@@ -47,7 +47,7 @@ describe("what a link is allowed to be", () => {
     // There is no `user` node kind and adding one is a consent question, not a
     // schema change. Anything else arriving over HTTP is rejected by name.
     expect(relationProblem({ typeId: "deputy", fromKind: "user", fromId: "u-ada", toKind: "org_role", toId: "gate" }, known))
-      .toContain("not a seat or a circle");
+      .toContain("not a role or a circle");
   });
 
   it("refuses a node that does not exist here", () => {

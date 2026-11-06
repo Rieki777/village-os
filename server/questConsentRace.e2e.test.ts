@@ -95,9 +95,13 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
   };
 
   /** A quest, claimed and submitted by Ora. Returns the claim and quest ids. */
-  const readyClaim = async (title: string, gratitude: string, stayCreditReward = 0) => {
+  /**
+   * The quest carries its own list (0265): ten credits at consent, and no
+   * Gratitude, because no quest pays it (Rye, 2026-10-21).
+   */
+  const readyClaim = async (title: string, stayCreditReward = 0) => {
     const quest = await call("POST", "/api/admin/quests", {
-      title, description: "Work exchange", gratitude, stayCreditReward, status: "Open",
+      title, description: "Work exchange", valueMinor: 1000000, valueTokens: [{ token: "credits", amount: 10 }], stayCreditReward, status: "Open",
     }, founderToken);
     expect(quest.status, quest.text.slice(0, 200)).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -110,25 +114,34 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     return { questId, claimId };
   };
 
-  /** What the ledger actually paid for this claim, in MINOR units. */
+  /** The credits the ledger paid for this claim, in MINOR units, read off the rows keyed on it. */
   const paidFor = async (claimId: string): Promise<number> => {
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT amount FROM token_ledger WHERE idempotency_key = ?",
-      [`quest_consent:${claimId}`],
+      "SELECT amount FROM token_ledger WHERE source = 'quest_consent' AND source_ref = ? AND token_type = 'credits'",
+      [claimId],
     );
-    expect(rows.length, "the recognition leg must have been written exactly once").toBe(1);
+    expect(rows.length, "the credits leg must have been written exactly once").toBe(1);
     return Number(rows[0].amount);
   };
 
-  /** The claim row's own number, read straight off the table. */
-  const claimAmount = async (claimId: string): Promise<number> => {
+  /** Whether any Gratitude was posted for this claim. A quest pays none. */
+  const gratitudeFor = async (claimId: string): Promise<number> => {
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM token_ledger WHERE source_ref = ? AND token_type = 'gratitude'",
+      [claimId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  };
+
+  /** The claim row's own number, read straight off the table. Null since a consent grants no Gratitude. */
+  const claimAmount = async (claimId: string): Promise<number | null> => {
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT amount, status FROM quest_claims WHERE id = ?",
       [claimId],
     );
     expect(rows.length).toBe(1);
     expect(String(rows[0].status)).toBe("consented");
-    return Number(rows[0].amount);
+    return rows[0].amount == null ? null : Number(rows[0].amount);
   };
 
   /** How many times the village pulse says this quest was completed. */
@@ -202,9 +215,9 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
    * claim. A member would have been shown a completed quest worth 90 over a
    * balance that moved by 10.
    */
-  it("refuses a second consent, so the claim's amount is the amount the ledger paid", async () => {
+  it("refuses a second consent, so the ledger pays the quest once and the claim records no grant", async () => {
     await setVar("quest.require_submission_before_consent", "false");
-    const { claimId } = await readyClaim("Mend the fence", "10-100");
+    const { claimId } = await readyClaim("Mend the fence");
 
     const first = await call("POST", `/api/admin/quest-claims/${claimId}/consent`, {
       approve: true, amount: 10,
@@ -222,17 +235,17 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     // status of the claim beside it.
     expect(second.json?.status, `the refusal names the status of the claim: ${second.text.slice(0, 300)}`).toBe("consented");
 
-    // THE ASSERTION THE OLD CODE FAILED, in the units each side actually holds:
-    // `quest_claims.amount` is the human number a witness typed and the ledger
-    // row is in minor units, so the comparison converts by the token's own
-    // scale rather than assuming today's.
+    // THE ASSERTION THE OLD CODE FAILED, now about the one number a consent
+    // moves: the quest's own ten credits, in the token's own minor units, once.
+    // The claim records no grant, because a consent is a yes (Rye, 2026-10-21).
     const tokens = await call("GET", "/api/admin/tokens", undefined, founderToken);
-    const recognition = (tokens.json?.tokens ?? []).find((t: any) => t.slug === "gratitude");
-    expect(recognition, "the recognition token is registered at boot").toBeTruthy();
-    const scale = 10 ** Number(recognition.decimals ?? 0);
+    const credits = (tokens.json?.tokens ?? []).find((t: any) => t.slug === "credits");
+    expect(credits, "the credits token is registered at boot").toBeTruthy();
+    const scale = 10 ** Number(credits.decimals ?? 0);
 
-    expect(await claimAmount(claimId), "the claim must hold what the first consent granted").toBe(10);
-    expect(await paidFor(claimId), "and the ledger must hold the same number").toBe(10 * scale);
+    expect(await claimAmount(claimId), "the claim records no grant").toBeNull();
+    expect(await paidFor(claimId), "and the ledger holds the quest's ten credits, once").toBe(10 * scale);
+    expect(await gratitudeFor(claimId), "and no Gratitude").toBe(0);
 
     await setVar("quest.require_submission_before_consent", "true");
   }, 120_000);
@@ -253,7 +266,7 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
     // A case that reads a dial another case left behind is measuring the order
     // the file happened to run in.
     await setVar("quest.require_submission_before_consent", "true");
-    const { questId, claimId } = await readyClaim("Clear the north path", "10", 20);
+    const { questId, claimId } = await readyClaim("Clear the north path", 20);
 
     const results = await Promise.all(
       Array.from({ length: 6 }, () =>
@@ -278,15 +291,142 @@ describe.skipIf(!DB_CONFIGURED)("one consent, one 200, and the claim agrees with
       expect(String(r.json?.error ?? ""), r.text.slice(0, 200)).toContain("consented");
     }
 
-    // THE MONEY, unchanged by the fix and asserted from the ledger. Two legs,
-    // one claim, whatever the concurrency.
+    // THE MONEY, unchanged by the fix and asserted from the ledger: the
+    // quest's credits once and its stay credits once, whatever the
+    // concurrency, and no Gratitude at all.
+    expect(await paidFor(claimId), "the credits leg, once").toBeGreaterThan(0);
     const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
-      "SELECT idempotency_key, token_type, amount FROM token_ledger WHERE idempotency_key IN (?, ?)",
-      [`quest_consent:${claimId}`, `queststay:${claimId}`],
+      "SELECT idempotency_key FROM token_ledger WHERE idempotency_key = ?",
+      [`queststay:${claimId}`],
     );
-    expect(rows.length, "one claim, two value legs, whatever the concurrency").toBe(2);
+    expect(rows.length, "one stay leg, whatever the concurrency").toBe(1);
+    expect(await gratitudeFor(claimId), "and no Gratitude").toBe(0);
 
     // THE VILLAGE PULSE. One act, one line in the feed the whole village reads.
     expect(await pulseRows(questId), "the village hears about one completion, not six").toBe(1);
   }, 180_000);
+
+  /**
+   * THE CASH A QUEST PAYS (0285, Rye 2026-10-23): "The Game wouldn't pay cash,
+   * but it would say what they are owed and they can claim it when they're
+   * paid out so that the treasurer has a record to check".
+   *
+   * Driven through every door over HTTP, against the built server: the quest
+   * states its cash, four consents race and the record is written once, the
+   * member claims it, a member without `cash.pay` can neither read the books
+   * nor mark anything paid, the founder marks it paid with a note, and the
+   * member reads the note and is told. Nobody marks their own cash paid.
+   */
+  it("owes a quest's cash once, lets the member claim it, and lets only somebody else mark it paid", async () => {
+    const quest = await call("POST", "/api/admin/quests", {
+      title: "Rebuild the water tank", description: "Cash work", valueMinor: 3000000, cashMinor: 2500000,
+      valueTokens: [{ token: "credits", amount: 5 }], status: "Open",
+    }, founderToken);
+    expect(quest.status, quest.text.slice(0, 200)).toBe(200);
+    const questId = String(quest.json?.id ?? "");
+    const currency = String(quest.json?.cashCurrency ?? "");
+    expect(currency, "the server stamps the village's own currency on the cash").toMatch(/^[A-Z]{3}$/);
+
+    // The board shows the cash beside the tokens, from the server's own answer.
+    const board = await call("GET", "/api/quests", undefined, oraToken);
+    const listed = (board.json ?? []).find((q: any) => q.id === questId);
+    expect(listed?.pay?.cashPay, "the card carries the cash").toEqual({ minor: 2500000, currency });
+
+    const claim = await call("POST", `/api/game/quests/${questId}/claim`, {}, oraToken);
+    expect(claim.status, claim.text.slice(0, 200)).toBe(200);
+    const claimId = String(claim.json?.id ?? "");
+    expect((await call("POST", `/api/game/quests/${questId}/submit`, { artifactUrl: "https://example.test/tank", note: "Done" }, oraToken)).status).toBe(200);
+
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => call("POST", `/api/admin/quest-claims/${claimId}/consent`, { approve: true }, founderToken)),
+    );
+    expect(results.filter((r) => r.status === 200).length, results.map((r) => r.status).join(",")).toBe(1);
+    const [owedRows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT * FROM cash_owed WHERE work_ref = ?",
+      [questId],
+    );
+    expect(owedRows.length, "four consents racing write the cash once").toBe(1);
+    expect(owedRows[0]).toMatchObject({ user_id: oraId, work_kind: "quest", work_title: "Rebuild the water tank", currency, state: "owed" });
+    expect(Number(owedRows[0].amount_minor)).toBe(2500000);
+
+    // The member reads what they are owed, and is not handed the books.
+    const mine = await call("GET", "/api/me/cash-owed", undefined, oraToken);
+    expect(mine.status).toBe(200);
+    expect(mine.json?.mayPay, "an ordinary member keeps no books").toBe(false);
+    const entry = (mine.json?.entries ?? []).find((e: any) => e.workRef === questId);
+    expect(entry).toMatchObject({ amountMinor: 2500000, currency, state: "owed", workKind: "quest" });
+
+    // Without `cash.pay`, the queue and the paid door are both shut.
+    expect((await call("GET", "/api/cash-owed/queue", undefined, oraToken)).status).not.toBe(200);
+    const sneak = await call("POST", `/api/cash-owed/${entry.id}/paid`, { note: "paid myself" }, oraToken);
+    expect(sneak.status, sneak.text.slice(0, 200)).not.toBe(200);
+
+    // Claiming is the member's own act, once.
+    const claimed = await call("POST", `/api/me/cash-owed/${entry.id}/claim`, {}, oraToken);
+    expect(claimed.status, claimed.text.slice(0, 200)).toBe(200);
+    expect((await call("POST", `/api/me/cash-owed/${entry.id}/claim`, {}, oraToken)).status).toBe(409);
+    // Somebody else's id reads as no such row.
+    expect((await call("POST", `/api/me/cash-owed/${entry.id}/claim`, {}, founderToken)).status).toBe(404);
+
+    // The founder keeps the books by default: nobody holds the key, so the gate falls through to admin.
+    const founderView = await call("GET", "/api/me/cash-owed", undefined, founderToken);
+    expect(founderView.json?.mayPay).toBe(true);
+    const queue = await call("GET", "/api/cash-owed/queue", undefined, founderToken);
+    expect(queue.status, queue.text.slice(0, 200)).toBe(200);
+    expect((queue.json?.unpaid ?? []).find((e: any) => e.id === entry.id)).toMatchObject({ memberName: "Ora", state: "claimed" });
+
+    // A payment with no stated method is not a record.
+    expect((await call("POST", `/api/cash-owed/${entry.id}/paid`, { note: "  " }, founderToken)).status).toBe(400);
+    const paid = await call("POST", `/api/cash-owed/${entry.id}/paid`, { note: "Bank transfer, ref 4471" }, founderToken);
+    expect(paid.status, paid.text.slice(0, 200)).toBe(200);
+    expect((await call("POST", `/api/cash-owed/${entry.id}/paid`, { note: "again" }, founderToken)).status).toBe(409);
+
+    const after = await call("GET", "/api/me/cash-owed", undefined, oraToken);
+    expect((after.json?.entries ?? []).find((e: any) => e.id === entry.id)).toMatchObject({ state: "paid", paidNote: "Bank transfer, ref 4471" });
+    const [told] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND type = 'cash_paid'",
+      [oraId],
+    );
+    expect(Number(told[0]?.n), "the member is told it was marked paid").toBe(1);
+    const books = await call("GET", "/api/cash-owed/queue", undefined, founderToken);
+    expect((books.json?.paid ?? []).find((e: any) => e.id === entry.id)).toMatchObject({ paidByName: "Race Founder" });
+
+    // The witness rule: the founder may not mark cash owed to themselves as paid.
+    const me = await call("GET", "/api/profile", undefined, founderToken);
+    await testDb!.conn.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "INSERT INTO cash_owed (id, occurrence_key, user_id, work_kind, work_ref, work_title, amount_minor, currency) VALUES ('cash-self', 'test:self', ?, 'quest', 'q-self', 'Own work', 100, ?)",
+      [String(me.json?.id ?? ""), currency],
+    );
+    const self = await call("POST", "/api/cash-owed/cash-self/paid", { note: "to myself" }, founderToken);
+    expect(self.status).toBe(409);
+    expect(String(self.json?.error ?? "")).toMatch(/Someone else marks your own cash paid/);
+  }, 180_000);
+
+  /**
+   * A PROPOSAL STATES ITS CASH WHEN IT IS ACCEPTED (0285). A Work With Us
+   * proposal carries no value until the yes, so the steward types the cash on
+   * accepting it, and the proposer is owed it once the acceptance pays.
+   */
+  it("owes an accepted proposal the cash typed on accepting it, and refuses cash that is not a number", async () => {
+    const sent = await call("POST", "/api/forms/submit", {
+      type: "work-with-us", data: { name: "Ora", email: `ora-${PORT}@example.test`, work: "A seed library" },
+    }, oraToken);
+    expect(sent.status, sent.text.slice(0, 200)).toBe(200);
+    const id = String(sent.json?.id ?? "");
+
+    const bad = await call("PUT", `/api/admin/submissions/${id}/status`, { status: "accepted", cashMinor: "lots" }, founderToken);
+    expect(bad.status, bad.text.slice(0, 200)).toBe(400);
+    const listed = await call("GET", "/api/admin/submissions", undefined, founderToken);
+    expect((listed.json ?? []).find((s: any) => s.id === id)?.status, "a refused cash amount accepts nothing").not.toBe("accepted");
+
+    const ok = await call("PUT", `/api/admin/submissions/${id}/status`, { status: "accepted", cashMinor: 500000 }, founderToken);
+    expect(ok.status, ok.text.slice(0, 200)).toBe(200);
+    const [rows] = await testDb!.conn.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT * FROM cash_owed WHERE work_kind = 'proposal' AND work_ref = ?",
+      [id],
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0]).toMatchObject({ user_id: oraId, work_title: "A seed library", state: "owed" });
+    expect(Number(rows[0].amount_minor)).toBe(500000);
+  }, 120_000);
 });

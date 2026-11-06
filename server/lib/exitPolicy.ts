@@ -78,19 +78,37 @@ export interface ExitPolicy {
  * S52 (F12): ships as an explicit PLACEHOLDER. The two prose fields say so in
  * plain language, and the two step lists are procedure a village is expected
  * to rewrite in its own words before claiming them.
+ *
+ * THE VOLUNTARY TERMS SAY WHAT THE RULING OF 2026-10-23 MADE TRUE. Members keep
+ * their tokens, and a leaver still holding any, or owed cash by the village,
+ * stays on as a former member
+ * (`resolveExit`, server/lib/exitResolve.ts); only an account with nothing of
+ * value left becomes a tombstone. The wording these replaced is kept in
+ * `RETIRED_DEFAULT_TERMS` below, because a village's stored document can still
+ * hold it word for word.
+ *
+ * AND WHAT THE ANSWERS OF 2026-10-30 ADDED. Rye approved every exit suggestion
+ * put to him that day, and two of them belong in the words a leaver reads
+ * before they go. Voice a former member keeps wanes under the same rule as
+ * everyone's (the suggestion he approved: "keep it, the same rule as for
+ * everyone. The platform's default exit policy text should say so"), and
+ * cash the village still owes keeps the account exactly as tokens do
+ * (`resolveExit`). The wording of 2026-10-23
+ * joined `RETIRED_DEFAULT_TERMS` the same day.
  */
 export const DEFAULT_EXIT_POLICY: ExitPolicy = {
   placeholder: true,
   voluntary: {
     noticePeriodDays: 30,
     valuationMethod:
-      "To be decided by the community: how contributed value is honored when someone leaves. Until then, settled balances are held in exit settlement and recorded on the exit.",
+      "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. Voice a former member keeps wanes under the same rule as everyone's. The exit records what they still hold.",
     unwindSteps: [
       "Return borrowed items and settle library loans",
       "Complete or hand off any active stay; resolve open purchases",
       "Hand off roles and open work",
       "Balances are settled and recorded",
-      "The account becomes a tombstone; contributions stay part of the village record",
+      "Anyone still holding tokens, or still owed cash, stays on as a former member, with their account and balances",
+      "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
     ],
   },
   involuntary: {
@@ -141,6 +159,53 @@ export const EXIT_POLICY_TERMS = [
 
 export type ExitPolicyTermKey = (typeof EXIT_POLICY_TERMS)[number]["key"];
 
+/**
+ * PLATFORM WORDING THIS FILE SHIPPED BEFORE, AND WHY IT IS STILL HERE.
+ *
+ * `dbDocument.get()` never merges a stored document with the defaults, so a
+ * village that saved its draft policy even once holds the platform's words of
+ * that day. Two things would go wrong the day the platform's words change:
+ *
+ *   1. THE GUARD WOULD OPEN. `platformDefaultTerms` compared only against the
+ *      current wording, so the old boilerplate would no longer match it, and a
+ *      founder could clear the draft banner over words the village never wrote.
+ *   2. THE PAGE WOULD SAY SOMETHING FALSE. The old voluntary terms promise that
+ *      the account becomes a tombstone, which since 2026-10-23 is true only of
+ *      an account with nothing of value left in it.
+ *
+ * So both readers know these. Each entry is a term exactly as an earlier
+ * release shipped it; an entry is added whenever a default term changes, and
+ * none is ever removed, because some stored document may still hold it.
+ */
+export const RETIRED_DEFAULT_TERMS: {
+  valuationMethod: readonly string[];
+  unwindSteps: ReadonlyArray<readonly string[]>;
+} = {
+  valuationMethod: [
+    "To be decided by the community: how contributed value is honored when someone leaves. Until then, settled balances are held in exit settlement and recorded on the exit.",
+    // 2026-10-23 to 2026-10-30: said nothing of Voice waning for a former member.
+    "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. The exit records what they still hold.",
+  ],
+  unwindSteps: [
+    [
+      "Return borrowed items and settle library loans",
+      "Complete or hand off any active stay; resolve open purchases",
+      "Hand off roles and open work",
+      "Balances are settled and recorded",
+      "The account becomes a tombstone; contributions stay part of the village record",
+    ],
+    // 2026-10-23 to 2026-10-30: said nothing of the cash still owed keeping the account.
+    [
+      "Return borrowed items and settle library loans",
+      "Complete or hand off any active stay; resolve open purchases",
+      "Hand off roles and open work",
+      "Balances are settled and recorded",
+      "Anyone still holding tokens stays on as a former member, with their account and balances",
+      "An account with nothing of value left becomes a tombstone; contributions stay part of the village record",
+    ],
+  ],
+};
+
 const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
 const steps = (v: unknown): string[] =>
@@ -150,8 +215,16 @@ const steps = (v: unknown): string[] =>
 const same = (a: string, b: string): boolean =>
   a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
 
-const sameSteps = (a: string[], b: string[]): boolean =>
+const sameSteps = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((s, i) => same(s, b[i]));
+
+/** The platform's valuation words, today's or any release's before. */
+const platformValuation = (v: string): boolean =>
+  same(v, DEFAULT_EXIT_POLICY.voluntary.valuationMethod) || RETIRED_DEFAULT_TERMS.valuationMethod.some((r) => same(v, r));
+
+/** The platform's voluntary steps, today's or any release's before. */
+const platformUnwind = (s: readonly string[]): boolean =>
+  sameSteps(s, DEFAULT_EXIT_POLICY.voluntary.unwindSteps) || RETIRED_DEFAULT_TERMS.unwindSteps.some((r) => sameSteps(s, r));
 
 /**
  * Coerce an admin body into a whole policy document.
@@ -220,11 +293,28 @@ export function normalizeExitPolicy(body: any): ExitPolicy {
 export function withPolicyDefaults(stored: any): ExitPolicy {
   const d = DEFAULT_EXIT_POLICY;
   const inv = stored?.involuntary ?? {};
+  const voluntary = { ...d.voluntary, ...(stored?.voluntary ?? {}) };
+  /*
+   * A DRAFT STILL HOLDING A RETIRED PLATFORM WORDING READS TODAY'S. Those words
+   * were never the village's: the draft banner still stands over them, and the
+   * platform changed what it says about a departure. Only an exact match is
+   * replaced, and only while `placeholder` is not false, so a single word a
+   * village changed, or a policy a village published as its own, reads as it
+   * was saved. `RETIRED_DEFAULT_TERMS` says why both are kept.
+   */
+  if (stored?.placeholder !== false) {
+    if (RETIRED_DEFAULT_TERMS.valuationMethod.some((r) => same(text(voluntary.valuationMethod), r))) {
+      voluntary.valuationMethod = d.voluntary.valuationMethod;
+    }
+    if (RETIRED_DEFAULT_TERMS.unwindSteps.some((r) => sameSteps(steps(voluntary.unwindSteps), r))) {
+      voluntary.unwindSteps = [...d.voluntary.unwindSteps];
+    }
+  }
   return {
     ...(stored ?? {}),
     ...d,
     ...(stored ?? {}),
-    voluntary: { ...d.voluntary, ...(stored?.voluntary ?? {}) },
+    voluntary,
     involuntary: {
       ...d.involuntary,
       ...inv,
@@ -241,14 +331,16 @@ export function withPolicyDefaults(stored: any): ExitPolicy {
  * The labels of every rendered term whose text is still the platform's.
  *
  * An empty array is the only state in which a village may record that its
- * community decided these terms.
+ * community decided these terms. A term is the platform's when it matches
+ * today's wording or any wording an earlier release shipped, for the reason
+ * `RETIRED_DEFAULT_TERMS` gives.
  */
 export function platformDefaultTerms(policy: ExitPolicy): string[] {
   const d = DEFAULT_EXIT_POLICY;
   const stale: string[] = [];
   const label = (key: ExitPolicyTermKey) => EXIT_POLICY_TERMS.find((t) => t.key === key)!.label;
-  if (same(policy.voluntary.valuationMethod, d.voluntary.valuationMethod)) stale.push(label("valuationMethod"));
-  if (sameSteps(policy.voluntary.unwindSteps, d.voluntary.unwindSteps)) stale.push(label("unwindSteps"));
+  if (platformValuation(policy.voluntary.valuationMethod)) stale.push(label("valuationMethod"));
+  if (platformUnwind(policy.voluntary.unwindSteps)) stale.push(label("unwindSteps"));
   if (same(policy.involuntary.process, d.involuntary.process)) stale.push(label("involuntaryProcess"));
   if (sameSteps(policy.restorative.steps, d.restorative.steps)) stale.push(label("restorativeSteps"));
   return stale;
@@ -271,9 +363,20 @@ export function blankTerms(policy: ExitPolicy): string[] {
  * R4, in the founder's words: "This exit policy can be many things, I think we
  * build some levers so that each village can create the policy that matters
  * for them." Ten of those levers are game variables in the `Exit` category of
- * `shared/gameVariables.ts`. Six combinations of them describe a policy the
+ * `shared/gameVariables.ts`. Five combinations of them describe a policy the
  * engine cannot honour, and a village that saves one has been told something
  * false about its own departure terms on the highest-stakes page on the site.
+ *
+ * TWO REFUSALS WERE LIFTED ON 2026-10-23, and their numbers are left empty
+ * below so the others keep theirs. A share of EQUITY was refused because the
+ * only equity token was the Hypha mirror, which this ledger never moves; Earned
+ * Equity (0266) is a platform token of kind `equity`, and the mirror holds no
+ * rows here to split. KEEPING VOICE was refused because a resolved exit made
+ * the account a tombstone, and the refusal named the condition that would
+ * lift it: "when a village can record a departure without one". The founder's
+ * ruling of that day built exactly that (`resolveExit`,
+ * server/lib/exitResolve.ts): a leaver still holding value stays on as a
+ * former member, account and balances intact.
  *
  * WHY THE GUARD LIVES HERE. Same reason `DEFAULT_EXIT_POLICY` does, stated at
  * the top of this file: the comparison has to be unit-testable without booting
@@ -281,7 +384,7 @@ export function blankTerms(policy: ExitPolicy): string[] {
  * they need about the world arrives in the `reading` they are handed: the
  * effective value of each dial, the notice period the village publishes, and
  * the token registry reduced to the four facts a lever asks about. That is
- * what lets `exitPolicy.test.ts` drive all six refusals and the warning with
+ * what lets `exitPolicy.test.ts` drive all five refusals and the warning with
  * no database, no registry load and no Express.
  *
  * `exitLeverRefusal` is the one impure function, and it is a four-line
@@ -380,17 +483,18 @@ function nameList(names: string[]): string {
 /**
  * Every incoherent thing this reading describes, refusals and warnings alike.
  *
- * The order is C.3's order, which is the order a founder meets them: the two
- * kinds that can never be kept, then the account, then the Voice pair, then
- * the published term, then the one warning.
+ * The order is C.3's order, which is the order a founder meets them: the kind
+ * that can never be kept, then the account, then the Voice pair, then the
+ * published term, then the one warning.
  */
 export function exitLeverFindings(reading: ExitLeverReading): ExitLeverFinding[] {
   const out: ExitLeverFinding[] = [];
 
   // 1. Recognition. `sendRefusal` already says why in a member's words:
-  // recognition "is given, never handed over". A leaver "keeping" a share of
-  // it means it sits in an account that becomes a tombstone at resolve, where
-  // nobody can read it. A policy that does nothing, dressed as one that does.
+  // recognition "is given, never handed over". It is a record of thanks and
+  // it is what shares the cycle pool, so a leaver carrying a share of it away
+  // would keep weighing in a split among the people still here. Still refused
+  // after the ruling of 2026-10-23, which kept every other kind.
   if (pct(reading, "exit.keep_pct.recognition") > 0) {
     out.push({
       keys: ["exit.keep_pct.recognition"],
@@ -401,18 +505,7 @@ export function exitLeverFindings(reading: ExitLeverReading): ExitLeverFinding[]
     });
   }
 
-  // 2. Equity. `validateLeg` refuses to move a hypha-governed token and a boot
-  // invariant requires zero equity rows in this ledger, so any share here is a
-  // promise about a book this platform does not write.
-  if (pct(reading, "exit.keep_pct.equity") > 0) {
-    out.push({
-      keys: ["exit.keep_pct.equity"],
-      severity: "refusal",
-      scope: "element",
-      message:
-        "Equity is governed on Base under Hypha and this platform never moves it. What happens to it on departure is decided there.",
-    });
-  }
+  // 2. Lifted on 2026-10-23: a share of equity. See the header above.
 
   // 3. Burn, where something a member can hold has no faucet to go back to.
   // `faucetFor` returns null for anything outside the slugs it knows, and this
@@ -459,19 +552,8 @@ export function exitLeverFindings(reading: ExitLeverReading): ExitLeverFinding[]
     });
   }
 
-  // 5. Keeping Voice, while resolve anonymizes. `anonymizeMember` runs at
-  // resolve and a tombstone is not a person who can hold voting weight. The
-  // refusal names the condition that would make it available, because a
-  // village reading "no" deserves to know what "yes" would take.
-  if (reading.value("exit.voice_on_exit") === "keep") {
-    out.push({
-      keys: ["exit.voice_on_exit"],
-      severity: "refusal",
-      scope: "element",
-      message:
-        "Keeping Voice needs an account that still exists after the departure, and a resolved exit makes the account a tombstone. This becomes available when a village can record a departure without one.",
-    });
-  }
+  // 5. Lifted on 2026-10-23: keeping Voice. Its own refusal named what would
+  // make it available, and the former-member resolve is that. See the header.
 
   // 6. A cooling period longer than the notice the village PUBLISHES. The page
   // would tell a member one number while the engine held their balance for
@@ -600,9 +682,9 @@ export function exitLeverReading(value: (key: string) => string, policy: ExitPol
  * refusal to be about the state the set would produce.
  *
  * ELEMENT (`exitElementRefusal`): true or false about one dial and the world.
- * A share of recognition, a share of equity, burning a token that has no
- * faucet, and keeping Voice are each wrong on their own, whatever else is in
- * the set, so an element pass catches them at the cheapest possible moment.
+ * A share of recognition and burning a token that has no faucet are each wrong
+ * on their own, whatever else is in the set, so an element pass catches them
+ * at the cheapest possible moment.
  *
  * SET (`exitSetRefusals`): the complete answer about a resulting reading. It
  * returns EVERY refusal that reading carries, element-scope ones included, so
@@ -664,18 +746,18 @@ export function exitElementRefusal(
 
 /**
  * The value every OTHER dial reads as during an element pass: the platform
- * default, which by construction triggers nothing. Written out rather than
- * read from the registry so this file keeps its three imports and stays
- * unit-testable with no registry loaded.
+ * default, which by construction triggers no refusal. Written out so this file
+ * keeps its three imports and stays unit-testable with no registry loaded;
+ * `exitPolicy.test.ts` holds it to the registry, so the two cannot drift.
  */
-const ELEMENT_NEUTRAL: Record<string, string> = {
-  "exit.keep_pct.credit": "0",
-  "exit.keep_pct.voice": "0",
+export const ELEMENT_NEUTRAL: Readonly<Record<string, string>> = {
+  "exit.keep_pct.credit": "100",
+  "exit.keep_pct.voice": "100",
   "exit.keep_pct.recognition": "0",
-  "exit.keep_pct.equity": "0",
+  "exit.keep_pct.equity": "100",
   "exit.remainder_account": "settlement",
   "exit.cooling_days": "0",
-  "exit.voice_on_exit": "forfeit",
+  "exit.voice_on_exit": "keep",
   "exit.voice_convert_rate": "0",
   "exit.vote_over": "0",
   "exit.sellback_enabled": "false",

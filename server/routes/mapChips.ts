@@ -39,15 +39,22 @@ import {
 } from "../../shared/mapStatChips";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { isAdmitted } from "../lib/admission";
+import { brochurePageOffAlone } from "../lib/brochurePages";
 import type { AppDeps } from "../lib/appDeps";
 import { createStatReader, sourceHiddenFrom, type StatViewer } from "../lib/mapStats";
 import { dbDocument } from "../repos/store-db";
 
 type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "getPool" | "seasonState" | "lapseContext">;
 
-/** A public chip carries no reason: a visitor is not told what they are not shown. */
+/**
+ * A public chip carries no reason: a visitor is not told what they are not
+ * shown. Nor does it lead to a story page the village switched off on its own
+ * (Admin, Pages, "Show this page"): the chip stays and its link goes.
+ */
 function forVisitors(chips: ResolvedChip[]): ResolvedChip[] {
-  return chips.filter((c) => c.state !== "unavailable").map(({ why: _why, ...rest }) => rest);
+  return chips
+    .filter((c) => c.state !== "unavailable")
+    .map(({ why: _why, ...rest }) => (rest.link && brochurePageOffAlone(rest.link) ? { ...rest, link: "" } : rest));
 }
 
 export function register(app: Express, deps: Deps): void {

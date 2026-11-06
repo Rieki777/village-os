@@ -2,7 +2,7 @@
  * Quests: the public board, the share card, crews, the admin CRUD, and the
  * two steps a member takes through a quest.
  *
- * Thirteen routes, lifted out of server/index.ts unchanged:
+ * Thirteen routes lifted out of server/index.ts unchanged, and the keep door added since:
  *
  *   board     GET  /api/quests
  *             GET  /api/quests/field
@@ -15,6 +15,7 @@
  *   admin     POST   /api/admin/quests
  *             PUT    /api/admin/quests/:id
  *             DELETE /api/admin/quests/:id
+ *             POST   /api/admin/quests/:id/keep   (a starter kept as real, 2026-10-31)
  *   the walk  POST /api/game/quests/:id/claim
  *             POST /api/game/quests/:id/submit
  *
@@ -58,11 +59,12 @@ import fs from "fs";
 import path from "path";
 import type { AppDeps } from "../lib/appDeps";
 import type { LimitState } from "../repos/rateHits";
-import { getStage, stageIndex } from "../../shared/gameConfig";
+import { stageIndex } from "../../shared/gameConfig";
+import { stageName } from "../lib/villagePaths";
 import { sceneStopsFor } from "../../shared/questScenes";
 import { cleanCrewName } from "../lib/crews";
 import { recordEvent } from "../lib/events";
-import { EXAMPLE_REFUSAL_BODY, isExampleRow, onRealItemPublished } from "../lib/examples";
+import { EXAMPLE_REFUSAL_BODY, afterExampleKept, isExampleRow, onRealItemPublished } from "../lib/examples";
 import {
   addMembers as addConversationMembers,
   createGroup,
@@ -70,8 +72,12 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
-import { questClosed } from "../repos/quests";
+import { keepExampleQuest, questClosed } from "../repos/quests";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
+import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
+import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
+import { defaultDisplayCurrency } from "../../shared/money";
+import { readWorkValueInput } from "../../shared/workValue";
 
 /** The share-card raster. 1200x630 is what every major unfurler crops to. */
 export const OG_WIDTH = 1200;
@@ -97,6 +103,7 @@ type Deps = Pick<
   | "questConsentRecipients"
   | "overLimit"
   | "clientIp"
+  | "projectCurrency"
 > & {
   /**
    * The guard's THREE answers, for the one route that needs the third.
@@ -130,12 +137,101 @@ export function register(app: Express, deps: Deps): void {
     overLimit,
     clientIp,
     limitState,
+    projectCurrency,
   } = deps;
 
   // Quests: public list
+  /*
+   * EVERY QUEST SAYS WHAT IT PAYS (Rye, 2026-10-21), worked out by the same
+   * function the consent pays from (server/lib/workPay.ts), so a card can never
+   * promise a token amount the engine would not post. One rules read for the
+   * whole board. `pay.value` is null on a quest nobody has valued, and the card
+   * then says to inquire.
+   */
   app.get("/api/quests", async (_req, res) => {
-    res.json(await questsRepo.all());
+    const [quests, rules, boosts] = await Promise.all([questsRepo.all(), questPayRules(getPool()), questBadgeBoosts()]);
+    res.json(quests.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) })));
   });
+
+  /*
+   * THE BADGES THAT MULTIPLY WHAT A QUEST PAYS, so a member sees the whole of
+   * it before taking the quest on (Rye, 2026-10-30). One read per request,
+   * public like the badges. A failed read shows no badge, never a wrong one.
+   */
+  async function questBadgeBoosts() {
+    try {
+      return await payBadgeBoosts(getPool(), await seasonallyDormantBadgeIds(getPool(), currentPatternId()));
+    } catch {
+      return [];
+    }
+  }
+
+  /*
+   * WHAT A STEWARD MAY PUT ON A QUEST OR A ROLE: the currency a value is
+   * stamped in, and for each kind of work the tokens the village has an
+   * enabled rule for, with the standard amount (no ceiling: work is paid in full). The editor
+   * prefills a new quest's list from the standard amounts, so what the steward
+   * sees is what the quest pays.
+   *
+   * PUBLIC, because every figure in it already is: the rules feed
+   * (`publicRules`) states each rule's amount and ceiling to anyone, and a
+   * steward accepting a proposal holds `quest.approve`, which is not an admin.
+   * Registered before `/api/quests/:id` so the literal path wins.
+   */
+  app.get("/api/quests/pay-options", async (_req, res) => {
+    const [quest, role] = await Promise.all([questPayRules(getPool()), rolePayRules(getPool())]);
+    res.json({
+      currency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),
+      quest: payableTokens(quest),
+      role: payableTokens(role),
+    });
+  });
+
+  /**
+   * A steward's value and list for a quest, checked against the village's own
+   * rules before anything is written, and stripped off the body so the raw
+   * fields never reach the record. Returns the fields to merge, or answers the
+   * request itself with a sentence.
+   */
+  const checkedQuestValue = async (
+    body: Record<string, unknown>,
+    res: express.Response,
+    opts: { required: boolean },
+  ): Promise<Record<string, unknown> | null> => {
+    const rules = await questPayRules(getPool());
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug));
+    delete body.valueMinor;
+    delete body.valueCurrency;
+    delete body.valueTokens;
+    delete body.cashMinor;
+    delete body.cashCurrency;
+    // `pay` is what this route SENDS. A client that posts a quest back as it
+    // received it must not have the projection written onto the row.
+    delete body.pay;
+    if (!input.ok) {
+      res.status(400).json({ error: input.error });
+      return null;
+    }
+    // Every quest carries a value from the moment it is created (Rye, 2026-10-21).
+    if (opts.required && (input.valueMinor === undefined || input.valueMinor === null)) {
+      res.status(400).json({ error: "Every quest says what it is worth. Set a value before you publish it." });
+      return null;
+    }
+    const out: Record<string, unknown> = {};
+    if (input.valueMinor !== undefined) {
+      out.valueMinor = input.valueMinor;
+      // Stamped here, never read from the body: the village's own currency at
+      // the moment of the save (0265 says why it is kept on the row).
+      out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    // The cash it pays (0285), stamped with the same currency for the same reason.
+    if (input.cashMinor !== undefined) {
+      out.cashMinor = input.cashMinor;
+      out.cashCurrency = input.cashMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    return out;
+  };
 
   /**
    * Life signs for the quest board (public): how many members hold each quest
@@ -224,10 +320,14 @@ export function register(app: Express, deps: Deps): void {
      * a screen can say "nothing yet" about. A stranger gets no key at all, so
      * the two facts never arrive looking the same.
      */
+    // What each quest pays, the same answer the board gives (see `/api/quests`).
+    const [rules, boosts] = await Promise.all([questPayRules(getPool()), questBadgeBoosts()]);
+    const priced = { ...quest, pay: withPayBadges(questPay(quest, rules), boosts) };
+    const pricedRelated = related.map((q) => ({ ...q, pay: withPayBadges(questPay(q, rules), boosts) }));
     const viewer = await authedUser(req);
-    if (!viewer) return res.json({ quest, related });
+    if (!viewer) return res.json({ quest: priced, related: pricedRelated });
     const needs = await linksForSubject(getPool(), "quest", id);
-    res.json({ quest, related, needs });
+    res.json({ quest: priced, related: pricedRelated, needs });
   });
 
   /**
@@ -535,6 +635,9 @@ export function register(app: Express, deps: Deps): void {
     const { title } = req.body ?? {};
     if (!title) return res.status(400).json({ error: "Missing title" });
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: true });
+    if (!valued) return;
     const count = (await questsRepo.all()).length;
     const entry = {
       id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -544,8 +647,9 @@ export function register(app: Express, deps: Deps): void {
       difficulty: "Beginner",
       tags: [],
       gratitude: "",
-      ...req.body,
-    };
+      ...body,
+      ...valued,
+    } as any;
     await questsRepo.add(entry);
     onRealItemPublished(getPool(), "quests", adminActor(req)?.id ?? null);
     // A quest posted during a season belongs to that season's pattern, so it
@@ -562,11 +666,61 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
     if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    // A save that does not carry the value leaves it alone; one that does is
+    // checked first. Clearing a value on an existing quest is allowed, and its
+    // card then says to inquire.
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: false });
+    if (!valued) return;
     const updated = await questsRepo.update(req.params.id, (q: any) => {
-      Object.assign(q, req.body, { id: q.id });
+      Object.assign(q, body, valued, { id: q.id });
     });
     if (!updated) return res.status(404).json({ error: "Not found" });
     res.json(updated);
+  });
+
+  /*
+   * KEEP A STARTER QUEST AS THE VILLAGE'S OWN (A8 / 19g, 2026-10-31).
+   *
+   * A fresh village opens on starter quests that are standing examples: the
+   * PUT above refuses them, so an edit can never launder one into a row the
+   * next retirement deletes, and the create route retires every one at once.
+   * Neither lets a founder keep the starter that already fits. This does, one
+   * row at a time, and leaves the starters nobody has decided on standing.
+   *
+   * It is a publish, so it holds everything the create route holds: an admin,
+   * a poster from the village's own upload, and a value, because every quest
+   * says what it is worth from the moment it is real (Rye, 2026-10-21). The
+   * founder's edits arrive with the press and land in the same write.
+   *
+   * It does NOT call onRealItemPublished. Keeping one starter is a decision
+   * about that starter, and retiring the rest on it would take away the next
+   * keep. `afterExampleKept` recounts the board instead, and stamps the
+   * tombstone when the last starter has been kept.
+   */
+  app.post("/api/admin/quests/:id/keep", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (rejectOffsiteImage(req.body?.imageUrl, res)) return;
+    const body: Record<string, unknown> = { ...(req.body ?? {}) };
+    const valued = await checkedQuestValue(body, res, { required: true });
+    if (!valued) return;
+    const kept = await keepExampleQuest(getPool(), String(req.params.id), (q: any) => {
+      Object.assign(q, body, valued, { id: q.id });
+    });
+    if (!kept.ok && kept.reason === "missing") return res.status(404).json({ error: "Not found" });
+    if (!kept.ok) {
+      return res.status(409).json({ error: "This quest is already the village's own. Edit it with Save." });
+    }
+    const actor = adminActor(req)?.id ?? null;
+    const { stillShowing } = await afterExampleKept(getPool(), "quests", actor);
+    // Real from this moment, so it belongs to the season it was kept in.
+    await captureIntoCurrentPattern(getPool(), currentPatternId(), "quest", kept.quest.id);
+    void recordEvent(getPool(), {
+      kind: "audit", text: `quest:kept:${kept.quest.id}`,
+      actorUserId: (await authedUser(req))?.id ?? actor,
+      entityType: "quest", entityRef: kept.quest.id, audience: "admin",
+    });
+    res.json({ ...kept.quest, startersLeft: stillShowing });
   });
 
   app.delete("/api/admin/quests/:id", async (req, res) => {
@@ -654,9 +808,8 @@ export function register(app: Express, deps: Deps): void {
     if (quest.minStage) {
       const needed = stageIndex(quest.minStage);
       if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-        const stage = getStage(quest.minStage);
         return res.status(403).json({
-          error: `This quest opens at the ${stage?.name ?? quest.minStage} stage. Keep walking the path and it will unlock.`,
+          error: `This quest opens at the ${stageName(quest.minStage)} stage. Keep walking the path and it will unlock.`,
           minStage: quest.minStage,
         });
       }
@@ -785,6 +938,7 @@ export function register(app: Express, deps: Deps): void {
             body: "Read what they did and consent when you are ready. Value moves when a steward says so.",
             link: "/review",
             dedupeKey: `quest-submission:${active.id}:${recipientId}`,
+            actorUserId: user.id,
           });
         } catch (bell) {
           console.error(`[quests] claim ${active.id}: the submission bell for ${recipientId} did not send`, bell);

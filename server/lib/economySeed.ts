@@ -16,7 +16,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { ARCHETYPES } from "../../shared/archetypes";
-import { CREDITS, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
+import { CREDITS, EARNED_EQUITY, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
 
 /**
  * The starting rules: VILLAGE VOICE AND VILLAGE CREDITS, and not Gratitude.
@@ -27,36 +27,16 @@ import { CREDITS, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
  * gratitude system they can have this be one of the tokens issued but that is
  * a change they can add not the defaults we're going to ship with."
  *
- * A CHANGE THEY CAN ADD IS WHY THE GRATITUDE RULE IS STILL HERE, DISABLED,
- * rather than deleted. There is no route in this build that CREATES a mint
- * rule: `PATCH /api/admin/economy/rules/:id` edits amount, ceiling and
- * enabled on a row that already exists, and the governed path after launch
- * (`shared/mintRuleKeys.ts`) offers the same three fields on the same rows.
- * Deleting the row would therefore take the payout away permanently, with no
- * way for any village to get it back. The ruling asked for a default that
- * omits Gratitude, and this is what that costs. Seeded at `enabled: 0`, the
- * row pays nobody until a village decides otherwise, and turning it on is one
- * PATCH before launch or one vote after.
+ * GRATITUDE PAYS NO WORK AT ALL NOW (Rye, 2026-10-21 and 2026-10-23: "GRATITUDE
+ * is only sent from player to player using the send gratitude function,
+ * gratitude is not distributed in any other way!"). The role rule on it stays
+ * seeded, disabled, only because villages already hold that row and the
+ * tests read it; switched on, it pays nobody, because `quoteWorkPay` refuses
+ * Gratitude and the Mint panel says so. No quest consent mints Gratitude
+ * either (41512d9), and no Gratitude rule is seeded for quests or proposals.
  *
- * Hearts on quest.completed are deliberately ABSENT ENTIRELY, and this is the
- * one place the disabled-row trick would be actively dangerous. The consent
- * route has minted recognition for a confirmed quest since S7, with its own
- * range, cap and standing multiplier. A quest.completed gratitude rule sitting
- * here disabled would look like the obvious thing to switch on, and switching
- * it on would pay twice for one piece of work. A trap with a toggle on it is
- * worse than an absence.
- *
- * WHICH ALSO MEANS A QUEST STILL PAYS GRATITUDE, and no change to this table
- * can stop it. The consent route mints it from the range the quest advertises
- * in `quests.gratitude`, and on the shipped defaults it REFUSES a consent
- * below 1 (`quest.allow_zero_consent` off) and refuses any quest whose range it
- * cannot read (`quest.consent_cap_mode` = 'posted'). Gratitude for a quest is
- * the consent transaction itself, so "quests stop paying gratitude" is a change
- * to that route and to what the board advertises. This file changes the seat
- * payout, where Gratitude genuinely was a default.
- *
- * Every ceiling is a real number. A from_source rule with no ceiling is an open
- * faucet with a form in front of it.
+ * Every ceiling is a real number, and none of them binds work since
+ * 2026-10-22 (`ceilingBinds` in shared/workValue.ts): work is paid in full.
  */
 const RULES = [
   // Whole numbers on purpose (Rye, 2026-08-11). 10 a quest and 50 a season
@@ -85,10 +65,31 @@ const RULES = [
   // erring low is the cheaper mistake: raising a payout later costs one PATCH,
   // while credits already issued at the wrong rate are in people's hands.
   { trigger: "quest.completed", token: CREDITS, amount: 25, ceiling: 250, recipient: "claimant", enabled: true },
-  { trigger: "role.cycle", token: VILLAGE_VOICE, amount: 50, ceiling: 200, recipient: "holder", enabled: true },
-  { trigger: "role.cycle", token: CREDITS, amount: 25, ceiling: 250, recipient: "holder", enabled: true },
-  // Off, not gone. See the block comment above.
+  // NO FLAT ROLE MINT (Rye, 2026-11-01: "Yes send a lane to turn off the
+  // automatic mint"). These two paid 50 Voice and 25 Credits to every seat
+  // every cycle. The amount is blank, so a role pays what its own list names
+  // and nothing otherwise; the rule stays ON because an enabled role rule is
+  // what lets a role's own list pay that token (server/lib/flatRoleMint.ts).
+  { trigger: "role.cycle", token: VILLAGE_VOICE, amount: null, ceiling: 200, recipient: "holder", enabled: true },
+  { trigger: "role.cycle", token: CREDITS, amount: null, ceiling: 250, recipient: "holder", enabled: true },
+  // Off, and it pays nobody if switched on. See the block comment above.
   { trigger: "role.cycle", token: HEARTS, amount: 20, ceiling: 100, recipient: "holder", enabled: false },
+  // AN ACCEPTED PROPOSAL IS WORK (Rye, 2026-10-23: "definitely a work token"),
+  // paid like a quest: Village Voice and Village Credits at a quest's amounts,
+  // and Earned Equity off. It used to mint 100 Gratitude. Set on the Mint panel.
+  { trigger: "proposal.accepted", token: VILLAGE_VOICE, amount: 10, ceiling: 100, recipient: "claimant", enabled: true },
+  { trigger: "proposal.accepted", token: CREDITS, amount: 25, ceiling: 250, recipient: "claimant", enabled: true },
+  { trigger: "proposal.accepted", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
+  // EARNED EQUITY (0266), OFF, because a village decides what pays equity.
+  // Seeded at all only because no route creates a mint rule: without these two
+  // rows a village could never pay it from a quest or a seat. One whole unit
+  // and a ceiling of one is the smallest payable figure and a placeholder to
+  // edit, chosen low because equity already in people's hands cannot be
+  // un-issued. Turning either on is one PATCH before launch or one vote after.
+  { trigger: "quest.completed", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
+  // Blank on a role, for the same reason as the two role rules above: a flat
+  // unit to every seat would be the automatic mint again, in equity.
+  { trigger: "role.cycle", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "holder", enabled: false },
 ];
 
 export interface SeedReport {

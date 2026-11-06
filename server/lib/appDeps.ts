@@ -44,7 +44,7 @@ import type { SubjectCloser } from "./applyDue";
 import type { PostOfficeDeps } from "./comms/postOffice";
 import type { CrewsRepo } from "./crews";
 import type { WeightModeSnapshot } from "./governanceWeights";
-import type { NotifyDeps, NotifyInput, NotifyResult } from "./notify";
+import type { NoticeAbout, NotifyDeps, NotifyInput, NotifyResult } from "./notify";
 import type { LapseContext } from "./orgChart";
 import type { StayRow } from "./stays";
 import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
@@ -281,7 +281,7 @@ export interface AppDeps {
    * loses the implementation's signature, so the omission can only become a
    * compiler error here. Batch it with `paidByVillage` below.
    */
-  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean): string;
+  computeStage(user: MemberRecord, consentedQuests: number, trainingDone: readonly string[], paidByVillage: boolean, holdsRole: boolean): string;
 
   /** Completed training modules for many members, in one query. */
   trainingCompletions(userIds: readonly string[]): Promise<Map<string, string[]>>;
@@ -400,9 +400,11 @@ export interface AppDeps {
    * One alert to EVERY admin and founder, deduped per recipient.
    *
    * The suffix on the dedupe key is what keeps "each admin hears it once" and
-   * "the event fires once" separate concerns.
+   * "the event fires once" separate concerns. A title that names a member
+   * passes them in `about.actorUserId`, so the erasure sweep finds the row
+   * once they have gone (server/repos/noticesNaming.ts).
    */
-  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[]): Promise<void>;
+  notifyAdmins(type: string, title: string, dedupeKey: string, link?: string, except?: readonly string[], about?: NoticeAbout): Promise<void>;
 
   /**
    * Tell whoever raised a report that a steward has read it and closed it.
@@ -437,6 +439,8 @@ export interface AppDeps {
     to: string[];
     subject: string;
     html: string;
+    /** The plain-text part, when the caller rendered one. */
+    text?: string;
     replyTo?: string;
     /** What made this email, for the ledger: `housing.request`, say. */
     origin?: string;
@@ -472,6 +476,13 @@ export interface AppDeps {
 
   /** What this village calls itself, for an email subject line. */
   projectName(): string;
+
+  /**
+   * The village's brand colour, one hex value, for the hand-written emails'
+   * band, buttons and links (`brandColour`, server/lib/themeCss.ts; read
+   * through `emailAccent` in server/lib/emailAccent.ts).
+   */
+  brandColour(): string;
 
   /**
    * What this village counts its money in, MERGED: the founder's Make This

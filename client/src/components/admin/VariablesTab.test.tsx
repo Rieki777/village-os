@@ -28,7 +28,7 @@
  * tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -109,7 +109,9 @@ describe("VariablesTab", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => answer(String(url))));
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -193,7 +195,7 @@ describe("VariablesTab", () => {
     // The server tagged this one as owned by a module, so it is edited there.
     expect(screen.queryByText("Report hide threshold")).toBeNull();
     const link = screen.getByRole("link", { name: "Forum & Decisions" });
-    expect(link.getAttribute("href")).toBe("/admin?tab=modules&module=forum");
+    expect(link.getAttribute("href")).toBe("/modules/forum");
     expect(screen.getByText(/1 setting, module off/)).toBeInTheDocument();
   });
 

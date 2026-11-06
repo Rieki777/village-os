@@ -61,10 +61,15 @@ export default function FirstWalk() {
           {loaded && steps.length === 0 && (
             <div className="bg-card border border-border rounded-xl p-6 text-center">
               <Compass className="w-6 h-6 text-teal-deep mx-auto mb-3" />
-              <p className="text-sm text-foreground font-medium mb-1">This village speaks for itself already.</p>
+              <p className="text-sm text-foreground font-medium mb-1">No practice examples are showing.</p>
               <p className="text-sm text-muted-foreground">
-                The practice examples are gone. Everything here now, your
-                village made.
+                They come with the modules that carry them, so a new village with
+                its modules off has none to walk yet.{" "}
+                <Link href="/modules" className="text-teal-deep underline">
+                  Switch a module on
+                </Link>{" "}
+                and its examples join this walk. A village that published its own
+                content has retired them, and everything here is its own.
               </p>
             </div>
           )}

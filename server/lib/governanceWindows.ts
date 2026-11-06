@@ -204,7 +204,7 @@ export const WINDOW_KINDS: Readonly<Record<string, WindowKindDef>> = {
   governance_mode: { key: "governance.window_governance_mode", label: "a change to how votes are counted" },
   role_declare: { key: "governance.window_role_declare", label: "declaring a role" },
   role_seat: { key: "governance.window_role_seat", label: "seating a role" },
-  role_unseat: { key: "governance.window_role_unseat", label: "taking a seat back" },
+  role_unseat: { key: "governance.window_role_unseat", label: "taking a role back" },
   power_transfer: { key: "governance.window_power_transfer", label: "moving a power to a role" },
   power_grant: { key: "governance.window_power_grant", label: "granting a power" },
   power_return: { key: "governance.window_power_return", label: "handing a power back" },

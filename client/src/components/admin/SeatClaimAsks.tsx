@@ -71,7 +71,7 @@ export function SeatClaimAsks({ asks, call, onDone }: SeatClaimAsksProps) {
   return (
     <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3" data-seat-claim-asks>
       <p className="text-xs font-semibold text-gray-900">
-        {asks.length === 1 ? "Someone asks to be confirmed in this seat" : "People ask to be confirmed in this seat"}
+        {asks.length === 1 ? "Someone asks to be confirmed in this role" : "People ask to be confirmed in this role"}
       </p>
       <p className="text-[11px] text-gray-600 mt-0.5">
         A name on an account is typed by whoever holds it, so this is a question
@@ -82,7 +82,7 @@ export function SeatClaimAsks({ asks, call, onDone }: SeatClaimAsksProps) {
           <li key={ask.claimId} className="flex flex-wrap items-center gap-2 justify-between">
             <span className="text-xs text-gray-800">
               <span className="font-medium">{ask.userName}</span>
-              {", recorded on this seat as "}
+              {", recorded on this role as "}
               <span className="font-medium">{ask.recordedName || "no name"}</span>
             </span>
             <span className="flex gap-2">

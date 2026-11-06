@@ -174,6 +174,44 @@ export async function listApplications(db: Db, limit = 500): Promise<StoredAppli
   return rows.map(rowToApplication);
 }
 
+/**
+ * Every application these members filed, newest first: one read, filtered in
+ * SQL by `candidate_user_id` so it rides `seat_applications_candidate_idx`.
+ * The `?candidate=` list and the player card both read a person's
+ * applications here (shared/applicationGroups.ts groups them).
+ */
+export async function applicationsOfCandidates(db: Db, candidateUserIds: readonly string[]): Promise<StoredApplication[]> {
+  if (candidateUserIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} FROM seat_applications WHERE candidate_user_id IN (${candidateUserIds.map(() => "?").join(",")}) ORDER BY created_at DESC, id DESC`,
+    [...candidateUserIds],
+  );
+  return rows.map(rowToApplication);
+}
+
+/**
+ * Ended seatings these members held that came through no application: the
+ * roles a village seated people in before applications were kept. One read.
+ */
+export async function pastSeatingsWithoutApplication(
+  db: Db,
+  userIds: readonly string[],
+): Promise<Array<{ userId: string; roleId: string; startedAt: Date | null; endedAt: Date | null }>> {
+  if (userIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT user_id, org_role_id, started_at, ended_at FROM org_role_assignments " +
+      `WHERE user_id IN (${userIds.map(() => "?").join(",")}) AND ended_at IS NOT NULL AND application_id IS NULL ` +
+      "AND holder_kind = 'member' AND is_example = 0 ORDER BY started_at, id",
+    [...userIds],
+  );
+  return rows.map((r) => ({
+    userId: String(r.user_id),
+    roleId: String(r.org_role_id),
+    startedAt: r.started_at ? new Date(r.started_at) : null,
+    endedAt: r.ended_at ? new Date(r.ended_at) : null,
+  }));
+}
+
 /** A member's applications still waiting on somebody's decision. */
 export async function openApplicationsOf(db: Db, candidateUserId: string): Promise<StoredApplication[]> {
   const [rows] = await db.query<RowDataPacket[]>(

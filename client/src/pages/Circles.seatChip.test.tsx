@@ -158,6 +158,11 @@ describe("an agent on /circles", () => {
 });
 
 describe("a seat chip on /circles", () => {
+  it("links the open circle to its own card at /circles/:id", async () => {
+    await openCircle();
+    expect(screen.getByRole("link", { name: "Open this circle's card" }).getAttribute("href")).toBe("/circles/land");
+  });
+
   it("is a button that opens a dialog named after the seat, with the role card inside", async () => {
     await openCircle();
     const chip = screen.getByRole("button", { name: "Seed Keeper" });

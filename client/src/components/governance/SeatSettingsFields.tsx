@@ -5,7 +5,7 @@
  * ordinary inputs. They write straight into the group's object and hand the
  * whole settings back up; `parseSeatSettings` judges the result, so a field
  * here never invents a rule of its own. Absent stays absent: clearing a box
- * removes the key, and the words then read "not set", never 0.
+ * removes the key, and an empty choice says the operations role will fill it.
  *
  * AMOUNTS ARE TYPED WHOLE, in the currency's own units, and stored as whole
  * minor units. A decimal typed here is kept as typed so the parser can say
@@ -13,6 +13,7 @@
  */
 import { useId, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
+import { honestyLine, OPS_FALLBACK } from "@shared/roleProposalHonesty";
 import {
   ALLOWANCE_KINDS,
   BONUS_KINDS,
@@ -28,10 +29,10 @@ import {
 } from "@shared/seatSettings";
 
 const input =
-  "w-full min-h-[44px] rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep";
-const labelClass = "block text-xs font-semibold text-stone-700";
+  "w-full min-h-[44px] rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const labelClass = "block text-xs font-semibold text-foreground";
 const smallButton =
-  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-stone-300 px-3 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -82,7 +83,7 @@ function Choice({
   value,
   options,
   onChange,
-  blank = "Not set",
+  blank = honestyLine({ set: false, presetLabel: null, customised: false, partner: OPS_FALLBACK, money: false }),
 }: {
   label: string;
   value: unknown;
@@ -185,7 +186,7 @@ function Amount({ label, minor, currency, onChange }: { label: string; minor: un
   );
 }
 
-function TermFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
+function TermFields({ g, set, openLabel }: { g: Obj; set: (next: Obj) => void; openLabel: string }) {
   const mode = g.endsOn === null ? "season" : typeof g.endsOn === "string" ? "date" : g.lengthMoons !== undefined ? "moons" : "";
   return (
     <>
@@ -204,7 +205,7 @@ function TermFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
               set(next);
             }}
           >
-            <option value="">Not set</option>
+            <option value="">{openLabel}</option>
             <option value="season">When the season ends</option>
             <option value="date">On a date</option>
             <option value="moons">After a number of moons</option>
@@ -228,8 +229,8 @@ function RhythmFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
     <>
       <div className="space-y-3 sm:col-span-2">
         {gatherings.map((row, i) => (
-          <fieldset key={i} className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-2">
-            <legend className="px-1 text-xs font-semibold text-stone-700">Gathering {i + 1}</legend>
+          <fieldset key={i} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+            <legend className="px-1 text-xs font-semibold text-foreground">Gathering {i + 1}</legend>
             <Words label="Name" max={LIMITS.labelChars} wide={false} value={row.label} onChange={(v) => setRow(i, put(row, "label", v))} />
             <Field label="Day">
               {(id) => (
@@ -269,7 +270,7 @@ function RhythmFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
         <legend className={labelClass}>Quiet days</legend>
         <div className="mt-1 flex flex-wrap gap-2">
           {WEEKDAYS.map((d, n) => (
-            <label key={d} className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-200 px-3 text-sm text-stone-800">
+            <label key={d} className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-3 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={quiet.includes(n)}
@@ -288,13 +289,13 @@ function RhythmFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
   );
 }
 
-function MoneyFields({ group, g, set }: { group: "pay" | "allowance"; g: Obj; set: (next: Obj) => void }) {
+function MoneyFields({ group, g, set, openLabel }: { group: "pay" | "allowance"; g: Obj; set: (next: Obj) => void; openLabel: string }) {
   const kinds = group === "pay" ? PAY_KINDS : ALLOWANCE_KINDS;
   const kind = String(g.kind ?? "");
   const amountKinds = group === "pay" ? ["fixed", "in-kind", "deferred"] : ["flat"];
   return (
     <>
-      <Choice label="Kind" value={g.kind} options={kinds} onChange={(v) => set(put(g, "kind", v))} />
+      <Choice label="Kind" value={g.kind} options={kinds} blank={openLabel} onChange={(v) => set(put(g, "kind", v))} />
       <Words
         label="Currency code"
         max={3}
@@ -310,17 +311,17 @@ function MoneyFields({ group, g, set }: { group: "pay" | "allowance"; g: Obj; se
         </>
       )}
       {kind !== "none" && kind !== "honorary" && kind !== "reimbursed" && (
-        <Choice label="Each" value={g.per} options={MONEY_PER} onChange={(v) => set(put(g, "per", v))} />
+        <Choice label="Each" value={g.per} options={MONEY_PER} blank={openLabel} onChange={(v) => set(put(g, "per", v))} />
       )}
       <Words label="Note" area max={LIMITS.noteChars} value={g.note} onChange={(v) => set(put(g, "note", v))} />
     </>
   );
 }
 
-function BonusFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
+function BonusFields({ g, set, openLabel }: { g: Obj; set: (next: Obj) => void; openLabel: string }) {
   return (
     <>
-      <Choice label="Kind" value={g.kind} options={BONUS_KINDS} onChange={(v) => set(put(g, "kind", v))} />
+      <Choice label="Kind" value={g.kind} options={BONUS_KINDS} blank={openLabel} onChange={(v) => set(put(g, "kind", v))} />
       {g.kind === "equity" && (
         <>
           <Words label="The cap, in words" max={LIMITS.wordsChars} placeholder="Up to a set share, written here in words" value={g.capWords} onChange={(v) => set(put(g, "capWords", v))} />
@@ -338,7 +339,7 @@ function QuestFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
       <Whole label="Fewest quests a moon" min={1} max={LIMITS.questsPerMoon} value={g.perMoonMin} onChange={(v) => set({ ...put(g, "perMoonMin", v), doneWhenRequired: true })} />
       <Whole label="Most quests a moon" min={1} max={LIMITS.questsPerMoon} value={g.perMoonMax} onChange={(v) => set({ ...put(g, "perMoonMax", v), doneWhenRequired: true })} />
       <Words label="How quests are agreed" max={LIMITS.wordsChars} value={g.agreedHow} onChange={(v) => set({ ...put(g, "agreedHow", v), doneWhenRequired: true })} />
-      <p className="text-xs text-stone-600 sm:col-span-2">Every quest has a done when. That part is always on.</p>
+      <p className="text-xs text-muted-foreground sm:col-span-2">Every quest has a done when. That part is always on.</p>
     </>
   );
 }
@@ -348,10 +349,10 @@ function ScoreboardFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
   const setRow = (i: number, row: Obj) => set({ ...g, measures: measures.map((x, j) => (j === i ? row : x)) });
   return (
     <div className="space-y-3 sm:col-span-2">
-      <p className="text-xs text-stone-600">A scoreboard measures the work. It never ranks people.</p>
+      <p className="text-xs text-muted-foreground">A scoreboard measures the work. It never ranks people.</p>
       {measures.map((row, i) => (
-        <fieldset key={i} className="grid gap-2 rounded-lg border border-stone-200 p-3 sm:grid-cols-2">
-          <legend className="px-1 text-xs font-semibold text-stone-700">Measure {i + 1}</legend>
+        <fieldset key={i} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+          <legend className="px-1 text-xs font-semibold text-foreground">Measure {i + 1}</legend>
           <Words label="What is measured" max={LIMITS.measureChars} value={row.measure} onChange={(v) => setRow(i, put(row, "measure", v))} />
           <Words label="Target, in words" max={LIMITS.measureChars} wide={false} value={row.target} onChange={(v) => setRow(i, put(row, "target", v))} />
           <Words label="Read from" max={LIMITS.measureChars} wide={false} value={row.readFrom} onChange={(v) => setRow(i, put(row, "readFrom", v))} />
@@ -382,7 +383,7 @@ function EndingFields({ g, set }: { g: Obj; set: (next: Obj) => void }) {
     <>
       <Whole label="Notice, in days" max={LIMITS.noticeDays} value={g.noticeDays} onChange={(v) => set(put(g, "noticeDays", v))} />
       <div className="flex items-end">
-        <label htmlFor={id} className="inline-flex min-h-[44px] items-center gap-2 text-sm text-stone-800">
+        <label htmlFor={id} className="inline-flex min-h-[44px] items-center gap-2 text-sm text-foreground">
           <input id={id} type="checkbox" checked={g.payThroughNotice === true} onChange={(e) => set({ ...g, payThroughNotice: e.target.checked })} />
           Pay runs through the notice
         </label>
@@ -395,25 +396,28 @@ export default function SeatSettingsFields({
   group,
   settings,
   onChange,
+  openLabel = honestyLine({ set: false, presetLabel: null, customised: false, partner: OPS_FALLBACK, money: false }),
 }: {
   group: SettingsGroup;
   settings: SeatSettings;
   onChange: (next: SeatSettings) => void;
+  /** The blank choice, when a field has no value yet. */
+  openLabel?: string;
 }) {
   const g: Obj = ((settings as Obj)[group] as Obj | undefined) ?? (group === "scoreboard" ? { measures: [] } : group === "quests" ? { doneWhenRequired: true } : {});
   const set = (next: Obj) => onChange({ ...settings, [group]: next } as SeatSettings);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {group === "term" && <TermFields g={g} set={set} />}
+      {group === "term" && <TermFields g={g} set={set} openLabel={openLabel} />}
       {group === "clocks" && (
         <>
-          <Choice label="Money keeps" value={g.pay} options={PAY_CLOCKS} onChange={(v) => set(put(g, "pay", v))} />
-          <Choice label="The work keeps" value={g.work} options={WORK_CLOCKS} onChange={(v) => set(put(g, "work", v))} />
+          <Choice label="Money keeps" value={g.pay} options={PAY_CLOCKS} blank={openLabel} onChange={(v) => set(put(g, "pay", v))} />
+          <Choice label="The work keeps" value={g.work} options={WORK_CLOCKS} blank={openLabel} onChange={(v) => set(put(g, "work", v))} />
         </>
       )}
       {group === "rhythm" && <RhythmFields g={g} set={set} />}
-      {(group === "pay" || group === "allowance") && <MoneyFields group={group} g={g} set={set} />}
-      {group === "bonus" && <BonusFields g={g} set={set} />}
+      {(group === "pay" || group === "allowance") && <MoneyFields group={group} g={g} set={set} openLabel={openLabel} />}
+      {group === "bonus" && <BonusFields g={g} set={set} openLabel={openLabel} />}
       {group === "quests" && <QuestFields g={g} set={set} />}
       {group === "scoreboard" && <ScoreboardFields g={g} set={set} />}
       {group === "ending" && <EndingFields g={g} set={set} />}

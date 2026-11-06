@@ -43,6 +43,7 @@ import { isCustomised, presetFor, type SeatPreset } from "@shared/seatPresets";
 import { OFFER_WORDS } from "@shared/seatTermsOffer";
 import type { AlignmentState } from "@shared/alignments";
 import AlignmentMarks, { type ChipParty } from "@/components/alignment/AlignmentMarks";
+import { useOpsPartner } from "@/components/governance/useOpsPartner";
 
 const GROUP_ICONS: Record<SettingsGroup, LucideIcon> = {
   term: CalendarClock,
@@ -58,8 +59,7 @@ const GROUP_ICONS: Record<SettingsGroup, LucideIcon> = {
 
 export const DRAWER_WORDS = {
   trigger: "Settings",
-  triggerSub: "Terms for whoever holds this seat",
-  notSetLead: "Not set yet",
+  triggerSub: "Terms for whoever holds this role",
   customised: "customised",
   fromPreset: "Started from",
   unreadable: "Some of these terms need fixing before they show here.",
@@ -68,7 +68,7 @@ export const DRAWER_WORDS = {
   none: OFFER_WORDS.none,
   propose: OFFER_WORDS.propose,
   changed: OFFER_WORDS.changed,
-  changeLater: "Changing the terms of a seat somebody holds comes later.",
+  changeLater: "Changing the terms of a role somebody holds comes later.",
 } as const;
 
 export interface DrawerAdoption {
@@ -218,6 +218,7 @@ export default function SeatTermsDrawer({
    */
   alignment?: { state: AlignmentState; sealed: boolean; parties: readonly ChipParty[]; endingLine?: string | null } | null;
 }) {
+  const who = useOpsPartner();
   const [open, setOpen] = useState(defaultOpen);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const bodyId = `${uid}-terms`;
@@ -280,7 +281,7 @@ export default function SeatTermsDrawer({
             )}
             {unset.length > 0 && (
               <p className="py-2 text-xs text-muted-foreground">
-                {DRAWER_WORDS.notSetLead}: {unset.map((r) => r.label).join(", ")}
+                {`We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`}
               </p>
             )}
           </>

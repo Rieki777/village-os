@@ -75,6 +75,19 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
      * a steward reads it before it becomes part of the chart.
      */
     "Body",
+    /**
+     * What the source holds a role to pay, as its Operations role described
+     * the fields on 2026-10-30: Model and Status are selects, Terms is free
+     * text, and the Target is ONE blended figure in US dollars a month for the
+     * whole arrangement, not cash alone. They cross as information for the
+     * structure review and are never written to a seat: pay is set here, by a
+     * person (`shared/proposedSeats.ts` keeps money out of a proposal).
+     * Terms is prose and meets the same three defences as `Body`.
+     */
+    "Compensation Model",
+    "Compensation Status",
+    "Compensation Terms",
+    "Compensation Target (Monthly)",
   ],
   /**
    * `Role Holder` is absent on purpose and so is `Active Holders` above. Who

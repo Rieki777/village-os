@@ -30,7 +30,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { landProposal } from "./lib/externalProposals";
 import { seatHolder } from "./lib/orgChart";
@@ -100,7 +100,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-review-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -160,6 +160,13 @@ beforeAll(async () => {
   // The seeded Steward Circle asks for the Member stage, so a fresh account
   // cannot be seated in it. Same step the handover suite takes, and the
   // refusal it produces is a real product rule rather than a fixture problem.
+  // Sheet 19 (0307): Steward Circle ships with admin access ON, so its holders can open the admin
+  // panel. This suite uses the group as a carrier of capabilities and tests a steward who is NOT an admin, so it
+  // pins the default and then switches it off. The group's admin access itself is pinned in
+  // server/authzRound.routes.e2e.test.ts.
+  expect(steward.grantsAdmin).toBe(true);
+  const off = await call("PUT", "/api/admin/roles/steward-circle/admin-access", { on: false });
+  expect(off.status, off.text).toBe(200);
   await call("PUT", `/api/admin/players/${kiraId}/stage`, { stageId: "member" });
   const seated = await call("POST", "/api/admin/roles/steward-circle/holders", { userId: kiraId, action: "add" });
   expect(seated.status, seated.text).toBe(200);
@@ -390,7 +397,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     // given. A village should be able to hand out the first without the
     // second, and this is that being true rather than being intended.
     const r = await call("POST", "/api/review/quests/anything/accept", {
-      reward: { gratitude: "50-100" },
+      reward: { valueMinor: 5000 },
     }, kiraToken);
     expect(r.status).not.toBe(200);
     expect([401, 403, 409]).toContain(r.status);
@@ -409,18 +416,19 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const records: Record<string, unknown>[] = [
       {
         role_name: "Spring Keeper", aim: "The spring runs clean all year.", domain: null,
-        accountabilities: "Test the spring monthly; Keep the log.", circle: "springs & wells ", seat_count: 1, recruiting: true,
+        // Three lines each (0274): a role answers for 3 to 6 things, and this test is about the vendor's field names.
+        accountabilities: "Test the spring monthly; Keep the log; Report each reading.", circle: "springs & wells ", seat_count: 1, recruiting: true,
       },
       {
         role_name: "Pipe Mender", aim: "No line stays broken for a week.", domain: "The water lines.",
-        accountabilities: "Walk the lines after rain\nCarry the repair kit", circle: "Water Care", seat_count: 2,
+        accountabilities: "Walk the lines after rain\nCarry the repair kit\nLog each repair", circle: "Water Care", seat_count: 2,
         recruiting: false, vendor_rank: 3,
         // A batch of three gives its draft no rationale, so this one is reported.
         rationale: "The lines break every rain.",
       },
       {
         role_name: "Mill Warden", aim: "The mill turns when the grain is in.", domain: "The mill.",
-        accountabilities: "Run the mill", circle: "Milling Circle", seat_count: 1, recruiting: false,
+        accountabilities: "Run the mill; Dress the stones; Keep the grain dry", circle: "Milling Circle", seat_count: 1, recruiting: false,
       },
     ];
     const ids: string[] = [];
@@ -462,7 +470,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect([...first.json.ignored[0].keys].sort()).toEqual(["rationale", "vendor_rank"]);
     // The reason itself reaches the steward, and it names the recovery walked below.
     expect(first.json.blockedLines).toEqual([
-      { reads: 'Create the seat "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
+      { reads: 'Create the role "Mill Warden"', blocked: expect.stringContaining('There is no circle called "Milling Circle" yet') },
     ]);
     expect(first.json.blockedLines[0].blocked).toContain("withdraw this draft. Its proposals go back in the review queue");
 
@@ -479,10 +487,10 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
 
     const one = await payloadsByName(first.json.draftId);
     expect(one["Spring Keeper"]).toMatchObject({
-      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log"],
+      circleId: waterId, seats: 1, recruiting: true, accountabilities: ["Test the spring monthly", "Keep the log", "Report each reading"],
     });
     expect(one["Pipe Mender"]).toMatchObject({
-      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit"],
+      circleId: waterId, seats: 2, accountabilities: ["Walk the lines after rain", "Carry the repair kit", "Log each repair"],
     });
     expect(one["Pipe Mender"]).not.toHaveProperty("vendor_rank");
     expect(one["Mill Warden"]).not.toHaveProperty("circleId");
@@ -550,7 +558,7 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     expect(taken.status, taken.text).toBe(200);
     expect(taken.json.blocked).toBe(1);
     expect(taken.json.blockedLines[0].blocked).toContain("Criticality is normal or high");
-    expect(taken.json.blockedLines[0].blocked).toContain("A seat holds between 1 and 50 people");
+    expect(taken.json.blockedLines[0].blocked).toContain("A role holds between 1 and 50 people");
     expect((await stuckOn()).map((d) => d.draftId)).toContain(taken.json.createdRef);
   });
 
@@ -701,7 +709,7 @@ describe.skipIf(!DB_CONFIGURED)("the person who proposed a quest", () => {
 
   it("hears that the idea went on the board, with a link to the quest and no words from the idea", async () => {
     const id = await inQueue("Mend the orchard gate");
-    const put = await call("POST", `/api/review/quests/${id}/accept`, { reward: { gratitude: "20" } });
+    const put = await call("POST", `/api/review/quests/${id}/accept`, { reward: { valueMinor: 2000 } });
     expect(put.status, put.text).toBe(200);
     const onBoard = await noticesOf("quest_idea_on_board");
     expect(onBoard).toHaveLength(1);

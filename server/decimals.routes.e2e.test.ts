@@ -47,7 +47,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -188,7 +188,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-decimals-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -474,11 +474,17 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
      * recognition would have cleared a bar set at a hundred.
      */
     await setVar("governance.hypha_threshold", "100");
+    // Kept for the cases after this one, which hand-mint credits with no co-signer.
     await setVar("ledger.admin_mint_cosign_over", "0");
     await setVar("ledger.admin_mint_cycle_cap", "10000");
+    // Gratitude reaches Anna the only way it reaches anybody, a member's send
+    // (Rye, 2026-10-23). This hand-minted it until the mint refused Gratitude.
+    // A large allowance and one full send let a single send cross the bar.
+    await setVar("gratitude.base_budget", "1000");
+    await setVar("gratitude.full_sends_per_cycle", "1");
 
-    const one = await call("POST", `/api/admin/tokens/${GRATITUDE}/mint`, {
-      body: { toUserId: annaId, amount: 1, reason: "one whole recognition" },
+    const one = await call("POST", "/api/game/gratitude/send", {
+      body: { toEmail: annaEmail(), amount: 1, message: "one whole recognition" },
     });
     expect(one.status, JSON.stringify(one.json)).toBe(200);
     // The cache and the ledger agree, and both are minor.
@@ -493,8 +499,8 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
 
     // And the bar is a real bar rather than an unreachable one: cross it and
     // the number the gate reads crosses with it.
-    const more = await call("POST", `/api/admin/tokens/${GRATITUDE}/mint`, {
-      body: { toUserId: annaId, amount: 120, reason: "over the bar" },
+    const more = await call("POST", "/api/game/gratitude/send", {
+      body: { toEmail: annaEmail(), amount: 120, message: "over the bar" },
     });
     expect(more.status, JSON.stringify(more.json)).toBe(200);
     const open = await call("GET", "/api/game/mechanics/standing", { token: annaToken });
@@ -512,7 +518,7 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
      */
     await call("PUT", "/api/admin/modules/stays/lifecycle", { body: { lifecycle: "public" } });
     const quest = await call("POST", "/api/admin/quests", {
-      body: { title: `Rebuild the beds ${PORT}`, gratitude: "10", stayCreditReward: 3, tags: ["work-exchange"] },
+      body: { title: `Rebuild the beds ${PORT}`, valueMinor: 1000000, stayCreditReward: 3, tags: ["work-exchange"] },
     });
     expect(quest.status, JSON.stringify(quest.json)).toBe(200);
     const questId = String(quest.json?.id ?? "");
@@ -529,8 +535,8 @@ describe.skipIf(!DB_CONFIGURED)("four decimals, through the routes that post and
 
     // Three whole stay credits, at four decimals.
     expect(await minorBalance(benId, STAY_CREDIT)).toBe(before + 3 * SCALE4);
-    // And the consent credit on the same act, in recognition's own units.
-    expect(await minorBalance(benId, GRATITUDE)).toBe(gratBefore + 10 * SCALE4);
+    // And no Gratitude on the same act: a quest pays none (Rye, 2026-10-21).
+    expect(await minorBalance(benId, GRATITUDE)).toBe(gratBefore);
 
     // The member is told the human number, which is the whole point of
     // converting at the boundary rather than inside the ledger.

@@ -48,7 +48,7 @@ describe("planning opens", () => {
     expect(ana).toMatchObject({
       type: "season_plan_open",
       title: "Plan your season: Second Season",
-      body: "Choose your seats and what you will do. Open until 31 March 2027.",
+      body: "Choose your roles and what you will do. Open until 31 March 2027.",
       link: "/season-plans/mine",
     });
     expect(Array.from(mem.rows.values()).some((r) => r.userId === "u-demo")).toBe(false);

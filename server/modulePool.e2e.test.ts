@@ -25,7 +25,7 @@ import os from "os";
 import path from "path";
 import { spawn, type ChildProcess } from "child_process";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { sealCycle } from "./repos/moduleUsage";
 import { cycleIdFor } from "./lib/gratitude-cycles";
@@ -99,7 +99,7 @@ describe.skipIf(!DB_CONFIGURED)("the builders' pool, driven", () => {
     }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-meter-"));
     testDb = await provisionTestDb();
-    pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
+    pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
 
     // Refuse a port a stranger is already holding, and wait out the previous
     // suite's server if it has not let go yet. The boot poll below breaks on ANY

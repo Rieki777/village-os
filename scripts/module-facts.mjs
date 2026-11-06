@@ -135,7 +135,9 @@ function unionStrings(sourceFile, aliasName) {
 // ── The gate commands, read from the workflow that actually decides ──────────
 
 /**
- * The `verify` job's steps, as (name, command) pairs.
+ * Every job's steps in one workflow, as (name, command) pairs. In ci.yml that is
+ * `verify`, the `test` shards and `tests-ran-once` together, so a step two jobs
+ * share (Install, Build) is listed once per job.
  *
  * Deliberately a targeted line scan and not a YAML dependency: this repository
  * refuses new dependencies, and the shape being read is two known keys at a
@@ -259,6 +261,21 @@ function ciGates(yml) {
       continue;
     }
 
+    // A FOLDED scalar (`run: >-`) is one command written across lines, which
+    // YAML joins with spaces. Without this the step printed as the literal
+    // `>-`, which is the shorter-truth failure this file exists to avoid.
+    const folded = /^\s{8}run:\s*>[-+]?\s*$/.exec(line);
+    if (folded && pending) {
+      const parts = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!/^\s{10,}\S/.test(lines[j])) break;
+        parts.push(lines[j].trim());
+      }
+      steps.push({ name: pending, command: parts.join(" "), block: false });
+      pending = null;
+      continue;
+    }
+
     const runOne = /^\s{8}run:\s+(.+?)\s*$/.exec(line);
     if (runOne && pending) {
       steps.push({ name: pending, command: runOne[1], block: false });
@@ -320,7 +337,7 @@ if (tiers === null) unreadable.push("the ModuleTier type in shared/modules.ts");
 if (dataClasses === null) unreadable.push("the ModuleDataClass type in shared/modules.ts");
 if (lifecycles === null) unreadable.push("the ModuleLifecycle type in shared/modules.ts");
 if (capabilityCount === null) unreadable.push("ALL_CAPABILITIES in shared/capabilities.ts");
-if (gates === null || !gates.steps.length) unreadable.push("the verify job steps in .github/workflows/ci.yml");
+if (gates === null || !gates.steps.length) unreadable.push("the job steps in .github/workflows/ci.yml");
 if (!prWorkflows.length) unreadable.push("any workflow under .github/workflows/ that runs on a pull request");
 for (const w of prWorkflows) {
   // Zero NAMED steps means the parse failed. Zero runnable steps beside a

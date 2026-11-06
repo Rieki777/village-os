@@ -59,8 +59,23 @@ export interface ClientOptions {
   baseUrl: string;
   token: string;
   fetchImpl: FetchLike;
-  /** Milliseconds for one call. Their slow answers arrive behind keepalives. */
+  /**
+   * Milliseconds for one call. Their slow answers arrive behind keepalives.
+   * Applied as an AbortSignal on every fetch below; it was declared and never
+   * applied until the moon review's Sera draft needed its 90-second cap.
+   */
   timeoutMs?: number;
+  /** A caller's own deadline, joined with `timeoutMs`: whichever fires first stops the call. */
+  signal?: AbortSignal;
+}
+
+/** The signal one fetch carries: the per-call timeout, the caller's deadline, both, or none. */
+export function callSignal(o: Pick<ClientOptions, "timeoutMs" | "signal">): AbortSignal | undefined {
+  const parts: AbortSignal[] = [];
+  if (typeof o.timeoutMs === "number" && o.timeoutMs > 0) parts.push(AbortSignal.timeout(o.timeoutMs));
+  if (o.signal) parts.push(o.signal);
+  if (parts.length === 0) return undefined;
+  return parts.length === 1 ? parts[0] : AbortSignal.any(parts);
 }
 
 /** Every way a call comes back with nothing, each one named. */
@@ -191,6 +206,7 @@ export async function openSession(o: ClientOptions): Promise<string | null> {
     res = await o.fetchImpl(o.baseUrl, {
       method: "POST",
       headers: headers(o.token),
+      signal: callSignal(o),
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -229,6 +245,7 @@ async function request(
     res = await o.fetchImpl(o.baseUrl, {
       method: "POST",
       headers: headers(o.token, sessionId),
+      signal: callSignal(o),
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     });
   } catch (e) {
@@ -238,7 +255,12 @@ async function request(
     return { ok: false, why: "refused", detail: `the service answered ${res.status}` };
   }
 
-  const body = await res.text();
+  let body: string;
+  try {
+    body = await res.text();
+  } catch (e) {
+    return { ok: false, why: "refused", detail: clip(e instanceof Error ? e.message : String(e)) };
+  }
   const stream = readEventStream(body);
   if (stream.messages.length === 0) {
     const n = stream.unparsed.length;
@@ -277,6 +299,36 @@ export async function callTool(
     return { ok: false, why: "unreadable", detail: describeReply(msg) };
   }
   return { ok: true, ...payload };
+}
+
+/**
+ * A tool call whose answer is not a record list: a write (feedback, a
+ * suppression) or a paged read in the service's newer `{ results, has_more,
+ * next_cursor }` shape. Answers the parsed JSON, or the text when it is prose.
+ * An MCP tool error (`isError`) is a named `vendor-error`, never a success.
+ */
+export async function callToolJson(
+  o: ClientOptions,
+  sessionId: string,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: true; value: unknown } | CallFailure> {
+  const answer = await request(o, sessionId, 4, "tools/call", { name: tool, arguments: args });
+  if (!answer.ok) return answer;
+  const result = answer.message.result as Record<string, unknown> | undefined;
+  if (!result || typeof result !== "object") return { ok: false, why: "unreadable", detail: describeReply(answer.message) };
+  const text = Array.isArray(result.content)
+    ? (result.content as unknown[])
+        .map((b) => (b && typeof b === "object" && (b as Record<string, unknown>).type === "text" ? String((b as Record<string, unknown>).text ?? "") : ""))
+        .join("\n")
+    : "";
+  if (result.isError === true) return { ok: false, why: "vendor-error", detail: vendorWords(text || "the tool refused") };
+  if (result.structuredContent && typeof result.structuredContent === "object") return { ok: true, value: result.structuredContent };
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: true, value: text };
+  }
 }
 
 /**

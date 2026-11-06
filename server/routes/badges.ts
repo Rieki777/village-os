@@ -4,7 +4,7 @@
  * Fourteen routes, lifted out of server/index.ts unchanged:
  *
  *   GET    /api/badges                     the catalogue plus the viewer's own
- *   GET    /api/badges/of/:userId          somebody else's, as they allow
+ *   GET    /api/badges/of/:userId          somebody else's, as they allow (or /of/@handle)
  *   PUT    /api/badges/featured            pin up to three on a profile
  *   GET    /api/badges/match               who holds the skills a quest asks for
  *   POST   /api/badges/:id/claim           claim a self-claimable badge
@@ -47,14 +47,18 @@ import {
   badgeProblem,
   badgesOpenState,
   evaluateEarnedBadges,
+  readBadgeMultipliers,
   removeSkill,
   skillsFor,
   upsertAward,
 } from "../lib/badges";
+import { tokenDef } from "../lib/ledger";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, isExampleUser, onRealItemPublished } from "../lib/examples";
 import { requireModule } from "../lib/modules";
-import { numberVar } from "../lib/variables";
+import { boolVar, numberVar } from "../lib/variables";
+import { firstNameOf, peopleTier } from "../lib/peopleLock";
+import { userIdForHandle } from "../lib/profile";
 
 type Deps = Pick<
   AppDeps,
@@ -66,6 +70,18 @@ type Deps = Pick<
   | "notify"
   | "getPool"
 >;
+
+/**
+ * A multiplier map names tokens this village actually runs. `badgeProblem`
+ * judges the factors; the registry is read here because the validator also
+ * runs at boot, before the registry is loaded.
+ */
+function unknownMultiplierToken(multipliers: Record<string, number> | null): string | null {
+  for (const token of Object.keys(multipliers ?? {})) {
+    if (!tokenDef(token)) return `"${token}" is not a token this village runs, so a badge cannot multiply it`;
+  }
+  return null;
+}
 
 export function register(app: Express, deps: Deps): void {
   const { adminActor, authedUser, firstName, isAdmin, members, notify, getPool } = deps;
@@ -181,12 +197,20 @@ export function register(app: Express, deps: Deps): void {
    * /api/badges view and the admin surfaces carry warnings.
    */
   app.get("/api/badges/of/:userId", async (req, res) => {
+    /*
+     * `@handle` reaches the same answer by the name a stranger knows. The
+     * public profile is keyed by handle and never carries the id, and the
+     * badge flower on it needs this read. A handle nobody holds is an empty
+     * roster, the same answer an unknown id already gets.
+     */
+    const param = String(req.params.userId);
+    const userId = param.startsWith("@") ? ((await userIdForHandle(getPool(), param.slice(1))) ?? "") : param;
     const [rows] = await getPool().query<any[]>(
       "SELECT b.id, b.name, b.kind, b.description, a.count, a.expires_at, a.featured FROM badge_awards a " +
         "JOIN badges b ON b.id = a.badge_id " +
         "WHERE a.user_id = ? AND b.active = 1 AND b.kind <> 'warning' " +
         "AND (a.expires_at IS NULL OR a.expires_at > NOW()) ORDER BY a.featured DESC, b.name",
-      [String(req.params.userId)],
+      [userId],
     );
     res.json({
       badges: rows.map((r) => ({
@@ -197,7 +221,7 @@ export function register(app: Express, deps: Deps): void {
         // right up to the day it vanished. Same spelling as /api/badges.
         expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
       })),
-      skills: await skillsFor(getPool(), String(req.params.userId)),
+      skills: await skillsFor(getPool(), userId),
       maxFeatured: numberVar("badges.max_featured"),
     });
   });
@@ -243,8 +267,14 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /** Who holds a badge or a skill — matching, never surveillance: active,
-   *  unexpired, non-warning awards only, names as the member set them. */
+   *  unexpired, non-warning awards only, names as the member set them.
+   *
+   *  A STRANGER READS LESS (R097). While the village keeps its people for
+   *  members (`org.public_people` off) the list is empty; otherwise a first
+   *  name and the handle a profile is reached by, and never the internal id
+   *  or the full name, which are a member's to read. */
   app.get("/api/badges/match", async (req, res) => {
+    const tier = peopleTier(!!(await authedUser(req)), boolVar("org.public_people"));
     const badgeId = String(req.query.badge ?? "");
     const skill = String(req.query.skill ?? "").toLowerCase();
     if (!badgeId && !skill) return res.status(400).json({ error: "say what to match: ?badge=<id> or ?skill=<tag>" });
@@ -263,11 +293,19 @@ export function register(app: Express, deps: Deps): void {
       );
     } else {
       [rows] = await getPool().query<any[]>(
-        "SELECT u.id, u.name, u.handle FROM skill_tags s JOIN users u ON u.id = s.user_id WHERE s.tag = ? ORDER BY u.name LIMIT 100",
+        // u.is_example = 0, as on the badge branch above: a skill search puts real people in touch.
+        "SELECT u.id, u.name, u.handle FROM skill_tags s JOIN users u ON u.id = s.user_id WHERE s.tag = ? AND u.is_example = 0 ORDER BY u.name LIMIT 100",
         [skill],
       );
     }
-    res.json({ members: rows.map((r) => ({ id: r.id, name: r.name, handle: r.handle ?? null })) });
+    if (tier === "none") return res.json({ members: [] });
+    res.json({
+      members: rows.map((r) =>
+        tier === "member"
+          ? { id: r.id, name: r.name, handle: r.handle ?? null }
+          : { id: null, name: firstNameOf(r.name), handle: r.handle ?? null },
+      ),
+    });
   });
 
   app.post("/api/badges/:id/claim", async (req, res) => {
@@ -331,7 +369,7 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/admin/badges", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const { name, description, icon, kind, capabilities, denies, rule, seasonScope, multiplier } = req.body ?? {};
+    const { name, description, icon, kind, capabilities, denies, rule, seasonScope, multiplier, multipliers } = req.body ?? {};
     if (!String(name ?? "").trim()) return res.status(400).json({ error: "A name is required" });
     const candidate = {
       kind: String(kind ?? "granted"),
@@ -343,17 +381,20 @@ export function register(app: Express, deps: Deps): void {
       // by hand-written SQL, which is the one path that validates nothing.
       seasonScope: seasonScope === "seasonal" ? "seasonal" : "permanent",
       multiplier: multiplier === undefined || multiplier === null || multiplier === "" ? null : Number(multiplier),
+      // 0278: what the badge multiplies, token by token.
+      multipliers: readBadgeMultipliers(multipliers),
     };
-    const problem = badgeProblem(candidate as any);
+    const problem = badgeProblem(candidate as any) ?? unknownMultiplierToken(candidate.multipliers);
     if (problem) return res.status(400).json({ error: problem });
     const id = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || `badge-${Date.now()}`;
     if (await badgeById(getPool(), id)) return res.status(409).json({ error: `A badge with id "${id}" already exists` });
     await getPool().query(
-      "INSERT INTO badges (id, name, description, icon, kind, capabilities, denies, rule, season_scope, multiplier) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO badges (id, name, description, icon, kind, capabilities, denies, rule, season_scope, multiplier, multipliers) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
       [id, String(name).trim().slice(0, 120), description ?? null, icon ?? null, candidate.kind,
         JSON.stringify(candidate.capabilities), JSON.stringify(candidate.denies),
         candidate.rule ? JSON.stringify(candidate.rule) : null,
-        candidate.seasonScope, candidate.multiplier],
+        candidate.seasonScope, candidate.multiplier,
+        candidate.multipliers ? JSON.stringify(candidate.multipliers) : null],
     );
     onRealItemPublished(getPool(), "badges", adminActor(req)?.id ?? null);
     res.json({ success: true, badge: await badgeById(getPool(), id) });
@@ -385,9 +426,11 @@ export function register(app: Express, deps: Deps): void {
       multiplier: req.body?.multiplier !== undefined
         ? (req.body.multiplier === null || req.body.multiplier === "" ? null : Number(req.body.multiplier))
         : existing.multiplier,
+      // 0278. Partial-update shape: absent keeps what is stored, null clears it.
+      multipliers: req.body?.multipliers !== undefined ? readBadgeMultipliers(req.body.multipliers) : existing.multipliers,
       active: req.body?.active !== undefined ? !!req.body.active : existing.active,
     };
-    const problem = badgeProblem(merged as any);
+    const problem = badgeProblem(merged as any) ?? (req.body?.multipliers !== undefined ? unknownMultiplierToken(merged.multipliers) : null);
     if (problem) return res.status(400).json({ error: problem });
     // KIND IS THE AUTHORITY EACH AWARD WAS MADE UNDER. Flipping it
     // retroactively re-interprets every existing award: a self-claimed badge
@@ -475,10 +518,11 @@ export function register(app: Express, deps: Deps): void {
       }
     }
     await getPool().query(
-      "UPDATE badges SET name=?, description=?, icon=?, kind=?, capabilities=?, denies=?, rule=?, season_scope=?, multiplier=?, active=? WHERE id=?",
+      "UPDATE badges SET name=?, description=?, icon=?, kind=?, capabilities=?, denies=?, rule=?, season_scope=?, multiplier=?, multipliers=?, active=? WHERE id=?",
       [merged.name, merged.description, merged.icon, merged.kind, JSON.stringify(merged.capabilities),
         JSON.stringify(merged.denies), merged.rule ? JSON.stringify(merged.rule) : null,
-        merged.seasonScope, merged.multiplier, merged.active ? 1 : 0, req.params.id],
+        merged.seasonScope, merged.multiplier, merged.multipliers ? JSON.stringify(merged.multipliers) : null,
+        merged.active ? 1 : 0, req.params.id],
     );
     // Every AWARD leaves a trail; the DEFINITION they answer to did not.
     void recordEvent(getPool(), {

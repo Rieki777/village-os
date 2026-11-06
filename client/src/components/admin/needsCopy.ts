@@ -188,7 +188,7 @@ export function needSentence(row: ScopeRow): string {
 
 /** What screen 5 says about a need with nothing tagged to it. */
 export function uncoveredSentence(label: string): string {
-  return `Nothing in this village meets ${label} yet. A quest or a seat tagged to it will show here.`;
+  return `Nothing in this village meets ${label} yet. A quest or a role tagged to it will show here.`;
 }
 
 /**
@@ -204,7 +204,7 @@ export function coveredSentence(row: CoverageRow): string {
   const say = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const parts: string[] = [];
   if (row.counts.quest) parts.push(say(row.counts.quest, "quest", "quests"));
-  if (row.counts.role) parts.push(say(row.counts.role, "seat", "seats"));
+  if (row.counts.role) parts.push(say(row.counts.role, "role", "roles"));
   if (row.counts.sink) parts.push(say(row.counts.sink, "place to spend", "places to spend"));
   if (row.counts.stay) parts.push(say(row.counts.stay, "stay", "stays"));
   if (row.counts.event) parts.push(say(row.counts.event, "event", "events"));
@@ -223,9 +223,9 @@ export function coveredSentence(row: CoverageRow): string {
 /** R18 in one line: roles needed, of roles filled, for one need. */
 export function seatSentence(row: SeatingRow): string {
   if (row.seatsNeeded === 0) {
-    return `No seat is tagged to ${row.label}, so there is no seat count to give for it.`;
+    return `No role is tagged to ${row.label}, so there is no role count to give for it.`;
   }
-  return `${row.seatsFilled} of the ${row.seatsNeeded} seats tagged to ${row.label} are held.`;
+  return `${row.seatsFilled} of the ${row.seatsNeeded} roles tagged to ${row.label} are held.`;
 }
 
 /**

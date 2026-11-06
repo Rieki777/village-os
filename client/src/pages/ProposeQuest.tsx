@@ -1,12 +1,13 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Lightbulb, ArrowLeft, CheckCircle2, Sparkles, MessageCircle, ClipboardList, Inbox } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchConfigCached } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
 import GuideChat from "@/components/GuideChat";
+import { useGuideName } from "@/hooks/useGuideName";
 import { sendProposal, assistantAvailable } from "@/lib/proposals";
 import type { IdeaHold, IdeaReceipt } from "@shared/questIdeas";
 
@@ -70,11 +71,10 @@ export default function ProposeQuest() {
    * "what do you need" field, and the fine print under the submit button.
    */
   const [projectName, setProjectName] = useState("village");
-  // LANE Q: the guide's name is a per-deployment persona set in the Setup
-  // Wizard, and this page hardcoded "Maia" in two places. A fork that renamed
-  // its guide had the button and the chat header calling her by the platform's
-  // first tenant's name. WorkWithUs.tsx already reads it from this document.
-  const [assistantName, setAssistantName] = useState("Maia");
+  // The guide's name is the village's own (workWithUs.assistantName), and an
+  // unnamed guide reads "the village guide" (shared/guideName.ts).
+  const guide = useGuideName();
+  const assistantName = guide.name;
   const [aiAvailable, setAiAvailable] = useState(false);
   const [mode, setMode] = useState<"ai" | "form">("form");
   const [form, setForm] = useState<QuestProposal>({
@@ -92,10 +92,6 @@ export default function ProposeQuest() {
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.project?.name) setProjectName(c.project.name); });
     assistantAvailable().then((ok) => { setAiAvailable(ok); if (ok) setMode("ai"); });
-    fetch("/api/work-with-us-config")
-      .then((r) => r.json())
-      .then((w) => { if (w?.assistantName) setAssistantName(w.assistantName); })
-      .catch(() => { /* the default stands */ });
   }, []);
 
   // Prefill for a signed-in member, without clobbering anything they've typed.
@@ -127,7 +123,7 @@ export default function ProposeQuest() {
       <Layout>
         <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[60vh]">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-xl mx-auto text-center bg-card border border-border rounded-2xl p-10 shadow-sm"
@@ -160,7 +156,7 @@ export default function ProposeQuest() {
                   </a>
                 </Link>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       </Layout>
@@ -172,7 +168,7 @@ export default function ProposeQuest() {
       <Layout>
         <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[60vh]">
           <div className="container">
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="max-w-xl mx-auto text-center bg-card border border-teal/20 rounded-2xl p-10 shadow-sm"
@@ -212,7 +208,7 @@ export default function ProposeQuest() {
                   Propose another
                 </button>
               </div>
-            </motion.div>
+            </m.div>
           </div>
         </section>
       </Layout>
@@ -220,14 +216,14 @@ export default function ProposeQuest() {
   }
 
   const field =
-    "w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50";
+    "w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary";
 
   return (
     <Layout>
       {/* Hero */}
       <section className="py-16 bg-gradient-to-b from-teal/10 to-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-2xl mx-auto text-center"
@@ -248,12 +244,12 @@ export default function ProposeQuest() {
               Tell us about the Quest you want to create. Anyone can propose one, and
               the {projectName} team will reach out to explore it with you.
             </p>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       {/* Talk it through, or fill it in yourself */}
-      {aiAvailable && (
+      {aiAvailable && guide.loaded && (
         <div className="bg-background">
           <div className="container max-w-2xl mx-auto flex flex-wrap gap-2 pb-6">
             <button
@@ -276,7 +272,7 @@ export default function ProposeQuest() {
         </div>
       )}
 
-      {mode === "ai" && aiAvailable && (
+      {mode === "ai" && aiAvailable && guide.loaded && (
         <section className="pb-24 bg-background">
           <div className="container max-w-2xl mx-auto">
             <GuideChat
@@ -300,7 +296,7 @@ export default function ProposeQuest() {
       {/* Form */}
       <section className={`pb-24 bg-background ${mode === "ai" && aiAvailable ? "hidden" : ""}`}>
         <div className="container">
-          <motion.form
+          <m.form
             onSubmit={submit}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -452,7 +448,7 @@ export default function ProposeQuest() {
               Your proposal goes straight to the {projectName} team. No idea is too small. The
               village is built from them.
             </p>
-          </motion.form>
+          </m.form>
         </div>
       </section>
     </Layout>

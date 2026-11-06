@@ -20,7 +20,7 @@ import { authToken } from "@/lib/gameApi";
  * names through the same arithmetic and fails on the old viewBox.
  */
 import { DOUGHNUT, DOUGHNUT_VIEWBOX, TAU, outerLabelPlacement } from "@/lib/doughnutLayout";
-import { SNAPSHOT_METRICS } from "@shared/healthMetrics";
+import { SNAPSHOT_METRICS, snapshotTileLabel } from "@shared/healthMetrics";
 import { Activity, CheckCircle2, Circle, Leaf, Moon, Sprout, Users } from "lucide-react";
 import { ExampleChip, ExamplesBanner } from "@/components/ExamplesBanner";
 
@@ -206,7 +206,7 @@ export default function VillageHealth() {
                   return (
                     <div key={key} className="border border-border rounded-lg px-3 py-2.5">
                       <p className="text-xl font-bold text-foreground">{latest.value}</p>
-                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="text-xs text-muted-foreground">{snapshotTileLabel(key, label, latest.meta)}</p>
                       {data.trendsUnlocked && points.length >= 2 && (
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {points.slice(-data.trendMinLunations).map((p: any) => p.value).join(" → ")} over recent cycles
@@ -251,7 +251,7 @@ export default function VillageHealth() {
                 <p className="font-semibold text-foreground text-sm">What the village depends on</p>
               </div>
               <p className="text-sm text-foreground">
-                {data.structure.soleHeldSeats} of {count(data.structure.seatingsLive, "filled seat")}{" "}
+                {data.structure.soleHeldSeats} of {count(data.structure.seatingsLive, "filled role")}{" "}
                 {data.structure.soleHeldSeats === 1 ? "has" : "have"} no second holder
                 {data.structure.soleHeldCritical > 0 && (
                   <>, {data.structure.soleHeldCritical} of them marked critical</>
@@ -261,8 +261,8 @@ export default function VillageHealth() {
                 )}
                 {data.structure.unheldSeats > 0 && (
                   <>
-                    , and {count(data.structure.unheldSeats, "seat")}{" "}
-                    {data.structure.unheldSeats === 1 ? "has" : "have"} nobody on{" "}
+                    , and {count(data.structure.unheldSeats, "role")}{" "}
+                    {data.structure.unheldSeats === 1 ? "has" : "have"} nobody in{" "}
                     {data.structure.unheldSeats === 1 ? "it" : "them"} at all
                   </>
                 )}
@@ -284,7 +284,7 @@ export default function VillageHealth() {
                 <p className="text-xs text-muted-foreground mt-2">
                   {data.structure.possibleDuplicates.map((d: any) => d.name).join(", ")} appears both as a
                   member and as a name written on a card, so the load above is split across two entries and
-                  reads lighter than it is. Claiming the seat joins them.
+                  reads lighter than it is. Claiming the role joins them.
                 </p>
               )}
               <p className="text-xs text-muted-foreground mt-1">{data.structure.note}</p>

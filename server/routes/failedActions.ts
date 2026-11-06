@@ -22,6 +22,7 @@
  * A member id, a name or an email. The job never stores one, so there is none
  * here to leak.
  */
+import { finishOwedCancelsJob } from "../lib/owedCancels";
 import type { Express } from "express";
 
 import type { AppDeps } from "../lib/appDeps";
@@ -78,7 +79,12 @@ export function register(app: Express, deps: Deps): void {
     runFailedActions({
       pool: deps.getPool(),
       sources: defaultSources(deps.getPool()),
-      retries: [(deadline) => resumeClosedErasures(deps.getPool(), deps.erasureDeps, deadline)],
+      retries: [
+        (deadline) => resumeClosedErasures(deps.getPool(), deps.erasureDeps, deadline),
+        // A departed member's subscription a person was asked to cancel, cancelled
+        // here once Stripe is connected (server/lib/owedCancels.ts).
+        (deadline) => finishOwedCancelsJob(deps.getPool(), deadline),
+      ],
       notifyAdmins: deps.notifyAdmins,
     }),
   );

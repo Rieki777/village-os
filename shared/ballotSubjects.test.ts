@@ -918,7 +918,7 @@ describe("a re-run for weight that cannot answer", () => {
     });
     expect(offer.offered).toBe(true);
     if (offer.offered) {
-      expect(offer.sentence).toContain("2 seats on this roll holds weight that cannot answer");
+      expect(offer.sentence).toContain("2 votes on this roll hold weight that cannot answer");
       expect(offer.carryForward).toEqual(["u-a"]);
     }
   });

@@ -26,7 +26,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -92,7 +92,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-warning-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY
@@ -222,6 +222,15 @@ describe.skipIf(!DB_CONFIGURED)("a member can read a warning that is about her",
     expect(ofHer.status, ofHer.text).toBe(200);
     expect(ofHer.text).not.toContain("shed-care");
     expect(ofHer.text, "the control must still travel").toContain("water-keeper");
+
+    // The same read by handle, which the public profile's badge flower uses.
+    await pool.query("UPDATE users SET handle = ? WHERE id = ?", [`mara-${PORT}`, memberId]);
+    const byHandle = await call("GET", `/api/badges/of/@mara-${PORT}`, undefined, "");
+    expect(byHandle.status, byHandle.text).toBe(200);
+    expect(byHandle.text).not.toContain("shed-care");
+    expect(byHandle.json?.badges, "the handle reaches her roster").toEqual(ofHer.json?.badges);
+    const nobody = await call("GET", "/api/badges/of/@nobody-holds-this", undefined, "");
+    expect(nobody.json?.badges).toEqual([]);
 
     const match = await call("GET", "/api/badges/match?badge=shed-care", undefined, "");
     expect(match.status, match.text).toBe(200);

@@ -10,10 +10,12 @@
  */
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
-import { SESSION_COPY, SESSION_LIST_COPY, SESSION_REFUSALS, type SessionListRow } from "@shared/sessions";
+import { SESSION_COPY, SESSION_DISCARD_COPY, SESSION_LIST_COPY, SESSION_REFUSALS, type SessionListRow } from "@shared/sessions";
+import { LIBRARY_REFUSALS } from "@shared/sessionLibrary";
+import { clearRoomGone, leaveRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 
 const state = vi.hoisted(() => ({
   user: { id: "usr-wren", name: "Wren" } as null | { id: string; name: string },
@@ -74,10 +76,15 @@ let calls: Call[];
 let answers: Record<string, () => Response>;
 
 beforeEach(() => {
+  clearRoomGone();
   state.user = { id: "usr-wren", name: "Wren" };
   state.modules = [{ id: "sessions", lifecycle: "members" }];
   calls = [];
-  answers = { "GET /api/sessions": () => json(LIST) };
+  answers = {
+    "GET /api/sessions": () => json(LIST),
+    // "Asking for advice" reads its own lists; a member who has asked nothing and been asked nothing.
+    "GET /api/sessions/advice/requests": () => json({ askedOfMe: [], mine: [], circles: [], today: "2026-10-24" }),
+  };
   state.fetch = async (path, init) => {
     const method = (init?.method ?? "GET").toUpperCase();
     calls.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
@@ -103,8 +110,13 @@ describe("the sessions list", () => {
     renderPage();
     const open = await screen.findByRole("region", { name: SESSION_COPY.openNow });
     expect(within(open).getByRole("link", { name: "Garden circle" })).toHaveAttribute("href", "/sessions/7");
-    expect(within(open).getByText(SESSION_COPY.joinedLabel)).toBeTruthy();
+    // The room this member is already in offers a real way back in, and the one they are not in offers the join.
+    const enter = within(open).getByRole("link", { name: SESSION_LIST_COPY.enterRoom });
+    expect(enter).toHaveAttribute("href", "/sessions/8");
+    expect(enter.className).toContain("min-h-11");
+    expect(within(open).queryByText(SESSION_COPY.joinedLabel)).toBeNull();
     expect(within(open).getAllByRole("button", { name: SESSION_COPY.joinButton })).toHaveLength(1);
+    expect(within(open).getAllByRole("link", { name: SESSION_LIST_COPY.enterRoom })).toHaveLength(1);
 
     const recent = screen.getByRole("region", { name: SESSION_COPY.recent });
     expect(within(recent).getByRole("link", { name: "Water circle" })).toHaveAttribute("href", "/sessions/3");
@@ -226,6 +238,32 @@ describe("joining a room", () => {
   });
 });
 
+describe("a room that went", () => {
+  it("enter the room goes straight in, with no join asked of the server", async () => {
+    const memory = renderPage();
+    const open = await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    fireEvent.click(within(open).getByRole("link", { name: SESSION_LIST_COPY.enterRoom }));
+    await waitFor(() => expect(memory.history).toContain("/sessions/8"));
+    expect(writes()).toEqual([]);
+  });
+
+  it("says once that the session was discarded, and the list no longer shows it", async () => {
+    leaveRoomGone(SESSION_DISCARD_COPY.discarded);
+    // The server no longer has session 8.
+    answers["GET /api/sessions"] = () => json({ ...LIST, open: LIST.open.filter((r) => r.id !== 8) });
+    renderPage();
+    expect(await screen.findByRole("status")).toHaveTextContent("This session was discarded.");
+    const open = await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    expect(within(open).queryByRole("link", { name: "Kitchen circle" })).toBeNull();
+    expect(peekRoomGone()).toBeNull();
+    cleanup();
+    // The next visit to the list has nothing to say.
+    renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    expect(screen.queryByText("This session was discarded.")).toBeNull();
+  });
+});
+
 describe("the gates", () => {
   it("asks a signed-out visitor to sign in, and asks the server nothing", () => {
     state.user = null;
@@ -239,5 +277,87 @@ describe("the gates", () => {
     renderPage();
     expect(screen.getByText("Module gate")).toBeTruthy();
     expect(calls).toEqual([]);
+  });
+});
+
+describe("what members brought, on the start card", () => {
+  const brought = (id: number, title: string, circleId: string | null, broughtAt = "2026-10-01T10:00:00.000Z") => ({
+    id,
+    title,
+    aim: null,
+    note: null,
+    circleId,
+    circleName: circleId === "garden" ? "Garden" : null,
+    broughtBy: "Dee",
+    mine: false,
+    broughtAt,
+    status: "waiting",
+    session: null,
+    settledAt: null,
+    backAt: null,
+    changedBy: null,
+    canEdit: false,
+    canMoveCircle: false,
+    canWithdraw: false,
+    canBringAgain: false,
+  });
+  const WITH_LIBRARY = {
+    ...LIST,
+    defaultMinutes: 60,
+    library: {
+      items: [brought(21, "Shed roof", "garden", "2026-10-02T10:00:00.000Z"), brought(22, "Picnic", null), brought(23, "Seed order", "garden")],
+      myCircleIds: ["garden"],
+    },
+  };
+
+  it("offers the chosen circle's items, drops a tick that no longer fits, and opens the room with the rest in order", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    answers["POST /api/sessions"] = () => json({ id: 45 });
+    const memory = renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    // No circle chosen yet: only the item for no circle is offered.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "garden" } });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Picnic/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Shed roof/ }));
+    // A tick on a garden item goes when the circle changes away from the garden.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seed order/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "kitchen" } });
+    fireEvent.change(screen.getByLabelText(SESSION_COPY.circleLabel), { target: { value: "garden" } });
+    expect((screen.getByRole("checkbox", { name: /Seed order/ }) as HTMLInputElement).checked).toBe(false);
+    // The kitchen dropped both garden ticks and kept the picnic's.
+    expect((screen.getByRole("checkbox", { name: /Shed roof/ }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: /Picnic/ }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Seed order/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_LIST_COPY.titleLabel), { target: { value: "Garden, week 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Open the room with 2 items" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    // The order the checklist shows: the garden's oldest first, then the one for no circle.
+    expect(writes()[0].body).toEqual({ title: "Garden, week 2", circleId: "garden", durationMin: 60, libraryIds: [23, 22] });
+    await waitFor(() => expect(memory.history).toContain("/sessions/45"));
+  });
+
+  it("reads the list again when an item went elsewhere a moment ago, and says so", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    answers["POST /api/sessions"] = () =>
+      json({ error: LIBRARY_REFUSALS.moved }, 409);
+    renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Picnic/ }));
+    fireEvent.change(screen.getByLabelText(SESSION_LIST_COPY.titleLabel), { target: { value: "Open call" } });
+    const reads = calls.filter((c) => c.method === "GET").length;
+    fireEvent.click(screen.getByRole("button", { name: "Open the room with 1 item" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("went onto another agenda");
+    await waitFor(() => expect(calls.filter((c) => c.method === "GET").length).toBeGreaterThan(reads));
+  });
+
+  it("lists what waits between the rooms open now and the records", async () => {
+    answers["GET /api/sessions"] = () => json(WITH_LIBRARY);
+    renderPage();
+    await screen.findByRole("region", { name: SESSION_COPY.openNow });
+    const regions = screen.getAllByRole("region").map((r) => r.getAttribute("aria-labelledby"));
+    expect(regions.indexOf("sessions-waiting-heading")).toBeGreaterThan(regions.indexOf("sessions-open-heading"));
+    expect(regions.indexOf("sessions-waiting-heading")).toBeLessThan(regions.indexOf("sessions-recent-heading"));
   });
 });

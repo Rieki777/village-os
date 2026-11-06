@@ -21,7 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 const MIGRATION = path.join(process.cwd(), "drizzle", "0125_payouts_stop_defaulting_to_gratitude.sql");
@@ -71,7 +71,7 @@ async function ruleRow(id: string): Promise<any> {
 describe.skipIf(!configured)("0125, on a village that already seeded", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
   });
 
   afterAll(async () => {

@@ -354,9 +354,15 @@ function countDbGatedSuites(): { guards: number; files: number } {
  * green on a suite that never ran, which is the bug. `pnpm test:unit` stays a
  * WHOLE run on purpose: it excludes the e2e files and still carries dozens of
  * database-gated ones, and its glob is not a path that exists.
+ *
+ * A CI SHARD IS A WHOLE RUN TOO, and that is load-bearing. Since 2026-10-21
+ * `ci.yml` runs the suite as `test (i/N)` jobs, each `vitest run --shard=i/N`
+ * plus its reporter flags, and every argument there is a flag. So each shard
+ * is held to the hollow-run rule on its own: a shard with no database, or one
+ * that provisioned nothing, fails its own job. `provisioningReport.test.ts`
+ * pins the exact argv the workflow passes.
  */
-function runIsFiltered(): boolean {
-  const argv = process.argv.slice(2);
+export function runIsFiltered(argv: string[] = process.argv.slice(2)): boolean {
   const start = argv.indexOf("run");
   const rest = start === -1 ? argv : argv.slice(start + 1);
   const positional = rest.some(

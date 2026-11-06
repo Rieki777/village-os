@@ -113,8 +113,10 @@ export function ApiKeyEditor(props: EditorProps) {
   // masked statuses and not with this screen's payload, so the screen is read
   // again after it.
   const submit = async () => {
-    const r = await save("/admin/integrations/resend_api_key", "PUT", { value: draft.trim() }, "Key saved");
+    // After launch the key may wait for a co-sign (202), and the toast says so.
+    const r = await save("/admin/integrations/resend_api_key", "PUT", { value: draft.trim() }, "");
     if (r === null) return;
+    toast.success((r as { asked?: boolean; message?: string }).asked ? String((r as { message?: string }).message) : "Key saved");
     setDraft("");
     const fresh = await commsCall<SettingsPayload>("/admin/comms/settings", props.password);
     if (fresh.ok) props.apply(fresh.data);

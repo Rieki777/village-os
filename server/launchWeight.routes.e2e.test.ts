@@ -36,7 +36,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { waitForHealth } from "./db/e2eBoot";
 
@@ -156,7 +156,7 @@ beforeAll(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-launchweight-"));
   // A village that has NOT started its Game, which is the whole premise.
   testDb = await provisionTestDb({ gameStarted: false });
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY
@@ -246,6 +246,17 @@ beforeAll(async () => {
     },
   })).status).toBe(200);
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "backups-drilled", done: true } })).status).toBe(200);
+
+  /*
+   * THE VILLAGE'S CLOCK, WHICH BLOCKS THE LAUNCH VOTE SINCE READINESS R059.
+   * The platform keeps UTC until a founder answers, and confirming the zone
+   * already showing is an answer, so this village keeps UTC and says so.
+   */
+  const zone = (await call("GET", "/api/admin/seasons")).json;
+  const confirmedZone = await call("PUT", "/api/admin/seasons", {
+    body: { seasons: zone.seasons, cadence: zone.cadence, timezone: zone.timezone, confirmTimezone: true },
+  });
+  expect(confirmedZone.status, JSON.stringify(confirmedZone.json)).toBe(200);
 
   /*
    * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND
@@ -388,18 +399,58 @@ describe.skipIf(!DB_CONFIGURED)("everybody carries weight, and skew is left alon
     });
     expect(closed.json?.outcome).toBe("passed");
     expect((await gameStartRow())?.ballotId).toBe(running.id);
-    const mint = await call("POST", "/api/admin/tokens/gratitude/mint", {
+    // Credits: Gratitude is never minted by hand (Rye, 2026-10-23).
+    const mint = await call("POST", "/api/admin/tokens/credits/mint", {
       body: { toUserId: wrenId, amount: 5, reason: "The village started its Game." },
     });
     expect(mint.status, JSON.stringify(mint.json)).toBe(200);
   });
 });
 
+/**
+ * Turn a module on the way a launched village with no `module.switch` holder
+ * does (Rye, 2026-10-09): a `module_lifecycle` change set on a mechanics
+ * proposal, a ballot everybody on the roll carries, the close, and the landing
+ * pass once the window has run out. Every step is the real route; only the
+ * clock is moved, the same way `expire` moves it.
+ */
+async function turnOnByVote(moduleId: string, to: "members" | "public") {
+  const made = await call("POST", "/api/game/mechanics/proposals", {
+    body: {
+      title: `Turn on ${moduleId}`,
+      rationale: "The village wants it, and this is how a launched village says so.",
+      changes: [{ kind: "module_lifecycle", moduleId, to }],
+    },
+  });
+  expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+  const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+    // A structural change carries a line on how it serves the purpose (0219).
+    body: { purposeAlignment: "Members asked for this together, and it lets the village run its own affairs in the open." },
+  });
+  expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+  const ballotId = String(opened.json?.ballot?.id ?? "");
+  for (const t of [founderToken, wrenToken, idaToken]) {
+    const v = await vote(ballotId, t, "yes");
+    expect(v.status, `vote: ${JSON.stringify(v.json)}`).toBe(200);
+  }
+  await expire(ballotId);
+  const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, {
+    body: { outcomeNote: `Everyone agreed to turn on ${moduleId}.` },
+  });
+  expect(closed.json?.outcome, `close: ${JSON.stringify(closed.json)}`).toBe("passed");
+  await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+  const landed = await call("POST", "/api/admin/cycles/close", { body: {} });
+  expect(landed.status, `land: ${JSON.stringify(landed.json)}`).toBe(200);
+  const catalog = await call("GET", "/api/modules/catalog");
+  const row = (catalog.json?.modules ?? []).find((m: any) => m.id === moduleId);
+  expect(row?.lifecycle, `after landing: ${JSON.stringify(row)}`).toBe(to);
+}
+
 describe.skipIf(!DB_CONFIGURED)("voice is not the platform's to sell", () => {
   it("lets the village create its own voice token, which was never the problem", async () => {
-    expect((await call("PUT", "/api/admin/modules/exchange/lifecycle", {
-      body: { lifecycle: "members", examples: false },
-    })).status).toBe(200);
+    // The exchange comes on by the village's vote: after launch that is the
+    // only way a module turns on here (see the switch cases at the foot).
+    await turnOnByVote("exchange", "members");
     const made = await call("POST", "/api/admin/tokens", {
       body: { slug: "assembly-voice", name: "Assembly Voice", kind: "voice", transferable: false },
     });
@@ -489,5 +540,30 @@ describe.skipIf(!DB_CONFIGURED)("after the Birthing, what weighs a vote is the v
       body: { note: "All of us at once.", changes: [{ userId: wrenId, weight: 5 }] },
     });
     expect(bulk.status).toBe(409);
+  });
+});
+
+/*
+ * THE MODULE SWITCH AFTER LAUNCH (Rye, 2026-10-09). This village launched by
+ * vote above and seated nobody, so `module.switch` has no holder and turning
+ * a module ON belongs to the village: the exchange above came on by vote. An
+ * admin is pointed at a proposal, and the safety valve stays: an admin may
+ * still narrow a module directly.
+ */
+describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the village's", () => {
+  it("refuses an admin who is not a holder, and says to propose instead", async () => {
+    const res = await call("PUT", "/api/admin/modules/forum/lifecycle", {
+      body: { lifecycle: "members", examples: false },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(403);
+    expect(res.json?.proposeInstead).toBe(true);
+  });
+
+  it("still lets that admin narrow a module that is on", async () => {
+    // Members to preview narrows what anyone can see, so it is the valve.
+    const res = await call("PUT", "/api/admin/modules/exchange/lifecycle", {
+      body: { lifecycle: "preview" },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(200);
   });
 });

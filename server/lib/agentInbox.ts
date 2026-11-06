@@ -31,6 +31,9 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { guardOutboundUrl } from "./toolcheck";
 import { NO_MEMBER_SECRETS_KEY_SENTENCE, memberSecretsKey } from "./memberSecrets";
 import { recordEvent } from "./events";
+import { holderStands, whileSessionHolds } from "./sessionHold";
+import { usersRepo } from "../repos/users";
+import { enabledInboxUserIds, forgetInboxOf, replaceInboxOn } from "../repos/memberAgent";
 
 export const DELIVERY_KINDS = ["test", "week_ahead", "weekly_digest", "opportunity"] as const;
 export type DeliveryKind = (typeof DELIVERY_KINDS)[number];
@@ -164,6 +167,27 @@ export function verifyDelivery(secret: string, body: any, header?: string | null
 
 // ── The inbox ────────────────────────────────────────────────────────────────
 
+/**
+ * Whether anybody still stands behind an inbox: a member row that is not an
+ * erasure's tombstone. The same test a `vat_` token meets at use
+ * (`holderStands`), and a missing row fails it too.
+ *
+ * WHY THE INBOX ASKS, when the erasure sweep deletes inboxes again after the
+ * tombstone ("member-agent-after-tombstone"). A request checks its session
+ * once, at the start, and `setInbox` then waits on a DNS lookup whose length
+ * the member's own nameserver sets. Started before an erasure, it could write
+ * after that step had deleted, and no step runs again. So the write asks
+ * under the member's row lock (`whileSessionHolds`, which also refuses a
+ * session a new password or a revoke ended), and every place a delivery is
+ * queued or sent asks here before anything leaves. An inbox that fails is
+ * removed where it is found, with everything queued for it.
+ */
+async function holderListens(pool: Pool, userId: string): Promise<boolean> {
+  return holderStands(await usersRepo(pool).byId(userId));
+}
+
+const INBOX_HOLDER_GONE = "This account can no longer hold an agent inbox";
+
 export async function getInbox(pool: Pool, userId: string): Promise<InboxRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>("SELECT * FROM agent_inboxes WHERE user_id = ? LIMIT 1", [userId]);
   return rows[0] ? toInbox(rows[0]) : null;
@@ -171,14 +195,25 @@ export async function getInbox(pool: Pool, userId: string): Promise<InboxRow | n
 
 export type SetInboxResult =
   | { ok: true; inbox: InboxRow; secret: string }
-  | { ok: false; status: 400 | 503; error: string };
+  | { ok: false; status: 400 | 401 | 403 | 503; error: string };
 
 /**
  * Set or replace the member's inbox URL. Setting a new URL mints a new inbox
  * id, so the secret rotates with the URL and the old one stops verifying.
  * The secret is in the result and nowhere else.
+ *
+ * `sessionVersion` is the tokenVersion the request's session was checked at.
+ * The write lands only while the member's row still carries it, and a
+ * session that a new password, a revoke or signing out ended since its check
+ * answers 401 with nothing written (`whileSessionHolds`).
  */
-export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env: NodeJS.ProcessEnv = process.env): Promise<SetInboxResult> {
+export async function setInbox(
+  pool: Pool,
+  userId: string,
+  rawUrl: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+  sessionVersion: number,
+): Promise<SetInboxResult> {
   if (!memberSecretsKey(env)) return { ok: false, status: 503, error: NO_MEMBER_SECRETS_KEY_SENTENCE };
   const url = String(rawUrl ?? "").trim();
   if (!url || url.length > 2048) return { ok: false, status: 400, error: "Give the URL your agent listens on" };
@@ -187,18 +222,26 @@ export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env:
   // resolved to, and a member-reachable route must not be an oracle for what
   // an internal name points at.
   if (!guard.ok) return { ok: false, status: 400, error: "That URL is not reachable from here. It must be a public https host" };
-  // Replacing the URL retires the old inbox whole: its id, its derived
-  // secret and anything still queued for it. A fresh id means a fresh secret.
   const prior = await getInbox(pool, userId);
-  if (prior) {
-    await pool.query("DELETE FROM agent_deliveries WHERE inbox_id = ?", [prior.id]);
-    await pool.query("DELETE FROM agent_inboxes WHERE user_id = ?", [userId]);
-  }
   const id = `inb-${randomBytes(8).toString("hex")}`;
-  await pool.query(
-    "INSERT INTO agent_inboxes (id, user_id, url, enabled, consecutive_failures) VALUES (?,?,?,1,0)",
-    [id, userId, url],
+  // The holder and the session are asked UNDER THE MEMBER'S ROW LOCK, and the
+  // write happens inside the same transaction, which is what closes both
+  // races. The guard above can wait seconds on DNS. An erasure's tombstone or
+  // a tokenVersion bump that lands in that wait has committed before the lock
+  // is taken, and this refuses; one that comes later waits for the commit,
+  // and the sweep after the tombstone or the end after the bump removes what
+  // this wrote. No secret leaves for a write that is refused.
+  // Replacing the URL retires the old inbox whole: its id, its derived secret
+  // and anything still queued for it. A fresh id means a fresh secret.
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) =>
+    replaceInboxOn(conn, userId, prior?.id ?? null, { id, url }),
   );
+  if (!held.ok && held.refusal === "session_ended") return { ok: false, status: 401, error: "auth_required" };
+  if (!held.ok) {
+    // An inbox that fails its holder is removed where it is found.
+    await forgetInboxOf(pool, userId);
+    return { ok: false, status: 403, error: INBOX_HOLDER_GONE };
+  }
   const inbox = await getInbox(pool, userId);
   const secret = inbox ? inboxSecret(inbox.id, env) : null;
   if (!inbox || !secret) return { ok: false, status: 503, error: NO_MEMBER_SECRETS_KEY_SENTENCE };
@@ -210,14 +253,22 @@ export async function setInbox(pool: Pool, userId: string, rawUrl: unknown, env:
   return { ok: true, inbox, secret };
 }
 
-export async function removeInbox(pool: Pool, userId: string): Promise<boolean> {
+/**
+ * Remove the member's inbox and everything still queued for it.
+ *
+ * `endedBy` names what ended it when the member did not press Remove: a new
+ * password or an admin's revoke sessions (`endAgentReach`,
+ * server/lib/agentTokens.ts). The audit line then says the platform did it,
+ * and never credits the member with a removal somebody else caused.
+ */
+export async function removeInbox(pool: Pool, userId: string, endedBy?: string): Promise<boolean> {
   const inbox = await getInbox(pool, userId);
   if (!inbox) return false;
   await pool.query("DELETE FROM agent_deliveries WHERE inbox_id = ?", [inbox.id]);
   await pool.query("DELETE FROM agent_inboxes WHERE user_id = ?", [userId]);
   await recordEvent(pool, {
-    kind: "agent_inbox", text: "removed their agent inbox",
-    actorUserId: userId, actorKind: "agent", entityType: "agent_inbox", entityRef: inbox.id, audience: "admin",
+    kind: "agent_inbox", text: endedBy ? `agent inbox removed: ${endedBy}` : "removed their agent inbox",
+    actorUserId: userId, actorKind: endedBy ? "system" : "agent", entityType: "agent_inbox", entityRef: inbox.id, audience: "admin",
   });
   return true;
 }
@@ -236,7 +287,8 @@ export type EnqueueResult =
  * Nothing is sent here; the drain job sends. A member with no inbox, or a
  * disabled one, is a quiet no-op with a reason, never an error into the
  * caller: the digest goes on landing in the member's own inbox and email
- * whether or not their agent is listening.
+ * whether or not their agent is listening. An inbox nobody stands behind any
+ * more (`holderListens`) answers "no_inbox" and is removed.
  */
 export async function enqueueAgentDelivery(
   pool: Pool,
@@ -246,6 +298,10 @@ export async function enqueueAgentDelivery(
   if (!DELIVERY_KINDS.includes(payload?.kind)) return { ok: false, reason: "bad_kind" };
   const inbox = await getInbox(pool, userId);
   if (!inbox) return { ok: false, reason: "no_inbox" };
+  if (!(await holderListens(pool, userId))) {
+    await forgetInboxOf(pool, userId);
+    return { ok: false, reason: "no_inbox" };
+  }
   if (!inbox.enabled) return { ok: false, reason: "disabled" };
   const id = `dlv-${randomBytes(8).toString("hex")}`;
   await pool.query(
@@ -253,6 +309,36 @@ export async function enqueueAgentDelivery(
     [id, inbox.id, payload.kind, JSON.stringify(payload.data ?? null)],
   );
   return { ok: true, id };
+}
+
+/** Injected so this file never imports the calendar's readers. */
+export interface WeekAheadDeps {
+  /** The member's own view of the week (`weekAhead` for that member). */
+  build(userId: string): Promise<unknown>;
+  timezone: string;
+}
+
+/**
+ * The `agent-week-ahead` job's body: the week ahead, queued to every enabled
+ * inbox whose holder still stands, from the member's own view of the calendar.
+ *
+ * The holder is asked BEFORE the week is built. Any user id reads the circle
+ * and household layers (`visibleLayersFor`), so a tombstone's id would build
+ * the village's signed-in week, places and all, and only the enqueue's own
+ * check would stop it leaving.
+ */
+export async function queueWeekAhead(pool: Pool, deps: WeekAheadDeps): Promise<{ queued: number }> {
+  let queued = 0;
+  for (const userId of await enabledInboxUserIds(pool)) {
+    if (!(await holderListens(pool, userId))) {
+      await forgetInboxOf(pool, userId);
+      continue;
+    }
+    const items = await deps.build(userId);
+    const q = await enqueueAgentDelivery(pool, userId, { kind: "week_ahead", data: { timezone: deps.timezone, items } });
+    if (q.ok) queued += 1;
+  }
+  return { queued };
 }
 
 export async function listDeliveries(pool: Pool, inboxId: string, limit = 20): Promise<DeliveryRow[]> {
@@ -286,7 +372,8 @@ export interface DrainSummary {
  * twice. Failures back off along RETRY_DELAYS_MS; the fifth failure drops the
  * row; ten consecutive failures across rows disable the inbox and tell the
  * member. The URL is re-guarded at every attempt through `post`, which is
- * `guardedFetchJson` in production.
+ * `guardedFetchJson` in production. A row whose holder no longer stands
+ * (`holderListens`) is never dialled: its inbox goes, and the row with it.
  */
 export async function drainDeliveries(pool: Pool, deps: DrainDeps, batch = 50): Promise<DrainSummary> {
   const env = deps.env ?? process.env;
@@ -299,8 +386,22 @@ export async function drainDeliveries(pool: Pool, deps: DrainDeps, batch = 50): 
       "ORDER BY d.next_attempt_at ASC LIMIT ?",
     [now, Math.max(1, Math.min(200, batch))],
   );
+  // Asked once per holder per batch, before anything is claimed or dialled. A
+  // holder who fails takes their inbox and everything queued for it with them,
+  // so the rest of this batch for them is already gone.
+  const listens = new Map<string, boolean>();
   for (const r of due) {
     const row = toDelivery(r);
+    const inboxUserId = String(r.inbox_user_id);
+    if (!listens.has(inboxUserId)) {
+      const stands = await holderListens(pool, inboxUserId);
+      listens.set(inboxUserId, stands);
+      if (!stands) await forgetInboxOf(pool, inboxUserId);
+    }
+    if (!listens.get(inboxUserId)) {
+      summary.dropped += 1;
+      continue;
+    }
     if (!Boolean(r.inbox_enabled)) {
       // The inbox went dark after this was queued. Drop, quietly.
       await pool.query("UPDATE agent_deliveries SET dropped_at = ?, last_error = 'inbox disabled' WHERE id = ?", [now, row.id]);
@@ -315,7 +416,6 @@ export async function drainDeliveries(pool: Pool, deps: DrainDeps, batch = 50): 
     if (!Number(claim?.affectedRows ?? 0)) continue;
     const attempt = row.attempts + 1;
     const secret = inboxSecret(row.inboxId, env);
-    const inboxUserId = String(r.inbox_user_id);
     let error: string | null = null;
     if (!secret) {
       error = NO_MEMBER_SECRETS_KEY;

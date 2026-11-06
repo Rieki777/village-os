@@ -13,7 +13,7 @@
  * the facts, the same posture `CharacterSheet.test.tsx` takes next door.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 
 import PathLadder from "./PathLadder";
 import PathsPanel from "./PathsPanel";
@@ -223,7 +223,9 @@ describe("PathsPanel with ladders", () => {
 });
 
 describe("usePathLadders", () => {
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 

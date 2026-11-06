@@ -59,8 +59,11 @@
  * deciding; everything arriving here was written by something that read a
  * transcript.
  *
- * Pure: no pool, no clock, no imports. The caller hands in the circle list.
+ * Pure: no pool, no clock. Its one import is the CCOS field list
+ * (shared/roleCcos.ts), which imports nothing. The caller hands in the circle
+ * list.
  */
+import { ROLE_CCOS_ALIASES, ROLE_CCOS_FIELDS, isRoleCcosListField } from "./roleCcos";
 
 /** A circle as `circlesRepo.all()` returns it. Only these fields are read. */
 export interface LiveCircle {
@@ -91,6 +94,16 @@ export const PROPOSABLE_SEAT_FIELDS = [
   "seats",
   "criticality",
   "recruiting",
+  // 0268: the role's handover words. Carried as sent (a list, or text with an
+  // item per line) and checked by the one parser at preview and at publish
+  // (shared/roleHandoverParse.ts), so a bad value blocks there by name.
+  "bringMe",
+  "notMine",
+  "runbook",
+  // 0274: the role's CCOS words, on the same rule: carried as sent and
+  // checked by their one parser (shared/roleCcosParse.ts) at preview and at
+  // publish.
+  ...ROLE_CCOS_FIELDS,
 ] as const;
 
 /**
@@ -103,17 +116,23 @@ export const SEAT_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   seats: ["seat_count", "seatCount"],
   whyItMatters: ["why_it_matters"],
   circleId: ["circle_id"],
+  bringMe: ["bring_me"],
+  notMine: ["not_mine"],
+  // 0274: the CCOS words' column spellings.
+  ...ROLE_CCOS_ALIASES,
 };
 
 /**
  * What the SOURCE said about a seat, carried beside it for the structure
  * review to read (`shared/structurePlan.ts`) and never written to a seat:
  * the source's status for the seat and for its circle, the further circles a
- * relation named, and that a relation named a circle the read did not hold.
- * Read by the caller, so never reported as a key nothing read, and never part
- * of the canonical payload.
+ * relation named, that a relation named a circle the read did not hold, and
+ * what the source holds the seat to pay (`sourcePay`). Read by the caller, so
+ * never reported as a key nothing read, and never part of the canonical
+ * payload. Pay in particular never reaches a seat this way: money is set here,
+ * by a person, on the role's own terms.
  */
-export const SOURCE_SEAT_KEYS = ["sourceStatus", "sourceCircleStatus", "sourceOtherCircles", "sourceCircleUnresolved"] as const;
+export const SOURCE_SEAT_KEYS = ["sourceStatus", "sourceCircleStatus", "sourceOtherCircles", "sourceCircleUnresolved", "sourcePay"] as const;
 
 /** Keys that give a circle by NAME, tried in this order. An id beats all of them. */
 export const CIRCLE_NAME_KEYS = ["circleName", "circle_name", "circle"] as const;
@@ -469,6 +488,24 @@ export function normaliseProposedSeat(
 
   const acc = pick("accountabilities", (v) => normaliseAccountabilities(v) !== undefined);
   if (acc) out.accountabilities = normaliseAccountabilities(acc.value);
+
+  // 0268: the handover words, carried as sent when they are text or a list.
+  // Their limits and refusals belong to the one parser the preview runs, so a
+  // proposal is never quietly trimmed to fit.
+  const listShape = (v: unknown) => typeof v === "string" || Array.isArray(v);
+  for (const k of ["bringMe", "notMine"] as const) {
+    const v = pick(k, orNull(listShape));
+    if (v) out[k] = v.value;
+  }
+  const runbook = pick("runbook", orNull((v) => typeof v === "string"));
+  if (runbook) out.runbook = runbook.value;
+
+  // 0274: the CCOS words, carried as sent the same way. A list field may be
+  // text with an item per line; the rest are text.
+  for (const k of ROLE_CCOS_FIELDS) {
+    const v = pick(k, orNull(isRoleCcosListField(k) ? listShape : (x) => typeof x === "string"));
+    if (v) out[k] = v.value;
+  }
 
   // THE CIRCLE. An explicit id always wins over a name. A name that places
   // exactly one live circle becomes that id. Anything else stays a name, with

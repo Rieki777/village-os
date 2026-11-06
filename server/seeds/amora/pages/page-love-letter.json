@@ -1,0 +1,92 @@
+{
+  "form": {
+    "paths": [
+      {
+        "id": "investor",
+        "label": "Investor / Capital Contributor"
+      },
+      {
+        "id": "steward",
+        "label": "Village Steward / Co-Creator"
+      },
+      {
+        "id": "resident",
+        "label": "Resident / Future Villager"
+      },
+      {
+        "id": "prosperity",
+        "label": "Prosperity Creator / Business Builder"
+      }
+    ],
+    "ackLabel": "I have read the {commitment} above and commit to the values and agreements of the {village} community as a member of {entity}.",
+    "submitLabel": "Sign the {commitment} & Join the {village} Family",
+    "visitorLede": "Fill in your details below to officially join the {village} Family and become a member of {entity}.",
+    "standardsLabel": "Good Neighbor Criteria",
+    "visitorHeading": "Sign Your Membership"
+  },
+  "hero": {
+    "lede": "Our founding covenant, and your official membership in {entity}.",
+    "headline": "The {village} {commitment}"
+  },
+  "letter": {
+    "closing": "With love and anticipation,",
+    "joining": "By signing this {commitment}, you are not just joining a community. You are becoming a co-creator of the most beautiful village we can imagine together. You are saying yes to regeneration, of the land, of community, of yourself.",
+    "greeting": "Dear Future {village} Family Member,",
+    "inReturn": "In return, you become a full member of {entity}, gaining access to community spaces, governance participation, and the opportunity to deepen your involvement through roles, residency, or business creation.",
+    "signature": "The {village} Community",
+    "commitLead": "As a member of {entity}, you commit to:",
+    "commitments": [
+      {
+        "text": "Treat all beings with respect, compassion, and authentic communication"
+      },
+      {
+        "text": "Participate in community governance through our sociocratic circles"
+      },
+      {
+        "text": "Contribute to the regeneration of the land and ecosystem"
+      },
+      {
+        "text": "Support fellow community members in their growth and wellbeing"
+      },
+      {
+        "text": "Honor the values and agreements of the {village} community"
+      },
+      {
+        "text": "Practice Nonviolent Communication and authentic relating"
+      },
+      {
+        "text": "Meet financial obligations as agreed with the community"
+      },
+      {
+        "text": "Show up for community life, circles, celebrations, and shared care"
+      }
+    ]
+  },
+  "thanks": {
+    "quote": "You are not just joining a place. You are becoming part of something alive."
+  },
+  "contribution": {
+    "tiers": [
+      {
+        "label": "$33/month, Seed level",
+        "value": "33"
+      },
+      {
+        "label": "$55/month, Sprout level",
+        "value": "55"
+      },
+      {
+        "label": "$88/month, Grove level",
+        "value": "88"
+      },
+      {
+        "label": "$108/month, Forest level",
+        "value": "108"
+      }
+    ],
+    "heading": "Monthly Membership Contribution",
+    "suggested": "Suggested: $33-$108/month.",
+    "customLabel": "I'd like to discuss a custom amount",
+    "customPlaceholder": "Tell us what works for you (e.g. $20/month, in-kind, barter)"
+  }
+}

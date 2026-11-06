@@ -23,7 +23,7 @@ Code noun `seasonPlan` (NOT "roll": already means ballot electorate and `season_
 `isLapsed` (orgChart.ts:341-384) treats a seating with another season_id as lapsed, so next-season adoptions must not seat early. PR4 gets `seat_applications.starts_at datetime NULL` + `startsNoEarlierThan` input; closer records adopted and leaves seating to hourly job `season-plan-turn` (registered from route module, precedent routes/failedActions.ts:40,77): seats via PR4's exported `seatFromApplication`, renewals rewrite season_id/term_ends_at/application_id on the existing seating, re-checks free places (held-full + notice). Gap: up to 1h lapsed after the turn; Season tab save runs sweep.
 
 ## Seat that does not exist yet
-Not in the same proposal in v1 (creating = org.decide/PR7; holding = org.seat/PR4). Plan page offers "Propose a seat". Optional RC3 after PR7: `awaits_draft_id`, status `awaiting-seat`, `releaseAwaiting(draftId)` from the org_draft closer.
+Not in the same proposal in v1 (creating = org.decide/PR7; holding = org.seat/PR4). Status 2026-10-21: `org.decide` and the `org_draft` vote are live (#495, server only); the member "Propose a seat" door is not built yet, so the Plan page does not offer it. Plan page offers "Propose a seat" once that door exists. Optional RC3 after PR7: `awaits_draft_id`, status `awaiting-seat`, `releaseAwaiting(draftId)` from the org_draft closer.
 
 ## Data (migration E, number by four-way check)
 ```sql
@@ -36,6 +36,8 @@ CREATE TABLE season_plans (
 );
 ```
 Plus `seat_applications.starts_at` folded into PR4 migration B. Raw SQL, insert versions; only filed_at, superseded_at and erasure update. Applications of a plan: `seat_applications WHERE candidate_user_id=? AND term_season_id=?` (no plan_id).
+
+Player role card PR 6 (0267, 2026-10-22) adds three nullable json columns: `serves_goals_json` ([{goal, howItHelps <= 200}], each one of the season's goals, at most the season's count; `serves_goal` keeps the first), `seasonal_goals_json` (0 to 3 {title <= 120, doneWhen <= 300}) and `card_words_json` ({howIHold, findMe, decisions, feedback, growingEdge, nextHolder}, each <= 300). Plus `player_moon_load (user_id, cycle_id, level 1..5, set_at, PK user_id+cycle_id)`, upserted: one read per member per moon. Rules in `shared/seasonPlanWords.ts`. Routes: `PUT /api/season-plans/mine/card` saves only those three groups (the rest carries from the newest version, still a new version) and `PUT /api/season-plans/mine/load` sets this moon's load. A group left out of any save keeps the newest version's; null clears it. Erasure nulls all three columns and deletes the loads.
 
 ## Files
 New: shared/seasonPlans.ts; server/repos/seasonPlans.ts; server/routes/seasonPlans.ts (GET /api/season-plans?season= [terms.read], GET/PUT /api/season-plans/mine, POST /mine/file, two jobs; rate limited like hand-to-village); client/src/pages/SeasonPlans.tsx, MySeason.tsx; client/src/components/profile/SeasonPlanSection.tsx.

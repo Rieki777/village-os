@@ -60,7 +60,7 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { balanceOf, loadTokenRegistry, memberAccount } from "./ledger";
 import { CREDITS, owedForClaim, postOwed, VILLAGE_VOICE, villageId } from "./economy";
 import { seedEconomy } from "./economySeed";
@@ -101,14 +101,9 @@ async function seatAMember(id: string): Promise<string> {
 /**
  * The live path: price what the consent owes, then post each row. The same two
  * steps `server/routes/questClaims.ts` takes across its commit.
- *
- * `granted` is passed above zero because `OwedClaim` requires it and
- * `priceClaim` prices no rule at zero or less. Without it these cases would
- * price nothing and their balance assertions would read an empty ledger, which
- * is the same shape of false green this file was written about.
  */
 async function payClaim(id: string, questId: string, userId: string): Promise<string[]> {
-  const priced = await owedForClaim(pool, { id, questId, userId, granted: 1 });
+  const priced = await owedForClaim(pool, { id, questId, userId });
   for (const row of priced.owed) await postOwed(pool, row);
   return priced.owed.map((o) => o.tokenSlug);
 }
@@ -116,7 +111,7 @@ async function payClaim(id: string, questId: string, userId: string): Promise<st
 describe.skipIf(!configured)("the first confirmed quest in a village's life", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
     await loadTokenRegistry(pool);

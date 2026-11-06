@@ -26,6 +26,7 @@ There is no timestamp and no author line, on purpose. Both would change on every
 | Token | Slug | Kind | Governed by | Decimals | Members may send it | Arrives from |
 | --- | --- | --- | --- | --- | --- | --- |
 | Gratitude | `gratitude` | recognition | this village | 0 | no | `drizzle/0006_token_registry.sql` |
+| Earned Equity | `earned-equity` | equity | this village | 0 | no | `drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql` |
 | Village Credits | `credits` | credit | this village | 2 | yes | `drizzle/0007_village_credits_token.sql` |
 | Library Credits | `library-credit` | credit | this village | 2 | no | `server/lib/library.ts` at boot |
 | Stay Credits | `stay-credit` | credit | this village | 2 | no | `server/lib/stays.ts` at boot |
@@ -33,7 +34,7 @@ There is no timestamp and no author line, on purpose. Both would change on every
 | Village Equity | `equity` | equity | Hypha, on Base | 0 | no | `drizzle/0124_the_equity_token_names_no_village.sql` |
 | Voice | `voice` | voice | Hypha, on Base | 0 | no | `drizzle/0006_token_registry.sql` |
 
-7 tokens. The order is the order a village acquires them: the ones a migration seeds, then the ones the server registers the first time it starts, then the mirrors of what lives on Base.
+8 tokens. The order is the order a village acquires them: the ones a migration seeds, then the ones the server registers the first time it starts, then the mirrors of what lives on Base.
 
 ## Every token in full
 
@@ -57,6 +58,26 @@ Recognition. One member thanks another for something that actually happened, and
 
 **What happens at cycle close.** The balance itself is untouched. What a member received during the moon decides their share of the pool, and then the balance stays where it is. Ruling 1 below would expire an unspent balance here, and it is not built.
 
+### Earned Equity
+
+Earned ownership. It accrues here from whichever rules the village turns on, and a member claims it across to the equity mirror on Base. Nothing pays it until the village decides what does.
+
+| Fact | Value |
+| --- | --- |
+| Slug | `earned-equity` |
+| Kind | equity |
+| Who governs it | this village, which mints it and moves it |
+| Decimals | 0 |
+| Arrives from | `drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql`, when the database is migrated |
+| Issued out of | `sys:equity-mint` |
+| A mint rule can pay it | yes |
+| Members may send it | no, because equity is never handed between members |
+| Can carry a price | no, a price is posted in credit tokens |
+
+**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded with no rule that does. Three rules ship switched OFF and pay nobody until the village turns them on: 1 on `proposal.accepted` to the claimant; 1 on `quest.completed` to the claimant; null on `role.cycle` to the holder. They are seeded off rather than left out because no route creates a mint rule, so a village that wanted one back would have no way to add it. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+
+**What happens at cycle close.** Nothing. Balances carry across the moon unchanged.
+
 ### Village Credits
 
 The village's own money. It is what the cycle pool shares out when a moon closes, and what a member spends on a night, a seat or a shelf.
@@ -73,9 +94,9 @@ The village's own money. It is what the cycle pool shares out when a moon closes
 | Members may send it | yes |
 | Can carry a price | yes, and spending it lands in `sys:treasury` |
 
-**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant, up to 250 a moon; 25 on `role.cycle` to the holder, up to 250 a moon. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant, up to 250 a moon; null on `role.cycle` to the holder, up to 250 a moon; 25 on `proposal.accepted` to the claimant, up to 250 a moon. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
-**What happens at cycle close.** A closing moon shares out as many of this token as the `gratitude.pool_per_cycle` dial says (default 1000, and 0 turns the pool off), split between members in proportion to the recognition each received that moon. Shares round down, and the remainder stays in the pool. Settlement pays everyone holding a seat 25 of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
+**What happens at cycle close.** A closing moon shares out as many of this token as the `gratitude.pool_per_cycle` dial says (default 1000, and 0 turns the pool off), split between members in proportion to the recognition each received that moon. Shares round down, and the remainder stays in the pool. Settlement pays everyone holding a seat null of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
 ### Library Credits
 
@@ -134,9 +155,9 @@ Earned say. It accrues here as work is confirmed and seats are held, and a membe
 | Can carry a price | no, a price is posted in credit tokens |
 | Name | `Village Voice` unless the seed is given another. The slug stays `village-voice` either way |
 
-**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant, up to 100 a moon; 50 on `role.cycle` to the holder, up to 200 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant, up to 100 a moon; null on `role.cycle` to the holder, up to 200 a moon; 10 on `proposal.accepted` to the claimant, up to 100 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
-**What happens at cycle close.** Settlement pays everyone holding a seat 50 of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
+**What happens at cycle close.** Settlement pays everyone holding a seat null of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
 **Claiming it across to Base.** A member's chip turns claimable once they hold `economy.voice_claim_threshold` of it (default 100). The claim holds the amount aside, becomes a real proposal in the village's Hypha space, and settles on Base when that proposal carries, moving to `sys:voice-settled`. A claim that is canceled, rejected or left to go stale returns the voice to the member instead, through the reversal of the very posting that took it. Claims open in a window once a season, `economy.claims_week_days` days long (default 7), so a whole season of contribution formalises in one governance pass rather than as a trickle of separate proposals.
 
@@ -218,7 +239,7 @@ Three other things move a token, and none of them is one member handing it to an
 
 - **Spending.** A member pays a village surface and the amount lands in the account above.
 - **Claiming across to Base.** An open claim holds the amount in `sys:voice-bridge`, which is not a faucet: it can only ever hold what a member put in it, which is what makes a cancelled claim provably refundable.
-- **Leaving.** A departing member's balances settle to `sys:exit-settlement`.
+- **Leaving.** What a departing member does not keep under the village's exit shares settles to `sys:exit-settlement` unless the village names another account. On the platform's defaults a leaver keeps every credit, Voice and equity balance, and a leaver still holding any stays on as a former member.
 
 One more way value enters, outside the rule engine: an administrator can stock the treasury by hand out of `sys:mint`, capped at `ledger.admin_mint_cycle_cap` per token per moon (default `10000`, and 0 switches hand-minting off). The exchange's own rules decide which tokens that route will accept.
 
@@ -232,7 +253,7 @@ There is no setting for how far a balance may go below zero. Ruling 2 below desc
 
 ## The registry table
 
-The `tokens` table carries 13 columns. The running registry loads 8 of them: `slug`, `name`, `kind`, `governance`, `transferable`, `decimals`, `active`, `is_example`.
+The `tokens` table carries 14 columns. The running registry loads 9 of them: `slug`, `name`, `description`, `kind`, `governance`, `transferable`, `decimals`, `active`, `is_example`.
 
 The rest are not loaded into the registry: `sort_order`, `created_at`, `glyph`, `spendable`, `external_ref`. A column on that list can still be used directly in SQL (`sort_order` orders several listings). One that nothing reads anywhere is dead weight, and this is the list to look in for it.
 
@@ -294,13 +315,18 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 | --- | --- | --- | --- | --- | --- |
 | `quest.completed` | `village-voice` | 10 | 100 | claimant | yes |
 | `quest.completed` | `credits` | 25 | 250 | claimant | yes |
-| `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
-| `role.cycle` | `credits` | 25 | 250 | holder | yes |
+| `role.cycle` | `village-voice` | null | 200 | holder | yes |
+| `role.cycle` | `credits` | null | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | no, seeded off |
+| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
+| `quest.completed` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
+| `role.cycle` | `earned-equity` | null | 1 | holder | no, seeded off |
 
 A confirmed quest also mints recognition from the consent route itself, with its own range and cap, which is not a mint rule and does not appear in that table. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
 
-Staged: the freedom. The rule engine can pay `gratitude`, `credits`, `library-credit`, `stay-credit`, `village-voice`. A village also has no route that creates a mint rule, so today it can edit the amounts on the rules it was seeded with and cannot add a token to a payout.
+Staged: the freedom. The rule engine can pay `gratitude`, `earned-equity`, `credits`, `library-credit`, `stay-credit`, `village-voice`. A village also has no route that creates a mint rule, so today it can edit the amounts on the rules it was seeded with and cannot add a token to a payout.
 
 ### 8. Redeeming tokens for money or equity
 
@@ -354,6 +380,48 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "description": "Recognition. One member thanks another for something that actually happened, and this token is the record of it. It is a signal, never a price."
     },
     {
+      "slug": "earned-equity",
+      "name": "Earned Equity",
+      "kind": "equity",
+      "governance": "platform",
+      "decimals": 0,
+      "transferable": false,
+      "active": true,
+      "sendableBetweenMembers": false,
+      "sendBlockedBy": "equity is never handed between members",
+      "faucet": "sys:equity-mint",
+      "ruleEngineCanPay": true,
+      "spendSink": null,
+      "arrivesFrom": "migration",
+      "arrivesIn": "drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql",
+      "isCyclePoolDefault": false,
+      "isVoteWeightDefault": false,
+      "seededRules": [
+        {
+          "trigger": "proposal.accepted",
+          "amount": 1,
+          "ceiling": 1,
+          "recipient": "claimant",
+          "enabled": false
+        },
+        {
+          "trigger": "quest.completed",
+          "amount": 1,
+          "ceiling": 1,
+          "recipient": "claimant",
+          "enabled": false
+        },
+        {
+          "trigger": "role.cycle",
+          "amount": null,
+          "ceiling": 1,
+          "recipient": "holder",
+          "enabled": false
+        }
+      ],
+      "description": "Earned ownership. It accrues here from whichever rules the village turns on, and a member claims it across to the equity mirror on Base. Nothing pays it until the village decides what does."
+    },
+    {
       "slug": "credits",
       "name": "Village Credits",
       "kind": "credit",
@@ -380,9 +448,16 @@ The same facts, for anything that would rather parse than read. Regenerated with
         },
         {
           "trigger": "role.cycle",
-          "amount": 25,
+          "amount": null,
           "ceiling": 250,
           "recipient": "holder",
+          "enabled": true
+        },
+        {
+          "trigger": "proposal.accepted",
+          "amount": 25,
+          "ceiling": 250,
+          "recipient": "claimant",
           "enabled": true
         }
       ],
@@ -455,9 +530,16 @@ The same facts, for anything that would rather parse than read. Regenerated with
         },
         {
           "trigger": "role.cycle",
-          "amount": 50,
+          "amount": null,
           "ceiling": 200,
           "recipient": "holder",
+          "enabled": true
+        },
+        {
+          "trigger": "proposal.accepted",
+          "amount": 10,
+          "ceiling": 100,
+          "recipient": "claimant",
           "enabled": true
         }
       ],
@@ -550,6 +632,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
     "loaded": [
       "slug",
       "name",
+      "description",
       "kind",
       "governance",
       "transferable",
@@ -586,6 +669,6 @@ The generator reads these and fails loudly if any of them moves:
 
 It also walks every `.ts` file under `server/` looking for a token registered at first start. Each one has to sit inside a function named `ensure…Token`, and a call anywhere else stops the build asking which kind it is. That is what stops a new module registering a token the document never mentions.
 
-The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql`.
+The seeded rows are produced by applying every token statement in `drizzle/` in migration order, rather than by reading the INSERTs alone. Two later migrations sweep the `transferable` column, and reading only the INSERTs would report recognition as sendable, which it has not been since `0092_token_sinks.sql`. The migrations that write the registry today: `drizzle/0006_token_registry.sql`, `drizzle/0007_village_credits_token.sql`, `drizzle/0047_example_market.sql`, `drizzle/0071_economy_core.sql`, `drizzle/0092_token_sinks.sql`, `drizzle/0124_the_equity_token_names_no_village.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql (read through a token-doc directive)`, `drizzle/0202_a_village_spends_its_credits_in_hundredths.sql`, `drizzle/0266_a_village_earns_equity_it_can_claim_on_hypha.sql`, `drizzle/0283_a_token_says_what_it_means.sql`.
 
 `server/db/tokenDoc.test.ts` runs every migration against a real MySQL and asserts the rows this generator computed are the rows the database actually holds, and that the faucet, sink and sending answers here match what the server's own functions return. The generator being wrong is a red test, not a quiet paragraph.

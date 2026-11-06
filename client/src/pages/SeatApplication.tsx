@@ -1,5 +1,6 @@
 /**
- * `/seat-applications/:id`: ONE APPLICATION TO HOLD SEATS, ON TERMS (seat settings PR4).
+ * `/role-applications/:id`: ONE APPLICATION TO HOLD ROLES, ON TERMS (seat settings PR4).
+ * `/seat-applications/:id` is its old spelling and redirects here (App.tsx).
  *
  * Members only. The read behind it answers 401 to a visitor and to a signed-in
  * guest (terms.read opens at the member rung), and this page says so in a
@@ -7,9 +8,24 @@
  *
  * What a member reads, in the order they ask it:
  *
- *   WHICH SEATS, ON WHAT TERMS   each seat as its live card, stacked, with the
- *                                Settings drawer OPEN on the application's terms
+ *   WHICH ROLES, ON WHAT TERMS   the candidate's player card in proposal mode
+ *                                (PR 3): one card for up to five roles, its
+ *                                live sections reading "Starts once adopted",
+ *                                then the Settings drawer OPEN on the terms.
+ *                                Should the card fail to load, each role as its
+ *                                live card, stacked, as before.
  *   IN THE MEMBER'S WORDS        what will be true at the season's end, and why them
+ *   THE CIRCLE'S ANSWER          for a role proposal (role proposals PR D): where
+ *                                the circle's consent stands, who was asked and
+ *                                answered by role title, and an asked holder's
+ *                                Consent or Object (CircleConsent.tsx). Once the
+ *                                circle has consented, the holder's adopt button
+ *                                reads "Record the adoption".
+ *   WHO ADOPTS IT                while it waits, who in this village can adopt
+ *                                it, as the server read it from who holds the
+ *                                power (E8): the role as "Role (FirstName)", what
+ *                                has to happen first when nobody holds it, or the
+ *                                village's vote once the village holds it
  *   WHERE IT STANDS              waiting for a seat holder, the village voting
  *                                (with a link to the vote), adopted, held
  *   WHAT YOU CAN DO              the holder's card: "Align for the village" and
@@ -21,6 +37,7 @@
  * Money in the terms is a record: the drawer prints "Recorded here. Paid
  * outside the platform." beside every money row.
  */
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Send, Undo2 } from "lucide-react";
@@ -32,6 +49,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatTermsDrawer from "@/components/power/SeatTermsDrawer";
+import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import { loadOrg } from "@/components/governance/pickSources";
 import {
   fetchApplication,
@@ -50,8 +68,12 @@ import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { call as alignCall } from "@/components/alignment/alignmentsApi";
 
+import { ApplicantGeneKeys } from "@/components/geneKeys/ProfileGeneKeys";
+import CircleConsent from "@/components/roleProposal/CircleConsent";
+import { CONSENT_WORDS } from "@shared/roleProposalConsent";
+
 export const APPLICATION_WORDS = {
-  membersOnly: "Members read seat applications.",
+  membersOnly: "Members read role applications.",
   membersOnlyLine: "An application carries its terms, money included, so it opens at the member rung.",
   signIn: "Sign in to read this application",
   wordsHeading: "In their words",
@@ -60,6 +82,8 @@ export const APPLICATION_WORDS = {
   wordsRemoved: "These words were removed at the member's request.",
   holderHeading: "For the village",
   holderLine: "You hold the power that seats people. Adopt it for the village, or send it to the village to decide.",
+  /** A role proposal that changes roles never goes to a village vote (role proposals PR B). */
+  powerLine: "You hold the power that seats people. Adopt it for the village.",
   ownTerms: "Your own terms go to the village to adopt.",
   align: "Align for the village",
   putToVillage: "Put it to the village",
@@ -71,26 +95,18 @@ export const APPLICATION_WORDS = {
   amends: "These terms amend earlier ones. The earlier terms stay in force until these are.",
   readEarlier: "Read the earlier terms",
   readTheVote: "Read the vote",
-  laterLine: "Adopted. The seats are taken up on the first day it names.",
-  packageTerms: "One set of terms covers every seat above.",
+  laterLine: "Adopted. The roles are taken up on the first day it names.",
+  packageTerms: "One set of terms covers every role above.",
 } as const;
 
-function SeatCards({ app }: { app: ServedApplication }) {
-  const [org, setOrg] = useState<any | null>(null);
-  const season = useSeason();
+/**
+ * The application's terms in the Settings drawer, open. The card prints pay in
+ * words only, so the drawer is where a holder reads the figures they adopt.
+ */
+function TermsDrawer({ app }: { app: ServedApplication }) {
   const villagePresets = useVillagePresets();
-  useEffect(() => {
-    let alive = true;
-    void loadOrg().then((o) => {
-      if (alive) setOrg(o);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
   const parsed = parseSeatSettings(app.settings);
   const marks = app.alignment ? { state: app.alignment.state, sealed: app.alignment.sealed, parties: app.alignment.parties } : null;
-  const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
   const adopted =
     app.status === "adopted" && app.decidedAt
       ? {
@@ -107,7 +123,7 @@ function SeatCards({ app }: { app: ServedApplication }) {
    * the card's tray when there is one seat, under the cards when there are
    * more. Three identical drawers read as three sets of terms.
    */
-  const drawer = (
+  return (
     <SeatTermsDrawer
       settings={parsed.ok ? parsed.settings : null}
       unreadable={!parsed.ok}
@@ -117,6 +133,42 @@ function SeatCards({ app }: { app: ServedApplication }) {
       defaultOpen
     />
   );
+}
+
+/** The card the application asks for, then its terms. */
+function ApplicationCard({ app }: { app: ServedApplication }) {
+  return (
+    <>
+    <ApplicantGeneKeys userId={app.candidate.id} firstName={(app.candidate.name ?? "The candidate").split(" ")[0]} />
+    <PlayerRoleCard
+      applicationId={app.id}
+      mode="proposal"
+      fallback={<SeatCards app={app} />}
+      footer={
+        <div data-package-terms="" className="sheet-night mt-6 rounded-xl bg-card p-4 text-foreground">
+          {app.seats.length > 1 && <p className="mb-3 text-sm text-muted-foreground">{APPLICATION_WORDS.packageTerms}</p>}
+          <TermsDrawer app={app} />
+        </div>
+      }
+    />
+    </>
+  );
+}
+
+function SeatCards({ app }: { app: ServedApplication }) {
+  const [org, setOrg] = useState<any | null>(null);
+  const season = useSeason();
+  useEffect(() => {
+    let alive = true;
+    void loadOrg().then((o) => {
+      if (alive) setOrg(o);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const roles: any[] = Array.isArray(org?.roles) ? org.roles : [];
+  const drawer = <TermsDrawer app={app} />;
   const single = app.seats.length === 1;
   return (
     <div className="space-y-6">
@@ -131,7 +183,17 @@ function SeatCards({ app }: { app: ServedApplication }) {
                   input={fromOrgSeat(row, org?.circles, org?.people, org?.village)}
                   ctx={{ now: new Date(), season: seasonForSheet(season), classNames: null }}
                   faces="stacked"
-                  settings={single ? drawer : undefined}
+                  settings={
+                    // What the seat pays sits above the terms asked for (Rye, 2026-10-30).
+                    row.pay ? (
+                      <div className="space-y-2">
+                        <WorkPayBlock pay={row.pay} variant="full" />
+                        {single ? drawer : null}
+                      </div>
+                    ) : single ? (
+                      drawer
+                    ) : undefined
+                  }
                 />
               ) : (
                 <div className="sheet-night rounded-xl bg-card p-4 text-foreground">
@@ -204,6 +266,9 @@ export default function SeatApplication() {
     return <ModuleGate moduleId="governance" name="Seat applications" behind={PAGE_GATE_LINES.propose} />;
   }
 
+  // "Record the adoption", once the circle has consented to a role proposal (role proposals PR D).
+  const record = app?.proposal?.consent?.record ?? null;
+
   const back = (
     <Link
       href="/decisions"
@@ -224,7 +289,7 @@ export default function SeatApplication() {
             <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
-                <SignInDoors next={`/seat-applications/${encodeURIComponent(id)}`} />
+                <SignInDoors next={`/role-applications/${encodeURIComponent(id)}`} />
               </div>
             )}
           </div>
@@ -263,7 +328,7 @@ export default function SeatApplication() {
               </p>
             </header>
 
-            <SeatCards app={app} />
+            <ApplicationCard app={app} />
 
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
@@ -300,6 +365,24 @@ export default function SeatApplication() {
               )}
             </section>
 
+            {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
+            {app.proposal?.consent && (
+              <CircleConsent
+                applicationId={app.id}
+                consent={app.proposal.consent}
+                decided={app.proposal.decided}
+                waiting={app.status === "awaiting-holder"}
+                onAnswered={() => void load()}
+              />
+            )}
+
+            {/* Who adopts it in this village, read on the server from who holds the power (E8). */}
+            {app.status === "awaiting-holder" && app.whoAdopts && (
+              <p className="text-sm text-stone-700" data-who-adopts="">
+                {app.whoAdopts}
+              </p>
+            )}
+
             {app.status === "voting" && app.ballotId && (
               <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
                 <p className="text-stone-800">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
@@ -321,18 +404,23 @@ export default function SeatApplication() {
                 {app.you.isCandidate ? (
                   <p className="mt-1 text-stone-700">{APPLICATION_WORDS.ownTerms}</p>
                 ) : (
-                  <p className="mt-1 text-stone-700">{APPLICATION_WORDS.holderLine}</p>
+                  <p className="mt-1 text-stone-700">
+                    {record ? CONSENT_WORDS.recordLine : app.proposal?.changesRoles ? APPLICATION_WORDS.powerLine : APPLICATION_WORDS.holderLine}
+                  </p>
                 )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {app.you.mayAdopt && (
                     // The holder's adopt click IS the village's alignment. Money terms may ask the re-confirm first.
+                    // Once the circle has consented, the same click records the adoption (role proposals PR D).
                     <AlignButton
-                      label={ALIGN_WORDS.forTheVillage}
+                      label={record ?? ALIGN_WORDS.forTheVillage}
                       sentence={intentSentence(app.seats.map((x) => x.name), true)}
                       disabled={busy}
                       onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST")}
                       onDone={(data) => {
-                        setSaid({ ok: true, text: typeof data?.message === "string" ? data.message : "Adopted for the village." });
+                        // A role proposal answers with its decision record, which names a role, never a person.
+                        const text = typeof data?.decided === "string" ? data.decided : typeof data?.message === "string" ? data.message : "Adopted for the village.";
+                        setSaid({ ok: true, text });
                         void load();
                       }}
                     />

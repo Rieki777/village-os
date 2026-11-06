@@ -47,7 +47,7 @@ const HASH = "c".repeat(64);
 const row = (over: Record<string, unknown>) => ({
   textId: "at-0000000000000001",
   kind: "seat_terms",
-  kindLabel: "Seat terms",
+  kindLabel: "Role terms",
   title: "Terms for Orchard steward",
   body: "Terms for Orchard steward\n\nTHE TERMS\n  Pay: XTS 43,210 a month\n",
   version: 1,
@@ -102,7 +102,7 @@ const serve = (answer: (url: string) => Response) => {
   fetchMock = vi.fn(async (url: string) => answer(url));
   vi.stubGlobal("fetch", fetchMock);
 };
-const page = (rows: unknown[], more = false, query: string | null = null) => json({ kinds: [{ id: "seat_terms", label: "Seat terms" }], rows, more, query });
+const page = (rows: unknown[], more = false, query: string | null = null) => json({ kinds: [{ id: "seat_terms", label: "Role terms" }], rows, more, query });
 
 beforeEach(() => {
   signedIn = { id: "u-hal" };
@@ -138,7 +138,7 @@ describe("a member reads the record", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "2026" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["2026", "2025"]);
     const orchard = screen.getByRole("article", { name: "Terms for Orchard steward" });
-    expect(within(orchard).getByText("Seat terms", { exact: false })).toBeTruthy();
+    expect(within(orchard).getByText("Role terms", { exact: false })).toBeTruthy();
     expect(within(orchard).getByText("In force")).toBeTruthy();
     expect(within(orchard).getByText("Aligned on 10 October 2026")).toBeTruthy();
     expect(within(orchard).getByText("Ana Quillfeather")).toBeTruthy();
@@ -202,7 +202,7 @@ describe("a member reads the record", () => {
       ],
     });
     const kinds = [
-      { id: "seat_terms", label: "Seat terms" },
+      { id: "seat_terms", label: "Role terms" },
       { id: "membership", label: "Membership letter" },
     ];
     serve((url) => json({ kinds, rows: url.includes("kind=membership") ? [letter] : [...ROWS, letter], more: false, query: null }));

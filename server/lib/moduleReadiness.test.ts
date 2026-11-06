@@ -148,7 +148,7 @@ describe("events readiness", () => {
       label: VARIABLES_BY_KEY["calendar.hemisphere"].label,
     });
     expect(setupHref("events", target, { on: true })).toBe(
-      "/admin?tab=modules&module=events&setting=calendar.hemisphere",
+      "/modules/events#setting-calendar.hemisphere",
     );
   });
 
@@ -205,9 +205,12 @@ describe("every module that declares setup", () => {
         ).toBeTruthy();
         expect(target.label).toBe(VARIABLES_BY_KEY[target.key].label);
       }
-      // Whatever the kind, the address is a real one.
-      expect(setupHref(def.id, target, { on: true }).startsWith("/admin?tab=")).toBe(true);
-      expect(setupHref(def.id, target, { on: false }).startsWith("/admin?tab=")).toBe(true);
+      // Whatever the kind, the address is a real one: the module's own page
+      // in the library (where its settings live since 2026-10-09), or, for
+      // content made on its own screen while it is on, that admin tab.
+      const real = (href: string) => href.startsWith(`/modules/${def.id}`) || href.startsWith("/admin?tab=");
+      expect(real(setupHref(def.id, target, { on: true }))).toBe(true);
+      expect(setupHref(def.id, target, { on: false }).startsWith(`/modules/${def.id}`)).toBe(true);
     });
   }
 });

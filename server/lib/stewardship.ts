@@ -180,6 +180,7 @@ import {
 import { catalystUserIds } from "../repos/users";
 import { slateFor } from "../repos/stewardSlate";
 import { moveCapabilityToVillage, STEWARD_ROLE_ID } from "./capabilityHolding";
+import { readLaunchSelection } from "./launchHandover";
 import { boolVar, stringVar } from "./variables";
 
 /**
@@ -540,7 +541,7 @@ export function isVetoable(
       vetoable: false,
       why:
         "This decision seats or unseats the steward's own role. It waits out its window like any other Game change, " +
-        "and no steward can stop it: a seat that could stop its own removal could never be removed.",
+        "and no steward can stop it: a role that could stop its own removal could never be removed.",
     };
   }
   const locked = elements.map((e) => String(e?.key ?? "")).filter((k) => keyIsVetoLocked(k));
@@ -548,9 +549,9 @@ export function isVetoable(
     return {
       vetoable: false,
       why:
-        `This decision changes ${locked.join(", ")}, which is a limit on the seat itself. ` +
+        `This decision changes ${locked.join(", ")}, which is a limit on the role itself. ` +
         "It waits out its window like any other Game change, and no steward can stop it, " +
-        "because a seat that could stop an edit to its own limits would have none.",
+        "because a role that could stop an edit to its own limits would have none.",
     };
   }
   return { vetoable: true, why: "" };
@@ -1076,7 +1077,7 @@ export async function beingVotedOut(pool: Pool, userId: string, at: Date): Promi
 
 /** The sentence a veto carries when its steward was being voted out. */
 export function votedOutSentence(firstName: string, landsAtIso: string): string {
-  return `${firstName} was being voted out when they cast this: the village had carried the vote to take their seat back, and it lands on ${landsAtIso.slice(0, 10)}.`;
+  return `${firstName} was being voted out when they cast this: the village had carried the vote to take their role back, and it lands on ${landsAtIso.slice(0, 10)}.`;
 }
 
 /**
@@ -1298,7 +1299,7 @@ export function stewardNoBlocks(input: StewardNoInput): StewardNoVerdict {
       "A steward's no does not fail a Game change. It waits out its window, and a steward who wants it stopped vetoes it there.",
     );
   }
-  if (seated === 0) return empty("No steward holds the seat, so nobody here can fail a payment.");
+  if (seated === 0) return empty("No steward holds the role, so nobody here can fail a payment.");
 
   const seats = new Set(input.seated.map((h) => h.userId));
   const counted: string[] = [];
@@ -1387,8 +1388,8 @@ export async function stewardMailRefusal(
   if (n.emailsOff !== true && n.governanceEmail !== "off") return null;
   if (!(await holdsStewardSeat(pool, userId))) return null;
   return (
-    "You hold a seat that can stop a decision the village has already carried, and the notice that your window " +
-    "is open is the only warning anybody gets. Governance mail stays on while you hold that seat. A role_unseat " +
+    "You hold a role that can stop a decision the village has already carried, and the notice that your window " +
+    "is open is the only warning anybody gets. Governance mail stays on while you hold that role. A role_unseat " +
     "ballot hands it back, and then this is yours to turn off."
   );
 }
@@ -1432,16 +1433,16 @@ export async function vacancyState(pool: Pool, now: Date = new Date()): Promise<
 
   let sentence: string;
   if (seated && live.length === 1) {
-    sentence = "One steward holds the seat, and can stop a decision inside its window.";
+    sentence = "One steward holds the role, and can stop a decision inside its window.";
   } else if (seated && council) {
-    sentence = `${live.length} stewards hold the seat, and a majority of them can stop a decision inside its window.`;
+    sentence = `${live.length} stewards hold the role, and a majority of them can stop a decision inside its window.`;
   } else if (seated) {
-    sentence = `${live.length} stewards hold the seat, and any one of them can stop a decision inside its window.`;
+    sentence = `${live.length} stewards hold the role, and any one of them can stop a decision inside its window.`;
   } else if (stillAsked) {
-    sentence = "No steward holds the seat; Game changes land at their landing time.";
+    sentence = "No steward holds the role; Game changes land at their landing time.";
   } else {
     sentence =
-      "No steward holds the seat, and nothing here can be stopped by one. This village's agreements carry themselves.";
+      "No steward holds the role, and nothing here can be stopped by one. This village's agreements carry themselves.";
   }
 
   return { seated, holdings, lapsed, stillAsked, council, healthy: !seated, sentence };
@@ -1474,8 +1475,9 @@ export interface SeatingReport {
   /** Which of the nineteen this call added. Empty on a retry, not a failure. */
   capabilitiesGranted: string[];
   /**
-   * Every one of the nineteen is now entrusted to the seat, so an administrator
-   * meets the break-glass door on all of them instead of walking through.
+   * Every power the stewards selected for the launch is now the village's, so
+   * an administrator meets the break-glass door on those instead of walking
+   * through. True when nothing was selected: nothing failed to cross.
    *
    * FALSE WHEN NOBODY WAS SEATED, on purpose and not as a failure. See the
    * block above the crossing in `seatCatalystsAsStewards` for why entrusting
@@ -1483,7 +1485,7 @@ export interface SeatingReport {
    * nineteen with no way back.
    */
   holdingMoved: boolean;
-  /** Which of the nineteen crossed on this call. Empty on a retry. */
+  /** Which of the selected powers crossed on this call. Empty on a retry, or when none was selected. */
   capabilitiesMoved: string[];
   /** Why the crossing did not happen, when it did not. Null when it did. */
   holdingHeld: string | null;
@@ -1563,7 +1565,8 @@ export function stewardHoldingId(userId: string): string {
 
 /**
  * Seat the founders who STOOD for the seat, once, with a term that really
- * ends, and entrust the seat with all nineteen powers.
+ * ends, on a role carrying all nineteen powers, and hand the village exactly
+ * the powers the stewards selected for the launch (step 3).
  *
  * THE WRITES ONLY. `seatFoundersAtLaunch` in server/lib/launchSeating.ts is
  * the caller, and it is where the term is decided (`resolveSeatTerm`, so the
@@ -1737,7 +1740,7 @@ export async function seatCatalystsAsStewards(
       id: STEWARD_ROLE_ID,
       name: STEWARD_ROLE_NAME,
       description:
-        "Can stop a decision the village has already carried, inside the window before it lands, and has to say why. Training wheels: a village that no longer needs the seat lets it stand empty, and its decisions land the same way.",
+        "Can stop a decision the village has already carried, inside the window before it lands, and has to say why. Training wheels: a village that no longer needs the role lets it stand empty, and its decisions land the same way.",
       capabilitiesJson: JSON.stringify([...HANDOVER_SET]),
       sortOrder: 0,
     });
@@ -1862,8 +1865,18 @@ export async function seatCatalystsAsStewards(
   }
 
   /*
-   * 3. ENTRUST ALL NINETEEN TO THE SEAT, and this is the step whose absence
-   *    made the whole seat decorative when it reached only one of them.
+   * 3. HAND THE VILLAGE EXACTLY WHAT THE STEWARDS SELECTED, and nothing else.
+   *
+   *    Rye, 2026-11-01: "At launch the stewards select WHAT powers are being
+   *    passed over. It doesn't pass none; they select which powers the launch
+   *    passes over." The selection may be none, some or all of the nineteen,
+   *    and it is chosen before launch through the one hand-over control
+   *    (server/routes/stewardHandover.ts, read by `readLaunchSelection`). This
+   *    step used to cross all nineteen, hardcoded. Nothing selected moves
+   *    nothing, and every power not selected stays with the stewards, who hand
+   *    it over later by the same recorded act.
+   *
+   *    WHAT A CROSSING DOES, for each selected power:
    *
    *    `capability_holding` is what turns an admin's silent yes into a
    *    break-glass with a public record: `isVillageHeld` reads that table, and
@@ -1873,8 +1886,8 @@ export async function seatCatalystsAsStewards(
    *    and every admin account would still be able to act on all of them
    *    without the village ever hearing about it. Granting the role the power
    *    and entrusting it are two acts by design (see capabilityHolding.ts),
-   *    and at a launch they happen together, because the point of the seat is
-   *    that it holds the village's own hand on all nineteen.
+   *    and at a launch they happen together for whatever the stewards
+   *    selected.
    *
    *    Idempotent on each capability, and each one refuses rather than throws,
    *    so a retried close moves nothing twice and a refusal is reported
@@ -1911,12 +1924,12 @@ export async function seatCatalystsAsStewards(
   const holdsTheSeat = base.seated.length + base.alreadySeated.length > 0;
   if (!holdsTheSeat) {
     base.holdingHeld =
-      "Nobody holds the steward's seat, so the village's powers stay where they were. " +
-      "A power entrusted to a seat nobody sits in belongs to nobody at all. " +
-      "They cross the moment the village votes somebody into the seat.";
+      "Nobody holds the steward role, so the village's powers stay where they were. " +
+      "A power entrusted to a role nobody sits in belongs to nobody at all. " +
+      "The stewards hand them over by their own act once the village votes somebody into the role.";
   } else {
     const refusals: string[] = [];
-    for (const capability of HANDOVER_SET) {
+    for (const capability of (await readLaunchSelection(pool)).capabilities) {
       const moved = await moveCapabilityToVillage(pool, {
         capability,
         holderRoleId: STEWARD_ROLE_ID,
@@ -1926,7 +1939,7 @@ export async function seatCatalystsAsStewards(
       if (moved.ok) base.capabilitiesMoved.push(capability);
       else refusals.push(`${capability}: ${moved.error}`);
     }
-    // TRUE ONLY WHEN ALL NINETEEN ARE THERE, which is what the caller's own
+    // TRUE ONLY WHEN EVERY SELECTED POWER IS THERE, which is what the caller's own
     // "the powers did not cross" notice means. `capabilitiesMoved` counts this
     // call's crossings and goes empty on a retry, so it is the wrong thing to
     // read: the question is the state of the table, not the work of this run.
@@ -2240,7 +2253,7 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
         ? `Your term on ${a.roleName} has ended`
         : `Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`,
       body: ended
-        ? "The agreement to keep holding this seat unasked has run out. This seat carries no permissions of its own, so nothing has been switched off, and it is the moment to say whether you want to carry on."
+        ? "The agreement to keep holding this role unasked has run out. This role carries no permissions of its own, so nothing has been switched off, and it is the moment to say whether you want to carry on."
         : "This is the nudge to say whether you want to carry on, while there is a whole cycle left to arrange it. Nothing renews on its own, and there is no limit on terms, so the village can seat you again.",
       link: a.orgRoleId ? `${SEASON_PLAN_MINE}?renew=${encodeURIComponent(a.orgRoleId)}` : SEASON_PLAN_MINE,
       dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}`,
@@ -2261,8 +2274,8 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
         ? `Your term as ${h.roleName} has ended`
         : `Your term as ${h.roleName} ends in ${h.daysLeft} day(s)`,
       body: h.ended
-        ? "The seat has ended, and the powers that came with it have ended with it. Nothing was taken from you by anybody; the term simply reached its date. The village seats you again if it wants you to carry on."
-        : "When the date arrives the seat ends, and the powers that came with it end too. Nothing renews on its own. There is no limit on terms, so the village can vote to seat you again before the date.",
+        ? "The role has ended, and the powers that came with it have ended with it. Nothing was taken from you by anybody; the term simply reached its date. The village seats you again if it wants you to carry on."
+        : "When the date arrives the role ends, and the powers that came with it end too. Nothing renews on its own. There is no limit on terms, so the village can vote to seat you again before the date.",
       link: SEASON_PLAN_MINE,
       dedupeKey: `${h.ended ? "perm-term-ended" : "perm-term-soon"}:${h.id}`,
     });

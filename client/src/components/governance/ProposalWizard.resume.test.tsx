@@ -92,7 +92,7 @@ describe("focus follows the step (red team U10)", () => {
 });
 
 describe("no error before any input (red team U11)", () => {
-  const PICK = "Pick the seat you are applying for.";
+  const PICK = "Pick the role you are applying for.";
   const SHORT_DELIVERABLES = /^Your list of deliverables needs at least 40 characters/;
   const SHORT_WHY = /^"Why you" needs at least 30 characters/;
 
@@ -130,10 +130,11 @@ describe("no error before any input (red team U11)", () => {
 describe("the seat preview says what it shows (red team U11)", () => {
   it("one seat: the seat you picked; several: the first, and the terms cover them all", async () => {
     const one = render(<ProposalWizard start={{ type: "role_application", answers: { seatIds: ["seat-1"] } }} />);
-    expect((await screen.findAllByText("Shows the seat you picked.")).length).toBeGreaterThan(0);
-    expect(screen.queryByText("Shows the role you picked.")).toBeNull();
+    // Since 2026-10-21 the single-role line and the role card's generic line say the same words
+    // (members say role, never seat), so only the several-roles case below can tell them apart.
+    expect((await screen.findAllByText("Shows the role you picked.")).length).toBeGreaterThan(0);
     one.unmount();
     render(<ProposalWizard start={{ type: "role_application", answers: { seatIds: ["seat-1", "seat-2"] } }} />);
-    expect((await screen.findAllByText("Shows the first seat you picked. Your terms cover every seat you picked.")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Shows the first role you picked. Your terms cover every role you picked.")).length).toBeGreaterThan(0);
   });
 });

@@ -16,7 +16,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { DAILY_EMAIL_CAP, insertNotification, type NotifyDeps } from "./lib/notify";
 import { numberVar } from "./lib/variables";
 import { runSeasonReminders } from "./lib/seasonReminders";
@@ -36,7 +36,7 @@ let pool: mysql.Pool;
 beforeAll(async () => {
   if (!configured) return;
   db = await provisionTestDb();
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, as every DB suite holds
+  pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, as every DB suite holds
 });
 
 afterAll(async () => {

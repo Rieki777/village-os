@@ -49,6 +49,7 @@ import {
   reversePair,
   runSettlement,
   shareCapFor,
+  toLedgerUnits,
   VILLAGE_VOICE,
   VOICE_DECIMALS,
   VOICE_BRIDGE,
@@ -63,7 +64,7 @@ import { createExit } from "./lib/exit";
 import { VOICE_SETTLED } from "./lib/voiceClaim";
 import { loadVariables, numberVar, setVariable } from "./lib/variables";
 import { cycleBoundsFor } from "../shared/lunar";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { lostConcurrencyRace } from "./db/concurrency";
 import { sendGratitude, type GratitudeDeps } from "./lib/gratitude";
 import { gratitudeLogRepo } from "./repos/gratitude";
@@ -117,15 +118,9 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  * (`server/routes/questClaims.ts`), so these take the two steps and this
  * reports the three fields the old return value carried.
  *
- * IT IS A TRANSLATION AND NOT A MOVE. Three things differ, and each one is a
+ * IT IS A TRANSLATION AND NOT A MOVE. Two things differ, and each one is a
  * way a case could go green while proving nothing:
  *
- *  - `granted` is REQUIRED on `OwedClaim`, and `priceClaim`'s `noRules` is
- *    true whenever it is zero or less. A case that left it out would price
- *    NOTHING, and "posted no more than the ceiling" would then pass over an
- *    empty set: a test defending the absence of the thing it checks. A grant
- *    above zero is passed on every call, and `owedPostings.test.ts` passes one
- *    for the same reason.
  *  - `owedForClaim` answers rows PRICED AND NOT YET POSTED, so `minted` here
  *    is the rows whose posting came back `posted`, which is what the old field
  *    meant.
@@ -140,7 +135,7 @@ async function scaleOf(p: mysql.Pool, slug: string): Promise<number> {
  */
 async function payClaim(
   p: mysql.Pool,
-  claim: { id: string; questId: string; userId: string; granted?: number },
+  claim: { id: string; questId: string; userId: string },
 ): Promise<{
   priced: string[];
   considered: number;
@@ -148,7 +143,7 @@ async function payClaim(
   unpayable: Array<{ token: string; reason: string }>;
   skipped?: string;
 }> {
-  const out = await owedForClaim(p, { granted: 1, ...claim });
+  const out = await owedForClaim(p, claim);
   const minted: Array<{ token: string; units: number; decimals: number }> = [];
   const unpayable = [...out.unpayable];
   for (const row of out.owed) {
@@ -196,7 +191,7 @@ const rule = (over: Partial<MintRule> = {}): MintRule => ({
 describe.skipIf(!configured)("the village economy engine", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");
@@ -1185,32 +1180,51 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(out.minted.map((m) => m.token)).toContain(VILLAGE_VOICE);
     });
 
-    it("names a quest rule that reads its amount from work that posts none", async () => {
-      // `amount: null` means "read it from whatever posted the work", and
-      // `queueRuleChange` accepts it on any rule. The only amount a quest
-      // posts is its Gratitude range, which the consent route already spends,
-      // so a from_source rule on a second token can never resolve an amount on
-      // any quest, ever. It used to fall through `if (human <= 0) continue`.
+    it("pays a quest rule that reads its amount from the work only on a quest that names one", async () => {
+      // `amount: null` means "read it from whatever posted the work". Until a
+      // quest could carry its own amounts (0265) the only amount a quest posted
+      // was its Gratitude range, so a from_source rule on a second token could
+      // never pay and was reported on every consent. It now pays the quests
+      // that name an amount for it, in full (no ceiling binds work, Rye
+      // 2026-10-22), and is quiet on a quest that names none: that quest simply
+      // does not pay this token.
       // A token of its own. `mint_rules` is UNIQUE on
       // (village_id, trigger, token_slug), so reusing `credits` here would not
       // add a rule at all: it would silently rewrite the credits rule the
       // block above proved, and this test would then pass by mutating its
-      // neighbour rather than by testing anything.
+      // neighbour rather than by testing anything. Registered here with the
+      // same scale the ceiling block below gives it, so neither moves it.
+      await registerToken(pool, { slug: "library-credit", name: "Library Credit", kind: "credit", governance: "platform", transferable: false, decimals: 0 });
+      await loadTokenRegistry(pool);
       await pool.query(
         "INSERT INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
-          "VALUES ('rule-fromsource-test', ?, 'quest.completed', 'stay-credit', NULL, 50, 'claimant', 1) " +
+          "VALUES ('rule-fromsource-test', ?, 'quest.completed', 'library-credit', NULL, 50, 'claimant', 1) " +
           "ON DUPLICATE KEY UPDATE `enabled` = 1, `amount` = NULL",
         [villageId()],
       );
-      const u = await makeMember("econ-fromsource-1");
-      const out = await payClaim(pool, { id: "claim-fromsource-1", questId: "q-fromsource", userId: u });
-      expect(out.priced).toContain(CREDITS); // denominator
-      const said = out.unpayable.find((x) => x.token === "stay-credit");
-      expect(said?.reason).toMatch(/reads its amount/);
-      // The credits rule beside it is untouched and still pays.
-      expect(out.minted.map((m) => m.token)).toContain(CREDITS);
-      // Clear it again: the rules table is shared by the tests below.
-      await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'");
+      try {
+        const u = await makeMember("econ-fromsource-1");
+        const quiet = await payClaim(pool, { id: "claim-fromsource-1", questId: "q-fromsource", userId: u });
+        expect(quiet.priced).toContain(CREDITS); // denominator
+        expect(quiet.priced).not.toContain("library-credit");
+        expect(quiet.unpayable.find((x) => x.token === "library-credit")).toBeUndefined();
+        // The credits rule beside it is untouched and still pays.
+        expect(quiet.minted.map((m) => m.token)).toContain(CREDITS);
+
+        // A quest naming 70 is paid 70, above the rule's ceiling of 50, and nothing it did not name.
+        const named = await owedForClaim(pool, {
+          id: "claim-fromsource-2",
+          questId: "q-fromsource",
+          userId: u,
+          valueTokens: [{ token: "library-credit", amount: 70 }],
+        });
+        expect(named.owed.map((o) => o.tokenSlug)).toEqual(["library-credit"]);
+        expect(named.owed[0].units).toBe(toLedgerUnits("library-credit", 70));
+      } finally {
+        // Clear it again: the rules table is shared by the tests below, and a
+        // row left behind here rewrites their rule through the unique key.
+        await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-fromsource-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      }
     });
 
     it("stays quiet about a rule a village deliberately set to zero", async () => {
@@ -1438,6 +1452,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
   // So the last test in this block is the one that pins the reading down: the
   // shipped default of `amount 25, ceiling 250` pays eleven confirmed quests
   // 275, and that is the rule working rather than a cap being missed.
+  /*
+   * NO CEILING BINDS WORK (Rye, 2026-10-22: "no caps here! ... we definitely
+   * can't have caps on what things pay"). This block pinned the clamp on both
+   * mint paths; it now pins the opposite on the same rows, with the same
+   * ledger reads, so a clamp that came back would turn it red.
+   */
   describe("a rule's ceiling", () => {
     // `stay-credit` because the natural key is (village, trigger, token) and
     // every other token this file uses on `quest.completed` already carries a
@@ -1484,18 +1504,16 @@ describe.skipIf(!configured)("the village economy engine", () => {
       await pool.query("DELETE FROM `mint_rules` WHERE `id` = ?", [RULE]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
-    it("pays the ceiling, not the amount, when a rule was left above its own ceiling", async () => {
+    it("pays the rule's own amount, not its ceiling, when a rule sits above its own ceiling", async () => {
       await setRule(25, 5);
       const u = await makeMember("econ-ceil-1");
       const out = await payClaim(pool, { id: "claim-ceil-1", questId: "q-ceil", userId: u });
       expect(out.priced).toContain(TOKEN); // denominator
       // Read on the balance and on the row, never on the return value: a mint
-      // that reported 5 and posted 25 would pass an assertion on `minted`.
-      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(5);
-      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 5 });
-      // And the caller is told what it actually paid, so a route logging the
-      // result does not tell the member 25.
-      expect(out.minted.find((m) => m.token === TOKEN)).toEqual({ token: TOKEN, units: 5, decimals: 0 });
+      // that reported 25 and posted 5 would pass an assertion on `minted`.
+      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(25);
+      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 25 });
+      expect(out.minted.find((m) => m.token === TOKEN)).toEqual({ token: TOKEN, units: 25, decimals: 0 });
       expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
     });
 
@@ -1526,31 +1544,17 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(Number(rows[0].ceiling)).toBe(5);
     });
 
-    it("mints nothing on a ceiling of zero, and says which number stopped it", async () => {
-      // An empty state and a real zero are different facts. `mint_rules.ceiling`
-      // is NOT NULL DEFAULT 0 and `mintRuleValueProblem` tells a village in as
-      // many words that "a ceiling is zero or more, and zero means zero", so
-      // this is fail-closed by the same reading the swap caps use.
+    it("pays in full on a ceiling of zero, which used to stop every payment", async () => {
       await setRule(25, 0);
       const u = await makeMember("econ-ceil-zero");
       const out = await payClaim(pool, { id: "claim-ceil-zero", questId: "q-ceil", userId: u });
-      // DENOMINATOR FIRST. A ceiling of zero prices NO row, so the denominator
-      // here cannot be `priced`: it is that the pricing reached a decision at
-      // all, which is what makes the refusal below a refusal rather than a
-      // pricing that never ran.
-      expect(out.considered).toBeGreaterThan(0);
-      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(0);
-      expect(await posted(memberAccount(u))).toEqual({ rows: 0, units: 0 });
-      // A refusal a person can read, naming the number to change. An amount of
-      // zero stays quiet because it is a village saying "not this one, not
-      // now"; a ceiling of zero under a positive amount is a row at war with
-      // itself and somebody has to be told.
-      const said = out.unpayable.find((x) => x.token === TOKEN);
-      expect(said?.reason).toMatch(/ceiling is 0/);
-      expect(said?.reason).toMatch(/Raise the ceiling or pause the rule/);
+      expect(out.priced).toContain(TOKEN); // denominator
+      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(25);
+      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 25 });
+      expect(out.unpayable.find((x) => x.token === TOKEN)).toBeUndefined();
     });
 
-    it("still pays once for one occurrence, whatever the clamp did", async () => {
+    it("still pays once for one occurrence", async () => {
       await setRule(25, 5);
       const u = await makeMember("econ-ceil-idem");
       const claim = { id: "claim-ceil-idem", questId: "q-ceil", userId: u };
@@ -1562,10 +1566,10 @@ describe.skipIf(!configured)("the village economy engine", () => {
       // The key shape is untouched by this change, so a re-confirm is still a
       // duplicate and still pays nothing a second time.
       expect(again.minted.find((m) => m.token === TOKEN)).toBeUndefined();
-      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 5 });
+      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 25 });
     });
 
-    it("holds the ceiling on two claims confirmed in the same instant", async () => {
+    it("pays each of two claims confirmed in the same instant once, in full", async () => {
       await setRule(25, 5);
       const a = await makeMember("econ-ceil-race-a");
       const b = await makeMember("econ-ceil-race-b");
@@ -1619,19 +1623,24 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const who = [a, b];
       for (let i = 0; i < settled.length; i += 1) {
         const rows = await posted(memberAccount(who[i]));
-        expect(rows).toEqual(settled[i].status === "fulfilled" ? { rows: 1, units: 5 } : { rows: 0, units: 0 });
+        expect(rows).toEqual(settled[i].status === "fulfilled" ? { rows: 1, units: 25 } : { rows: 0, units: 0 });
       }
       expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
     });
 
-    it("clamps a seat payout at settlement too, which is the other mint path", async () => {
-      // The twin. `runSettlement` read `r.amount ?? 0` and posted it, so a
-      // fix to the quest path alone would have left every seat in the village
-      // paid over the ceiling once a moon.
+    it("pays a seat in full at settlement too, which is the other mint path", async () => {
+      // The twin. Both mint paths read `quoteWorkPay`, so neither may clamp.
       // No `org_roles` row: the seat query reads `org_role_assignments` alone
       // and this schema carries no foreign keys, so inventing a seat title
       // here would only be scenery.
       const u = await makeMember("econ-ceil-seat");
+      // The role names its own 25: a seat is paid its role's list, never a flat
+      // amount, since Rye ended the automatic role mint (2026-11-01).
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-ceiling-test','role-ceiling-test',?) " +
+          "ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES ('seat-ceiling-test','role-ceiling-test','member',?,?,0) " +
@@ -1646,10 +1655,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
       );
       const out = await runSettlement(pool);
       expect(out.stewardsThanked).toBe(1);
-      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(5);
-      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 5 });
+      expect(await balanceOf(pool, memberAccount(u), TOKEN)).toBe(25);
+      expect(await posted(memberAccount(u))).toEqual({ rows: 1, units: 25 });
       await pool.query("DELETE FROM `mint_rules` WHERE `id` = 'rule-ceiling-seat'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await pool.query("DELETE FROM `org_role_assignments` WHERE `id` = 'seat-ceiling-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-ceiling-test'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
     it("leaves the shipped default alone: eleven quests at 25 under a ceiling of 250 issue 275", async () => {
@@ -2627,7 +2637,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
 
     beforeAll(async () => {
       ddb = await provisionTestDb();
-      dpool = mysql.createPool({ uri: ddb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      dpool = testPool(ddb, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       await loadTokenRegistry(dpool);
       await loadVariables(dpool);
       await ensureVoiceToken(dpool, "Village Voice");
@@ -2702,8 +2712,16 @@ describe.skipIf(!configured)("the village economy engine", () => {
       return rows.map((row) => Number(row.amount));
     }
 
-    /** A live seat for one member, and the rule that pays a seat 50 Voice a moon. */
+    /**
+     * A live seat for one member whose role names 50 Voice a moon, and the rule
+     * that lets a role pay Voice. The role names the figure because a seat is
+     * paid its role's own list, never a flat amount (Rye, 2026-11-01).
+     */
     async function seated(id: string): Promise<void> {
+      await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT IGNORE INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES (?,?,?)",
+        [`role-${id}`, `role-${id}`, JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }])],
+      );
       await dpool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT IGNORE INTO `mint_rules` (`id`, `village_id`, `trigger`, `token_slug`, `amount`, `ceiling`, `recipient`, `enabled`) " +
           "VALUES ('decay-seat-rule', ?, 'role.cycle', ?, 50, 200, 'holder', 1)",
@@ -2867,9 +2885,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
         "INSERT IGNORE INTO `ledger_accounts` (`id`, `kind`, `user_id`, `label`, `faucet`) VALUES (?,?,?,?,0)",
         [memberAccount(id), "member", id, id],
       );
-      await dpool.query("INSERT IGNORE INTO `org_roles` (`id`, `name`, `is_example`) VALUES (?,?,0)", [
+      // The role names its 50 Voice: a seat is paid its role's own list, never a
+      // flat amount, since Rye ended the automatic role mint (2026-11-01).
+      await dpool.query("INSERT IGNORE INTO `org_roles` (`id`, `name`, `is_example`, `value_tokens`) VALUES (?,?,0,?)", [
         `role-${id}`,
         `Seat for ${id}`,
+        JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }]),
       ]);
       await dpool.query(
         "INSERT IGNORE INTO `org_role_assignments` " +
@@ -3271,6 +3292,12 @@ describe.skipIf(!configured)("the village economy engine", () => {
    * number for every input on this table. The fix is the DIRECTION: an amount
    * rounds to the nearest payable figure, and a bound may only ever fall.
    */
+  /*
+   * Named for what it pinned until 2026-10-22, when Rye ruled that nothing
+   * caps what work pays. The scales and the readers it walks still matter:
+   * every case now asserts the rule's OWN amount, posted at the token's scale,
+   * on the ledger, in the preview, on the feed and on the panel.
+   */
   describe("the ceiling binds the number that is posted", () => {
     // `library-credit` because it has a faucet (`sys:library-mint`), so the
     // engine can actually pay it, and because no other block in this file
@@ -3339,39 +3366,34 @@ describe.skipIf(!configured)("the village economy engine", () => {
     });
 
     // The adversary's table, driven through the real mint path and read back
-    // off `token_ledger`, never off a return value: a mint that reported 0.5
-    // and posted 1 would pass an assertion on what it said it did.
+    // off `token_ledger`, never off a return value. Every ceiling here is AT or
+    // BELOW the amount, which is where a clamp would show: the units are the
+    // amount at the token's scale, rounded the way a payment rounds.
     const table: Array<{ decimals: number; amount: number; ceiling: number; units: number }> = [
-      { decimals: 0, amount: 0.6, ceiling: 0.5, units: 0 },
-      { decimals: 0, amount: 1.5, ceiling: 1.5, units: 1 },
-      { decimals: 0, amount: 25.5, ceiling: 25.5, units: 25 },
-      { decimals: 3, amount: 0.0006, ceiling: 0.0005, units: 0 },
-      { decimals: 3, amount: 0.0015, ceiling: 0.0015, units: 1 },
+      { decimals: 0, amount: 0.6, ceiling: 0.5, units: 1 },
+      { decimals: 0, amount: 1.5, ceiling: 1.5, units: 2 },
+      { decimals: 0, amount: 25.5, ceiling: 25.5, units: 26 },
+      { decimals: 3, amount: 0.0006, ceiling: 0.0005, units: 1 },
+      { decimals: 3, amount: 0.0015, ceiling: 0.0015, units: 2 },
       // Four, where nothing the column can write is below what the token can
       // hold, so the clamp is the plain one and neither refusal fires. No
       // shipped token carries this scale and none is going to: Rye settled the
       // question on whole numbers (section 11.1). It is here because
       // `tokens.decimals` is an int a village writes and `registerToken` takes
       // whatever it is given, so a fork can reach this column any day.
-      { decimals: 4, amount: 0.6, ceiling: 0.5, units: 5000 },
+      { decimals: 4, amount: 0.6, ceiling: 0.5, units: 6000 },
       { decimals: 4, amount: 0.4, ceiling: 0.5, units: 4000 },
     ];
     for (const row of table) {
       const tag = `${row.decimals}-${String(row.amount).replace(".", "p")}`;
-      it(`posts at or below a ceiling of ${row.ceiling} at ${row.decimals} decimals`, async () => {
+      it(`posts the rule's ${row.amount} at ${row.decimals} decimals, whatever its ceiling of ${row.ceiling}`, async () => {
         await atScale(row.decimals);
         await setRule(row.amount, row.ceiling);
         const u = await makeMember(`mx-ceil-${tag}`);
         const out = await payClaim(pool, { id: `claim-mx-${tag}`, questId: "q-mx", userId: u });
-        // DENOMINATOR. Two rows of this table expect 0 units, so without it a
-        // pricing that produced nothing would satisfy them for the wrong
-        // reason: the rule has to have been DECIDED about either way.
-        expect(out.considered).toBeGreaterThan(0);
+        expect(out.priced).toContain(TOKEN); // denominator
         const units = await heldBy(u);
         expect(units).toBe(row.units);
-        // The property, in the ceiling's own units and independent of the
-        // table: nothing the ledger holds is above what the village voted for.
-        expect(units / 10 ** row.decimals).toBeLessThanOrEqual(row.ceiling);
         expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
       });
     }
@@ -3382,45 +3404,44 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const u = await makeMember("mx-return-row");
       const out = await payClaim(pool, { id: "claim-mx-return", questId: "q-mx", userId: u });
       expect(out.priced).toContain(TOKEN); // denominator
-      // The row holds one thousandth. The old return value said 0.0015, which
+      // The row holds two thousandths. An old return value said 0.0015, which
       // is a figure no row in this database holds, and a route logging it told
       // the member a number that was never posted.
       expect(out.minted.find((m) => m.token === TOKEN)).toEqual({
         token: TOKEN, units: await heldBy(u), decimals: 3,
       });
-      expect(await heldBy(u)).toBe(1);
+      expect(await heldBy(u)).toBe(2);
     });
 
-    it("says which number stopped it when a ceiling falls below what the token can hold", async () => {
+    it("pays in full when a ceiling falls below what the token can hold", async () => {
       await atScale(0);
       await setRule(25, 0.5);
       const u = await makeMember("mx-ceil-unreachable");
       const out = await payClaim(pool, { id: "claim-mx-unreachable", questId: "q-mx", userId: u });
-      expect(out.considered).toBeGreaterThan(0); // denominator; the row prices nothing on purpose
-      expect(await heldBy(u)).toBe(0);
-      const said = out.unpayable.find((x) => x.token === TOKEN);
-      // A ceiling fact gets a ceiling's sentence. Reporting it as "the amount
-      // is too small" would send the founder to the number that is fine.
-      expect(said?.reason).toMatch(/ceiling is 0.5/);
-      expect(said?.reason).toMatch(/Raise the ceiling or pause the rule/);
+      expect(out.priced).toContain(TOKEN); // denominator
+      expect(await heldBy(u)).toBe(25);
+      expect(out.unpayable.find((x) => x.token === TOKEN)).toBeUndefined();
     });
 
     it("publishes what the engine will pay on the feed a member reads", async () => {
       await atScale(0);
-      await setRule(25, 5);
-      const shown = (await publicRules(pool)).find((r) => r.token === "Library Credit");
-      // The engine pays 5. This feed is unauthenticated and it published 25.
-      expect(shown?.says).toContain("5 Library Credit");
-      expect(shown?.says).not.toContain("25 Library Credit");
-
-      await setRule(25, 0);
-      const shut = (await publicRules(pool)).find((r) => r.token === "Library Credit");
-      expect(shut?.says).toContain("no Library Credit");
+      // The engine pays the rule's 25 whatever the ceiling, and the feed says so.
+      for (const ceiling of [5, 0]) {
+        await setRule(25, ceiling);
+        const shown = (await publicRules(pool)).find((r) => r.token === "Library Credit");
+        expect(shown?.says, `ceiling ${ceiling}`).toMatch(/^25 Library Credit when a steward confirms finished work; a quest that names its own amount is paid that$/);
+      }
     });
 
     it("previews and settles the same number, and never a payout the run will not make", async () => {
       await atScale(0);
       await setSeatRule(25, 5);
+      // The role names its own 25: a seat is paid its role's list, never the
+      // flat amount (Rye, 2026-11-01). Taken off again at the end.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
           "VALUES (?,'role-mx','member',?,?,0) ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
@@ -3429,52 +3450,70 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const view = await mintView(pool);
       const seats = view.settlementPreview.seats;
       const previewed = view.settlementPreview.mints.find((m) => m.token === TOKEN);
-      // The preview said `amount * seats` and the engine pays `clamp * seats`.
-      expect(previewed).toEqual({ token: TOKEN, units: 5 * seats, decimals: 0 });
-      // And the panel's own card states the clamp and the cap, so a founder
-      // reading the rule sees the same number the preview does.
+      // The engine pays the rule's 25 a seat, above its ceiling of 5, and the preview says the same.
+      expect(previewed).toEqual({ token: TOKEN, units: 25 * seats, decimals: 0 });
+      // And the panel's own card states the same 25, so a founder reading the
+      // rule sees the number the preview does.
       const card = view.rules.find((r) => r.id === SEAT_RULE);
-      expect(card?.pays).toEqual({ units: 5, ceilingUnits: 5, decimals: 0 });
+      expect(card?.pays).toEqual({ units: 25, ceilingUnits: 5, decimals: 0 });
       expect(card?.problem).toBeNull();
 
       const out = await runSettlement(pool);
-      expect(out.minted.find((m) => m.token === TOKEN)).toEqual({ token: TOKEN, units: 5, decimals: 0 });
-      expect(await heldBy("mx-seat-holder")).toBe(5);
+      expect(out.minted.find((m) => m.token === TOKEN)).toEqual({ token: TOKEN, units: 25, decimals: 0 });
+      expect(await heldBy("mx-seat-holder")).toBe(25);
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     });
 
-    it("previews nothing where the engine would pay nothing, and says why", async () => {
+    it("previews a seat rule at a ceiling of zero as paying, because it does", async () => {
       await atScale(0);
       await setSeatRule(25, 0);
+      // The role names its 25: a seat is paid its role's list (Rye, 2026-11-01).
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 25 }])],
+      );
       const view = await mintView(pool);
-      expect(view.settlementPreview.mints.map((m) => m.token)).not.toContain(TOKEN);
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      expect(view.settlementPreview.mints.map((m) => m.token)).toContain(TOKEN);
       const card = view.rules.find((r) => r.id === SEAT_RULE);
-      // Served AND carried by the client's own interface now, so the panel can
-      // stop putting a green badge over a rule that pays nobody.
-      expect(card?.problem).toMatch(/ceiling is 0/);
-      expect(card?.pays).toEqual({ units: 0, ceilingUnits: 0, decimals: 0 });
+      // No "paying nobody" badge over a rule that pays.
+      expect(card?.problem).toBeNull();
+      expect(card?.pays).toEqual({ units: 25, ceilingUnits: 0, decimals: 0 });
     });
 
-    it("logs a seat rule its ceiling refuses, the way every other unpayable seat rule is logged", async () => {
-      // THE GAP. The settlement filter put a ceiling refusal straight onto
-      // `out.unpayable` and never into the list `reportUnpayable` prints, so a
-      // seat rule at a ceiling of zero paid nobody every moon and no log line
-      // anywhere said so. Observed on the console, where that report goes.
+    it("logs a seat rule that cannot post, the way every other unpayable seat rule is logged", async () => {
+      // THE GAP this pinned: a refusal that reached `out.unpayable` and never
+      // the list `reportUnpayable` prints. A ceiling no longer refuses a seat
+      // rule, so the same path is walked with the reason that still can: an
+      // amount smaller than the token can hold, at 0 decimals.
       await atScale(0);
-      await setSeatRule(25, 0);
+      await setSeatRule(null, 0);
+      // The ROLE names the amount too small to post: a seat is paid its role's
+      // list, never a flat amount (Rye, 2026-11-01), so that is where it lives now.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: TOKEN, amount: 0.4 }])],
+      );
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `is_example`) " +
+          "VALUES (?,'role-mx','member',?,?,0) ON DUPLICATE KEY UPDATE `user_id` = VALUES(`user_id`)",
+        [SEAT, await makeMember("mx-seat-holder"), "mx-seat-holder"],
+      );
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
         const out = await runSettlement(pool);
-        // Carried home once, not twice, now that it travels with the others.
+        // Carried home once, however many seats.
         const said = out.unpayable.filter((x) => x.token === TOKEN);
         expect(said).toHaveLength(1);
-        expect(said[0].reason).toMatch(/ceiling is 0/);
+        expect(said[0].reason).toMatch(/smaller than the smallest amount/);
         const lines = errors.mock.calls.map((call) => call.map(String).join(" "));
         const logged = lines.filter(
-          (line) => line.includes(`the rule on "${TOKEN}" paid nobody`) && /ceiling is 0/.test(line),
+          (line) => line.includes(`the rule on "${TOKEN}" paid nobody`) && /smaller than the smallest amount/.test(line),
         );
         expect(logged).toHaveLength(1);
       } finally {
         errors.mockRestore();
+        await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       }
     });
 
@@ -3492,8 +3531,18 @@ describe.skipIf(!configured)("the village economy engine", () => {
           "ON DUPLICATE KEY UPDATE `amount` = 50, `ceiling` = 200, `enabled` = 1, `effective_from_cycle` = 0",
         [villageId(), VILLAGE_VOICE],
       );
+      // The roles name their 50 Voice: a seat is paid its role's list, never a
+      // flat amount (Rye, 2026-11-01). Every seat here holds role-mx.
+      await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "INSERT INTO `org_roles` (`id`, `name`, `value_tokens`) VALUES ('role-mx','role-mx',?) ON DUPLICATE KEY UPDATE `value_tokens` = VALUES(`value_tokens`)",
+        [JSON.stringify([{ token: VILLAGE_VOICE, amount: 50 }])],
+      );
       const view = await mintView(pool);
-      const seats = view.settlementPreview.seats;
+      await pool.query("DELETE FROM `org_roles` WHERE `id` = 'role-mx'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      const [[named]] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT COUNT(*) AS n FROM `org_role_assignments` WHERE `org_role_id` = 'role-mx' AND `active_holder_key` IS NOT NULL",
+      );
+      const seats = Number(named.n);
       const voice = view.settlementPreview.mints.find((m) => m.token === VILLAGE_VOICE);
       // The scale off the registry, never a literal here: the assertion holds
       // whatever a village has set this token to.
@@ -3504,11 +3553,11 @@ describe.skipIf(!configured)("the village economy engine", () => {
     });
 
     it("does not call a settlement that could pay nothing an already settled moon", async () => {
-      // The seat rule reads its amount from the work and a seat posts none, so
-      // this rule can never pay. It used to sail through the payable filter,
-      // pay nobody, and come back `alreadyRun: true` with an EMPTY unpayable
-      // list: a misconfiguration reported as a completed moon, which is the
-      // reading that stops anybody looking.
+      // The seat rule reads its amount from the role, and the only seat here
+      // holds a role that names none, so it pays nothing. It used to sail
+      // through the payable filter, pay nobody, and come back `alreadyRun: true`
+      // with an EMPTY unpayable list: a misconfiguration reported as a completed
+      // moon, which is the reading that stops anybody looking.
       await atScale(0);
       await pool.query("DELETE FROM `mint_rules` WHERE `village_id` = ? AND `trigger` = 'role.cycle'", [ // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
         villageId(),
@@ -3517,7 +3566,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
       const out = await runSettlement(pool);
       expect(out.minted).toEqual([]);
       expect(out.alreadyRun).toBe(false);
-      expect(out.unpayable.find((x) => x.token === TOKEN)?.reason).toMatch(/reads its amount from the work/);
+      expect(out.unpayable.find((x) => x.token === TOKEN)?.reason).toMatch(/no role anybody holds names an amount/);
     });
 
     // ── What held before this change, and still holds ────────────────────────
@@ -3562,10 +3611,10 @@ describe.skipIf(!configured)("the village economy engine", () => {
       expect(first.minted.find((m) => m.token === TOKEN)).toBeTruthy(); // denominator
       const again = await payClaim(pool, claim);
       expect(again.minted.find((m) => m.token === TOKEN)).toBeUndefined();
-      expect(await heldBy(u)).toBe(5);
+      expect(await heldBy(u)).toBe(25);
     });
 
-    it("still holds the ceiling under six concurrent calls on one claim", async () => {
+    it("still pays each claim once, in full, under six concurrent calls", async () => {
       /*
        * Six calls, two claims, and the clamp has no running total to race on:
        * it is a pure function of the row and the amount, decided before the
@@ -3609,7 +3658,7 @@ describe.skipIf(!configured)("the village economy engine", () => {
         );
         const n = Number(rows[0].n);
         expect(n).toBeLessThanOrEqual(1);
-        expect(Number(rows[0].units)).toBe(n * 5);
+        expect(Number(rows[0].units)).toBe(n * 25);
       }
       expect((await checkLedgerInvariants(pool)).problems).toEqual([]);
     });
@@ -3679,7 +3728,7 @@ function gratitudeAtScale(decimals: number): void {
 
     beforeAll(async () => {
       fdb = await provisionTestDb();
-      fpool = mysql.createPool({ uri: fdb.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      fpool = testPool(fdb, { connectionLimit: 10 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       // The seam, before anything is posted. What the flip migration does,
       // minus the rescale of rows already held.
       await fpool.query("UPDATE `tokens` SET `decimals` = ? WHERE `slug` = ?", [decimals, HEARTS]); // module-review-ok: the decimals seam this suite exists to exercise, against the S5 scratch schema

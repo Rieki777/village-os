@@ -40,6 +40,7 @@
  * meant for the server alone.
  */
 import { canonicalJson } from "./canonicalJson";
+import { isSignKey, type SignKey } from "./roleSigns";
 
 export const SEAT_SETTINGS_VERSION = 1 as const;
 
@@ -155,6 +156,10 @@ export interface ScoreMeasure {
   measure: string;
   readFrom?: string;
   target?: string;
+  /** A key of the closed sign catalog (`shared/roleSigns.ts`). Absent reads "Not counted yet". */
+  countedBy?: SignKey;
+  /** A whole-number target for the counted sign. `target` stays the words. */
+  targetCount?: number;
 }
 export interface ScoreboardSettings {
   measures: ScoreMeasure[];
@@ -192,6 +197,7 @@ export const emptySettings = (): SeatSettings => ({ v: SEAT_SETTINGS_VERSION });
 
 export const LIMITS = {
   gatherings: 6,
+  /** The most measures a stored scoreboard is READ with. A new write holds 2 to 4 (`MEASURES_NEW`). */
   scoreMeasures: 8,
   noteChars: 300,
   wordsChars: 200,
@@ -203,6 +209,21 @@ export const LIMITS = {
   /** Whole minor units. A ceiling far above any stipend, to refuse typos. */
   amountMinor: 1_000_000_000_000,
 } as const;
+
+/**
+ * CCOS: "How we'll know it's working" names 2 to 4 measures (the CCOS Role
+ * Card's Measurable Indicators, Rye 2026-10-22). Bound on a NEW write only,
+ * when an org draft puts terms on offer (`parseSeatSettings(raw, { newWrite:
+ * true })`). A scoreboard stored before the limit keeps loading with what it
+ * holds, and a scoreboard with no measures is "none named yet", never refused.
+ */
+export const MEASURES_NEW = { min: 2, max: 4 } as const;
+export const MEASURES_NEW_MESSAGE = `Name ${MEASURES_NEW.min} to ${MEASURES_NEW.max} measures of how we'll know it's working.`;
+
+export interface ParseOptions {
+  /** A new write: apply the CCOS limits that bind only what is written from now on. */
+  newWrite?: boolean;
+}
 
 // ── The parser ───────────────────────────────────────────────────────────────
 
@@ -229,10 +250,10 @@ export interface ParsedSettings {
  * percentage scaled both pay and voice.
  */
 const REFUSED_KEYS: Record<string, string> = {
-  voice: "Voice is never a term of a seat. Every member's say comes from the village's own rules.",
-  voiceWeight: "Voice is never a term of a seat. Every member's say comes from the village's own rules.",
-  commitment: "A seat is held whole. Terms carry no commitment share.",
-  commitmentPct: "A seat is held whole. Terms carry no commitment share.",
+  voice: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
+  voiceWeight: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
+  commitment: "A role is held whole. Terms carry no commitment share.",
+  commitmentPct: "A role is held whole. Terms carry no commitment share.",
   deferredPct: "Deferred pay is written as a pay kind with a note.",
   tokenSlug: "Terms record money in a currency. Tokens are paid through the village's own rules.",
   tokenPerCycle: "Terms record money in a currency. Tokens are paid through the village's own rules.",
@@ -258,11 +279,11 @@ const TIME_IN_TEXT = /(?<![\d:])(?:[01]?\d|2[0-3]):[0-5]\d(?![\d:])/g;
 const IBAN_SHAPE = /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b/i;
 
 /** A scoreboard measures the work. These words rank people. */
-const RANKS_PEOPLE =
+export const RANKS_PEOPLE =
   /\b(rank|ranks|ranked|ranking|leaderboard|league table|top \d+|best (?:member|person|people|holder)|worst|power level)\b/i;
 
 export const PAYMENT_DETAIL_MESSAGE =
-  "This looks like a bank or card number. Payment details are never stored in a seat's terms.";
+  "This looks like a bank or card number. Payment details are never stored in a role's terms.";
 
 /** True when a piece of free text carries something shaped like payment details. */
 export function looksLikePaymentDetails(text: string): boolean {
@@ -306,6 +327,12 @@ function currencyKnown(code: string): boolean | null {
 class Reader {
   problems: SettingsProblem[] = [];
   flags: SettingsProblem[] = [];
+
+  readonly newWrite: boolean;
+
+  constructor(newWrite = false) {
+    this.newWrite = newWrite;
+  }
 
   refuse(path: string, message: string): void {
     this.problems.push({ path, message });
@@ -501,7 +528,7 @@ function readMoney(
   if (!kind) return undefined;
   const carriesAmount = out.amountMinor !== undefined || out.minMinor !== undefined || out.maxMinor !== undefined;
   if ((kind === "none" || kind === "honorary") && carriesAmount) {
-    r.refuse(`${group}.amountMinor`, "An unpaid or honorary seat records no amount.");
+    r.refuse(`${group}.amountMinor`, "An unpaid or honorary role records no amount.");
   }
   if (kind === "range" && out.amountMinor !== undefined) {
     r.refuse("pay.amountMinor", "A range records its lowest and highest amounts.");
@@ -577,15 +604,22 @@ function readScoreboard(r: Reader, raw: unknown): ScoreboardSettings | undefined
     const at = `scoreboard.measures.${i}`;
     const m = r.group(at, row);
     if (!m) return [];
-    r.onlyKeys(at, m, ["measure", "readFrom", "target"]);
+    r.onlyKeys(at, m, ["measure", "readFrom", "target", "countedBy", "targetCount"]);
+    if (m.countedBy != null && !isSignKey(m.countedBy)) r.refuse(`${at}.countedBy`, "That is not a sign the platform can count.");
     const measure = r.text(`${at}.measure`, m.measure, LIMITS.measureChars, { required: true, ranks: true });
     const out = compact({
       measure,
       readFrom: r.text(`${at}.readFrom`, m.readFrom, LIMITS.measureChars, { ranks: true }),
       target: r.text(`${at}.target`, m.target, LIMITS.measureChars, { ranks: true }),
+      countedBy: isSignKey(m.countedBy) ? m.countedBy : undefined,
+      targetCount: r.whole(`${at}.targetCount`, m.targetCount, 0, 1_000_000),
     });
     return measure ? [out as ScoreMeasure] : [];
   });
+  // CCOS, on a new write only: 2 to 4, once any measure is named.
+  if (r.newWrite && g.measures.length > 0 && (g.measures.length < MEASURES_NEW.min || g.measures.length > MEASURES_NEW.max)) {
+    r.refuse("scoreboard.measures", MEASURES_NEW_MESSAGE);
+  }
   return { measures };
 }
 
@@ -642,14 +676,18 @@ const READERS: { [G in SettingsGroup]: (r: Reader, raw: unknown) => SeatSettings
  * Read a seat's settings from anything: a stored JSON column, a request body,
  * the editor's state. Refuses what it cannot keep and says why, per field.
  * `null` and `undefined` read as an empty set of terms, every group not set.
+ *
+ * `newWrite` adds the limits that bind only what is written from now on
+ * (`MEASURES_NEW`). Every read of a stored value leaves it off, so terms
+ * written before a limit keep loading as they are.
  */
-export function parseSeatSettings(raw: unknown): ParsedSettings {
-  const r = new Reader();
+export function parseSeatSettings(raw: unknown, opts: ParseOptions = {}): ParsedSettings {
+  const r = new Reader(opts.newWrite === true);
   if (raw === undefined || raw === null) {
     return { ok: true, settings: emptySettings(), problems: [], flags: [] };
   }
   if (!isPlainObject(raw)) {
-    r.refuse("", "A seat's settings arrive as a set of groups.");
+    r.refuse("", "A role's settings arrive as a set of groups.");
     return { ok: false, settings: null, problems: r.problems, flags: r.flags };
   }
   if (raw.v !== undefined && raw.v !== SEAT_SETTINGS_VERSION) {
@@ -731,7 +769,7 @@ export function moneyWords(minor: number, currency: string | undefined, locale =
 export function dateWords(iso: string, locale = "en-GB"): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(d);
 }
 
 const perWords = (per: string | undefined): string => (per === "moon" ? " a moon" : per === "month" ? " a month" : "");

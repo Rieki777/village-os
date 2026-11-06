@@ -9,7 +9,8 @@
  * ── WHAT LIVES HERE ──────────────────────────────────────────────────────
  *
  *   taskBoard       one member's board: what they hold, what their seats
- *                   hold, and what they finished.
+ *                   hold, what is back with their circles, and what they
+ *                   finished.
  *   taskCount       how many tasks wait on one member, and the nearest date.
  *   answerTask      one answer, in one transaction: the state row moves, an
  *                   event is appended, the circle's open room reads it.
@@ -17,6 +18,12 @@
  *                   answerTask's own path.
  *   circleTasksFor  the "From last time" cards of an open room.
  *   taskRecord      one session's tasks as its record shows them.
+ *   acceptTask      "Accept as accomplished": the version read here, then
+ *                   answerTask's own path with the `accepted` answer.
+ *   tasksToAccept   the done tasks one holder of `org.seat` may accept, for
+ *                   the task board's Waiting on you.
+ *   accomplishmentsOf  one member's accepted tasks by moon, for the player
+ *                   card (shared/taskAccomplishments.ts).
  *
  * ── THE RECORD STAYS AS SAID ─────────────────────────────────────────────
  *
@@ -29,9 +36,11 @@
  * Every door decides with the pure functions in the contract (`canSeeTask`,
  * `taskRights`, `mayGive`). This file only measures the `TaskViewer` they
  * read: the asker's number, their live seats (lapsed terms left out), the
- * sessions they were in, and the open rooms they host in a circle where they
- * have standing (they were in its last closed session, or sit in one of its
- * seats). A task the asker may not see answers 404, the same as a task that
+ * sessions they were in, the circles where they have standing (they were in
+ * its last meeting, a closed session two or more people were in, or they sit
+ * in one of its seats: `standingIn` in server/lib/circleStanding.ts, the one
+ * measure the agenda library reads too), and the open rooms they host in such
+ * a circle. A task the asker may not see answers 404, the same as a task that
  * is not there, so a refusal never says a task exists.
  *
  * ── A PERSON IS A NUMBER, AND A CARD CARRIES NAMES ───────────────────────
@@ -48,19 +57,26 @@ import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import * as repo from "../repos/liveSessions";
 import * as store from "../repos/sessionTasks";
 import { listOrgAssignments, listOrgRoles, type LapseContext, type OrgAssignment } from "./orgChart";
+import { lastTimeIn, standingIn } from "./circleStanding";
 import { villageTimezone } from "./villageReaders";
 import { ensureMemberNo, mapSession, maySee, memberNo, namesFor, rolesIn, type MemberLookup, type Named, type Outcome, type Refusal, type SessionRec, type Viewer } from "./liveSessions";
 import { civilDateKey } from "../../shared/lunar";
 import { SESSION_COPY, SESSION_REFUSALS, SESSION_SOMEONE } from "../../shared/sessions";
+import { holderFirstName } from "../../shared/roleHolderLabel";
+import { currentAccomplishments, groupByMoon, type AccomplishmentEvent, type AccomplishmentMoon } from "../../shared/taskAccomplishments";
+import type { WaitingAcceptance } from "../../shared/waitingOnYou";
 import {
   TASK_COPY,
   TASK_FINISHED_DAYS,
   TASK_NOTICES,
   TASK_REFUSALS,
+  acceptRefusal,
+  anyoneMayAccept,
   applyAnswer,
   canSeeTask,
   compareByDue,
   eventFor,
+  isAccepted,
   isTaskEventKind,
   isTaskStatus,
   liveHoldersOf,
@@ -90,6 +106,13 @@ export interface TaskDeps {
   lookup: MemberLookup;
   circleName: (id: string | null) => string | null;
   lapseContext?: () => LapseContext;
+  /**
+   * The live holders of the power that seats people (`ACCEPTING_POWER`),
+   * counted the way the capability gate counts: `liveHoldersOf` in
+   * server/index.ts. They may accept done work as accomplished. Absent: nobody
+   * is offered the accept control, and no card reads Waiting to be accepted.
+   */
+  acceptors?: () => Promise<string[]>;
   /** For the in-app notice a hand-back sends the facilitator. Absent: no notice. */
   notify?: (input: { userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }) => Promise<unknown>;
 }
@@ -174,8 +197,23 @@ interface Seen {
   liveSeatIds: string[];
   /** The sessions, among the ones read, the asker was in. */
   joined: Set<number>;
-  /** The circles in which the asker facilitates or keeps notes for an open room. */
+  /** The circles, among the ones read, where the asker has standing (`standingIn`, server/lib/circleStanding.ts). */
+  standing: Set<string>;
+  /** The circles, among the ones read, where the asker facilitates or keeps notes for an open room and has standing. */
   hostsOpenIn: Set<string>;
+  /** They hold the power that seats people live. */
+  acceptPower: boolean;
+}
+
+/** The live holders of the power that seats people, or null when this door was not handed the reader. */
+async function acceptorsNow(deps: Pick<TaskDeps, "acceptors">): Promise<string[] | null> {
+  if (!deps.acceptors) return null;
+  try {
+    return await deps.acceptors();
+  } catch (e) {
+    console.error("[sessions] the holders who may accept work could not be read", e);
+    return null;
+  }
 }
 
 /** Every live seating, with lapsed terms marked when the season's reading is at hand. */
@@ -183,38 +221,24 @@ async function seatingsNow(pool: Pool | PoolConnection, deps: Pick<TaskDeps, "la
   return listOrgAssignments(pool as Pool, deps.lapseContext?.());
 }
 
+/** The asker, for the task rows read: the sessions they were in, their standing, and the open rooms they host. */
 async function seenBy(
   pool: Pool | PoolConnection,
   who: { userId: string | null; no: number | null; admin: boolean },
-  sessionIds: readonly number[],
+  rows: readonly (RowDataPacket | Record<string, unknown>)[],
   seatings: readonly OrgAssignment[],
+  acceptors: readonly string[] | null = null,
 ): Promise<Seen> {
-  const ids = Array.from(new Set(sessionIds));
+  const ids = Array.from(new Set(rows.map((r) => Number(r.session_id))));
+  const circles = new Set(rows.filter((r) => r.circle_id != null && r.circle_id !== "").map((r) => String(r.circle_id)));
   const joined = new Set<number>(who.no != null ? (await repo.joinedRows(pool, who.no, ids)).map((r) => Number(r.session_id)) : []);
   const liveSeatIds = who.userId ? liveSeatIdsFor(seatings, who.userId) : [];
+  const standing = await standingIn(pool, { no: who.no, liveSeatIds }, circles);
   const hostsOpenIn = new Set<string>();
-  if (who.no != null) {
-    let seatCircles: Set<string> | null = null;
+  if (who.no != null && standing.size) {
     for (const r of await repo.openSessionRows(pool, 50)) {
       const hosts = Number(r.facilitator_no) === who.no || (r.secretary_no != null && Number(r.secretary_no) === who.no);
-      if (!hosts || !r.circle_id) continue;
-      const circleId = String(r.circle_id);
-      if (hostsOpenIn.has(circleId)) continue;
-      // Any member may open a room in any circle, so hosting one is not enough
-      // on its own. The host also needs standing there, the rule the room's
-      // `carried` keeps: they were in the circle's last closed session, or they
-      // sit in one of its seats now.
-      const [prev] = await repo.lastClosedInCircle(pool, circleId, Number(r.id));
-      if (prev && (await repo.personRow(pool, Number(prev.id), who.no)).length > 0) {
-        hostsOpenIn.add(circleId);
-        continue;
-      }
-      if (liveSeatIds.length) {
-        seatCircles ??= new Set(
-          (await listOrgRoles(pool as Pool)).filter((role) => role.circleId && liveSeatIds.includes(role.id)).map((role) => String(role.circleId)),
-        );
-        if (seatCircles.has(circleId)) hostsOpenIn.add(circleId);
-      }
+      if (hosts && r.circle_id != null && standing.has(String(r.circle_id))) hostsOpenIn.add(String(r.circle_id));
     }
   }
   return {
@@ -222,7 +246,9 @@ async function seenBy(
     admin: who.admin,
     liveSeatIds,
     joined,
+    standing,
     hostsOpenIn,
+    acceptPower: !!who.userId && !!acceptors && acceptors.includes(who.userId),
   };
 }
 
@@ -230,13 +256,16 @@ async function seenBy(
 function viewerFor(seen: Seen, r: RowDataPacket | Record<string, unknown>): TaskViewer {
   const no = seen.no != null && seen.no > 0 ? seen.no : null;
   const hostsSource = no != null && (Number(r.facilitator_no) === no || (r.secretary_no != null && Number(r.secretary_no) === no));
+  const circleId = r.circle_id == null || r.circle_id === "" ? null : String(r.circle_id);
   return {
     no: seen.no,
     admin: seen.admin,
     liveSeatIds: seen.liveSeatIds,
     inSourceSession: seen.joined.has(Number(r.session_id)),
     hostsSource,
-    hostsOpenRoomInCircle: r.circle_id != null && seen.hostsOpenIn.has(String(r.circle_id)),
+    hostsOpenRoomInCircle: circleId != null && seen.hostsOpenIn.has(circleId),
+    standsInCircle: circleId != null && seen.standing.has(circleId),
+    acceptPower: seen.acceptPower,
   };
 }
 
@@ -247,6 +276,45 @@ interface Book {
   names: Map<number, Named>;
   seatName: Map<string, string>;
   seatHolders: Map<string, string[]>;
+  /** Done tasks, not accepted, that nobody in the village may accept now. */
+  noAcceptor: Set<number>;
+}
+
+/**
+ * The done tasks among these rows that nobody may accept: every live holder of
+ * the power that seats people holds the task, sits in its role, or marked it
+ * done (`anyoneMayAccept`). Null `acceptors` measures nothing.
+ */
+async function nobodyAccepts(
+  pool: Pool | PoolConnection,
+  rows: readonly (RowDataPacket | Record<string, unknown>)[],
+  seatings: readonly OrgAssignment[],
+  acceptors: readonly string[] | null,
+): Promise<Set<number>> {
+  const out = new Set<number>();
+  if (!acceptors) return out;
+  const waiting = rows.filter((r) => r.entry_id != null && r.status === "done" && r.latest_kind !== "accepted");
+  if (!waiting.length) return out;
+  const nos = new Set<number>();
+  for (const r of waiting) {
+    const owner = holderNo(r.owner_no);
+    if (owner != null) nos.add(owner);
+    const by = holderNo(r.changed_by_no);
+    if (by != null) nos.add(by);
+  }
+  const userOf = new Map((await repo.memberUserIdRows(pool, Array.from(nos))).map((m) => [Number(m.no), String(m.user_id)]));
+  for (const r of waiting) {
+    const owner = holderNo(r.owner_no);
+    const by = holderNo(r.changed_by_no);
+    const seat = seatOf(r.owner_seat_id);
+    const someone = anyoneMayAccept(acceptors, {
+      ownerUserId: owner != null ? (userOf.get(owner) ?? null) : null,
+      markedByUserId: by != null ? (userOf.get(by) ?? null) : null,
+      seatHolders: seat ? liveHoldersOf(seatings, seat) : [],
+    });
+    if (!someone) out.add(Number(r.entry_id));
+  }
+  return out;
 }
 
 async function bookFor(
@@ -254,6 +322,7 @@ async function bookFor(
   rows: readonly (RowDataPacket | Record<string, unknown>)[],
   seatings: readonly OrgAssignment[],
   lookup: MemberLookup,
+  acceptors: readonly string[] | null = null,
 ): Promise<Book> {
   const nos = new Set<number>();
   const seats = new Set<string>();
@@ -270,17 +339,19 @@ async function bookFor(
   const seatHolders = new Map<string, string[]>();
   if (seats.size) {
     for (const role of await listOrgRoles(pool as Pool)) if (seats.has(role.id)) seatName.set(role.id, role.name);
+    // First names only: the card says "Held by Treasurer (Rick)" (Rye, 2026-10-30), so a
+    // surname would be a name sent for nothing.
     for (const seat of Array.from(seats)) {
       const holders = await Promise.all(
         liveHoldersOf(seatings, seat).map(async (userId) => {
           const m = await lookup(userId).catch(() => null);
-          return m && typeof m.name === "string" && m.name.trim() ? m.name.trim() : SESSION_SOMEONE;
+          return m && typeof m.name === "string" ? holderFirstName(m.name) : "";
         }),
       );
-      seatHolders.set(seat, holders);
+      seatHolders.set(seat, holders.filter(Boolean));
     }
   }
-  return { names, seatName, seatHolders };
+  return { names, seatName, seatHolders, noAcceptor: await nobodyAccepts(pool, rows, seatings, acceptors) };
 }
 
 const nameIn = (book: Book, no: number | null): string | null => (no == null ? null : (book.names.get(no)?.name ?? SESSION_SOMEONE));
@@ -293,7 +364,7 @@ function stateCard(r: RowDataPacket | Record<string, unknown>, seen: Seen, book:
   const state = stateOf(r);
   const by = state.changedByNo > 0 ? state.changedByNo : null;
   const hosts = [Number(r.facilitator_no ?? 0), Number(r.secretary_no ?? 0)].filter((n) => n > 0);
-  return taskCardFor(
+  const card = taskCardFor(
     {
       state,
       text: String(r.text ?? ""),
@@ -305,9 +376,11 @@ function stateCard(r: RowDataPacket | Record<string, unknown>, seen: Seen, book:
       latestByName: nameIn(book, by),
       // The facilitator or the secretary answered for somebody else: the card says so.
       latestByFacilitator: by != null && by !== state.ownerNo && hosts.includes(by),
+      noAcceptor: book.noAcceptor.has(state.entryId),
     },
     viewerFor(seen, r),
   );
+  return { ...card, acceptedOn: isAccepted(state) ? villageDate(state.changedAt) : null };
 }
 
 /** An action still in an open session: no state yet, read-only, answered in the room. */
@@ -343,6 +416,13 @@ const DAY_MS = 86_400_000;
  * joined a session still sees what their seat holds. Somebody with neither a
  * number nor a seat has an empty board, read from nothing.
  *
+ * `circleBack` is every open task back with a circle where they have standing
+ * (`standingIn`), so a task handed back is in front of everyone who might take
+ * it before the circle meets again. It is the circle's, never theirs: the
+ * count of what waits on them (`taskCount`) leaves it out, and no notice or
+ * email goes out because of it. An admin reads it for the circles where they
+ * have standing, like anybody else.
+ *
  * `earlier` reads every finished task, the ones before the three moons too:
  * `finished` then holds them all, newest first, and `earlierCount` is 0
  * because nothing is left unread.
@@ -353,16 +433,20 @@ export async function taskBoard(pool: Pool, who: Asker, deps: TaskDeps, opts: { 
   const no = await memberNo(pool, who.userId);
   const seatings = await seatingsNow(pool, deps);
   const seats = liveSeatIdsFor(seatings, who.userId);
-  if (no == null && seats.length === 0) return { holding: [], seatsHold: [], finished: [], earlierCount: 0, today };
+  if (no == null && seats.length === 0) return { holding: [], seatsHold: [], circleBack: [], finished: [], earlierCount: 0, today };
 
   const finishedSince = new Date(now.getTime() - TASK_FINISHED_DAYS * DAY_MS);
-  const [rows, liveRows, earlierCount] = await Promise.all([
+  const [rows, liveRows, earlierCount, backCircles] = await Promise.all([
     store.boardRows(pool, no, seats, { finishedSince, earlier }),
     store.openSessionActionRows(pool, no, seats),
     earlier ? Promise.resolve(0) : store.boardEarlierCount(pool, no, seats, finishedSince),
+    store.backWithCircleIds(pool),
   ]);
-  const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [...rows, ...liveRows].map((r) => Number(r.session_id)), seatings);
-  const book = await bookFor(pool, [...rows, ...liveRows], seatings, deps.lookup);
+  // Standing first, in the circles something is back with, so only their own circles' tasks are read.
+  const backRows = await store.backWithCircleRows(pool, Array.from(await standingIn(pool, { no, liveSeatIds: seats }, backCircles)));
+  const acceptors = await acceptorsNow(deps);
+  const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [...rows, ...liveRows, ...backRows], seatings, acceptors);
+  const book = await bookFor(pool, [...rows, ...liveRows, ...backRows], seatings, deps.lookup, acceptors);
 
   const holding: TaskCard[] = [];
   const seatsHold: TaskCard[] = [];
@@ -377,6 +461,7 @@ export async function taskBoard(pool: Pool, who: Asker, deps: TaskDeps, opts: { 
   return {
     holding: holding.sort(compareByDue),
     seatsHold: seatsHold.sort(compareByDue),
+    circleBack: backRows.map((r) => stateCard(r, seen, book, deps)).sort(compareByDue),
     finished: finished.sort(newestFirst),
     earlierCount,
     today,
@@ -430,17 +515,24 @@ export async function answerTask(pool: Pool, who: Asker, entryId: number, raw: u
   const today = villageDate(now);
   const no = await memberNo(pool, who.userId);
   const seatings = await seatingsNow(pool, deps);
+  const acceptors = await acceptorsNow(deps);
 
   const step: AnswerStep = await repo.inTransaction(pool, async (conn): Promise<AnswerStep> => {
     const locked = await store.stateForUpdate(conn, entryId);
     const [row] = locked.length ? await store.taskRowsFor(conn, [entryId]) : [];
     if (!row) return { kind: "refused", refusal: refuse(404, TASK_REFUSALS.notFound), withCard: false };
     const current = stateOf(locked[0]);
-    const seen = await seenBy(conn, { userId: who.userId, no, admin: who.admin }, [current.sessionId], seatings);
+    const seen = await seenBy(conn, { userId: who.userId, no, admin: who.admin }, [row], seatings, acceptors);
     const viewer = viewerFor(seen, row);
-    if (!canSeeTask(current, viewer)) return { kind: "refused", refusal: refuse(404, TASK_REFUSALS.notFound), withCard: false };
+    // A holder of the power that seats people reads a done task to accept it, wherever it came from.
+    const readsToAccept = answer.op === "accepted" && viewer.acceptPower === true && current.status === "done";
+    if (!canSeeTask(current, viewer) && !readsToAccept) return { kind: "refused", refusal: refuse(404, TASK_REFUSALS.notFound), withCard: false };
     if (answer.version !== current.version) return { kind: "refused", refusal: refuse(409, TASK_REFUSALS.moved), withCard: true };
-    if (!mayGive(answer.op, taskRights(current, viewer))) return { kind: "refused", refusal: refuse(403, TASK_REFUSALS.notYours), withCard: false };
+    if (answer.op === "accepted") {
+      // Nobody accepts their own work, and only a live holder of the power accepts at all.
+      const why = acceptRefusal(current, viewer);
+      if (why === "ownWork" || why === "notAnAcceptor") return { kind: "refused", refusal: refuse(403, TASK_REFUSALS[why]), withCard: false };
+    } else if (!mayGive(answer.op, taskRights(current, viewer))) return { kind: "refused", refusal: refuse(403, TASK_REFUSALS.notYours), withCard: false };
     const problem = validateAnswer(answer, current, today);
     if (problem) return { kind: "refused", refusal: refuse(400, TASK_REFUSALS[problem]), withCard: false };
 
@@ -454,7 +546,7 @@ export async function answerTask(pool: Pool, who: Asker, entryId: number, raw: u
 
   if (step.kind === "refused") {
     if (!step.withCard) return step.refusal;
-    const card = await cardFor(pool, entryId, { userId: who.userId, no, admin: who.admin }, seatings, deps);
+    const card = await cardFor(pool, entryId, { userId: who.userId, no, admin: who.admin }, seatings, deps, acceptors);
     return card ? refuse(409, step.refusal.error, { task: card }) : refuse(404, TASK_REFUSALS.notFound);
   }
 
@@ -475,7 +567,7 @@ export async function answerTask(pool: Pool, who: Asker, entryId: number, raw: u
     }
   }
 
-  const card = await cardFor(pool, entryId, { userId: who.userId, no: step.actorNo, admin: who.admin }, seatings, deps);
+  const card = await cardFor(pool, entryId, { userId: who.userId, no: step.actorNo, admin: who.admin }, seatings, deps, acceptors);
   return card ? done({ task: card }) : refuse(404, TASK_REFUSALS.notFound);
 }
 
@@ -501,7 +593,7 @@ export async function markTaskDone(pool: Pool, who: Asker, entryId: number, deps
     const [row] = await store.taskRowsFor(pool, [entryId]);
     if (!row) return refuse(404, TASK_REFUSALS.notFound);
     const current = stateOf(row);
-    const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [current.sessionId], seatings);
+    const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [row], seatings);
     const viewer = viewerFor(seen, row);
     if (!canSeeTask(current, viewer)) return refuse(404, TASK_REFUSALS.notFound);
     // The rights an answer would need, whatever the task's status is now.
@@ -515,6 +607,176 @@ export async function markTaskDone(pool: Pool, who: Asker, entryId: number, deps
   }
 }
 
+// ── Accepted as accomplished ────────────────────────────────────────────────
+
+/**
+ * "Accept as accomplished": the `accepted` answer, with the version the server
+ * reads itself, so a row in Waiting on you needs only the task's id and an
+ * optional note. The same shape as `markTaskDone`:
+ *
+ *   - a task this person may neither see nor accept answers 404
+ *   - their own work, or no live hold of the power, answers 403
+ *   - a task already accepted answers the card as it is, and changes nothing
+ *   - a task not done answers 409 with its own sentence and the card
+ *   - a done task goes through `answerTask`, the PATCH's own path: the version
+ *     lock, the note's checks (300 characters, no payment details), the state
+ *     row and the appended event, which is the audit trail
+ */
+export async function acceptTask(pool: Pool, who: Asker, entryId: number, raw: unknown, deps: TaskDeps, now = new Date()): Promise<Outcome<{ task: TaskCard }>> {
+  const body = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const no = await memberNo(pool, who.userId);
+  const seatings = await seatingsNow(pool, deps);
+  const acceptors = await acceptorsNow(deps);
+  for (let attempt = 1; ; attempt++) {
+    const [row] = await store.taskRowsFor(pool, [entryId]);
+    if (!row) return refuse(404, TASK_REFUSALS.notFound);
+    const current = stateOf(row);
+    const seen = await seenBy(pool, { userId: who.userId, no, admin: who.admin }, [row], seatings, acceptors);
+    const viewer = viewerFor(seen, row);
+    if (!canSeeTask(current, viewer) && !(viewer.acceptPower && current.status === "done")) return refuse(404, TASK_REFUSALS.notFound);
+    const why = acceptRefusal(current, viewer);
+    if (why === "ownWork" || why === "notAnAcceptor") return refuse(403, TASK_REFUSALS[why]);
+    if (why === "alreadyAccepted" || why === "notDoneYet") {
+      const card = stateCard(row, seen, await bookFor(pool, [row], seatings, deps.lookup, acceptors), deps);
+      return why === "alreadyAccepted" ? done({ task: card }) : refuse(409, TASK_REFUSALS.notDoneYet, { task: card });
+    }
+    const out = await answerTask(pool, who, entryId, { op: "accepted", version: current.version, note: body.note }, deps, now);
+    if (out.ok || out.status !== 409 || attempt >= 2) return out;
+  }
+}
+
+/** How many tasks Waiting on you offers to accept at most, newest first. */
+export const TO_ACCEPT_MAX = 50;
+
+/**
+ * The done tasks one member may accept as accomplished, for the task board's
+ * Waiting on you: marked done in the last three moons (TASK_FINISHED_DAYS),
+ * not accepted yet, and not their own work (`acceptRefusal`). Nothing is read
+ * for somebody who does not hold the power that seats people live.
+ *
+ * A row names no person: the task's words, its role, its circle and the day.
+ */
+export async function tasksToAccept(
+  pool: Pool,
+  userId: string,
+  deps: { acceptors: readonly string[]; lapseContext?: () => LapseContext; circleName?: (id: string | null) => string | null },
+  now = new Date(),
+): Promise<WaitingAcceptance[]> {
+  if (!deps.acceptors.includes(userId)) return [];
+  const since = new Date(now.getTime() - TASK_FINISHED_DAYS * DAY_MS);
+  const rows = await store.doneNotAcceptedRows(pool, since, TO_ACCEPT_MAX);
+  if (!rows.length) return [];
+  const no = await memberNo(pool, userId);
+  const liveSeatIds = liveSeatIdsFor(await seatingsNow(pool, deps), userId);
+  const viewer: TaskViewer = {
+    no,
+    admin: false,
+    liveSeatIds,
+    inSourceSession: false,
+    hostsSource: false,
+    hostsOpenRoomInCircle: false,
+    standsInCircle: false,
+    acceptPower: true,
+  };
+  const mine = rows.filter((r) => acceptRefusal(stateOf(r), viewer) === null);
+  if (!mine.length) return [];
+  const seats = new Set(mine.map((r) => seatOf(r.owner_seat_id)).filter((s): s is string => !!s));
+  const seatName = new Map<string, string>();
+  if (seats.size) for (const role of await listOrgRoles(pool)) if (seats.has(role.id)) seatName.set(role.id, role.name);
+  return mine.map((r) => {
+    const s = stateOf(r);
+    return {
+      entryId: s.entryId,
+      text: String(r.text ?? ""),
+      role: s.ownerSeatId ? (seatName.get(s.ownerSeatId) ?? TASK_COPY.seatUnnamed) : null,
+      circle: storedCircleName(r.summary) ?? deps.circleName?.(s.circleId) ?? null,
+      doneOn: villageDate(s.doneAt ?? s.changedAt),
+    };
+  });
+}
+
+/**
+ * One member's accomplishments, by the moon the work was done in, for the
+ * player card (`PlayerCardInput.accomplished`, shared/playerCard.ts). A task
+ * counts for them when it was accepted and not opened again since
+ * (`currentAccomplishments`), and they held it in person when it was
+ * accepted, or a role held it and they marked it done.
+ *
+ * WHO READS THEM. The member themselves and admins read every one. Anybody
+ * else (`viewer`) reads only the tasks they may read as cards (`canSeeTask`),
+ * so a profile never shows a circle's task to somebody outside it. With no
+ * viewer at all, nothing is filtered: the caller is the member's own door.
+ */
+export async function accomplishmentsOf(
+  pool: Pool,
+  ownerUserId: string,
+  deps: Pick<TaskDeps, "lapseContext">,
+  opts: { viewer?: { userId: string | null; admin: boolean } } = {},
+): Promise<AccomplishmentMoon[]> {
+  return (await accomplishmentsOfMany(pool, [ownerUserId], deps, opts)).get(ownerUserId) ?? [];
+}
+
+/**
+ * `accomplishmentsOf` for several members at once, by the same viewer rule,
+ * for the player card's batched builder (server/lib/playerCardData.ts). The
+ * statements run once for the whole batch, never once per member: their
+ * numbers, the accepted tasks, the viewer's standing and the events. A member
+ * with nothing accepted, or no number, maps to an empty list.
+ */
+export async function accomplishmentsOfMany(
+  pool: Pool,
+  ownerUserIds: readonly string[],
+  deps: Pick<TaskDeps, "lapseContext">,
+  opts: { viewer?: { userId: string | null; admin: boolean } } = {},
+): Promise<Map<string, AccomplishmentMoon[]>> {
+  const out = new Map<string, AccomplishmentMoon[]>(ownerUserIds.map((id) => [id, []]));
+  const owners = Array.from(new Set(ownerUserIds));
+  if (!owners.length) return out;
+  const viewer = opts.viewer;
+  // The viewer's number rides in the same read as the owners'.
+  const asked = viewer?.userId && !owners.includes(viewer.userId) ? [...owners, viewer.userId] : owners;
+  const noOf = new Map((await repo.memberNoRowsFor(pool, asked)).map((r) => [String(r.user_id), Number(r.no)]));
+  const ownerNos = owners.map((id) => noOf.get(id)).filter((n): n is number => n != null);
+  if (!ownerNos.length) return out;
+  const rows = await store.acceptedTaskRowsForMany(pool, ownerNos);
+  if (!rows.length) return out;
+
+  // Anybody but the member themselves or an admin reads only the tasks they may read as cards.
+  const filtered = (ownerId: string) => !!viewer && viewer.userId !== ownerId && !viewer.admin;
+  let visible: Set<number> | null = null;
+  if (owners.some(filtered)) {
+    const seatings = await seatingsNow(pool, deps);
+    const viewerNo = viewer!.userId ? noOf.get(viewer!.userId) ?? null : null;
+    const seen = await seenBy(pool, { userId: viewer!.userId, no: viewerNo, admin: false }, rows, seatings);
+    visible = new Set(rows.filter((r) => canSeeTask(stateOf(r), viewerFor(seen, r))).map((r) => Number(r.entry_id)));
+  }
+
+  const textOf = new Map(rows.map((r) => [Number(r.entry_id), String(r.text ?? "")]));
+  const events: AccomplishmentEvent[] = (await store.eventRowsFor(pool, Array.from(textOf.keys()))).map((e) => ({
+    entryId: Number(e.entry_id),
+    kind: String(e.kind),
+    byNo: Number(e.by_no ?? 0) || 0,
+    ownerNo: holderNo(e.owner_no),
+    ownerSeatId: seatOf(e.owner_seat_id),
+    note: e.note == null ? null : String(e.note),
+    at: toIso(e.created_at) ?? new Date(0).toISOString(),
+    text: textOf.get(Number(e.entry_id)) ?? "",
+  }));
+  const all = currentAccomplishments(events);
+  for (const ownerId of owners) {
+    const no = noOf.get(ownerId);
+    if (no == null) continue;
+    const seeAll = !filtered(ownerId);
+    const theirs = all.filter(
+      (a) =>
+        (a.ownerNo === no || (a.ownerNo == null && a.roleId != null && a.doneByNo === no)) &&
+        (seeAll || (visible !== null && visible.has(a.entryId))),
+    );
+    out.set(ownerId, groupByMoon(theirs));
+  }
+  return out;
+}
+
 /** One task's card, as it stands now, for one asker. */
 async function cardFor(
   pool: Pool,
@@ -522,11 +784,12 @@ async function cardFor(
   who: { userId: string; no: number | null; admin: boolean },
   seatings: readonly OrgAssignment[],
   deps: TaskDeps,
+  acceptors: readonly string[] | null = null,
 ): Promise<TaskCard | null> {
   const [row] = await store.taskRowsFor(pool, [entryId]);
   if (!row) return null;
-  const seen = await seenBy(pool, who, [Number(row.session_id)], seatings);
-  return stateCard(row, seen, await bookFor(pool, [row], seatings, deps.lookup), deps);
+  const seen = await seenBy(pool, who, [row], seatings, acceptors);
+  return stateCard(row, seen, await bookFor(pool, [row], seatings, deps.lookup, acceptors), deps);
 }
 
 // ── From last time, and one record ──────────────────────────────────────────
@@ -541,12 +804,19 @@ async function userIdOf(pool: Pool | PoolConnection, no: number | null): Promise
 /**
  * The cards an open room's "From last time" reads: every task of the circle's
  * earlier sessions that is still open, and every one answered since the
- * circle last met, kept to the ones this viewer may see (`canSeeTask`). A
- * closed session, or one with no circle, has none: its record reads
+ * circle last met, kept to the ones this viewer may see (`canSeeTask`). Every
+ * member with standing in the circle reads them all. Somebody who walked into
+ * the room without standing reads only the ones they hold or were in the room
+ * for. A closed session, or one with no circle, has none: its record reads
  * `taskRecord` instead.
  *
- * `lastMetAt` is the close of the circle's last session, the line the check
- * groups by. It comes only with cards, so a viewer who may see none of the
+ * `viewer.userId` is the asker's own id when the room has it, so a member who
+ * sits in one of the circle's seats reads the cards before they have joined a
+ * session and been given a number.
+ *
+ * `lastMetAt` is the close of the session the room carries from (`lastTimeIn`:
+ * a session one person was in that left nothing behind is passed over), the
+ * line the check groups by. It comes only with cards, so a viewer who may see none of the
  * circle's tasks learns nothing about when it met.
  *
  * Best effort. The room is the thing a viewer came for, so a task layer that
@@ -562,16 +832,19 @@ export async function circleTasksFor(
   const none = { cards: [], lastMetAt: null };
   if (s.status !== "open" || !s.circleId) return none;
   try {
-    const [prev] = await repo.lastClosedInCircle(pool, s.circleId, s.id);
+    // The circle's last time: never a session one person was in that left nothing behind (server/lib/circleStanding.ts).
+    const prev = await lastTimeIn(pool, s.circleId, s.id);
     const lastMet = prev?.closed_at ? new Date(prev.closed_at) : null;
     const metAt = lastMet && Number.isFinite(lastMet.getTime()) ? lastMet : null;
     const rows = await store.circleTaskRows(pool, s.circleId, metAt);
     if (!rows.length) return none;
     const seatings = await seatingsNow(pool, deps);
-    const seen = await seenBy(pool, { userId: await userIdOf(pool, viewer.no), no: viewer.no, admin: viewer.admin }, rows.map((r) => Number(r.session_id)), seatings);
+    const userId = viewer.userId ?? (await userIdOf(pool, viewer.no));
+    const acceptors = await acceptorsNow(deps);
+    const seen = await seenBy(pool, { userId, no: viewer.no, admin: viewer.admin }, rows, seatings, acceptors);
     const visible = rows.filter((r) => canSeeTask(stateOf(r), viewerFor(seen, r)));
     if (!visible.length) return none;
-    const book = await bookFor(pool, visible, seatings, deps.lookup);
+    const book = await bookFor(pool, visible, seatings, deps.lookup, acceptors);
     return { cards: visible.map((r) => stateCard(r, seen, book, deps)), lastMetAt: metAt ? metAt.toISOString() : null };
   } catch (e) {
     console.error(`[sessions] the circle's tasks could not be read for session ${s.id}`, e);
@@ -581,25 +854,44 @@ export async function circleTasksFor(
 
 /**
  * One session's tasks as its record shows them, and whether this viewer may
- * send its task emails again. The record's own reading rule holds: an open
- * session is seen by any member, a closed one by the people who were in it
- * and admins. `canSend` is the closed session's facilitator, or an admin.
+ * send its task emails again. `canSend` is the closed session's facilitator,
+ * or an admin.
+ *
+ * TWO READERS. Whoever may read the record (an open session: any member; a
+ * closed one: the people who were in it, and admins) gets every task and the
+ * mail line. Anybody else gets only the cards they may see (`canSeeTask`,
+ * which since Rye's ruling of 2026-10-21 is everyone with standing in the
+ * session's circle), with no mail line and no record link on any card, and
+ * the record's own refusal when that is none. So the cards are the circle's,
+ * and the record around them stays with the people who were in the room.
+ *
+ * `viewer.userId` is the asker's own id when the door has it, so a member who
+ * sits in one of the circle's seats and has never joined a session is read by
+ * their seats, the way their board reads them.
  */
 export async function taskRecord(pool: Pool, sessionId: number, viewer: Viewer, deps: TaskDeps): Promise<Outcome<TaskRecordPayload>> {
   const rows = await repo.sessionRow(pool, sessionId);
   if (!rows.length) return refuse(404, SESSION_REFUSALS.notFound);
   const s = mapSession(rows[0]);
   const joined = viewer.no != null && (await repo.personRow(pool, sessionId, viewer.no)).length > 0;
-  if (!maySee(s, joined, viewer.admin)) return refuse(403, SESSION_COPY.closedNoAccess);
+  const readsRecord = maySee(s, joined, viewer.admin);
 
   const taskRows = await store.sessionTaskRows(pool, sessionId);
   const seatings = taskRows.length ? await seatingsNow(pool, deps) : [];
-  const seen = await seenBy(pool, { userId: await userIdOf(pool, viewer.no), no: viewer.no, admin: viewer.admin }, [sessionId], seatings);
+  const userId = viewer.userId ?? (await userIdOf(pool, viewer.no));
+  const acceptors = taskRows.length ? await acceptorsNow(deps) : null;
+  const seen = await seenBy(pool, { userId, no: viewer.no, admin: viewer.admin }, taskRows, seatings, acceptors);
+  const visible = taskRows.filter((r) => canSeeTask(stateOf(r), viewerFor(seen, r)));
+  if (!readsRecord) {
+    if (!visible.length) return refuse(403, SESSION_COPY.closedNoAccess);
+    const book = await bookFor(pool, visible, seatings, deps.lookup, acceptors);
+    return done({ tasks: visible.map((r) => stateCard(r, seen, book, deps)), mail: { canSend: false, lastSend: null } });
+  }
   const [last] = await store.lastSend(pool, sessionId);
   const sentBy = last ? holderNo(last.sent_by_no) : null;
-  const book = await bookFor(pool, sentBy != null ? [...taskRows, { changed_by_no: sentBy }] : taskRows, seatings, deps.lookup);
+  const book = await bookFor(pool, sentBy != null ? [...visible, { changed_by_no: sentBy }] : visible, seatings, deps.lookup, acceptors);
   return done({
-    tasks: taskRows.map((r) => stateCard(r, seen, book, deps)),
+    tasks: visible.map((r) => stateCard(r, seen, book, deps)),
     mail: {
       canSend: s.status === "closed" && rolesIn(s, viewer).runs,
       lastSend: last

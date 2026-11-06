@@ -203,8 +203,16 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // to a seat holder an application still waits on (shared/waitingOnYou.ts).
   seat_application_reminder: {
     group: "decisions",
-    blurb: "An application for a seat still waits on a seat holder, and you hold that power.",
-    many: "{n} applications still wait on a seat holder.",
+    blurb: "An application for a role still waits on a role holder, and you hold that power.",
+    many: "{n} applications still wait on a role holder.",
+    celebrate: false,
+  },
+  // One member asked another to do something, or the one asked answered it
+  // (shared/memberAsks.ts). Quiet: an ask is a small thing between two people.
+  ask: {
+    group: "work",
+    blurb: "Someone asked you to do something, or answered something you asked.",
+    many: "{n} asks moved.",
     celebrate: false,
   },
   // How much your vote weighs is power, and the weight routes moved it for a
@@ -222,13 +230,13 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   role_appointed: {
     group: "decisions",
-    blurb: "A seat is yours to hold. The role page says what it is accountable for.",
-    many: "{n} seats came to you.",
+    blurb: "A role is yours to hold. The role page says what it is accountable for.",
+    many: "{n} roles came to you.",
     celebrate: false,
   },
   season: {
     group: "decisions",
-    blurb: "No season is running, so the calendar every term is measured against has stopped. Every mandate in the village hangs on it, the steward's seat included, so it says so until somebody starts the next one.",
+    blurb: "No season is running, so the calendar every term is measured against has stopped. Every mandate in the village hangs on it, the steward role included, so it says so until somebody starts the next one.",
     many: "The calendar has been stopped for {n} sweeps.",
     celebrate: false,
   },
@@ -241,7 +249,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // Season plans (2026-10-09). Quiet, both: planning is an ask, never a moment.
   season_plan_open: {
     group: "decisions",
-    blurb: "Planning is open for the season. Choose the seats you keep, hand back or apply for, and what you will do.",
+    blurb: "Planning is open for the season. Choose the roles you keep, hand back or apply for, and what you will do.",
     many: "{n} notices that planning is open.",
     celebrate: false,
   },
@@ -251,16 +259,73 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} reminders to file your season.",
     celebrate: false,
   },
+  // Role proposals (2026-10-22). In the bell only (no case in emailCadenceFor):
+  // the feedback is read on the draft, which only its owner opens.
+  role_proposal_feedback: {
+    group: "people",
+    blurb: "A member who has the link to your role proposal left feedback on it. Open the draft to read it.",
+    many: "{n} pieces of feedback on your role proposal.",
+    celebrate: false,
+  },
+  // The circle's 2 business days to consent or object (role proposals PR B),
+  // and an objection reaching the candidate. Bell only, like the tension pair:
+  // neither has a case in emailCadenceFor.
+  role_proposal_consent_ask: {
+    group: "decisions",
+    blurb: "A member proposes roles in a circle you hold a role in. Consent or object within 2 business days.",
+    many: "{n} role proposals ask your circle to consent.",
+    celebrate: false,
+  },
+  role_proposal_objection: {
+    group: "decisions",
+    blurb: "A member of the circle objected to your role proposal, so it goes to the circle's next meeting.",
+    many: "{n} objections to your role proposals.",
+    celebrate: false,
+  },
+  // A role proposal from somebody with no account yet (open proposals part
+  // B), once its address confirmed it. Bell only, like the member pair above.
+  open_role_proposal_consent_ask: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles in a circle you hold a role in. Consent or object within 2 business days.",
+    many: "{n} role proposals from outside the village ask your circle to consent.",
+    celebrate: false,
+  },
+  open_role_proposal_waiting: {
+    group: "decisions",
+    blurb: "Somebody from outside the village proposes to hold roles. You hold the power that seats people, so it is yours to adopt or decline.",
+    many: "{n} role proposals from outside the village wait on you.",
+    celebrate: false,
+  },
+  // The three nudges to propose roles for next season. Bell only; the
+  // profile banner says the same thing for as long as it is true.
+  role_proposal_window_open: {
+    group: "decisions",
+    blurb: "Planning for next season is open. Propose the roles you will hold.",
+    many: "{n} notices that you can propose your roles.",
+    celebrate: false,
+  },
+  role_proposal_review_due: {
+    group: "decisions",
+    blurb: "One of your roles is due its review. Propose how you will hold it next season.",
+    many: "{n} roles due their review.",
+    celebrate: false,
+  },
+  role_proposal_window_closing: {
+    group: "decisions",
+    blurb: "Your role proposal is still a draft, and the window closes in 2 business days.",
+    many: "{n} reminders that the window closes soon.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
-    blurb: "The agreement to keep holding your seat is running out. On a seat that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
+    blurb: "The agreement to keep holding your role is running out. In a role that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
     many: "{n} of your terms are running out.",
     celebrate: false,
   },
   submission: {
     group: "decisions",
-    blurb: "Somebody raised a hand for a seat or a power, and the village owes them an answer.",
-    many: "{n} people raised a hand for a seat or a power.",
+    blurb: "Somebody raised a hand for a role or a power, and the village owes them an answer.",
+    many: "{n} people raised a hand for a role or a power.",
     celebrate: false,
   },
   submission_status: {
@@ -310,6 +375,40 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "economy",
     blurb: "A redemption was not confirmed, and the tokens it held are back in your wallet.",
     many: "{n} of your redemptions were not confirmed.",
+    celebrate: false,
+  },
+  /**
+   * The village marked cash it owed you as paid (0285, server/routes/cashOwed.ts).
+   * The body is the treasurer's own note on how it was paid. Not celebrated,
+   * for redemption's reason: the platform records the payment and never sees it.
+   */
+  /**
+   * The end-of-moon review (module moon-review, server/lib/moonReview.ts): a
+   * recap returned, approved, a range changed, a self-approval to review, and
+   * "Your pay is sent". The title carries the contract's own words.
+   */
+  moon_review: {
+    group: "work",
+    blurb: "Your moon recap moved: returned, approved, or paid.",
+    many: "{n} updates on moon recaps.",
+    celebrate: false,
+  },
+  /**
+   * Once a day, what Sera's agent did since the last summary (B7,
+   * server/lib/seraAgent.ts). Sent to the live holders of moon.approve and
+   * moon.approve_alone, never to an agent account. Each action can be undone
+   * for 30 days from the Sera bridge panel.
+   */
+  sera_agent_digest: {
+    group: "work",
+    blurb: "What Sera's agent changed since the last summary, each one undoable for 30 days.",
+    many: "{n} summaries of what Sera's agent did.",
+    celebrate: false,
+  },
+  cash_paid: {
+    group: "economy",
+    blurb: "The village marked cash it owed you as paid.",
+    many: "{n} cash payments were marked paid.",
     celebrate: false,
   },
   exchange: {
@@ -398,14 +497,28 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   // it left with is held by you, or by a seat you sit in.
   session_action_held: {
     group: "work",
-    blurb: "A live session closed with an action held by you or by a seat you sit in. The notice says what it is and by when.",
-    many: "{n} actions from live sessions are held by you or your seats.",
+    blurb: "A live session closed with an action held by you or by a role you sit in. The notice says what it is and by when.",
+    many: "{n} actions from live sessions are held by you or your roles.",
     celebrate: false,
   },
   // The task layer (server/lib/sessionTaskMail.ts, server/lib/sessionTasks.ts):
   // a gentle note near a task's date, a task handed back to its circle, and a
   // task sitting with a seat nobody holds. None of them celebrate: each one
   // asks somebody to look at work, and none happened TO the reader.
+  // Your own list (server/lib/memberTaskNudges.ts): a task near its date, and
+  // a task somebody asked you for. In-app only; nothing celebrates.
+  my_task_due: {
+    group: "work",
+    blurb: "A task on your own list is due soon. Open your list to see it.",
+    many: "{n} tasks on your list are due soon.",
+    celebrate: false,
+  },
+  my_task_asked: {
+    group: "work",
+    blurb: "Someone asked you for a task on your own list. Open your list to see who.",
+    many: "{n} tasks on your list are waiting on you.",
+    celebrate: false,
+  },
   session_action_due: {
     group: "work",
     blurb: "A task you hold from a live session is near its date, or its date just passed. Answer it on your task board.",
@@ -420,8 +533,91 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   session_task_unheld: {
     group: "work",
-    blurb: "A task from a live session sits with a seat nobody holds now. Give it to someone at the next call.",
-    many: "{n} tasks sit with seats nobody holds.",
+    blurb: "A task from a live session sits with a role nobody holds now. Give it to someone at the next call.",
+    many: "{n} tasks sit with roles nobody holds.",
+    celebrate: false,
+  },
+  // A tension raised with a role you hold (server/lib/roleTensions.ts), and
+  // the one reminder after two business days. In the bell only: neither has
+  // a case in emailCadenceFor, because the words are private to the role's
+  // holders and whoever raised it, and neither notice carries them anyway.
+  role_tension_raised: {
+    group: "work",
+    blurb: "A member raised a tension with a role you hold. Only the role's holders and whoever raised it can read it.",
+    many: "{n} tensions were raised with roles you hold.",
+    celebrate: false,
+  },
+  role_tension_reminder: {
+    group: "work",
+    blurb: "A tension raised with a role you hold has waited 2 business days. Take it, answer it, or bring it to the circle.",
+    many: "{n} tensions with your roles have waited 2 business days.",
+    celebrate: false,
+  },
+  // The agenda library (server/lib/sessionLibrary.ts): an item a member
+  // brought for a circle went onto a session's agenda, and how it left that
+  // session. Neither celebrates: each is an answer to somebody who raised
+  // something, and it reads as one.
+  session_item_taken: {
+    group: "work",
+    blurb: "An agenda item you added is on a session's agenda now.",
+    many: "{n} agenda items you added are on an agenda.",
+    celebrate: false,
+  },
+  // A circle's rhythm (server/lib/sessionRhythm.ts): the day before a circle
+  // meets, its members hear when, with what is on the agenda.
+  session_coming_up: {
+    group: "work",
+    blurb: "A circle you are part of meets soon. The notice says when, and what is on the agenda.",
+    many: "{n} of your circles meet soon.",
+    celebrate: false,
+  },
+  // The advice process (shared/sessionAdvice.ts): somebody asks a circle you
+  // are part of for advice, the asker hears each new piece of advice, and the
+  // people asked hear what was decided.
+  session_advice_asked: {
+    group: "work",
+    blurb: "Somebody asks a circle you are part of for advice before they decide. The notice says what they mean to decide.",
+    many: "{n} requests for your advice.",
+    celebrate: false,
+  },
+  session_advice_given: {
+    group: "work",
+    blurb: "Somebody you asked for advice gave it.",
+    many: "{n} people gave advice on what you mean to decide.",
+    celebrate: false,
+  },
+  session_advice_decided: {
+    group: "work",
+    blurb: "Somebody who asked for your advice decided. The notice says what they decided.",
+    many: "{n} decisions made after asking for your advice.",
+    celebrate: false,
+  },
+  // A facilitator filled in for a member (0288, shared/sessionOnBehalf.ts):
+  // the person hears what went in under their name, and can undo it.
+  session_filled_in: {
+    group: "work",
+    blurb: "The Facilitator filled something in for you during a session. You can change it or undo it there.",
+    many: "{n} things the Facilitator filled in for you.",
+    celebrate: false,
+  },
+  // A night on a proposal (0281): whoever asked for one hears where to answer
+  // once the call has closed, and the facilitator hears when no night lasts.
+  session_night_open: {
+    group: "work",
+    blurb: "You asked for a night on a proposal and the call has closed. The notice says where to answer, and by when.",
+    many: "{n} proposals wait for your answer after a night.",
+    celebrate: false,
+  },
+  session_night_settled: {
+    group: "work",
+    blurb: "A proposal from a session you facilitated waited for a night, and the night is over. The notice says how the round went.",
+    many: "{n} rounds you facilitated are settled after a night.",
+    celebrate: false,
+  },
+  session_item_settled: {
+    group: "work",
+    blurb: "A session that took up an agenda item you added has closed. The item says whether it was taken up or waits for next time.",
+    many: "{n} sessions closed with agenda items you added.",
     celebrate: false,
   },
 
@@ -496,7 +692,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   contact_request: {
     group: "people",
-    blurb: "Somebody wants to reach you about a seat you hold. They see a relay, never your address.",
+    blurb: "Somebody wants to reach you about a role you hold. They see a relay, never your address.",
     many: "{n} people want to reach you.",
     celebrate: false,
   },

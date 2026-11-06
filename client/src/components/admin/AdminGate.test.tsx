@@ -36,7 +36,9 @@ vi.mock("@/components/auth/signInMethods", () => ({
 
 import AdminGate, { signInFailure } from "./AdminGate";
 
-const DEEP_LINK = "/admin?tab=modules&module=saberra";
+// A deep link to one admin screen. (The Module Library tab used to be the
+// example; since 2026-10-09 it redirects to the public library before the gate.)
+const DEEP_LINK = "/admin?tab=email-settings&from=launch";
 
 beforeEach(() => {
   auth.state = { user: null, loading: false };

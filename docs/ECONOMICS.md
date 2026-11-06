@@ -91,15 +91,15 @@ subtlety in this system; see section 7.
 
 | Trigger | Path | Notes |
 |---|---|---|
-| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | Gratitude is posted by the route inside the claim's own commit; the rule engine deliberately SKIPS the gratitude slug so one piece of work cannot pay twice. What else the consent owes is priced and recorded in that same commit and posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
-| A moon closes | `runSettlement` | Pays seat holders per `mint_rules` on `role.cycle` |
+| A steward confirms a quest | consent route (`server/routes/questClaims.ts`), then `owedForClaim`, `recordOwed`, `settleOwedForClaim` | A consent is a yes and posts no Gratitude (Rye, 2026-10-21). The quest pays its own list, or the standard rules when it has none, priced by `quoteWorkPay` (see "What a quest and a role pay" in section 4) and recorded in the claim's own commit, then posted after it, so a crash between the two cannot lose the obligation. A steward can ask again at `POST /api/admin/quest-claims/:id/owed/pay` |
+| A moon closes | `runSettlement` | Pays each holder their role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay`, in full |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
 | An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
 | A member spends | a stay night, a seat fee, a library escrow, a member-to-member send | See section 12 |
 | A member asks to redeem | `requestRedemption`, `server/lib/redemptionStore.ts` | Holds the asked amount in `sys:redemption-hold` when `redemption.holds_on_propose` is on, and holds nothing when it is off. A refusal, a withdrawal or an expiry returns a held amount by reversing the hold |
 | A redemption is confirmed | `settleRedemption`, `server/lib/redemptionStore.ts` | Retires the tokens to `sys:redeemed`, which only ever receives, taking them from the hold if one was taken and from the member otherwise |
-| A member leaves | `sweepBalances` in `server/lib/exit.ts` | Moves the remaining balance to `sys:exit-settlement`; see section 14 |
+| A member leaves | `sweepBalances` in `server/lib/exit.ts` | Moves whatever the village's exit shares do not keep to `exit.remainder_account`, which on the shipped dials is recognition alone, to `sys:exit-settlement`; see section 14 |
 | A claim confirms on Base | `settleVoiceClaim` | Reconciles a one-way bridge; see section 6 |
 
 ### The occurrence keys
@@ -107,19 +107,21 @@ subtlety in this system; see section 7.
 <!-- generated:triggers start -->
 A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is UNIQUE, so the shape of the key is what decides whether a second attempt pays again.
 
-`keys` in `server/lib/economy.ts` builds 11 of them. The angle brackets are that builder's own parameter names.
+`keys` in `server/lib/economy.ts` builds 13 of them. The angle brackets are that builder's own parameter names.
 
 | Builder | What the builder returns |
 | --- | --- |
 | `keys.questCompleted` | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` |
 | `keys.gratitudeGiven` | `gratitude.given:<esc(v)>:<esc(noteId)>` |
 | `keys.roleCycle` | `role.cycle:<esc(v)>:<esc(cycleKey)>:<esc(seatId)>:<esc(userId)>:<esc(tokenSlug)>` |
+| `keys.duesDividend` | `dues.dividend:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` |
 | `keys.journeyStage` | `journey.stage_reached:<esc(v)>:<esc(journeyId)>:<esc(stage)>:<esc(userId)>` |
 | `keys.welcomeAboard` | `welcome_aboard.quest:<esc(v)>:<esc(questNo)>:<esc(userId)>` |
 | `keys.voiceDecay` | `voice.decay:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` |
 | `keys.transfer` | `transfer:<esc(v)>:<esc(transferRowId)>` |
 | `keys.reversal` | `reversal:<esc(v)>:<eventKey>` |
 | `keys.voiceClaim` | `voice-claim:<esc(v)>:<esc(claimRowId)>` |
+| `keys.equityClaim` | `equity-claim:<esc(v)>:<esc(claimRowId)>` |
 | `keys.redemptionHold` | `redemption:<esc(v)>:<esc(redemptionId)>:hold` |
 | `keys.redemptionBurn` | `redemption:<esc(v)>:<esc(redemptionId)>:burn` |
 
@@ -135,6 +137,9 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
 | `comp-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
+| `dues.dividend:<esc(v)>:<esc(cycleKey)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
+| `equity-claim-debit:<villageId()>:<claimId>` | `server/lib/voiceClaim.ts` |
+| `equity-claim-settled:<villageId()>:<claimId>` | `server/lib/voiceClaim.ts` |
 | `exit:<exitId>:convert-credit:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:convert:<token>` | `server/lib/exit.ts` |
 | `exit:<exitId>:sweep:<token>` | `server/lib/exit.ts` |
@@ -161,8 +166,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `pp:<purchaseId>:reversal:inv_<String(invoiceId)>` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:manual` | `server/index.ts` |
 | `pp:<purchaseId>:reversal:pi_<payment_intent>` | `server/index.ts` |
-| `proposal_accepted:<id>` | `server/index.ts` |
-| `quest_consent:<id>` | `server/routes/questClaims.ts` |
+| `proposal_accepted:<submissionId>:<token>` | `server/lib/proposalAward.ts` |
 | `quest.completed:<esc(v)>:<esc(questId)>:<esc(claimId)>:<esc(userId)>:<esc(tokenSlug)>` | `server/lib/economy.ts` |
 | `queststay:<id>` | `server/lib/economy.ts` |
 | `redemption:<esc(v)>:<esc(redemptionId)>:hold` | `server/lib/redemptionStore.ts` |
@@ -179,7 +183,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `xstock-<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `xstock:<slug>:<body>` | `server/index.ts` |
 
-51 distinct shapes across 57 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
+53 distinct shapes across 59 posting site(s), plus 8 site(s) that forward a key their caller decided (`mint()` and `mintStayCredits` hand on what they were given, and every caller of those is read above). A shape ending in a timestamp and a random suffix is a key the caller did not make idempotent: the admin mint and the exchange stocking route both fall back to one when no client nonce is sent, so a retried request there is a second posting rather than a no-op.
 <!-- generated:triggers end -->
 
 ---
@@ -278,6 +282,7 @@ the modules that register their own token at boot:
 | Slug | Name | Kind | Governed by | Decimals | Faucet | A member may send it |
 | --- | --- | --- | --- | --- | --- | --- |
 | `gratitude` | Gratitude | recognition | the village | 0 | `sys:gratitude-pool` | no: recognition is never handed between members |
+| `earned-equity` | Earned Equity | equity | the village | 0 | `sys:equity-mint` | no: equity is never handed between members |
 | `credits` | Village Credits | credit | the village | 2 | `sys:cycle-pool` | yes |
 | `library-credit` | Library Credits | credit | the village | 2 | `sys:library-mint` | no: it buys one named thing from the village and cannot be passed on |
 | `stay-credit` | Stay Credits | credit | the village | 2 | `sys:mint` | no: it buys one named thing from the village and cannot be passed on |
@@ -285,7 +290,7 @@ the modules that register their own token at boot:
 | `equity` | Village Equity | equity | Hypha, on Base | 0 | none, it is read from Base | no: it is governed on Base |
 | `voice` | Voice | voice | Hypha, on Base | 0 | none, it is read from Base | no: it is governed on Base |
 
-7 tokens in a fresh village: 5 minted here, 2 read from Base. The registry rows are seeded by 8 migration file(s) and by the modules that register their own token at boot.
+8 tokens in a fresh village: 6 minted here, 2 read from Base. The registry rows are seeded by 10 migration file(s) and by the modules that register their own token at boot.
 <!-- generated:tokens end -->
 
 `governance` splits the table in two and is the most important column in it.
@@ -295,11 +300,54 @@ this village read from a chain it does not control. Never write a hypha token as
 though minting it here creates anything. `postTransfer` refuses to move one at
 all, by name, and every boot refuses to start if a ledger row for one exists.
 
+**What a token is called, what it means, and what all of them are called
+together are the village's own words (0283).** Rye, 2026-10-23: "Village Tokens
+is the umbrella word, which should be able to be set in admin to name each type
+of token and for what categories it's issued and what it means." Four settings,
+all in Admin then Tokens:
+
+- the **name**, `tokens.name`, renamed through `PUT /api/admin/tokens/:slug`
+  (refused on a Hypha mirror, whose name is a fact about Base);
+- the **meaning**, `tokens.description` (varchar 600, NULL when nobody has
+  written one), through the same route. `tokenDescriptionProblem`
+  (`server/lib/tokenMeaning.ts`) judges it before the route writes anything, so a
+  refused description never leaves a rename half done beside it. A Hypha mirror
+  may take one, because what it means to this village is the village's to say.
+  Members read it on their wallet (`GET /api/me/wallet`, each row's
+  `description`);
+- the **jobs** a token is issued for, the token-jobs panel above the table;
+- the **umbrella word**, `currency.collectiveName` in the brand overlay, served
+  on `/api/game/config` and written `{tokens}` on pages. Its platform default is
+  Rye's word, `Village Tokens` (`GAME_CONFIG.currency.collectiveName`); a blank
+  setting inherits it.
+
+The platform writes no meaning for any token. Rye ruled on 2026-10-22 that
+shipped copy never says what a token does, so the per-token sentences the admin
+catalog used to carry (`describeToken`) are gone, and a token nobody has
+described says that nothing is written yet.
+
 The equity row is the one place a village's own name is correct. A fresh village
 gets `Village Equity`, because `drizzle/0124_the_equity_token_names_no_village.sql`
 sets the neutral name only where the current name is not the village's own. On
 the live Amora instance it reads `Amora` (measured 2026-09-03, not derivable from
 this repository).
+
+**`earned-equity` is that mirror's accruing twin (0266)**, the way `village-voice`
+is the twin of `voice`. The mirror cannot accrue, by the rule two paragraphs up, so
+equity a village pays for work has to land in a platform token first and be
+claimed across later. It ships as `Earned Equity` because the mirror's own default
+is `Village Equity` and two balances under one name are a balance nobody can read
+(`tokenNameClash` refuses an exact match for the same reason). A village renames it
+like any platform token; the slug never moves. Its kind is `equity`, which keeps it
+off the exchange (only credits trade) and puts it under `exit.keep_pct.equity` when
+a member leaves. **A leaver keeps it, by the founder's ruling of 2026-10-23**
+("As a general rule members keep their tokens"; asked whether a leaver stays on as
+a former member or is erased after carrying their voice and equity to Hypha: "a if
+b hasn't already happened"). That share defaults to 100, and the save-time refusal
+that held it at 0, written when the only equity token was the mirror ("this
+platform never moves it"), was lifted the same day. A departing member who still
+holds earned equity stays on as a former member with it (section 14), and can
+still claim it across later on the same terms as anybody. Section 6 has its claim.
 
 `credits` is the only token a member can send to another member. Section 13 has
 the sentence a member reads for each of the others.
@@ -308,12 +356,15 @@ the sentence a member reads for each of the others.
 
 ## 4. Where tokens come from
 
-Five faucets, all present on production (measured 2026-09-03):
+Five faucets, all present on production (measured 2026-09-03). A fresh village
+now boots with six: `sys:equity-mint` arrives with 0266 and is in the table below
+because the table is read from the code.
 
 <!-- generated:faucets start -->
 | Faucet account | Issues |
 | --- | --- |
 | `sys:cycle-pool` | `credits` |
+| `sys:equity-mint` | `earned-equity` |
 | `sys:gratitude-pool` | `gratitude` |
 | `sys:library-mint` | `library-credit` |
 | `sys:mint` | `stay-credit` |
@@ -323,6 +374,8 @@ A faucet's NEGATIVE balance is the issued supply of its token. These system acco
 
 | Vault account | Holds |
 | --- | --- |
+| `sys:equity-bridge` | earned equity held for an open claim |
+| `sys:equity-settled` | earned equity whose claim Hypha confirmed |
 | `sys:event-escrow` | a seat fee, until the gathering is held or cancelled |
 | `sys:exit-settlement` | a departing member's swept balance |
 | `sys:library-escrow` | a loan deposit, until the loan settles |
@@ -335,7 +388,7 @@ A faucet's NEGATIVE balance is the issued supply of its token. These system acco
 | `sys:voice-decay` | all the voice that has waned in this village, and it only ever receives |
 | `sys:voice-settled` | voice whose claim Hypha confirmed |
 
-11 of them, read from every `INSERT` into `ledger_accounts` under `drizzle/` and never from a list kept here: this table named four for as long as the migrations seeded more, and a reader asking where value sits was told about less of it than exists.
+13 of them, read from every `INSERT` into `ledger_accounts` under `drizzle/` and never from a list kept here: this table named four for as long as the migrations seeded more, and a reader asking where value sits was told about less of it than exists.
 
 Sources that may drive a NON-faucet account below zero, and only with `allowNegative` set: `stay_night`, `payment_reversal`, `reversal`.
 <!-- generated:faucets end -->
@@ -347,9 +400,14 @@ The mint rules a fresh village is seeded with:
 | --- | --- | --- | --- | --- | --- |
 | `quest.completed` | `village-voice` | 10 | 100 | claimant | yes |
 | `quest.completed` | `credits` | 25 | 250 | claimant | yes |
-| `role.cycle` | `village-voice` | 50 | 200 | holder | yes |
-| `role.cycle` | `credits` | 25 | 250 | holder | yes |
+| `role.cycle` | `village-voice` | read from the work | 200 | holder | yes |
+| `role.cycle` | `credits` | read from the work | 250 | holder | yes |
 | `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
+| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
+| `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
+| `role.cycle` | `earned-equity` | read from the work | 1 | holder | **no** |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
@@ -385,6 +443,19 @@ Raise the ceiling or pause the rule." That is the same fail-closed reading of ze
 swap caps use, and it is what `mintRuleValueProblem` already promised a village when it
 said a ceiling is zero or more and zero means zero.
 
+**No ceiling binds work, since 2026-10-22.** Rye: "no caps here! Relatively most projects
+will have 1 token ~1USD (or their local currency) so we definitely can't have caps on what
+things pay." So everything above about clamping holds for every trigger EXCEPT the two that
+pay work, `quest.completed` and `role.cycle` (`WORK_PAY_TRIGGERS` and `ceilingBinds` in
+`shared/workValue.ts`). On those two the ceiling column is still stored and still editable,
+and binds nothing: not a quest's or a role's own amount, and not the rule's own fixed amount
+either, which `queueRuleChange` and the ballot check (`mintCeilingProblems`) no longer hold
+under it. A ceiling of 0 on a work rule pays in full too. Every rule the engine pays is on one
+of these two triggers (`rulesFor` is asked for nothing else, and the seed ships nothing else),
+so **no ceiling binds anything the engine pays today**. The column is still stored, and the Mint
+panel never offered a control for it. `ceilingBinds` keeps the old clamp for a rule on any other
+trigger, and nothing pays one.
+
 A rule the engine cannot honour is REPORTED rather than skipped. `ruleCannotPay`
 answers why, `reportUnpayable` logs it, and both `owedForClaim` and
 `runSettlement` return the list. This exists because a village once enabled a
@@ -392,9 +463,161 @@ credits rule, watched the Mint panel publish it, and was never paid by it: the
 faucet switch returned null for `credits` and both mint paths did `if (!faucet)
 continue`.
 
+### What a quest and a role pay (0265)
+
+Rye, 2026-10-21: every quest carries a value from the moment it is created, and quest
+and role cards show every token assigned to them, or "inquire for payment details" when
+no value is set. Gratitude is never one of them: its only job is sharing out the cycle
+pool (section 5).
+
+A quest and a role each carry three columns. `value_minor` and `value_currency` are what
+the work is worth, in minor units of the village's own currency at the moment it was set;
+NULL is "nobody has set a value". `value_tokens` is the list of token amounts the platform
+pays for it: once at consent for a quest, to each seat every cycle for a role. NULL means
+the work has no list of its own; an empty list means it pays no tokens. The value is shown
+and never paid. The tokens are how the platform pays it, and a role's cash is stated from
+its terms and never paid either.
+
+**One function prices every piece of work**: `quoteWorkPay` in `server/lib/economy.ts`.
+The consent prices from it, `runSettlement` pays each seat from it, the Mint panel's
+settlement preview sums it seat by seat, and the cards render from it
+(`server/lib/workPay.ts`), so a card cannot promise a figure the engine would not post.
+
+| The work carries | What it is paid |
+|---|---|
+| its own list | each line it names, at its own amount, in full, on a token the village has an enabled rule for. A token it does not name pays nothing, so a valued quest is never also paid the flat amounts |
+| no list, a quest | every enabled rule's fixed amount, in full |
+| no list, a role | nothing from its rules. A seat is paid its role's own list and never a flat amount (below) |
+| a line on a token with no enabled rule | nothing. No rule lets that token pay this kind of work, so it is refused at the save and reported if it is ever reached |
+
+**No flat role mint, and the dues dividend** (Rye, 2026-11-01: "Yes send a lane to turn off the
+automatic mint - if this is turned on again it would be attached to those who are paying members,
+so that each cycle they're paying membership dues they're getting these tokens minted to them.").
+The `role.cycle` rules used to pay their flat 50 Voice and 25 Credits to every live seat. The seed
+now leaves them blank and still enabled, because an enabled rule is what lets a role's own list
+pay that token, and `blankFlatRoleMint` (`server/lib/flatRoleMint.ts`) queued the blank on running
+villages from the next cycle. A flat amount a village sets again is paid by `payDuesDividend`
+(`server/lib/economy.ts`): once a cycle to each member with a paid, unreversed card charge for a
+`membership` product in that cycle (`server/repos/duesPaid.ts`), per member and never per seat,
+role or no role, never to a former member or an erased account, with no badge multiplier. Card
+dues only, by Rye's ruling: dues paid through Zeffy or by hand leave no per-cycle record. The
+source is `dues_dividend`, which pays no contribution, and the cycle just closed is asked too, so
+dues paid in a cycle's last hour are paid for that cycle.
+| a line on Gratitude | nothing. Refused at the save, and a rule on Gratitude for quests or roles is reported and skipped |
+
+The refusal and the public rules feed state the rule ("Quests and roles are not paid in Gratitude", "no Gratitude for work") and never what the token does (Rye, 2026-10-22: "every community will design their own rules for these and other tokens so don't mention what it does anywhere"). Which token does which job is listed in one read model, `GET /api/admin/token-jobs` (`server/lib/tokenJobs.ts`), read from the places that decide each job.
+
+**The rule decides which tokens, never how much (Rye, 2026-10-22).** Somebody holding the
+power to value a quest or a role types what it pays; the village's enabled rules decide
+which tokens work may pay at all. Until 2026-10-22 each line was also clamped to that rule's
+ceiling, so a quest worth thousands in a currency pegged near one token each was held to
+250. A rule that reads its amount from the work (`amount` NULL) pays the work that names
+one, in full, and is quiet on work that names none. Until 0265 it could never pay anything,
+because the only amount a quest posted was its Gratitude range. The only upper bound left is
+what the platform records: `TOKEN_AMOUNT_MAX`, a billion of a token on one line.
+
+**The double-pay trap this closes.** A quest valued at 40 credits while the flat 25-credit
+rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a list
+replaces the flat amounts for that piece of work, so turning values on needs no flag day
+and no rule change: the flat rules go on paying the quests nobody has valued yet.
+
+**An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
+Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
+Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
+`payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
+recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
+sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle
+treasuries refuse it too.
+
+**A badge multiplies the token it names (0278, Rye, 2026-10-23: "the multiplier is attached to a
+token, so voice, credits, etc").** `badges.multipliers` maps a token to a factor from 1 to 3.
+`rewardMultipliersFor` (`server/lib/seasonPatterns.ts`) compounds every awake badge a member
+holds, per token, held at `MAX_REWARD_MULTIPLIER` (3), and skips self and hypha badges and any
+badge asleep for the season. It is applied where the member is PAID, never on a card: the
+consent (`OwedClaim.boost`), each seat at settlement (`runSettlement`'s `boostFor`) and an
+accepted proposal, all through `quoteWorkPay`'s `boost`. The old single `badges.multiplier`
+names no token and multiplies nothing.
+
+**A card NAMES the multiplier and never applies it (Rye, 2026-10-30: each quest and role shows
+its full pay, cash, tokens, Voice and badge, before you take it on).** `payBadgeBoosts` and
+`withPayBadges` (`server/lib/workPay.ts`) read the same badges `rewardMultipliersFor` pays from
+(awake, no example, never self or hypha) and list, on `WorkPay.badges`, each one that multiplies
+one of the work's own lines: "×2 Village Voice with the Builder badge". The line's amount stays
+the base figure, because who holds the badge is only known at payment. A Voice token's line
+carries `voice: true`, so the card can say what Voice is. The quest board and detail, the
+consent queue, role cards at the `terms.read` tier, the circle card page and the Stay page's
+"Earn your nights" list (`server/routes/stays.ts`, which now sends each quest's whole `pay`
+beside its stay credits) all carry it. None of this posts anything.
+
+### The cash work pays, and the record of it (0285)
+
+Rye, 2026-10-23: "roles and quests and more can be paid in cash, tokens (equity, credits,
+etc), and voice (governance) and most roles will carry all 3, few quests will pay cash, but
+some will." And: "The Game wouldn't pay cash, but it would say what they are owed and they
+can claim it when they're paid out so that the treasurer has a record to check when sending
+or giving cash payments."
+
+**The platform never moves money, and nothing here changes that.** Fiat flows in only. Cash
+has no token, no ledger account and no posting. What the platform keeps is a RECORD of what
+the village owes, in `cash_owed`, beside the ledger and never inside it, so conservation and
+every boot invariant are untouched by it.
+
+**Every contribution type states its cash.** `quests.cash_minor` and `org_roles.cash_minor`
+(with `cash_currency`, stamped with the village's currency at the save, for the reason 0265
+gives for `value_currency`) are set in the same editors as the value and the tokens, and read
+by `readWorkValueInput` like the value. Zero and blank both store nothing. A Work With Us
+proposal carries no value until it is accepted, so its cash is typed on accepting it (Admin,
+Submissions, "Accept with this cash"). Cards show the work's own cash beside its tokens
+(`WorkPay.cashPay`); a role's terms on offer may state cash too, and that line shows only
+where the role states none of its own, so the two never read as one sum. The pay path never
+reads terms (`shared/seatSettings.boundary.test.ts`): the cash it owes is the role's own.
+
+**Owed at the moment the work is paid in tokens, keyed so a retry writes nothing new:**
+
+| Work | When | Occurrence key |
+| --- | --- | --- |
+| a quest | at consent, on the consent's connection, inside the commit that flips the claim | the claim |
+| a role | each settled cycle (`runSettlement`), before the token rules are read, once the Game has started | the cycle, the seat, the member |
+| a proposal | when the acceptance's token payment goes through (`applyAcceptReward`) | the submission |
+
+A village with no `role.cycle` rule can still pay its roles in cash, which is why the role step
+runs before `runSettlement` can return early. It waits for the Game to start the way the ledger
+does, so a seat held while a village is still setting up owes nothing. A badge multiplier never
+touches cash: the ruling attaches a multiplier to a token.
+
+**Owed, claimed, paid.** A row moves one way. The member reads what they are owed on their
+profile and claims it when the village pays out (`POST /api/me/cash-owed/:id/claim`, their own
+row only). Whoever holds `cash.pay` reads the village's list (`GET /api/cash-owed/queue`) and
+marks a row paid with a note saying how (`POST /api/cash-owed/:id/paid`); the note is required,
+because a payment with no stated method is not a record anybody can check. A holder may mark an
+owed row paid before it is claimed, when the money went out first. Nobody marks their own cash
+paid, the witness rule `canConfirm` holds for consent. With nobody holding the key, the one gate
+falls through to admin. The member is told when it is marked paid, with the note.
+
+**Who holds `cash.pay`** (Rye, 2026-10-30: "yes and this one is then given to a finance role as
+well"). It is in the founding stewards' handover set, so a village that launches holds it in the
+founding seat and can hand it over like any other steward power. The seeded Treasury role grants it
+too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
+once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
+
+**An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
+row holds an account id and an amount, never a name, so an erased member reads as the tombstone
+everywhere else does.
+
+**Who the pool follows.** Before 2026-10-21 a member who finished many quests earned
+Gratitude for each, and so a share of the cycle pool. Now the pool follows peer thanks
+alone, and the same member is paid for each quest directly, in its own tokens. A member who
+does a great deal of work and is rarely thanked sees less from the pool and more from
+direct pay. Peer Gratitude is unaffected: it comes from each member's cycle allowance, never
+from a balance quests filled.
+
 ---
 
 ## 5. The gratitude cycle
+
+**Gratitude's only job is sharing out the cycle pool** (Rye, 2026-10-21). No quest and no
+role pays it: members give it to each other from their allowance, and the pool follows what
+each member received. Quests and roles are paid in the village's own tokens (section 4).
 
 Gratitude is recognition and is not meant to accumulate. Every member receives an
 allowance at the start of each lunar cycle to give away, and what they do not
@@ -481,6 +704,49 @@ chain: `export const BRIDGE_DISPATCH_BUILT = false;`. Nothing in this build
 dispatches a claim to Hypha. A claim is recorded, the voice is debited and held
 at the bridge, and something outside this repository has to confirm it.
 
+### Earned equity crosses the same bridge (0266)
+
+Rye, 2026-10-21: those doing roles and quests "can earn Amora, Village Credits,
+and more and then go to Hypha when they want to 'Claim their tokens'". The `equity`
+mirror cannot be minted here, so the equity a village pays is `earned-equity`, and a
+member claims it toward the mirror through **the same code a voice claim runs
+through**. `server/lib/voiceClaim.ts` is a set of claim LANES now, one per token,
+and there is no second claim module.
+
+| | Voice lane | Equity lane |
+|---|---|---|
+| Token that accrues | `village-voice` | `earned-equity` |
+| Mirror it is claimed toward | `voice` | `equity` |
+| Held against an open claim | `sys:voice-bridge` | `sys:equity-bridge` |
+| Where a confirmed claim lands | `sys:voice-settled` | `sys:equity-settled` |
+| Threshold dial | `economy.voice_claim_threshold` (100) | `economy.equity_claim_threshold` (1) |
+| Debit source and key | `voice_claim`, `voice-claim-debit:<village>:<claimId>` | `equity_claim`, `equity-claim-debit:<village>:<claimId>` |
+
+Everything else is shared and written once: the debit at request, the
+compare-and-set that lets only one of a racing cancel and confirm win, the refund
+by reversal, `retryRefund`, Claims Week, the Hypha space and the
+`BRIDGE_DISPATCH_BUILT` gate. **An equity claim is shut exactly as a voice claim
+is**: `requestClaim` answers 503 before anything is debited, so no member's equity
+can be stranded at a bridge that nothing will ever release.
+
+`voice_claims` carried a `token_slug` column from 0072, which is why one table is
+enough. Every read of it now filters on the token: before there were two lanes,
+"this member's open claim" and "what the bridge owes" never had to say which token
+they meant, and an open equity claim would have blocked a voice claim and shown up
+as voice the voice bridge owed. **One open claim per member per token.** A
+settlement reads its lane off the stored row, so the Hypha receiver and the
+member's cancel route settle an equity claim with no change, and a row naming a
+token no lane carries is refused before its state moves.
+
+Both seeded `earned-equity` rules ship switched OFF (section 4). A village decides
+what pays equity; the platform does not.
+
+The member wallet (`GET /api/me/wallet`, `server/lib/wallet.ts`) shows each lane's
+balance, the claim chip's sentence, when claims open, and what the mirror says the
+member holds on Base, read from the `onchain_balances` cache and never dialled.
+Gratitude appears there as giving left and thanks received, with no price and no
+claim. A token shows a money figure only when the exchange posted one.
+
 ### Voice that wanes (R3, R15)
 
 Voice does not keep. At the close of each cycle the settlement posts a
@@ -530,9 +796,15 @@ asks for `kind = 'member'`, which is what keeps `sys:voice-bridge` and
 change the amount arriving at the far end of a crossing that has already been
 quoted, and the refund path reverses the original debit, so it would then hand
 back a different number than was taken. A member with an open exit is exempt
-because their balances are already on the way to `sys:exit-settlement` and a
-notice period has been quoted to them. A member who is simply away wanes like
-anybody else, which is the whole mechanism.
+because their balances are being settled and a notice period has been quoted to
+them. A member who is simply away wanes like anybody else, which is the whole
+mechanism. **So does a former member** (section 14): the exemption reads an OPEN
+exit through `openExitFor`, and a resolved exit is not one, so Voice a leaver kept
+under the ruling of 2026-10-23 wanes each moon like any other holding. On 2026-10-30
+the founder approved the suggestion that it should, "keep it, the same rule as for
+everyone" ("yes build all the exit suggestions!"), and the platform's default exit
+terms now say so (`DEFAULT_EXIT_POLICY`, section 14),
+so a leaver reads it before they go.
 
 `SettlementResult` carries a field named `decay`, always present and filled with
 zeros when the step did not run, so a reader cannot mistake "the engine never
@@ -2139,7 +2411,9 @@ Satisfied answers counted as having met its target.
 as a word: five stay requests, ten reservations. Vote either cap down and the member was refused
 at the new number while being told the old one. Both refusals now take a single read of the dial
 and use it for the limit and for the sentence, in the shape the gratitude refusal has always
-used, down to the singular when a village votes a cap of one.
+used, down to the singular when a village votes a cap of one. A stay request still rings the
+admins with the member's name; the row now records the member as its actor, so the erasure
+finds it and rewrites it once they have gone. No price, cap or posting changed with that.
 
 **The exchange names the rung this village voted.** `progression.unlock.exchange.buy` is an
 open-ring dial whose default is the platform's own stage-unlock entry, and a village may move it
@@ -2157,6 +2431,12 @@ its own consent route would break at a multiple of the posted amount, and a vill
 unlimited mode advertised a ceiling it had voted away. The mode and its multiplier now come off
 the same rules read, each setting states its own sentence, and nothing is promised while the
 rules have not arrived.
+
+**Retired 2026-10-21, with the grant.** A consent no longer carries a Gratitude amount, so the
+three consent dials and the sentences above left together. The quest page now states what the
+quest pays from the same function the consent prices from (section 4, "What a quest and a role
+pay"), which closes this class of defect by construction: there is one answer, not two to keep in
+step.
 
 **One twin is deliberately left open.** The exchange buy route refuses with the same literal the
 wallet used to print, three lines under its capability check. It sits inside a ledger-capability
@@ -2451,7 +2731,14 @@ this class at all.
    is undecided is the valuation: `DEFAULT_EXIT_POLICY` still ships
    `placeholder: true`, `/exit-policy` still prints the caution card, and no dial
    answers what contributed value is honoured at. The code declines to decide that
-   and says so on the member's screen.
+   and says so on the member's screen. **What a leaver KEEPS is decided** (Rye,
+   2026-10-23: members keep their tokens, "a if b hasn't already happened"): a
+   leaver still holding value stays on as a former member, section 14. The five
+   questions that ruling raised (kept Voice on a roll frozen before the
+   departure, delegations a former member carries, their vouches, waning, and
+   whether the erasure door warns a holder) were answered on 2026-10-30, with a
+   sixth that makes unpaid cash owed count as value. Section 14 has each answer
+   and where it lives.
 
 ---
 
@@ -2461,6 +2748,10 @@ The gratitude cycle pays real value in whatever token `gratitude.pool_token`
 names, which defaults to `credits`. `server/lib/spending.ts` exists because that
 token had nowhere to go: the loop ended at "you received a number". It answers two
 questions and posts nothing at all. The callers post.
+
+The Paths & Stages editor (`server/routes/villagePaths.ts`, registered in `server/index.ts`) reads
+`gratitude.pool_token` only to say that token's name in a village's own path and stage words. It
+reads a name and moves nothing (2026-11-01).
 
 <!-- generated:sinks start -->
 A token may carry a price when it is platform-governed, active, not an example, and of kind `credit` (`isPriceableToken`, `server/lib/spending.ts`). Today that is:
@@ -2518,6 +2809,11 @@ call sites under one row. Whenever this paragraph and that table disagree again,
 the table is the PATHS and the paragraph should say which unit it means before it
 says a number.
 
+**0266 adds one PATH and no SITE.** Claiming earned equity is a nineteenth row,
+and it posts through the very `postTransfer` call in `requestClaim` that claiming
+Voice does, one call site serving both lanes. So the table below has nineteen rows
+over the same nineteen sites, and the rule above is why that is not a contradiction.
+
 **How to redo it, so the next lane gets the same answer.** `INSERT INTO
 token_ledger` appears at exactly two places in the tree, both inside
 `server/lib/ledger.ts`, so the posting set is closed by the call sites of the
@@ -2558,7 +2854,8 @@ Three notes on the method, each of which cost a lane a re-read:
 | Sending credits to another member | `POST /api/wallet/send` | `member_send` | `send:<userId>:<clientNonce>` | the other member, no sink at all |
 | Swapping one token for another | `executeSwap`, `server/lib/exchange.ts`, leg 1 of a pair | `exchange_swap` | `ord:<orderId>:leg1` | `sys:treasury` |
 | Voice that wanes at a cycle close | `decayVoice`, `server/lib/economy.ts` | `voice_decay` | `voice.decay:<village>:<cycleKey>:<userId>:<token>` | `sys:voice-decay` |
-| Claiming Voice toward Hypha | `requestVoiceClaim`, `server/lib/voiceClaim.ts` | `voice_claim` | `voice-claim-debit:<village>:<claimId>` | `sys:voice-bridge` |
+| Claiming Voice toward Hypha | `requestClaim` in the voice lane, `server/lib/voiceClaim.ts` | `voice_claim` | `voice-claim-debit:<village>:<claimId>` | `sys:voice-bridge` |
+| Claiming earned equity toward Hypha (0266) | `requestClaim` in the equity lane, `server/lib/voiceClaim.ts` | `equity_claim` | `equity-claim-debit:<village>:<claimId>` | `sys:equity-bridge` |
 | A departing member's balance | `sweepBalances`, `server/lib/exit.ts` | `exit_settlement` | `exit:<exitId>:sweep:<token>` | whatever `exit.remainder_account` names: `sys:exit-settlement`, `sys:treasury`, `sys:cycle-pool`, or the token's own faucet |
 | A departing member's Voice, converted | `sweepBalances`, leg 1 of a pair | `exit_settlement` | `exit:<exitId>:convert:<token>` | the same four, with credits paid back from `sys:treasury` on leg 2 |
 | An admin burning library credit | `POST /api/admin/library/adjust`, negative amount | `library_burn` | the adjustment's own id | `sys:library-sink` |
@@ -2627,6 +2924,19 @@ pay out what somebody paid in, which is what makes a refund provably funded. A
 cancelled seat is refunded from escrow (`event_seat_refund`), and only a gathering
 that actually happened moves the fee on to the treasury (`event_seat_kept`).
 
+**On a gathering that repeats, "happened" is read one evening at a time.** Each
+evening's fee is held under that evening's village-time date, the
+`<occurrenceKey>` in its key, and `settleFinishedSeats` keeps it only once THAT
+evening ended more than the grace ago, read through the calendar's own expansion
+(`occurrenceOf`, `server/lib/calendar.ts`) in the village's zone with any move the
+host made applied. The row's own `starts_at` and `ends_at` are only the series'
+first evening and decide nothing for the others. An evening the host called off or
+took out of the series never happened, so its fee stays in escrow, where giving the
+place back still refunds it. Until 2026-10-23 the settle read the row's own times,
+so a weekly gathering's fees for evenings still ahead went to the treasury a day
+after its first evening, and a member who then gave their place back was refunded
+nothing. `server/lib/eventSeats.recurring.test.ts` holds the per-evening rule.
+
 **`spendSinkFor` has exactly one POSTING user, and it is no longer the only
 caller.** It had one when this was written and the line number has moved twice
 since; measured again on `wt/econ-small` by grepping the whole tree, there are
@@ -2651,6 +2961,9 @@ is in practice routed by its own caller.
   pool pays a different token entirely.
 - **Attendance pays nothing.** `checkIn` mints no currency at all, deliberately:
   counting an RSVP as attendance hands a badge to anyone willing to tap a button.
+  It also refuses a departed member ("That member has left the village."), and the
+  erasure clears a steward's note on a departed member's check-ins while the
+  check-in itself stays as the record of who was there. Neither moves any value.
 - **Nothing is ever sold for fiat.** The exchange is buy-only; fiat flows in and
   tokens never flow out for money.
 
@@ -2786,15 +3099,16 @@ words:
    share is `exit.keep_pct.<kind>` for that token's kind, computed in minor units
    and floored; the remainder is the balance minus that share, and it posts to
    whichever of four accounts `exit.remainder_account` names. On the shipped
-   defaults every share is 0 and the account is `sys:exit-settlement`, so the
-   posting a default village sees is the whole balance to exit settlement, which
-   is what this step used to say happened always. Source `exit_settlement`,
+   defaults, since the founder's ruling of 2026-10-23, the credit, Voice and
+   equity shares are 100 and recognition's is 0, so the one posting a default
+   village sees is a recognition balance moving whole to `sys:exit-settlement`,
+   which is what every balance did before that day. Source `exit_settlement`,
    `sourceRef: <exitId>`, description `Balance settled at departure`, key
    `exit:<exitId>:sweep:<token>`. A remainder of zero posts nothing.
 6. **Voice gets a second decision, and one branch of it CREDITS the member.**
-   `exit.voice_on_exit` is `forfeit` (the share goes with everything else, the
-   default), `keep` (refused at save time, honoured here if a stored value
-   predates the guard) or `convert`, which posts a `postTransferPair`: the Voice
+   `exit.voice_on_exit` is `keep` (the share stays in the account, the default
+   since 2026-10-23), `forfeit` (the share goes with everything else, the
+   default before) or `convert`, which posts a `postTransferPair`: the Voice
    share out to the remainder account and credits IN to the member from
    `sys:treasury`, both legs or neither, under two distinct keys. The credits come
    from the treasury and never from a faucet, because a faucet leg is issuance and
@@ -2824,13 +3138,186 @@ forever. Re-running it moves nothing.
   content and not a person who can leave.
 - **Only an admin can sweep the balance**: `POST /api/admin/exits/:id/settle-balances`.
   A member cannot settle their own. The enumeration marks the `balances` domain
-  as NON-blocking with the description `Swept to exit settlement by an explicit
-  admin act`, which is the honest word for it.
+  as NON-blocking with the description `Settled by the village's exit shares in
+  an explicit admin act; while anything besides recognition is still held at
+  resolve, the account stays on as a former member`, which says what the two acts
+  do with it.
 - **Only an admin can resolve**, and resolve refuses while any blocking domain is
   outstanding: unsettled library loans, requested or active stays, pending or
-  disputed stay purchases, pending or disputed exchange orders, and any NEGATIVE
-  balance. Resolution anonymises the member and vacates their seats. Value rows
-  are never deleted, so conservation holds through every departure.
+  disputed stay purchases, pending or disputed exchange orders, open redemptions,
+  and any NEGATIVE balance. Then it asks one question, below: does the member
+  still hold anything of value? Either way their roles are vacated and the
+  stewards are told which. Value rows are never deleted, so conservation holds
+  through every departure.
+- **An admin can cancel** ("They're staying", `POST /api/admin/exits/:id/cancel`,
+  which calls `cancelExit` in `server/lib/exit.ts`): the exit closes without a
+  tombstone and moves no value. A balance an earlier settle already swept stays
+  where that sweep posted it; nothing in the cancel gives it back. If a resolve
+  on the tombstone path (below) had begun the erasure and stopped before the
+  account closed, the cancel ends
+  that erasure record first, so no later resume closes the account of a member
+  who stayed, and it names the steps the stopped sweep had already run (role
+  holdings, skill tags and the like), which it does not undo. Once the account
+  is closed the cancel is refused (round 2 of the erasure review, finding 1).
+- **A recurring payment informs and never blocks** (round 3, finding 5). The
+  enumeration's `subscriptions` domain (`subscriptionsState`) names each Stripe
+  subscription the member's purchases hold, and says the deletion cancels it in
+  Stripe and refunds nothing already paid. It cannot block, because no door lets
+  a member cancel one first. The erasure's `product-subscriptions-after-tombstone`
+  step does the cancelling and moves no token; with no Stripe key it asks the
+  admins to cancel each one by hand and finishes. A charge that lands after the
+  account is gone posts no `product_grant` from the treasury: `settleProductPurchase`
+  refuses a buyer who has left on every period, banks the money in `fiat_charges`
+  as it does for any refused renewal, and asks the admins to refund it. That
+  refusal also cancels the subscription (round 4), so a checkout paid after the
+  delete stops charging; with no key, or a failing Stripe, the cancel is owed
+  on `/review` until Finish, the hourly job or a person settles it. On the exit
+  path a member who holds tokens, or is owed cash, reads that resolving keeps them a former
+  member, and that resolving cancels the payments all the same (Rye, 2026-10-31, ruling 8:
+  the resolve's `subscriptions` step runs the erasure's cancel and its no-key hand-off).
+- **The exit desk shows the cash the village still owes them** as a
+  NON-blocking `cash` domain: the `cash_owed` rows (0285) in state `owed` or
+  `claimed`, totalled per currency, with the sentence `is owed <amount> in cash
+  the village has not paid yet. Unpaid cash keeps the account at resolve, so they
+  stay on as a former member and can still sign in to see it marked paid`. The
+  platform moves no money, so a debt the village owes a leaver never holds the
+  leaver.
+
+### A former member, or a tombstone (the ruling of 2026-10-23)
+
+Rye, verbatim: "As a general rule members keep their tokens." Asked whether a
+leaver should (a) stay on as a former member, account and balances kept, so they
+can come back or claim later, or (b) have the account erased after first moving
+their voice and equity across to Hypha, he answered: **"a if b hasn't already
+happened."**
+
+`resolveExit` in `server/lib/exitResolve.ts` is that sentence. Once the blocking
+domains are clean it reads the member's own account (`heldValueOf`) and the cash
+the village still owes them (`unpaidCashOf`, `server/lib/formerMember.ts`):
+
+- **Something of value is still there**: a POSITIVE balance in a
+  platform-governed token whose kind is not `recognition`, or, since 2026-10-30,
+  a `cash_owed` row in state `owed` or `claimed`. The member stays on as
+  a **former member**. The account, the sign-in, the sessions and every balance
+  stay exactly where they are. Membership ends (`membershipGranted` and
+  `stageGranted` both clear, because either one admits somebody, see
+  `isAdmitted` in `server/lib/admission.ts`), the account tier goes back to
+  `member`, and their roles go by the calls the erasure makes: alignment texts
+  marked `party_left`, permission holdings ended (`endPermissionHoldings`), org
+  seatings released (`releaseSeatingsForUser`), unseated seat applications
+  withdrawn, and every delegation they gave or carried ended (`endDelegationsOf`).
+  The exit is marked resolved with a dated line,
+  `kept as a former member: still holds <amount> <token>, ...; is owed <amount>
+  <currency> in cash`, in human units, each half present only when it applies,
+  and the response says `outcome: "former"` and lists what is `held` and `owed`.
+- **Nothing of value is left**, because they carried it across to Hypha, never
+  held any, and are owed no unpaid cash: the anonymize tombstone runs exactly as
+  it always has, and the response says `outcome: "erased"`. Cash already marked
+  `paid` keeps nothing.
+
+Recognition never keeps an account alive. It is a record of thanks and it is what
+shares the cycle pool, so `exit.keep_pct.recognition` stays at 0 with its
+refusal, and the sweep settles it at the shipped dials.
+
+**What a former member can still do, measured through the routes**
+(`server/exitLevers.routes.e2e.test.ts`): sign in, with the old session or a new
+one; read their wallet, every balance intact; and reach the claim door, which
+asks for a session and nothing about membership. In this build that door answers
+every account with a 503 before anything is debited, because the connection to
+Hypha is not built (`BRIDGE_DISPATCH_BUILT` in `server/lib/voiceClaim.ts`), so a
+former member meets the same answer as everybody else. An admin can admit them
+again through any door that admits anybody: a stage grant at Member, an accepted
+membership signing, or the vouch count being met.
+
+**What a former member is, structurally.** `isFormerMember` in
+`server/lib/formerMember.ts`, asked at the moment it matters: the account has a
+RESOLVED exit (`exits.status`), is not a tombstone, and is not admitted now
+(`isAdmitted`). Never the resolution note's text, which is display copy. The last
+fact is why coming back costs nothing extra: admitted again, they read as a member
+everywhere at once, with no flag to clear.
+
+**What the founder decided on 2026-10-30**, when the questions the first ruling
+raised were put to him with suggestions ("yes build all the exit suggestions!"),
+and where each answer lives. `server/exitLevers.routes.e2e.test.ts` drives all of
+them through the built server.
+
+- **Votes already open.** A vote they cast before leaving stands. After they
+  leave they cast no new one, on any ballot: `castVote` (`server/lib/ballots.ts`)
+  refuses with `LEFT_THE_VILLAGE_VOTE`, read by the vote route through
+  `leftTheVillage`, and `fileObjection` refuses an objection filed directly the
+  same way, because on a consent ballot that is a no. A roll frozen before the
+  departure is never rewritten, so they still count on it and the quorum does not
+  shift mid-vote.
+- **Voting power.** A former member is on no new ballot's roll, whatever badges
+  they hold or whatever rung a village lowered `ballot.vote` to:
+  `buildElectorate` runs `withoutFormerMembers` before it asks the gate. Their
+  Voice stays theirs, and counts again on the next roll once they are admitted
+  again. Giving or accepting a delegation is refused to them for the same reason
+  (`server/routes/delegation.ts`).
+- **Delegations and vouches.** `keepAsFormerMember` calls `endDelegationsOf`, the
+  erasure's own call, notices included: each member who handed them a voice is
+  told (`DELEGATE_LEFT_NOTICE`, one stable key per delegator) and decides their own
+  votes again, and a vote copied from them onto an open ballot is no longer cast.
+  A vouch that already admitted somebody stands. A vouch they gave somebody still
+  waiting stops counting, because a vouch is a member's ongoing promise:
+  `livingVouchesFor` (`server/repos/vouches.ts`) leaves it out of the count, and
+  the row is never deleted, so it counts again if they come back.
+- **Waning.** Kept Voice wanes like everyone's (section 6), and the default exit
+  terms say so (below).
+- **Deleting your own account.** The delete screen reads
+  `GET /api/me/holdings` (`server/routes/ownHoldings.ts`, the same `heldValueOf`
+  and `unpaidCashOf` resolve reads) when it opens, lists what the member holds,
+  says none of it can be recovered, and offers "Leave the village instead", which
+  opens the departure process on `/exit-policy`. `DELETE /api/admin/players/:id`
+  and `POST /api/profile/delete-account` themselves are unchanged: an erasure a
+  member asks for is their right (Costa Rica Law 8968), so the door is never
+  closed. A member who erases their account while holding tokens still loses
+  access to all of it: the balances stay on the tombstone's ledger account, so
+  conservation holds, and nobody can sign in to spend or claim them.
+- **Cash owed keeps the account.** Unpaid `cash_owed` counts as value at resolve
+  (above), so somebody owed cash and holding no tokens stays on, signs in, and
+  reads it marked paid. The exit desk shows it as the non-blocking `cash` line.
+
+**One gap this leaves, named.** A member resolved as a former member BEFORE
+2026-10-30 kept their delegations, because the former-member path did not end them
+then. Nothing ends those retroactively: they stand until either side revokes them,
+and a delegate who left casts nothing new, so the delegator's vote goes uncast on
+any ballot until they act.
+
+**Nothing new reaches a tombstone.** Its row keeps an address,
+`deleted-<id>@anonymized.invalid`, and the doors that pay a recipient a member
+names used to refuse only the standing examples, so that address, the tombstone's
+id or a heart on a departed member's old post issued Gratitude from the faucet,
+or moved credits, into an account nobody holds. `departedRecipient` in
+`server/lib/gratitude.ts` now refuses it on all three: `sendGratitude` (the wall
+and forum hearts), the Hearts give (`POST /api/gratitude`) and member sends
+(`POST /api/wallet/send`), with 404 and "That member has left the village, so
+nothing can be sent to them." before anything is written, so no allowance is
+spent and no ledger leg posts. A former member keeps their address and is not a
+tombstone, so they can still be paid.
+
+**The admin hand-mint refuses a tombstone too.** `POST /api/admin/tokens/:slug/mint`
+used to refuse only a missing recipient, so a steward could issue any platform
+token from `sys:mint` into a tombstone's account, or a standing example's. It now
+asks `mintRecipientRefusal` in `server/lib/gratitude.ts` before anything is
+recorded or moved: a tombstone gets 404 and the same sentence as the send doors,
+and a standing example gets 409 and the example refusal every admin door gives,
+under the co-sign line and over it, so no grant waits for a second steward in a
+departed member's name. The co-signed approval
+(`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
+steward signs, so a grant asked for while a member was here mints nothing once
+they have left; it stays pending, and a steward can decline it. A former member
+can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
+`server/needsTombstone.routes.e2e.test.ts`.
+
+**A donation waiting on its second sign-off.** `approveIntake` in
+`server/lib/library.ts` awards a former member as normal: the account was kept,
+so the credits go to it. A donor whose account was erased while the item waited
+is awarded nothing, since no credit goes into an account nobody holds, and the
+item still joins the library. The figure is not dropped (Rye, 2026-10-31:
+"still a debt owed"): the item's `intake_approved` event records the credits
+left unpaid, for a steward settling it by hand. Pinned by
+`server/lib/departedPayments.test.ts`.
 
 ### What the village owes
 
@@ -2841,8 +3328,23 @@ the gap for a founder to fall into.**
 `placeholder: true`, and its `valuationMethod` reads, verbatim:
 
 > To be decided by the community: how contributed value is honored when someone
-> leaves. Until then, settled balances are held in exit settlement and recorded
-> on the exit.
+> leaves. Until then, a member who leaves keeps their tokens and their account,
+> and stays on as a former member. Recognition stays on the village's books.
+> Voice a former member keeps wanes under the same rule as everyone's. The exit
+> records what they still hold.
+
+and its fifth voluntary step reads "Anyone still holding tokens, or still owed
+cash, stays on as a former member, with their account and balances".
+
+It said "settled balances are held in exit settlement" until 2026-10-23, and the
+voluntary steps ended "The account becomes a tombstone". From 2026-10-23 to
+2026-10-30 it said nothing of waning, and the fifth step named tokens alone. Every
+one of those wordings is kept in `RETIRED_DEFAULT_TERMS`, for a reason worth
+knowing: a stored policy document is never merged with the defaults, so a village
+that saved its draft before either day still holds the old words.
+`platformDefaultTerms` treats them as the platform's, so the draft banner still
+cannot be cleared over them, and `withPolicyDefaults` reads today's wording in
+their place while the banner stands.
 
 `/exit-policy` prints a caution card above the terms while that flag stands. The
 flag is not a checkbox an admin can simply clear: `platformDefaultTerms` compares
@@ -2863,14 +3365,18 @@ does is decide what any of those numbers should be.
 
 The honest statement, split the way the thing itself is split:
 
-- **On the shipped defaults nothing has changed and that is measured.** Every
-  keep share is 0, the remainder account is `sys:exit-settlement`, cooling is 0,
-  Voice is forfeit, there is no vote and no sellback. A departing member's
-  positive balances move to `sys:exit-settlement` and stay there.
-  `sys:exit-settlement` is not a faucet, so what it holds is real and traceable.
+- **On the shipped defaults a leaver keeps what they hold, and that is
+  measured.** Since the founder's ruling of 2026-10-23 the credit, Voice and
+  equity shares are 100, Voice is kept, recognition's share is 0, the remainder
+  account is `sys:exit-settlement`, cooling is 0, and there is no vote and no
+  sellback. A departing member's recognition moves to `sys:exit-settlement`, which
+  is not a faucet, so what it holds is real and traceable; everything else stays
+  in their account and resolve keeps them as a former member.
   `server/lib/exitDefaults.test.ts` runs a whole departure against a schema with
-  no `exit.%` row and compares every field of every `token_ledger` row to what
-  `origin/main`'s `sweepBalances` writes; the two dumps are identical.
+  no `exit.%` row and pins every field of the one row it posts, and
+  `server/exitLevers.routes.e2e.test.ts` drives both resolve outcomes. Before that
+  day every share was 0 and every positive balance moved; a village that stored
+  its own values keeps them.
 - **On a village that has voted the dials, the settlement genuinely pays.** The
   line-by-line above is the whole of it, and the split that ACTUALLY applied is
   captured on `exits.resolution` at the moment it applies, because the amount
@@ -2890,28 +3396,33 @@ what happens to Voice specifically (`exit.voice_on_exit` and
 `exit.voice_convert_rate`), the value above which a departure would need the
 village to agree (`exit.vote_over`), and whether a leaver may sell kept credits
 back (`exit.sellback_enabled`). Every one of them is Ring 2 by derivation, so a
-village governs its own exit terms, and every default reproduces the paragraph
-above exactly: shares at 0, remainder to `sys:exit-settlement`, cooling at 0,
-Voice forfeit, no vote, no sellback.
+village governs its own exit terms. The defaults are the founder's ruling of
+2026-10-23: credit, Voice and equity shares at 100, recognition at 0, remainder
+to `sys:exit-settlement`, cooling at 0, Voice kept, no vote, no sellback.
 
-**On the defaults, nothing changed, and that is measured.**
+**On the defaults, a leaver keeps what they hold, and that is measured.**
 `server/lib/exitDefaults.test.ts` runs a whole departure against a schema
-holding no `exit.%` row at all and compares every field of every `token_ledger`
-row to the rows `origin/main`'s `sweepBalances` writes. The two dumps are
-identical. A village that never opens this panel keeps the departure it already
-had.
+holding no `exit.%` row at all: the credit, Voice and equity balances stay to
+the last unit, and the one row posted is recognition's, field for field the row
+every balance was swept in before the ruling. A village that never opens this
+panel inherits the ruling; one that stored its own values keeps them.
 
 The save-time guard. `exitLeverProblem` in `server/lib/exitPolicy.ts` refuses
-six combinations no engine could honour: a share of recognition, a share of
-equity, burning back to a faucet that does not exist for a token this village
-issues, converting Voice at a rate of zero, keeping Voice while resolve turns
-the account into a tombstone, and a cooling period longer than the notice the
-published policy prints. Each refusal is one sentence naming what is wrong and
-what to do instead, and the cooling one names both numbers. A seventh
-combination is a WARNING and never a refusal: a full credit keep with no vote,
-on a token somebody can buy today, is a withdrawal window wearing an exit, and a
-village may genuinely mean that, so the save goes through and the test run is
-where it is said out loud.
+five combinations no engine could honour: a share of recognition, burning back
+to a faucet that does not exist for a token this village issues, converting
+Voice at a rate of zero, converting a Voice share of zero, and a cooling period
+longer than the notice the published policy prints. Each refusal is one sentence
+naming what is wrong and what to do instead, and the cooling one names both
+numbers. Two more were refused until 2026-10-23 and were lifted by the ruling: a
+share of equity (written when the only equity token was the Hypha mirror, which
+this ledger never moves; Earned Equity is a platform token) and keeping Voice
+(refused while resolve always made the account a tombstone, and its own refusal
+named the condition that would lift it, a departure recorded without one). A
+further combination is a WARNING and never a refusal: a full credit keep with no
+vote, on a token somebody can buy today, is a withdrawal window wearing an exit,
+and a village may genuinely mean that, so the save goes through and the test run
+is where it is said out loud. A full credit keep with no vote is the shipped
+default now, so every village that lists a credit token meets that warning.
 
 **The guard now runs where every writer passes.** It used to sit in the admin
 variables route alone, while `applyMechanicsProposal` writes through
@@ -2938,9 +3449,10 @@ they held, at every scale, and a rounding remainder can never exceed the
 balance. The remainder posts to whichever of the four accounts
 `exit.remainder_account` names: `sys:exit-settlement`, `sys:treasury`,
 `sys:cycle-pool`, or `faucetFor(slug)` to burn, which refuses by name for a
-token that has no faucet. `exit.voice_on_exit` decides Voice: `forfeit` sends
-the whole holding with everything else, which is what a departure did before;
-`keep` is refused at save time; `convert` posts a `postTransferPair`, the Voice
+token that has no faucet. `exit.voice_on_exit` decides Voice: `keep`, the
+default since 2026-10-23, leaves the share in the account; `forfeit` sends the
+whole holding with everything else, which is what a departure did before;
+`convert` posts a `postTransferPair`, the Voice
 out to the remainder account and credits in FROM THE TREASURY, both legs or
 neither, under two distinct keys. The credits come from the treasury and never
 from a faucet, because a faucet leg is issuance and each faucet's negative
@@ -2968,6 +3480,13 @@ reads the split of record back out. The sweep response carries it, so a panel
 reading the live dial after a settled sweep would be printing a number that did
 not happen. A second settle also never sweeps back what the same exit PAID the
 member, which is how a converted Voice share stays converted.
+
+**The erasure keeps every one of those lines.** When a member who opened their
+own departure is erased, the note they typed at the top of `exits.resolution`
+is replaced by one constant line, and every dated line the settle route wrote
+stays exactly as it was, so `capturedSplit` reads the same split of record
+afterwards (`forgetOwnExitNotes`). A note a steward wrote on a departure the
+steward opened is the village's record and is left alone.
 
 Negative balances are still never swept and still block resolve. No policy
 touches that.
@@ -3017,7 +3536,7 @@ and both learned it the same way.
 | Who decides the amount | the village's dials, applied to whatever is there | the member, in the request |
 | What the member gets | nothing is decided. `DEFAULT_EXIT_POLICY` ships `placeholder: true` and the code declines to say | a named thing, off platform, agreed before confirmation |
 | Consent | can be INVOLUNTARY: `POST /api/admin/exits` opens one for somebody else | always the member's own act |
-| Afterwards | resolution anonymises the member and vacates their seats. Terminal for the person | the member stays, and will do it again next moon |
+| Afterwards | resolution anonymises the member and vacates their roles. Terminal for the person | the member stays, and will do it again next moon |
 | A refused posting | the sweep collects the error and CONTINUES, because one bad token must not strand the rest | stops everything and rolls the state claim back. There is one posting and it is the whole act |
 
 **That last row alone forbids shared code.** `sweepBalances`' error discipline is
@@ -3084,39 +3603,40 @@ person is `shareCapFor(100) = max(1, floor(100 x 25 / 100)) = 25`.
 
 ### 15.2 Ash confirms Wren's quest
 
-One human act, **three** ledger rows, from three different faucets. `canConfirm`
-refuses first if Ash and Wren are the same person.
+One human act. `canConfirm` refuses first if Ash and Wren are the same person. A
+consent is a yes (Rye, 2026-10-21): Ash types no amount, and no Gratitude moves.
+What the quest pays is decided by `quoteWorkPay` before Ash presses, and the claims
+read (`GET /api/admin/quest-claims`) shows Ash the same `pay` the quest's card shows.
 
-Ash's amount is checked where Ash types it, before the route sees it. Each claim in
-the steward's claims read (`GET /api/admin/quest-claims`) carries its `bounds`, which
-`consentBounds` states from the same dials `checkConsentAmount` enforces, so the
-consent queue opens on the quest's floor where it has one and will not send an
-amount the route would refuse. That read moves no value, and nothing in this table
-changes with it.
+**The well quest has no list of its own**, so the seeded rules pay it, **two** ledger
+rows from two faucets:
 
 | # | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|---|
-| 1 | the consent route | `sys:gratitude-pool` | `mem:<wren>` | `gratitude` | the consented amount, lifted by any standing badge multiplier (1 by default) and never past a top: the range's top under `posted`, the bonus ceiling under `capped`, the advertised top under `unlimited` | `quest_consent` | `quest_consent:<claimId>` |
-| 2 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
-| 3 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+| 1 | `settleOwedPosting` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **1000** (10) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:village-voice` |
+| 2 | `settleOwedPosting` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `quest_consent` | `quest.completed:local:q-well:<claimId>:<wren>:credits` |
+
+**Had a steward valued it** at 25,000 colones with a list of 40 credits, it would post
+**one** row, `credits` **4000** (40) under the same key shape, and no Village Voice: a
+list replaces the flat amounts for that piece of work. Had the list named 500 Village
+Voice, it would post the rule's ceiling of 100 and the card would have said so.
 
 Five things this table is showing:
 
-- **Row 1 is not a mint rule.** The consent route has posted recognition since S7
-  from the range the quest advertises. The pricing behind `owedForClaim` explicitly skips
-  the gratitude slug (`if (r.tokenSlug === HEARTS) continue`) so one piece of work
-  cannot pay twice. There is deliberately no seeded `quest.completed` gratitude
-  rule: a disabled one would look like the obvious thing to switch on.
-- **Rows 2 and 3 end in the token slug.** `keys.questCompleted` builds that segment,
+- **There is no Gratitude row.** Until 2026-10-21 the consent route posted recognition
+  from the range the quest advertised, keyed `quest_consent:<claimId>`, inside the
+  claim's commit. A quest pays the village's own tokens now, and Gratitude only shares
+  out the cycle pool. `quest_claims.amount` is written NULL. Older claims keep the
+  figure their witness granted, and their `quest_consent` rows stand.
+- **Rows 1 and 2 end in the token slug.** `keys.questCompleted` builds that segment,
   escaped like the rest of the key. Without it the second rule would collide with
   the first, read as a duplicate, and Wren would be quietly paid in one token
   instead of two.
 - **10 becomes 1000 and 25 becomes 2500.** `toLedgerUnits` reads the token's own
   `decimals`, which is 2 for both Village Voice and credits since `0202`.
-- **Row 1 posts in the consent's commit, and rows 2 and 3 are recorded there.**
-  Recognition posts inside `consentOnce`'s transaction, as it always has. Rows 2
-  and 3, and any stay-credit reward the quest carries, are priced by `owedForClaim`
-  on the same connection and written to `quest_owed_postings` (0210) before that
+- **Both rows are recorded in the consent's commit and posted after it.** They, and
+  any stay-credit reward the quest carries, are priced by `owedForClaim` on the
+  consent's own connection and written to `quest_owed_postings` (0210) before that
   commit. `settleOwedPosting` pays each one straight after it, in a transaction
   that marks the row posted in the same commit. A payment that does not go through
   stays owed, with the ledger's reason, and a steward pays it from /review
@@ -3130,12 +3650,10 @@ Five things this table is showing:
   beside it does, so two members who share a first name cannot be confused at the
   moment a steward pays one of them. That is the read only: no posting, key,
   amount or order above changes with it.
-- **A consent at 0 posts none of the three.** A zero is the witness saying the work
-  earned no recognition, so row 1 posts nothing, and `owedForClaim` prices no rule
-  for a grant of 0 either (economics and governance, 2026-09-14): a village can weight its ballots by
-  any token (`governance.weight_token`), so a rule token minted at 0 would be voting
-  weight farmed through `quest.allow_zero_consent`. A stay-credit reward the quest
-  itself carries is still owed and paid, keyed `queststay:<claimId>`.
+- **Before the launch vote carries, a consent that would pay is refused** and the
+  claim stays submitted, where a consent after launch finds it and pays it in full.
+  A quest that pays nothing can be witnessed at any time. A stay-credit reward the
+  quest carries is owed and paid, keyed `queststay:<claimId>`.
 
 Nothing in this table changes when the audit trail does. The row a founder's own
 consent leaves (`quest:self-consent:solo-founder:<claim>`) is written after the
@@ -3144,8 +3662,8 @@ uses of that window and not attempts at it. No faucet, key, amount or order
 above moves with it, and a founder who declines their own claim now leaves no
 row at all, which is what declining always meant.
 
-Wren's balances after: 25 credits, 10 voice, and whatever recognition the
-quest advertised.
+Wren's balances after: 25 credits and 10 voice. Wren's Gratitude is what members
+gave Wren, and nothing else.
 
 ### 15.3 Wren thanks Ash, 5 gratitude
 
@@ -3197,8 +3715,9 @@ cycle `lunar-000330`.
 | `runSettlement` | `sys:voice-mint` | `mem:<wren>` | `village-voice` | **5000** (50) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:village-voice` |
 | `runSettlement` | `sys:cycle-pool` | `mem:<wren>` | `credits` | **2500** (25) | `role_cycle` | `role.cycle:local:lunar-000330:seat-hearth:<wren>:credits` |
 
-The seeded `role.cycle` gratitude rule of 20 is `enabled: false`, so it writes
-nothing. Two seats would be two thanks, and the same seat next moon is another,
+Wren's role, the hearth, names 50 Voice and 25 Credits in its own list: since 2026-11-01 a seat
+is paid its role's own list and never a flat amount ("What a quest and a role pay"). The seeded `role.cycle`
+gratitude rule of 20 is `enabled: false`, so it writes nothing. Two seats would be two thanks, and the same seat next moon is another,
 because the key carries the cycle, the seat and the holder.
 
 A re-run is a no-op and a resumed partial run finishes, both for the same reason:
@@ -3231,7 +3750,9 @@ decided rather than re-splitting a pool that is already partly out the door.
 | 2a | the gathering is held | `sys:event-escrow` | `sys:treasury` | `credits` | **10** (10) | `event_seat_kept` | `seat:<eventId>:-:<wren>:1:keep` |
 | 2b | or it is cancelled | `sys:event-escrow` | `mem:<wren>` | `credits` | **10** (10) | `event_seat_refund` | `seat:<eventId>:-:<wren>:1:refund` |
 
-`<occurrenceKey>` is `-` for a gathering that does not repeat, and `chargeSeq`
+`<occurrenceKey>` is `-` for a gathering that does not repeat, and the evening's
+village-time date for one that does, whose row 2a waits for that evening and not
+for the series' first (section 12). `chargeSeq`
 starts at 1 so a member who leaves and retakes a seat gets a distinct key rather
 than a silent duplicate.
 
@@ -3247,33 +3768,39 @@ which that is legal.
 
 An admin opens the exit, and Wren's open state is enumerated. Suppose it is clean.
 The admin presses settle-balances. **This example is on PLATFORM DEFAULTS, which
-for exit means every keep share at 0, the remainder to `sys:exit-settlement`,
-cooling at 0 and Voice forfeit**, so `sweepBalances` writes one row per positive
-balance. A village that has voted the levers of R4 gets a different set of rows,
-and section 14 walks that case:
+for exit means, since the founder's ruling of 2026-10-23, the credit, Voice and
+equity shares at 100, recognition at 0, the remainder to `sys:exit-settlement`,
+cooling at 0 and Voice kept**, so `sweepBalances` writes one row, for the
+recognition Wren holds. A village that has voted the levers of R4 gets a
+different set of rows, and section 14 walks that case:
 
 | Posted by | From | To | Token | Amount | Source | Idempotency key |
 |---|---|---|---|---|---|---|
-| `sweepBalances` | `mem:<wren>` | `sys:exit-settlement` | `credits` | **290** (290) | `exit_settlement` | `exit:<exitId>:sweep:credits` |
-| `sweepBalances` | `mem:<wren>` | `sys:exit-settlement` | `village-voice` | **60000** (60) | `exit_settlement` | `exit:<exitId>:sweep:village-voice` |
 | `sweepBalances` | `mem:<wren>` | `sys:exit-settlement` | `gratitude` | whatever recognition they hold | `exit_settlement` | `exit:<exitId>:sweep:gratitude` |
 
-Then resolve anonymises the account and vacates the seat. Wren's contributions
-stay part of the village record; every ledger row stays exactly where it is, and
-conservation holds.
+Wren's 290 credits and 60 voice stay where they are. Then resolve finds them
+there, so Wren stays on as a **former member**: the account and both balances
+stay, membership ends, the role is vacated, and the exit records
+`kept as a former member: still holds 290 credits, 60 village-voice`. Every
+ledger row stays exactly where it is, and conservation holds.
 
-**And then nothing, ON THESE DEFAULTS.** `sys:exit-settlement` now holds 290
-credits and 60 voice that belong to nobody, and no code path in this build will
-move them again: nothing reads `sys:exit-settlement` to pay anybody out of it.
-That is the whole of what a DEFAULT village gives a departing member: a number in
-an account, and a written promise that the community will decide.
+**What Wren can do afterwards, ON THESE DEFAULTS.** Sign in and see both
+balances; carry the Voice across to Hypha through the same claim door as anybody,
+once the bridge is built; and come back, the day an admin admits them again.
+What a member-only power would let them do with the credits meanwhile is decided
+by the one gate, and Wren no longer holds membership. Had Wren carried everything across to Hypha before leaving,
+resolve would have found nothing of value and erased the account as it always
+did.
 
-The levers change where the value goes and never who decides what it is worth.
-Had Amora voted `exit.keep_pct.credit` to 40, Wren would have kept 116 credits
-and 174 would have moved; had it voted `exit.voice_on_exit` to `convert`, the
-Voice would have left and credits would have come back from `sys:treasury` at
-`exit.voice_convert_rate`. Neither of those is the village answering what
-contributed value is honoured at, which is still item 4 in section 11.
+Before the ruling, these defaults moved all three balances to
+`sys:exit-settlement`, where they belonged to nobody, and resolve anonymised the
+account. The levers still change where the value goes and never who decides what
+it is worth. Had Amora voted `exit.keep_pct.credit` to 40, Wren would have kept
+116 credits and 174 would have moved; had it voted `exit.voice_on_exit` to
+`convert`, the Voice would have left and credits would have come back from
+`sys:treasury` at `exit.voice_convert_rate`. Neither of those is the village
+answering what contributed value is honoured at, which is still item 4 in
+section 11.
 
 ---
 
@@ -3396,7 +3923,10 @@ split silently stands. That is correct, and it is invisible unless the policy
 that actually applied is written down at the moment it applies. So the split is
 captured on `exits.resolution` and every reader prints the captured one. On the
 shipped defaults nothing about a departure changed on the day the levers
-landed, which is pinned against `origin/main`'s own postings.
+landed, which was pinned against `origin/main`'s own postings. The defaults
+then moved on 2026-10-23, by the founder's ruling that members keep their
+tokens: the credit, Voice and equity shares are 100, Voice is kept, and resolve
+keeps a leaver who still holds value as a former member (section 14).
 
 **R5, the redemption half.** Redemption ships for credit-kind tokens only, and it
 does NOT answer R5. `redeemableToken` is `isPriceableToken` minus

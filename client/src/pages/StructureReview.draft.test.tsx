@@ -138,11 +138,11 @@ describe("the structure review after the accept", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Your draft" })).toBeTruthy();
     expect(screen.getByTestId("draft-state").textContent).toBe("Nothing is live yet. 6 changes, none blocked.");
     expect(screen.getByTestId("draft-count-New circles").textContent).toBe("2");
-    expect(screen.getByTestId("draft-count-New seats").textContent).toBe("3");
-    expect(screen.getByTestId("draft-count-Moved seats").textContent).toBe("1");
+    expect(screen.getByTestId("draft-count-New roles").textContent).toBe("3");
+    expect(screen.getByTestId("draft-count-Moved roles").textContent).toBe("1");
     // The read-only list carries the draft's seats, and the moved one says its holder stays.
     expect(screen.getAllByText("Ventures Operations Steward").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Our existing seat moves here from General Circle\. 1 person keeps it\./)).toBeTruthy();
+    expect(screen.getByText(/Our existing role moves here from General Circle\. 1 person keeps it\./)).toBeTruthy();
     // No checkbox and no choice: it is read only.
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     // What stayed behind is named, with the way to the list.
@@ -168,17 +168,34 @@ describe("the structure review after the accept", () => {
     answer = { ...answer, mayPublish: false };
     await open();
     expect(screen.queryByRole("button", { name: "Publish to the live chart" })).toBeNull();
-    expect(screen.getByTestId("who-publishes").textContent).toContain("an admin of this village does it");
+    expect(screen.getByTestId("who-publishes").textContent).toContain("whoever holds the power to change the village's structure does it");
     // Withdrawing is the steward's own, so it stays.
     expect(screen.getByRole("button", { name: "Withdraw the draft" })).toBeEnabled();
+  });
+
+  it("publishes through the holder's door when the read names it, and says what that door refused", async () => {
+    answer = { ...answer, publishDoor: "power", mayModerate: true };
+    onPost = () => ({ ok: false, status: 403, body: { error: "not_a_holder", message: "Publishing a change to the structure straight onto the chart is for whoever holds the power." } });
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Publish to the live chart" }));
+    fireEvent.click(within(screen.getByTestId("publish-confirm")).getByRole("button", { name: "Yes, publish it now" }));
+    await screen.findByText("Publishing a change to the structure straight onto the chart is for whoever holds the power.");
+    expect(posts.map((p) => p.url)).toEqual(["/api/org/drafts/draft-1/publish-by-power"]);
+  });
+
+  it("offers a holder who does not keep the review queue the publish, and no withdraw", async () => {
+    answer = { ...answer, plan: null, waiting: 0, publishDoor: "power", mayModerate: false };
+    await open();
+    expect(screen.getByRole("button", { name: "Publish to the live chart" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Withdraw the draft" })).toBeNull();
   });
 
   it("publishes only through a confirm that names what goes live, then says it is live", async () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Publish to the live chart" }));
     const confirm = screen.getByTestId("publish-confirm");
-    expect(confirm.textContent).toContain("This puts 2 new circles, 3 new seats and 1 moved seat on the live chart at once");
-    expect(confirm.textContent).toContain("People keep their seats");
+    expect(confirm.textContent).toContain("This puts 2 new circles, 3 new roles and 1 moved role on the live chart at once");
+    expect(confirm.textContent).toContain("People keep their roles");
     expect(posts).toHaveLength(0);
 
     fireEvent.click(within(confirm).getByRole("button", { name: "Not yet" }));
@@ -193,7 +210,7 @@ describe("the structure review after the accept", () => {
     expect(posts.map((p) => p.url)).toEqual(["/api/admin/org/drafts/draft-1/publish"]);
     expect(screen.getByTestId("notice").textContent).toContain("Published");
     expect(screen.getByRole("link", { name: "See the living map" }).getAttribute("href")).toBe("/map");
-    expect(screen.getByRole("link", { name: "See every seat" }).getAttribute("href")).toBe("/roles");
+    expect(screen.getByRole("link", { name: "See every role" }).getAttribute("href")).toBe("/roles");
     expect(screen.getByTestId("step-3").getAttribute("data-state")).toBe("done");
     expect(within(screen.getByTestId("step-3")).getByText("Live now")).toBeTruthy();
   });
@@ -284,5 +301,90 @@ describe("what stayed behind", () => {
     expect(stayedBehind(mixed, 5, "The source")).toBe(
       "5 proposals from The source stay in the queue: 3 archived in The source, 1 note that changes no structure, 1 still waiting for a decision.",
     );
+  });
+});
+
+describe("the role's words, before and after (0268)", () => {
+  it("lists Bring me, Not mine to hold and the runbook beside the aim, for a moved role and a new one", async () => {
+    const liveWithWords: PlanLiveSeat[] = [
+      { ...LIVE_SEATS[0], words: { aim: "Keep things running", domain: null, bringMe: ["A weekly note"], notMine: null, runbook: null } },
+    ];
+    const changes = [
+      {
+        op: "update_seat",
+        orgRoleId: "ops",
+        payload: { name: "Operations Steward", bringMe: ["A weekly note", "The key"], notMine: ["Bookkeeping"], runbook: "https://example.org/ops" },
+      },
+      { op: "create_seat", orgRoleId: "rec-9", payload: { name: "Hearth Keeper", circleId: "general", aim: "Keep the fire", notMine: ["The kitchen rota"] } },
+    ];
+    const { plan, decisions } = planFromDraft("draft-1", changes, LIVE_CIRCLES, liveWithWords);
+    answer = { ...answer, draft: { ...draftAnswer(), plan, decisions, counts: countDraft(changes) } };
+    await open();
+    const lists = screen.getAllByTestId("role-field-changes");
+    expect(lists).toHaveLength(2);
+    const moved = lists[0].textContent ?? "";
+    expect(moved).toContain("Bring me");
+    expect(moved).toContain("Before: A weekly note");
+    expect(moved).toContain("After: A weekly note; The key");
+    expect(moved).toContain("Not mine to hold");
+    expect(moved).toContain("Before: Not written yet");
+    expect(moved).toContain("After: Bookkeeping");
+    expect(moved).toContain("Runbook");
+    expect(moved).toContain("After: https://example.org/ops");
+    // The aim the payload does not name is not listed as a change.
+    expect(moved).not.toContain("Purpose");
+    const made = lists[1].textContent ?? "";
+    expect(made).toContain("Purpose");
+    expect(made).toContain("Keep the fire");
+    expect(made).toContain("Not mine to hold");
+    expect(made).toContain("The kitchen rota");
+    expect(made).not.toContain("Before:");
+  });
+});
+
+describe("the role's CCOS words, before and after (0274)", () => {
+  it("lists what changes for a moved role, and every word a new role writes", async () => {
+    const liveWithWords: PlanLiveSeat[] = [
+      {
+        ...LIVE_SEATS[0],
+        words: { aim: "Keep things running", domain: "The tools", authorities: ["Order spare parts"], existsWhile: null, timeCommitment: "Two days a week" },
+      },
+    ];
+    const changes = [
+      {
+        op: "update_seat",
+        orgRoleId: "ops",
+        payload: {
+          name: "Operations Steward",
+          authorities: ["Order spare parts", "Book the van"],
+          existsWhile: "the village runs its own tools",
+          timeCommitment: "Two days a week",
+        },
+      },
+      {
+        op: "create_seat",
+        orgRoleId: "rec-9",
+        payload: { name: "Hearth Keeper", circleId: "general", responsibilities: ["Light the fire each evening"], stepBack: "Name it at the Friday check-in." },
+      },
+    ];
+    const { plan, decisions } = planFromDraft("draft-1", changes, LIVE_CIRCLES, liveWithWords);
+    answer = { ...answer, draft: { ...draftAnswer(), plan, decisions, counts: countDraft(changes) } };
+    await open();
+    const lists = screen.getAllByTestId("role-field-changes");
+    expect(lists).toHaveLength(2);
+    const moved = lists[0].textContent ?? "";
+    expect(moved).toContain("What it can decide on its own");
+    expect(moved).toContain("Before: Order spare parts");
+    expect(moved).toContain("After: Order spare parts; Book the van");
+    expect(moved).toContain("This role exists while");
+    expect(moved).toContain("Before: Not written yet");
+    expect(moved).toContain("After: the village runs its own tools");
+    // The time the payload names but does not change is not listed.
+    expect(moved).not.toContain("The time it asks");
+    const made = lists[1].textContent ?? "";
+    expect(made).toContain("What it does regularly");
+    expect(made).toContain("Light the fire each evening");
+    expect(made).toContain("How whoever holds it can step back");
+    expect(made).not.toContain("Before:");
   });
 });

@@ -8,9 +8,10 @@
  * every gathered string before it builds markup; this panel renders that
  * document and adds nothing to it.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
+import { useModalFocus } from "@/lib/useModalFocus";
 import { Mail, X } from "lucide-react";
 
 interface BriefPayload {
@@ -77,6 +78,11 @@ export default function WeeklyBrief({ signedIn }: { signedIn: boolean }) {
     setSaving(false);
   };
 
+  // aria-modal below is a promise that the page behind is out of reach; this
+  // keeps it for the keyboard (focus in, Tab wraps, Escape closes, focus back).
+  const panel = useRef<HTMLDivElement>(null);
+  useModalFocus(open && signedIn, panel, { onEscape: close });
+
   if (!signedIn) return null;
 
   return (
@@ -96,7 +102,7 @@ export default function WeeklyBrief({ signedIn }: { signedIn: boolean }) {
       </div>
 
       {open && (
-        <div className="print-hide fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Weekly brief">
+        <div className="print-hide fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Weekly brief" ref={panel}>
           <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-xl my-8">
             <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
               <h2 className="font-display text-lg font-semibold text-foreground">{brief?.subject ?? "Your week"}</h2>

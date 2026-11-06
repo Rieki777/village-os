@@ -18,59 +18,29 @@ import { Link, useRoute } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, ClipboardCheck, Clock, Compass, Footprints,
-  Heart, Lightbulb, ListChecks, Send, Sparkles, Sprout, Users,
+  Lightbulb, ListChecks, Send, Sparkles, Sprout, Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchGameMe, gameFetch, QuestClaim, useGameConfig } from "@/lib/gameApi";
-import { useTokenName } from "@/hooks/useTokenNames";
+import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import QuestActions from "@/components/QuestActions";
 import QuestCrews from "@/components/QuestCrews";
+import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
 import NeedChips, { type NeedTag } from "@/components/NeedChips";
 import NeedTagPicker from "@/components/admin/NeedTagPicker";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import {
   currentClaims, gateFix, gateLabel, relativeWhen, statusIs,
   type BoardQuest, type FieldSigns,
 } from "@/lib/questBoard";
 
-/*
- * WHAT THE BOARD MAY PROMISE ABOUT A QUEST'S PAYMENT: ONE LEAD SENTENCE PER SETTING.
- *
- * `quest.consent_cap_mode` has three settings, and each pays a different shape
- * (`checkConsentAmount` and `payoutFor` in server/lib/questConsent.ts):
- *   posted     inside the advertised range, and a badge lifts no higher than its top;
- *   capped     never below the range's floor (ruling 7, 2026-09-14), and up to the
- *              multiplier times its top;
- *   unlimited  whatever the circle releases, so the range is a suggestion.
- * The paragraph used to open with "the exact amount inside the range" under all
- * three and qualify it in a second sentence, so a village on `unlimited` read a
- * promise and its retraction together, and a village on `capped` was never told
- * that the floor holds.
- *
- * NOTHING MODE-SPECIFIC until the server has named a setting this page knows, with
- * a number for a capped village's multiplier. A payload that has not arrived is not
- * a setting, and the neutral sentence is true under all three.
- */
-function promiseFor(reward: string, rules?: { consentCapMode?: string; consentCapMultiplier?: number }): string {
-  const mode = rules?.consentCapMode;
-  if (mode === "posted") {
-    return `The circle sets the amount inside the ${reward} range when it consents to your work. What a quest advertises is what it pays.`;
-  }
-  if (mode === "capped" && typeof rules?.consentCapMultiplier === "number") {
-    return `The ${reward} range is where the circle starts when it consents to your work. It pays at least the bottom of that range, and may lift the amount up to ${rules.consentCapMultiplier} times what the quest advertises.`;
-  }
-  if (mode === "unlimited") {
-    return `This quest suggests ${reward}, and the circle may release any amount when it consents to your work.`;
-  }
-  return `The circle sets the amount when it consents to your work. This quest advertises ${reward}.`;
-}
-
 export default function QuestDetail() {
   const [, params] = useRoute("/quests/:id");
   const questId = params?.id ?? "";
   const cfg = useGameConfig();
-  const currencyName = useTokenName("Recognition");
   const stages = cfg?.stages ?? [];
+  const ladder = useLadderTitle();
   const { user } = useAuth();
   const [quest, setQuest] = useState<BoardQuest | null>(null);
   const [related, setRelated] = useState<BoardQuest[]>([]);
@@ -89,25 +59,6 @@ export default function QuestDetail() {
   // What this quest is for (R1, R18). It arrives on the same detail read, so
   // the chips are painted with the page and never after a second round trip.
   const [needTags, setNeedTags] = useState<NeedTag[]>([]);
-  /*
-   * WHAT THE BOARD MAY PROMISE, AND WHO DECIDES IT.
-   *
-   * `quest.consent_cap_mode` is an open-ring dial with three settings, and
-   * only ONE of them ("posted") makes the advertised amount the payout. Its
-   * own registry entry uses this page's sentence to describe that one setting:
-   * "Capping it at the posted amount keeps the quest board honest: what a
-   * quest advertises is what it pays." This page printed that guarantee
-   * unconditionally, so a village on "capped" or on "unlimited" published a
-   * promise it had voted away.
-   *
-   * `GET /api/game/rules` is the anonymous whitelist that exists so the UI can
-   * render the game's actual rules, and it already carried the mode. It now
-   * carries the multiplier beside it, because the capped sentence is about a
-   * number and a number stated here would be a second copy of the dial.
-   */
-  const [rules, setRules] = useState<{
-    quests?: { consentCapMode?: string; consentCapMultiplier?: number };
-  } | null>(null);
   const iAmAdmin = !!user && (user.role === "admin" || user.role === "founder");
 
   useEffect(() => {
@@ -141,15 +92,6 @@ export default function QuestDetail() {
       .catch(() => { /* the page renders without counts */ });
     return () => { live = false; };
   }, [questId]);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/game/rules")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d) setRules(d); })
-      .catch(() => { /* the paragraph says less, and never a guarantee */ });
-    return () => { alive = false; };
-  }, []);
 
   const refreshClaims = () => {
     fetchGameMe().then((me) => {
@@ -193,7 +135,21 @@ export default function QuestDetail() {
   const Icon = iconFor(quest?.icon);
   const steps = quest?.steps ?? [];
   const tips = quest?.tips ?? [];
-  const why = quest?.story ?? quest?.description ?? "";
+  /*
+   * WHAT IT ASKS FOR, THEN WHY IT MATTERS (2026-10-23).
+   *
+   * Admin's quest editor has two boxes: "What it asks for" (`description`)
+   * and "Why it matters" (`story`). This page drew `story ?? description`,
+   * and every seeded quest carries both, so the first box landed on no page
+   * at all. The description now leads the reading column as one plain line
+   * and the story sits under its own heading. The same words in both boxes
+   * show once.
+   */
+  const lead = String(quest?.description ?? "").trim();
+  const story = String(quest?.story ?? "").trim();
+  const why = story && story !== lead ? story : "";
+  // Whoever runs the place, in the village's own word (Admin, Make This Yours).
+  const catalyst = villageWord(cfg?.project?.catalystName, CATALYST_FALLBACK);
 
   if (loaded && !quest) {
     return (
@@ -285,12 +241,8 @@ export default function QuestDetail() {
 
           {/* The offer, stated once and plainly */}
           <div className="flex flex-wrap items-center gap-2.5 mt-4">
-            {quest.gratitude && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                <Heart className="w-4 h-4" />
-                {quest.gratitude} {currencyName}
-              </span>
-            )}
+            {/* What the quest is worth and pays, or to inquire (0265). */}
+            <WorkPayBlock pay={quest.pay} />
             {quest.duration && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm">
                 <Clock className="w-4 h-4" />
@@ -350,9 +302,16 @@ export default function QuestDetail() {
         <div className="container max-w-5xl grid lg:grid-cols-[1fr_360px] gap-8 items-start">
           {/* The reading column */}
           <div className="space-y-8 min-w-0">
-            {/* Why this quest matters. A quest with no story and no
-                description renders no heading either: an empty section is the
-                one thing the board's own empty-state law forbids. */}
+            {/* What the quest asks for, in the admin's own words. */}
+            {lead && (
+              <p className="text-lg text-foreground leading-relaxed break-words" data-quest-lead>
+                {lead}
+              </p>
+            )}
+
+            {/* Why this quest matters. A quest with no story renders no
+                heading either: an empty section is the one thing the board's
+                own empty-state law forbids. */}
             {(why || quest.impact) && (
               <div>
                 <h2 className="font-display text-xl font-bold text-foreground mb-3">
@@ -362,7 +321,7 @@ export default function QuestDetail() {
                   <p className="text-muted-foreground leading-relaxed">{why}</p>
                 )}
                 {quest.impact && (
-                  <p className="mt-3 text-sm text-foreground/70 italic border-l-2 border-teal/40 pl-3">
+                  <p className="mt-3 text-sm text-muted-foreground italic border-l-2 border-teal/40 pl-3">
                     "{quest.impact}"
                   </p>
                 )}
@@ -372,12 +331,12 @@ export default function QuestDetail() {
             {/* The first step: small enough to do today */}
             {quest.firstStep && (
               <div className="bg-amber-light border border-amber/30 rounded-2xl p-5">
-                <h2 className="font-display text-lg font-bold text-gold mb-2 flex items-center gap-2">
+                <h2 className="font-display text-lg font-bold text-amber-ink mb-2 flex items-center gap-2">
                   <Footprints className="w-5 h-5" />
                   Your first step
                 </h2>
                 <p className="text-foreground/90 leading-relaxed">{quest.firstStep}</p>
-                <p className="text-xs text-foreground/60 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Fifteen minutes or less. The rest of the quest can wait until you have done this.
                 </p>
               </div>
@@ -452,10 +411,13 @@ export default function QuestDetail() {
                   {quest.deliverable ??
                     "A link or a few words showing what you did. The circle reads it before consenting."}
                 </p>
-                {quest.gratitude && (
-                  <p className="text-xs text-muted-foreground mt-3">
-                    {promiseFor(quest.gratitude, rules?.quests)}
-                  </p>
+                {/* The quest's value, worked out by the function the consent pays
+                    from (0265). The block says it all: no sentence under it
+                    restates that the work is paid (Rye, 2026-10-23). */}
+                {quest.pay && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <WorkPayBlock pay={quest.pay} variant="full" />
+                  </div>
                 )}
               </div>
               <QuestActions
@@ -463,8 +425,15 @@ export default function QuestDetail() {
                 signedIn={!!user}
                 claim={claim}
                 decimals={payoutDecimals}
+                pay={quest.pay}
                 onChanged={refreshClaims}
               />
+              {/* The chat everyone on this quest shares, once two people are on it. */}
+              {!quest.isExample && (
+                <div className="px-6 pb-5 empty:hidden">
+                  <WorkChatButton kind="quest" id={quest.id} probe className="w-full" />
+                </div>
+              )}
             </div>
 
             {/* The gate, in full color, saying what opens it */}
@@ -474,12 +443,12 @@ export default function QuestDetail() {
                   <Sprout className="w-4 h-4" />
                   {gateText}
                 </p>
-                <p className="text-xs text-foreground/70 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {/* R47: the lock names its fix where the stage has one. */}
                   {quest.minStage
                     ? (gateFix(quest, stages, cfg?.project?.commitmentName) ??
-                      "Keep walking the Path of Growth and this opens on its own.")
-                    : "Ask a founder or the circle about stepping into it."}
+                      `Keep walking the ${ladder} and this opens on its own.`)
+                    : `Ask ${catalyst.aName} or the circle about stepping into it.`}
                 </p>
               </div>
             )}
@@ -513,7 +482,6 @@ export default function QuestDetail() {
                   claim={claims[q.id]}
                   signs={signs?.perQuest?.[q.id]}
                   stages={stages}
-                  currencyName={currencyName}
                 />
               ))}
             </div>

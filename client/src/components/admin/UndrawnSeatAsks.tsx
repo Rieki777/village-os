@@ -58,16 +58,16 @@ export function UndrawnSeatAsks({ asks, drawnSeatIds, roles, circles, call, onDo
   const drawnCircleIds = new Set(circles.map((c) => String(c.id)));
   const whyNoCard = (seat: string): string => {
     const r = roleById.get(seat);
-    if (!r) return "This seat is no longer on the chart.";
+    if (!r) return "This role is no longer on the chart.";
     if (r.circleId == null || r.circleId === "") return "In no circle yet.";
     return drawnCircleIds.has(String(r.circleId)) ? "" : "Its circle is not on this page.";
   };
 
   return (
     <section aria-labelledby="undrawn-asks-h" className="bg-white border border-amber-300 rounded-xl p-4 mb-6">
-      <h3 id="undrawn-asks-h" className="font-semibold text-gray-900 text-sm">Asks for seats not drawn below</h3>
+      <h3 id="undrawn-asks-h" className="font-semibold text-gray-900 text-sm">Asks for roles not drawn below</h3>
       <p className="text-xs text-gray-600 mt-0.5">
-        These seats sit outside every circle on this page, so their asks have no card to appear on. Answer them here.
+        These roles sit outside every circle on this page, so their asks have no card to appear on. Answer them here.
       </p>
       <div className="mt-3 space-y-4">
         {Array.from(bySeat, ([seat, seatAsks]) => (

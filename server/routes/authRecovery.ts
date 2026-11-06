@@ -31,7 +31,7 @@ import { maySendSetPasswordLink } from "../lib/oauthAccounts";
 /** What this module reaches. The complete list. */
 export interface RecoveryDeps {
   authSecret: string;
-  members: { byEmail(email: string): Promise<any | null> };
+  members: { byEmail(email: string): Promise<any | null>; all(): Promise<any[]> };
   /** True when the caller has already spent its budget. */
   overLimit(bucket: string, max: number, windowMs: number): Promise<boolean>;
   clientIp(req: Request): string;
@@ -51,7 +51,26 @@ export interface RecoveryDeps {
   recordAudit(text: string, userId: string): void;
 }
 
+/**
+ * WHETHER THIS VILLAGE CAN STILL BE CLAIMED: true while no member holds the
+ * founder or admin role, the same test `POST /api/admin/bootstrap` makes
+ * before it will spend the bootstrap password. The home page reads it so a
+ * founder who has just deployed can find `/claim` at all (the founder-path
+ * pass of 2026-11-01 found the front door never pointed there).
+ *
+ * It says nothing an attacker can use: claiming still needs the bootstrap
+ * password and stays throttled, and the answer flips to false for good the
+ * moment a founder exists.
+ */
+export function claimOpen(all: readonly { role?: unknown }[]): boolean {
+  return !all.some((u) => u?.role === "admin" || u?.role === "founder");
+}
+
 export function register(app: Express, deps: RecoveryDeps): void {
+  app.get("/api/auth/claim-status", async (_req: Request, res: Response) => {
+    res.json({ open: claimOpen(await deps.members.all()) });
+  });
+
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
     const sameAnswer = {
       success: true,

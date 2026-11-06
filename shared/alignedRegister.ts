@@ -45,7 +45,7 @@ export interface RegisterKind {
  * village's record of what it aligned with does not shrink.
  */
 export const REGISTER_KINDS: readonly RegisterKind[] = [
-  { id: "seat_terms", label: "Seat terms", capability: "terms.read" },
+  { id: "seat_terms", label: "Role terms", capability: "terms.read" },
   { id: "membership", label: "Membership letter", capability: "terms.read" },
   // After the agreements lane lands: { id: "agreement", label: "Village agreement", capability: "terms.read" },
 ];
@@ -122,16 +122,16 @@ export const ALIGNED_WORDS = {
   title: "Aligned",
   lede: "Every set of terms and every membership letter members have aligned with, every version, and how the village aligned with each. Open to every member.",
   membersOnly: "Members read what the village has aligned with.",
-  membersOnlyLine: "The register carries seat terms, money included, so it opens at the member rung.",
+  membersOnlyLine: "The register carries role terms, money included, so it opens at the member rung.",
   kinds: "Kinds",
   everyKind: "Every kind",
   searchLabel: "Search the register",
-  searchPlaceholder: "A seat, a person, a word in the terms",
+  searchPlaceholder: "A role, a person, a word in the terms",
   search: "Search",
   clear: "Show the whole register",
   results: (q: string) => `Terms that match "${q}"`,
   noResults: "Nothing in the register matches that.",
-  empty: "Nothing has been aligned with yet. When a member aligns with the village's letter or applies for a seat on terms, the words land here.",
+  empty: "Nothing has been aligned with yet. When a member aligns with the village's letter or applies for a role on terms, the words land here.",
   loading: "Reading the register",
   more: "Show earlier terms",
   readingMore: "Reading earlier terms…",

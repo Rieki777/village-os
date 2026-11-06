@@ -26,6 +26,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/
 import { confirmManual, launchStatus, launchVoteBlocked, recordLaunchCarried, type LaunchDeps } from "./launch";
 import { writeGoverningPurpose } from "./governingPurpose";
 import { readConfigDocument } from "../repos/appConfigDocs";
+import { dbDocument } from "../repos/store-db";
 import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
@@ -120,6 +121,12 @@ describe.skipIf(!configured)("the sealing-key requirement against a real schema"
      */
     const wrote = await writeGoverningPurpose(pool, { statement: PURPOSE_EXAMPLE, writtenBy: "founder-1" });
     expect(wrote.ok, JSON.stringify(wrote)).toBe(true);
+    // The village's clock, answered: blocking since readiness R059, and read
+    // from the stored season document rather than from a wired check.
+    await dbDocument(pool, "season", {} as any).put({
+      seasons: [], cadence: "solstice-equinox", timezone: "UTC",
+      timezoneAnswer: { at: "2026-10-31T00:00:00.000Z", by: "founder-1" },
+    } as any);
   }, 180_000);
 
   beforeEach(async () => {

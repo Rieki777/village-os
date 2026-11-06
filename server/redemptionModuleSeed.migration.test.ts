@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { splitStatements } from "./db/migrate";
 
 const configured = testDbConfigured();
@@ -64,7 +64,7 @@ describe.skipIf(!configured)("0211, redemption stays on where it was used", () =
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, connectionLimit: 2, timezone: "Z" }); // module-review-ok: fixture pool on the S5 scratch schema
+    pool = testPool(db, { connectionLimit: 2 }); // module-review-ok: fixture pool on the S5 scratch schema
   }, 180_000);
 
   afterAll(async () => {

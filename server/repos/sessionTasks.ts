@@ -236,6 +236,54 @@ export async function eventRows(q: Queryable, entryId: number): Promise<RowDataP
   );
 }
 
+// ── Accepted as accomplished ────────────────────────────────────────────────
+
+/**
+ * The tasks accepted as accomplished that could be one member's: held by them
+ * in person, or held by a role (whoever marked it done is read off the events
+ * by the lib). Through the owner index for the first half.
+ */
+export async function acceptedTaskRowsFor(q: Queryable, memberNo: number): Promise<RowDataPacket[]> {
+  return acceptedTaskRowsForMany(q, [memberNo]);
+}
+
+/** The same read for several members at once, so a batch of cards costs one statement. */
+export async function acceptedTaskRowsForMany(q: Queryable, memberNos: readonly number[]): Promise<RowDataPacket[]> {
+  if (memberNos.length === 0) return [];
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'done' AND \`t\`.\`latest_kind\` = 'accepted' ` +
+      "AND (`t`.`owner_no` IN (?) OR ((`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) AND `t`.`owner_seat_id` IS NOT NULL AND `t`.`owner_seat_id` <> '')) " +
+      "ORDER BY `t`.`entry_id`",
+    [[...memberNos]],
+  );
+}
+
+/** Every answer these tasks were given, oldest first per task, through the entry index. */
+export async function eventRowsFor(q: Queryable, entryIds: readonly number[]): Promise<RowDataPacket[]> {
+  if (entryIds.length === 0) return [];
+  return rowsOf(
+    q,
+    "SELECT `id`, `entry_id`, `session_id`, `kind`, `by_no`, `status`, `owner_no`, `owner_seat_id`, `note`, `created_at` " +
+      "FROM `live_session_task_events` WHERE `entry_id` IN (?) ORDER BY `entry_id`, `id`",
+    [[...entryIds]],
+  );
+}
+
+/**
+ * Done tasks not accepted yet, marked done at or after `since`, newest first,
+ * at most `limit`. What a holder of the power that seats people may be asked
+ * to accept; the lib leaves out their own work.
+ */
+export async function doneNotAcceptedRows(q: Queryable, since: Date, limit: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'done' AND \`t\`.\`latest_kind\` <> 'accepted' ` +
+      "AND `t`.`done_at` >= ? ORDER BY `t`.`done_at` DESC, `t`.`entry_id` DESC LIMIT ?",
+    [since, Math.max(1, Math.floor(limit))],
+  );
+}
+
 // ── A circle, and one session ───────────────────────────────────────────────
 
 /**
@@ -249,6 +297,28 @@ export async function circleTaskRows(q: Queryable, circleId: string, lastMetAt: 
     `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`circle_id\` = ? AND (\`t\`.\`status\` = 'open' OR \`t\`.\`changed_at\` > ?) ` +
       "ORDER BY `t`.`entry_id`",
     [circleId, lastMetAt ?? new Date(0)],
+  );
+}
+
+/** An open task held by no person and no seat, from a session that had a circle. */
+const BACK_WITH_CIRCLE =
+  "`t`.`status` = 'open' AND (`t`.`owner_no` IS NULL OR `t`.`owner_no` = 0) " +
+  "AND (`t`.`owner_seat_id` IS NULL OR `t`.`owner_seat_id` = '') AND `t`.`circle_id` IS NOT NULL AND `t`.`circle_id` <> ''";
+
+/** The circles that have a task back with them now, so the board measures standing only where it matters. */
+export async function backWithCircleIds(q: Queryable): Promise<string[]> {
+  const rows = await rowsOf(q, `SELECT DISTINCT \`t\`.\`circle_id\` FROM \`live_session_task_state\` \`t\` WHERE ${BACK_WITH_CIRCLE}`);
+  return rows.map((r) => String(r.circle_id));
+}
+
+/** Every task back with one of these circles, through the circle index. By date, undated last. */
+export async function backWithCircleRows(q: Queryable, circleIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (!circleIds.length) return [];
+  return rowsOf(
+    q,
+    `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`circle_id\` IN (?) AND ${BACK_WITH_CIRCLE} ` +
+      "ORDER BY `t`.`due_on` IS NULL, `t`.`due_on`, `t`.`entry_id`",
+    [[...circleIds]],
   );
 }
 
@@ -314,6 +384,32 @@ export async function dueRows(q: Queryable, fromDate: string, toDate: string): P
     `SELECT ${TASK_COLUMNS} ${TASK_FROM} WHERE \`t\`.\`status\` = 'open' AND \`t\`.\`due_on\` BETWEEN ? AND ? ORDER BY \`t\`.\`entry_id\``,
     [fromDate, toDate],
   );
+}
+
+// ── One session, gone ───────────────────────────────────────────────────────
+
+/**
+ * Every task row a discarded session or a deleted record left: the state and
+ * the answers of its entries, and every send of its task emails. Run inside
+ * the discard's own transaction, before the entries themselves are deleted
+ * (server/repos/liveSessions.ts `deleteSessionRows`), with the entry ids read
+ * in that transaction.
+ *
+ * Both by the entries and by the session, so a row whose copied `session_id`
+ * and entry disagree still goes. `live_session_task_events` has no index on
+ * `session_id`, so its ids are read first with a plain read, which takes no
+ * locks, and deleted by primary key; a DELETE that scanned the table would
+ * lock every task answer in the village until the commit.
+ */
+export async function deleteTaskRowsForSession(q: Queryable, sessionId: number, entryIds: readonly number[]): Promise<void> {
+  if (entryIds.length > 0) {
+    await q.query("DELETE FROM `live_session_task_state` WHERE `entry_id` IN (?)", [entryIds]);
+    await q.query("DELETE FROM `live_session_task_events` WHERE `entry_id` IN (?)", [entryIds]);
+  }
+  await q.query("DELETE FROM `live_session_task_state` WHERE `session_id` = ?", [sessionId]);
+  const events = (await rowsOf(q, "SELECT `id` FROM `live_session_task_events` WHERE `session_id` = ?", [sessionId])).map((r) => Number(r.id));
+  if (events.length > 0) await q.query("DELETE FROM `live_session_task_events` WHERE `id` IN (?)", [events]);
+  await q.query("DELETE FROM `live_session_task_sends` WHERE `session_id` = ?", [sessionId]);
 }
 
 // ── One member: the export and the erasure ─────────────────────────────────

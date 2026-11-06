@@ -119,7 +119,7 @@ export default function HandsForPower({
               <p className="mt-2 text-xs text-muted-foreground">{WATCHING[hand.whoMay]}</p>
             ) : hand.rolesCarrying.length === 0 ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                No role here carries this power yet, so there is no seat to vote anybody into. The
+                No role here carries this power yet, so there is no role to vote anybody into. The
                 village votes a power onto a role first.
               </p>
             ) : asking === hand.id ? (
@@ -142,7 +142,7 @@ export default function HandsForPower({
                   </label>
                 )}
                 <label className="text-xs text-muted-foreground">
-                  Why this person for this seat. The whole village reads it before voting.
+                  Why this person for this role. The whole village reads it before voting.
                   <textarea
                     value={why}
                     onChange={(e) => setWhy(e.target.value)}

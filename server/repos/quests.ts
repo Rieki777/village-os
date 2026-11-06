@@ -14,6 +14,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { parseRewardRange } from "../../shared/questRewards";
+import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 import { lostConcurrencyRace } from "../db/concurrency";
 import { calendarRemove, calendarUpsert } from "../lib/calendar";
 import { questCalendarInput } from "../lib/calendarProviders";
@@ -109,6 +110,27 @@ export interface QuestRecord {
   startsAt?: string | null;
   endsAt?: string | null;
   dueAt?: string | null;
+  /**
+   * What the quest is worth, in minor units of `valueCurrency` (0265). NULL
+   * means nobody has set a value, and the card says to inquire.
+   */
+  valueMinor?: number | null;
+  /** The village's currency when the value was set, stamped by the server. */
+  valueCurrency?: string | null;
+  /**
+   * What the quest pays at consent, human amounts (0265). NULL means the
+   * quest has no list of its own and the village's standard mint rules pay
+   * it; an empty list means it pays no tokens. Read through `readValueTokens`.
+   */
+  valueTokens?: TokenAmount[] | null;
+  /**
+   * The cash the quest pays at consent, in minor units of `cashCurrency`
+   * (0285). The platform never pays it: the consent records it as owed
+   * (`oweQuestCash`, server/lib/cashOwed.ts). NULL pays no cash.
+   */
+  cashMinor?: number | null;
+  /** The village's currency when the cash was set, stamped by the server. */
+  cashCurrency?: string | null;
 }
 
 /**
@@ -160,7 +182,7 @@ const QUEST_SELECT =
   // is_example is selected so consumers can filter. Without it no downstream
   // code could tell an example quest from a real one â€” the work-exchange
   // suggester was offering seeded quests to real guests as paid work.
-  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at FROM quests";
+  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM quests";
 
 /** JSON column â†’ string array, tolerant of junk: an empty list renders fine. */
 function toList(v: unknown): string[] {
@@ -202,6 +224,12 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     startsAt: toIso(r.starts_at),
     endsAt: toIso(r.ends_at),
     dueAt: toIso(r.due_at),
+    // Both halves or neither: a value with no currency is not a value.
+    valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
+    valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
+    valueTokens: readValueTokens(r.value_tokens),
+    cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
+    cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
   };
 }
 
@@ -249,11 +277,20 @@ function questParams(q: QuestRecord): any[] {
     toDb(q.startsAt),
     toDb(q.endsAt),
     toDb(q.dueAt),
+    // The value and what it pays (0265), appended for the same reason again.
+    // A value with no currency stores neither half.
+    q.valueMinor == null || !q.valueCurrency ? null : Math.trunc(Number(q.valueMinor)),
+    q.valueMinor == null || !q.valueCurrency ? null : String(q.valueCurrency).toUpperCase(),
+    valueTokensToStore(q.valueTokens),
+    // The cash it pays (0285), appended for the same reason. Zero or no
+    // currency stores neither half: a quest that pays no cash has no row here.
+    !q.cashMinor || !q.cashCurrency ? null : Math.trunc(Number(q.cashMinor)),
+    !q.cashMinor || !q.cashCurrency ? null : String(q.cashCurrency).toUpperCase(),
   ];
 }
 
 const QUEST_COLS =
-  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at)";
+  "(id, title, description, impact, gratitude, gratitude_min, gratitude_max, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, subtitle, story, first_step, steps, deliverable, tips, image_url, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency)";
 
 /**
  * The quest's calendar row (0085): written on the quest's own save path, so a
@@ -286,7 +323,7 @@ export function questsRepo(pool: Pool): QuestsRepo {
 
     async add(q) {
       await pool.query(
-        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO quests ${QUEST_COLS} VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         questParams(q),
       );
       await syncQuestCalendar(pool, q);
@@ -308,7 +345,8 @@ export function questsRepo(pool: Pool): QuestsRepo {
         await conn.query(
           "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
             "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
-            "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=? WHERE id=?",
+            "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
+            "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=? WHERE id=?",
           [...p.slice(1), id],
         );
         await conn.commit();
@@ -355,6 +393,72 @@ export function questsRepo(pool: Pool): QuestsRepo {
       });
     },
   };
+}
+
+/** What keeping a starter answers with. */
+export type QuestKeep =
+  | { ok: true; quest: QuestRecord }
+  | { ok: false; reason: "missing" | "not_example" };
+
+/**
+ * KEEP ONE STARTER QUEST AS THE VILLAGE'S OWN.
+ *
+ * A fresh village's starters are standing examples (`server/lib/examples.ts`):
+ * inert, refused by every write route, and gone together when a founder clears
+ * them or posts a quest of their own. That left no way to keep the one starter
+ * that already fit. Editing it in place is refused on purpose, because a row
+ * that keeps `is_example` would be deleted by the next retirement along with
+ * the founder's words, so this is the one door that turns the flag off.
+ *
+ * ONE STATEMENT DECIDES, UNDER THE ROW LOCK. The UPDATE carries
+ * `AND is_example = 1`, so two presses of Keep cannot both succeed and a row
+ * that is already real cannot be "kept" again. The founder's edits and the
+ * value land in the same write, and `created_at` restarts, because that column
+ * means when the quest first appeared on a real board and the weekly brief
+ * reads it as new (0088).
+ *
+ * The id is kept. Nothing reads an `ex-` prefix as a flag (the flag is the
+ * column), and a kept quest keeps the address a founder may already have
+ * shared while deciding.
+ */
+export async function keepExampleQuest(
+  pool: Pool,
+  id: string,
+  mutate: (q: QuestRecord) => void,
+): Promise<QuestKeep> {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query<RowDataPacket[]>(`${QUEST_SELECT} WHERE id = ? FOR UPDATE`, [id]);
+    if (!rows[0]) {
+      await conn.rollback();
+      return { ok: false, reason: "missing" };
+    }
+    const quest = rowToQuest(rows[0]);
+    if (!quest.isExample) {
+      await conn.rollback();
+      return { ok: false, reason: "not_example" };
+    }
+    mutate(quest);
+    const kept: QuestRecord = { ...quest, id, isExample: false };
+    const p = questParams(kept);
+    await conn.query(
+      "UPDATE quests SET title=?, description=?, impact=?, gratitude=?, gratitude_min=?, gratitude_max=?, " +
+        "duration=?, difficulty=?, circle=?, status=?, icon=?, role_required=?, min_stage=?, requires_role=?, stay_credit_reward=?, tags=?, sort_order=?, " +
+        "subtitle=?, story=?, first_step=?, steps=?, deliverable=?, tips=?, image_url=?, starts_at=?, ends_at=?, due_at=?, " +
+        "value_minor=?, value_currency=?, value_tokens=?, cash_minor=?, cash_currency=?, " +
+        "is_example = 0, created_at = CURRENT_TIMESTAMP WHERE id = ? AND is_example = 1",
+      [...p.slice(1), id],
+    );
+    await conn.commit();
+    await syncQuestCalendar(pool, kept);
+    return { ok: true, quest: kept };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally {
+    conn.release();
+  }
 }
 
 // â”€â”€ Claims â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

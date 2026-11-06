@@ -59,7 +59,20 @@ export const KIND_GLYPHS: Record<string, LucideIcon> = {
 
 export const kindGlyph = (kind: string): LucideIcon => KIND_GLYPHS[kind] ?? Sparkles;
 
-/** What a kind's claim means, in one plain word for the card corner. */
+/**
+ * What a kind's claim means, in one plain word for the card corner.
+ *
+ * READ `needLabel` BELOW RATHER THAN THIS MAP. At hub contract 4 a thing the
+ * project would BORROW arrives as `kind: "item"` with `acceptsLoan: 1`, and
+ * new needs never use `kind: "loan"` at all. A surface that looked the kind up
+ * here would print "goods" on a need somebody meant to lend, and a member
+ * acting in good faith on that word would offer to GIVE AWAY a chainsaw they
+ * meant to lend for a fortnight. That is a mistake about property, made by
+ * somebody who read the card correctly.
+ *
+ * Legacy rows keep `kind: "loan"` (hub migration 0257 sets the flags and never
+ * touches the kind), so this entry stays and is not history.
+ */
 export const KIND_LABELS: Record<string, string> = {
   loan: "a loan",
   role: "a role",
@@ -69,6 +82,40 @@ export const KIND_LABELS: Record<string, string> = {
   crypto: "crypto",
   land: "land",
 };
+
+/**
+ * THE WORD FOR A NEED, from the kind AND the flags rather than the kind alone.
+ *
+ * `acceptsLoan` wins over the kind, because at contract 4 it is the only thing
+ * that distinguishes borrowing from keeping: both arrive as `kind: "item"`.
+ * A need that accepts both is named for the loan, because the stronger promise
+ * a member can make by mistake is to give something away permanently.
+ *
+ * ABSENT FLAGS MEAN THE OLD MEANING. Every need from a hub older than contract
+ * 4 sends neither flag, and its kind already says everything it said before.
+ */
+export function needLabel(need: { kind: string; acceptsLoan?: unknown; acceptsGift?: unknown }): string {
+  const lendable = need.acceptsLoan === 1 || need.acceptsLoan === true;
+  if (lendable && need.kind !== "loan") return `${KIND_LABELS[need.kind] ?? need.kind}, on loan`;
+  return KIND_LABELS[need.kind] ?? need.kind;
+}
+
+/**
+ * The window a lent thing is wanted for, when the hub gave one.
+ *
+ * Nothing displayed a custody window before contract 4 because nothing carried
+ * one. A member deciding whether to lend a generator needs to know for how
+ * long before they decide, not after a steward tells them.
+ */
+export function loanWindow(need: { neededFrom?: string | null; neededUntil?: string | null }): string | null {
+  const from = (need.neededFrom ?? "").trim();
+  const until = (need.neededUntil ?? "").trim();
+  const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  if (from && until) return `Wanted ${day(from)} to ${day(until)}`;
+  if (from) return `Wanted from ${day(from)}`;
+  if (until) return `Wanted until ${day(until)}`;
+  return null;
+}
 
 // ── What the hub's numbers can and cannot be asked to mean ───────────────────
 
@@ -205,7 +252,14 @@ export function phaseLabel(status: string, percentPledged: number): string {
   if (status === "draft" || status === "pending_review") return "Waiting to open";
   if (status === "funded") return "The pool is full";
   if (status === "completed") return "Built into the village";
-  if (status === "cancelled" || status === "rejected") return "Closed";
+  /*
+   * `closed` is hub contract 5: the close date passed and the campaign did not
+   * complete. It takes no offers. It MUST be listed here, because the last line
+   * below treats any status it does not recognise as live, so a closed
+   * campaign would otherwise read "Gathering the pool" and invite offers it
+   * will refuse.
+   */
+  if (status === "cancelled" || status === "rejected" || status === "closed") return "Closed";
   return percentPledged < 50 ? "Gathering the pool" : "Under construction";
 }
 
@@ -638,6 +692,7 @@ export function CrowdpoolStyles() {
       .cp-slots-over{font-size:10.5px;line-height:1.45;font-weight:600;margin-top:4px;border-left:2px solid currentColor;padding-left:6px}
       .cp-need{position:relative;padding:12px 14px 12px 16px;border-left-width:4px;border-left-style:solid}
       .cp-need .cp-pin{position:absolute;top:8px;right:10px;font-size:10px;letter-spacing:.12em;color:#8a6a33;font-variant:small-caps}
+      .cp-note{font-size:11px;margin-top:6px}
       .cp-ledger-line{animation:none}
       .cp-ledger-line.arrival{animation:cp-arrive 1.2s ease-out 1}
       @keyframes cp-arrive{from{opacity:0;transform:translateY(-6px);background:rgba(236,208,138,.28)}to{opacity:1;transform:none;background:transparent}}

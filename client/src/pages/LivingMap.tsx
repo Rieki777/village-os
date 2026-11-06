@@ -80,7 +80,9 @@ type Presence = "checking" | "present" | "absent";
  */
 async function probeGrounds(): Promise<{ presence: Presence; url: string }> {
   try {
-    const res = await fetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
+    // With the session: the probe sits behind the map module's gate
+    // (server/routes/grounds.ts), so a members-only map answers a member.
+    const res = await gameFetch(GROUNDS_MANIFEST, { headers: { Accept: "application/json" } });
     if (!res.ok) return { presence: "absent", url: GROUNDS };
     const body = await res.json();
     if (body?.present !== true) return { presence: "absent", url: GROUNDS };
@@ -348,6 +350,8 @@ export default function LivingMap() {
       if (body?.skin) payload.skin = body.skin;
       Object.assign(payload, walkPush(body));
       if (body?.vocabulary) payload.vocabulary = body.vocabulary;
+      // The village's own name and its guide's, for the map's top bar and dock.
+      if (body?.village) payload.village = body.village;
       /*
        * The published land (0063), or the blank one when nothing is published:
        * the map's own seed is another village's land. The scene crosses the
@@ -697,9 +701,9 @@ export default function LivingMap() {
   if (modules.loaded && !mapModule) return <ModuleGate moduleId="map" name="How Power Is Held" />;
   if (slate.state === "blank" && !board) {
     return (
-      <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+      <main className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
         <BlankSlate slate={slate} onLeave={exitApp} onOpenBoard={() => { setBoard(true); enterTheLand(); }} />
-      </div>
+      </main>
     );
   }
   /* Nothing mounts until the slate is known, so a visitor to a blank village never downloads the map. */
@@ -723,9 +727,12 @@ export default function LivingMap() {
    * the shell's own escape control, and all three run the same path (see
    * mapHistory.ts). The shell draws one because the artifact's are laid
    * out off-screen on a phone, which left app mode with no way out at all.
+   *
+   * <main>, not <div>: app mode renders no Layout, so this is the page's only
+   * landmark, and a screen reader's landmark list was empty here.
    */
   return (
-    <div className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
+    <main className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-background">
       {/*
        * THE DOOR OUT, drawn by the SHELL, and only where the artifact has none.
        *
@@ -877,6 +884,6 @@ export default function LivingMap() {
           allow="fullscreen"
         />
       )}
-    </div>
+    </main>
   );
 }

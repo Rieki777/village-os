@@ -45,7 +45,8 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import type { SubjectCloser } from "../lib/applyDue";
 import type { RollNotice } from "../lib/ballotNotices";
-import { getDraft } from "../lib/orgDrafts";
+import { addChange, createDraft, getDraft, withdrawDraft } from "../lib/orgDrafts";
+import { parseArrangement } from "../lib/circlePlacement";
 import {
   BALLOT_OPEN_REFUSAL,
   decideStanding,
@@ -57,12 +58,15 @@ import {
   ORG_DECIDE,
   ORG_DRAFT,
   orgDraftCloser,
+  publishDoorFor,
   publishOrgDraft,
   putDraftToVillage,
   putToVillageRefusal,
   type BallotSetup,
   type PublishDeps,
+  type PublishDoor,
 } from "../lib/orgDraftDecide";
+import type { Pool } from "mysql2/promise";
 
 type Deps = Pick<
   AppDeps,
@@ -90,6 +94,27 @@ type Deps = Pick<
 
 const ASKS_PER_WINDOW = 10;
 const ASK_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * WHO MAY ARRANGE THE CIRCLES ON THE MAP, and through which door (2026-10-23).
+ *
+ * Arranging publishes an org draft, so the answer is exactly who may publish
+ * one: a live holder of `org.decide` (the power door, stewards by default and
+ * any role the village gives it to, an org designer for one), or an admin
+ * until a launch vote carries (the admin panel's door). Rye: "org designers,
+ * me and founder/steward roles should be able to drag and drop the
+ * orientation and update it". It was `admin` alone, which also offered the
+ * drag to an admin after launch, whose publish the door then refused.
+ */
+export async function arrangeViewer(
+  pool: Pool,
+  viewer: { id?: unknown } | null,
+  isAdmin: boolean,
+  liveHoldersOf: (capability: string) => Promise<string[]>,
+): Promise<{ mayArrange: boolean; arrangeDoor: PublishDoor | null }> {
+  const door = await publishDoorFor(pool, { userId: viewer?.id ? String(viewer.id) : null, isAdmin }, await liveHoldersOf(ORG_DECIDE));
+  return { mayArrange: door !== null, arrangeDoor: door };
+}
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo } = deps;
@@ -162,6 +187,59 @@ export function register(app: Express, deps: Deps): void {
     const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
+  });
+
+  /*
+   * THE ARRANGEMENT DOOR (2026-10-23): a holder of `org.decide` drags circles
+   * into place on the map and publishes it in one act. The moves become ONE
+   * human-sourced org draft of `move_circle` changes, checked by the same
+   * preview every draft meets, against the village as the draft leaves it, and
+   * then published by power like any draft a holder publishes: live, no window
+   * (Rye, 2026-09-14). A refused arrangement is withdrawn and the refusals come
+   * back in words, so nothing is left half open for somebody else to find.
+   * The admin panel's door keeps its own route (`/api/admin/org/drafts`).
+   */
+  app.post("/api/org/arrangements", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to arrange the circles." });
+    if (await overLimit(`arrange:${String(user.id)}`, ASKS_PER_WINDOW, ASK_WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_asks", message: "That is a lot in a few minutes. Wait a little and try again." });
+    }
+    if (!(await holderMayPublish(req, res, { authedUser, guardCapability, capabilityCtx, liveHoldersOf }))) return;
+    const parsed = parseArrangement(req.body);
+    if (!parsed.ok) return res.status(400).json({ error: "refused", message: parsed.problem });
+    const pool = getPool();
+    const userId = String(user.id);
+    const made = await createDraft(pool, {
+      title: "Circles arranged on the map",
+      rationale: "Arranged on the circles map by a holder of the power to decide the structure.",
+      createdBy: userId,
+      sourceKind: "human",
+      openCap: null,
+    });
+    if (!made.ok) return res.status(409).json({ error: "refused", message: made.error });
+    for (const m of parsed.moves) {
+      const { circleId, ...payload } = m;
+      const added = await addChange(pool, made.id, { op: "move_circle", orgRoleId: `circle:${circleId}`, payload });
+      if (!added.ok) {
+        await withdrawDraft(pool, made.id);
+        return res.status(400).json({ error: "refused", message: added.error });
+      }
+    }
+    const draft = await getDraft(pool, made.id);
+    const ready = draft ? await draftReadiness(pool, draft) : { blocked: 1, blockedLines: [], changes: 0 };
+    if (ready.blocked > 0) {
+      await withdrawDraft(pool, made.id);
+      const first = ready.blockedLines[0];
+      return res.status(409).json({
+        error: "blocked",
+        message: first ? `${first.reads}: ${first.blocked}. Nothing was published.` : "This arrangement does not fit the village as it stands. Nothing was published.",
+        blockedLines: ready.blockedLines,
+      });
+    }
+    const r = await publishOrgDraft(publishDeps, made.id, userId, userId);
+    if (!r.ok) return res.status(409).json({ error: r.error });
+    res.json({ success: true, draftId: made.id, applied: r.applied, reloaded: r.reloaded });
   });
 
   app.post("/api/org/drafts/:id/put-to-village", async (req, res) => {

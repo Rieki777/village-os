@@ -24,7 +24,7 @@
  * three states, not the site shell around them.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -36,6 +36,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
+  // The owed-postings panel names each token through useTokenNameMap, which
+  // reads the village's own names from the game config (readiness, R-words).
+  useGameConfig: () => ({ currency: { names: {} } }),
 }));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
@@ -99,7 +102,9 @@ describe("the review queue tells three states apart", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -247,6 +252,7 @@ describe("the change limit on a batch card", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -369,6 +375,7 @@ describe("what the review page says after an accept", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -453,11 +460,11 @@ describe("what the review page says after an accept", () => {
     renderReview();
     // No accept on this page at all: the cards come from the server.
     expect(await screen.findByText(/"Milling Circle" yet/)).toBeTruthy();
-    expect(screen.getByText(/2 of its seats are blocked/)).toBeTruthy();
+    expect(screen.getByText(/2 of its roles are blocked/)).toBeTruthy();
     expect(screen.getAllByText("Withdraw that draft")).toHaveLength(2);
     fireEvent.click(screen.getAllByText("Withdraw that draft")[0]);
     await waitFor(() => expect(screen.queryByText(/"Milling Circle" yet/)).toBeNull());
-    expect(screen.getByText(/2 of its seats are blocked/)).toBeTruthy();
+    expect(screen.getByText(/2 of its roles are blocked/)).toBeTruthy();
     expect(screen.getAllByText("Withdraw that draft")).toHaveLength(1);
   });
 
@@ -621,7 +628,7 @@ describe("what the review page says after an accept", () => {
     expect(screen.getByText(/Not read from/)).toBeTruthy();
     expect(screen.getByText(/That draft is live now/)).toBeTruthy();
     // This reader is no admin, and the Org Chart is an admin screen, so it is told who can.
-    expect(screen.getByText(/ask an admin to write it onto that seat in the Org Chart/)).toBeTruthy();
+    expect(screen.getByText(/ask an admin to write it onto that role in the Org Chart/)).toBeTruthy();
   });
 
   it("says a draft the server could not preview could not be checked, and counts no blocked seats", async () => {
@@ -643,7 +650,7 @@ describe("what the review page says after an accept", () => {
     });
     renderReview();
     expect(await screen.findByText(/This draft could not be checked/)).toBeTruthy();
-    expect(screen.queryByText(/of its seats are blocked/)).toBeNull();
+    expect(screen.queryByText(/of its roles are blocked/)).toBeNull();
     // Nothing was counted, so "accept fewer at a time" was advice about a number nobody has.
     expect(screen.queryByText(/accept fewer at a time/)).toBeNull();
     expect(screen.getByText("Withdraw that draft")).toBeTruthy();
@@ -715,6 +722,7 @@ describe("each key opens its own section, and only refusing both closes the page
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
@@ -798,6 +806,7 @@ describe("the role card preview on a proposed seat", () => {
     vi.restoreAllMocks();
   });
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 

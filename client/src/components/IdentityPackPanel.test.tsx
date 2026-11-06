@@ -22,7 +22,7 @@
  * test here is what the founder can see and press.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -56,7 +56,9 @@ const pickerInput = () => document.getElementById("identity-pack-file") as HTMLI
 
 describe("the identity pack picker", () => {
   beforeEach(() => stubGet(EMPTY_PACK));
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

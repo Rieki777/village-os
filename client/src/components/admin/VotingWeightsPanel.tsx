@@ -290,7 +290,7 @@ export default function VotingWeightsPanel({
         </h3>
         <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">{modeLine(data.mode, data.token)}</p>
         <a
-          href="/admin?tab=modules&module=governance"
+          href="/modules/governance"
           className="mt-2 inline-flex items-center min-h-[44px] text-sm font-semibold text-teal-deep hover:underline focus:outline-none focus:ring-2 focus:ring-teal-deep rounded-lg"
         >
           Change how weight is assigned
@@ -484,7 +484,7 @@ export default function VotingWeightsPanel({
                       autoFocus
                       aria-label={`Why ${m.name} moves from ${weightText(m.weight)} to ${weightText(asNumber)}`}
                       aria-describedby={`${m.id}-reason-hint`}
-                      placeholder="Elected to the finance seat this season"
+                      placeholder="Elected to the finance role this season"
                       onChange={(e) => setReason({ ...reason, [m.id]: e.target.value })}
                       className={`${inputCls} w-full mt-1 min-h-[44px] block`}
                     />

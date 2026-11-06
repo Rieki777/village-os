@@ -19,12 +19,12 @@ export const RAISED_HAND_TERM_KEYS: readonly string[] = ["termEndsOn", "followsS
 export function raisedHandTermSentence(data: Record<string, unknown>): string {
   const endsOn = typeof data.termEndsOn === "string" ? data.termEndsOn.trim() : "";
   if (!endsOn) {
-    return "This hand was raised before a hand could name an end date. Seat them with no end date and the seat ends with the season.";
+    return "This hand was raised before a hand could name an end date. Seat them with no end date and the role ends with the season.";
   }
   if (data.followsSeason === true) {
     return `Asks to sit until the season ends, which was ${endsOn} when the hand was raised. Seat them with no end date to honour it.`;
   }
-  return `Asks to sit until ${endsOn}. Give the seat that end date when you seat them.`;
+  return `Asks to sit until ${endsOn}. Give the role that end date when you seat them.`;
 }
 
 export function RaisedHandTerm({ data }: { data: Record<string, unknown> }) {

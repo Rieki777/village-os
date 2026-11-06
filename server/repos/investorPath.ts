@@ -229,3 +229,25 @@ export async function membersHoldingFact(
   );
   return rows.map(toRow);
 }
+
+/**
+ * Clear the words on every fact about one member, for the erasure's
+ * `investor-fact-words-after-tombstone` step (server/lib/erasure.ts).
+ *
+ * THE FACTS STAY, THEIR WORDS GO. A fact here is a dated record that something
+ * happened on the investor path: an interest registered, a packet released,
+ * an accreditation declared, an agreement signed. Those are the kind of
+ * record a village may have to keep after a person leaves, which is a legal
+ * question this platform cannot answer for every village, so the row, its
+ * fact and its dates are kept, de-attributed by the tombstone. `detail` is the
+ * free text beside it, words a human wrote about the person, and that goes.
+ *
+ * Idempotent: an UPDATE writing NULL, keyed on the member.
+ */
+export async function forgetFactWordsOf(pool: Pool, userId: string): Promise<number> {
+  const [r]: any = await pool.query(
+    "UPDATE investor_path_facts SET detail = NULL WHERE village_id = ? AND user_id = ? AND detail IS NOT NULL",
+    [VILLAGE, userId],
+  );
+  return Number(r?.affectedRows ?? 0);
+}

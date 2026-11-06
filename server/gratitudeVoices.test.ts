@@ -19,7 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { loadExampleSeed, loadExampleState, retireExamples, seedExamples } from "./lib/examples";
 import { heroVoices, realVoiceCount, wallEntries, type WallLogRow } from "./lib/gratitudeVoices";
 import { HERO_SLOTS } from "../shared/gratitudeVoices";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const SEEDS_DIR = new URL("./seeds", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const configured = testDbConfigured();
@@ -76,7 +76,7 @@ describe.skipIf(!configured)("the hero blends real voices over examples", () => 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisions and drops, never a production table
   }, 240_000);
 
   afterAll(async () => {

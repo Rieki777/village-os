@@ -1070,185 +1070,66 @@ describe("economics model, flags", () => {
     expect(codes).not.toContain("econ_rule_ceiling_zero");
   });
 
-  it("says so when a rule's amount is above its own ceiling", () => {
-    const snap = snapshot("lunar");
-    // The shape a ballot leaves behind when it lowers only the ceiling.
-    snap.mintRules = snap.mintRules.map((r) =>
-      r.id === "rule-quest.completed-credits" ? { ...r, ceiling: BigInt(5), ceilingRaw: "5.0000", amount: BigInt(25) } : r,
-    );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    // min(25, 5) = 5, and the clamp happens before the ledger sees it.
-    expect(stepped.balances["mem:u1"].credits).toBe(BigInt(5));
-    const flag = model.flags(stepped, 1).filter((f) => f.code === "econ_rule_contradicts_ceiling")[0];
-    expect(flag.severity).toBe("warning");
-    expect(flag.sentence).toContain("says it pays 25 credits and caps one occurrence at 5");
-    expect(flag.actionable).toContain("Raise the ceiling to 25");
-    expect(readEconomicsMemo(stepped)!.rules.filter((r) => r.tokenSlug === "credits")[0].clampedAway).toBe(
-      BigInt(20),
-    );
-  });
-
-  it("refuses a rule whose ceiling is zero, in the engine's own words", () => {
-    const snap = snapshot("lunar");
-    snap.mintRules = snap.mintRules.map((r) =>
-      r.id === "rule-quest.completed-credits" ? { ...r, ceiling: BigInt(0), ceilingRaw: "0.0000" } : r,
-    );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    expect(stepped.balances["mem:u1"].credits).toBeUndefined();
-    // The voice rule is untouched and still pays.
-    expect(stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(10000));
-    const flag = model.flags(stepped, 1).filter((f) => f.code === "econ_rule_ceiling_zero")[0];
-    expect(flag.sentence).toContain("this rule's ceiling is 0, so it can pay no credits at all");
-    expect(flag.sentence).toContain("Raise the ceiling or pause the rule");
-    // And it lands in the same unpayable list ruleCannotPay feeds.
-    const unpayable = readEconomicsMemo(stepped)!.unpayable;
-    expect(unpayable.map((u) => u.reason).join(" ")).toContain("can pay no credits at all");
-  });
-
-  it("tells a cap of nothing from a cap typed below what the token can hold", () => {
-    /*
-     * BOTH VILLAGES ARRIVE HOLDING `ceiling: BigInt(0)`, and only
-     * `MintRuleSpec.ceilingRaw` tells them apart.
-     *
-     * "0.0000" is a decision. `ceilingOutcome` (server/lib/economy.ts:590)
-     * finds `ceiling <= 0` and refuses every occurrence, out loud.
-     *
-     * "0.0004" on a token with no decimal places is a typo. The engine reads
-     * 0.0004, finds it ABOVE zero, so it does not refuse: `clampToCeiling`
-     * (economy.ts:534) returns `min(25, 0.0004)` = 0.0004, and
-     * `toLedgerUnits` (economy.ts:154) then rounds that to 0, which the mint
-     * path reports as smaller than the token can hold (economy.ts:1377).
-     * Reading the second as the first would turn a fat-fingered cap into a
-     * total stop and preview a village nobody voted for.
-     */
-    const withCeiling = (raw: string, minor: bigint) => {
+  /*
+   * NO CEILING BINDS WORK (Rye, 2026-10-22: "we definitely can't have caps on
+   * what things pay"). These cases pinned the clamp and its two flags through
+   * the quest rules, which is where a ceiling used to bite. A quest rule now
+   * posts its own amount in full whatever its ceiling says, and its ceiling
+   * raises no flag, so the same rows are asserted the other way round.
+   */
+  it("pays a quest rule's own amount whatever its ceiling, and flags no ceiling", () => {
+    const cases: Array<{ raw: string; minor: bigint | null }> = [
+      { raw: "5.0000", minor: BigInt(5) }, // below the amount: a ballot that lowered only the ceiling
+      { raw: "0.0000", minor: BigInt(0) }, // a cap of nothing
+      { raw: "0.0004", minor: BigInt(0) }, // a cap below what the token can hold
+      { raw: "", minor: BigInt(0) }, // the malformed pairing no reader emits
+    ];
+    for (const c of cases) {
       const snap = snapshot("lunar");
       snap.mintRules = snap.mintRules.map((r) =>
-        r.id === "rule-quest.completed-credits" ? { ...r, ceiling: minor, ceilingRaw: raw } : r,
+        r.id === "rule-quest.completed-credits" ? { ...r, ceiling: c.minor, ceilingRaw: c.raw, amount: BigInt(25) } : r,
       );
       const model = economicsModel(ONE_QUEST);
       const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-      return { model, stepped, codes: model.flags(stepped, 1).map((f) => f.code), flags: model.flags(stepped, 1) };
+      expect(stepped.balances["mem:u1"].credits, `ceiling "${c.raw}"`).toBe(BigInt(25));
+      expect(stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(10000));
+      const codes = model.flags(stepped, 1).map((f) => f.code);
+      for (const code of ["econ_rule_contradicts_ceiling", "econ_rule_ceiling_zero", "econ_ceiling_rounds_away"]) {
+        expect(codes, `ceiling "${c.raw}"`).not.toContain(code);
+      }
+      expect(readEconomicsMemo(stepped)!.unpayable).toEqual([]);
+      expect(readEconomicsMemo(stepped)!.rules.filter((r) => r.tokenSlug === "credits")[0].clampedAway).toBe(BigInt(0));
+    }
+  });
+
+  it("still tells a cap of nothing from a cap typed below what the token can hold, on a rule that is not work", () => {
+    /*
+     * The two flags survive for a rule on any other trigger (`ceilingBinds` in
+     * shared/workValue.ts), and only `ceilingRaw` tells the two villages apart:
+     * "0.0000" is a decision, "0.0004" on a whole-unit token is a typo. Nothing
+     * pays such a rule today, which is why this reads the flags alone.
+     */
+    const withCeiling = (raw: string, minor: bigint) => {
+      const snap = snapshot("lunar");
+      const quest = snap.mintRules.find((r) => r.id === "rule-quest.completed-credits")!;
+      snap.mintRules = [
+        ...snap.mintRules,
+        { ...quest, id: "rule-library.contributed-credits", trigger: "library.contributed", ceiling: minor, ceilingRaw: raw },
+      ];
+      const model = economicsModel(ONE_QUEST);
+      const stepped = model.step(initialState(snap), 1, makeRng(SEED));
+      return model.flags(stepped, 1);
     };
-
-    // A cap of nothing: the refusal, and never the rounds-away sentence.
     const decided = withCeiling("0.0000", BigInt(0));
-    expect(decided.codes).toContain("econ_rule_ceiling_zero");
-    expect(decided.codes).not.toContain("econ_ceiling_rounds_away");
-
-    // A cap below the resolution: the rounds-away sentence, and never the refusal.
+    expect(decided.map((f) => f.code)).toContain("econ_rule_ceiling_zero");
+    expect(decided.map((f) => f.code)).not.toContain("econ_ceiling_rounds_away");
+    expect(decided.find((f) => f.code === "econ_rule_ceiling_zero")!.sentence).toContain(
+      "this rule's ceiling is 0, so it can pay no credits at all",
+    );
     const typo = withCeiling("0.0004", BigInt(0));
-    expect(typo.codes).toContain("econ_ceiling_rounds_away");
-    expect(typo.codes).not.toContain("econ_rule_ceiling_zero");
-    const rounds = typo.flags.filter((f) => f.code === "econ_ceiling_rounds_away")[0];
-    expect(rounds.severity).toBe("warning");
-    expect(rounds.sentence).toContain("caps one occurrence at 0.0004 credits");
-    expect(rounds.sentence).toContain("credits holds 0 decimal place(s)");
-    expect(rounds.actionable).toContain("Write a ceiling of at least 1");
-
-    // Neither one pays, and each says why in the engine's own words.
-    expect(decided.stepped.balances["mem:u1"].credits).toBeUndefined();
-    expect(typo.stepped.balances["mem:u1"].credits).toBeUndefined();
-    const saidOf = (r: ReturnType<typeof withCeiling>) =>
-      readEconomicsMemo(r.stepped)!.unpayable.map((u) => u.reason).join(" | ");
-    expect(saidOf(decided)).toContain("this rule's ceiling is 0, so it can pay no credits at all");
-    expect(saidOf(typo)).toContain("0.0004 is smaller than the smallest amount this token can hold");
-    expect(saidOf(typo)).not.toContain("can pay no credits at all");
-
-    // The voice rule is untouched in both, so this is about the ceiling and
-    // never about the cycle failing.
-    expect(decided.stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(10000));
-    expect(typo.stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(10000));
-  });
-
-  it("refuses a cap the token cannot hold, and says so, where it used to round it up into a payment", () => {
-    /*
-     * REWRITTEN AT 10.31, AND THE OLD ASSERTION WAS THE DEFECT WRITTEN DOWN.
-     *
-     * This case used to read: "`toLedgerUnits` rounds half UP, so on
-     * village-voice at three places 0.0006 becomes 1 thousandth and the cap is
-     * real. Nothing is flagged, because nothing is wrong." It asserted a
-     * payment of 1 and asserted that `econ_ceiling_rounds_away` must NOT fire.
-     *
-     * Something was wrong. 0.0006 is BELOW the smallest amount a token with
-     * three places can express, and rounding a BOUND up hands the member more
-     * than the village wrote. An amount rounds, because the nearest payable
-     * figure is what a payment means; a bound may only ever fall. The engine
-     * settled this in `ceilingAtScale`, and a preview that answered the old way
-     * would promise a payout the run refuses.
-     *
-     * So the cap arrives as nothing, the rule pays nobody, and the flag that
-     * exists for exactly this case fires and names the smallest cap that would
-     * work. That is the whole point of `econ_ceiling_rounds_away`: the previous
-     * assertion required it to stay silent on the one input it was written for.
-     */
-    const snap = snapshot("lunar");
-    snap.mintRules = snap.mintRules.map((r) =>
-      r.id === "rule-quest.completed-village-voice" ? { ...r, ceiling: BigInt(1), ceilingRaw: "0.0006" } : r,
-    );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    expect(stepped.balances["mem:u1"]?.["village-voice"] ?? BigInt(0)).toBe(BigInt(0));
-    const flags = model.flags(stepped, 1);
-    const codes = flags.map((f) => f.code);
-    expect(codes).toContain("econ_ceiling_rounds_away");
-    expect(codes).not.toContain("econ_rule_ceiling_zero");
-    // And it names the smallest cap that would actually pay, so the village is
-    // told what to write and not merely that what it wrote is wrong.
-    expect(flags.find((f) => f.code === "econ_ceiling_rounds_away")!.actionable).toContain("0.001");
-  });
-
-  it("keeps a cap that survives the scale, down to the smallest unit the token holds", () => {
-    /*
-     * The boundary on the other side, and the one that proves the rule above is
-     * a scale rule and not a refusal of small caps. "0.0010" IS expressible at
-     * three places, so the cap is real, it clamps the rule's own 10.0000 down to
-     * one thousandth, and nothing about the scale is flagged.
-     */
-    const snap = snapshot("lunar");
-    snap.mintRules = snap.mintRules.map((r) =>
-      r.id === "rule-quest.completed-village-voice" ? { ...r, ceiling: BigInt(1), ceilingRaw: "0.0010" } : r,
-    );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    expect(stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(1));
-    const codes = model.flags(stepped, 1).map((f) => f.code);
-    expect(codes).not.toContain("econ_ceiling_rounds_away");
-    expect(codes).not.toContain("econ_rule_ceiling_zero");
-    // It does contradict its own amount, which is a different and true thing.
-    expect(codes).toContain("econ_rule_contradicts_ceiling");
-  });
-
-  it("survives a malformed spec that pairs a real cap of zero with no text", () => {
-    /*
-     * DELIBERATELY MALFORMED, AND NO CONFORMING READER EMITS IT.
-     *
-     * `types.ts` pairs an empty `ceilingRaw` with `ceiling: null`, and the two
-     * together mean NO CAP. `ceiling: BigInt(0)` is a different fact: a real
-     * cap of nothing. So this fixture asserts both at once, which no snapshot
-     * reader can do, because the economy reader keys both fields off one null
-     * check and emits them as a pair.
-     *
-     * It is here anyway, and that is the point. `writtenCeiling` carries a
-     * fallback for a spec arriving with no text, and a fallback nothing
-     * exercises is a fallback nobody can trust. The safe answer with no text to
-     * read is the old one: a cap that rounded to nothing is treated as a cap of
-     * nothing, which stops a payout rather than letting one through. This test
-     * pins that, and it is the ONLY place in this file that builds a spec the
-     * contract does not describe.
-     */
-    const snap = snapshot("lunar");
-    snap.mintRules = snap.mintRules.map((r) =>
-      // Malformed on purpose: a real cap of zero beside the empty text that
-      // means no cap. See the block above.
-      r.id === "rule-quest.completed-credits" ? { ...r, ceiling: BigInt(0), ceilingRaw: "" } : r,
-    );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    expect(model.flags(stepped, 1).map((f) => f.code)).toContain("econ_rule_ceiling_zero");
-    expect(stepped.balances["mem:u1"].credits).toBeUndefined();
+    expect(typo.map((f) => f.code)).toContain("econ_ceiling_rounds_away");
+    expect(typo.map((f) => f.code)).not.toContain("econ_rule_ceiling_zero");
+    expect(typo.find((f) => f.code === "econ_ceiling_rounds_away")!.actionable).toContain("Write a ceiling of at least 1");
   });
 
   it("pays a seat holder from the role.cycle rules and a seatless member nothing", () => {
@@ -1323,16 +1204,23 @@ describe("the ceiling mirror, held to the engine's own table", () => {
      * `round(min(a, c) * s)` equals `min(round(a * s), round(c * s))`. Proved
      * here on village-voice, whose scale is 1000 (VOICE_DECIMALS, economy.ts:151).
      */
+    // Held on the two functions directly: no rule the model pays is clamped
+    // any more (Rye, 2026-10-22), so a balance can no longer show the clamp.
+    const human = ceilingOutcome({ amount: 10, ceiling: 2.5, tokenSlug: "village-voice" }, 0).paid;
+    expect(Math.round(human * 1000)).toBe(2500);
+    const minor = ceilingOutcomeMinor(
+      { id: "r", trigger: "library.contributed", tokenSlug: "village-voice", recipient: "claimant", amount: BigInt(10000), amountRaw: "10.0000", ceiling: BigInt(2500), ceilingRaw: "2.5000", enabled: true } as any,
+      BigInt(10000),
+      3,
+    ).paid;
+    expect(minor).toBe(BigInt(2500));
+    // And the quest rule on the same token pays its own 10 in full.
     const snap = snapshot("lunar");
     snap.mintRules = snap.mintRules.map((r) =>
       r.id === "rule-quest.completed-village-voice" ? { ...r, ceiling: BigInt(2500), ceilingRaw: "2.5000", amount: BigInt(10000) } : r,
     );
-    const model = economicsModel(ONE_QUEST);
-    const stepped = model.step(initialState(snap), 1, makeRng(SEED));
-    // Human: min(10, 2.5) = 2.5 -> toLedgerUnits -> 2500.
-    const human = ceilingOutcome({ amount: 10, ceiling: 2.5, tokenSlug: "village-voice" }, 0).paid;
-    expect(Math.round(human * 1000)).toBe(2500);
-    expect(stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(2500));
+    const stepped = economicsModel(ONE_QUEST).step(initialState(snap), 1, makeRng(SEED));
+    expect(stepped.balances["mem:u1"]["village-voice"]).toBe(BigInt(10000));
   });
 });
 

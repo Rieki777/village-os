@@ -27,7 +27,7 @@ import type { AddressInfo } from "node:net";
 import mysql from "mysql2/promise";
 import { encodeAbiParameters, parseAbiParameters } from "viem";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import {
   FRESH_WINDOW_MS,
   formatUnits,
@@ -40,6 +40,7 @@ import {
 import { villageFigure } from "./lib/hypha/village";
 import { switchoverPreflight } from "./lib/hypha/switchover";
 import { loadVariables, setVariable } from "./lib/variables";
+import { loadSecrets } from "./lib/secrets";
 import * as repo from "./repos/hypha";
 
 const configured = testDbConfigured();
@@ -150,6 +151,7 @@ describe.skipIf(!configured)("the Hypha Bridge, driven against a chain", () => {
   let db: TestDb;
   let pool: mysql.Pool;
   let chain: Awaited<ReturnType<typeof startFixtureChain>>;
+  let savedRpcEnv: string | undefined;
 
   const tokens: Record<string, FixtureToken> = {
     [EQUITY.toLowerCase()]: {
@@ -174,19 +176,26 @@ describe.skipIf(!configured)("the Hypha Bridge, driven against a chain", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     chain = await startFixtureChain(tokens);
     await pool.query("DELETE FROM game_variables"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadVariables(pool);
     // The loopback exemption in base-reads.ts is deliberate and documented, and
-    // this is the case it exists for: a local node, http, no public DNS.
-    await setVariable(pool, "tokens.base_rpc_url", chain.url);
+    // this is the case it exists for: a local node, http, no public DNS. The
+    // endpoint is an integration secret now, so it arrives the way a host sets
+    // one, BASE_RPC_URL, which also drives the env fallback through real reads.
+    await pool.query("DELETE FROM app_config WHERE config_key = 'integration-secrets'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await loadSecrets(pool, {});
+    savedRpcEnv = process.env.BASE_RPC_URL;
+    process.env.BASE_RPC_URL = chain.url;
     await setVariable(pool, "hypha.treasury_address", TREASURY_ADDR);
     await setVariable(pool, "hypha.founder_base_address", FOUNDER);
     await loadVariables(pool);
   });
 
   afterAll(async () => {
+    if (savedRpcEnv === undefined) delete process.env.BASE_RPC_URL;
+    else process.env.BASE_RPC_URL = savedRpcEnv;
     await chain?.stop().catch(() => {});
     await pool?.end();
     await db?.drop();

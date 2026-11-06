@@ -23,8 +23,11 @@
  * it is there it is no longer offered. Those cards belong to the earlier
  * session, which is closed and keeps its record as it was, so they are drawn
  * as the room draws every card (glyph and all) with no pencil and no remove.
+ * A tension there can instead go to a circle's agenda items (SendTension.tsx),
+ * for anybody who was in that session; once sent, it is offered here no more.
  */
 import { useState } from "react";
+import SendTension from "./SendTension";
 import {
   AIM_DEFS,
   ROOM_COPY,
@@ -91,8 +94,9 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
   const today = roomDay(view.serverNow);
   const source = carried?.sessionId ?? newestSource(tasks);
   // The action check is a title of the room's own, so the room asks its agenda whether it is there yet.
+  // Any earlier session counts: a member with standing and no `carried` reads another source, and one check is enough.
   const checkTitle = ROOM_COPY.actionCheckTitle.toLowerCase();
-  const checkAdded = view.items.some((i) => i.fromSessionId === source && i.title.toLowerCase() === checkTitle);
+  const checkAdded = view.items.some((i) => i.fromSessionId != null && i.title.toLowerCase() === checkTitle);
   // The server knows when the circle last met; the cards' own guess is the fallback.
   const groups = useTasks ? groupForCheck(tasks, view.circleLastMetAt ?? lastMetFrom(tasks)) : [];
 
@@ -111,7 +115,7 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
 
   return (
     <section className={CARD} aria-labelledby="carried-title">
-      <h3 id="carried-title" className={H3}>
+      <h3 id="carried-title" tabIndex={-1} className={`${H3} outline-none`}>
         {SESSION_COPY.carriedTitle}
       </h3>
       {carried && <p className={HINT}>{carried.title}</p>}
@@ -209,16 +213,19 @@ export default function FromLastTime({ view, actions }: Omit<StageProps, "now">)
                   entry={e}
                   readOnly
                   extra={
-                    canAdd ? (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          className={BTN_SECONDARY}
-                          disabled={busy != null}
-                          onClick={() => void bring(`e${e.id}`, e.text, "explore", ROOM_ITEM_MINUTES_DEFAULT)}
-                        >
-                          {ROOM_COPY.addToAgenda}
-                        </button>
+                    canAdd || (e.kind === "tension" && carried) ? (
+                      <div className="mt-2 flex flex-wrap items-start gap-2">
+                        {canAdd && (
+                          <button
+                            type="button"
+                            className={BTN_SECONDARY}
+                            disabled={busy != null}
+                            onClick={() => void bring(`e${e.id}`, e.text, "explore", ROOM_ITEM_MINUTES_DEFAULT)}
+                          >
+                            {ROOM_COPY.addToAgenda}
+                          </button>
+                        )}
+                        {e.kind === "tension" && carried && <SendTension view={view} actions={actions} entry={e} sessionId={carried.sessionId} returnFocusTo="carried-title" />}
                       </div>
                     ) : null
                   }

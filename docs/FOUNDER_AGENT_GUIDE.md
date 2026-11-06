@@ -291,6 +291,49 @@ founder will not notice it unless you tell them:
 A ticked box outlives whatever it was ticked about. If a founder shows you six
 of six and the site still looks wrong, four of those six are their own word.
 
+### Starting from a ReGen Civics profile
+
+**What it achieves:** a land project that designed its Game in ReGen Civics'
+Season 2 sessions brings that work in, instead of typing it again: its human
+needs, its circles and roles, who holds them, and, from the Village OS 1.0 file,
+its name, purpose and covenant.
+
+The card is at the top of Make This Site Yours, and the needs ceremony's first
+screen points to it. The founder pastes or chooses the file (the board's "Copy
+for Village OS" card, schema `regen-civics/village-card@1`, or the profile's 1.0
+file, `regen-civics/village@1`); any other file is refused in a sentence.
+Reading it writes nothing. The screen lists every part in plain words with its
+own tick, and only "Load what you kept" sends anything:
+
+- the needs go through the same scope write the needs ceremony uses, and the
+  whole-village figure through the variables route;
+- the circles, the roles, the holders the file names and the resting of the
+  councils a new village is born with become **one org draft**, which the
+  founder reads line by line on the same screen and then publishes or
+  withdraws. A published draft reverts whole;
+- after the publish, each circle's way of deciding is declared and each role is
+  tagged with its own needs;
+- identity, the purpose statement, the covenant, the recognition token's name,
+  the exit policy's leaving words and each quest are put into their own
+  editors unsaved, and the founder presses Save there;
+- everything else the stewards wrote (how the next holder of a role is chosen,
+  voting, founders, stewards, the first step in, seasons, the pool token, the
+  legal and land answers, tools, the web address) is a checklist of what to set
+  by hand, each line saying where. Nothing on it is set.
+
+Nothing it loads is money. The stewards' answer to the issuance cap is shown
+beside the launch decision it answers, which stays the founders' own, and
+exchange, redemption, commerce, stays and the crowdpool view stay off whatever
+the file says. Modules are listed in the order they can be turned on. A role a
+being holds goes in as a role with an opening, the being named on its card. Holders
+need a running season with an end date, because every holding ends with its
+season; without one the screen says so and leaves them for a later load.
+
+The rules are in `shared/regenImport.ts`, the reader in `shared/regenFile.ts`,
+the screen in `client/src/components/admin/ProfileImport.tsx`. Walk the founder
+through the preview before they press Load: it is the one place they see the
+whole shape before it is true.
+
 ### Naming the place
 
 **What it achieves:** the village has its own name, its own tagline, its own
@@ -423,11 +466,17 @@ and the Love Letter Covenant (`client/src/components/admin/contentSections.ts`).
 The pair reads as one thing at a glance. Both misreadings are actionable, and
 each one costs somebody an afternoon.
 
-- **Seeded starter quests** come from `server/seeds/quests-seed.json` and land
-  as ordinary rows in a fresh village. No example flag anywhere on them. They
-  are fully editable and fully deletable and they are meant to be rewritten in
-  the village's own words. Rewriting them is the best drafting work available to
-  you in this whole document.
+- **Starter quests** come from the `quests` section of
+  `server/seeds/examples-seed.json` and arrive on a fresh village's board as
+  standing examples: labelled, and nobody can claim one. In Admin, Quests, each
+  one has Keep, which publishes it as a real quest with whatever the founder
+  changed and the value they set, and the others stay until they decide. Clear
+  removes the rest. The Journey to Launch row "Review the starter quests" stays
+  open until none is waiting. Rewriting a starter in the village's own words
+  before keeping it is the best drafting work available to you in this whole
+  document. (A village seeded before 2026-10-31 got fourteen ordinary rows from
+  `server/seeds/quests-seed.json` instead, which are fully editable and
+  deletable like any quest.)
 - **Standing examples** come from `server/seeds/examples-seed.json` and appear
   when a module is first switched on, so a founder meets a working module rather
   than "No items yet." Every row carries `is_example` on the row itself, so the
@@ -441,7 +490,7 @@ each one costs somebody an afternoon.
 A founder who reports "I tried to edit the example and it would not let me" has
 met the refusal working correctly, and the answer is to publish their own item.
 A founder who leaves the starter quests alone in case they are locked has the
-other misreading, and those are theirs to rewrite today.
+other misreading: Keep is the door, and the words are theirs to rewrite first.
 
 Drafting here is the single best use of your time. Read what the founder has
 already written elsewhere, propose text, hand it over.
@@ -529,8 +578,13 @@ three parts:
    sign-up page the link opens, which posts to `POST /api/auth/register`, or
    Google sign-in at `/api/auth/google/start` (`server/routes/authGoogle.ts`),
    set up as `docs/GOOGLE_SIGN_IN.md` says. Both doors check the invitation
-   the same way (`server/lib/inviteDoor.ts`), and both make a plain member
-   holding no privileges. Somebody without a link can ask to join at
+   the same way (`server/lib/inviteDoor.ts`). BEFORE LAUNCH, an invitation a
+   founder made admits the person as a member the moment they make their
+   account, so the launch roll counts them (readiness R068: the bar is 3
+   vouches and nobody else can vouch yet). AFTER LAUNCH, an invitation is one
+   vouch of `membership.vouches_required`; the rest come from members who may
+   vouch, or an admin grants Member under Admin, Players. Either way the
+   account holds no privileges until a role or an admin gives them. Somebody without a link can ask to join at
    `/request-membership`, and the request lands in the founder's Admin.
 3. **An admin sets the role afterwards**, at `PUT /api/admin/users/:id/role`.
    It takes exactly `member`, `admin` or `founder`. Before the village launches,
@@ -558,8 +612,8 @@ founder, and the three are not related to each other.
 | What | Where | What it decides |
 |---|---|---|
 | `users.role` | on the member record, set by `PUT /api/admin/users/:id/role` | Whether this account is a member, an admin, or the founder. This is the one that opens `/admin` |
-| The `roles` table | `drizzle/0002_roles_and_cycles.sql`, holders in `role_holders` | Named permission groups carrying a `capabilities` list. Village-authored, granted per person |
-| `org_roles` and `org_role_assignments` | `drizzle/0049_org_roles.sql` | Org-chart seats, in the sociocratic sense: a seat has an aim, a domain it may decide alone, accountabilities, and a seat count. Vacancy is derived from active assignments against seats. It grants no access to anything |
+| The `roles` table | `drizzle/0002_roles_and_cycles.sql`, holders in `role_holders` | Named permission groups (Power groups in Admin) carrying a `capabilities` list. Village-authored, granted per person |
+| `org_roles` and `org_role_assignments` | `drizzle/0049_org_roles.sql` | Org-chart roles, in the sociocratic sense: a role has an aim, a domain it may decide alone, accountabilities, and how many people it holds (the `seats` column). Vacancy is derived from active assignments against `seats`. It grants no access to anything |
 
 The third is the one founders mean when they talk about roles in the village,
 and it is the one that grants nothing. The first is the one that grants

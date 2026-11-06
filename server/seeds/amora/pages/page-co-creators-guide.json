@@ -1,0 +1,288 @@
+{
+  "cta": {
+    "cards": [
+      {
+        "id": "commitment",
+        "title": "The {commitment}",
+        "description": "Read our community covenant and founding values"
+      },
+      {
+        "id": "quests",
+        "title": "Find Your Quest",
+        "description": "Discover opportunities that match your gifts"
+      },
+      {
+        "id": "events",
+        "title": "Join Community Call",
+        "description": "Meet us live and ask your questions"
+      }
+    ],
+    "intro": "The infinite journey starts with a single step. Choose your path below.",
+    "heading": "Ready to Begin?",
+    "moreLabel": "Learn More"
+  },
+  "hero": {
+    "intro": "Your complete guide to co-creating this village. How the economy works, how decisions get made, how to use our governance platform, and what the journey from visitor to Sage looks like.",
+    "headline": "The {village} Game Guide",
+    "alsoCalled": "Also called: The Co-Creators Guide"
+  },
+  "hypha": {
+    "body": "No single person, not even the founders, can override a community consent vote on Hypha. That's the point. When we say {village} is community-governed, this is what makes it true.",
+    "loop": [
+      {
+        "id": "sense",
+        "label": "Sense",
+        "description": "Find where your gifts are most needed. A quest waiting. A gap in the land. A conversation that sparks something."
+      },
+      {
+        "id": "propose",
+        "label": "Propose",
+        "description": "Open your intention to the community in Hypha. Consent-based: the check is simply whether this serves us."
+      },
+      {
+        "id": "create",
+        "label": "Create",
+        "description": "Do the work. Document it. Share what you created with the community."
+      }
+    ],
+    "intro": "Hypha is the platform where every {village} decision lives, recorded, verifiable, and tamper-proof on a distributed ledger. This isn't a shared Google Doc or a Discord vote that disappears. It's an **incredibly secure, globally trusted governance system** used by communities around the world to hold their most important decisions. Your voice here is permanent. Your contributions here are real.",
+    "actions": [
+      {
+        "id": "agreement",
+        "cta": "Create Agreement",
+        "title": "Start with an Agreement",
+        "subtitle": "Proposing a role, quest, or new contribution",
+        "description": "Before you begin any new type of contribution, a seasonal role, a quest, or a new initiative, you open it to the community with an Agreement. Describe what you're bringing, what {village} receives, and what you're requesting in return. The community votes. Value in = value out."
+      },
+      {
+        "id": "claim",
+        "cta": "Propose a Contribution",
+        "title": "Claim Your Contribution",
+        "subtitle": "After completing a task or season",
+        "description": "When you've done the work, completed a quest, finished a season as a role holder, or reached a milestone, you come back and propose a Contribution Claim. Detail what you delivered and what {village} gained. This is how the value you create becomes visible."
+      },
+      {
+        "id": "expenses",
+        "cta": "Pay for Expenses",
+        "title": "Propose Expenses",
+        "subtitle": "When your work has real costs",
+        "description": "If your contribution requires purchasing materials, covering travel, or paying for services that benefit the community, you can propose those expenses for reimbursement. Be transparent and specific, the community is the budget committee here, and your integrity in how you handle shared resources is part of your contribution."
+      },
+      {
+        "id": "delegate",
+        "cta": "View Members",
+        "title": "Delegate Your Voice",
+        "subtitle": "Trust someone to vote on your behalf",
+        "description": "Your voice is your governance power, it grows as you contribute. If you trust another member to represent your perspective while you're away or unavailable, you can delegate your voice to them. Choose someone whose judgment aligns with yours and whose commitment to {village} you trust deeply."
+      }
+    ],
+    "eyebrow": "Where Governance Gets Real",
+    "heading": "Meet Hypha",
+    "navLabel": "Hypha Platform",
+    "openLabel": "Open Hypha Platform",
+    "valueBody": "Every proposal puts one question to the community: does this contribution serve {village}? Not hours logged, hours are not a contribution. What matters is the actual value created, articulated clearly, and assessed honestly by your peers.",
+    "loopHeading": "The {village} Contribution Loop",
+    "valueHeading": "Value In = Value Out"
+  },
+  "voice": {
+    "note": "**Monthly All-Village Calls:** Major cross-circle decisions happen here, with full transparency and participation.",
+    "intro": "{village} practices consent-based decision making where everyone's voice matters, circles hold authority within their domains, and all concerns are heard.",
+    "steps": [
+      {
+        "title": "Proposal",
+        "description": "Anyone can raise a proposal for action or change. Proposals are presented clearly with context and goals."
+      },
+      {
+        "title": "Clarification",
+        "description": "The circle asks clarifying questions. This isn't debate, just understanding. Proposals may be refined."
+      },
+      {
+        "title": "Consent",
+        "description": "We look for consent, not unanimous agreement. No reasoned objections means we move forward."
+      }
+    ],
+    "heading": "Voice & Governance",
+    "navLabel": "Voice & Governance",
+    "principles": [
+      {
+        "body": "Each circle has decision-making power within its domain. No single person overrides the circle.",
+        "title": "Circles Hold Authority"
+      },
+      {
+        "body": "A reasoned objection blocks progress. A disagreement is noted but doesn't stop the work. Know the difference.",
+        "title": "Objections vs. Disagreements"
+      },
+      {
+        "body": "We're not seeking unanimous agreement. We're looking for no reasoned objections. That's enough to move forward.",
+        "title": "Consent Culture"
+      },
+      {
+        "body": "If you see a problem, speak up. Concerns shape better decisions. Silence isn't consent.",
+        "title": "Anyone Can Raise Concerns"
+      }
+    ],
+    "stepsHeading": "How Proposals Work",
+    "principlesHeading": "Key Principles"
+  },
+  "ikigai": {
+    "intro": "The intersection of what you love, what you're good at, what {village} needs, and what the village pays for.",
+    "circles": [
+      {
+        "id": "love",
+        "body": "Your authentic desires and what brings you alive. What would you do even if no one paid you?",
+        "label": "What You LOVE",
+        "title": "What You LOVE (Passion)"
+      },
+      {
+        "id": "good",
+        "body": "Your natural abilities, experience, and expertise. What do others come to you for?",
+        "label": "What You're GOOD AT",
+        "title": "What You're GOOD AT (Skills)"
+      },
+      {
+        "id": "needs",
+        "body": "The gaps we need filled to create a thriving, regenerative community. Where can you fill a real need?",
+        "label": "What the VILLAGE NEEDS",
+        "title": "What {village} NEEDS (Regeneration)"
+      },
+      {
+        "id": "pays",
+        "body": "The roles and quests {village} needs, each on its own card.",
+        "label": "What PAYS",
+        "title": "What PAYS (Compensation)"
+      }
+    ],
+    "heading": "Your R-Ikigai",
+    "navLabel": "R-Ikigai",
+    "centerTop": "Your",
+    "centerBottom": "R-Ikigai"
+  },
+  "spaces": {
+    "intro": "{village} is organized into four interconnected circles, each stewarding a different dimension of our community.",
+    "items": [
+      {
+        "title": "Village Steward Space",
+        "description": "Coordinates overall village success, open to all path members"
+      },
+      {
+        "title": "Resident Space",
+        "description": "Governs residential life and neighbor relations"
+      },
+      {
+        "title": "Prosperity Space",
+        "description": "Manages business interests and shared enterprise"
+      },
+      {
+        "title": "Land Stewardship Space",
+        "description": "Cares for land and ecosystem health"
+      }
+    ],
+    "heading": "The Four Spaces",
+    "navLabel": "The Four Spaces"
+  },
+  "closing": {
+    "quote": "{village} is an Infinite Game, played to keep creating together. We co-become the most beautiful village, where all beings belong and thrive. Success is measured by the flourishing of our community, land, and relationships.",
+    "signoff": "Welcome to {village}"
+  },
+  "progression": {
+    "intro": "Your journey through {village}, from first contact to deepest participation. Each stage has its own gifts and responsibilities.",
+    "elders": [
+      {
+        "id": "guide",
+        "body": "After 7+ years of deep participation, you become a Guide. Guides mentor others, hold institutional memory, and help newer members navigate their journey.",
+        "title": "Guide",
+        "duties": "**Responsibilities:** Mentorship, wisdom sharing, ceremony holding, and intergenerational connection."
+      },
+      {
+        "id": "sage",
+        "body": "After 21+ years, a Guide may become a Sage. Sages are the living embodiment of {village}'s values and vision, holding space for the village's evolution.",
+        "title": "Sage",
+        "duties": "**Responsibilities:** Long-term vision, values stewardship, conflict resolution, and community healing."
+      }
+    ],
+    "stages": [
+      {
+        "note": "",
+        "label": "Visitor"
+      },
+      {
+        "note": "",
+        "label": "Guest"
+      },
+      {
+        "note": "",
+        "label": "Immersant"
+      },
+      {
+        "note": "",
+        "label": "Participant"
+      },
+      {
+        "note": "({village} Family)",
+        "label": "Member"
+      },
+      {
+        "note": "",
+        "label": "Contributor"
+      },
+      {
+        "note": "",
+        "label": "Quest Seeker"
+      },
+      {
+        "note": "",
+        "label": "Initiate"
+      },
+      {
+        "note": "",
+        "label": "Co-Creator"
+      },
+      {
+        "note": "",
+        "label": "Role Holder"
+      },
+      {
+        "note": "(7+ years)",
+        "label": "Guide"
+      },
+      {
+        "note": "(21+ years)",
+        "label": "Sage"
+      }
+    ],
+    "heading": "Path of Growth",
+    "navLabel": "Path of Growth"
+  },
+  "recognition": {
+    "intro": "Every quest and role shows what it is worth on its own card. {token} is recognition from the community, and {village} sets its own rules for it and its other tokens.",
+    "heading": "{token}",
+    "navLabel": "{token}",
+    "cardTitle": "Open quests and roles",
+    "linkLabel": "See how they work here"
+  },
+  "goodNeighbor": {
+    "body": "The {good-neighbor} are essential for anyone seeking to become a Resident. They reflect our commitment to authentic community and mutual respect.",
+    "intro": "To become a resident of {village}, you commit to embodying these four pillars.",
+    "heading": "{good-neighbor}",
+    "pillars": [
+      {
+        "title": "{commitment} Values",
+        "description": "Commitment to community values"
+      },
+      {
+        "title": "Authentic Communication",
+        "description": "Resolve conflicts with integrity"
+      },
+      {
+        "title": "Financial Stability",
+        "description": "Meet community dues"
+      },
+      {
+        "title": "Governance Participation",
+        "description": "Active in decision-making"
+      }
+    ],
+    "navLabel": "Good Neighbor",
+    "buttonLabel": "Read the Full {good-neighbor}"
+  }
+}

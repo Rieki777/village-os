@@ -18,7 +18,7 @@
  * the camera scales them, so a fixed width is a hairline on one circle and a
  * smear on the next.
  */
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { captionSize } from "./labelFit";
 import type { PowerSeat } from "./types";
 
@@ -65,8 +65,34 @@ export default function CircleLabel({
   const captionY = labelTop + (label.lines.length - (hasChildren ? 0 : 1)) * label.lineHeight;
   return (
     <>
+      {/* The caption sits in a small dashed pill, the same material as the
+          forming disc, so it reads as a tag on the circle and not as more name. Drawn first,
+          so a long name that reaches down to it stays on top. */}
+      {forming && show && !drop && (() => {
+        const size = captionSize(label.fontSize, pxPerWorld);
+        const w = 7 * size * 0.56 + size * 1.2;
+        const h = size * 1.5;
+        const baseline = captionY + (hasChildren ? 14 : 16);
+        return (
+          <rect
+            x={x - w / 2}
+            y={baseline - size * 1.08}
+            width={w}
+            height={h}
+            rx={h / 2}
+            fill="var(--background)"
+            fillOpacity={0.6}
+            stroke="var(--foreground)"
+            strokeOpacity={0.45}
+            strokeWidth={haloWidth(size) * 0.45}
+            strokeDasharray={`${size * 0.35} ${size * 0.25}`}
+            pointerEvents="none"
+            aria-hidden="true"
+          />
+        );
+      })()}
       {(show || hovered) && !drop && (
-        <motion.text
+        <m.text
           animate={{ x, y: labelTop }}
           initial={false}
           transition={morph}
@@ -100,7 +126,7 @@ export default function CircleLabel({
               {ln}
             </tspan>
           ))}
-        </motion.text>
+        </m.text>
       )}
 
       {forming && show && !drop && (

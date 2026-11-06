@@ -210,7 +210,7 @@ describe("money, words and the sentence", () => {
     const a = renderSeatTermsText(["Orchard steward", "Ledger keeper"], settings);
     expect(renderSeatTermsText(["Orchard steward", "Ledger keeper"], settings)).toEqual(a);
     expect(a.title).toBe("Terms for Orchard steward and Ledger keeper");
-    expect(a.body).toContain("THE SEATS\n  Orchard steward\n  Ledger keeper");
+    expect(a.body).toContain("THE ROLES\n  Orchard steward\n  Ledger keeper");
     expect(a.body).toContain("Recorded here. Paid outside the platform.");
     expect(a.body).not.toMatch(/\bsign/i);
     expect(intentSentence(["Orchard steward"])).toBe("I align with these terms for Orchard steward.");

@@ -1,27 +1,10 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  Briefcase,
-  Shield,
-  Lightbulb,
-  ChevronDown,
-  Users2,
-  Zap,
-  Leaf,
-  Star,
-  Home,
-  Building2,
-  CircleDot,
-  Globe,
-  Handshake,
-  MessageCircle,
-  ClipboardList,
-  Scale,
-  Link2,
-} from "lucide-react";
+/** The link from a circle's group to its own card (`/circles/:id`). */
+const OPEN_CIRCLE_CARD = "Open this circle's card";
+import { m, AnimatePresence } from "framer-motion";
+import { ArrowRight, Briefcase, ChevronDown, Link2 } from "lucide-react";
+import { iconFor } from "@/lib/circleIcons";
 import { useEffect, useId, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/components/natural/useReducedMotion";
 import InfoTip from "@/components/InfoTip";
@@ -35,11 +18,16 @@ import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
+import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
+import RaiseTension from "@/components/roleTension/RaiseTension";
+import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
+import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import { coordinatingCircle } from "@shared/coordinatingCircle";
 
 interface RoleEntry {
   id: string;
@@ -69,11 +57,6 @@ interface SheetSource {
   historyShown: boolean;
 }
 
-/** Icon names a card may reference; anything unknown falls back to CircleDot. */
-const ICONS: Record<string, React.ElementType> = {
-  Users, Briefcase, Shield, Lightbulb, Users2, Zap, Leaf, Star, Home,
-  Building2, CircleDot, Globe, Handshake, MessageCircle, ClipboardList, Scale,
-};
 
 // The subtitles under each circle heading used to be a hardcoded map of one
 // village's circle names, living in platform code: a fork got no subtitle for
@@ -222,7 +205,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   // and a literal would be this platform naming one of them.
   const vendorName = useModule("saberra")?.name ?? "the connected service";
   const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
-  const Icon = ICONS[role.icon ?? ""] ?? CircleDot;
+  const Icon = iconFor(role.icon);
   // Admin-editable colour, resolved together with the ink that stays legible
   // on it. See client/src/lib/swatch.ts.
   const swatch = swatchFor(role.color);
@@ -239,7 +222,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
     el.focus({ preventScroll: true });
   }, [arrive]);
   return (
-    <motion.div
+    <m.div
       // The linked row is drawn in place. Its entrance offset is still on it
       // when the scroll is measured, so it would settle 20px higher, under
       // the sticky nav (measured in Chromium: header top 92, nav bottom 96).
@@ -287,7 +270,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
           its first frame and leaves the reader at the top of the page. */}
       <AnimatePresence initial={!arrive}>
         {expanded && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -312,7 +295,14 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   Outside the night card, in this page's own light inks. Not
                   on a demonstration seat: nobody is recruited for one, so a
                   link to it has nothing to ask anybody. */}
+              {!role.isExample && <RoleHolderCards role={role.raw} />}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {!role.isExample && (
+                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
+                  {RP_WORDS.proposeThisRole}
+                </Link>
+              )}
+              {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
               {/* The card is the seat today. This is the seat's whole record,
                   ended holdings included, which is the half a village loses
                   when it keeps its org chart in a document. Fetched only once
@@ -342,10 +332,10 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 </div>
               )}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -448,16 +438,26 @@ export default function Roles() {
     historyShown,
   };
 
+  // The circle the others link back to is the village's own top circle, or
+  // none. This line named "the General Coordinating Circle" to every village.
+  // Held invisible until /api/org answers, so the sentence never grows a
+  // clause in front of the reader.
+  const coordinator = coordinatingCircle(circles);
+  const orgPending = roles === null && !failed;
+  const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
+    coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
+  }`;
+
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
   const circleOrder = new Map(circles.map((c, i) => [c.name, i]));
-  const groups: { title: string; subtitle: string; roles: RoleEntry[] }[] = [];
+  const groups: { title: string; subtitle: string; circleId: string | null; roles: RoleEntry[] }[] = [];
   for (const role of roles ?? []) {
     const g = groups.find((x) => x.title === role.group);
     if (g) g.roles.push(role);
     else {
       const circle = circles.find((c) => c.name === role.group);
-      groups.push({ title: role.group, subtitle: circle?.purpose ?? "", roles: [role] });
+      groups.push({ title: role.group, subtitle: circle?.purpose ?? "", circleId: circle?.id ?? null, roles: [role] });
     }
   }
   groups.sort(
@@ -469,7 +469,7 @@ export default function Roles() {
       <section className="py-24 bg-background">
         <div className="container">
           {/* Header */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
@@ -490,7 +490,7 @@ export default function Roles() {
               is a way to hold some of it with your own hands, by{" "}
               <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the
@@ -499,23 +499,23 @@ export default function Roles() {
                 every visit after the first. */}
             <SeatClaimCard />
             {/* How it works */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               className="mb-14 grid sm:grid-cols-3 gap-4"
             >
               {[
-                { label: "Circles", description: "Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on), and links back to the General Coordinating Circle." },
+                { label: "Circles", description: circlesHow, pending: orgPending },
                 { label: "Roles", description: "Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned." },
                 { label: "Consent", description: "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar." },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl bg-muted/30 border border-border p-5">
                   <div className="text-sm font-bold text-foreground mb-1">{item.label}</div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{item.description}</p>
+                  <p className={`text-xs text-muted-foreground leading-relaxed${"pending" in item && item.pending ? " invisible" : ""}`}>{item.description}</p>
                 </div>
               ))}
-            </motion.div>
+            </m.div>
 
             {/* Members-only people: every seat card below still carries its
                 aim, its domain and whether it is held. This says whose names
@@ -539,18 +539,27 @@ export default function Roles() {
               )}
               {linkMissed && (
                 <p className="text-center text-sm text-muted-foreground mb-8">
-                  That seat is not on this page anymore.
+                  That role is not on this page anymore.
                 </p>
               )}
             </div>
 
-            {groups.map(({ title, subtitle, roles: groupRoles }) => (
+            {groups.map(({ title, subtitle, circleId, roles: groupRoles }) => (
               <div className="mb-14" key={title}>
                 <div className="mb-6">
                   <h2 className="font-display text-2xl font-bold text-foreground mb-1">{title}</h2>
                   {subtitle && (
                     <p className="text-muted-foreground text-sm">{subtitle}</p>
                   )}
+                  {/* The circle's own card: its words, its roles and who agreed to them. */}
+                  {circleId ? (
+                    <Link
+                      href={`/circles/${encodeURIComponent(circleId)}`}
+                      className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+                    >
+                      {OPEN_CIRCLE_CARD}
+                    </Link>
+                  ) : null}
                 </div>
                 <div className="space-y-3">
                   {groupRoles.map((role, i) => (
@@ -570,7 +579,7 @@ export default function Roles() {
             ))}
 
             {/* How tensions work */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -585,10 +594,10 @@ export default function Roles() {
               <p className="text-muted-foreground">
                 Decisions are made by consent. Consent means no one holds a reasoned objection based on their ability to do their work. It does not require unanimous agreement. The circle tries the change for an agreed period, then evaluates. Roles here are invitations to a specific way of serving the living purpose, not fixed job descriptions.
               </p>
-            </motion.div>
+            </m.div>
           </div>
 
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -598,7 +607,7 @@ export default function Roles() {
               Explore Our Circles
               <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

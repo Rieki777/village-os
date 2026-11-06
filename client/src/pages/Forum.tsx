@@ -26,7 +26,7 @@ const headers = (): Record<string, string> => {
 const KIND_BADGE: Record<string, string> = {
   decision: "bg-purple-50 text-purple-700 border border-purple-200",
   event: "bg-sky-50 text-sky-700 border border-sky-200",
-  announcement: "bg-amber/20 text-amber-700",
+  announcement: "bg-amber/20 text-amber-800",
 };
 
 export default function Forum() {

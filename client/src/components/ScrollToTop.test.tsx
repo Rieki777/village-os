@@ -112,6 +112,21 @@ describe("ScrollToTop on a plain element anchor", () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
+  it("jumps without the glide for a member who asked for less motion", () => {
+    // The stylesheet's reduce rule cannot reach a call that names "smooth"
+    // outright, so the call has to ask (natural/useReducedMotion.ts).
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), media: q }));
+    try {
+      const section = plant("choose-path");
+      const fire = arriveAt("/#choose-path");
+      expect(fire).not.toThrow();
+      expect(scrollIntoView.mock.contexts[0]).toBe(section);
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "instant" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("reaches an id that is not a valid selector", () => {
     const section = plant("2026-plan");
     const fire = arriveAt("/#2026-plan");

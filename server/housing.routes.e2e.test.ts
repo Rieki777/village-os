@@ -47,8 +47,9 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { scrubReservationsOf } from "./repos/housing";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -174,7 +175,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-housing-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 });
+  pool = testPool(testDb, { connectionLimit: 4 });
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY
@@ -853,6 +854,43 @@ describe.skipIf(!DB_CONFIGURED)("housing routes: the guards nothing was testing"
 
     // And a reservation that does not exist is still a 404.
     expect((await call("PUT", "/api/housing/reservations/hres-ghost/status", { body: { status: "reserved" } })).status).toBe(404);
+  });
+
+  it("writes to nobody once the person who asked has been erased, and still moves the home", async () => {
+    /*
+     * The erasure scrubs a request instead of deleting it, because a reserved
+     * row is a home held (`scrubReservationsOf`, the
+     * `housing-reservations-after-tombstone` step). The row then carries the
+     * tombstone's address, which reaches nobody, so the move must send nothing
+     * and say so to the founder's panel.
+     */
+    const askEmail = `erased-${PORT}@example.test`;
+    const made = await call("POST", "/api/housing/reservations", {
+      body: { homeType: "casita", name: "Lark Benn", email: askEmail, phone: "555 0123", notes: "Two dogs", structureKey: "eraseKey" },
+      token: null,
+      ip: "10.6.0.9",
+    });
+    expect(made.status).toBe(200);
+    await settle(1200); // let the create route's own sends land and be counted
+    const address = `deleted-hs-gone-${PORT}@anonymized.invalid`;
+    // One request, matched by the address it was sent under, and the admin audit line the route wrote for it.
+    expect(await scrubReservationsOf(pool, { userId: `hs-gone-${PORT}`, emailKey: askEmail, name: "A departed member", address })).toEqual({
+      scrubbed: 1,
+      addressOnly: 0,
+      auditLines: 1,
+    });
+    const [audit] = await pool.query<any[]>("SELECT text FROM health_events WHERE entity_type = 'housing_reservation' AND entity_ref = ?", [made.json.id]); // module-review-ok: reading back the audit line the route wrote, which is the assertion
+    expect(audit, "the founder's history keeps what was asked for and loses who asked").toEqual([{ text: "A departed member asked for a casita in eraseKey" }]);
+
+    const before = resendAttempts();
+    const reserved = await call("PUT", `/api/housing/reservations/${made.json.id}/status`, { body: { status: "reserved" } });
+    expect(reserved.status).toBe(200);
+    await settle(800);
+    expect(resendAttempts() - before, "no letter goes to a tombstone's address").toBe(0);
+    expect(reserved.json.notified, "the panel is told nobody was written to").toBe(false);
+    expect(await reservationsFor(address)).toMatchObject([
+      { name: "A departed member", phone: null, notes: null, status: "reserved", structure_key: "eraseKey" },
+    ]);
   });
 
   it("counts a home against a hamlet only once someone is actually reserved", async () => {

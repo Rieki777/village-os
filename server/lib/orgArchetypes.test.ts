@@ -23,7 +23,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { listOrgRoles } from "./orgChart";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -40,7 +40,7 @@ const tagsOf = async (id: string): Promise<string[]> => {
 describe.skipIf(!configured)("the class tags on a seat", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the scratch-schema pool this DB test provisions, same shape as every server DB suite
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the scratch-schema pool this DB test provisions, same shape as every server DB suite
     await pool.query( // module-review-ok: seeding org_roles on the scratch schema so ROLE_COLS' archetypes read-back is provable
       "INSERT INTO org_roles (id, name, seats, archetypes) VALUES " +
         "('tagged','Water Steward',1,?), " +

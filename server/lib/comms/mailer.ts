@@ -39,6 +39,7 @@ import type { Pool } from "mysql2/promise";
 import type { PostResult } from "../../../shared/comms/contracts";
 import type { NoticeEmail, NoticeSendResult } from "../notify";
 import { numberVar } from "../variables";
+import { emailAccent } from "../emailAccent";
 import { post, type PostOfficeDeps } from "./postOffice";
 import { resendTransport, type Transport } from "./transport";
 
@@ -62,11 +63,36 @@ export const DEFAULT_EMAIL_CONFIG = {
   sender: "",
 };
 
+/**
+ * `local@domain.tld`, checked in one pass: exactly one `@` with something
+ * before it, no whitespace (nor any character in `banned`), and a dot in the
+ * domain with something on both sides of it.
+ *
+ * It replaces `/^[^@\s]+@[^@\s]+\.[^@\s]+$/` and its two siblings, which
+ * accept the same strings but backtrack polynomially on a long run of dots,
+ * and a stranger types the address on public forms (CodeQL
+ * js/polynomial-redos, alerts #449, #450, #451). mailerAddress.test.ts holds
+ * the two to the same answers.
+ */
+export function isPlainAddress(s: string, banned = ""): boolean {
+  const at = s.indexOf("@");
+  if (at <= 0 || at !== s.lastIndexOf("@")) return false;
+  for (const ch of s) if (ch.trim() === "" || banned.includes(ch)) return false;
+  const domain = s.slice(at + 1);
+  const dot = domain.indexOf(".", 1);
+  return dot !== -1 && dot < domain.length - 1;
+}
+
 /** `addr@dom.tld` or `Name <addr@dom.tld>`. Anything else is not sendable. */
 export function validEmailSender(v: string): boolean {
   const s = v.trim();
   if (!s) return false;
-  return /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(s) || /^[^<>]+<[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+>$/.test(s);
+  if (isPlainAddress(s, "<>")) return true;
+  if (!s.endsWith(">")) return false;
+  const lt = s.indexOf("<");
+  // One `<`, after a name with no angle brackets in it, and the `>` that ends the string.
+  if (lt <= 0 || lt !== s.lastIndexOf("<") || s.indexOf(">") !== s.length - 1) return false;
+  return isPlainAddress(s.slice(lt + 1, -1), "<>");
 }
 
 /**
@@ -130,6 +156,8 @@ export interface MailerDeps {
   secretValue(key: "resend_api_key" | "assistant_api_key"): string;
   /** This village's own name, for the heading of a submission email. */
   projectName(): string;
+  /** The village's brand colour for a submission email's band and button (server/lib/emailAccent.ts). Absent: the neutral. */
+  brandColour?(): string;
   /** The pool the post office writes its ledger through. */
   getPool(): Pool;
   /** This village's absolute origin, for the one-click links in an email's headers. */
@@ -156,9 +184,16 @@ const NOTICE_ACCEPTED: ReadonlySet<string> = new Set(["queued", "sending", "sent
  */
 export function normalizeRecipients(to: string[]): string[] {
   return Array.from(new Set(
-    to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)),
+    to.flatMap((a) => String(a ?? "").split(",")).map((s) => s.trim()).filter((s) => isPlainAddress(s)),
   ));
 }
+
+/**
+ * Which is exactly why a STRANGER's typed address must never reach `to` raw:
+ * one public request became one essential email per comma. Public forms read
+ * their address through this, from server/lib/publicAddress.ts.
+ */
+export { singlePublicAddress } from "../publicAddress";
 
 /** The post office's answer, in the words the old mailer's callers read. */
 export function mailResultOf(r: PostResult): MailResult {
@@ -198,18 +233,19 @@ export function createMailer(deps: MailerDeps) {
    * is escaped because a village types its own name.
    */
   function buildSubmissionEmailHtml(type: string, data: Record<string, unknown>, adminUrl: string): string {
+    const accent = emailAccent(deps.brandColour?.());
     const rows = Object.entries(data)
       .map(
         ([k, v]) =>
-          `<tr><td style="padding:6px 12px;font-weight:600;color:#2D5A5A;background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
+          `<tr><td style="padding:6px 12px;font-weight:600;color:${accent};background:#f4f7f7;border-bottom:1px solid #e5e7eb;vertical-align:top">${escapeHtml(k)}</td><td style="padding:6px 12px;color:#1f2937;border-bottom:1px solid #e5e7eb;white-space:pre-wrap">${escapeHtml(typeof v === "object" ? JSON.stringify(v) : String(v ?? ""))}</td></tr>`
       )
       .join("");
     return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937">
 <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-  <div style="background:#2D5A5A;color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(deps.projectName())}</div></div>
+  <div style="background:${accent};color:#fff;padding:20px 24px"><div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">New ${escapeHtml(type)} submission</div><div style="font-size:20px;font-weight:700;margin-top:4px">${escapeHtml(deps.projectName())}</div></div>
   <div style="padding:20px 24px">
     <table style="width:100%;border-collapse:collapse;font-size:14px">${rows}</table>
-    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:#2D5A5A;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
+    <div style="margin-top:24px"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;background:${accent};color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">Open Admin</a></div>
   </div>
 </div></body></html>`;
   }
@@ -324,7 +360,7 @@ export function createMailer(deps: MailerDeps) {
    * of emails a route tried to send. The rows are still written, as `skipped`,
    * so Sent mail shows what would have gone.
    */
-  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; replyTo?: string; origin?: string }): Promise<MailResult> {
+  async function sendResendEmail(opts: { to: string[]; subject: string; html: string; text?: string; replyTo?: string; origin?: string }): Promise<MailResult> {
     const gap = !postOffice.hasApiKey() ? "no_api_key" : !postOffice.sender() ? "no_sender" : null;
     if (gap === "no_api_key") console.log("[RESEND] API key not set, skipping email");
     if (gap === "no_sender") {
@@ -349,7 +385,8 @@ export function createMailer(deps: MailerDeps) {
           to: { email: address },
           subject: opts.subject,
           html: opts.html,
-          text: "",
+          // A plain-text part when the caller rendered one (the Words emails do).
+          text: opts.text ?? "",
           // The contact relay (S22) sets this to the SENDER's address so a
           // plain reply works, always with compose-screen disclosure.
           replyTo: opts.replyTo ?? null,

@@ -1,0 +1,77 @@
+{
+  "paths": {
+    "investor": {
+      "label": "Investor",
+      "role": "Capital Contributor",
+      "description": "Plant capital in a project built to last."
+    },
+    "steward": {
+      "label": "Village Steward",
+      "role": "Co-Creator",
+      "description": "Hold a role, join a circle, and keep the whole village running."
+    },
+    "resident": {
+      "label": "Resident",
+      "role": "Co-Creator",
+      "description": "Make {village} your home. Find a place to live, join the waitlist, and belong."
+    },
+    "prosperity-creator": {
+      "label": "Prosperity Creator",
+      "role": "Business Builder",
+      "description": "Launch or grow your business inside the village, and share in what you build."
+    }
+  },
+  "stages": {
+    "visitor": {
+      "name": "Visitor",
+      "description": "Discovering what this village is."
+    },
+    "guest": {
+      "name": "Guest",
+      "description": "Created a profile and stepped inside."
+    },
+    "immersant": {
+      "name": "Immersant",
+      "description": "Spent immersive time with the community."
+    },
+    "participant": {
+      "name": "Participant",
+      "description": "Completed community training."
+    },
+    "member": {
+      "name": "Member",
+      "description": "Signed the {commitment} and joined the community."
+    },
+    "contributor": {
+      "name": "Contributor",
+      "description": "The village has paid you for what you brought it."
+    },
+    "quest-seeker": {
+      "name": "Quest Seeker",
+      "description": "Contributing steadily through quests."
+    },
+    "initiate": {
+      "name": "Initiate",
+      "description": "Walking the Co-Creator Right of Passage."
+    },
+    "co-creator": {
+      "name": "Co-Creator",
+      "description": "Consented by the Co-Creators circle."
+    },
+    "role-holder": {
+      "name": "Role Holder",
+      "description": "Holding a seasonal role for the village."
+    },
+    "guide": {
+      "name": "Guide",
+      "description": "Seven or more years of stewardship."
+    },
+    "sage": {
+      "name": "Sage",
+      "description": "Twenty-one or more years of stewardship."
+    }
+  },
+  "ladder": {
+    "title": "Path of Growth"
+  }
+}

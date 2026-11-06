@@ -134,7 +134,7 @@ describe("reminders", () => {
   it("says the words the design names", () => {
     expect(planOpenCopy("Second Season", "2027-03-31")).toEqual({
       title: "Plan your season: Second Season",
-      body: "Choose your seats and what you will do. Open until 31 March 2027.",
+      body: "Choose your roles and what you will do. Open until 31 March 2027.",
     });
     expect(planReminderCopy(4)).toEqual({ title: "Your season is not filed yet", body: "4 days left." });
     expect(planReminderCopy(1).body).toBe("1 day left.");

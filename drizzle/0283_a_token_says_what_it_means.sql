@@ -1,0 +1,14 @@
+-- A TOKEN SAYS WHAT IT MEANS, IN THE VILLAGE'S OWN WORDS.
+--
+-- Rye, 2026-10-23: "Village Tokens is the umbrella word, which should be able
+-- to be set in admin to name each type of token and for what categories it's
+-- issued and what it means."
+--
+-- The name was already the village's to set (PUT /api/admin/tokens/:slug).
+-- What a token means was not: the only sentence was hard-coded platform copy in
+-- the admin client, and the 2026-10-22 ruling says platform copy never says
+-- what a token does. This is the village's own text, written in Admin, Tokens,
+-- and shown to members beside the token. NULL is "nobody has written one".
+--
+-- Expand only: a nullable column, which the previous release never reads.
+ALTER TABLE `tokens` ADD COLUMN `description` varchar(600) NULL AFTER `name`;

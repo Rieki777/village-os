@@ -34,9 +34,9 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { GAME_CONFIG } from "../../shared/gameConfig";
 import { sortMembersByName } from "../../shared/memberOrder";
-import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
+import { grantStage } from "../lib/stageGrant";
+import { roleHoldersNow } from "../repos/pathLadders";
 
 type Deps = Pick<
   AppDeps,
@@ -49,10 +49,15 @@ type Deps = Pick<
   | "hasMembership"
   | "stageOf"
   | "recordStageEvent"
->;
+  | "getPool"
+  | "lapseContext"
+> & {
+  /** Sheet 19: the power groups that give this member admin access right now, by name. */
+  adminGroupsFor(userId: string): string[];
+};
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, paidByVillage, hasMembership, stageOf, recordStageEvent } = deps;
+  const { isAdmin, members, claimsRepo, computeStage, trainingCompletions, paidByVillage, hasMembership, stageOf, recordStageEvent, getPool, lapseContext, adminGroupsFor } = deps;
 
   // Players admin: list + stage grants
   app.get("/api/admin/players", async (req, res) => {
@@ -79,6 +84,9 @@ export function register(app: Express, deps: Deps): void {
     // reason: a per-member ledger question inside the map below would cost one
     // query per member on a page that lists all of them.
     const paid = await paidByVillage(allMembers.map((u: any) => String(u.id)));
+    // The fifth: who holds an org-chart role right now, which lifts Role Holder
+    // on its own (Rye, 2026-10-31). One query for the roster, same as the others.
+    const holders = await roleHoldersNow(getPool(), lapseContext());
     res.json(
       allMembers.map((u: any) => ({
         id: u.id,
@@ -90,28 +98,19 @@ export function register(app: Express, deps: Deps): void {
         joinedAt: u.joinedAt,
         balance: u.recognitionBalance ?? 0,
         stageGranted: u.stageGranted ?? null,
-        stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? [], paid.has(String(u.id))),
+        stageComputed: computeStage(u, consented.get(u.id) ?? 0, trained.get(String(u.id)) ?? [], paid.has(String(u.id)), holders.has(String(u.id))),
         membership: hasMembership(u),
+        adminVia: adminGroupsFor(String(u.id)),
       }))
     );
   });
 
+  // The one path a stage is granted by (server/lib/stageGrant.ts), which an adopted open role proposal takes too.
   app.put("/api/admin/players/:id/stage", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const { stageId } = req.body ?? {};
-    if (stageId && !GAME_CONFIG.stages.some((s) => s.id === stageId)) {
-      return res.status(400).json({ error: "Unknown stage" });
-    }
-    const target = await members.byId(req.params.id);
-    if (!target) return res.status(404).json({ error: "Not found" });
-    // The seed sets each identity's stage so its example content renders at
-    // the right level; moving one is editing example content.
-    if (isExampleUser(target)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    const before = await stageOf(target);
-    const updated = await members.update(target.id, (u: any) => { u.stageGranted = stageId ?? null; });
-    if (!updated) return res.status(404).json({ error: "Not found" });
-    const after = await stageOf(updated);
-    await recordStageEvent(updated, before, after, stageId ? "granted by an admin" : "grant removed");
-    res.json({ success: true, stageComputed: after });
+    const out = await grantStage({ members, stageOf, recordStageEvent }, req.params.id, stageId, stageId ? "granted by an admin" : "grant removed");
+    if (!out.ok) return res.status(out.status).json(out.body);
+    res.json({ success: true, stageComputed: out.stageComputed });
   });
 }

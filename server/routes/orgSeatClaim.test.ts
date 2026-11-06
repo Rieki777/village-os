@@ -48,7 +48,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { listOrgAssignments, seatHolder } from "../lib/orgChart";
 import { dbCollection } from "../repos/store-db";
 import { register } from "./org";
@@ -112,7 +112,7 @@ describe.skipIf(!configured)("claiming a seat recorded under a name", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     submissionsRepo = dbCollection(pool, {
       table: "submissions",
       orderBy: "`submitted_at`, `id`",
@@ -141,7 +141,8 @@ describe.skipIf(!configured)("claiming a seat recorded under a name", () => {
         return false;
       },
       getPool: () => pool,
-      members: { all: async () => [] },
+      // Nobody here has left, so the departed-member check finds no row.
+      members: { all: async () => [], byId: async () => null },
       firstName: (n: string) => String(n).split(/\s+/)[0],
       capabilityCtx: async () => ({}),
       lapseContext: () => ({}),

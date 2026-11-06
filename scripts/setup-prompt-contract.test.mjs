@@ -50,4 +50,34 @@ check("the copied half fetches everything at one release", () => {
   assert.doesNotMatch(prompt, /village-os:\d+\.\d+\.\d+/, "a pinned image tag mixes releases");
 });
 
+/*
+ * THE OTHER TWO FILES THE PROMPT SENDS THE ASSISTANT TO, AND THE HOSTED PATH
+ * (readiness R191 and R202). The prompt says AGENTS.md and START_HERE.md win
+ * when they disagree with it, so a stall in either is a stall in the prompt:
+ * a clone without `--branch` takes unreleased `main`, and `docker compose
+ * logs -f` never returns to an assistant waiting on it. And the three
+ * hosted-path documents gave two different answers for DATABASE_URL and no
+ * step at all for the address `/claim` is opened at.
+ */
+const read = (rel) => fs.readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), "utf8");
+const SENT_TO = { "AGENTS.md": read("AGENTS.md"), "START_HERE.md": read("START_HERE.md"), "the prompt": prompt };
+
+check("no file the assistant follows clones without a release or waits on logs -f", () => {
+  for (const [name, text] of Object.entries(SENT_TO)) {
+    for (const line of text.split(/\r?\n/)) {
+      if (/git clone\b/.test(line)) assert.match(line, /--branch\s+\S+/, `${name}: an unpinned clone takes unreleased main: ${line.trim()}`);
+    }
+    assert.doesNotMatch(text, /logs\s+-f\b/, `${name}: \`logs -f\` never returns to an assistant waiting on it`);
+  }
+});
+
+check("the hosted path names one DATABASE_URL, a reference, and an address before /claim", () => {
+  const hosted = { "START_HERE.md": SENT_TO["START_HERE.md"], "docs/PROVISIONING.md": read("docs/PROVISIONING.md"), "the prompt": prompt };
+  for (const [name, text] of Object.entries(hosted)) {
+    assert.match(text, /\$\{\{MySQL\.MYSQL_URL\}\}/, `${name}: DATABASE_URL is the reference to the MySQL service's MYSQL_URL`);
+    assert.match(text, /Generate Domain/, `${name}: no step gives the service an address to open /claim at`);
+  }
+  assert.doesNotMatch(read("docs/PROVISIONING.md"), /filled in for you\s+automatically/, "the old wording said DATABASE_URL fills itself in");
+});
+
 console.log(`setup-prompt contract: ${passed} passed`);

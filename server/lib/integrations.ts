@@ -206,6 +206,47 @@ export async function callVendor<T>(
   }
 }
 
+// ── The platform's own calls keep the same record ───────────────────────────
+
+/**
+ * THE CALLS THE PLATFORM ITSELF MAKES, recorded in the same table.
+ *
+ * Rye, 2026-10-13: green means a live check passed. The launch journey's
+ * Stripe and guide rows went green on a key being set, which is the failure
+ * this file was written against, so the platform's own outbound calls now keep
+ * the record a listing's driver keeps. One row per call below, written only by
+ * `notePlatformCall`, and read by server/lib/launchProofs.ts.
+ *
+ * The module ids name the outside service and collide with no module in
+ * shared/modules.ts. No correlation header goes to Stripe or Anthropic, so the
+ * id column stays empty on these rows rather than holding an id the vendor
+ * never saw.
+ */
+export const PLATFORM_CALLS = {
+  /** Stripe opening a checkout session, in server/lib/payments.ts. */
+  stripeCheckout: { moduleId: "stripe", operation: "checkout" },
+  /** The guide answering on the village's own key, in server/lib/assistant.ts. */
+  guideReply: { moduleId: "assistant", operation: "reply" },
+  /** The same, on the key the platform lends a village. */
+  guideReplyBorrowed: { moduleId: "assistant", operation: "reply-borrowed" },
+} as const;
+
+export type PlatformCall = (typeof PLATFORM_CALLS)[keyof typeof PLATFORM_CALLS];
+export type PlatformCallOutcome = { ok: true } | { ok: false; status: string; detail: string };
+
+/**
+ * Record one platform call's outcome. NEVER THROWS: a record that could not be
+ * written must not turn the payment or the reply it describes into a failure.
+ */
+export async function notePlatformCall(call: PlatformCall, outcome: PlatformCallOutcome): Promise<void> {
+  try {
+    if (outcome.ok) await recordSuccess(call.moduleId, call.operation, "");
+    else await recordFailure(call.moduleId, call.operation, "", outcome.status, outcome.detail);
+  } catch (e: any) {
+    console.warn(`[integrations] could not record ${call.moduleId} ${call.operation}: ${String(e?.message ?? e).slice(0, 120)}`);
+  }
+}
+
 // ── Reading the record honestly ──────────────────────────────────────────────
 
 /**

@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   balanceOf,
   loadTokenRegistry,
@@ -43,7 +43,7 @@ describe.skipIf(!configured)("the Game's start gates issuance (MySQL)", () => {
   beforeAll(async () => {
     // The whole point of this suite: a village that has NOT started.
     db = await provisionTestDb({ gameStarted: false });
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
     await loadTokenRegistry(pool);
   });
 
@@ -238,7 +238,7 @@ describe.skipIf(!configured)("the harness fixture starts a village by default", 
   it("provisions an ordinary mid-life village, so the rest of the suite mints", async () => {
     const started = await provisionTestDb();
     try {
-      const p = mysql.createPool({ uri: started.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
+      const p = testPool(started, { connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool, the crews.test.ts shape
       try {
         const fact = await readGameStart(p);
         expect(fact.started).toBe(true);

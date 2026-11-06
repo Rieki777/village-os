@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CommsWords from "@/components/admin/comms/CommsWords";
 
@@ -85,7 +85,31 @@ function stub(calls: Call[], details: Record<string, any> = {}) {
   );
 }
 
+/*
+ * UNMOUNT BEFORE THE STUB GOES, or the real fetch meets a relative URL.
+ *
+ * client/src/test/setup.ts registers afterEach(cleanup) as a SETUP FILE, so it
+ * registers before the afterEach below. Vitest runs after-hooks in reverse
+ * registration order, so without the explicit cleanup the stub is removed while
+ * the screen is still mounted. A request any pending effect then fires meets
+ * Node's real fetch, which refuses a relative URL:
+ *
+ *   TypeError: Failed to parse URL from /api/admin/comms/words/gathering.confirm
+ *
+ * That URL is one the stub itself answers, which is the proof it escaped the
+ * stub rather than coming from somewhere else. It surfaces as an UNHANDLED
+ * error rather than a failing test, so the shard reports every test passed and
+ * fails anyway, on whichever pull request happened to be running. It reddened
+ * #626 on 2026-10-30, which touches no comms code at all.
+ *
+ * cleanup() is idempotent, so the global one still runs harmlessly after this.
+ * SIXTY-SIX other client test files share this shape (stub fetch, unstub in
+ * their own afterEach, never cleanup themselves). Fixing them all wants its own
+ * change: flipping vitest sequence.hooks to list would do it in one line, but
+ * several files read the DOM in their own afterEach and would break.
+ */
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });

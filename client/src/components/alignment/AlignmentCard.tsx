@@ -3,7 +3,7 @@
  *
  * The exact words, as stored, then a chip per party, then what the reader can
  * do: Align when they are a party who has not, the date they aligned when
- * they have, and the receipt. Used on /seat-applications/:id and in the
+ * they have, and the receipt. Used on /role-applications/:id and in the
  * profile's "What you have aligned with".
  *
  * How the terms are ending (PR8) sits under the title in one line, and a

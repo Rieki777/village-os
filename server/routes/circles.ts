@@ -35,9 +35,22 @@ import { listOrgRoles } from "../lib/orgChart";
 import { circleDeleteProblem, onCircleStatusChange } from "../lib/circleTreasury";
 import { listBudgets } from "../lib/resources";
 import { CIRCLE_STATUSES } from "../../shared/draftKinds";
-import { parentingRefusal } from "../../shared/circleView";
+import { parentingRefusal, CIRCLE_LAYERS, isCircleLayer } from "../../shared/circleView";
 
 type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "circlesRepo" | "getPool" | "loadRoles">;
+
+/** A layer the admin form sent that is none of CIRCLE_LAYERS (0286), in words. */
+export function layerRefusal(layer: unknown): { error: string; message: string } | null {
+  if (layer === null || layer === "" || isCircleLayer(layer)) return null;
+  return {
+    error: "unknown_layer",
+    message: `A circle's governance layer is one of ${CIRCLE_LAYERS.join(", ")}, or none. "${String(layer)}" is none of those.`,
+  };
+}
+
+/** The refusal an admin meets changing a circle's purpose directly. */
+export const PURPOSE_BY_CONSENT = (circleId: string): string =>
+  `A circle's purpose changes by consent. Propose new words on the circle's card, at /circles/${circleId}.`;
 
 export function register(app: Express, deps: Deps): void {
   const { isAdmin, adminActor, circlesRepo, getPool, loadRoles } = deps;
@@ -64,6 +77,8 @@ export function register(app: Express, deps: Deps): void {
     const parentId = req.body?.parentCircleId ? String(req.body.parentCircleId) : null;
     const parentRefused = parentingRefusal(circlesRepo.all() as any[], slug, parentId);
     if (parentRefused) return res.status(400).json(parentRefused);
+    const layerRefused = layerRefusal(req.body?.layer ?? null);
+    if (layerRefused) return res.status(400).json(layerRefused);
     const circle = {
       id: slug,
       name: String(name).trim().slice(0, 120),
@@ -75,6 +90,7 @@ export function register(app: Express, deps: Deps): void {
       color: req.body.color ?? null,
       status: (CIRCLE_STATUSES as readonly string[]).includes(req.body.status) ? req.body.status : "active",
       order: circlesRepo.all().length + 1,
+      layer: req.body.layer || null,
     };
     await circlesRepo.insert(circle);
     onRealItemPublished(getPool(), "map", adminActor(req)?.id ?? null);
@@ -106,16 +122,34 @@ export function register(app: Express, deps: Deps): void {
       if (name.length > 120) return res.status(400).json({ error: "name_too_long", message: "A circle name is at most 120 characters." });
       req.body.name = name;
     }
+    // 0286: a layer is one of CIRCLE_LAYERS or none, and "" from the form's "None" is none.
+    if (req.body?.layer !== undefined) {
+      const refused = layerRefusal(req.body.layer);
+      if (refused) return res.status(400).json(refused);
+      req.body.layer = req.body.layer || null;
+    }
     if (req.body?.status !== undefined && !(CIRCLE_STATUSES as readonly string[]).includes(String(req.body.status))) {
       return res.status(400).json({
         error: "unknown_status",
         message: `A circle is ${CIRCLE_STATUSES.join(", ")}. "${String(req.body.status)}" is none of those.`,
       });
     }
+    /*
+     * A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22). It is one of the
+     * circle card's words, and those change through an org draft
+     * (`update_circle`, server/lib/circleWordsDraft.ts), so the admin door
+     * refuses a purpose that differs from the one stored and points to the
+     * card. The same purpose sent back with a rename or a status change is no
+     * change, and goes through. A new circle still starts with its purpose
+     * (POST above): there was nothing to consent to changing.
+     */
     if (req.body?.purpose !== undefined) {
-      const purpose = String(req.body.purpose ?? "").trim();
-      if (purpose.length > 2000) return res.status(400).json({ error: "purpose_too_long", message: "A circle purpose is at most 2000 characters." });
-      req.body.purpose = purpose || null;
+      const purpose = String(req.body.purpose ?? "").trim() || null;
+      const stored = String((all[idx] as any).purpose ?? "").trim() || null;
+      if (purpose !== stored) {
+        return res.status(409).json({ error: "purpose_by_consent", message: PURPOSE_BY_CONSENT(String(req.params.id)) });
+      }
+      req.body.purpose = stored;
     }
     // isExample is pinned exactly like id: a request body may not forge the
     // flag onto a real row, nor strip it off an example to launder it.
@@ -168,7 +202,7 @@ export function register(app: Express, deps: Deps): void {
     const seatsHere = (await listOrgRoles(getPool())).filter((r) => r.circleId === req.params.id);
     const stillHere = referencing.length + seatsHere.length;
     if (stillHere) {
-      return res.status(409).json({ error: `${stillHere} seat(s) still orbit this circle, reassign them first` });
+      return res.status(409).json({ error: `${stillHere} role(s) still orbit this circle, reassign them first` });
     }
     // The same refusal as the seats above, one level up: deleting a circle
     // with circles inside it would leave each of them pointing at a parent that

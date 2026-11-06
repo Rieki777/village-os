@@ -112,10 +112,18 @@ const MAP_BEFORE = [
   "id", "name", "description", "domain", "accountabilities", "whyItMatters", "circleId", "seats",
   "minStage", "holderCount", "vacant", "state", "isExample", "representsCircle", "howChosen",
   "howChosenGloss", "termEnds", "archetypes", "holders",
+  // 0268: the handover words ride the core beside the domain, on both routes.
+  "bringMe", "notMine", "runbook",
+  // 0274: the CCOS words, on the same rule.
+  "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment",
 ];
 const ORG_BEFORE = [
   "id", "circleId", "name", "aim", "domain", "accountabilities", "whyItMatters", "seats",
   "criticality", "recruiting", "state", "holderCount", "holders", "isExample",
+  // 0268: the handover words, at the domain's tier.
+  "bringMe", "notMine", "runbook",
+  // 0274: the CCOS words, at the domain's tier too.
+  "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment",
 ];
 const PACK = [
   "authority", "firstYearOutcomes", "first90DayOutcomes", "locationExpectations",
@@ -347,6 +355,79 @@ describe("the privacy rule: never more public on /api/org than on /api/map", () 
     // terms.read is its own flag: map.viewPeople never implies it.
     expect(mapSeatTier(true, true).terms).toBe(true);
     expect(tierOrg({ viewPeople: true, editing: true }).terms).toBe(false);
+  });
+});
+
+describe("the handover words (0268): on the role, at the domain's tier", () => {
+  const words = {
+    bringMe: ["A water reading", "The tank key"],
+    notMine: ["Garden irrigation"],
+    runbook: "https://example.org/water-runbook",
+  };
+  const tiers: Array<[string, SeatTier, "map" | "org"]> = [
+    ["map structure", MAP_STRUCTURE, "map"],
+    ["map member", MAP_MEMBER, "map"],
+    ["org stranger, map dark", ORG_STRANGER_DARK, "org"],
+    ["org stranger, map lit", ORG_STRANGER_LIT, "org"],
+    ["org member", ORG_MEMBER, "org"],
+    ["org editing", ORG_EDITING, "org"],
+  ];
+
+  it("rides every tier on both routes exactly where the domain does", () => {
+    for (const [label, tier, route] of tiers) {
+      const seat = projectSeat(role(words), HELD, tier, ctx(route));
+      expect("domain" in seat, `${label}: the domain is the control`).toBe(true);
+      expect(seat.bringMe, label).toEqual(words.bringMe);
+      expect(seat.notMine, label).toEqual(words.notMine);
+      expect(seat.runbook, label).toBe(words.runbook);
+    }
+  });
+
+  it("is null, never absent, when nothing is written or the fixture predates 0268", () => {
+    const seat = projectSeat(role(), HELD, ORG_STRANGER_DARK, ctx("org"));
+    expect(seat).toHaveProperty("bringMe", null);
+    expect(seat).toHaveProperty("notMine", null);
+    expect(seat).toHaveProperty("runbook", null);
+  });
+});
+
+describe("the CCOS words (0274): on the role, at the domain's tier", () => {
+  const words = {
+    existsWhile: "people are still arriving and need a clear way in",
+    authorities: ["Manage applicant onboarding and role invitations"],
+    responsibilities: ["Answer role applications within 2 business days", "Run onboarding calls"],
+    signsStretched: "Applications waiting longer than 2 business days.",
+    flowsBack: "Runbooks and the intake agent from the Operations role.",
+    stepBack: "Name it at the Friday check-in.",
+    timeCommitment: "Part of a full-time season",
+  };
+  const tiers: Array<[string, SeatTier, "map" | "org"]> = [
+    ["map structure", MAP_STRUCTURE, "map"],
+    ["map member", MAP_MEMBER, "map"],
+    ["org stranger, map dark", ORG_STRANGER_DARK, "org"],
+    ["org stranger, map lit", ORG_STRANGER_LIT, "org"],
+    ["org member", ORG_MEMBER, "org"],
+    ["org editing", ORG_EDITING, "org"],
+  ];
+
+  it("rides every tier on both routes exactly where the domain does", () => {
+    for (const [label, tier, route] of tiers) {
+      const seat = projectSeat(role(words), HELD, tier, ctx(route));
+      expect("domain" in seat, `${label}: the domain is the control`).toBe(true);
+      for (const [k, v] of Object.entries(words)) expect(seat[k], `${label}: ${k}`).toEqual(v);
+    }
+  });
+
+  it("is null, never absent, when nothing is written or the fixture predates 0274", () => {
+    const seat = projectSeat(role(), HELD, ORG_STRANGER_DARK, ctx("org"));
+    for (const k of Object.keys(words)) expect(seat, k).toHaveProperty(k, null);
+  });
+
+  it("keeps the recruitment pack's own authority note apart, at the editing tier only", () => {
+    const r = role({ ...words, authority: "May sign for small purchases" });
+    expect(projectSeat(r, HELD, ORG_STRANGER_DARK, ctx("org"))).not.toHaveProperty("authority");
+    expect(projectSeat(r, HELD, ORG_EDITING, ctx("org")).authority).toBe("May sign for small purchases");
+    expect(projectSeat(r, HELD, ORG_EDITING, ctx("org")).authorities).toEqual(words.authorities);
   });
 });
 

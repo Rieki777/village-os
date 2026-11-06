@@ -841,7 +841,7 @@ describe("Undo of a card row after a look at the live map (round 3, finding 1)",
     m.close();
     expect(control, "the screen matches the live map before the edit").toBe(true);
     expect(moved, "the tick moved a seat").toBe(true);
-    expect(seen.toast).toMatch(/^Undid: moved a seat to /);
+    expect(seen.toast).toMatch(/^Undid: moved a role to /);
     expect(seen.same, "the seat is back where the live map has it").toBe(true);
     expect(seen.net).toBe(0);
     expect(seen.card.bar.publishDisabled).toBe(true);
@@ -888,10 +888,10 @@ describe("Undo of a card row after a look at the live map (round 3, finding 1)",
       card: card(m),
     };
     m.close();
-    expect(seen.toast).toBe('"created a seat Keeper of the scales" can no longer be taken back, so it stays in your draft.');
+    expect(seen.toast).toBe('"created a role Keeper of the scales" can no longer be taken back, so it stays in your draft.');
     expect(seen.edits, "no undo line was written").toBe(edits);
     expect(seen.seat).toBe(true);
-    expect(seen.card.list).toEqual(["created a seat Keeper of the scales"]);
+    expect(seen.card.list).toEqual(["created a role Keeper of the scales"]);
   });
 });
 

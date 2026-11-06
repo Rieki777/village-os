@@ -120,16 +120,30 @@ describe("publishDraft keeps exactly its doors", () => {
     expect(sites[0].src.slice(Math.max(0, sites[0].at - 600), sites[0].at)).toContain("export async function publishOrgDraft(");
   });
 
-  it("publishOrgDraft has the admin route, the holder's route and the closer, and nothing else", () => {
+  /*
+   * THE FOURTH DOOR, NAMED (Rye, 2026-10-30, approving #626): a holder of
+   * `org.decide` arranges the circles on the map and publishes it in one act,
+   * `POST /api/org/arrangements`. It asks the holder's question
+   * (`holderMayPublish`) and publishes the way the holder's route does; it only
+   * makes the draft too, because a member has no other way to make one. Rye,
+   * 2026-10-23: "org designers, me and founder/steward roles should be able to
+   * drag and drop the orientation and update it".
+   */
+  it("publishOrgDraft has the admin route, the holder's two routes and the closer, and nothing else", () => {
     const sites = callsOf("publishOrgDraft");
     expect(sites.map((s) => s.file).sort()).toEqual([
       "server/lib/orgDraftDecide.ts",
       "server/routes/org.ts",
       "server/routes/orgDraftDecide.ts",
+      "server/routes/orgDraftDecide.ts",
     ]);
     const before = (s: { src: string; at: number }) => s.src.slice(Math.max(0, s.at - 900), s.at);
+    const holderSites = sites.filter((s) => s.file === "server/routes/orgDraftDecide.ts").map(before);
     expect(before(sites.find((s) => s.file === "server/routes/org.ts")!)).toContain('"/api/admin/org/drafts/:id/publish"');
-    expect(before(sites.find((s) => s.file === "server/routes/orgDraftDecide.ts")!)).toContain('"/api/org/drafts/:id/publish-by-power"');
+    expect(holderSites.some((b) => b.includes('"/api/org/drafts/:id/publish-by-power"'))).toBe(true);
+    // The arrangement route is longer, so its window reaches further back to its path and its gate.
+    const wide = sites.filter((s) => s.file === "server/routes/orgDraftDecide.ts").map((s) => s.src.slice(Math.max(0, s.at - 2600), s.at));
+    expect(wide.some((w) => w.includes('"/api/org/arrangements"') && w.includes("holderMayPublish"))).toBe(true);
     expect(before(sites.find((s) => s.file === "server/lib/orgDraftDecide.ts")!)).toContain("execute: async (b, actorId)");
   });
 

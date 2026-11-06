@@ -8,7 +8,9 @@
  *   THE HEADER       the season, its window, and how many have filed
  *   ONE CARD EACH    every present member, ordered by name and never by
  *                    progress: seats held and handed back, applications and
- *                    where they stand, aim, this moon's quest pips, measures
+ *                    where they stand, aim, the goals they serve with how
+ *                    each helps, their seasonal goals, this moon's quest
+ *                    pips, measures (all drawn by PlanCard)
  *   WAITING          a filter to the members with an application the village
  *                    has not answered yet
  *   NOT FILED YET    the members who have not filed, by name (Rye, 2026-10-09)
@@ -32,7 +34,7 @@ import { civilDayWords } from "@shared/seasonPlans";
 export const SEASON_PLANS_WORDS = {
   title: "The village's season",
   membersOnly: "Members read the village's season plans.",
-  membersOnlyLine: "Each plan names the seats people hold and ask for, so this page opens at the member rung.",
+  membersOnlyLine: "Each plan names the roles people hold and ask for, so this page opens at the member rung.",
   noSeason: "There is no season to plan yet.",
   noSeasonLine: "Planning opens one moon before the next season starts.",
   filed: (n: number, of: number) => `${n} of ${of} have filed`,
@@ -81,9 +83,9 @@ export default function SeasonPlans() {
     return (
       <Layout>
         <div className="container max-w-3xl px-4 py-8">
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{SEASON_PLANS_WORDS.membersOnly}</h1>
-            <p className="mx-auto mt-2 max-w-md leading-relaxed text-stone-600">{SEASON_PLANS_WORDS.membersOnlyLine}</p>
+          <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
+            <h1 className="font-display text-2xl font-bold text-foreground">{SEASON_PLANS_WORDS.membersOnly}</h1>
+            <p className="mx-auto mt-2 max-w-md leading-relaxed text-muted-foreground">{SEASON_PLANS_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
                 <SignInDoors next="/season-plans" />
@@ -122,9 +124,9 @@ export default function SeasonPlans() {
           </p>
         )}
         {state === "ready" && data && !data.season && (
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{SEASON_PLANS_WORDS.noSeason}</h1>
-            <p className="mx-auto mt-2 max-w-md text-stone-600">{SEASON_PLANS_WORDS.noSeasonLine}</p>
+          <div className="mt-6 rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
+            <h1 className="font-display text-2xl font-bold text-foreground">{SEASON_PLANS_WORDS.noSeason}</h1>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground">{SEASON_PLANS_WORDS.noSeasonLine}</p>
           </div>
         )}
         {state === "ready" && data?.season && (

@@ -31,6 +31,7 @@
 import { fenceForPrompt, toolNameToKey } from "./villageReaders";
 import { providerFor, type ProviderId, type ToolResult, type WireMessage } from "./assistantProviders";
 import { guardedFetchJson } from "./toolcheck";
+import { PLATFORM_CALLS, notePlatformCall, type PlatformCallOutcome } from "./integrations";
 
 export type AssistantMode =
   | "proposal"
@@ -40,7 +41,9 @@ export type AssistantMode =
   | "organize"
   | "studio"
   | "synthesize"
-  | "journal";
+  | "journal"
+  | "roleGuide"
+  | "card";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -71,6 +74,15 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   // day. No tools: the member's own data arrives prefetched and fenced, and
   // the guide has nothing else to reach for.
   journal: { audience: "member", dailyBudget: 150, maxTokens: 700, toolCalls: 0 },
+  // The role proposal guide (server/routes/roleGuide.ts). It writes back a
+  // whole role card, so it needs the room a draft does. No tools: the member's
+  // proposal, their circle's charter and the season goals arrive prefetched.
+  roleGuide: { audience: "member", dailyBudget: 150, maxTokens: 2400, toolCalls: 0 },
+  // A live session's card (server/lib/sessionCard.ts): Maia weaves a reading
+  // from facts the card already computed. Its own bucket, so a room pulling
+  // card after card cannot spend the journal's day. No tools: the facts arrive
+  // prefetched, and a card that cannot be woven is served plain.
+  card: { audience: "member", dailyBudget: 120, maxTokens: 1400, toolCalls: 0 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */
@@ -466,6 +478,17 @@ function withPrefetched(system: string, prefetched: { key: string; data: unknown
 }
 
 /**
+ * The record each answer keeps, read by the launch journey's `assistant-key`
+ * row (server/lib/launchProofs.ts): one answer from the guide is what proves
+ * its key works. A member's own key keeps none. It is theirs, and it says
+ * nothing about the village's.
+ */
+async function noteReply(source: KeySource, outcome: PlatformCallOutcome): Promise<void> {
+  if (source === "village") await notePlatformCall(PLATFORM_CALLS.guideReply, outcome);
+  else if (source === "platform") await notePlatformCall(PLATFORM_CALLS.guideReplyBorrowed, outcome);
+}
+
+/**
  * Every guard, then the call, then as many tool turns as the mode allows.
  *
  * The per-IP burst limit runs first and ONCE, because it is a guard about a
@@ -590,6 +613,7 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
         if (!r.ok) {
           // The key never reaches a log line, whoever it belongs to.
           console.error(`[assistant:${req.mode}] ${provider.id} error`, r.status, (await r.text()).slice(0, 300));
+          await noteReply(resolved.source, { ok: false, status: String(r.status), detail: `${provider.id} answered ${r.status}` });
           return { ok: false, status: 502, error: "assistant-error", ...spent() };
         }
         data = await r.json();
@@ -598,8 +622,10 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
       // The guarded dialer throws its refusal or the upstream status as the
       // message; neither carries the key or the body.
       console.error(`[assistant:${req.mode}] ${provider.id}`, String((err as any)?.message ?? err).slice(0, 200));
+      await noteReply(resolved.source, { ok: false, status: "network", detail: `${provider.id} could not be reached` });
       return { ok: false, status: 502, error: "assistant-error", ...spent() };
     }
+    await noteReply(resolved.source, { ok: true });
 
     iterations += 1;
     const reply = provider.parse(data);

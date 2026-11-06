@@ -1,0 +1,307 @@
+{
+  "schema": "regen-civics/village-card@1",
+  "needs": [
+    {
+      "needKey": "love",
+      "depthTarget": "alive",
+      "breadthTargetPct": 60,
+      "sortOrder": 1
+    },
+    {
+      "needKey": "vitality",
+      "depthTarget": "satisfied",
+      "breadthTargetPct": 100,
+      "sortOrder": 2
+    },
+    {
+      "needKey": "honesty",
+      "depthTarget": "satisfied",
+      "breadthTargetPct": 100,
+      "sortOrder": 3
+    },
+    {
+      "needKey": "custom:spiritual-practice",
+      "label": "Spiritual practice",
+      "depthTarget": "thriving",
+      "breadthTargetPct": 100,
+      "sortOrder": 4
+    }
+  ],
+  "variables": {
+    "needs.totality_target_pct": 40
+  },
+  "needLinks": [
+    {
+      "needKey": "vitality",
+      "subjectType": "role",
+      "circle": "water",
+      "circleLabel": "Living Water"
+    },
+    {
+      "needKey": "love",
+      "subjectType": "role",
+      "circle": "love",
+      "circleLabel": "Love Cultivation"
+    },
+    {
+      "needKey": "honesty",
+      "subjectType": "role",
+      "circle": "trust",
+      "circleLabel": "Trust & Comms"
+    },
+    {
+      "needKey": "custom:spiritual-practice",
+      "subjectType": "role",
+      "circle": "festivals",
+      "circleLabel": "Festivals & Rites"
+    }
+  ],
+  "seats": [
+    {
+      "name": "Water keeper",
+      "circle": "water",
+      "circleLabel": "Living Water",
+      "seats": 1,
+      "aim": "Living water for every household on the land",
+      "domain": null,
+      "accountabilities": "The spring, the catchment, the water tests",
+      "why": "Meets Vitality",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "team",
+      "who": "Ana",
+      "contribution": {
+        "hoursPerWeek": 4,
+        "text": "4 hours a week"
+      },
+      "needLinks": [
+        {
+          "needKey": "vitality",
+          "subjectType": "role",
+          "weight": "partial"
+        }
+      ]
+    },
+    {
+      "name": "River voice",
+      "circle": "water",
+      "circleLabel": "Living Water",
+      "seats": 1,
+      "aim": "Living water for every household on the land",
+      "domain": null,
+      "accountabilities": "The spring, the catchment, the water tests",
+      "why": "Meets Vitality",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "being",
+      "who": "The river",
+      "contribution": {},
+      "needLinks": [
+        {
+          "needKey": "vitality",
+          "subjectType": "role",
+          "weight": "partial"
+        }
+      ]
+    },
+    {
+      "name": "Cook",
+      "circle": "own:Kitchen",
+      "circleLabel": "Kitchen",
+      "seats": 1,
+      "aim": "Three meals a day for whoever is on the land",
+      "domain": null,
+      "accountabilities": "The kitchen; the pantry",
+      "why": "Meets Vitality",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "open",
+      "who": "",
+      "contribution": {
+        "text": "two mornings a week"
+      },
+      "needLinks": [
+        {
+          "needKey": "vitality",
+          "subjectType": "role",
+          "weight": "partial"
+        }
+      ]
+    },
+    {
+      "name": "Heart keeper",
+      "circle": "love",
+      "circleLabel": "Love Cultivation",
+      "seats": 1,
+      "aim": "Everyone here is met",
+      "domain": null,
+      "accountabilities": "Check-ins, the care circle",
+      "why": "Meets Love",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "team",
+      "who": "Bo",
+      "contribution": {
+        "hoursPerWeek": 6,
+        "text": "6 hrs per week"
+      },
+      "needLinks": [
+        {
+          "needKey": "love",
+          "subjectType": "role",
+          "weight": "primary"
+        }
+      ]
+    },
+    {
+      "name": "Ceremony holder",
+      "circle": "festivals",
+      "circleLabel": "Festivals & Rites",
+      "seats": 1,
+      "aim": "Moons and solstices kept",
+      "domain": null,
+      "accountabilities": "The ceremony calendar",
+      "why": "Meets Spiritual practice",
+      "term": null,
+      "nextHolder": null,
+      "decides": null,
+      "heldBy": "open",
+      "who": "",
+      "contribution": {},
+      "needLinks": [
+        {
+          "needKey": "custom:spiritual-practice",
+          "subjectType": "role",
+          "weight": "primary"
+        }
+      ]
+    }
+  ],
+  "circles": [
+    {
+      "circle": "water",
+      "label": "Living Water",
+      "needs": [
+        "vitality"
+      ],
+      "decidesOn": [
+        "when we irrigate"
+      ],
+      "decidesBy": "consent",
+      "decidesByGloss": null,
+      "decidesByAnswers": [
+        {
+          "by": "consent",
+          "gloss": null
+        }
+      ],
+      "startsWith": true
+    },
+    {
+      "circle": "love",
+      "label": "Love Cultivation",
+      "needs": [
+        "love"
+      ],
+      "decidesOn": [
+        "who joins the care circle",
+        "how we hold a tension"
+      ],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [
+        {
+          "by": "consensus",
+          "gloss": null
+        },
+        {
+          "by": "other",
+          "gloss": "Elders listen, then the circle sits until it is clear"
+        }
+      ],
+      "startsWith": true
+    },
+    {
+      "circle": "own:Kitchen",
+      "label": "Kitchen",
+      "needs": [
+        "vitality"
+      ],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    },
+    {
+      "circle": "trust",
+      "label": "Trust & Comms",
+      "needs": [
+        "honesty"
+      ],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    },
+    {
+      "circle": "festivals",
+      "label": "Festivals & Rites",
+      "needs": [
+        "custom:spiritual-practice"
+      ],
+      "decidesOn": [],
+      "decidesBy": null,
+      "decidesByGloss": null,
+      "decidesByAnswers": [],
+      "startsWith": false
+    }
+  ],
+  "decisions": {
+    "together": [
+      "Who joins"
+    ],
+    "how": "Everyone, by consent or consensus",
+    "agreement": "Circles decide what's theirs"
+  },
+  "entry": "Come to a work day, then a welcome circle",
+  "quests": [
+    {
+      "quest": "Clear the spring",
+      "need": "vitality"
+    },
+    {
+      "quest": "Cook for the work day",
+      "need": "love"
+    }
+  ],
+  "customNeeds": [
+    {
+      "needKey": "custom:wisdom",
+      "label": "wisdom"
+    }
+  ],
+  "firstLine": "future generations",
+  "players": {
+    "toStart": null,
+    "now": null
+  },
+  "shape": {
+    "shape": null,
+    "line": null
+  },
+  "from": {
+    "site": "regen-civics.example",
+    "project": "Riverbend Farm",
+    "applicationId": 1231543,
+    "weeks": [
+      3,
+      4
+    ]
+  }
+}

@@ -234,6 +234,28 @@ export async function powersForClass(
   }
 }
 
+/**
+ * Every class this village has, with the powers it suits, for the role cards
+ * (A10, 2026-10-31). The same answer `powersForClass` gives one class card,
+ * read once for the whole batch. Recommends and never permits: nothing that
+ * reads this decides who may do anything. Null when the map cannot be read,
+ * so a card says nothing it could not check.
+ */
+export async function powersByClass(
+  pool: Pool,
+  villageId: string,
+): Promise<Map<string, Array<{ key: Capability; label: string }>> | null> {
+  try {
+    const { classes } = await villageAffinity(pool, villageId);
+    const out = new Map<string, Array<{ key: Capability; label: string }>>();
+    for (const c of classes) out.set(c.key, await powersForClass(pool, villageId, c.key));
+    return out;
+  } catch (err) {
+    console.warn(`[powerAffinity] the role cards went out with no suited powers: ${(err as Error)?.message ?? String(err)}`);
+    return null;
+  }
+}
+
 /** One power as the editor shows it. */
 export interface AffinityEditorRow {
   key: Capability;

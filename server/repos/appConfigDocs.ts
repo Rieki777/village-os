@@ -53,3 +53,14 @@ export async function readConfigDocument<T = Record<string, unknown>>(
   }
   return value && typeof value === "object" && !Array.isArray(value) ? (value as T) : null;
 }
+
+/**
+ * Write one keyed document whole, replacing what was there. The writer twin of
+ * `readConfigDocument`, for a document that is always written in one piece.
+ */
+export async function writeConfigDocument(pool: Pool, key: string, value: Record<string, unknown>): Promise<void> {
+  await pool.query(
+    "INSERT INTO app_config (config_key, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+    [key, JSON.stringify(value)],
+  );
+}

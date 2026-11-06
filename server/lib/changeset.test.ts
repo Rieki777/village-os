@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   applyChangeSet,
   applyMechanicsProposal,
@@ -28,7 +28,7 @@ import {
   type ChangesetDeps,
 } from "./changeset";
 import { dryRunProposal } from "./proposalDryRun";
-import { loadVariables, numberVar, rawValue, wireVariableGuard } from "./variables";
+import { loadVariables, numberVar, rawValue, setVariable, wireVariableGuard } from "./variables";
 import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
 import { loadModuleSettings } from "./modules";
 import { villageId } from "./economy";
@@ -67,7 +67,7 @@ const sevenWithABadFourth = () => [
 beforeAll(async () => {
   if (!configured) return;
   db = await provisionTestDb();
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+  pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
   await loadVariables(pool);
 }, 300000);
 
@@ -104,10 +104,15 @@ describe.skipIf(!configured)("phase one refuses before anything is written", () 
     expect(ledgerRows).toEqual([]);
   });
 
-  it("refuses a dial the village does not govern", async () => {
+  it("refuses the weighing of votes as a plain dial: it lands only as a mode switch", async () => {
     const out = await validateElements(deps(), [{ kind: "dial", key: "governance.weight_mode", to: "token" }]);
     expect(out.ok).toBe(false);
-    expect(out.ok === false && out.problem).toContain("community-governable");
+    expect(out.ok === false && out.problem).toContain("mode switch");
+  });
+
+  it("lands a founder-held dial: who adopts it is decided at the doors, before the executor", async () => {
+    const out = await validateElements(deps(), [{ kind: "dial", key: "abuse.register_per_ip_hourly", to: "50" }]);
+    expect(out.ok, JSON.stringify(out)).toBe(true);
   });
 
   it("refuses to switch the part of the Game that holds the vote", async () => {
@@ -482,6 +487,10 @@ describe.skipIf(!configured)("a set of exit dials is judged on the state it prod
 
   it("refuses the whole set when its final state is refused, writes nothing, and is not marked applied", async () => {
     let told = 0;
+    // The village holds a Voice share of 0. That was the inherited default
+    // until the ruling of 2026-10-23 made it 100, so it is stored here, which
+    // is the state this case was written about.
+    expect((await setVariable(pool, "exit.keep_pct.voice", "0")).ok).toBe(true);
     // Rate first: judged alone against today it is coherent and used to land,
     // then convert was refused and the set was stamped applied anyway.
     const p = await proposal("gmp-voice-noshare", [

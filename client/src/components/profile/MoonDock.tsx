@@ -59,7 +59,7 @@
  * assumed (`MoonDock.test.tsx`).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { CalendarDays, X } from "lucide-react";
 
 import MoonGlyph from "@/components/calendar/MoonGlyph";
@@ -227,7 +227,7 @@ export default function MoonDock() {
         </div>
       )}
 
-      <motion.button
+      <m.button
         ref={button}
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -239,7 +239,7 @@ export default function MoonDock() {
         className="pointer-events-auto absolute bottom-[var(--moon-bottom)] left-4 inline-flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-lg hover:border-notice sm:h-16 sm:w-16 md:bottom-6 md:left-6"
       >
         <MoonGlyph phase={lunar.phase} size={38} hemisphere={answer?.hemisphere ?? "north"} />
-      </motion.button>
+      </m.button>
     </div>
   );
 }

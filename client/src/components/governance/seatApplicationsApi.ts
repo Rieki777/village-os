@@ -9,6 +9,7 @@
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { ServedAlignment } from "@/components/alignment/alignmentsApi";
+import type { ConsentOut } from "@/components/roleProposal/proposalApi";
 
 export interface ServedApplication {
   id: string;
@@ -35,6 +36,14 @@ export interface ServedApplication {
   createdAt: string | null;
   /** The words the parties align with, and where each party stands (PR5). */
   alignment?: ServedAlignment;
+  /**
+   * The role proposal it came from (role proposals PR B): where the circle's
+   * consent stands for this reader, and the decision record in words once
+   * adopted. Null for an ordinary application; absent from an older server.
+   */
+  proposal?: { id: string; changesRoles: boolean; consent: ConsentOut | null; decided: string | null } | null;
+  /** Who adopts it in this village, in words, while it waits (E8); null once decided, absent from the list. */
+  whoAdopts?: string | null;
   you?: {
     isCandidate: boolean;
     mayAdopt: boolean;
@@ -65,6 +74,8 @@ async function call<T>(path: string, method: "GET" | "POST" = "GET"): Promise<Ap
 const base = (id: string) => `/api/governance/role-applications/${encodeURIComponent(id)}`;
 
 export const fetchApplication = (id: string) => call<{ application: ServedApplication }>(base(id));
+/** Every application, for a reader holding terms.read. The profile keeps the reader's own open ones. */
+export const fetchApplications = () => call<{ applications: ServedApplication[] }>("/api/governance/role-applications");
 export const adoptApplication = (id: string) => call<{ status: ApplicationStatus; message?: string }>(`${base(id)}/adopt`, "POST");
 export const putApplicationToVillage = (id: string) =>
   call<{ status: ApplicationStatus; ballot: { id: string } }>(`${base(id)}/put-to-village`, "POST");

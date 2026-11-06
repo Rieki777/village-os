@@ -36,7 +36,7 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { closeUnlanded, type UnlandedDeps } from "./lib/applyDue";
 import { CREDITS, cycleWindow, mint, toLedgerUnits } from "./lib/economy";
 import { defaultSources, runFailedActions } from "./lib/failedActions";
@@ -129,7 +129,7 @@ describe.skipIf(!configured)("the redemption closer's error, as the failed-actio
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await setVariable(pool, "redemption.holds_on_propose", "true");

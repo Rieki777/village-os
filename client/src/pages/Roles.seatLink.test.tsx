@@ -96,7 +96,7 @@ const ORG = {
   roles: [seat("water-keeper", "Water Keeper", "filled"), seat("seed-keeper", "Seed Keeper", "open")],
 };
 
-const MISSING = "That seat is not on this page anymore.";
+const MISSING = "That role is not on this page anymore.";
 /** The copy control's accessible name, the fallback field's, and the line a copy says, for one seat. */
 const COPY = (seat: string) => `Copy link to ${seat}`;
 const FIELD = (seat: string) => `Link to ${seat}`;

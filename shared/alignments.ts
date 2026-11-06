@@ -22,6 +22,7 @@
  *
  * Money in these words is a record. Nothing here pays, posts or settles.
  */
+import { opsPartner } from "./roleProposalHonesty";
 import { seatList } from "./seatApplications";
 import { MONEY_GROUPS, settingsWords, type SeatSettings } from "./seatSettings";
 
@@ -119,15 +120,16 @@ export interface RenderedText {
  * did not see can be in it. No candidate name: the parties carry who, and a
  * name in the words would be one more thing an erasure has to find.
  */
-export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings): RenderedText {
+export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings, partner?: string | null): RenderedText {
   const title = `Terms for ${seatList(seatNames)}`.slice(0, 200);
+  const who = opsPartner(partner);
   const rows = settingsWords(settings);
   const set = rows.filter((r) => r.set);
   const unset = rows.filter((r) => !r.set);
   const lines = [
     title,
     "",
-    seatNames.length === 1 ? "THE SEAT" : "THE SEATS",
+    seatNames.length === 1 ? "THE ROLE" : "THE ROLES",
     ...seatNames.map((n) => `  ${n.trim()}`),
     "",
     "THE TERMS",
@@ -137,7 +139,7 @@ export function renderSeatTermsText(seatNames: readonly string[], settings: Seat
       ...(r.moneyLine ? [`    ${r.moneyLine}`] : []),
     ]),
     ...(set.length === 0 ? ["  None set."] : []),
-    ...(unset.length > 0 ? ["", `Not set: ${unset.map((r) => r.label).join(", ")}.`] : []),
+    ...(unset.length > 0 ? ["", `We'll fill this together with ${who}: ${unset.map((r) => r.label).join(", ")}.`] : []),
     "",
   ];
   return { title, body: lines.join("\n") };
@@ -263,7 +265,7 @@ export const ENDINGS_WORDS = {
   giveNotice: "Give notice",
   giveNoticeFor: "Give notice for the village",
   noticeLine: (days: number) =>
-    `Giving notice ends these terms ${days === 0 ? "at once" : `in ${days} ${days === 1 ? "day" : "days"}`}. Nothing unseats anybody: the seat ends through the village's own doors. You can take it back until it takes effect.`,
+    `Giving notice ends these terms ${days === 0 ? "at once" : `in ${days} ${days === 1 ? "day" : "days"}`}. Nothing unseats anybody: the role ends through the village's own doors. You can take it back until it takes effect.`,
   confirmNotice: "Give notice now",
   takeBackNotice: "Take back the notice",
   endByAgreement: "End by agreement",
@@ -372,7 +374,7 @@ export function deriveAlignmentState(s: StateInput): DerivedState {
   if (s.seatings) {
     if (s.seatings.open > 0) return out("in-force", null);
     if (s.seatings.total > 0) return out("ended", "The seating these terms were held on has ended.", "seating");
-    return out("pending", "Aligned, and waiting for the seats to be taken up.");
+    return out("pending", "Aligned, and waiting for the roles to be taken up.");
   }
   return out("in-force", null);
 }

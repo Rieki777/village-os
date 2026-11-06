@@ -40,7 +40,9 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, E2E_BOOT_DEADLINE_MS, waitForPortFree } from "./db/testDb";
+import { encodeToken } from "./lib/memberTokens";
+import { makeEmailVerifyToken } from "./lib/emailVerification";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -203,7 +205,7 @@ beforeAll(async () => {
   await startGoogleStandIn();
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-google-exit-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {
@@ -263,6 +265,11 @@ beforeAll(async () => {
   annaId = String(reg.json?.user?.id ?? "");
   annaToken = String(reg.json?.token ?? "");
   expect(annaToken, "Anna holds a session").toBeTruthy();
+  // She proves her address from the letter sign-up sends, the way an honest
+  // member does. An unproved password is ended by a Google link (R104), and
+  // Anna is this suite's member who KEEPS hers.
+  const proved = await call("POST", "/api/auth/verify-email", { body: { token: makeEmailVerifyToken(SECRET, annaId, ANNA_GOOGLE.email) }, token: annaToken });
+  expect(proved.status, `Anna proves her address: ${JSON.stringify(proved.json)}`).toBe(200);
 
   ({ token: ginaToken, id: ginaId } = await signUpWithGoogle(GINA.sub, GINA.email, GINA.name));
   ({ token: halToken, id: halId } = await signUpWithGoogle(HAL.sub, HAL.email, HAL.name));
@@ -378,6 +385,20 @@ describe.skipIf(!DB_CONFIGURED)("a member who joined through Google can leave an
     expect(r.json?.anonymized).toBe(true);
     const [rows] = await pool.query<any[]>("SELECT email FROM users WHERE id = ?", [halId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(String(rows[0].email)).toContain("anonymized.invalid");
+  });
+
+  it("a session signed at the tombstone's own version opens nothing", async () => {
+    // The shape a sign-in racing the erasure could mint: the tombstone's
+    // address and its bumped version, signed with the server's own key. The
+    // version check alone passes it, so the door has to ask what the row is.
+    const [rows] = await pool.query<any[]>("SELECT email, token_version FROM users WHERE id = ?", [halId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const forged = encodeToken(SECRET, halId, String(rows[0].email), Number(rows[0].token_version ?? 0));
+    const read = await call("GET", "/api/profile", { token: forged });
+    expect(read.status, "a tombstone still had a working session").toBe(401);
+    // And the control: the same key and the same shape for a member who stays.
+    const [anna] = await pool.query<any[]>("SELECT email, token_version FROM users WHERE id = ?", [annaId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const live = encodeToken(SECRET, annaId, String(anna[0].email), Number(anna[0].token_version ?? 0));
+    expect((await call("GET", "/api/profile", { token: live })).status).toBe(200);
   });
 
   it("THE PASSWORD PATH IS UNCHANGED: same bodies on a wrong password, and the right one deletes", async () => {

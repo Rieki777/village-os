@@ -28,11 +28,11 @@ import { asOffer } from "../../shared/powerHands";
  * form gets a sentence that is plain instead of one that is wrong.
  */
 const WHAT_THEY_SENT: Record<string, string> = {
-  "role-application": "your offer to hold a seat",
+  "role-application": "your offer to hold a role",
   // A seat the village had already written your name on, before you had an
   // account here. Different from a raised hand, which offers to take on a
   // seat nobody is holding.
-  "seat-claim": "your ask to be confirmed in a seat",
+  "seat-claim": "your ask to be confirmed in a role",
   "power-application": "your offer to take on a power",
   "comms-change": "your proposed change to the village's email",
   "work-with-us": "your proposal to work together",

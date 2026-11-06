@@ -1,10 +1,11 @@
-﻿import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 // Nineteen icons left this list when navGroups and CONTENT_SECTIONS moved to
 // client/src/components/admin/: they were the nav's icons, not this file's.
-import { Lock, Inbox, Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, LogOut, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Circle, Trash2, ChevronDown, ChevronUp, Save, RefreshCw, FileText, Upload, ExternalLink, ArrowUp, ArrowDown, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { linesToList, listToLines } from "@/lib/questBoard";
+import QuestsTab from "@/components/admin/QuestsTab";
 import {
   CLOSE_CONSEQUENCES, closeReport, settlementBlocked, settlementIntent,
   type OpenCycle, type PendingSettlement,
@@ -22,6 +23,7 @@ import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
+import PlayersTab from "@/components/admin/PlayersTab";
 import { RAISED_HAND_TERM_KEYS, RaisedHandTerm } from "@/components/admin/RaisedHandTerm";
 import { POWER_HAND_KEYS, PowerHandNote } from "@/components/admin/PowerHandNote";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
@@ -30,34 +32,54 @@ import Celebration from "@/components/natural/Celebration";
 import { useMomentWindow } from "@/components/natural/moments";
 import { playMoment } from "@/lib/sound";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameConfig } from "@/lib/gameApi";
+import { refreshGameConfig, useGameConfig } from "@/lib/gameApi";
+import { currencySymbol, figureWithCurrency } from "@shared/money";
 import { holdCancelled, swipeIntent } from "@/lib/gestures";
-import { Link } from "wouter";
-import { BUILDER_GUIDE_URL, MODULE_GROUPS, POOL_REASON_COPY, TIER_PILL } from "@shared/moduleCatalog";
+import { Link, Redirect } from "wouter";
+import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
+import AdminHeader from "@/components/admin/AdminHeader";
+import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
+import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
+import { tabFromSearch } from "@/components/admin/adminAreas";
+import HealthStrip from "@/components/admin/HealthStrip";
+import AdminHelp from "@/components/admin/AdminHelp";
+import UndoBar from "@/components/admin/UndoBar";
+import { isSnoozed } from "@/components/admin/adminSnooze";
+import { limitNav, simpleNav } from "@/components/admin/adminFeel";
+import { TourCard } from "@/components/admin/AdminFeel";
+
+const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
+import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
-import type { ModuleLifecycle, ModuleTier } from "@shared/modules";
+import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
-
+import CashPayoutsTab from "@/components/admin/CashPayoutsTab";
 import TypographyPanel from "@/components/TypographyPanel";
 import LookPanel from "@/components/LookPanel";
 import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
+import AdminMobileNav from "@/components/admin/AdminMobileNav";
+import AdminQueueState from "@/components/admin/AdminQueueState";
+import { loadSubmissionRows } from "@/components/admin/adminQueueState";
+import { putSubmissionStatus } from "@/components/admin/submissionStatus";
+import SubmissionHandling from "@/components/admin/SubmissionHandling";
+import SubmissionDesk, { Pick } from "@/components/admin/SubmissionDesk";
+import { useSubmissionFilter } from "@/components/admin/savedViews";
+import OpenProposalsPanel from "@/components/admin/OpenProposalsPanel";
+import ProposalAcceptCash from "@/components/admin/ProposalAcceptCash";
 import LandTab from "@/components/admin/LandTab";
 import GameRolesTab from "@/components/admin/GameRolesTab";
 import ArchetypesPanel from "@/components/admin/ArchetypesPanel";
 import EventsAdminPanel from "@/components/EventsAdminPanel";
 import ResourcesAdminPanel from "@/components/power/ResourcesAdminPanel";
 import { CrowdpoolAdminTab, ForumCategoriesEditor, ToolsCategoriesEditor } from "@/components/admin/ModuleConfigPanels";
-import ModuleSettingsSection from "@/components/admin/ModuleSettingsSection";
-import { useModuleDeepLink } from "@/components/admin/moduleDeepLink";
-import SetupNeeded from "@/components/modules/SetupNeeded";
 import VillageAnswers from "@/components/admin/VillageAnswers";
-import CurrencyAnswerNote from "@/components/admin/CurrencyAnswerNote";
+import VillageCurrencyField from "@/components/admin/VillageCurrencyField";
+import { BadgeDefinitionRow } from "@/components/admin/BadgeMultipliersEditor";
 import SeasonTimezoneField from "@/components/admin/SeasonTimezoneField";
 import { CONTENT_SECTIONS, emptyContentFor } from "@/components/admin/contentSections";
-import { displayCurrencyProblem } from "@shared/money";
 import { formatTokenAmount } from "@/lib/tokenAmount";
 import { parentChoicesFor } from "@shared/circleView";
 import InvoluntaryExitDialog from "@/components/admin/InvoluntaryExitDialog";
@@ -65,10 +87,11 @@ import ContentEditorTab from "@/components/admin/ContentEditorTab";
 import WorkWithUsTab from "@/components/admin/WorkWithUsTab";
 import { StepListEditor, stalePolicyTerms } from "@/components/admin/exitPolicyEditing";
 import { CONNECTIONS_GROUP_TITLE, MODULES_GROUP_TITLE, navGroups, type NavGroup } from "@/components/admin/adminNavGroups";
-import { IDENTITY_WIZARD_FIELDS, SETUP_STEPS, measureSetup, setupIsComplete } from "@/components/admin/setupProgress";
+import { IDENTITY_WIZARD_FIELDS, SETUP_CONTENT_EDITORS, SETUP_STEPS, contentEditorHint, measureSetup, setupIsComplete, useWizardFacts } from "@/components/admin/setupProgress";
 import TokenNamingLink from "@/components/admin/TokenNamingLink";
 import TokensTab from "@/components/admin/TokensTab";
 import SetupSection from "@/components/admin/SetupSection";
+import BrandTextField from "@/components/admin/BrandTextField";
 import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
@@ -77,17 +100,12 @@ import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
 import PurposeStatementPanel from "@/components/admin/PurposeStatementPanel";
+import ProfileImportDoor from "@/components/admin/ProfileImportDoor";
+import { takePrefill, usePrefill } from "@/lib/profilePrefill";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import HousingAdminPanel from "@/components/HousingAdminPanel";
 import { CommsJourneys, CommsLetters, CommsOverview, CommsPeople, CommsSentMail, CommsSettings, CommsWords, EmailField } from "@/components/admin/comms";
-import { ExampleChip, ExamplesBanner, forgetExamplesCache, RETIRES_WITH } from "@/components/ExamplesBanner";
-// visit-inquiry and membership-508 were missing, and they are the two highest-value
-// submissions on the site: a request to walk the land, and a signed 508(c)(1)(a)
-// membership. Both were reachable only by scrolling "All types". The strings are
-// the ones the pages actually POST, from Visit.tsx and LoveLetter.tsx.
-// membership-request is somebody with no invitation asking to join, from
-// RequestMembership.tsx (Rye, 2026-09-09: requests sit in admin for a team to talk to them).
-const FORM_TYPES = ["work-with-us", "quest-proposal", "visit-inquiry", "membership-508", "membership-request", "investor", "steward", "resident", "prosperity", "contact", "comms-change"] as const;
+import { ExampleChip, ExamplesBanner, forgetExamplesCache } from "@/components/ExamplesBanner";
 
 /**
  * THE SERVER'S OWN SENTENCE, WHEN IT HAS ONE.
@@ -187,7 +205,7 @@ function ForumModerationTab({ password }: { password: string }) {
           read on every request since it shipped, with no editor anywhere. */}
       <ForumCategoriesEditor password={password} />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -357,7 +375,7 @@ function MessageReportsTab({ password }: { password: string }) {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["open", "resolved", "dismissed"] as const).map((s) => (
           <button
             key={s}
@@ -450,11 +468,9 @@ function MessageReportsTab({ password }: { password: string }) {
  * exists. Collapsed it is a 56px strip of icons that still navigate in one
  * tap, so narrowing costs nothing.
  *
- * Expanded, the two sizes behave differently on purpose. On a wide screen it
- * sits in the layout and pushes the content across. On a phone there is no
- * room to push anything, so it floats over the content with a backdrop and
- * closes itself the moment you choose something — the pattern every mobile
- * drawer uses, because the alternative is squeezing the page to nothing.
+ * Expanded, it sits in the layout and pushes the content across. Below the
+ * laptop width this rail is hidden: the phone uses the bottom sheet, and a
+ * backdrop here would cover that page with nothing behind it to open.
  */
 function AdminNav({
   groups, activeTab, onSelect, open, setOpen,
@@ -577,7 +593,7 @@ function AdminNav({
       {hint && (
         <button
           onClick={dismissHint}
-          className="fixed z-50 left-16 bottom-6 max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl"
+          className="fixed z-50 left-16 bottom-6 hidden max-w-[15rem] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs leading-relaxed text-white shadow-xl lg:block"
         >
           Hold an icon to see its name, or swipe right to slide the whole menu
           out.
@@ -595,18 +611,11 @@ function AdminNav({
           {tip.label}
         </div>
       )}
-      {open && (
-        <button
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-        />
-      )}
       <nav
         onTouchStart={swipeStart}
         onTouchEnd={swipeEnd}
         className={`${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:shadow-none lg:w-56" : "w-14"} ` +
-          "min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
+          "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
       >
         <button
           onClick={() => {
@@ -653,7 +662,7 @@ function AdminNav({
                   onTouchMove={open ? undefined : moveHold}
                   onTouchEnd={open ? undefined : endHold}
                   onTouchCancel={open ? undefined : endHold}
-                  title={label}
+                  title={label} data-admin-tab={key}
                   aria-label={label}
                   aria-current={active ? "page" : undefined}
                   className={`w-full flex items-center text-sm font-medium transition-colors ${
@@ -712,113 +721,46 @@ function prettyType(t: string) {
 
 export function SubmissionsTab({ password }: { password: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [filter, setFilter] = useState<string>("all");
+  const [filter, setFilter] = useSubmissionFilter();
   const [loading, setLoading] = useState(true);
+  const [problem, setProblem] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [snoozeTick, setSnoozeTick] = useState(0);
+  useEffect(() => {
+    const on = () => setSnoozeTick((n) => n + 1);
+    window.addEventListener("admin:snooze", on);
+    return () => window.removeEventListener("admin:snooze", on);
+  }, []);
+  const visible = submissions.filter((s) => snoozeTick >= 0 && !isSnoozed(s.id));
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const url = filter === "all"
-        ? `${API_BASE}/admin/submissions`
-        : `${API_BASE}/admin/submissions?type=${filter}`;
-      const res = await fetch(url, { headers: authHeaders(password) });
-      const data = await res.json();
-      setSubmissions(Array.isArray(data) ? data : []);
-    } catch {
-      setSubmissions([]);
-    }
+    const result = await loadSubmissionRows(password, filter);
+    setSubmissions(result.rows);
+    setProblem(result.problem);
     setLoading(false);
   }, [password, filter]);
 
   useEffect(() => { load(); }, [load]);
 
-  const deleteSubmission = async (id: string) => {
-    if (!confirm("Delete this submission?")) return;
-    // The reload was standing in for an answer: a refused delete redrew the
-    // same row and said nothing, so it read as a click that missed.
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}`, { method: "DELETE", headers: authHeaders(password) });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        toast.error(refusal(body, `The server refused that (${res.status}). The submission is still here.`));
-        return;
-      }
-    } catch {
-      toast.error("That did not reach the server. The submission is still here.");
-      return;
-    }
-    load();
-  };
-
-  const setStatus = async (id: string, status: string, type = "") => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/submissions/${id}/status`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ status }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error();
-      if (data.rewarded) toast.success("Accepted. The member was welcomed into the game.");
-      else if (data.admitted) toast.success("Accepted. They hold membership now.");
-      // A stranger signed with no account, so the accept stands and admits nobody.
-      else if (data.admitted === false) toast.success("Accepted. This signing carries no account, so nobody was admitted. Invite them to join.");
-      // A yes to joining admits nobody, even from an account (a signing or vouches do), and names the next step:
-      // for an account, the doors that do admit; for a stranger's form, with no account to reach, an invitation.
-      else if (type === "membership-request" && status === "accepted") toast.success(data.notified ? "Accepted, and they have been told. A yes to a request admits nobody. Their signed letter, once accepted, or enough vouches will make them a member." : "Accepted. They have no account yet, so nobody was told. Make them a link under Invite somebody on your profile, and send it to the address on their request.", { duration: 12000 });
-      else if (data.notified) toast.success("Status updated. The person who sent it has been told.");
-      else toast.success("Status updated");
-      load();
-    } catch { toast.error("Could not update status"); }
-  };
+  // Moved to submissionStatus.ts, so the proposal cash control shares its sentences (0285).
+  const setStatus = async (id: string, status: string, type = "") => { if (await putSubmissionStatus(password, id, status, type)) load(); };
 
   return (
-    <div>
-      {/* flex-wrap and gap, because this row does not fit a phone: the heading
-          plus a 171px type filter plus the refresh button need about 657px, and
-          justify-between on a non-wrapping flex pushed the overflow onto the
-          document rather than onto this row. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Form Submissions</h2>
-        {/* The row above wraps; this group used to not, and the filter sizes itself to its longest
-            option, so at 320px it pushed the button 19px off the edge. It now takes the wrapped line,
-            the filter shrinks into it, and the button never does. */}
-        <div className="flex items-center gap-3 w-full min-w-0 sm:w-auto">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Form type"
-            className="min-w-0 flex-1 sm:flex-none text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-          >
-            <option value="all">All types</option>
-            {FORM_TYPES.map((t) => (
-              <option key={t} value={t}>{prettyType(t)}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={load}
-            aria-label="Look again for new submissions"
-            title="Look again"
-            className="shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
+    <SubmissionDesk password={password} filter={filter} onFilter={setFilter} rows={visible} onChanged={load}>
+      <OpenProposalsPanel password={password} />
       {loading ? (
         <div className="text-center py-12 text-gray-400">Loading...</div>
-      ) : submissions.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Inbox className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No submissions yet</p>
-        </div>
+      ) : problem ? (
+        <AdminQueueState kind="error" message={problem} onRetry={load} />
+      ) : visible.length === 0 ? (
+        <AdminQueueState kind="empty" />
       ) : (
         <div className="space-y-3">
-          {submissions.map((s) => (
-            <div key={s.id} className="border border-gray-200 rounded-xl overflow-hidden">
+          {visible.map((s) => (
+            <div key={s.id} className="flex items-start border border-gray-200 rounded-xl overflow-hidden">
+              <Pick id={s.id} />
+              <div className="min-w-0 flex-1">
               <button
                 onClick={() => setExpanded(expanded === s.id ? null : s.id)}
                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors text-left"
@@ -841,15 +783,10 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteSubmission(s.id); }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
                   {expanded === s.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                 </div>
               </button>
+              <SubmissionHandling password={password} submission={s} onChanged={load} />
 
               {expanded === s.id && (
                 <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">
@@ -870,6 +807,7 @@ export function SubmissionsTab({ password }: { password: string }) {
                       </span>
                     )}
                   </div>
+                  <ProposalAcceptCash password={password} submission={s} onDone={load} />
                   {s.type === "role-application" && <RaisedHandTerm data={s.data} />}
                   {s.type === "power-application" && <PowerHandNote data={s.data} />}
                   <table className="w-full text-sm">
@@ -898,11 +836,12 @@ export function SubmissionsTab({ password }: { password: string }) {
                   </table>
                 </div>
               )}
+              </div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </SubmissionDesk>
   );
 }
 
@@ -939,7 +878,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(refusal(d, "failed"));
-      toast.success(value.trim() ? "Key saved" : "Key cleared");
+      toast.success(d?.asked ? String(d.message) : value.trim() ? "Key saved" : "Key cleared");
       setDrafts((p) => ({ ...p, [key]: "" }));
       load();
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
@@ -974,7 +913,7 @@ export function IntegrationsTab({ password }: { password: string }) {
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
-        <div className="space-y-5 max-w-2xl">
+        <div className="w-full space-y-5">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}
           <div className="bg-teal-deep/5 border border-teal-deep/20 rounded-xl p-4">
             <p className="text-sm font-medium text-gray-900 mb-1">Your Stripe webhook URL</p>
@@ -1005,7 +944,7 @@ export function IntegrationsTab({ password }: { password: string }) {
           {CARDS.map((c) => {
             const s = c.key ? statusOf(c.key) : null;
             return (
-              <div key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
+              <div id={c.module === "saberra" ? "integration-sera" : c.module === "events" ? "integration-calendar" : c.key === "resend_api_key" ? "integration-email" : c.key === "stripe_secret_key" ? "integration-payments" : undefined} key={c.key ?? `module:${c.module}`} className="bg-white border border-gray-100 rounded-xl p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
                   <p className="font-semibold text-gray-900">
                     {c.title}
@@ -2108,7 +2047,7 @@ function FaqAdminTab({ password }: { password: string }) {
         <p className="text-sm text-gray-500">Manage the Common Questions section shown on each journey page.</p>
       </div>
 
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200">
+      <div className="flex flex-wrap items-center gap-x-2 mb-6 border-b border-gray-200">
         {FAQ_PATHWAYS.map((p) => (
           <button
             key={p.id}
@@ -2407,11 +2346,11 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <select
                         value={m.status}
                         onChange={(e) => update(m.id, { status: e.target.value as Milestone["status"] })}
-                        className="px-2 py-1 text-xs border border-gray-200 rounded bg-white"
+                        className="min-h-11 w-full rounded border border-gray-200 bg-white px-2 py-1 text-sm"
                       >
                         <option value="complete">Complete</option>
                         <option value="in-progress">In Progress</option>
@@ -2424,7 +2363,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, completedDate: e.target.value || null } : x))}
                         onBlur={(e) => update(m.id, { completedDate: e.target.value || null })}
                         placeholder="YYYY-MM (if complete)"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                       <input
                         type="text"
@@ -2432,7 +2371,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                         onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, phase: e.target.value } : x))}
                         onBlur={(e) => update(m.id, { phase: e.target.value })}
                         placeholder="Phase"
-                        className="px-2 py-1 text-xs border border-gray-200 rounded"
+                        className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                       />
                     </div>
                     <input
@@ -2441,7 +2380,7 @@ function MilestonesAdminTab({ password }: { password: string }) {
                       onChange={(e) => setItems((prev) => prev.map((x) => x.id === m.id ? { ...x, updateNote: e.target.value } : x))}
                       onBlur={(e) => update(m.id, { updateNote: e.target.value })}
                       placeholder="Status note (optional, shown on homepage)"
-                      className="w-full px-2 py-1 text-xs border border-gray-200 rounded"
+                      className="min-h-11 w-full rounded border border-gray-200 px-2 py-1 text-sm"
                     />
                     {(() => {
                       const d = daysSinceUpdate(m);
@@ -2746,1191 +2685,14 @@ function QuestClaimsTab() {
  * were where you edit them. Everything here is live to members immediately;
  * there is no deploy in the loop.
  */
-function QuestsTab({ password }: { password: string }) {
-  const [quests, setQuests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState<Record<string, any>>({});
-  const [adding, setAdding] = useState({ title: "", description: "", gratitude: "", circle: "" });
-  const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
-  // Suggestions come from the board itself, so an admin reuses the circle
-  // names already in play instead of coining a near-miss the chips ignore.
-  const questCircles = useMemo(
-    () => Array.from(new Set(quests.map((q) => q?.circle).filter(Boolean))).sort() as string[],
-    [quests],
-  );
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/quests`);
-      const data = await res.json();
-      setQuests(Array.isArray(data) ? data : []);
-    } catch { setQuests([]); }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const call = async (path: string, body?: unknown, method = "POST") => {
-    try {
-      const res = await fetch(`${API_BASE}${path}`, {
-        method,
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const b = await res.json().catch(() => null);
-        throw new Error(b?.error || "That did not work");
-      }
-      return await res.json();
-    } catch (e: any) {
-      toast.error(e?.message || "That did not work");
-      return null;
-    }
-  };
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Quests</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          The board members see. Edits are live immediately, no deploy. A quest with claims in
-          flight cannot be deleted until those claims are consented or declined.
-        </p>
-      </div>
-
-      <div className="bg-white border border-gray-100 rounded-xl p-5 mb-6">
-        <h3 className="font-semibold text-gray-900 mb-3">Post a quest</h3>
-        <div className="grid sm:grid-cols-5 gap-2 items-end">
-          <label className="text-xs text-gray-500">Title
-            <input value={adding.title} onChange={(e) => setAdding({ ...adding, title: e.target.value })} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="text-xs text-gray-500">What it asks for
-            <input value={adding.description} onChange={(e) => setAdding({ ...adding, description: e.target.value })} className={`${inputCls} w-full mt-1`} />
-          </label>
-          <label className="text-xs text-gray-500">Reward (e.g. 50 or 50-100)
-            <input value={adding.gratitude} onChange={(e) => setAdding({ ...adding, gratitude: e.target.value })} className={`${inputCls} w-full mt-1`} />
-          </label>
-          {/* The state carried a circle from the day this form shipped and no
-              field was ever bound to it, so every admin-posted quest landed
-              with an empty circle: filtered off every chip on the board, and
-              unplaceable on the map. */}
-          <label className="text-xs text-gray-500">Circle
-            <input value={adding.circle} onChange={(e) => setAdding({ ...adding, circle: e.target.value })}
-              list="quest-circles" placeholder="Which circle?" className={`${inputCls} w-full mt-1`} />
-            <datalist id="quest-circles">
-              {questCircles.map((c) => <option key={c} value={c} />)}
-            </datalist>
-          </label>
-          <button
-            onClick={async () => {
-              if (!adding.title.trim()) return toast.error("Give it a title");
-              const d = await call("/admin/quests", adding);
-              if (d) {
-                forgetExamplesCache("quests");
-                toast.success("Posted");
-                setAdding({ title: "", description: "", gratitude: "", circle: "" });
-                load();
-              }
-            }}
-            className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium"
-          >
-            Post quest
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">Loading…</div>
-      ) : quests.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No quests on the board yet.</div>
-      ) : (
-        <div className="space-y-3">
-          {quests.map((q: any) => {
-            const d = draft[q.id] ?? {
-              ...q,
-              stepsText: listToLines(q.steps),
-              tipsText: listToLines(q.tips),
-            };
-            // The dirty check projects every editable field, story layer
-            // included, so a change buried in a collapsed section still
-            // lights the Save button.
-            const proj = (x: any, stepsText: string, tipsText: string) =>
-              JSON.stringify({
-                t: x.title, de: x.description, g: x.gratitude, s: x.status, c: x.circle,
-                su: x.subtitle ?? "", st: x.story ?? "", fs: x.firstStep ?? "",
-                dv: x.deliverable ?? "", iu: x.imageUrl ?? "", im: x.impact ?? "",
-                di: x.difficulty ?? "", du: x.duration ?? "",
-                sl: stepsText, tl: tipsText,
-              });
-            const dirty =
-              proj(d, d.stepsText ?? "", d.tipsText ?? "") !==
-              proj(q, listToLines(q.steps), listToLines(q.tips));
-            return (
-              <div key={q.id} className="bg-white border border-gray-100 rounded-xl p-4">
-                {/* On a fresh fork the whole board is examples. Without the
-                    chip the admin found that out by editing one and reading
-                    the 409 the edit route answers. */}
-                {q.isExample && (
-                  <p className="mb-2"><ExampleChip /></p>
-                )}
-                <div className="grid sm:grid-cols-5 gap-2 items-end">
-                  <label className="text-xs text-gray-500">Title
-                    <input value={d.title ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, title: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                  </label>
-                  <label className="text-xs text-gray-500">What it asks for
-                    <input value={d.description ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, description: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                  </label>
-                  <label className="text-xs text-gray-500">Reward
-                    <input value={d.gratitude ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, gratitude: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                  </label>
-                  <label className="text-xs text-gray-500">Circle
-                    <input value={d.circle ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, circle: e.target.value } })}
-                      list="quest-circles" className={`${inputCls} w-full mt-1`} />
-                  </label>
-                  <label className="text-xs text-gray-500">Status
-                    <select value={d.status ?? "Open"} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, status: e.target.value } })} className={`${inputCls} w-full mt-1`}>
-                      <option value="Open">Open</option>
-                      <option value="Closed">Closed</option>
-                    </select>
-                  </label>
-                </div>
-
-                {/* The story layer (0068): everything a member reads on the
-                    quest's own page. Collapsed by default so the board list
-                    stays scannable; every field is optional and an empty one
-                    simply does not render. */}
-                <details className="mt-3 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
-                  <summary className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
-                    Story, effort, steps, and poster
-                  </summary>
-                  <div className="grid sm:grid-cols-2 gap-2 mt-3">
-                    {/* Difficulty, duration and impact were in the save payload
-                        and in the dirty check from the day the story layer
-                        shipped, with no field bound to any of them. The server
-                        took all three and a founder had no door to reach them,
-                        so every admin-posted quest kept whatever the seed left
-                        behind. Difficulty is the load-bearing one: ringFor
-                        reads it to place the quest on the board. */}
-                    <label className="text-xs text-gray-500">Difficulty
-                      {/* A select, because the three words are a vocabulary
-                          the board reads: QuestCard colours by them,
-                          the Quests filter chips match on them exactly, and
-                          ringFor compares against "Beginner" character for
-                          character. A typed "beginner" would drop the colour
-                          and move the quest out of Start here with nothing
-                          said. */}
-                      <select value={d.difficulty ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, difficulty: e.target.value } })} className={`${inputCls} w-full mt-1`}>
-                        <option value="">Not set</option>
-                        <option value="Beginner">Beginner</option>
-                        <option value="Intermediate">Intermediate</option>
-                        <option value="Advanced">Advanced</option>
-                        {/* A stored value outside the three shows itself. A
-                            select whose value matches no option renders blank,
-                            which would read as "Not set" over a row that holds
-                            something, and the founder would save the blank
-                            believing they changed nothing. */}
-                        {d.difficulty && !["Beginner", "Intermediate", "Advanced"].includes(d.difficulty) && (
-                          <option value={d.difficulty}>{d.difficulty} (not one of the three)</option>
-                        )}
-                      </select>
-                    </label>
-                    <label className="text-xs text-gray-500">Time it takes
-                      <input value={d.duration ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, duration: e.target.value } })} placeholder="90 minutes, Two mornings, Flexible" className={`${inputCls} w-full mt-1`} />
-                    </label>
-                    <label className="text-xs text-gray-500">Subtitle
-                      <input value={d.subtitle ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, subtitle: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                    </label>
-                    <label className="text-xs text-gray-500">First step
-                      <input value={d.firstStep ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, firstStep: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                    </label>
-                    <label className="text-xs text-gray-500 sm:col-span-2">Why it matters
-                      <textarea value={d.story ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, story: e.target.value } })} rows={3} className={`${inputCls} w-full mt-1 resize-y`} />
-                    </label>
-                    {/* A textarea, because the quest page prints this as a
-                        pull quote under Why it matters and the seeded ones run
-                        to two full sentences. */}
-                    <label className="text-xs text-gray-500 sm:col-span-2">What changes because of it
-                      <textarea value={d.impact ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, impact: e.target.value } })} rows={2} className={`${inputCls} w-full mt-1 resize-y`} />
-                    </label>
-                    <label className="text-xs text-gray-500">Steps, one per line
-                      <textarea value={d.stepsText ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, stepsText: e.target.value } })} rows={4} className={`${inputCls} w-full mt-1 resize-y`} />
-                    </label>
-                    <label className="text-xs text-gray-500">Tips, one per line
-                      <textarea value={d.tipsText ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, tipsText: e.target.value } })} rows={4} className={`${inputCls} w-full mt-1 resize-y`} />
-                    </label>
-                    <label className="text-xs text-gray-500">What they'll share
-                      <input value={d.deliverable ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, deliverable: e.target.value } })} className={`${inputCls} w-full mt-1`} />
-                    </label>
-                    <label className="text-xs text-gray-500">Poster path
-                      <input value={d.imageUrl ?? ""} onChange={(e) => setDraft({ ...draft, [q.id]: { ...d, imageUrl: e.target.value } })} placeholder="/api/uploads/quest-01.webp" className={`${inputCls} w-full mt-1`} />
-                    </label>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-2">
-                    Beginner places this quest in the board's Start here ring. Any other setting, and an empty one, place it under The village. A stage floor or a role requirement moves it to Further in whatever you pick.
-                  </p>
-                  <p className="text-[11px] text-gray-400 mt-2">
-                    A poster comes through the village's own upload, so its path starts with /api/uploads/. Leave it empty and the card paints a scene from the quest's circle.
-                  </p>
-                </details>
-                <div className="flex items-center gap-3 mt-3">
-                  <button
-                    disabled={!dirty}
-                    onClick={async () => {
-                      const r = await call(`/admin/quests/${q.id}`, {
-                        title: d.title, description: d.description, gratitude: d.gratitude,
-                        status: d.status, circle: d.circle,
-                        subtitle: d.subtitle ?? "", story: d.story ?? "", firstStep: d.firstStep ?? "",
-                        deliverable: d.deliverable ?? "", imageUrl: d.imageUrl ?? "",
-                        difficulty: d.difficulty ?? "", duration: d.duration ?? "", impact: d.impact ?? "",
-                        steps: linesToList(d.stepsText ?? ""), tips: linesToList(d.tipsText ?? ""),
-                      }, "PUT");
-                      if (r) { toast.success("Saved"); setDraft({ ...draft, [q.id]: undefined }); load(); }
-                    }}
-                    className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (!window.confirm(`Delete "${q.title}"? Members will no longer see it.`)) return;
-                      const r = await call(`/admin/quests/${q.id}`, undefined, "DELETE");
-                      if (r) { toast.success("Deleted"); load(); }
-                    }}
-                    className="text-sm text-red-500 hover:text-red-600"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Game Admin: Players + stage grants ───────────────────────────────────────
-
-const ROLE_STYLE: Record<string, string> = {
-  founder: "bg-amber-100 text-amber-800 border-amber-200",
-  admin: "bg-violet-100 text-violet-700 border-violet-200",
-  member: "bg-gray-100 text-gray-500 border-gray-200",
-};
-
-function PlayersTab({ password }: { password: string }) {
-  const { user: me } = useAuth();
-  const iAmFounder = me?.role === "founder";
-  const [players, setPlayers] = useState<any[]>([]);
-  const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
-  /*
-   * R90: THE FOUNDER ROLE ENDS WHEN THE VILLAGE STARTS ITS GAME, so who may
-   * work the control below changes at that moment and this tab has to know it.
-   * Before launch only a founder may change a role. After launch any
-   * administrator may, and no new founder can be made.
-   *
-   * Read from the server rather than inferred from the roster, because a
-   * client that guesses at a permission is a client that eventually disagrees
-   * with the gate. `/api/game/mechanics` answers strangers and already carries
-   * the fact, so this costs no new route and no token.
-   */
-  const [gameStarted, setGameStarted] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [pRes, cRes, mRes] = await Promise.all([
-        fetch(`${API_BASE}/admin/players`, { headers: authHeaders(password) }),
-        fetch(`${API_BASE}/game/config`),
-        fetch(`${API_BASE}/game/mechanics`),
-      ]);
-      const p = await pRes.json();
-      const c = await cRes.json();
-      const m = await mRes.json();
-      setPlayers(Array.isArray(p) ? p : []);
-      setStages(c?.stages ?? []);
-      setGameStarted(m?.gameStart?.started === true);
-    } catch { setPlayers([]); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const grant = async (id: string, stageId: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/players/${id}/stage`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ stageId: stageId || null }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Stage updated");
-      load();
-    } catch { toast.error("Update failed"); }
-  };
-
-  const remove = async (id: string, email: string) => {
-    if (!confirm(`Delete player ${email}? This removes their account. Historical quest claims and gratitude entries are kept.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/players/${id}`, {
-        method: "DELETE",
-        headers: authHeaders(password),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Player deleted");
-      load();
-    } catch { toast.error("Delete failed"); }
-  };
-
-  const setRole = async (id: string, role: string, name: string) => {
-    if (role === "founder" && !confirm(`Make ${name} a FOUNDER? Founders manage admins and can only be demoted by another founder.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}/role`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ role }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(refusal(data, "failed"));
-      toast.success(`${name} is now ${role}`);
-      load();
-    } catch (e: any) { toast.error(e?.message || "Role change failed"); }
-  };
-
-  const revokeSessions = async (id: string, name: string) => {
-    if (!confirm(`Sign ${name} out everywhere? They keep their account and password; every active session dies.`)) return;
-    try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}/revoke-sessions`, {
-        method: "POST",
-        headers: authHeaders(password),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("Sessions revoked");
-    } catch { toast.error("Revoke failed"); }
-  };
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Players</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Stages compute automatically from real acts; grant the ceremony-based stages here.
-        </p>
-      </div>
-      {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : players.length === 0 ? (
-        <p className="text-sm text-gray-400">No players yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {players.map((p) => (
-            <div key={p.id} className="border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[180px]">
-                <div className="font-medium text-gray-900">
-                  {p.name}
-                  {p.handle && <span className="text-gray-400 font-normal"> @{p.handle}</span>}
-                </div>
-                <div className="text-xs text-gray-400">{p.email} · joined {new Date(p.joinedAt).toLocaleDateString()}</div>
-              </div>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium border ${ROLE_STYLE[p.role] ?? ROLE_STYLE.member}`}>
-                {p.role}
-              </span>
-              <span className="text-xs bg-teal-deep/10 text-teal-deep px-2 py-1 rounded-full font-medium">
-                {stages.find((s) => s.id === p.stageComputed)?.name ?? p.stageComputed}
-              </span>
-              <span className="text-xs text-gray-500">{p.balance} earned</span>
-              {(gameStarted || iAmFounder) && (
-                <select
-                  value={p.role}
-                  onChange={(e) => setRole(p.id, e.target.value, p.name)}
-                  title={
-                    gameStarted
-                      ? "Change this member's role. The founder role ended when the village started its Game, so an administrator is the most this can set"
-                      : "Founders run the admins: change this member's role"
-                  }
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-                >
-                  <option value="member">member</option>
-                  <option value="admin">admin</option>
-                  {/* Only while the role still exists, or on the row of
-                      somebody who already holds it. After launch the server
-                      refuses a new one, and an option that can only ever
-                      produce a refusal is worse than no option. Dropping it
-                      from a founder's OWN row would be worse again: the select
-                      would have no option matching the value and would show
-                      that person as a member beside a badge saying founder. */}
-                  {(!gameStarted || p.role === "founder") && <option value="founder">founder</option>}
-                </select>
-              )}
-              <button
-                onClick={() => revokeSessions(p.id, p.name)}
-                title="Sign this member out everywhere (their password keeps working)"
-                className="text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Sign out all
-              </button>
-              <select
-                value={p.stageGranted ?? ""}
-                onChange={(e) => grant(p.id, e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
-              >
-                <option value="">No grant</option>
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>Grant: {s.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => remove(p.id, p.email)}
-                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 font-medium"
-              >
-                Delete
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Modules (S13): the catalog, lifecycles, and the Hypha integration card ───
+// ── Modules: retired into the library (Rye, 2026-10-09) ─────────────────────
 //
-// BUILDER_GUIDE_URL and POOL_REASON_COPY moved to shared/moduleCatalog.ts
-// (L1): the public library renders the same words, and shared/ is where
-// check-voice holds them.
-
-const LIFECYCLES = ["off", "preview", "members", "public"] as const;
-// Keyed by the union, not by `string`: the compiler now owns the promise that
-// every lifecycle has a sentence, so a fifth one is a build error rather than a
-// blank paragraph where the who-can-see-this line belongs.
-const LIFECYCLE_HINT: Record<ModuleLifecycle, string> = {
-  off: "Routes 404, no nav, no admin surface.",
-  preview: "Admins only. Invisible to everyone else.",
-  members: "Signed-in members only.",
-  public: "Everyone. Capability gates still apply.",
-};
-
-export function ModulesTab({ password }: { password: string }) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string>("");
-  // The catalog controls. Every filter defaults to "all", so a village that has
-  // never opened this page sees the same list it saw before.
-  const [query, setQuery] = useState("");
-  const [tierFilter, setTierFilter] = useState("all");
-  const [domainFilter, setDomainFilter] = useState("all");
-  const [dataFilter, setDataFilter] = useState("all");
-  const [priceFilter, setPriceFilter] = useState("all");
-  /** Which listing has its detail open. One at a time, so the page stays readable. */
-  const [openId, setOpenId] = useState<string | null>(null);
-  /**
-   * Which listing has its SETTINGS open, and the deep link that opens one.
-   *
-   * `/admin?tab=modules&module=<id>&setting=<key>` is the address Game
-   * Mechanics and every setup hint send a founder to, so the link lands on the
-   * settings, and on the one dial where it names one. The reading lives in
-   * `moduleDeepLink.ts`; this file is on a line ratchet that only turns down.
-   */
-  const { settingsId, setSettingsId, focusKey, setFocusKey, clearFocusKey } = useModuleDeepLink(!loading);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules`, { headers: authHeaders(password) });
-      setData(await res.json());
-    } catch { setData(null); }
-    setLoading(false);
-  }, [password]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setLifecycle = async (mod: any, lifecycle: string) => {
-    if (mod.legalReview && mod.lifecycle === "off" && lifecycle !== "off") {
-      const sure = window.confirm(
-        `${mod.name} touches funds. Before enabling: credits are non-withdrawable and non-refundable to fiat; ` +
-          "tested backups, per-admin identities, and legal review are preconditions. Continue?",
-      );
-      if (!sure) return;
-    }
-    setBusy(mod.id);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules/${mod.id}/lifecycle`, {
-        method: "PUT",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ lifecycle }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        // A missing dependency is the one refusal the server cannot phrase
-        // alone, because the fix is a list of other modules. The trailing stop
-        // comes off before the sentence is extended, so a unified body that
-        // already ends in one does not print "..". Every other refusal,
-        // `dependents` included, now carries its own sentence and is printed
-        // as it stands.
-        if (d.missing?.length) toast.error(`${refusal(d, "Change refused").replace(/\.$/, "")}. Enable ${d.missing.join(", ")} first.`);
-        else toast.error(refusal(d, "Change refused"));
-      } else {
-        toast.success(`${mod.name} is now ${lifecycle}`);
-        // The nav rail and the Go-live card share one reader; tell it the
-        // world moved so a turned-on module's tab appears without a reload.
-        window.dispatchEvent(new Event("modules:changed"));
-      }
-      load();
-    } catch { toast.error("Change failed"); }
-    setBusy("");
-  };
-
-  /**
-   * Clear a module's standing examples without publishing a decoy first.
-   * One-way, so it asks — and it says what "for good" means, because the
-   * button cannot be undone by turning the module off and on again.
-   */
-  const clearExamples = async (mod: any) => {
-    // The route retires the PAIR, and the question named one module, so a
-    // founder clearing the forum was never told the feed empties with it.
-    // Only name a twin that is actually holding examples right now.
-    const twins = (RETIRES_WITH[mod.id] ?? [])
-      .map((id) => (data?.modules ?? []).find((m: any) => m.id === id))
-      .filter((m: any) => m?.showingExamples)
-      .map((m: any) => String(m.name));
-    const sure = window.confirm(
-      `Clear the standing examples from ${mod.name}?\n\n` +
-        (twins.length
-          ? `This clears ${twins.join(" and ")} too: they are lenses over the same rows, so one cannot keep its examples while the other loses them.\n\n`
-          : "") +
-        "They are removed permanently. Publishing your first real item would " +
-        "have done this anyway; this just does it now, leaving the module empty.",
-    );
-    if (!sure) return;
-    setBusy(mod.id);
-    try {
-      const res = await fetch(`${API_BASE}/admin/modules/${mod.id}/examples/clear`, {
-        method: "POST",
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        toast.error(refusal(d, "Could not clear the examples"));
-      } else {
-        toast.success(`${mod.name}: ${d.removed} example row(s) cleared`);
-        // The member-facing banner reads its own endpoint and would otherwise
-        // keep labelling a module whose rows this button just deleted, until
-        // whoever is on that page happened to reload it. Only on success: a
-        // partial pass leaves the rows AND the tombstone, so the label has to
-        // stay. Paired, because the route retires the pair: the forum and the
-        // feed share a table and a category, so clearing one alone left the
-        // other's rows on the same page with the banner already gone.
-        // `confirmed` because this answer IS the server's, awaited: there is
-        // nothing left to reconcile with a poll.
-        forgetExamplesCache(mod.id, { confirmed: true });
-      }
-      load();
-    } catch { toast.error("Could not clear the examples"); }
-    setBusy("");
-  };
-
-  const demoted = (data?.modules ?? []).filter((m: any) => m.demotedBecause?.length);
-  const showingExamples = (data?.modules ?? []).filter((m: any) => m.showingExamples);
-
-  // ── The catalog ────────────────────────────────────────────────────────────
-  const all: any[] = data?.modules ?? [];
-  /** A village running something that is no longer offered needs telling once, at the top. */
-  const withdrawnAndOn = all.filter((m: any) => m.withdrawn && m.lifecycle !== "off");
-
-  /*
-   * A filter appears only once the catalog holds more than one answer for it.
-   *
-   * Eighteen modules that are all `included`, all free and all member-pii would
-   * otherwise render three dropdowns that can only ever return everything, plus
-   * a price filter whose "paid" option matches nothing. The toolbar grows as
-   * the library does, which is the honest version of a store front.
-   */
-  const distinct = (pick: (m: any) => string | null | undefined): string[] =>
-    Array.from(new Set(all.map(pick).filter((v): v is string => !!v))).sort();
-  const tiers = distinct((m) => m.tier);
-  const domains = distinct((m) => m.provides);
-  const dataClasses = distinct((m) => m.dataClass);
-  const prices = distinct((m) => (m.pricing && m.pricing.amount > 0 ? "paid" : "free"));
-
-  const needle = query.trim().toLowerCase();
-  const visible = all.filter((m: any) => {
-    if (needle) {
-      const hay = [m.name, m.description, m.id, m.builtBy, m.vendor?.legalName, m.provides]
-        .filter(Boolean).join(" ").toLowerCase();
-      if (!hay.includes(needle)) return false;
-    }
-    if (tierFilter !== "all" && m.tier !== tierFilter) return false;
-    if (domainFilter !== "all" && (m.provides ?? "") !== domainFilter) return false;
-    if (dataFilter !== "all" && m.dataClass !== dataFilter) return false;
-    if (priceFilter !== "all" && (m.pricing && m.pricing.amount > 0 ? "paid" : "free") !== priceFilter) return false;
-    return true;
-  });
-  const filtered = needle !== "" || tierFilter !== "all" || domainFilter !== "all" || dataFilter !== "all" || priceFilter !== "all";
-  const clearFilters = () => {
-    setQuery(""); setTierFilter("all"); setDomainFilter("all"); setDataFilter("all"); setPriceFilter("all");
-  };
-
-  /**
-   * A successor named by its NAME. `replacedBy` carries a module id because an
-   * id is what the registry can validate against; showing that id to a founder
-   * would print something like "village-map replaces it" where the product
-   * everywhere else says Village Map. The server's 409 resolves it the same
-   * way, so the two read alike.
-   */
-  const successorName = (id: string | null | undefined): string | null =>
-    id ? (all.find((x: any) => x.id === id)?.name ?? id) : null;
-
-  /**
-   * The five shelves (L1): the same grouping the public library renders,
-   * filters and search applying within them. A module whose group the
-   * shelves do not claim stays visible on the last shelf instead of
-   * vanishing; the catalog test upstream makes that a cannot-happen.
-   */
-  const shelves = MODULE_GROUPS.map((group, gi) => ({
-    group,
-    items: [
-      ...visible.filter((m: any) => m.group === group.id),
-      ...(gi === MODULE_GROUPS.length - 1
-        ? visible.filter((m: any) => !MODULE_GROUPS.some((g) => g.id === m.group))
-        : []),
-    ],
-  })).filter((s) => s.items.length > 0);
-
-  /*
-   * Mobile first, because most of this audience is on mobile Safari.
-   *
-   * Two iOS rules drive every number here. A form control under 16px makes
-   * Safari ZOOM the whole page on focus, which on a filter row means the
-   * catalog jumps sideways the moment somebody taps it, so the base size is
-   * `text-base` and desktop shrinks to the existing `text-xs` at `sm:`. And a
-   * touch target under 44px is a target people miss, so controls carry
-   * `min-h-[44px]` on a phone and drop it on a pointer device.
-   *
-   * The filters are half-width on a phone so two sit per row within thumb
-   * reach, and full auto width from `sm:` up.
-   */
-  const SELECT =
-    "text-base min-h-[44px] flex-1 min-w-[45%] sm:text-xs sm:min-h-0 sm:flex-none sm:min-w-0 " +
-    "border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-teal-deep/40";
-  const PILL = "ml-2 text-[10px] px-1.5 py-0.5 rounded-full";
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Modules</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          What this village runs. Everything ships off; each step up widens who can
-          see it. Off modules contribute nothing: no routes, no nav, no settings.
-        </p>
-      </div>
-      {loading ? <div className="text-center py-12 text-gray-600">Loading...</div> : !data ? (
-        <p className="text-sm text-red-600">Could not load modules.</p>
-      ) : (
-        <div className="space-y-5">
-          {(demoted.length > 0 || (data.orphans ?? []).length > 0) && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-              {demoted.map((m: any) => (
-                <p key={m.id}>
-                  <strong>{m.name}</strong> is configured {m.lifecycle} but requires{" "}
-                  {m.demotedBecause.join(", ")}. It is being served as OFF until that is resolved.
-                </p>
-              ))}
-              {(data.orphans ?? []).length > 0 && (
-                <p>Stored settings reference unknown module id(s): {data.orphans.join(", ")} (ignored).</p>
-              )}
-            </div>
-          )}
-
-          {withdrawnAndOn.length > 0 && (
-            <div className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-              <p className="font-medium">
-                {withdrawnAndOn.length === 1 ? "One module you run is" : `${withdrawnAndOn.length} modules you run are`} no longer offered.
-              </p>
-              <p className="mt-1 text-xs leading-relaxed">
-                Withdrawn means withdrawn from the catalog. Yours keeps running exactly as it is, and
-                nothing about it changes today. What you cannot do is turn it back on once you switch
-                it off, so plan the move before you do.
-              </p>
-              <ul className="mt-2 text-xs space-y-1">
-                {withdrawnAndOn.map((m: any) => (
-                  <li key={m.id}>
-                    <strong>{m.name}</strong>, withdrawn {m.withdrawn.since}
-                    {m.withdrawn.replacedBy ? `. ${successorName(m.withdrawn.replacedBy)} replaces it` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {showingExamples.length > 0 && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              <p className="font-medium">Some modules are showing standing examples.</p>
-              <p className="mt-1 text-xs leading-relaxed">
-                Platform-authored content so a module is never empty when you first
-                open it. Nobody in this village made it, nothing anyone does to it
-                takes effect, and it clears itself the moment you publish something
-                real there. Clear it early if you want to start from nothing. Either
-                way it is gone for good.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {showingExamples.map((m: any) => (
-                  <button
-                    key={m.id}
-                    onClick={() => clearExamples(m)}
-                    disabled={busy === m.id}
-                    className="text-xs font-medium px-2.5 py-1 rounded-md border border-amber-400 bg-white/70 hover:bg-white disabled:opacity-50"
-                  >
-                    {busy === m.id ? "Clearing…" : `Clear ${m.name} examples`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="border border-teal-deep/30 bg-teal-deep/5 rounded-xl p-5">
-            <h3 className="font-semibold text-gray-900 mb-1">Hypha integration</h3>
-            <p className="text-xs text-gray-600 mb-3">
-              All governance, voting, and equity live on your Hypha DHO; modules link
-              out and never rebuild it. Set the address on the Hypha Bridge card below,
-              under Settings (hypha.org_url). Blank hides every Hypha button.
-            </p>
-            {data.hypha?.configured ? (
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(data.hypha.links).map(([name, url]) => (
-                  <a key={name} href={String(url)} target="_blank" rel="noopener noreferrer"
-                    className="text-xs bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-teal-deep font-medium hover:bg-gray-50">
-                    {name} ↗
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-block">
-                Not connected yet. Every Hypha surface is hidden.
-              </p>
-            )}
-          </div>
-
-          {/* The front door for builders. It sits above the catalog because
-              somebody browsing what exists is the person most likely to notice
-              what does not. Mobile first, on the same numbers as the catalog
-              controls below: 16px text and a 44px target on a phone, dropping
-              to the compact sizes on a pointer device, and the link is
-              underlined at rest because a phone has no hover. */}
-          <div className="border border-teal-deep/30 bg-white rounded-xl p-5">
-            <h3 className="font-semibold text-gray-900 mb-1">Start building modules. Start here.</h3>
-            <p className="text-sm sm:text-xs text-gray-600 leading-relaxed">
-              Anyone can build a module for this platform. One guide covers all of it: what to read,
-              what to run, and how a finished module reaches other villages. Every free module earns a
-              share of the ReGen builders' pool, sized by how many members open it. A share is
-              recorded against the account named in the module's own entry, and the builder links
-              their Base address in their own profile there. Nothing has been paid out yet: the
-              counting runs, and the sending is still done by a person.
-            </p>
-            {/* The explainer sits here once, beside the link that acts on it,
-                instead of repeating per card. Every module card carries its own
-                one-line reason; this is the sentence that makes those reasons
-                mean something, and a founder needs it once. */}
-            <p className="text-sm sm:text-xs text-gray-600 leading-relaxed mt-2">
-              ReGen Civics shares a pool of $ReGen every lunar cycle across the free modules that
-              members are opening. A module that charges a price is paid by the villages using it.
-            </p>
-            <a
-              href={BUILDER_GUIDE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center mt-3 text-base sm:text-xs font-medium text-teal-deep underline min-h-[44px] sm:min-h-0 pr-3"
-            >
-              Open the builder guide ↗
-            </a>
-          </div>
-
-          {/* The catalog toolbar. Search always; each filter only once the
-              library holds more than one answer for it. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search the catalog"
-              /* A placeholder is not a name: it disappears the moment somebody
-                 types, and a screen reader announcing "edit text, blank" beside
-                 four labelled selects leaves the one control that does the most
-                 work unnamed. */
-              aria-label="Search the catalog"
-              className="w-full sm:flex-1 sm:w-auto sm:min-w-[200px] px-3 py-2 text-base min-h-[44px] sm:text-sm sm:min-h-0 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
-            />
-            {tiers.length > 1 && (
-              <select value={tierFilter} onChange={(e) => setTierFilter(e.target.value)} className={SELECT} aria-label="Filter by tier">
-                <option value="all">Any tier</option>
-                {tiers.map((t) => <option key={t} value={t}>{TIER_PILL[t as ModuleTier] ?? t}</option>)}
-              </select>
-            )}
-            {domains.length > 1 && (
-              <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} className={SELECT} aria-label="Filter by domain">
-                <option value="all">Any domain</option>
-                {domains.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-            {dataClasses.length > 1 && (
-              <select value={dataFilter} onChange={(e) => setDataFilter(e.target.value)} className={SELECT} aria-label="Filter by data class">
-                <option value="all">Any data</option>
-                {dataClasses.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
-            {prices.length > 1 && (
-              <select value={priceFilter} onChange={(e) => setPriceFilter(e.target.value)} className={SELECT} aria-label="Filter by price">
-                <option value="all">Any price</option>
-                <option value="free">No extra charge</option>
-                <option value="paid">Paid</option>
-              </select>
-            )}
-            {/* The count is the one number that says whether a filter is
-                hiding anything, so it reads at gray-600. At gray-400 it
-                measured 2.49:1 on the panel's own gray-50. */}
-            <span className="text-xs text-gray-600">
-              {visible.length} of {all.length}
-            </span>
-            {filtered && (
-              <button onClick={clearFilters} className="text-sm sm:text-xs font-medium text-teal-deep underline min-h-[44px] sm:min-h-0 px-2">
-                Clear
-              </button>
-            )}
-          </div>
-
-          {visible.length === 0 && (
-            <p className="text-sm text-gray-500 py-8 text-center">
-              Nothing in the catalog matches that. Clear the filters to see all {all.length}.
-            </p>
-          )}
-
-          {shelves.map(({ group, items }) => (
-          <section key={group.id}>
-            <h3 className="font-semibold text-gray-900">{group.label}</h3>
-            <p className="text-xs text-gray-500 mt-0.5 mb-3">{group.gloss}</p>
-          <div className="grid gap-4">
-            {items.map((m: any) => (
-              /*
-               * `min-w-0 break-words` is what keeps eighteen cards inside a
-               * phone.
-               *
-               * One column, so every card is the same width, and a grid item's
-               * automatic minimum is its min-content: one long word anywhere in
-               * any listing sets the floor for the whole catalog and the page
-               * scrolls sideways. The word that did it is a game variable in
-               * the lifecycle hint. `feed.max_hearts_per_recipient_per_cycle`
-               * is thirty-nine characters and a dot is not a break opportunity,
-               * so it measured 256px against the 232px a 360px screen leaves,
-               * and every card went to 298.5.
-               *
-               * `min-w-0` stops any child setting that floor and `break-words`
-               * gives the word somewhere to break, which is why they ship as a
-               * pair: alone, the first would let the word spill out of the card
-               * and the second would not shrink min-content at all. Applied to
-               * the card rather than to the one paragraph, because `builtBy`, a
-               * vendor name, a licence key and a module id can all be one long
-               * token too, and `overflow-wrap` inherits.
-               */
-              <div key={m.id} id={`module-card-${m.id}`} className="border border-gray-200 rounded-xl p-5 min-w-0 break-words">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="max-w-xl min-w-0">
-                    <h3 className="font-semibold text-gray-900">
-                      {m.name}
-                      {/* gray-600 on the gray-100 chip: gray-500 measured
-                          4.39:1 there, just under the line. */}
-                      {m.core && <span className="ml-2 text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Core</span>}
-                      {m.legalReview && <span className="ml-2 text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full">legal review</span>}
-                      {/* The third pill. `included` deliberately shows nothing:
-                          it is the absence of a badge, exactly the way
-                          everything that is not core is silent here today. */}
-                      {m.tier === "connected" && <span className={`${PILL} bg-sky-50 text-sky-700 border border-sky-200`}>{TIER_PILL.connected}</span>}
-                      {m.tier === "managed" && <span className={`${PILL} bg-violet-50 text-violet-700 border border-violet-200`}>{TIER_PILL.managed}</span>}
-                      {/* Withdrawn sits beside the tier because it changes what
-                          a founder can do, which is the same kind of fact. */}
-                      {m.withdrawn && <span className={`${PILL} bg-orange-50 text-orange-700 border border-orange-200`}>withdrawn</span>}
-                      {m.pricing && m.pricing.amount > 0 && (
-                        <span className={`${PILL} bg-emerald-50 text-emerald-700 border border-emerald-200`}>{m.priceLine}</span>
-                      )}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-0.5">{m.description}</p>
-                    {/* Who wrote it. A credit line, never a tier, which is why it
-                        renders for included modules too and sits apart from the
-                        pills above. */}
-                    {m.builtBy && (
-                      <p className="text-xs text-gray-600 mt-1.5">Built by {m.builtBy}</p>
-                    )}
-                    {m.requires.length > 0 && (
-                      <p className="text-xs text-gray-600 mt-1.5">requires: {m.requires.join(", ")}</p>
-                    )}
-                    {/* The fourth line: who answers for this one. Only where
-                        somebody outside is involved, so eighteen platform
-                        modules gain no noise. */}
-                    {m.support?.party === "vendor" && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        built and supported by {m.support.vendorName}, and you hold the account.{" "}
-                        <a href={m.support.supportUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Support</a>
-                      </p>
-                    )}
-                    {m.tier === "managed" && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        supported by whoever runs this deployment. One bill, one number to call.
-                      </p>
-                    )}
-                    {m.listing && (
-                      <p className="text-xs text-gray-600 mt-1.5">
-                        enabled as "{TIER_PILL[m.listing.tier as ModuleTier] ?? m.listing.tier}" under library contract {m.listing.contractVersion}
-                        {m.listing.acceptedAt ? ` on ${new Date(m.listing.acceptedAt).toLocaleDateString()}` : ""}
-                      </p>
-                    )}
-                    {/* A paid listing says where it stands on its licence, in
-                        both directions. `credentialPresent` is whether a key is
-                        SET, which is a different fact from a key that works, so
-                        this line never claims the second one. */}
-                    {m.pricing && m.pricing.amount > 0 && m.credentialPresent === false && (
-                      <p className="text-xs text-amber-700 mt-1.5">
-                        No licence key yet. This module answers 503 and says who to reach, and the
-                        rest of the village keeps working.
-                      </p>
-                    )}
-                    {m.pricing && m.pricing.amount > 0 && m.credentialPresent === true && (
-                      <p className="text-xs text-gray-600 mt-1.5">Licence key is set.</p>
-                    )}
-                    {m.withdrawn && (
-                      <p className="text-xs text-orange-700 mt-1.5">
-                        Withdrawn from the catalog on {m.withdrawn.since}.
-                        {m.withdrawn.replacedBy ? ` ${successorName(m.withdrawn.replacedBy)} replaces it.` : ""}
-                        {m.lifecycle === "off"
-                          ? " It cannot be turned on."
-                          : " Yours keeps running, and turning it off is one way."}
-                      </p>
-                    )}
-                    {/* Underlined at rest rather than on hover: a phone has no
-                        hover, so an affordance that only appears under a cursor
-                        is invisible to most of this audience. */}
-                    <button
-                      onClick={() => setOpenId(openId === m.id ? null : m.id)}
-                      aria-expanded={openId === m.id}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3"
-                    >
-                      {openId === m.id ? "Hide details" : "Details"}
-                    </button>
-                    {/* The public card for this module: art, promise, the
-                        whole pitch. Same page members browse (L1). */}
-                    <Link
-                      href={`/modules/${m.id}`}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3 inline-flex items-center"
-                    >
-                      Library page
-                    </Link>
-                    {/* Every setting this module reads, on the card, at any
-                        lifecycle (Rye, 2026-09-15). A button rather than a
-                        section that is always open: eighteen cards each
-                        unrolling their dials is a page nobody can scan. */}
-                    <button
-                      onClick={() => setSettingsId(settingsId === m.id ? null : m.id)}
-                      aria-expanded={settingsId === m.id}
-                      className="text-sm sm:text-xs font-medium text-teal-deep underline mt-2 min-h-[44px] sm:min-h-0 pr-3"
-                    >
-                      {settingsId === m.id ? "Hide settings" : "Settings"}
-                    </button>
-                  </div>
-                  {m.core ? (
-                    /* This pill is a core module's whole lifecycle answer, so
-                       it reads at the same weight as the buttons beside it.
-                       gray-400 measured 2.49:1 on the panel's gray-50. */
-                    <span className="text-xs text-gray-600 italic pt-1">always on</span>
-                  ) : (
-                    /*
-                     * Two columns on a phone, one row from `sm:` up.
-                     *
-                     * As one nowrap row the four labels set a min-content floor
-                     * of 264px, which a 360px screen cannot pay for: 56px rail +
-                     * 32px page padding + 40px card padding leaves 230, and the
-                     * whole catalog scrolled sideways because of it. A grid
-                     * wraps instead of pushing, so the card fits whatever is
-                     * left, and each cell lands well over the 44px a thumb
-                     * needs (the `off` button was 40.6 wide as a flex item).
-                     *
-                     * The hairlines come from the container's own background
-                     * showing through a 1px gap. `border-l` per button drew a
-                     * stray line down the left edge of the second row.
-                     */
-                    <div className="grid grid-cols-2 gap-px w-full sm:flex sm:w-auto sm:gap-0 rounded-lg border border-gray-200 bg-gray-200 sm:bg-transparent overflow-hidden">
-                      {LIFECYCLES.map((lc) => {
-                        /* A withdrawn listing that is already off can never come
-                           back, so the buttons that would try are dead rather
-                           than merely refused. The server refuses it anyway
-                           (409); this is so a founder is not invited to press
-                           something that cannot work. */
-                        const barred = !!m.withdrawn && m.lifecycle === "off" && lc !== "off";
-                        return (
-                          <button
-                            key={lc}
-                            disabled={busy === m.id || barred}
-                            onClick={() => setLifecycle(m, lc)}
-                            title={barred ? `Withdrawn on ${m.withdrawn.since}. It cannot be turned on.` : LIFECYCLE_HINT[lc]}
-                            className={`px-3 py-1.5 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 text-xs font-medium transition-colors ${
-                              m.lifecycle === lc
-                                ? "bg-teal-deep text-white"
-                                : "bg-white text-gray-600 hover:bg-gray-50"
-                            } ${barred ? "opacity-40 cursor-not-allowed" : ""} ${lc !== "off" ? "sm:border-l sm:border-gray-200" : ""}`}
-                          >
-                            {lc}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {/* What this module is still waiting for, at every lifecycle,
-                    with the link to the control. The Go-live card only speaks
-                    in preview and this card said nothing at all, so a village
-                    already live could never be told. */}
-                <SetupNeeded
-                  moduleId={m.id}
-                  setup={m.setup ?? "none"}
-                  ready={m.ready}
-                  lifecycle={String(m.served ?? m.lifecycle ?? "off")}
-                  className="mt-3"
-                  onOpen={({ moduleId, settingKey }) => { setSettingsId(moduleId); setFocusKey(settingKey); }}
-                />
-                {!m.core && m.lifecycle !== "off" && (
-                  <p className="text-xs text-gray-600 mt-3">
-                    {/* `m` is the untyped catalog row, so the cast is where the
-                        wire value meets the union. It asserts what the server
-                        already validates and nothing more: a value outside the
-                        union still renders blank, exactly as it does today. */}
-                    {LIFECYCLE_HINT[m.lifecycle as ModuleLifecycle]}
-                    {/* The sentence that used to follow sent a founder to Game
-                        Mechanics for this module's tunables. They are on this
-                        card now, under Settings, and they are there while the
-                        module is off as well. */}
-                  </p>
-                )}
-
-                {settingsId === m.id && (
-                  <ModuleSettingsSection
-                    moduleId={m.id}
-                    moduleName={m.name}
-                    lifecycle={String(m.served ?? m.lifecycle ?? "off")}
-                    moduleNames={Object.fromEntries(all.map((x: any) => [x.id, x.name]))}
-                    password={password}
-                    focusKey={focusKey}
-                    onFocused={clearFocusKey}
-                  />
-                )}
-
-                {/* The listing detail. Inline rather than a modal, so the list
-                    stays put and a founder never loses their place. */}
-                {openId === m.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-100 grid gap-3 text-xs">
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-500">
-                      <span>id: <code className="text-gray-700">{m.id}</code></span>
-                      <span>data it holds: <span className="text-gray-700">{m.dataClass}</span></span>
-                      {m.pool && POOL_REASON_COPY[m.pool.reason] && (
-                        <span>
-                          pool:{" "}
-                          {/* Keyed on disposition and no longer on `eligible`.
-                              R59 made every platform module eligible, so an
-                              eligible test now paints all twenty-three the same
-                              emerald and the colour says nothing. Green here
-                              means a builder outside the platform is paid. */}
-                          <span className={m.pool.disposition === "paid" ? "text-emerald-700" : "text-gray-700"}>
-                            {POOL_REASON_COPY[m.pool.reason]}
-                          </span>
-                        </span>
-                      )}
-                      {m.provides && <span>domain: <span className="text-gray-700">{m.provides}</span></span>}
-                      <span>
-                        contract doc:{" "}
-                        <span className={m.hasContractDoc ? "text-gray-700" : "text-amber-700"}>
-                          {m.hasContractDoc ? "on the shelf" : "none yet"}
-                        </span>
-                      </span>
-                    </div>
-
-                    {m.pricing && (
-                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                        <p className="font-medium text-emerald-900">{m.priceLine}</p>
-                        <p className="text-emerald-800 mt-1 leading-relaxed">
-                          {m.pricing.amount > 0
-                            ? "You buy this from the builder and they bill you directly. This platform takes no part in the payment."
-                            : "This listing adds no charge of its own."}
-                        </p>
-                        {m.pricing.billingUrl && (
-                          <a href={m.pricing.billingUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">
-                            Pricing and billing ↗
-                          </a>
-                        )}
-                        {m.pricing.licenceKey && (
-                          <p className="text-emerald-800 mt-1">
-                            The licence lives in your own secrets store, under{" "}
-                            <code>{m.pricing.licenceKey}</code>. You can see its last four characters
-                            and clear it from Integrations, without asking anybody.
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {m.vendor && (
-                      <div className="grid gap-1">
-                        <p className="font-medium text-gray-700">{m.vendor.legalName}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          <a href={m.vendor.url} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Product ↗</a>
-                          <a href={m.vendor.termsUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Terms ↗</a>
-                          <a href={m.vendor.statusUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Status ↗</a>
-                          <a href={m.vendor.supportUrl} target="_blank" rel="noopener noreferrer" className="text-teal-deep hover:underline">Support ↗</a>
-                          <span className="text-gray-500">{m.vendor.supportEmail}</span>
-                        </div>
-                        <p className="text-gray-500">
-                          {m.vendor.liveness?.mode === "window"
-                            ? `A successful call is expected inside ${m.vendor.liveness.withinHours} hours. Longer silence reads as stale.`
-                            : "Called on demand, so silence here is normal and is declared as such."}
-                        </p>
-                      </div>
-                    )}
-
-                    {(m.vendor?.setupSteps ?? []).length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-700 mb-1">Setup you do inside their product</p>
-                        <ul className="list-disc pl-4 space-y-1 text-gray-500">
-                          {m.vendor.setupSteps.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-
-                    {(m.health ?? []).length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-700 mb-1">What its calls have actually done</p>
-                        {m.health.map((h: any) => (
-                          <p key={h.operation} className={h.reading?.verdict === "failing" || h.reading?.verdict === "stale" ? "text-red-600" : "text-gray-500"}>
-                            {h.operation}: {h.reading?.detail}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-500">
-                      {m.recommends.length > 0 && <span>works better with: {m.recommends.join(", ")}</span>}
-                      {m.capabilities.length > 0 && <span>adds permissions: {m.capabilities.join(", ")}</span>}
-                      {/* The count of tunables stood here. It read
-                          `variableKeys`, which is now only the keys a module
-                          owns OUTSIDE its own namespace, so the number would
-                          undercount every module that owns one. Settings has
-                          its own button above, and the section prints the
-                          whole list. */}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          </section>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+// The Module Library tab lived here. It is one page with the public library
+// now: `/modules` (filters, state, starter sets, the founder's plan) and
+// `/modules/:id` (the switch, setup, dials, examples, vendor and health, in
+// client/src/components/admin/ModuleStewardPanel.tsx). The rail keeps one
+// entry, which is a link there, and `/admin?tab=modules&...` redirects
+// (`legacyModulesTabTarget` in shared/moduleSetupLink.ts).
 
 // ── Circles & Map admin (S19-S23) ────────────────────────────────────────────
 
@@ -4398,7 +3160,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Season Shapes</h2>
         <p className="text-sm text-gray-500 mt-1">
-          A shape is the working setup of a season: which circles, seats, badges
+          A shape is the working setup of a season: which circles, roles, badges
           and quests are live while it runs. Anything in no shape at all is
           permanent and a season turn never touches it.
         </p>
@@ -4448,7 +3210,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
                   onChange={(e) => void toggle(r.kind, r.id, e.target.checked)} />
                 <span className={governed(r.kind, r.id) ? "" : "text-gray-500"}>{r.name}</span>
                 <span className="text-[11px] text-gray-400">
-                  {r.kind === "circle" ? "circle" : "seat"}
+                  {r.kind === "circle" ? "circle" : "role"}
                   {!governed(r.kind, r.id) && " · permanent"}
                 </span>
               </label>
@@ -4493,7 +3255,7 @@ function SeasonPatternsTab({ password }: { password: string }) {
             ))}
             {plan.lapsing?.length > 0 && (
               <p className="text-xs text-gray-500">
-                {plan.lapsing.length} seat(s) would reopen for reassignment.
+                {plan.lapsing.length} role(s) would reopen for reassignment.
               </p>
             )}
           </div>
@@ -5935,7 +4697,7 @@ function BadgesAdminTab({ password }: { password: string }) {
   // or denied from here at all. Reading the registry means a new capability
   // shows up the moment it is added.
   const CAPS = ALL_CAPABILITIES;
-  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth"];
+  const METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"];
   const [data, setData] = useState<any>(null);
   const [off, setOff] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -6030,28 +4792,7 @@ function BadgesAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">Badge definitions</h3>
         <div className="space-y-2 mb-5">
           {(data?.badges ?? []).map((b: any) => (
-            <div key={b.id} className={`border rounded-lg px-4 py-3 ${b.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {b.name} <span className="text-xs text-gray-400">({b.kind})</span>
-                    {b.isExample && <ExampleChip className="ml-2 align-middle" />}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {b.kind === "earned" && b.rule ? `at ${b.rule.threshold} ${String(b.rule.metric).replace(/_/g, " ")}${b.rule.stackable ? ` · stacks ×${b.rule.maxStack}` : ""} · ` : ""}
-                    {(b.capabilities ?? []).length ? `grants ${b.capabilities.join(", ")} · ` : ""}
-                    {(b.denies ?? []).length ? `denies ${b.denies.join(", ")} · ` : ""}
-                    {b.description || "no description"}
-                  </p>
-                </div>
-                <button
-                  onClick={async () => { const d = await call(`/admin/badges/${b.id}`, { active: !b.active }, "PUT"); if (d) load(); }}
-                  className="text-xs text-gray-500 hover:text-gray-900"
-                >
-                  {b.active ? "Deactivate" : "Reactivate"}
-                </button>
-              </div>
-            </div>
+            <BadgeDefinitionRow key={b.id} badge={b} call={call} onSaved={load} />
           ))}
           {(data?.badges ?? []).length === 0 && <p className="text-sm text-gray-400">No badges yet.</p>}
         </div>
@@ -6603,6 +5344,8 @@ function ExitsAdminTab({ password }: { password: string }) {
   const [selectedUser, setSelectedUser] = useState("");
   const [state, setState] = useState<any>(null);
   const [policyDraft, setPolicyDraft] = useState<any>(null);
+  // What happens when someone leaves, from a ReGen Civics file (ProfileImport.tsx): in the leaving words below, unpublished.
+  const [exitFromProfile, setExitFromProfile] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   // The platform's own words, sent down with the policy. Held rather than
   // copied into the bundle so the editor's "still the platform's" marker and
@@ -6627,7 +5370,9 @@ function ExitsAdminTab({ password }: { password: string }) {
       ]);
       const e = await eRes.json();
       setData(e);
-      setPolicyDraft(e.policy);
+      const handedExit = takePrefill("exitPolicy");
+      setPolicyDraft(handedExit && e.policy ? { ...e.policy, voluntary: { ...e.policy.voluntary, valuationMethod: handedExit } } : e.policy);
+      if (handedExit && e.policy) setExitFromProfile(true);
       setPolicyDefaults(e.defaults ?? null);
       setCircles(Array.isArray(e.circles) ? e.circles : []);
       const p = await pRes.json();
@@ -6667,7 +5412,7 @@ function ExitsAdminTab({ password }: { password: string }) {
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   if (loading && !data) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const openExit = state?.exit;
+  const openExit = state?.exit, formerIds = new Set((data?.exits ?? []).filter((e: any) => e.formerMember).map((e: any) => e.userId)); // E4: a former member is named so, and offered no second exit
 
   return (
     <div className="space-y-8">
@@ -6686,7 +5431,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         <h3 className="font-semibold text-gray-900 mb-3">A member's open state</h3>
         <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className={`${inputCls} mb-3`}>
           <option value="">Pick a member…</option>
-          {players.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {players.map((p: any) => <option key={p.id} value={p.id}>{formerIds.has(p.id) ? `${p.name} (former member)` : p.name}</option>)}
         </select>
         {state && (
           <>
@@ -6723,7 +5468,7 @@ function ExitsAdminTab({ password }: { password: string }) {
               }}
                   />
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-              {!openExit ? (
+              {!openExit && state.formerMember ? (<span data-former-member="" className="text-sm text-gray-600 self-center">They already left the village and are a former member, so there is no departure to open. Admitting them again is the only way back.</span>) : !openExit ? (
                 <>
                   <button onClick={async () => { const d = await call("/admin/exits", { userId: selectedUser, kind: "voluntary" }); if (d) { toast.success("Exit opened"); load(); loadState(selectedUser); } }}
                     className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium">Open exit</button>
@@ -6739,11 +5484,11 @@ function ExitsAdminTab({ password }: { password: string }) {
                   <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/settle-balances`); if (d) { toast.success(`Swept: ${JSON.stringify(d.swept)}`); loadState(selectedUser); } }}
                     className="text-sm border border-teal-deep text-teal-deep rounded-lg px-3 py-2 font-medium">Sweep balances</button>
                   <button onClick={async () => {
-                    if (!window.confirm("Resolve this exit? The account becomes a tombstone: identity removed, contributions kept.")) return;
+                    if (!window.confirm("Resolve this exit? A member still holding tokens, or owed cash by the village, stays on as a former member, with their account and balances, and their membership and roles end. An account with nothing of value left becomes a tombstone: identity removed, contributions kept.")) return;
                     const d = await call(`/admin/exits/${openExit.id}/resolve`);
-                    if (d) { toast.success(`Resolved${d.vacatedRoles.length ? `. Seats opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
-                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve (tombstone)</button>
-                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success("They're staying"); loadState(selectedUser); load(); } }}
+                    if (d) { toast.success(`${d.outcome === "former" ? "Resolved. Kept as a former member" : "Resolved. The account is a tombstone"}${d.vacatedRoles.length ? `. Roles opened: ${d.vacatedRoles.join(", ")}` : ""}`); setSelectedUser(""); load(); }
+                  }} className="text-sm bg-red-600 text-white rounded-lg px-3 py-2 font-medium">Resolve</button>
+                  <button onClick={async () => { const d = await call(`/admin/exits/${openExit.id}/cancel`); if (d) { toast.success(d.message ?? "They're staying", d.message ? { duration: 15000 } : undefined); loadState(selectedUser); load(); } }}
                     className="text-sm text-gray-500 hover:text-gray-900 px-2">They're staying</button>
                 </>
               )}
@@ -6759,7 +5504,7 @@ function ExitsAdminTab({ password }: { password: string }) {
           {(data?.exits ?? []).map((e: any) => (
             <div key={e.id}>
               <p className="text-sm text-gray-600">
-                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}
+                <b className="text-gray-900">{e.userName}</b>: {e.kind}, {e.status}{e.formerMember ? ", former member" : ""}
                 <span className="text-xs text-gray-400"> · opened {new Date(e.openedAt).toLocaleDateString()}{e.resolvedAt ? `, closed ${new Date(e.resolvedAt).toLocaleDateString()}` : ""}</span>
                 {e.agreementRef && <span className="text-xs text-teal-deep"> · agreement: {e.agreementRef}</span>}
               </p>
@@ -6794,6 +5539,7 @@ function ExitsAdminTab({ password }: { password: string }) {
         return (
         <div className="bg-white border border-gray-100 rounded-xl p-5">
           <h3 className="font-semibold text-gray-900 mb-1">The published policy</h3>
+          {exitFromProfile && <p className="mb-3 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">"How contributed value is honored" now holds your stewards' words for what happens when someone leaves, from your ReGen Civics profile. Move any part to the box it belongs in. Nothing is published until you press Publish.</p>}
           <p className="text-xs text-gray-500 mb-4">
             Every field here is printed at /exit-policy for anyone to read,
             signed in or not. This is the highest-stakes copy on the site: it
@@ -6926,7 +5672,7 @@ function ExitsAdminTab({ password }: { password: string }) {
             )}
           </div>
 
-          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); load(); } }}
+          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
             className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep">Publish policy</button>
         </div>
         );
@@ -7651,7 +6397,7 @@ function CyclesTab({ password }: { password: string }) {
                   </p>
                   <p className="text-sm text-gray-600 mt-1">
                     Split across everyone acknowledged that lunation, in proportion to what
-                    they received. Set by gratitude.pool_per_cycle, on its module card
+                    they received. Set by {"gratitude.pool_per_cycle"}, on its module card
                     under Modules.
                   </p>
                   {pending.pool.problem && (
@@ -7911,7 +6657,7 @@ function LedgerTab({ password }: { password: string }) {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Ledger</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -7920,7 +6666,7 @@ function LedgerTab({ password }: { password: string }) {
             have issued, which is why everything still sums to zero.
           </p>
         </div>
-        <button onClick={load} className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-50">
+        <button onClick={load} className="admin-nowrap inline-flex min-h-11 shrink-0 items-center rounded-lg border border-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-50">
           Re-check
         </button>
       </div>
@@ -8306,44 +7052,15 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [savedCurrency, setSavedCurrency] = useState(""); // As last stored, so the picker can say when a choice is not saved yet.
+  const wizard = useWizardFacts();
   const needsSetup = useNeedsSetupObservation(password);
-  /**
-   * Which currency codes the daily rate table actually carries.
-   *
-   * Read live from the same route the member-facing picker reads, rather
-   * than from a list typed here, so this can never drift from what the
-   * village can really convert. Empty is a fine answer: the note below the
-   * field only speaks when it knows something.
-   *
-   * ABOVE THE EARLY RETURN, with the other hooks, and it has to stay there.
-   * A hook below `if (!brand || !defaults) return` is a hook the first render
-   * skips and the second runs, which is exactly the crash the Work With Us
-   * tab shipped with.
-   */
-  const [fxCovered, setFxCovered] = useState<string[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    fetch(`${API_BASE}/fx/rates`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((t) => {
-        if (!alive) return;
-        // ONLY when rates actually arrived. Seeding from `t.base` alone made
-        // `known` true with one entry, so a village whose daily job had not run
-        // was told there is no rate for USD, which is false.
-        const rates = Object.keys(t?.rates ?? {});
-        if (!rates.length) return;
-        setFxCovered([t.base, ...rates].filter(Boolean).sort());
-      })
-      .catch(() => { /* No table is not an error here; the note stays quiet. */ });
-    return () => { alive = false; };
-  }, []);
-
   const load = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, { headers: authHeaders(password) });
       const data = await res.json();
       setBrand(data.brand);
+      setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       setDefaults(data.defaults);
     } catch { toast.error("Failed to load setup"); }
   }, [password]);
@@ -8360,7 +7077,8 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setBrand(data.brand);
+      setBrand(data.brand); void refreshGameConfig();
+      setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       toast.success("Saved");
     } catch { toast.error("Save failed"); }
     setSavingSection(null);
@@ -8393,92 +7111,20 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   };
 
   /* `project` only. The two `currency` calls came out with the dead boxes, and
-     narrowing the type is what stops a third one going back in by hand. */
+     narrowing the type is what stops a third one going back in by hand. The box
+     itself, and the "Show nothing here" choice on the Tagline and the Footer
+     introduction (R088), are client/src/components/admin/BrandTextField.tsx. */
   const brandField = (group: "project", key: string, label: string, defaultVal: string) => (
-    <div key={key}>
-      <label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>
-      <input
-        type="text"
-        value={brand[group][key] ?? ""}
-        onChange={(e) => setField(group, key, e.target.value)}
-        placeholder={defaultVal}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
-      />
-      <p className="text-[11px] text-gray-400 mt-0.5">Platform default: {defaultVal}</p>
-    </div>
+    <BrandTextField
+      key={key}
+      fieldKey={key}
+      label={label}
+      defaultVal={defaultVal}
+      project={brand[group]}
+      onProject={(next) => setBrand((b: any) => ({ ...b, [group]: next }))}
+    />
   );
 
-  /**
-   * The currency this village's money is quoted in.
-   *
-   * IT HAD NO FIELD ANYWHERE, which is why every fork shipped declaring
-   * Costa Rican colones: `shared/gameConfig.ts` defaults `fiatCurrency` to
-   * "CRC" and no screen in client/src let a founder say otherwise.
-   * `scripts/check-identity-keys.mjs` has been counting down a pending list
-   * whose last entry is this key, and whose stated exit condition is that the
-   * founder sets it in Admin. This is that screen.
-   *
-   * A FREE TEXT BOX WITH SUGGESTIONS, and deliberately not a dropdown. The
-   * daily rate table carries fourteen codes; the world has rather more, and
-   * the first village to use this platform is itself on one the table does
-   * not carry. A closed list would have made this village's own currency
-   * unreachable from the screen built to set it.
-   *
-   * The note is the honest half. `server/lib/fxRates.ts` fetches the
-   * daily list, which does not carry CRC (measured 2026-08-21), so a village
-   * quoting in an uncovered currency shows amounts unconverted to anyone
-   * viewing in another until an admin records a manual rate. That is a real
-   * consequence of a choice made here, so it is said here, at the moment of
-   * choosing, rather than discovered later on a member's screen.
-   */
-  const currencyField = () => {
-    const raw = String(brand.project?.fiatCurrency ?? "");
-    const code = raw.trim().toUpperCase();
-    const problem = displayCurrencyProblem(raw.trim());
-    const known = fxCovered.length > 0;
-    const covered = known && fxCovered.includes(code);
-    return (
-      <div className="md:col-span-2">
-        <label className="text-xs font-medium text-gray-500 block mb-1" htmlFor="project-fiat-currency">
-          Currency your prices are in (three letter code)
-        </label>
-        <input
-          id="project-fiat-currency"
-          type="text"
-          // Tied to the box: a bare role="alert" is announced once and is then
-          // unreachable, so tabbing back gives the label and nothing about the
-          // problem. aria-invalid exposes a state the red text cannot.
-          aria-describedby="project-fiat-currency-note"
-          aria-invalid={problem ? true : undefined}
-          list="fiat-currency-options"
-          maxLength={3}
-          value={code}
-          // Uppercased on the way in, so "chf" and "CHF" cannot become two
-          // different villages' worth of stored value.
-          onChange={(e) => setField("project", "fiatCurrency", e.target.value.toUpperCase())}
-          placeholder={defaults.project?.fiatCurrency ?? ""}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg uppercase"
-        />
-        <datalist id="fiat-currency-options">
-          {fxCovered.map((c) => <option key={c} value={c} />)}
-        </datalist>
-        {problem ? (
-          <p id="project-fiat-currency-note" role="alert" className="text-[11px] text-red-600 mt-0.5">{problem}</p>
-        ) : code && known && !covered ? (
-          <p id="project-fiat-currency-note" className="text-[11px] text-amber-700 mt-0.5">
-            There is no daily rate for {code}, so anyone viewing in another currency sees your
-            amounts unconverted until an admin records a rate by hand. Prices themselves are unaffected.
-          </p>
-        ) : (
-          <p id="project-fiat-currency-note" className="text-[11px] text-gray-400 mt-0.5">
-            Platform default: {defaults.project?.fiatCurrency ?? ""}. This sets what every price on the
-            site is quoted in, and what a member sees before choosing their own display currency.
-          </p>
-        )}
-        <CurrencyAnswerNote answered={!!code} />
-      </div>
-    );
-  };
 
   const imageField = (key: string, label: string, altUnavailable?: string) => (
     <BrandImageField
@@ -8493,34 +7139,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
       altUnavailable={altUnavailable}
     />
   );
-
-  /*
-   * The "Journey page copy" row came out with the four tabs it pointed at.
-   * It sent a founder to an editor whose saves the journey pages never read,
-   * and a wizard that hands somebody a door to a room that was demolished is
-   * worse than one that stays quiet about it.
-   */
-  const contentEditors = [
-    /*
-     * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
-     * surfaces a fresh village publishes people on. A founder walked the whole
-     * wizard and was never shown the screen where the seats and the team cards
-     * are edited, so whatever was already on /team and /roles stayed there and
-     * read as the village's own. That is how a fork published four strangers.
-     *
-     * First in the list on purpose: people are the thing a visitor looks for
-     * first and the thing a village is most answerable for.
-     */
-    { tab: "org-chart", label: "Org Chart", hint: "Your circles, your seats, and who holds them. This is what /roles and /team show." },
-    { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for." },
-    { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page." },
-    { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage." },
-    { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
-    { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy." },
-    { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page." },
-    { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
-    { tab: "quests-admin", label: "Quests", hint: "Seeded starter quests. Rewrite, add or remove them here so the board is yours." },
-  ];
 
   /* SetupSection is a module-scope import and MUST stay one. It was declared
      here, inside this body, which made a new component type on every render
@@ -8563,13 +7181,22 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         )}
       </div>
 
+      {/* A project from ReGen Civics brings its file here. Identity goes into the boxes below, unsaved (ProfileImportDoor.tsx). */}
+      <ProfileImportDoor password={password} onOpenTab={onOpenTab} onIdentity={(p) => setBrand((b: any) => ({ ...b, project: { ...b.project, ...p } }))} />
+
       <SetupSection {...step} id="identity" n={1} title="Identity" subtitle="What your project is called.">
         <div className="grid md:grid-cols-2 gap-4 mb-4">
           {/* catalystName is a LABEL and not a role: renaming it changes no permission (see client/src/lib/gameApi.ts).
               It is deliberately NOT one of the measured Identity fields in setupProgress.ts, because it ships with a
               working default and counting it would leave Identity unfinished forever for a village happy with it. */}
           {IDENTITY_WIZARD_FIELDS.map(([key, label]) => brandField("project", key, label, defaults.project[key] ?? ""))}
-          {currencyField()}
+          {/* Picked by name, so a founder never has to know the code (VillageCurrencyField.tsx). */}
+          <VillageCurrencyField
+            value={String(brand.project?.fiatCurrency ?? "")}
+            saved={savedCurrency}
+            platformDefault={defaults.project?.fiatCurrency ?? ""}
+            onChange={(c) => setField("project", "fiatCurrency", c)}
+          />
           {/*
             THE TWO CURRENCY BOXES ARE GONE, and they were dead when they were
             here. `mergedConfig()` (server/index.ts) computes
@@ -8610,7 +7237,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("identity", { project: brand.project })} disabled={savingSection === "identity"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "identity" ? "Saving..." : "Save identity"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, gratitude, season banner, pulse). Page marketing copy is edited under Content below.</p>
+        <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, recognition, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
       {/* 0219: the sentence every later change is judged against, and the one
@@ -8638,7 +7265,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         <button onClick={() => saveBrand("images", { images: brand.images })} disabled={savingSection === "images"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
           {savingSection === "images" ? "Saving..." : "Save pictures"}
         </button>
-        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. Crawler-facing metadata (og:image, canonical URL) stays neutral in <code>client/index.html</code>; a fork that wants it adds it in its own fork.</p>
+        <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. What a shared link shows (its sentence and picture) is set in Make it yours, Pages, Whole site, and falls back to your Tagline and homepage picture.</p>
         {/* Typography lives with Pictures: both are "how the village looks".
             Self-contained component — see client/src/components/TypographyPanel.tsx. */}
         <LookPanel password={password} />
@@ -8659,11 +7286,11 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
       <SetupSection {...step} id="content" n={5} title="Content" subtitle="Rewrite the words, questions, milestones, and quests for your project.">
         <div className="space-y-2">
-          {contentEditors.map((c) => (
+          {SETUP_CONTENT_EDITORS.map((c) => (
             <div key={c.tab} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-2.5">
               <div className="min-w-0">
                 <div className="text-sm font-medium text-gray-900">{c.label}</div>
-                <div className="text-xs text-gray-500 truncate">{c.hint}</div>
+                <div className="text-xs text-gray-500 truncate">{contentEditorHint(c, wizard.brochureOn)}</div>
               </div>
               <button onClick={() => onOpenTab(c.tab)} className="shrink-0 px-3 py-1.5 text-xs font-medium text-teal-deep border border-gray-200 rounded-lg hover:bg-gray-50">
                 Open →
@@ -8695,10 +7322,10 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           repaints as you save, so you see every change where it lands.
         </p>
         <Link
-          href="/map"
+          href={wizard.mapOn ? "/map" : "/modules/map"}
           className="inline-flex items-center gap-2 min-h-[44px] px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-deep"
         >
-          Open the map
+          {wizard.mapOn ? "Open the map" : "Switch the map on first"}
         </Link>
       </SetupSection>
 
@@ -8728,7 +7355,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
           <li>
             <p className="font-medium text-gray-900">5. Social image & favicon</p>
-            <p className="text-gray-500">Only in a fork you build yourself: edit <code>client/index.html</code> for the <code>og:image</code> and <code>twitter:image</code> links, which are build-time and not in this wizard.</p>
+            <p className="text-gray-500">Set the sentence and picture a shared link shows in Make it yours, Pages, Whole site. The tab icon is in Pictures. Both apply live, with no deploy.</p>
           </li>
           <li>
             <p className="font-medium text-gray-900">6. Full reference</p>
@@ -8745,14 +7372,13 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 function SettingsTab({ password }: { password: string }) {
   const [settings, setSettings] = useState<any>(null);
   const [saving, setSaving] = useState(false);
-
+  const fiatCurrency = useGameConfig()?.project?.fiatCurrency ?? "";
   useEffect(() => {
     fetch(`${API_BASE}/admin/settings`, { headers: authHeaders(password) })
       .then((r) => r.json())
       .then(setSettings)
       .catch(() => toast.error("Failed to load settings"));
   }, [password]);
-
   const save = async () => {
     setSaving(true);
     try {
@@ -8798,7 +7424,7 @@ function SettingsTab({ password }: { password: string }) {
     { key: "plannedHomes", label: "Planned homes", valueHint: "how many", noteHint: "", where: "Master plan" },
     { key: "guestRooms", label: "Guest rooms", valueHint: "how many", noteHint: "", where: "Master plan" },
   ];
-  const preview = dues.amount ? `${dues.currency || "$"}${dues.amount} / ${dues.period || "month"}` : "Not shown until you set an amount";
+  const preview = dues.amount ? `${figureWithCurrency(String(dues.amount), dues.currency, fiatCurrency)} / ${dues.period || "month"}` : "Not shown until you set an amount";
 
   return (
     <div>
@@ -8833,7 +7459,7 @@ function SettingsTab({ password }: { password: string }) {
             <label className="text-xs font-medium text-gray-500 block mb-1">Currency</label>
             <input
               type="text"
-              value={dues.currency ?? "$"}
+              value={dues.currency ?? ""} placeholder={currencySymbol(fiatCurrency) || "Symbol"}
               onChange={(e) => setDues({ currency: e.target.value })}
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
             />
@@ -9169,16 +7795,18 @@ function LaunchBanner({ password }: { password: string }) {
   if (!status || status.launchedAt) return null;
   const total = (status.items ?? []).length;
   const done = (status.items ?? []).filter((i: any) => i.state === "ok").length;
+  const short = status.blockingOpen > 0 ? `Launch ${done}/${total} · ${status.blockingOpen} open` : `Launch ${done}/${total}`;
+  const full = `Journey to Launch: ${done} of ${total} done${status.blockingOpen > 0 ? ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open` : " · ready when a founder says so"}`;
   return (
     <a
       href="/journey-to-launch"
-      className="block bg-amber-400 text-teal-950 px-6 py-2.5 text-sm font-medium hover:bg-amber-300 transition-colors"
+      className="flex items-center gap-2 bg-amber-400 px-3 py-2 text-sm font-medium text-teal-950 hover:bg-amber-300 sm:px-6"
     >
-      <span className="font-semibold">🌳 Journey to Launch:</span>{" "}
-      {done} of {total} done
-      {status.blockingOpen > 0 && ` · ${status.blockingOpen} blocking item${status.blockingOpen === 1 ? "" : "s"} open`}
-      {status.blockingOpen === 0 && " · ready when a founder says so"}
-      <span className="float-right">→</span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{full}</span>
+      </span>
+      <span className="shrink-0" aria-hidden="true">→</span>
     </a>
   );
 }
@@ -9187,6 +7815,7 @@ function LaunchBanner({ password }: { password: string }) {
 
 export default function Admin() {
   const [password, setPassword] = useState<string | null>(null);
+  const { user } = useAuth();
   // Live config, same hook the rest of the app already reads its identity
   // from. The panel header used to hardcode "Amora Admin" over
   // "game.amora.cr" — the first screen a founder on a fresh instance opens,
@@ -9201,9 +7830,7 @@ export default function Admin() {
   // a specific admin screen; "go to Integrations" had no address. Same
   // `activeTab`/`setActiveTab` contract, so the ~35 call sites are untouched,
   // and back/forward now walk tab history the way a browser should.
-  const [activeTab, setActiveTabState] = useState<string>(
-    () => new URLSearchParams(window.location.search).get("tab") ?? "submissions",
-  );
+  const [activeTab, setActiveTabState] = useState<string>(() => tabFromSearch(window.location.search));
   const setActiveTab = useCallback((tab: string) => {
     setActiveTabState(tab);
     const p = new URLSearchParams(window.location.search);
@@ -9211,10 +7838,12 @@ export default function Admin() {
     window.history.pushState({}, "", `${window.location.pathname}?${p.toString()}`);
     // Choosing from low in the rail leaves you scrolled past the top of the
     // panel you just opened; every tab change starts at its own beginning.
+    const main = document.querySelector("main");
+    if (main) main.style.paddingBottom = "";
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const onPop = () => setActiveTabState(new URLSearchParams(window.location.search).get("tab") ?? "submissions");
+    const onPop = () => setActiveTabState(tabFromSearch(window.location.search));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -9240,6 +7869,8 @@ export default function Admin() {
     return window.innerWidth >= 1024;
   });
   useEffect(() => { writeStored("local", "admin.navOpen", navOpen ? "1" : "0"); }, [navOpen]);
+  const [night, setNight] = useState<boolean>(() => readAdminNight());
+  useEffect(() => { writeAdminNight(night); }, [night]);
 
   useEffect(() => {
     if (!password) return;
@@ -9252,54 +7883,60 @@ export default function Admin() {
       .catch(() => { /* leave as incomplete; the wizard just stays pinned */ });
   }, [password, activeTab, needsSetup.observations]);
 
+  // The retired Module Library tab, and every old link to it, land on the
+  // library itself. Before the gate: the library is public.
+  const shownGroups = limitNav(filterNavByModules(navGroups(setupComplete), moduleLifecycles), simpleNav(user?.role));
+  if (activeTab === "modules" && new URLSearchParams(window.location.search).get("module") !== "saberra") {
+    return <Redirect to={legacyModulesTabTarget(window.location.search) ?? "/modules"} replace />;
+  }
   if (!password) {
     return <AdminGate onAuth={setPassword} />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={adminRootClass(night)}>
       {/* S64: the journey banner. Every admin sees the road to launch at the
           top of every admin visit until a founder marks the village launched —
           then it retires itself. */}
       <LaunchBanner password={password} />
-      <header className="bg-teal-deep text-white px-6 py-4 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-            <Lock className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-lg leading-tight">{villageName ? `${villageName} Admin` : "Admin"}</h1>
-            {siteUrl && (
-              <p className="text-xs text-white/60">{siteUrl.replace(/^https?:\/\//, "")}</p>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={() => setPassword(null)}
-          className="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
-      </header>
+      <AdminHeader
+        villageName={villageName}
+        siteUrl={siteUrl}
+        night={night}
+        onNight={setNight}
+        onSignOut={() => setPassword(null)}
+        extra={<AdminSeraChip password={password} />}
+      />
 
-      <div className="flex">
+      <div className="flex w-full">
         <AdminNav
-          groups={filterNavByModules(navGroups(setupComplete), moduleLifecycles)}
+          groups={shownGroups}
           activeTab={activeTab}
           onSelect={setActiveTab}
           open={navOpen}
           setOpen={setNavOpen}
+        />
+        <UndoBar />
+        <AdminMobileNav
+          groups={shownGroups}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          onSignOut={() => setPassword(null)}
         />
 
         {/* min-w-0 lets a flex child actually shrink — without it a wide
             table inside sets the floor and the page scrolls sideways. The
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <main className="admin-fit min-w-0 w-full max-w-5xl flex-1 p-4 sm:p-6 lg:p-8">
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
+          <TourCard wait={activeTab === "home"} />
+          <HealthStrip password={password} full={activeTab === "home" || activeTab === "integrations"} onOpen={setActiveTab} />
+          <AdminHelp tab={activeTab} />
+          {activeTab === "home" && <Suspense fallback={null}><HomeBase password={password} onOpenTab={setActiveTab} groups={shownGroups} role={user?.role} /></Suspense>}
+          {activeTab === "modules" && <SeraAdminHome />}
           <AdminGoLive token={password} moduleId={TAB_MODULE[activeTab] ?? null}
             onLifecycles={(m) => setModuleLifecycles(m as Record<string, ModuleLifecycle>)} />
           {/* The two facts only this village can state. VillageAnswers.tsx says why it outlives the checklist. */}
@@ -9329,7 +7966,6 @@ export default function Admin() {
           {activeTab === "game-roles" && <GameRolesTab password={password} />}
           {activeTab === "handover" && <HandoverTab password={password} />}
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
-          {activeTab === "modules" && <ModulesTab password={password} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
@@ -9350,10 +7986,10 @@ export default function Admin() {
           {activeTab === "exits-admin" && <ExitsAdminTab password={password} />}
           {activeTab === "calls-admin" && <CallsAdminTab password={password} />}
           {activeTab === "intents-admin" && <IntentsAdminTab password={password} />}
-          {/* The same lifecycle map the nav filters on, so the registry and the
-              rail can never disagree about which modules this village runs. */}
+          {/* The nav's own lifecycle map, so the registry and the rail never disagree on which modules run. */}
           {activeTab === "tokens" && <TokensTab password={password} lifecycles={moduleLifecycles} />}
           {activeTab === "ledger" && <LedgerTab password={password} />}
+          {activeTab === "cash-payouts" && <CashPayoutsTab password={password} />}
           {activeTab === "cycles" && <CyclesTab password={password} />}
           {activeTab === "variables" && <VariablesTab password={password} />}
           {activeTab === "season" && <SeasonTab password={password} />}

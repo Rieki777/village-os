@@ -14,7 +14,7 @@
  * quantity, and at `decimals: 2` a hundred-fold error is the failure mode that
  * would otherwise look plausible on both sides.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -72,7 +72,9 @@ describe("a credit balance a member reads, and what the send posts", () => {
     } as any);
   });
 
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 

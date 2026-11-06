@@ -93,6 +93,11 @@ const KIND_FOR: Readonly<Partial<Record<SaberraRecordKind, string>>> = {
   risk: "risk.observed",
 };
 
+/** The proposal kind a vendor kind lands as, or null when it lands none. */
+export function proposalKindFor(kind: SaberraRecordKind): string | null {
+  return KIND_FOR[kind] ?? null;
+}
+
 /** Which half each vendor kind belongs to, by whether its allowed fields name a person. */
 const STREAM_FOR: Readonly<Record<SaberraRecordKind, Stream>> = {
   circle: "structure",

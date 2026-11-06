@@ -22,6 +22,9 @@ import { civilParts, zonedTimeToUtc, type YearAnchor } from "../../shared/lunar"
 import { expandOccurrences, type CalendarRow } from "./calendar";
 import { lunarSummaryFor, type MonthName } from "./lunarTable";
 import { moonCountLabel } from "../../shared/villageMoon";
+import { replaceFeedTokenOn } from "../repos/calendarFeedTokens";
+import { recordEvent } from "./events";
+import { whileSessionHolds } from "./sessionHold";
 
 export interface IcsOptions {
   /** X-WR-CALNAME: what a subscriber's app shows. */
@@ -406,17 +409,38 @@ export function looksLikeFeedToken(raw: unknown): raw is string {
   return typeof raw === "string" && /^[a-f0-9]{64}$/.test(raw);
 }
 
-export async function mintFeedToken(pool: Pool, userId: string): Promise<string> {
+/** A private feed address made, or why not. */
+export type FeedMint = { ok: true; raw: string } | { ok: false; status: 401; error: "auth_required" };
+
+/**
+ * A new private feed key, retiring the member's old one, with the admin's
+ * audit line. The raw key is in the result and nowhere else.
+ *
+ * MINTED WHILE THE SESSION HOLDS (adversarial round 4). `sessionVersion` is
+ * the tokenVersion the request's session was checked at, and
+ * `POST /api/events/feed/token` passes it. The address never expires and
+ * reads the member's private layers, so a new password and an admin's revoke
+ * sessions retire it on both sides of the bump (`endAgentReach`,
+ * server/lib/agentTokens.ts). The key is written under the member's row lock,
+ * and only while the row still carries that version (`whileSessionHolds`): a
+ * session that change ended since its check gets 401 and no address, and a
+ * change that comes later waits for the commit, and the end after the bump
+ * retires the key.
+ */
+export async function mintFeedToken(pool: Pool, userId: string, sessionVersion: number): Promise<FeedMint> {
   const raw = randomBytes(32).toString("hex");
-  await pool.query(
-    "UPDATE calendar_feed_tokens SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL",
-    [userId],
-  );
-  await pool.query(
-    "INSERT INTO calendar_feed_tokens (id, user_id, token_hash) VALUES (?,?,?)",
-    [`ft-${Date.now()}-${randomBytes(3).toString("hex")}`, userId, hashToken(raw)],
-  );
-  return raw;
+  const id = `ft-${Date.now()}-${randomBytes(3).toString("hex")}`;
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) => replaceFeedTokenOn(conn, userId, id, hashToken(raw)));
+  if (!held.ok) return { ok: false, status: 401, error: "auth_required" };
+  await recordEvent(pool, {
+    kind: "calendar_feed_minted",
+    text: "made a private calendar feed address",
+    actorUserId: userId,
+    entityType: "calendar",
+    entityRef: "feed",
+    audience: "admin",
+  });
+  return { ok: true, raw };
 }
 
 export async function revokeFeedTokens(pool: Pool, userId: string): Promise<number> {

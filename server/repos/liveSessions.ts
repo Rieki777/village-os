@@ -34,6 +34,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { lostConcurrencyRace } from "../db/concurrency";
+import { deleteChecksForEntries, deleteChecksForSession, deleteOrphanChecks } from "./sessionChecks";
 
 /** A pool, or the one connection a transaction runs on. */
 export type Queryable = Pool | PoolConnection;
@@ -83,6 +84,12 @@ const none = <T>(list: readonly T[]): boolean => list.length === 0;
 /** The member's number, if they have one. */
 export async function memberNoRows(q: Queryable, userId: string): Promise<RowDataPacket[]> {
   return rowsOf(q, "SELECT `no` FROM `live_session_members` WHERE `user_id` = ? LIMIT 1", [userId]);
+}
+
+/** The numbers of several members in one read. Members with none are simply absent. */
+export async function memberNoRowsFor(q: Queryable, userIds: readonly string[]): Promise<RowDataPacket[]> {
+  if (none(userIds)) return [];
+  return rowsOf(q, "SELECT `no`, `user_id` FROM `live_session_members` WHERE `user_id` IN (?)", [[...userIds]]);
 }
 
 /** Give the member a number. A second call for the same member changes nothing. */
@@ -166,13 +173,100 @@ export async function closedSessionRows(q: Queryable, limit: number): Promise<Ro
   return rowsOf(q, `SELECT ${SESSION_COLUMNS} FROM \`live_sessions\` WHERE \`status\` = 'closed' ORDER BY \`closed_at\` DESC, \`id\` DESC LIMIT ?`, [limit]);
 }
 
-/** The most recent closed session of a circle, other than this one. */
+/**
+ * The most recent closed session of a circle, other than this one, however
+ * many people were in it. The circle's last MEETING is `lastMeetingInCircle`.
+ */
 export async function lastClosedInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
     `SELECT ${SESSION_COLUMNS} FROM \`live_sessions\` WHERE \`circle_id\` = ? AND \`status\` = 'closed' AND \`id\` <> ? ` +
       "ORDER BY `closed_at` DESC, `id` DESC LIMIT 1",
     [circleId, exceptId],
+  );
+}
+
+/**
+ * A closed session is one of its circle's MEETINGS when at least this many
+ * people were in it (Rye, 2026-10-21). Any member may open a room for any
+ * circle and close it alone, so a session one person was in is never a
+ * circle's last meeting: it gives nobody standing, takes it from nobody, and
+ * never becomes the circle's "last time". The floor lives here and only here;
+ * server/lib/circleStanding.ts reads every meeting through the two functions
+ * below.
+ */
+export const MEETING_MIN_PEOPLE = 2;
+
+/**
+ * SQL for "session `alias` had at least ? people in it": one `?`, the floor.
+ * The count is the larger of the people still on its record and the count the
+ * close stored (`summary`.`counts`.`people`, server/lib/liveSessions.ts), so a
+ * meeting stays a meeting after one of its people leaves the village and their
+ * row goes. A session closed before the count was kept reads its rows alone.
+ */
+export const heldWithAtLeast = (alias: string): string =>
+  `GREATEST((SELECT COUNT(*) FROM \`live_session_people\` \`p_${alias}\` WHERE \`p_${alias}\`.\`session_id\` = \`${alias}\`.\`id\`), ` +
+  `CASE WHEN JSON_VALID(\`${alias}\`.\`summary\`) ` +
+  `THEN COALESCE(CAST(JSON_EXTRACT(\`${alias}\`.\`summary\`, '$.counts.people') AS UNSIGNED), 0) ELSE 0 END) >= ?`;
+
+/**
+ * One circle's last meeting, other than this session: its latest closed
+ * session at least `MEETING_MIN_PEOPLE` people were in, picked the way
+ * `lastClosedInCircle` picks (the latest `closed_at`, the higher id on a tie).
+ */
+export async function lastMeetingInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${SESSION_COLUMNS.split(", ").map((c) => `\`s\`.${c}`).join(", ")} FROM \`live_sessions\` \`s\` ` +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`id\` <> ? AND ${heldWithAtLeast("s")} ` +
+      "ORDER BY `s`.`closed_at` DESC, `s`.`id` DESC LIMIT 1",
+    [circleId, exceptId, MEETING_MIN_PEOPLE],
+  );
+}
+
+/**
+ * The session an open room of this circle carries from ("From last time"):
+ * its latest closed session other than this one, passing over a session fewer
+ * than `MEETING_MIN_PEOPLE` people were in that left nothing behind, no agenda
+ * item and no entry. That is the shape of a room opened by mistake or as a
+ * test. A one-person session that did leave something stays last time: passing
+ * over it would hide what it parked, and offer again what it brought over from
+ * the meeting before it and dealt with.
+ */
+export async function lastTimeInCircle(q: Queryable, circleId: string, exceptId: number): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    `SELECT ${SESSION_COLUMNS.split(", ").map((c) => `\`s\`.${c}`).join(", ")} FROM \`live_sessions\` \`s\` ` +
+      `WHERE \`s\`.\`circle_id\` = ? AND \`s\`.\`status\` = 'closed' AND \`s\`.\`id\` <> ? AND (${heldWithAtLeast("s")} ` +
+      "OR EXISTS (SELECT 1 FROM `live_session_items` `i` WHERE `i`.`session_id` = `s`.`id`) " +
+      "OR EXISTS (SELECT 1 FROM `live_session_entries` `e` WHERE `e`.`session_id` = `s`.`id`)) " +
+      "ORDER BY `s`.`closed_at` DESC, `s`.`id` DESC LIMIT 1",
+    [circleId, exceptId, MEETING_MIN_PEOPLE],
+  );
+}
+
+/**
+ * Every circle's last meeting at once, one row (`circle_id`, `id`) per circle
+ * that has one, picked the way `lastMeetingInCircle` picks. `circleIds` reads
+ * only those circles. `minPeople` is the floor's own lever for the tests that
+ * hold the two readings together: 0 is the plain last close of each circle.
+ */
+export async function lastMeetingPerCircle(
+  q: Queryable,
+  opts: { circleIds?: readonly string[]; minPeople?: number } = {},
+): Promise<RowDataPacket[]> {
+  if (opts.circleIds && none(opts.circleIds)) return [];
+  const floor = opts.minPeople ?? MEETING_MIN_PEOPLE;
+  const only = opts.circleIds ? "AND `s`.`circle_id` IN (?) " : "";
+  return rowsOf(
+    q,
+    "SELECT `s`.`circle_id`, `s`.`id` FROM `live_sessions` `s` WHERE `s`.`status` = 'closed' AND `s`.`circle_id` IS NOT NULL " +
+      only +
+      `AND ${heldWithAtLeast("s")} ` +
+      "AND NOT EXISTS (SELECT 1 FROM `live_sessions` `t` WHERE `t`.`circle_id` = `s`.`circle_id` AND `t`.`status` = 'closed' " +
+      `AND ${heldWithAtLeast("t")} ` +
+      "AND (`t`.`closed_at` > `s`.`closed_at` OR (`t`.`closed_at` = `s`.`closed_at` AND `t`.`id` > `s`.`id`)))",
+    [...(opts.circleIds ? [[...opts.circleIds]] : []), floor, floor],
   );
 }
 
@@ -247,6 +341,26 @@ export async function writeClosed(
 }
 
 /** Rebuilt minutes, after an erasure changed what a closed record may say. */
+/** A closed record's summary, written again: a round that outlived the call moved on (0281). */
+export async function writeSummary(q: Queryable, id: number, summary: string): Promise<void> {
+  await q.query("UPDATE `live_sessions` SET `summary` = ? WHERE `id` = ? AND `status` = 'closed'", [summary, id]);
+}
+
+/**
+ * The rounds on closed records where a night ended lately (0281), one row
+ * each, for the job. `since` bounds the read: a night is at most a week long,
+ * so a round whose nights all ended long ago was read many times already.
+ */
+export async function endedNightRows(q: Queryable, now: Date, since: Date): Promise<RowDataPacket[]> {
+  return rowsOf(
+    q,
+    "SELECT DISTINCT r.`session_id`, r.`target` FROM `live_session_responses` r JOIN `live_sessions` s ON s.`id` = r.`session_id` " +
+      "WHERE s.`status` = 'closed' AND r.`value` = 'sleep' AND r.`answer_by` IS NOT NULL AND r.`answer_by` <= ? AND r.`answer_by` > ? " +
+      "ORDER BY r.`session_id` LIMIT 500",
+    [now, since],
+  );
+}
+
 export async function writeMinutes(q: Queryable, id: number, minutesPeople: string, minutesShareable: string): Promise<void> {
   await q.query(
     "UPDATE `live_sessions` SET `minutes_people` = ?, `minutes_shareable` = ?, `version` = `version` + 1 WHERE `id` = ?",
@@ -325,15 +439,31 @@ export async function itemRows(q: Queryable, sessionId: number): Promise<RowData
   return rowsOf(q, `SELECT ${ITEM_COLUMNS} FROM \`live_session_items\` WHERE \`session_id\` = ? ORDER BY \`position\`, \`id\``, [sessionId]);
 }
 
+/**
+ * One agenda item. Whoever added it presents it, unless `presenterNo` says
+ * otherwise: an item brought from the library (0264) is presented by whoever
+ * brought it when they are in the room, and by nobody yet when they are not.
+ */
 export async function insertItem(
   q: Queryable,
-  row: { sessionId: number; title: string; aim: string; minutes: number; position: number; addedByNo: number; fromSessionId: number | null; now: Date },
+  row: {
+    sessionId: number;
+    title: string;
+    aim: string;
+    minutes: number;
+    position: number;
+    addedByNo: number;
+    presenterNo?: number | null;
+    fromSessionId: number | null;
+    now: Date;
+  },
 ): Promise<number> {
+  const presenterNo = row.presenterNo === undefined ? row.addedByNo : row.presenterNo;
   return insertIdOf(
     q,
     "INSERT INTO `live_session_items` (`session_id`, `title`, `aim`, `minutes`, `position`, `status`, `added_by_no`, " +
       "`presenter_no`, `used_seconds`, `from_session_id`, `created_at`) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, 0, ?, ?)",
-    [row.sessionId, row.title, row.aim, row.minutes, row.position, row.addedByNo, row.addedByNo, row.fromSessionId, row.now],
+    [row.sessionId, row.title, row.aim, row.minutes, row.position, row.addedByNo, presenterNo, row.fromSessionId, row.now],
   );
 }
 
@@ -376,7 +506,7 @@ export async function writeItemStatus(q: Queryable, id: number, status: string):
 /** `due_on` as text, so no zone ever moves a date by a day. */
 const ENTRY_COLUMNS =
   "`id`, `session_id`, `item_id`, `kind`, `text`, `status`, `author_no`, `owner_no`, `owner_seat_id`, " +
-  "DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `claimed_at`, `created_at`";
+  "DATE_FORMAT(`due_on`, '%Y-%m-%d') AS `due_on`, `claimed_at`, `created_at`, `serves_goal_id`";
 
 export async function entryRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(q, `SELECT ${ENTRY_COLUMNS} FROM \`live_session_entries\` WHERE \`session_id\` = ? ORDER BY \`id\``, [sessionId]);
@@ -436,7 +566,9 @@ export async function parkEntries(q: Queryable, sessionId: number, ids: readonly
   await q.query("UPDATE `live_session_entries` SET `status` = 'parked' WHERE `session_id` = ? AND `id` IN (?)", [sessionId, ids]);
 }
 
+/** An entry, and its check with it (0297). */
 export async function deleteEntryRow(q: Queryable, id: number): Promise<void> {
+  await deleteChecksForEntries(q, [id]);
   await q.query("DELETE FROM `live_session_entries` WHERE `id` = ?", [id]);
 }
 
@@ -449,7 +581,7 @@ export async function deleteEntryRow(q: Queryable, id: number): Promise<void> {
 export async function responseRows(q: Queryable, sessionId: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `target`, `member_no`, `value`, `text` FROM `live_session_responses` " +
+    "SELECT `target`, `member_no`, `value`, `text`, UNIX_TIMESTAMP(`answer_by`) AS `answer_by_s` FROM `live_session_responses` " +
       "WHERE `session_id` = ? AND `target` <> 'facilitation' ORDER BY `id`",
     [sessionId],
   );
@@ -468,19 +600,58 @@ export async function facilitationRows(q: Queryable, sessionId: number): Promise
 /** One answer per person per target. Answering again replaces the answer. */
 export async function upsertResponse(
   q: Queryable,
-  row: { sessionId: number; target: string; memberNo: number; value: string; text: string | null; now: Date },
+  row: { sessionId: number; target: string; memberNo: number; value: string; text: string | null; answerBy?: Date | null; now: Date },
 ): Promise<void> {
+  // `answer_by` (0281) is a night's answer-by time; any other answer sets it back to NULL.
   await q.query(
-    "INSERT INTO `live_session_responses` (`session_id`, `target`, `member_no`, `value`, `text`, `created_at`, `updated_at`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `text` = VALUES(`text`), " +
-      "`updated_at` = VALUES(`updated_at`)",
-    [row.sessionId, row.target, row.memberNo, row.value, row.text, row.now, row.now],
+    "INSERT INTO `live_session_responses` (`session_id`, `target`, `member_no`, `value`, `text`, `answer_by`, `created_at`, `updated_at`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`), `text` = VALUES(`text`), " +
+      "`answer_by` = VALUES(`answer_by`), `updated_at` = VALUES(`updated_at`)",
+    [row.sessionId, row.target, row.memberNo, row.value, row.text, row.answerBy ?? null, row.now, row.now],
   );
 }
 
 export async function deleteResponsesForTargets(q: Queryable, sessionId: number, targets: readonly string[]): Promise<void> {
   if (none(targets)) return;
   await q.query("DELETE FROM `live_session_responses` WHERE `session_id` = ? AND `target` IN (?)", [sessionId, targets]);
+}
+
+// ── One session, gone: the discard and the deleted record ──────────────────
+
+/**
+ * The ids of this session's entries, read before anything is deleted, so the
+ * task layer (server/repos/sessionTasks.ts `deleteTaskRowsForSession`) can
+ * delete by the entries as well as by the session.
+ */
+export async function sessionEntryIds(q: Queryable, sessionId: number): Promise<number[]> {
+  const rows = await rowsOf(q, "SELECT `id` FROM `live_session_entries` WHERE `session_id` = ?", [sessionId]);
+  return rows.map((r) => Number(r.id));
+}
+
+/**
+ * The session and every row 0238 keyed to it: its answers, its entries, its
+ * agenda, its people, and the session row itself, last. Run inside the
+ * discard's own transaction, after the session row was locked, so a write to
+ * the room that waited on that lock finds no room.
+ *
+ * An item in ANOTHER session that was brought over from this one keeps its
+ * words and loses the link (`from_session_id` to NULL). There is no index on
+ * that column, so the ids are read first with a plain read, which takes no
+ * locks, and written by primary key; an UPDATE that scanned the table would
+ * lock every agenda item in the village for the rest of the transaction.
+ * Hands back how many session rows went: 1, or 0 when it was already gone.
+ */
+export async function deleteSessionRows(q: Queryable, sessionId: number): Promise<number> {
+  await q.query("DELETE FROM `live_session_responses` WHERE `session_id` = ?", [sessionId]);
+  await deleteChecksForSession(q, sessionId);
+  await q.query("DELETE FROM `live_session_entries` WHERE `session_id` = ?", [sessionId]);
+  await q.query("DELETE FROM `live_session_items` WHERE `session_id` = ?", [sessionId]);
+  await q.query("DELETE FROM `live_session_people` WHERE `session_id` = ?", [sessionId]);
+  const carried = (await rowsOf(q, "SELECT `id` FROM `live_session_items` WHERE `from_session_id` = ?", [sessionId])).map((r) => Number(r.id));
+  if (!none(carried)) await q.query("UPDATE `live_session_items` SET `from_session_id` = NULL WHERE `id` IN (?)", [carried]);
+  const [r] = await q.query<any>("DELETE FROM `live_sessions` WHERE `id` = ?", [sessionId]);
+  await deleteOrphanChecks(q);
+  return Number(r.affectedRows ?? 0);
 }
 
 // ── One member, across every session: the export and the erasure ──────────
@@ -518,7 +689,7 @@ export async function memberItemRows(q: Queryable, no: number): Promise<RowDataP
 export async function memberResponseRows(q: Queryable, no: number): Promise<RowDataPacket[]> {
   return rowsOf(
     q,
-    "SELECT `session_id`, `target`, `value`, `text`, `updated_at` FROM `live_session_responses` WHERE `member_no` = ? ORDER BY `id`",
+    "SELECT `session_id`, `target`, `value`, `text`, UNIX_TIMESTAMP(`answer_by`) AS `answer_by_s`, `updated_at` FROM `live_session_responses` WHERE `member_no` = ? ORDER BY `id`",
     [no],
   );
 }
@@ -556,7 +727,11 @@ export async function authoredEntryIds(q: Queryable, no: number): Promise<RowDat
 export async function forgetMemberRows(q: Queryable, no: number, entryIds: readonly number[]): Promise<void> {
   await q.query("DELETE FROM `live_session_people` WHERE `member_no` = ?", [no]);
   await q.query("DELETE FROM `live_session_responses` WHERE `member_no` = ?", [no]);
-  if (!none(entryIds)) await q.query("DELETE FROM `live_session_entries` WHERE `id` IN (?)", [entryIds]);
+  if (!none(entryIds)) {
+    await deleteChecksForEntries(q, entryIds);
+    await q.query("DELETE FROM `live_session_entries` WHERE `id` IN (?)", [entryIds]);
+  }
+  await deleteOrphanChecks(q);
   await q.query("UPDATE `live_session_entries` SET `owner_no` = NULL, `claimed_at` = NULL WHERE `owner_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `added_by_no` = 0 WHERE `added_by_no` = ?", [no]);
   await q.query("UPDATE `live_session_items` SET `presenter_no` = NULL WHERE `presenter_no` = ?", [no]);

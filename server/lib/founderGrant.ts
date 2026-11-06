@@ -27,6 +27,14 @@
  * collect the role. That refusal is load-bearing for this file. If it is ever
  * relaxed, this grant becomes a way to hand a village to a stranger.
  *
+ * AND THE ROW HAS TO BE THE FOUNDER'S TOO (R104). A verified address proves
+ * who is signing in. It never proved who set the password on the row the role
+ * lands on: email sign-up stored any address it was given, so a stranger could
+ * make a password account at the founder's address first. A row holding a
+ * password nobody proved is therefore never elevated. The Google callback ends
+ * such a password before it asks this, so on that path the refusal is a second
+ * lock on the same door.
+ *
  * WHAT IT DELIBERATELY WILL NOT DO. It only ever raises a role, never lowers
  * one, so removing an address from the list cannot silently demote a working
  * founder and an operator's typo cannot lock a village out of itself.
@@ -37,6 +45,8 @@
  * restore from backup, or a hand-edit comes back the next time the founder
  * signs in. That is exactly the failure that started this.
  */
+
+import { holdsUnprovenPassword } from "./oauthAccounts";
 
 /** The roles this village treats as "can do anything". */
 const FOUNDER_ROLES = new Set(["founder", "admin"]);
@@ -85,6 +95,13 @@ export function decideFounderGrant(input: {
   founderEmails: Set<string>;
   /** Standing example identities can never sign in and must never be elevated. */
   isExample?: boolean;
+  /**
+   * The row the role would be written to, as it stands now. A VERIFIED Google
+   * address proves who is signing in, never who set the row's password: a row
+   * holding a password nobody proved belongs to the address (R104) may have
+   * been planted at the founder's address before the founder arrived.
+   */
+  account: { passwordHash?: string; emailVerifiedAt?: string | null };
 }): FounderGrantDecision {
   if (input.founderEmails.size === 0) {
     return { grant: false, reason: "FOUNDER_EMAILS is not set on this deployment" };
@@ -97,6 +114,9 @@ export function decideFounderGrant(input: {
   }
   if (input.isExample) {
     return { grant: false, reason: "standing example identities are never elevated" };
+  }
+  if (holdsUnprovenPassword(input.account)) {
+    return { grant: false, reason: "this account holds a password its address never proved, which is never elevated" };
   }
   const email = String(input.email ?? "").trim().toLowerCase();
   if (!email || !input.founderEmails.has(email)) {

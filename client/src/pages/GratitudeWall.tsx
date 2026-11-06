@@ -34,6 +34,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, fetchGameMe, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Send, Sparkles } from "lucide-react";
@@ -47,11 +48,21 @@ import HeartsRow from "@/components/gratitude/HeartsRow";
 import WallEntryCard from "@/components/gratitude/WallEntryCard";
 import YourStanding from "@/components/gratitude/YourStanding";
 import MoonsPast from "@/components/gratitude/MoonsPast";
+import SuggestionChips from "@/components/gratitude/SuggestionChips";
 import type { WallEntry } from "@shared/gratitudeVoices";
 
 interface SentEntry {
   toId?: string | null;
   cycleId?: string | null;
+}
+
+/** The recipient a link asked for, as typed: `/gratitude?to=@handle`. Empty when none. */
+function prefilledTo(): string {
+  try {
+    return (new URLSearchParams(window.location.search).get("to") ?? "").trim().slice(0, 80);
+  } catch {
+    return "";
+  }
 }
 
 export default function GratitudeWall() {
@@ -71,13 +82,17 @@ export default function GratitudeWall() {
    */
   const [peopleThanked, setPeopleThanked] = useState<number | null>(null);
   const currency = useTokenName("Recognition");
+  const ladder = useLadderTitle();
   // `to` carries whatever the member typed: an @handle, or an address for
   // anyone who still knows one. The server tells the two apart and looks the
   // handle up; see `recipientFor` in server/index.ts for why a handle is the
   // one of the two a member can actually obtain.
-  const [form, setForm] = useState({ to: "", amount: 10, message: "" });
+  // `?to=@handle` fills the field (My moon's Send gratitude). Nothing sends until the member does.
+  const [form, setForm] = useState(() => ({ to: prefilledTo(), amount: 10, message: "" }));
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  // Bumped after a send so the chips re-read and the person just thanked leaves.
+  const [sentCount, setSentCount] = useState(0);
 
   /* The one thing on this form the village decides. See the textarea below. */
   const [requireMessage, setRequireMessage] = useState<boolean | null>(null);
@@ -168,6 +183,7 @@ export default function GratitudeWall() {
         // threshold rather than on the first send, so this can drop the banner
         // one send early. It is a cache hint and the next read corrects it.
         forgetExamplesCache("gratitude");
+        setSentCount((n) => n + 1);
         load();
       }
     } catch {
@@ -177,6 +193,16 @@ export default function GratitudeWall() {
   };
 
   const budget = me?.gratitude.budget;
+
+  /*
+   * The gratitude nudge links to `#send`. The form renders only once the
+   * member is known, after the browser has already looked for the anchor and
+   * found nothing, so the scroll is done here when the form arrives.
+   */
+  useEffect(() => {
+    if (!user || typeof window === "undefined" || window.location.hash !== "#send") return;
+    document.getElementById("send")?.scrollIntoView({ block: "start" });
+  }, [user]);
 
   return (
     <Layout>
@@ -223,7 +249,7 @@ export default function GratitudeWall() {
           {user && <YourStanding currency={currency} />}
 
           {user ? (
-            <form onSubmit={send} className="mb-10 rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <form id="send" onSubmit={send} className="mb-10 scroll-mt-20 rounded-2xl border border-border bg-card p-6 shadow-sm">
               {/*
                 `flex-wrap` and a gap, because at 390px these two run into each
                 other. `justify-between` pushes them to the edges only while
@@ -240,7 +266,7 @@ export default function GratitudeWall() {
                     <InfoTip tip="Your sending budget refills when the cycle turns. Sending moves it from your budget to their wall; it never costs you anything you earned." label="How the budget works" />
                   </span>
                 ) : budget && budget.total <= 0 ? (
-                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the Path of Growth.</span>
+                  <span className="text-xs italic text-muted-foreground">Your sending budget opens as you walk the {ladder}.</span>
                 ) : (
                   <span className="text-xs italic text-muted-foreground">Your budget didn't load. Reload to see it.</span>
                 )}
@@ -251,6 +277,9 @@ export default function GratitudeWall() {
               {budget && budget.total > 0 && peopleThanked !== null && (
                 <HeartsRow people={peopleThanked} fullSends={budget.fullSends} cap={budget.cap} />
               )}
+
+              {/* One tap fills the field below; the Send button still sends. */}
+              <SuggestionChips selected={form.to} onPick={(to) => setForm({ ...form, to })} refreshKey={sentCount} />
 
               <div className="mb-3 grid gap-3 md:grid-cols-[1fr_110px]">
                 <input

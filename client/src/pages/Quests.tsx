@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
+import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ArrowRight,
   Calendar,
@@ -15,9 +16,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useValueConversion } from "@/lib/moneyClaims";
-import { rewardCeiling } from "@shared/questRewards";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
 import InfoTip from "@/components/InfoTip";
 import QuestCard, { iconFor, QuestPoster } from "@/components/QuestCard";
@@ -32,7 +34,8 @@ import {
   type FieldSigns,
   type Ring,
 } from "@/lib/questBoard";
-import { useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
+import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 
@@ -54,7 +57,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
   further: {
     title: "Further in",
     blurb:
-      "These open as you walk the Path of Growth or step into a role. Each one says what opens it.",
+      "These open as you walk the {ladder} or step into a role. Each one says what opens it.",
   },
 };
 
@@ -73,7 +76,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
-  const brochureOn = useBrochurePages() === true;
+  const letterOn = useStoryPageShown()("/love-letter");
   // The recognition and value tokens' live names (Admin → Tokens) — a fork's
   // rename reaches every line below without a code change.
   const cfg = useGameConfig();
@@ -84,6 +87,8 @@ export default function Quests() {
   const villageName = cfg?.project?.name ?? "the village";
   const eventsUrl = cfg?.project?.eventsUrl ?? "";
   const stages = cfg?.stages ?? [];
+  // The ladder's name in this village's words (Admin, Paths & Stages).
+  const ladder = useLadderTitle();
   const [activeCircle, setActiveCircle] = useState<string>("All");
   const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "All">(
     "All"
@@ -199,7 +204,7 @@ export default function Quests() {
       {/* Hero */}
       <section className="py-10 md:py-24 bg-gradient-to-b from-teal/10 to-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-6"
@@ -213,23 +218,18 @@ export default function Quests() {
             {/* R47: the Trail line leads, the reward word keeps its tooltip,
                 and the Lore line comes last, after the numbers. */}
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-4">
-              Take a Quest, do the work, turn it in. The village thanks you in{" "}
-              <InfoTip tip={`${currencyName} is thanks for work, never pay. A finished quest carries its thank-you, released when the circle consents the work is done.`}>{currencyName}</InfoTip>.
+              Take a Quest, do the work, turn it in.
             </p>
             <ExamplesBanner moduleId="quests" noun="quest" />
             <p className="text-sm text-muted-foreground mb-8">
-              {quests.length} active quests &nbsp;·&nbsp; up to{" "}
-              {quests
-                .reduce((s, q) => s + rewardCeiling(q.gratitude), 0)
-                .toLocaleString()}{" "}
-              {currencyName} available
-              <InfoTip tip="Every open quest names its own thank-you; this number is all of them added together." label="Where this number comes from" />
+              {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
+              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" />
             </p>
             <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
               Real work, on real land, beside people becoming your people.
             </p>
 
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
@@ -291,10 +291,17 @@ export default function Quests() {
                     <span className="block text-xs text-muted-foreground">
                       {suggestion.quest.subtitle ?? "A gentle way in. See the first step."}
                     </span>
+                    {/* What it pays, before it is taken on (Rye, 2026-10-30). */}
+                    {suggestion.quest.pay && (
+                      <span className="mt-1 block text-xs">
+                        <WorkPayBlock pay={suggestion.quest.pay} />
+                      </span>
+                    )}
                   </span>
                   <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
                 </Link>
               ) : null}
+              {!inFlight.length && suggestion ? <MaiaTypeLine className="mt-3" /> : null}
             </div>
           </div>
         </section>
@@ -426,15 +433,15 @@ export default function Quests() {
                       )}
                     </div>
                     <p className="text-muted-foreground mt-1 max-w-2xl">
-                      {meta.blurb}
+                      {meta.blurb.replace("{ladder}", ladder)}
                       {ring === "further" && (
-                        <InfoTip tip="The Path of Growth is the membership ladder on your profile. Walking it, or holding a role, opens these quests." label="What opens these quests" />
+                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" />
                       )}
                     </p>
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {shown.map((quest, index) => (
-                      <motion.div
+                      <m.div
                         key={quest.id}
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
@@ -447,10 +454,9 @@ export default function Quests() {
                           claim={claims[quest.id]}
                           signs={signs?.perQuest?.[quest.id]}
                           stages={stages}
-                          currencyName={currencyName}
                           priority={ring === RING_ORDER[0] && index === 0}
                         />
-                      </motion.div>
+                      </m.div>
                     ))}
                   </div>
                   {hidden > 0 && (
@@ -532,11 +538,11 @@ export default function Quests() {
                   Join a Community Call
                 </a>
               )}
-              {brochureOn && (
+              {letterOn && (
                 <Link href="/love-letter">
                   <a className="px-6 py-3 bg-muted text-foreground rounded-lg font-semibold hover:bg-muted/80 transition-colors flex items-center gap-2">
                     <Heart className="w-5 h-5" />
-                    Sign the Love Letter
+                    Sign the {pageVarsFrom(cfg ?? {}).commitment}
                   </a>
                 </Link>
               )}
@@ -545,51 +551,26 @@ export default function Quests() {
         </div>
       </section>
 
-      {/* Gratitude Explainer */}
+      {/*
+        About the village's tokens, WITHOUT SAYING WHAT ANY OF THEM DOES (Rye,
+        2026-10-22): "every community will design their own rules for these and
+        other tokens so don't mention what it does anywhere". It names the tokens,
+        carries the village's own published wording about conversion when there
+        is any, and points at the village's live rules.
+      */}
       <section className="py-16 bg-primary/5">
         <div className="container">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="font-display text-3xl font-bold text-foreground mb-4 text-center">
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="font-display text-3xl font-bold text-foreground mb-4">
               About {currencyName}
             </h2>
-            <p className="text-muted-foreground text-center mb-10">
-              {villageName} acknowledges contributions in {currencyName}, a recognition signal with
-              no financial value of its own. The value rides beside it: each cycle the
-              community sets aside a real pool of {valueName} and shares it across
-              everyone's {currencyName}, so appreciation decides where the value flows.
+            <p className="text-muted-foreground">
+              {villageName} sets its own rules for {currencyName}, {valueName} and its other tokens.
+              {conversionNote ? ` ${conversionNote}` : ""}
             </p>
-            <div className="grid sm:grid-cols-3 gap-6">
-              {[
-                {
-                  title: "Earn",
-                  body: `Complete quests, contribute to circles, steward the land, teach, build, host, create. Every meaningful act earns ${currencyName}.`,
-                  icon: Heart,
-                },
-                {
-                  title: "Hold",
-                  body: `Your Village Profile accumulates ${currencyName} and reflects your full contribution history, a record of everything you have invested.`,
-                  icon: Star,
-                },
-                {
-                  title: "Share",
-                  body: `Each cycle, everyone's ${currencyName} shares in a real pool of ${valueName}.${conversionNote ? ` ${conversionNote}` : ""} This is how we honor contributions made before we could pay in cash.`,
-                  icon: Sprout,
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="bg-card rounded-xl p-6 shadow-sm text-center"
-                >
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <item.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <h3 className="font-display text-lg font-bold text-foreground mb-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">{item.body}</p>
-                </div>
-              ))}
-            </div>
+            <Link href="/game-mechanics" className="inline-block mt-4 text-sm text-teal-deep underline">
+              See this village's rules
+            </Link>
           </div>
         </div>
       </section>

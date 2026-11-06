@@ -59,6 +59,7 @@
  * The job checks every scheduler tick and calls the service only when the
  * module's `pollSchedule` says it is due; off, the default, never calls it.
  */
+import { boolVar } from "../lib/variables";
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { POLL_JOB, pollOnce, syncByHand, syncRunsAnswer } from "../lib/saberraSync";
@@ -69,6 +70,17 @@ import { moduleConfig } from "../lib/modules";
 import { httpsAddress } from "@shared/modules";
 import { factsForEntity, moduleFactCount } from "../repos/moduleFacts";
 import { outboxView } from "../lib/saberraOutbox";
+import { bridgeReading } from "../repos/saberraBridge";
+import { privacyTokenSet } from "../lib/saberraPrivacy";
+import { currentTokenUses } from "../lib/saberraTokens";
+import { lastQuestFeed, runQuestFeed, QUEST_FEED_MODULE } from "../lib/seraQuestFeed";
+import { waitingSeraQuests } from "../repos/seraQuestFeed";
+import { recordEvent } from "../lib/events";
+import { linkSeraPerson, linkedMember } from "../repos/memberTaskImport";
+import { linkableMember, memberLinks, memberName, unlinkMember } from "../repos/seraPersonLinks";
+import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
+import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
+import { clearReview } from "../repos/seraLinkReviews";
 
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
 
@@ -99,6 +111,24 @@ export function register(app: Express, deps: Deps): void {
       res.json({ connection, held, addressSet: addressSet() });
     } catch {
       res.status(500).json({ error: "Could not read the connection." });
+    }
+  });
+
+  /**
+   * The bridge board: counts only, the same gate as the status read. Nothing
+   * is sent to the service and nothing is written.
+   */
+  app.get("/api/saberra/bridge", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      const pool = getPool();
+      const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
+      const held = await moduleFactCount(pool, MODULE_ID);
+      const rest = await bridgeReading(pool, boolVar("memberTasks.listDefault"));
+      const questFeed = { last: await lastQuestFeed(pool), waiting: await waitingSeraQuests(pool, QUEST_FEED_MODULE).catch(() => 0) };
+      res.json({ connection: { mayCall: connection.mayCall, addressSet: addressSet(), held, privacySet: privacyTokenSet(), tokens: currentTokenUses(connection.mayCall) }, ...rest, questFeed });
+    } catch {
+      res.status(500).json({ error: "Could not read the bridge." });
     }
   });
 
@@ -138,6 +168,108 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
+   * LINK TO SERA, BY HAND (end-of-moon spec, section 18). A steward pastes a
+   * member's library owner id; nothing is imported. The same gate as the rest
+   * of this panel. Owner ids come back only as a six-character tail.
+   */
+  app.get("/api/saberra/links", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json({ members: await linksWithReviews(getPool()) });
+    } catch {
+      res.status(500).json({ error: "Could not read the links." });
+    }
+  });
+
+  app.put("/api/saberra/links/:userId", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    const userId = String(req.params.userId ?? "").trim();
+    const raw = (req.body ?? {}) as { seraOwnerId?: unknown };
+    const problem = seraOwnerIdProblem(raw.seraOwnerId);
+    if (problem) return res.status(400).json({ error: problem });
+    const owner = String(raw.seraOwnerId).trim();
+    try {
+      const pool = getPool();
+      const member = await linkableMember(pool, userId);
+      if (!member.ok) {
+        const words = member.why === "departed" ? LINK_WORDS.departed : member.why === "example" ? LINK_WORDS.example : LINK_WORDS.unknownMember;
+        return res.status(member.why === "unknown" ? 404 : 409).json({ error: words });
+      }
+      const holder = await linkedMember(pool, owner);
+      if (holder && holder !== userId) return res.status(409).json({ error: LINK_WORDS.takenBy(await memberName(pool, holder)) });
+      // One library person per member: a relink replaces the old link whole.
+      await unlinkMember(pool, userId);
+      await linkSeraPerson(pool, owner, userId, String(actor.id));
+      await clearReview(pool, userId).catch(() => {});
+      void recordEvent(pool, {
+        kind: "audit", text: `sera:link:${userId}`, actorUserId: actor.id,
+        entityType: "sera_person_link", entityRef: userId, audience: "admin",
+      });
+      res.json({ ok: true, message: LINK_WORDS.linked(member.name), members: await linksWithReviews(pool) });
+    } catch {
+      res.status(500).json({ error: "Could not write the link." });
+    }
+  });
+
+  app.delete("/api/saberra/links/:userId", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    const userId = String(req.params.userId ?? "").trim();
+    try {
+      const pool = getPool();
+      await unlinkMember(pool, userId);
+      void recordEvent(pool, {
+        kind: "audit", text: `sera:unlink:${userId}`, actorUserId: actor.id,
+        entityType: "sera_person_link", entityRef: userId, audience: "admin",
+      });
+      res.json({ ok: true, message: LINK_WORDS.unlinked(await memberName(pool, userId)), members: await linksWithReviews(pool) });
+    } catch {
+      res.status(500).json({ error: "Could not remove the link." });
+    }
+  });
+
+  /**
+   * Keyed-hash matching for members already here (docs/modules/sera-person-links.md).
+   * A dry run unless the body says dryRun: false; the dry run counts and calls nothing.
+   */
+  app.post("/api/saberra/person-match/backfill", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    try {
+      const pool = getPool();
+      const dryRun = (req.body as { dryRun?: unknown } | undefined)?.dryRun !== false;
+      const counts = await backfill(pool, dryRun);
+      if (!dryRun && !counts.note) {
+        void recordEvent(pool, {
+          kind: "audit", text: `sera:match-backfill:${counts.linked}/${counts.review}/${counts.failed}`, actorUserId: actor.id,
+          entityType: "sera_person_link", entityRef: "backfill", audience: "admin",
+        });
+      }
+      res.json({ ...counts, members: await linksWithReviews(pool) });
+    } catch {
+      res.status(500).json({ error: "The match stopped on an error in this village's server." });
+    }
+  });
+
+  /**
+   * Sera's quest feed into the quest review queue. A dry run unless the body
+   * says `dryRun: false` in so many words; nothing reaches the board until a
+   * steward accepts a proposal and types its reward.
+   */
+  app.post("/api/saberra/quest-feed", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    try {
+      res.json(await runQuestFeed(getPool(), { dryRun: (req.body as any)?.dryRun !== false }));
+    } catch {
+      res.status(500).json({ error: "The quest feed stopped on an error in this village's server." });
+    }
+  });
+
+  /**
    * The schedule, when it next calls the service, and the last twenty runs.
    * The same gate as the button, because it is the button's report.
    */
@@ -166,7 +298,7 @@ export function register(app: Express, deps: Deps): void {
     const kind = String(req.query.kind ?? "");
     const id = String(req.query.id ?? "");
     if (kind === "" || id === "") {
-      res.status(400).json({ error: "Say which seat or circle to read." });
+      res.status(400).json({ error: "Say which role or circle to read." });
       return;
     }
     try {

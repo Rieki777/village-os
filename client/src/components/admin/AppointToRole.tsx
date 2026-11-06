@@ -14,7 +14,7 @@ import SeatTermField, { carriesStewardVeto, type SeatTermLook } from "@/componen
 
 const LOOK: SeatTermLook = {
   label: "block text-xs text-gray-500",
-  input: "mt-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white",
+  input: "mt-1 min-h-11 text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white",
   line: "text-xs text-gray-500",
   caution: "text-xs text-amber-700",
   refusal: "text-xs text-red-600",
@@ -47,7 +47,7 @@ export function AppointToRole({
         value={who}
         onChange={(e) => setWho(e.target.value)}
         aria-label="Appoint a member"
-        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+        className="min-h-11 max-w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
       >
         <option value="">Appoint a member…</option>
         {players
@@ -69,7 +69,7 @@ export function AppointToRole({
       <button
         onClick={() => void appoint()}
         disabled={!who}
-        className="text-xs bg-teal-deep text-white rounded-lg px-3 py-1.5 font-medium disabled:opacity-40"
+        className="min-h-11 text-xs bg-teal-deep text-white rounded-lg px-4 py-1.5 font-medium disabled:opacity-40"
       >
         Appoint
       </button>

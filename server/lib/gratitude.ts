@@ -13,7 +13,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { boolVar, numberVar } from "./variables";
 import { parseCycleId } from "./gratitude-cycles";
-import { isExampleUser } from "./examples";
+import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "./examples";
 import { issuanceRefusal } from "./gameStart";
 import { PLATFORM_TOKEN, lockLedgerAccounts, memberAccount, postTransferOn, RECOGNITION_FAUCET } from "./ledger";
 import { allowanceFor, writeGratitudeRow, shareCapFor, fullSendsIn, recognitionName, toLedgerUnits, type Allowance } from "./economy";
@@ -140,6 +140,38 @@ export interface SendInput {
   contextRef?: string;
 }
 
+// NOTHING IS SENT TO A MEMBER WHO HAS LEFT: the question and its sentence live
+// in server/lib/departed.ts, and are re-exported here for the doors that import them from this file.
+export { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
+import { DEPARTED_RECIPIENT, departedRecipient } from "./departed";
+
+/**
+ * NOR DOES A STEWARD MINT TO THEM, OR TO A STANDING EXAMPLE.
+ *
+ * The admin hand-mint (`POST /api/admin/tokens/:slug/mint`) and its co-signed
+ * approval (`POST /api/admin/mint-requests/:id/approve`) looked the recipient
+ * up by id and refused only a missing row. So a steward could issue any
+ * platform token from `sys:mint` into a tombstone's account, where nobody can
+ * spend or claim it and Village Voice counts as weight for nobody, or into a
+ * standing example's, which `sendGratitude` above already refuses. The
+ * approval reads the recipient again when the second steward signs, so a grant
+ * asked for while a member was here is refused once they have left, and stays
+ * pending for a steward to decline.
+ *
+ * Both routes ask this before anything is recorded or moved: a tombstone gets
+ * the sentence every send door gives, a standing example the refusal every
+ * admin door gives. A missing row answers null, and the route keeps its own
+ * 404 for it. A former member keeps their address and is not a tombstone, so
+ * they can still be minted to.
+ */
+export function mintRecipientRefusal(
+  member: { email?: unknown; isExample?: unknown } | null | undefined,
+): { status: 404 | 409; body: { error: string; code?: string } } | null {
+  if (departedRecipient(member)) return { status: 404, body: { error: DEPARTED_RECIPIENT } };
+  if (isExampleUser(member)) return { status: 409, body: EXAMPLE_REFUSAL_BODY };
+  return null;
+}
+
 export type SendOutcome =
   | { ok: true; entry: GratitudeEntry; recipient: any; budget: GratitudeBudget }
   | { ok: false; status: number; error: string };
@@ -237,6 +269,7 @@ export async function sendGratitude(deps: GratitudeDeps, input: SendInput): Prom
       error: who.toId ? "No member here with that id" : "No member found with that email",
     };
   }
+  if (departedRecipient(recipient)) return { ok: false, status: 404, error: DEPARTED_RECIPIENT };
   if (recipient.id === user.id) return { ok: false, status: 400, error: `Send ${recognitionName()} to others` };
   // The example identities have fixed, public @examples.invalid addresses, so
   // without this any member can send to one: the sender's real budget is spent

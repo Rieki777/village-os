@@ -1,11 +1,11 @@
 /**
  * Launch status resolver (S62): turns shared/launchRequirements.ts into live
  * per-item status, and holds the little state the registry itself refuses to
- * carry — manual confirmations and the launched flag.
+ * carry â€” manual confirmations and the launched flag.
  *
  * The registry declares WHAT must be true; this file observes WHETHER it is.
  * Checks arrive as closures from server/index.ts (LaunchDeps) because the
- * things being checked — brand overlay, email config, module lifecycles —
+ * things being checked â€” brand overlay, email config, module lifecycles â€”
  * live in that file's boot-loaded caches, and importing them here would be a
  * cycle. A check the server cannot observe ("manual:*") is confirmed by a
  * named admin instead, and the confirmation records who and when: a human
@@ -27,9 +27,11 @@ import type { Pool } from "mysql2/promise";
 import {
   LAUNCH_REQUIREMENTS,
   projectCurrencyCheck,
+  starterQuestsCheck,
   timezoneAnswerCheck,
   type LaunchRequirement,
 } from "../../shared/launchRequirements";
+import { exampleQuestCount } from "../repos/questExamples";
 import {
   ISSUANCE_CAP_KEY,
   ISSUANCE_CAP_REQUIREMENT,
@@ -43,6 +45,7 @@ import { countWords, purposeStatementProblem } from "../../shared/governingPurpo
 import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
 import { villageSecretsLaunchCheck } from "./secrets";
+import { LAUNCH_PROOFS } from "./launchProofs";
 
 /**
  * The one `checkKey` this file resolves by name. It is a constant so the
@@ -95,7 +98,7 @@ export interface LaunchItemStatus extends LaunchRequirement {
 
 export interface LaunchStatus {
   items: LaunchItemStatus[];
-  /** blocking items not yet ok — what stands between here and launched. */
+  /** blocking items not yet ok â€” what stands between here and launched. */
   blockingOpen: number;
   recommendedOpen: number;
   /**
@@ -191,6 +194,25 @@ export async function launchedByBallotIdOf(pool: Pool): Promise<string | null> {
   return (await readState(pool)).launchedByBallotId ?? null;
 }
 
+/**
+ * Whether this village's LAUNCH BALLOT has carried: the module switch's meaning
+ * of "launched" (Rye, 2026-10-09: "launch = the launch ballot carries"). Read by
+ * `server/routes/moduleLibrary.ts` and `shared/moduleSwitch.ts`.
+ *
+ * DERIVED FROM `launchedByBallotIdOf`, NOT A SECOND READ OF THE FIELD. Two lanes
+ * arrived at this question independently - #495 wanting the id and #466 wanting
+ * the boolean - and each wrote its own reader of `launchedByBallotId`. Composing
+ * them would have left twins that must change together, and the next person to
+ * change what `launched` means would have found one of them. The reason neither
+ * may read `game-start` is the same for both: migration 0112 wrote a start row,
+ * with no ballot behind it, for villages that were issuing before the vote
+ * existed - and the test harness writes `bal-fixture` there, which made every
+ * provisioned village read as launched until #495 fixed it.
+ */
+export async function launchBallotCarried(pool: Pool): Promise<boolean> {
+  return (await launchedByBallotIdOf(pool)) !== null;
+}
+
 /** Resolve every applicable requirement into live status. */
 export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<LaunchStatus> {
   const state = await readState(pool);
@@ -200,7 +222,7 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
 
   for (const req of LAUNCH_REQUIREMENTS) {
     // A requirement for a module this village does not run is not a
-    // requirement — it is a distraction wearing a checkbox.
+    // requirement â€” it is a distraction wearing a checkbox.
     // Required while ANY of the named modules is on: one piece of setup can
     // serve several modules, and it is needed if even one of them runs.
     if (req.appliesWhenModule) {
@@ -334,10 +356,16 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
-    const check = deps.checks[req.checkKey];
+    /*
+     * THE ROWS PROVED BY EVIDENCE (./launchProofs.ts) resolve here when the
+     * caller injects nothing for them, which server/index.ts no longer does.
+     * An injected check still wins, so a test can hold every other row still.
+     */
+    const proof = LAUNCH_PROOFS[req.checkKey];
+    const check = deps.checks[req.checkKey] ?? (proof ? () => proof(pool, deps.env ?? process.env) : undefined);
     if (!check) {
       // A registry entry without a resolver is a wiring bug. Fail VISIBLY on
-      // the page rather than silently dropping the row — a checklist that
+      // the page rather than silently dropping the row â€” a checklist that
       // hides items reads as shorter than the truth.
       items.push({ ...req, state: "missing", detail: `No check wired for "${req.checkKey}". This is a platform bug, report it` });
       continue;
@@ -526,6 +554,19 @@ export async function villageFactFor(
   if (fact === "walk") {
     return welcomeWalkCheck(await readConfigDocument(pool, MAP_WALK_DOC));
   }
+  /*
+   * THE STARTER QUESTS a founder has not yet kept or cleared, counted on the
+   * board itself (A8 / 19g). Every way of deciding ends in that one number,
+   * so it is the answer, and a village seeded before starters were examples
+   * holds none. A failed read says so on the row; the journey still renders.
+   */
+  if (fact === "starter-quests") {
+    try {
+      return starterQuestsCheck(await exampleQuestCount(pool));
+    } catch (e: any) {
+      return { state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` };
+    }
+  }
   return {
     state: "missing",
     detail: `No village fact resolver for "${fact}". This is a platform bug, report it`,
@@ -590,7 +631,7 @@ export async function launchVoteBlocked(
  * forwards and different events looking back: every village running today has
  * been issuing for months and none of them has ever held this vote.
  *
- * ── WHY THIS ONE DOES NOT USE `writeState` ──────────────────────────────────
+ * â”€â”€ WHY THIS ONE DOES NOT USE `writeState` â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
  * Everything else in this file reads the whole document, edits a field and
  * writes the whole document back. That is fine for a manual confirmation,

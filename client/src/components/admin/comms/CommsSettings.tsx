@@ -109,7 +109,7 @@ function ChecklistRow({
   const panelId = `comms-setup-${item.key}`;
   return (
     <li className={`border rounded-xl bg-white ${item.done ? "border-gray-200" : item.required ? "border-amber-300" : "border-gray-200"}`}>
-      <div className="flex items-start gap-3 p-4">
+      <div className="flex flex-wrap items-start gap-3 p-4">
         <span
           className={`mt-0.5 inline-flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${
             item.done ? "bg-green-100 text-green-700" : item.required ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-500"
@@ -136,7 +136,7 @@ function ChecklistRow({
           onClick={onToggle}
           aria-expanded={open}
           aria-controls={panelId}
-          className={`${secondaryCls} shrink-0 inline-flex items-center gap-1`}
+          className={`${secondaryCls} shrink-0 max-w-full inline-flex items-center gap-1`}
         >
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           {open ? "Close" : item.done ? "Change" : "Set up"}
@@ -230,7 +230,10 @@ export default function CommsSettings({ password, openIntegrations }: { password
       <div>
         <h2 className="text-xl font-bold text-gray-900">Comms Settings</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Everything the village's email needs from you, in one place. Every item can be changed again later.
+          Everything the village's email needs from you, in one place. Every item can be changed again later.{" "}
+          <a href="/setup-game" className="text-teal-deep underline">
+            Or plant it step by step in the setup game.
+          </a>
         </p>
         <p
           className={`text-sm mt-3 rounded-lg px-3 py-2 border ${

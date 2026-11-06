@@ -12,10 +12,16 @@
  * and an admin in the room can fix its words or take it out before the
  * session closes and the backlog goes to next time. The panel is drawn only
  * once there is something in it.
+ *
+ * EVERY TENSION CAN BECOME AN AGENDA ITEM. Whoever named it, the hosts and an
+ * admin send it on to a circle's agenda items (SendTension.tsx); once sent,
+ * the card says where it went.
  */
 import { useState } from "react";
 import { ROOM_COPY, SESSION_COPY, SESSION_LIMITS, cleanText } from "@shared/sessions";
 import EntryCard from "./EntryCard";
+import SendTension from "./SendTension";
+import { TENSION_SEND_COPY } from "@shared/sessionLibrary";
 import GrowingText from "./GrowingText";
 import { BTN_PRIMARY, BTN_QUIET, ENTRY_GLYPH, LABEL_CAPS, PANEL, UNDER_BOX, type StageProps } from "./roomUi";
 
@@ -48,15 +54,32 @@ export default function TensionCatcher({ view, actions }: Omit<StageProps, "now"
   const backlog =
     tensions.length > 0 ? (
       <section className={PANEL} aria-labelledby="tension-backlog">
-        <h3 id="tension-backlog" className={`${LABEL_CAPS} mb-3`}>
+        <h3 id="tension-backlog" tabIndex={-1} className={`${LABEL_CAPS} mb-3 outline-none`}>
           {ROOM_COPY.backlogSoFar}
         </h3>
         <ul className="space-y-2">
-          {tensions.map((e) => (
-            <li key={e.id}>
-              <EntryCard view={view} actions={actions} entry={e} />
-            </li>
-          ))}
+          {tensions.map((e) => {
+            const sent = view.sentTensions[String(e.id)];
+            const maySend = view.me.admin || view.me.facilitates || view.me.secretary || e.authorUserId === view.me.userId;
+            return (
+              <li key={e.id}>
+                <EntryCard
+                  view={view}
+                  actions={actions}
+                  entry={e}
+                  extra={
+                    sent ? (
+                      <p className="mt-1 text-sm text-open">{TENSION_SEND_COPY.sent(sent.circleName)}</p>
+                    ) : maySend ? (
+                      <div className="mt-1">
+                        <SendTension view={view} actions={actions} entry={e} sessionId={view.id} returnFocusTo="tension-backlog" />
+                      </div>
+                    ) : null
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
       </section>
     ) : null;

@@ -16,7 +16,7 @@ import path from "node:path";
 import express from "express";
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import type { ErasureDeps } from "../lib/erasure";
 import { BLIND_SPOTS, FAILED_ACTIONS_JOB, REPORT_SOURCE, defaultSources, runFailedActions } from "../lib/failedActions";
 import { registeredJobs } from "../lib/scheduler";
@@ -61,7 +61,7 @@ const notifyAdmins = async (...args: unknown[]) => {
 describe.skipIf(!configured)("the failures report", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-failures-route-"));
 
     const app = express();

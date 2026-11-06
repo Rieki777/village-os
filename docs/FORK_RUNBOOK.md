@@ -31,26 +31,30 @@ what, where, what breaks without it.
 | Var | Purpose | Without it |
 |---|---|---|
 | `AUTH_TOKEN_SECRET` | Signs member tokens | **Silently degrades to per-process sessions** — logins die on every restart |
-| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, Rye 2026-07-26), and the break-glass account needs it. | No founder can be created |
+| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, 2026-07-26), and the break-glass account needs it. | No founder can be created |
 | `JOURNEY_PASSWORD` | Legacy Command Centre gate — retired at v3 S2 | — |
 | `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
 | `ANTHROPIC_BASE_URL` | (optional, dev/CI) points the assistant at a stub instead of api.anthropic.com | Defaults to the real API |
+| `PLATFORM_ASSISTANT_OPERATOR` | (companions, optional) The name of whoever holds `PLATFORM_ASSISTANT_KEY`, as members should read it. Before a member's words first go to a model on the borrowed key, their companion shows one line naming the provider and this operator, and the member agrees or does not (`server/lib/companionConsent.ts`). Set it with the borrowed key, at provisioning. A yes is to one line, so changing this name asks every member again | The line says the shared key's operator "is not named on this deployment", which is true, and members decide on that |
 | `PLATFORM_ASSISTANT_KEY` | (S76, optional) A ReGen-provisioned key this deployment may BORROW until the village adds its own. Set at provisioning by whoever has deploy access, deliberately never an admin toggle: a screen that lets a deployment start spending someone else's money is a screen that eventually does. The village's own key (Admin → Integrations, or `ANTHROPIC_API_KEY`) always wins the moment it exists, with no restart. A borrowed key must not survive handoff, since the village loses Maia the day it rotates. | No borrowing: the assistant is simply unavailable until the village adds a key |
 | `PLATFORM_ASSISTANT_DAILY_CAP` | (S76, optional) Calls per day allowed against the borrowed key, counted separately from every per-mode budget so a demo fork cannot spend a production village's headroom. `0` means zero, never unlimited. | 100 |
 | `MEMBER_SECRETS_KEY` | (round 4, Your agent) 32 random bytes as 64 hex characters (`openssl rand -hex 32`), set at provisioning. Encrypts each member's own LLM key at rest (AES-256-GCM, `server/lib/memberSecrets.ts`) and derives each member's agent-inbox signing secret. **Rotating it makes every stored member key unreadable**: members re-enter theirs and re-save their inbox URL. Deliberately no per-process fallback: a random key would store credentials this deployment could never read again after its next restart. Agent tokens (`vat_`) do NOT depend on it; they are hashed. Optional flag beside it: `AGENT_INTENT_WRITE=1` opens `POST /api/agent/v1/intents` once the introductions module has landed (leave unset until then). | The profile's "Run the assistant on your key" and "Agent inbox" sections say "this deployment has no member-secrets key; ask your operator" and refuse to store anything; bring-your-agent tokens, the skills and every read still work |
 | `RESEND_API_KEY` | Transactional email. **S63: settable from Admin → Integrations instead** — admin-typed beats env, masked on read. Village Comms puts the same key first on the Comms Settings checklist (Admin, Comms, Settings), saved through the same secrets route. | Each email is recorded as not sent, and nothing leaves the village |
 | `RESEND_WEBHOOK_SECRET` | (Village Comms, 2026-10-02) The signing secret (`whsec_…`) of the email provider's delivery-report webhook. `POST /api/comms/webhooks/resend` checks every report against it in the Svix format and stores each one once. Held in the secrets store as `resend_webhook_secret`, so an admin-typed value beats this env var; Comms Settings creates the webhook and stores the secret with one button (Delivery reports), and takes the secret pasted by hand when the Resend key in use can only send. | Delivery reports answer 503 and the provider retries them; bounces and complaints go unrecorded, so a dead address keeps being written to |
 | `RESEND_API_BASE` | (dev/CI only, Village Comms) Points the post office at a stand-in provider instead of `https://api.resend.com`. The test suites set it to the fake in `server/testkit/fakeResend.ts`, so no test ever sends a real email. Honoured only when it is an https address or a loopback one, so a mistyped value cannot carry the village's key across a network in the clear. | The real provider is used, which is correct in production |
-| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. **Amora handoff item (Rye, 2026-07-26): `amora.cr` is unverified and only its team can add the DNS records — verify it during handoff.** | Claim links & notifications never arrive |
+| ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. | Claim links & notifications never arrive |
 | `EMAIL_FROM` | The `From:` address every village email leaves under: `name@example.org` or `Village Name <name@example.org>`. **Settable from Admin, Comms, Settings instead** (the sender name and address; admin-typed beats this env var, a malformed value is refused at the door, and so is an address that is not on the village's sending domain). Must be on the domain verified in Resend, or the send 200s and delivers nothing. There is no fallback sender: with neither this nor an admin-typed sender, nothing is sent, the post office records each email as not configured, and the caller is told why. | Nothing is sent; each email is recorded as not configured |
 | `FRONTEND_URL` | This village's own public address, e.g. `https://village.example.org`. Two things read it: the CORS allow-origin header, and every absolute link this server writes into an outgoing email (claim links, digests, the weekly brief). **Set it during any fork's provisioning.** It used to fall back to one specific project's domain, so a fork that left it unset mailed its own members a link to somebody else's login page and nobody found out until a member clicked one. That fallback is gone. | No CORS grant is sent at all, which refuses cross-origin readers rather than trusting a stranger. Email links fall back to the address this server has actually been reached at, taken from the first inbound request's proxy headers. If nothing has reached it yet, links have no absolute address and one log line names this variable |
-| `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** **Amora handoff item (Rye, 2026-07-26): the Amora team creates its own Stripe account and connects it during handoff** — until then card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
-| `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Amora handoff item (Rye, 2026-07-26): create the endpoint + set this secret together with `STRIPE_SECRET_KEY` — a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
+| `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** Until a village connects its own Stripe account, card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
+| `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Create the endpoint and set this secret together with `STRIPE_SECRET_KEY`: a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
 | `RIVERSIDE_WEBHOOK_SECRET` | Shared secret for `POST /api/webhooks/riverside` (automation module). **Settable from Admin → Integrations instead** — admin-typed beats env, masked on read. The webhook **fails closed**: without a configured secret, or without a matching `x-riverside-secret` header on the delivery, every payload is discarded with an inert 200 (the automation admin card shows a warning while unset). Configure Riverside to send the same value as the `x-riverside-secret` header. | Riverside deliveries are silently discarded until the secret is set |
 | `GOVERNANCE_HUB_SECRET` | Shared secret for `POST /api/webhooks/mechanics-governance` — how a Hypha vote's outcome comes home. **Settable from Admin → Integrations instead** (admin-typed beats env, masked on read). The ReGen hub runs ONE Alchemy listener on Base for every fork; when a proposal carrying a `[gm:…]` marker executes on-chain, the hub POSTs the outcome here with this secret as the `x-governance-hub-secret` header. **Fails closed**: unset or mismatched = every delivery discarded with an inert 200. Until your fork is registered with the hub, outcomes are reported by the proposer and applied by an admin ("Verify & apply"). | Verified outcomes never arrive; the human verify-and-apply path still works |
 | `BASESCAN_API_KEY` | (optional) Etherscan/Basescan API key for **Admin → Game Mechanics → Hypha Bridge**: after the founder issues themselves a token on Hypha, the token's contract address on Base is discovered from the founder's account history (`hypha.founder_base_address`) and listed for the founder to confirm. **Settable from Admin → Integrations instead** (admin-typed beats env, masked on read). One free key from etherscan.io serves Base via the V2 API. | The contract lookup answers 409 with guidance; contract addresses can still be pasted by hand from basescan.org |
+| `BASE_RPC_URL` | (optional) A dedicated Base RPC endpoint, e.g. `https://base-mainnet.g.alchemy.com/v2/<key>`, for token balances and the Hypha Bridge. The key is in the address, so the whole URL is a secret. **Settable from Admin → Integrations instead** (sealed, admin-typed beats env, masked to last4). Until 2026-10-31 this was the plain game variable `tokens.base_rpc_url`; a boot with `VILLAGE_SECRETS_KEY` usable moves a stored value into the sealed store and clears the variable, and with no usable key it keeps reading the old value and Integrations shows it as saved in the clear. | Reads go to the free public node `https://mainnet.base.org`; the Hypha listener posture reads as `none` unless the hub carries the village |
 | `FEEDBACK_HUB_URL` | (S66, optional) **must be `https://` and publicly resolvable** — the relay now dials through the pinned-IP guard, which refuses plain http and any private/loopback/CGNAT address. A self-hosted hub on a VPC-internal or `http://` address will simply never receive anything (rows stay queued locally, no data is lost, one log line per attempt). Where the feedback relay POSTs. **There is no default, and that is deliberate**: the relay is ON by default (`platform.feedback_relay` game variable) and it ships up to 8000 characters of member-written detail per item, so a hardcoded destination meant every fork posted its members' words to one specific organisation without ever choosing to. **A deployment that wants the relay must name its hub here, including the hosted one.** It sends CONTENT only (never who submitted), queues locally and retries while the hub is unreachable; turning the dial off keeps everything in Admin → Feedback, local-only. | The relay does not run. Feedback stays local, admins still see every item in Admin → Feedback, and the submission form correctly says it is not shared |
+| `CSP_MODE` | (optional) `report-only` sends the page CSP as Content-Security-Policy-Report-Only, so nothing new is blocked while a village finds out what its own edge or proxy injects; `frame-ancestors 'self'` stays enforced. Any other value enforces. See `server/lib/securityHeaders.ts`. | Enforced: only scripts from this origin, the shell's inline script by hash, and Cloudflare's Web Analytics beacon run |
+| `CSP_REPORT_URI` | (optional) An https address of a CSP report collector. Browsers POST violation reports there (`report-uri` plus `Reporting-Endpoints`); this server adds no report route of its own. | No report directives; violations show only in each visitor's console |
 | `ERROR_WEBHOOK_URL` | (optional, PY6) an HTTPS endpoint that receives a JSON POST when something crashes — a Slack or Discord incoming webhook, a Sentry store URL, or your own collector. Admins are ALWAYS notified in-app regardless; this puts the same alert where your team actually looks. Deduped to one alert per distinct failure per hour, and dialled through the pinned-IP guard like every other outbound call. | Crashes are still logged and still alert admins in-app, but nothing reaches an external channel |
 | `TRUSTED_PROXY_HOPS` | (optional, default `1`) how many proxies sit in front of this process. `X-Forwarded-For` grows left to right, so the client's real address is the Nth entry from the RIGHT, where N is this number — and everything to its left is caller-supplied and forgeable. Every rate limit (checkout attempts, sign-in throttling, the assistant's cost cap, the abuse guard) keys on the result. `1` is correct on Railway, Fly and Render; raise it if the fork puts its own CDN or load balancer in front; `0` means no proxy and the socket address is used directly. | A value too LOW trusts a forged header and lets one caller bypass every rate limit; too HIGH buckets unrelated visitors together and throttles innocents |
 | `PLATFORM_SUPPORT_URL` | (module library, optional) Where a village is sent when the PLATFORM is the supporting party: every Included module, and every Managed listing. Whoever operates this deployment is its own support desk, so platform code carries no address and this is where the fork puts one. It appears in the 503 body a lapsed Managed listing answers with. | The lapse body still says "this one is on us" and still says what keeps working; it just gives nowhere to write |
@@ -82,7 +86,17 @@ it; a plain admin may not target a founder) and the existing
 Note the session semantics, because members notice: `tokenVersion` is the only
 revocation lever there is, so **signing out, or setting a new password, ends
 every session on every device**. Per-session sign-out would need a sessions
-table.
+table. Setting a new password and `revoke-sessions` also end everything a
+session can leave standing for the member's agent (`endAgentReach`,
+`server/lib/agentTokens.ts`): every agent token (`vat_`), the private calendar
+feed address, the agent inbox with its queued deliveries, and the member's own
+model key. A new password ends them before the tokenVersion bump and again
+after it (`withAgentReachEnded`), so a failure leaves the set-password link
+unspent and the retry finishes the reset. `revoke-sessions` bumps first, so the
+sessions end whatever happens next, then ends the rest; a failure answers 500
+and pressing again finishes it. The member's notes, drafts and agent profile stay.
+Signing out leaves all of these standing. A member who relied on a calendar
+subscription or an inbox sets it up again after a reset.
 
 ## Game mechanics: rings, the public snapshot, the amendment ledger
 
@@ -136,8 +150,25 @@ above the size of a gathering, not to the size of one person's usage.
 
 ## Seeds & per-deployment data
 
-- `server/seeds/content-seed.json`, `quests-seed.json` — page copy + quest
-  library (self-heals via `seedIfMissingOrEmpty`).
+- `server/seeds/content-seed.json` — page copy (self-heals via `seedIfMissingOrEmpty`).
+- Starter quests (2026-10-31): the `quests` section of `server/seeds/examples-seed.json`. A fresh
+  village opens on them as standing examples a founder keeps (Admin, Quests, Keep, which asks for a
+  value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
+  change a fork's starters. `server/seeds/quests-seed.json` is frozen, seeds nothing, and is read
+  only by the two repair passes below; a test pins its hash.
+- `server/seeds/village-paths-before-neutral.json` — every path and stage word as it read before
+  the ladder's default sentences went neutral (2026-11-01, readiness R061). Read once at boot by
+  the `keep-path-words-2026-11-01` runOnce (`server/lib/pathWordsKept.ts`), only for a village
+  that already holds its own `page-*` words or path and stage words, and written into its
+  `village-paths` document under what it saved; a new village never sees it.
+- `server/seeds/page-governance-before-neutral.json` — How We Govern as it read before its
+  defaults went neutral (2026-11-01). Read once at boot by the `keep-governance-words-2026-11-01`
+  runOnce (`server/lib/governanceWordsKept.ts`), only for a village that already holds its own
+  `page-*` words; a new village never sees it.
+- `server/seeds/page-circles-before-neutral.json` — Circles as it read before its defaults went
+  neutral (2026-11-01). Read once at boot by the `keep-circles-words-2026-11-01` runOnce
+  (`server/lib/circlesWordsKept.ts`, on the rule in `server/lib/pageWordsKept.ts`), only for a
+  village that already holds its own `page-*` words; a new village never sees it.
 - `server/seeds/examples-seed.json` — STANDING EXAMPLES: platform-authored
   worked content revealed when a module is first enabled, so a founder meets a
   working module instead of "No items yet." Inert (every mutation refused) and
@@ -151,8 +182,9 @@ above the size of a gathering, not to the size of one person's usage.
   the first one, which would take a new village from sixteen voices to one.
   They seed into `gratitude_voices` (0180) and never into `gratitude_log`,
   because a gratitude row posts to the ledger at creation.
-- `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits,
-  and stay-credit, library-credit and village-voice arrive at first boot) - a
+- `tokens` table rows (a fresh village seeds gratitude/equity/voice/credits and,
+  since 0266, earned-equity; stay-credit, library-credit and village-voice
+  arrive at first boot) - a
   fork renames its recognition token HERE AND NOWHERE ELSE, through Admin,
   The Game, Tokens. The registry is the single source of truth for a token's
   display name (`mergedConfig()` reads `tokens`.`name` ahead of both the brand
@@ -163,6 +195,27 @@ above the size of a gathering, not to the size of one person's usage.
   ("Make This Yours"): identity, images (uploaded, sharp-compressed), dues,
   personas.
 - Game variables: only CHANGED values are stored; platform defaults inherit.
+- Finished erasures, given the steps they predate (no migration, no env var):
+  late in boot, once per list of steps (the runOnce id is
+  `erasure-steps-backfill-<digest>`), every finished `member_erasures` record
+  and every tombstone with no record at all is given the steps after the
+  tombstone that it lacks and that find their rows by user id
+  (`backfillFinishedErasures`, `server/lib/erasure.ts`). On a village that
+  erased somebody on an older release, this ends the agent token, open
+  invitation link, place at a gathering, vouch for somebody still waiting,
+  group ownership and delegation that outlived them, and takes off the
+  `departed-<id>` handle an old tombstone kept, so no profile page answers to
+  it (`handle-after-tombstone`). A fee for a place ahead
+  comes back once, and a freed seat goes to whoever was waiting, who is told.
+  Look for `[erasure] finished-erasure backfill:` in the boot log. A member it
+  stopped part way is counted there and tried again on the next boot.
+- Earned equity (0266, no env var): the migration seeds the `earned-equity`
+  token with `sys:equity-mint`, `sys:equity-bridge` and `sys:equity-settled`,
+  and `seedEconomy` adds its two mint rules (`quest.completed`, `role.cycle`)
+  switched OFF at 1 and ceiling 1. Nothing pays it until your village turns a
+  rule on in Admin then The Mint. Rename it in Admin then Tokens; the slug is
+  permanent. Claims to Hypha stay shut until the bridge dispatch ships, like
+  voice claims.
 
 ## Brand overlay (make it yours)
 
@@ -279,7 +332,7 @@ two from the admin panel and almost never touches the first.
   drop the links, and `/` shows the neutral welcome page
   (`client/src/pages/VillageWelcome.tsx`). Migration
   `drizzle/0225_a_village_keeps_the_pages_it_already_served.sql` wrote it ON in
-  every database that already had members, so Amora keeps its pages.
+  every database that already had members, so the first village keeps its pages.
   `shared/brochure.ts` says how a fork that rewrote the pages turns them back
   on. Neutral legal and covenant templates with placeholders are in
   `server/seeds/templates/`; the first village's own wording is in
@@ -477,7 +530,7 @@ nothing had ever read the column).
   `hypha.treasury_address` (blank shows total supply only). Who watches Base is
   DERIVED from the hosting relationship rather than set: a village holding the
   `governance_hub_secret` is on the hub's listener, a village with its own
-  dedicated `tokens.base_rpc_url` runs its own, and a village with neither
+  dedicated Base RPC endpoint (`BASE_RPC_URL`, or Admin → Integrations) runs its own, and a village with neither
   records outcomes by hand. `hypha.space_id` now does what it always claimed:
   a governance callback naming a different space is refused. See
   `docs/modules/hypha.md`.
@@ -689,7 +742,7 @@ with no document the bar draws its five example numbers, each one saying
 "example", until a founder points a chip at a source. The sources and what each
 counts are `STAT_SOURCES` in `shared/mapStatChips.ts`; a source that reads a
 module (Events, Village Health) is drawn only for a viewer who can open it.
-The treasury source (Rye, 2026-10-05) reads `sys:treasury` in the one token
+The treasury source (founder ruling, 2026-10-05) reads `sys:treasury` in the one token
 `gratitude.pool_token` names, in whole tokens at that token's own `decimals`,
 and is drawn only for a member the village has admitted, or an admin: a
 visitor and a signed-in guest get no chip and no number. Nothing to provision.
@@ -741,7 +794,7 @@ call, and the shell pushes it as a single `{type:'config'}` message on
 `grounds-ready`. The walk and the village's own welcome live in a `map_walk`
 document keyed by language (`en` default; the welcome under `welcome`).
 **An absent or empty walk means the map offers no walk at all, and an absent
-welcome means the guide greets people plainly** (Rye, 2026-10-02: onboarding is
+welcome means the guide greets people plainly** (founder ruling, 2026-10-02: onboarding is
 the founders' to write). The seed's example walk is offered to nobody. Once the
 fetch has answered, the shell sends both keys, null included; it leaves them
 out only after a failed fetch, which tells the map to keep what it has. Write
@@ -760,7 +813,7 @@ served yesterday's build with no way to force a refresh.
 ### Importing a map scene
 
 ```bash
-npx tsx scripts/import-map-scene.ts <amora-scene.json> --dry
+npx tsx scripts/import-map-scene.ts <village-scene.json> --dry
 ```
 
 `--dry` needs no database and writes nothing. Without it, set `DATABASE_URL`.
@@ -967,12 +1020,19 @@ variables and invariants are language-free by construction.
 - New game variable, no migration: `org.public_people` (default `true`,
   founder-held, category "The village's people"). On, a signed-out visitor
   reads the first names of the people holding each seat on those three pages.
-  Off is Rye's "secret society" setting: the names become members-only and the
+  Off is the founder's "secret society" setting: the names become members-only and the
   structure stays open. Deliberately outside the map module's `variableKeys`,
   because those three pages have no module gate and `/api/org` answers with the
   map module off. Three tiers on that route now: anyone (a first name and
   nothing else), `map.viewPeople` (the holder rows, with focus and note), and
   admin (seating ids and the recruitment pack).
+  Since R097 the lock reaches every page: with it off, no
+  GET answered to a signed-out caller carries a member's name, handle, user id
+  or email (`server/lib/peopleLock.ts`, installed in front of every route), and
+  a profile or role card reached by handle is a 404 to them. With it on, a
+  stranger reads a first name and a handle at most, never a full name or an id.
+  No setting to change; a village that never touched the dial sees no change
+  beyond those last two.
 - Seed refresh: the `examples-refresh-featured-awards-and-members-product`
   runOnce reapplies the `badges` and `commerce` example rows. It exists
   because no example award carried `featured` (bylines render featured awards
@@ -1217,15 +1277,28 @@ the seeded roles whose descriptions already claimed the work
 | `health.record` | Steward Circle |
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
+| `cash.pay` | Treasury (founder ruling, 2026-10-30; also in the founding stewards' handover set) |
 | `org.declare` | Founders Circle |
+| `org.seat`, `org.decide` | Founders Circle (founder ruling, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
 
 Nothing to provision. `roles-seed.json` is applied ONLY when the `roles` table
 is empty, so a running village keeps every role it has and an admin adds these
 through the role editor. A fresh fork gets them at first boot. A role grants
-nothing until somebody holds it, exactly like a badge.
+nothing until somebody holds it, exactly like a badge. That is why seating
+people and publishing a change to the org chart reach a village that already
+runs only when an admin adds `org.seat` and `org.decide` to the role there.
 
-- Seeds: `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
+`cash.pay` is the one exception, and it is a boot step rather than a seed:
+the `cash-pay-to-treasury-2026-10-30` runOnce (`grantCashPayToTreasury`,
+`server/lib/starterRoles.ts`) adds it to a running village's role with the id
+`treasury`, if one exists and does not already carry it, and changes nothing
+else on that role. The power is new, so no village can have taken it off on
+purpose. Nothing to provision. Look for `the Treasury role now grants cash.pay`
+in the boot log. A village with no Treasury role gets no line, and its admins
+and founding stewards still hold the power.
+
+- Seeds: the frozen `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.
 - Quest crews (0067, `quest_crews` + `quest_crew_members`): a small named group walking one quest, formed by any signed-in member and joined by invite link. Nothing about a crew touches value: members claim, submit and are consented to individually, so the consent gate never learns crews exist. Every crew route requires a signed-in member INCLUDING the read, because quest pages are public and who walks with whom is not for crawlers. Crews work with messaging off, and the roster is the crew. With messaging on, forming a crew also opens a conversation through `crewsRepo.attachConversation` (`kind` 'crew', `context_type` 'quest', `context_id` the quest id), joining the crew joins that thread, and leaving the crew leaves it. All three calls are best-effort and logged on failure, so a room that will not open never fails the act of forming a crew, and a village that switches messaging off later keeps its crews and loses the rooms.
 - Uploads, every door (`server/lib/uploads.ts`): every byte that reaches `data/uploads/` goes through `sanitiseForVolume` first. An image is re-encoded in its own format AT ITS OWN DIMENSIONS with no metadata, and the result is read back and asserted before it is written, so a picture cannot publish the coordinates of the land it was taken on. A PDF is scanned for an embedded geotagged photograph and REFUSED with a sentence when it holds one (a PDF is not re-encoded: that needs a new runtime dependency, and a PDF's own metadata carries author and producer, never GPS). Fonts, spreadsheets and everything else pass through untouched. No env var and no seat of configuration: this is not tunable, deliberately, because it protects a person from a consequence they cannot see. `node scripts/check-upload-strip.mjs` is a CI gate that fails when any new writer reaches the volume without coming through that module, and `multer.diskStorage` is refused outright because it writes a stranger's bytes before any handler can look at them. Two log lines are worth an alert: `[uploads] refused a proposal attachment whose metadata survived the strip` and its vault twin both mean the runtime assertion fired, which should never happen.
@@ -1979,3 +2052,39 @@ it, Admin, What's Failing names what is wrong with it in the same words.
 ## The setup game's two root slots (2026-10-13, guild rulings lane)
 
 Admin, Integrations has two new cards, `railway_project_token` (one Railway project and environment) and `dns_zone_token` (one DNS zone), the setup game's master roots from `shared/guilds.ts`. They are store-only: no environment variable stands in for either, so do not set one in Railway. Both are optional, and every variable and record they would plant can still be planted by hand.
+
+## The end-of-moon review's payers (0313, module `moon-review`, 2026-11-03)
+
+- The `payers` document in `app_config` (key `payers`, shape `PayersDoc` in `shared/moonRecap.ts`) names each entity a member's invoice is billed to: legal name, address, tax number, country, currencies, where invoices go (`invoiceTo`) and who is copied (`invoiceCc`, up to five email addresses), the routes it pays, an invoicing switch (off by default), its authority as a note, and a queue note. No seed writes it; a `cash.pay` holder sets it through `PUT /api/moon-review/payers`, and every change writes a `payers_changed` event with old and new values. A second document, `moon-review-settings` (shape `MoonReviewSettings`), holds the host country, its VAT rate, rate source and currency, the tax forms on file, the hold rules and the pilot acknowledgement with its version; it also ships empty, is set through `PUT /api/moon-review/settings`, and writes a `settings_changed` event. Until a payer, the host country and the acknowledgement are set, invoices are refused with "Name who you pay first" and recaps still send. The send-by day is the circle Monday; a third document, `moon_rhythm` (shape `RhythmDoc` in `shared/moonRhythm.ts`), moves one cycle's walkthrough or circle day (`{cycleId: {walkthrough, circle}}`), sets the reminder hour (default 9) and holds `guideUrl`, the village's own End of Moon guide (https only); it also ships empty, and with no guide set no guide link shows. Entity names live there and never in code. Before turning the module on, seat someone in a power group carrying `moon.approve`, and clear `org_roles.cash_minor` on any role paid through this flow so the hourly settlement does not owe it too. On the first boot of this release, `moon.approve_alone` is added once to the roles `founders-circle` and `steward-circle`, and `moon.approve_own` to the role `treasury`, where those roles exist (`runOnce` id `moon-review-keys-2026-11-03`); an admin confirms them under the power groups afterwards, and may take either off.
+
+## Task boards start on (`memberTasks.listDefault`, 2026-11-03, no migration)
+
+- The game variable `memberTasks.listDefault` (boolean, default `true`, "Every member has a task board unless a steward turns one off") decides a member's task board when they have no `member_task_access` row. A steward's explicit off still keeps a board off. No rows are written, so a village that sets the variable to `false` gets exactly the earlier behaviour back, where a board stays off until a steward turns it on.
+
+## The end-of-moon review's three village documents, and where they are edited (decision 22, 2026-11-03)
+
+- `payers`, `moon-review-settings` and `moon_rhythm` in `app_config` all ship empty and are edited on the admin Cash payouts desk, under "End-of-moon review settings", by a `cash.pay` holder (`GET`/`PUT /api/moon-review/payers`, `/settings` and `/rhythm`, in `server/routes/moonReviewSettings.ts`, behind the `moon-review` module). Each save is checked by the contract's parser, and every change writes a `moon_review_events` row (`payers_changed`, `settings_changed`, `rhythm_changed`) with the old and new value of each field that moved. A village fills in its payers, its host country and pilot acknowledgement, and, if it wants them, its moved moon days and guide link; nothing village-specific is set in code or in the environment.
+
+## The village connector (`POST /api/agent/v1/mcp`, 2026-11-03, no migration)
+
+- A remote MCP server on the existing `vat_` agent tokens. A member mints a token under Your agent with `moon.read` (their moon, roles, season and task board) and, if they want, `tasks.write` (their own board pressed Done, Let go or Undo, each write asked first and confirmed), then adds `<origin>/api/agent/v1/mcp` to their client with `Authorization: Bearer <token>`. Every tool runs the member's own route over the loopback at `127.0.0.1:$PORT`, so nothing new needs provisioning, and the connector's name is the village's own name setting. OAuth sign-in for Claude's custom connectors comes with the next piece.
+
+## The Operations agent account (`users.is_agent`, migration 0321, 2026-11-03)
+
+- To give the village an Operations agent: register a member account for it (named so people can tell, such as "Claude (Operations agent)", with its own address on the village's domain), make it an admin, then mark it with `PUT /api/admin/players/<id>/agent {"isAgent": true}`. Only a person may mark an account, and only while it holds no role: an agent account never holds a role. Signed in as the agent account, mint a token under Your agent with the `admin` scope (only an admin can) and add `<origin>/api/agent/v1/mcp` to Claude with it.
+- What the agent may call is the `agent-admin-paths` document in `app_config`, edited at `PUT /api/admin/agent-admin-paths` by an admin who is a person. It ships holding task-board access, the Sera bridge's view and sync, and the moon rhythm. A path added there is a person's to confirm unless it says `"confirm": "agent"`. Erasure, powers and capabilities, money and the moon review's approvals, secrets, accounts and the agent accounts themselves are refused whatever the list says (`shared/agentAdmin.ts`).
+- Every call the agent makes is in `GET /api/admin/agent-actions`. Revoke its token from its Your agent panel or by any admin; a password change ends it too.
+
+## Sera's agent account (`sera.undoable`, 2026-11-03, no new migration)
+
+- To let Sera's agents act in the village: register a member account for it (such as "Sera (Saberra agent)"), never make it an admin, and mark it with `PUT /api/admin/players/<id>/agent {"isAgent": true}`. Signed in as that account, mint a token with the `sera.undoable` scope (only a non-admin agent account can) and hand it to the Sera side; any admin can revoke it. Its tools are a closed list, each undoable for 30 days from the Sera bridge panel: link a member to their Sera person (never over a steward's link), suggest a task on a member's board, switch a member's board on or off. Nothing it does notifies a member.
+
+## The connector's OAuth sign-in (2026-11-03, no new migration)
+
+- Claude's custom connectors sign a member in by OAuth 2.1: `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `POST /api/agent/v1/oauth/register`, the consent page at `/oauth/authorize` and `POST /api/agent/v1/oauth/token`. Every address in the metadata is built from `FRONTEND_URL` when it is set (otherwise from the request's host), so a village behind a proxy sets `FRONTEND_URL` to its public origin. Nothing else to provision: clients and codes live in 0319's tables, and the token is an ordinary agent token.
+- Also through `sera.undoable` (2026-11-04): draft an agenda item in a circle's library (a person brings it to the room) and suggest an item on a member's Draft recap, each undoable for 30 days while nobody has touched it. Once a day the `sera-agent-digest` job tells every admin who is a person what Sera's agent did; the members it acted on are not told, and agent accounts are not sent it.
+- The connector's moon tools (`moon.write`: import a moon pack, change an item, set next moon's goals; `moon.review`: the review queue and role signals) call the moon review's own routes and answer "not open" while the module is off. Nothing to provision.
+
+## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
+
+- A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.

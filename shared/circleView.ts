@@ -62,6 +62,29 @@ export interface CircleView {
    * passthrough on purpose.
    */
   decidesByDomains: Record<string, { method: string; gloss?: string }> | null;
+  /** The circle's governance layer, or null when the village has not set one. */
+  layer: CircleLayer | null;
+}
+
+/**
+ * A CIRCLE'S GOVERNANCE LAYER (2026-10-23): which circle holds the middle of
+ * its container on the map (a link or lead circle), and the order the rest ring
+ * it. Rye chose a stored field for this over reading it from sort order, and
+ * that org designers and the founder and steward roles drag it into place.
+ * Stored as varchar and checked here, the house style for a vocabulary
+ * (0083's header): a value this build does not know reads as no layer at all,
+ * which the map draws as an ordinary operating circle.
+ */
+export const CIRCLE_LAYERS = ["link", "lead", "operating", "advisory", "council"] as const;
+export type CircleLayer = (typeof CIRCLE_LAYERS)[number];
+
+export function isCircleLayer(v: unknown): v is CircleLayer {
+  return (CIRCLE_LAYERS as readonly unknown[]).includes(v);
+}
+
+/** A stored layer as the map reads it: a known one, or null. */
+export function circleLayerOf(v: unknown): CircleLayer | null {
+  return isCircleLayer(v) ? v : null;
 }
 
 const str = (v: unknown): string | null => {
@@ -99,6 +122,7 @@ export function circleView(c: any): CircleView {
       c?.decidesByDomains && typeof c.decidesByDomains === "object" && !Array.isArray(c.decidesByDomains)
         ? (c.decidesByDomains as Record<string, { method: string; gloss?: string }>)
         : null,
+    layer: circleLayerOf(c?.layer),
   };
 }
 

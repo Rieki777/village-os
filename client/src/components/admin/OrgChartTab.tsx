@@ -24,10 +24,26 @@ import { useCallback, useEffect, useState } from "react";
 import { Circle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { CIRCLE_STATUSES } from "@shared/draftKinds";
-import { parentChoicesFor } from "@shared/circleView";
+import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circleView";
+
+/**
+ * What each governance layer means, in the words the editor offers (0286).
+ * Keyed by the union, so a layer added in shared/circleView.ts cannot draw an
+ * empty option here.
+ */
+const LAYER_WORDS: Record<CircleLayer, string> = {
+  link: "Link: the circle that links the others",
+  lead: "Lead: holds the middle of what it sits inside",
+  operating: "Operating: does the work",
+  advisory: "Advisory: counsels the circles",
+  council: "Council",
+};
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
+import RoleValueEditor from "@/components/admin/RoleValueEditor";
+import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
+import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
@@ -116,7 +132,7 @@ export function OrgChartTab({ password }: { password: string }) {
   const drawnSeatIds = new Set(circles.flatMap((c) => (byCircle.get(c.id) ?? []).map((r) => String(r.id))));
 
   const STATE_LABEL: Record<string, string> = {
-    filled: "Filled", partial: "Partially filled", open: "Open seat", forming: "Forming",
+    filled: "Filled", partial: "Partially filled", open: "Open role", forming: "Forming",
     // Held, and overdue. Nobody has been removed; the seat is asking to be
     // reassigned because a term ran out or the season it was filled in turned.
     expired: "Term ended, awaiting reassignment",
@@ -127,9 +143,9 @@ export function OrgChartTab({ password }: { password: string }) {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Circles, the seats inside them, and who holds each seat. This is what
+          Circles, the roles inside them, and who holds each role. This is what
           /roles, /circles and /team show, and edits are live immediately.
-          Whether a seat reads as filled or open is worked out from its holders,
+          Whether a role reads as filled or open is worked out from its holders,
           so it can never say filled with nobody in it.
         </p>
       </div>
@@ -151,7 +167,7 @@ export function OrgChartTab({ password }: { password: string }) {
               : "Mandates coming up"}
           </p>
           <p className="text-xs text-gray-600 mt-0.5">
-            Everyone here is still holding their seat and still doing the work. What has run out is the
+            Everyone here is still holding their role and still doing the work. What has run out is the
             agreement to keep doing it unasked.
           </p>
           <ul className="mt-2 space-y-1">
@@ -198,7 +214,8 @@ export function OrgChartTab({ password }: { password: string }) {
               */}
               {(() => {
                 const cd = circleDraft[c.id] ?? c;
-                const cDirty = ["name", "purpose", "status", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
+                // The purpose is not edited here: it changes by consent, on the circle's card.
+                const cDirty = ["name", "status", "layer", "parentCircleId"].some((k) => (cd[k] ?? "") !== (c[k] ?? ""));
                 const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
                 return (
                   <div className="mb-4">
@@ -213,6 +230,16 @@ export function OrgChartTab({ password }: { password: string }) {
                           {CIRCLE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </label>
+                      {/* THE GOVERNANCE LAYER (0286). The circles map puts a link or
+                          lead circle in the middle of the circle it sits inside, and
+                          rings the rest by layer, then by the village's own order. */}
+                      <label className="text-xs text-gray-500">Governance layer
+                        <select value={cd.layer ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
+                          onChange={(e) => setCircle({ layer: e.target.value || null })}>
+                          <option value="">None set, drawn as operating</option>
+                          {CIRCLE_LAYERS.map((l) => <option key={l} value={l}>{LAYER_WORDS[l]}</option>)}
+                        </select>
+                      </label>
                       {/* WHERE THIS CIRCLE SITS. Offered from `parentChoicesFor`,
                           the rules the server refuses with, so nothing on this
                           list is a choice the save turns down: not the circle
@@ -225,29 +252,28 @@ export function OrgChartTab({ password }: { password: string }) {
                           {parentChoicesFor(circles, c.id).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </label>
-                      <div className="text-xs text-gray-400 pb-2">
-                        {c.grownFromOrgRoleId && <span>Grew from a seat. </span>}
-                        {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
-                      </div>
                     </div>
-                    <label className="text-xs text-gray-500 block mt-2">Purpose
-                      {/* A wrapping <label> names the control with EVERY string
-                          inside it, so this field announced its name plus the
-                          whole hint as one sentence. The name is the field, the
-                          hint is a description a reader can take or skip. */}
-                      <textarea rows={2} value={cd.purpose ?? ""} className={`${inputCls} w-full mt-1`} disabled={!!c.isExample}
-                        aria-label="Purpose"
-                        aria-describedby={`${c.id}-purpose-hint`}
-                        onChange={(e) => setCircle({ purpose: e.target.value })} />
-                      <span id={`${c.id}-purpose-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                        Printed on /circles as the circle's description, and on /roles as the heading under its name.
-                      </span>
-                    </label>
+                    <div className="text-xs text-gray-400 pt-1">
+                      {c.grownFromOrgRoleId && <span>Grew from a role. </span>}
+                      {c.isExample && <span className="text-amber-700">Standing example, publish your own to replace it.</span>}
+                    </div>
+                    {/* A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): shown here, and
+                        proposed on the circle's card, where it goes to the village as an org draft. */}
+                    <div className="text-xs text-gray-500 mt-2">
+                      <p>Purpose</p>
+                      <p className="text-sm text-gray-700 mt-1">{c.purpose || "No purpose written yet"}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Changes by consent.{" "}
+                        <a href={`/circles/${encodeURIComponent(String(c.id))}`} className="inline-flex min-h-[44px] items-center underline">
+                          Propose new words on the circle's card
+                        </a>
+                      </p>
+                    </div>
                     <button
                       disabled={!cDirty || !!c.isExample}
                       className="mt-2 text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
                       onClick={async () => {
-                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, purpose: cd.purpose, status: cd.status, parentCircleId: cd.parentCircleId || null }, "PUT");
+                        const ok = await call(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }, "PUT");
                         if (ok) { toast.success("Circle saved"); setCircleDraft({ ...circleDraft, [c.id]: undefined }); void load(); }
                       }}
                     >Save circle</button>
@@ -271,7 +297,7 @@ export function OrgChartTab({ password }: { password: string }) {
                   return (
                     <div key={r.id} className="border border-gray-100 rounded-lg p-3">
                       <div className="grid sm:grid-cols-4 gap-2 items-end">
-                        <label className="text-xs text-gray-500">Seat
+                        <label className="text-xs text-gray-500">Role
                           <input value={d.name ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, name: e.target.value } })} />
                         </label>
@@ -282,7 +308,7 @@ export function OrgChartTab({ password }: { password: string }) {
                             {circles.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                           </select>
                         </label>
-                        <label className="text-xs text-gray-500">Seats
+                        <label className="text-xs text-gray-500">Holds up to
                           <input type="number" min={1} value={d.seats ?? 1} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, seats: Number(e.target.value) } })} />
                         </label>
@@ -297,7 +323,7 @@ export function OrgChartTab({ password }: { password: string }) {
                           <textarea rows={2} value={d.aim ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, aim: e.target.value } })} />
                         </label>
-                        <label className="text-xs text-gray-500">Domain (what it decides alone)
+                        <label className="text-xs text-gray-500">Domain (what it looks after)
                           <textarea rows={2} value={d.domain ?? ""} className={`${inputCls} w-full mt-1`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, domain: e.target.value } })} />
                         </label>
@@ -324,12 +350,12 @@ export function OrgChartTab({ password }: { password: string }) {
                               [r.id]: { ...d, accountabilities: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) },
                             })} />
                           <span id={`${r.id}-accountabilities-hint`} className="block text-[11px] text-gray-400 mt-0.5">
-                            The ongoing work the circle counts on this seat to keep doing. Listed on /roles.
+                            The ongoing work the circle counts on this role to keep doing. Listed on /roles.
                           </span>
                         </label>
-                        <label className="text-xs text-gray-500">Why this seat matters
+                        <label className="text-xs text-gray-500">Why this role matters
                           <textarea rows={4} value={d.whyItMatters ?? ""} className={`${inputCls} w-full mt-1`}
-                            aria-label="Why this seat matters"
+                            aria-label="Why this role matters"
                             aria-describedby={`${r.id}-why-hint`}
                             onChange={(e) => setDraft({ ...draft, [r.id]: { ...d, whyItMatters: e.target.value } })} />
                           <span id={`${r.id}-why-hint`} className="block text-[11px] text-gray-400 mt-0.5">
@@ -387,7 +413,7 @@ export function OrgChartTab({ password }: { password: string }) {
                                 className="min-h-[44px] min-w-[44px] px-2 rounded-full text-red-700 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-600"
                                 onClick={async () => {
                                   const typed = window.prompt(
-                                    `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this seat's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
+                                    `FORGET ${h.name}. This ends every holding in their name and erases their name and notes from this role's history, past entries included. It cannot be undone.\n\nType their name exactly to confirm:`,
                                   );
                                   if (typed === null) return;
                                   if (typed.trim() !== String(h.name).trim()) { toast.error("That name did not match. Nothing was changed."); return; }
@@ -436,11 +462,17 @@ export function OrgChartTab({ password }: { password: string }) {
                             }, "PUT");
                             if (ok) { toast.success("Saved"); setDraft({ ...draft, [r.id]: undefined }); void load(); }
                           }}
-                        >Save seat</button>
+                        >Save role</button>
                       </div>
 
                       {/* What the seat offers whoever holds it, through a draft (PR3). */}
                       {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
+                      {/* What the role is worth and pays each seat every cycle (0265). */}
+                      {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
+                      {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
+                      {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
@@ -449,7 +481,7 @@ export function OrgChartTab({ password }: { password: string }) {
                         <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
                           {(journal[r.id] as any[]).length === 0 && (
                             <p className="text-xs text-gray-400">
-                              Nothing recorded against this seat yet. Changes from here on will show up.
+                              Nothing recorded against this role yet. Changes from here on will show up.
                             </p>
                           )}
                           {(journal[r.id] as any[]).map((e) => (
@@ -464,7 +496,7 @@ export function OrgChartTab({ password }: { password: string }) {
                     </div>
                   );
                 })}
-                {seats.length === 0 && <p className="text-xs text-gray-400">No seats in this circle yet.</p>}
+                {seats.length === 0 && <p className="text-xs text-gray-400">No roles in this circle yet.</p>}
                 {/*
                   Creating a seat. `POST /api/admin/org/roles` has existed since
                   the org chart shipped and nothing in the browser called it, so
@@ -472,7 +504,7 @@ export function OrgChartTab({ password }: { password: string }) {
                   never add one of its own.
                 */}
                 <div className="flex flex-wrap gap-2 items-end pt-2 border-t border-gray-50">
-                  <label className="text-xs text-gray-500">Add a seat to this circle
+                  <label className="text-xs text-gray-500">Add a role to this circle
                     <input value={newSeat[c.id] ?? ""} placeholder="Welcome Host"
                       className={`${inputCls} mt-1 min-h-[44px]`}
                       onChange={(e) => setNewSeat({ ...newSeat, [c.id]: e.target.value })} />
@@ -482,9 +514,9 @@ export function OrgChartTab({ password }: { password: string }) {
                     disabled={!String(newSeat[c.id] ?? "").trim()}
                     onClick={async () => {
                       const ok = await call("/admin/org/roles", { name: String(newSeat[c.id]).trim(), circleId: c.id, seats: 1 });
-                      if (ok) { toast.success("Seat added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
+                      if (ok) { toast.success("Role added"); setNewSeat({ ...newSeat, [c.id]: "" }); void load(); }
                     }}
-                  >Add seat</button>
+                  >Add role</button>
                 </div>
               </div>
             </div>
@@ -493,7 +525,7 @@ export function OrgChartTab({ password }: { password: string }) {
 
         {(byCircle.get("") ?? []).length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-            <h3 className="font-semibold text-amber-900 mb-2">Seats with no circle</h3>
+            <h3 className="font-semibold text-amber-900 mb-2">Roles with no circle</h3>
             <p className="text-xs text-amber-800">
               {(byCircle.get("") ?? []).map((r) => r.name).join(", ")}
             </p>

@@ -26,8 +26,8 @@ export function PowerHandNote({ data }: { data: Record<string, unknown> }) {
       <p className="text-xs font-medium text-gray-500">What they ask for</p>
       <p className="text-sm text-gray-800">{powerHandSentence(data)}</p>
       <p className="mt-1 text-sm text-gray-600">
-        Saying yes here gives them nothing yet. To hand them the power, seat them on a role that carries it under Game
-        Roles. If no role carries it yet, give the power to a role under The Handover first.
+        Saying yes here gives them nothing yet. To hand them the power, add them to a power group that carries it,
+        under Power groups. If no group carries it yet, give the power to a group under The Handover first.
       </p>
     </div>
   );

@@ -28,7 +28,11 @@
  *     The offset rides the safe area so the overlap is the same on every
  *     device: the trigger's lower edge tucks about 1rem into the bar rather
  *     than floating a thumb's width above it.
- *  3. Layering: modal sheets z-[70], FAB z-[60], scrim z-[55], tab bar z-50.
+ *  3. Layering: setup walk z-[80], a card opened from inside a modal z-[75]
+ *     (the Gene Keys seal's), modal sheets z-[70], FAB z-[60], scrim z-[55],
+ *     tab bar z-50. NOTHING ENFORCES THIS: a shadcn Dialog or Sheet that sets
+ *     no tier lands at z-50, tab-bar level, under any modal it was opened
+ *     from, and a phone tap shows nothing with no error (live 2026-10-30).
  *     The scrim has to sit between the FAB and the bar, not over both — and a
  *     modal has to clear all three, or the tab bar sits on top of the sheet's
  *     own buttons (the village map's node card shipped that way at z-50).
@@ -46,7 +50,7 @@ import { X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { FAB_ACTIONS, FabTriggerIcon, type FabAction } from "@/config/mobileNav";
-import { isBrochurePath, useBrochurePages } from "@/lib/brochure";
+import { useStoryPageShown } from "@/lib/brochure";
 import { haptic } from "@/lib/haptics";
 import { isBareRoute, normalisePath } from "./MobileTabBar";
 
@@ -102,14 +106,15 @@ export default function MobileFab() {
   const moduleOn = (id?: string) =>
     !id || (Array.isArray(modules) && modules.some((m) => m.id === id && m.lifecycle !== "off"));
   const currentPath = normalisePath(location);
-  // A shortcut into a brochure page goes with the pages (shared/brochure.ts).
-  const brochureOn = useBrochurePages() === true;
+  // A shortcut into a brochure page goes with the pages (shared/brochure.ts),
+  // and with its own page when that one is switched off alone.
+  const storyShown = useStoryPageShown();
   // BOTH sides of this line, which is what #404 asked for: keep #406's brochure
   // filter on the list, and take #404's `moduleOn` as the fourth argument. The
   // two are independent questions about the same shortcut row - whether a page
   // exists on this village at all, and whether the module behind it is on.
   const actions = resolve(
-    FAB_ACTIONS.filter((a) => brochureOn || !a.href || !isBrochurePath(a.href)),
+    FAB_ACTIONS.filter((a) => !a.href || storyShown(a.href)),
     currentPath,
     !!user,
     moduleOn,
@@ -251,9 +256,21 @@ export default function MobileFab() {
           aria-label="Shortcuts"
           aria-hidden={!open}
           onKeyDown={onMenuKey}
-          className={`flex flex-col items-end gap-2.5 mb-3 transition-all duration-200 ${
-            open ? "pointer-events-auto" : "pointer-events-none"
+          // THE SHUT MENU TAKES NO ROOM AND IS NOT DRAWN.
+          //
+          // It used to sit in flow above the trigger at opacity 0, so this
+          // fixed box was as tall as every row. The rows depend on sign-in and
+          // the brochure switch, which answer after first paint, and a row
+          // arriving grew the box upward: Chrome scored that as a layout shift
+          // on every page, 0.012 to 0.025 at 390 wide, for a menu nobody could
+          // see. Out of flow it cannot move the box, and `invisible` keeps a
+          // shut menu out of the shift count entirely. The visibility change
+          // waits 400ms on the way out, past the rows' 300ms fade plus their
+          // stagger, so closing still animates exactly as before.
+          className={`absolute bottom-full right-0 mb-3 flex w-max flex-col items-end gap-2.5 ${
+            open ? "visible pointer-events-auto" : "invisible pointer-events-none"
           }`}
+          style={{ transition: `visibility 0s linear ${open ? "0s" : "400ms"}` }}
         >
           {actions.map((a, i) => {
             // Nearest the trigger reveals first, so the stack springs upward.

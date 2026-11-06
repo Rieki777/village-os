@@ -223,6 +223,38 @@ describe.skipIf(!DB_CONFIGURED)("the public proposal attachment door", () => {
     expect(up.status).toBe(400);
     expect(up.text).toContain("Only images or PDF");
   });
+
+  /*
+   * Adversarial round 3, finding 10, through the routes an applicant uses.
+   * The erasure wrote over the row's `attachment` and left the file, so the
+   * CV went on answering at this address with no sign-in, and the retention
+   * sweep, which deletes a file by that pointer, could no longer find it.
+   */
+  it("takes a member's CV off the volume when they delete their account, so its address answers nothing", async () => {
+    const email = `cv-leaver-${PORT}@example.test`;
+    const password = "StripLeaver123!";
+    const reg = await call("POST", "/api/auth/register", { name: "Cora Leaver", email, password, paths: ["resident"] }, "");
+    expect(reg.status, reg.text).toBe(200);
+    const token = String(reg.json?.token ?? "");
+    const up = await postAttachment(buildPdfEmbedding(await plainJpeg(120, 90)), "Cora-CV.pdf", "application/pdf", token);
+    expect(up.status, up.text).toBe(200);
+    const filename = String(up.json?.filename ?? "");
+    const sent = await call("POST", "/api/forms/submit", {
+      type: "work-with-us",
+      data: { name: "Cora Leaver", email, message: "I build earth ovens", attachment: filename, attachmentName: "Cora-CV.pdf" },
+    }, token);
+    expect(sent.status, sent.text).toBe(200);
+    expect((await fetchUpload(filename)).status, "the control: the CV is served to anybody holding its name").toBe(200);
+
+    const gone = await call("POST", "/api/profile/delete-account", { password }, token);
+    expect(gone.status, gone.text).toBe(200);
+
+    expect((await fetchUpload(filename)).status, "the address answers nothing once they have gone").toBe(404);
+    expect(fs.existsSync(path.join(dataDir, "uploads", filename)), "the file is off the volume").toBe(false);
+    const inbox = await call("GET", "/api/admin/submissions");
+    expect(inbox.status, inbox.text).toBe(200);
+    expect(JSON.stringify(inbox.json), "the inbox no longer names the file").not.toContain(filename);
+  });
 });
 
 /*

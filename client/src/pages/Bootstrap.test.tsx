@@ -14,7 +14,7 @@
  * test here.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
@@ -54,7 +54,8 @@ function mockFetch(status: number, body: unknown) {
 
 describe("claiming a village", () => {
   beforeEach(() => vi.restoreAllMocks());
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("sends the password in the body and never in the URL", async () => {
     const f = mockFetch(200, { emailed: true });
@@ -83,8 +84,11 @@ describe("claiming a village", () => {
     await claim(f);
 
     expect(screen.getByText(/no email provider is configured/i)).toBeInTheDocument();
+    // The server builds the link from FRONTEND_URL, which may not answer yet.
+    // The page puts the same path and token on the address the founder is
+    // using right now (lib/claimLink.ts), which is the one that works.
     const link = screen.getByRole("link", { name: /set-password\?token=abc123/i });
-    expect(link).toHaveAttribute("href", "https://village.example/set-password?token=abc123");
+    expect(link).toHaveAttribute("href", `${window.location.origin}/set-password?token=abc123`);
   });
 
   /**

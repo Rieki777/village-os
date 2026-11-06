@@ -210,7 +210,7 @@ describe("the kinds a viewer reads", () => {
   it("are the kinds whose capability the viewer holds, and only those", () => {
     expect(readableKinds(() => true).map((k) => k.id)).toEqual(REGISTER_KINDS.map((k) => k.id));
     expect(readableKinds(() => false)).toEqual([]);
-    expect(readableKinds((c) => c === "terms.read").map((k) => k.label)).toContain("Seat terms");
+    expect(readableKinds((c) => c === "terms.read").map((k) => k.label)).toContain("Role terms");
   });
 });
 
@@ -289,7 +289,7 @@ describe.skipIf(!configured)("the register, on a real schema", () => {
     const r = await h.call("GET", "/api/aligned");
     expect(r.status).toBe(200);
     expect(r.body.kinds).toEqual([
-      { id: "seat_terms", label: "Seat terms" },
+      { id: "seat_terms", label: "Role terms" },
       // Seat settings PR9 turned the letter on.
       { id: "membership", label: "Membership letter" },
     ]);
@@ -310,7 +310,7 @@ describe.skipIf(!configured)("the register, on a real schema", () => {
   it("each row: parties by name and capacity, the derived state, the day in the village's zone, and how the village aligned", async () => {
     const r = await h.call("GET", "/api/aligned");
     const money = rowOf(r.body, made.money.textId);
-    expect(money.kindLabel).toBe("Seat terms");
+    expect(money.kindLabel).toBe("Role terms");
     expect(money.state).toBe("in-force");
     expect(money.money).toBe(true);
     expect(money.parties.map((p: any) => [p.label, p.capacity, p.aligned])).toEqual(

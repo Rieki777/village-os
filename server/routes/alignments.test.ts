@@ -281,7 +281,7 @@ describe.skipIf(!configured)("aligning, on a real schema", () => {
     const s = await seat("Orchard steward");
     const shown = await words({ seatIds: [s], seatSettings: HONORARY_TERMS });
     expect(shown.status).toBe(200);
-    expect(shown.body.body).toContain("THE SEAT\n  Orchard steward");
+    expect(shown.body.body).toContain("THE ROLE\n  Orchard steward");
     expect(shown.body.money).toBe(false);
     const a = await h.call("POST", "/api/governance/role-applications", {
       seatIds: [s],
@@ -471,7 +471,7 @@ describe.skipIf(!configured)("aligning, on a real schema", () => {
       ["u-hal", `alignment:${a.body.textId}:village:in-force`],
     ]);
     expect(told[0].title).toBe("Aligned and in force: the terms for Holder adopts");
-    expect(told[0].link).toBe(`/seat-applications/${a.body.id}`);
+    expect(told[0].link).toBe(`/role-applications/${a.body.id}`);
 
     // The receipt verifies against the village's key, and carries the hash, never the words.
     const [seal] = await sealsOf(pool, [a.body.textId]);

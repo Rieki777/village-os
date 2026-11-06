@@ -161,7 +161,7 @@ export function seasonReminderCopy(
   const days = due.daysLeft === 1 ? "1 day" : `${due.daysLeft} days`;
   const ask =
     "Before it turns, run the end-of-season governance: record what this season did, and seat people for the next season. " +
-    "Seats end with the season by default, so the seats filled now are the seats the next season starts with.";
+    "Roles end with the season by default, so the roles filled now are the roles the next season starts with.";
   return {
     title: `${name} turns in ${days}, on ${formatCivilDate(due.endsOn)}`,
     body:

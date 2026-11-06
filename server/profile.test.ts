@@ -122,3 +122,24 @@ describe("profile privacy", () => {
     expect(moonsSince("not a date", now)).toBe(0);
   });
 });
+
+describe("profile inventory", () => {
+  const inventory = {
+    loans: [{ id: "l1", item: "Pressure washer", status: "active" as const, dueOn: "2026-11-07" }],
+    stays: [{ id: "s1", place: "Casita Two", status: "requested" as const, arriveOn: null }],
+    lots: [{ id: "h1", homeType: "tiny-home", structureKey: "pond-homes", standing: "You have asked for this" }],
+  };
+  it("keeps it off a stranger's copy by default", () => {
+    const out = publicView({ ...full(), inventory }, PRIVACY_DEFAULTS);
+    expect(out.inventory).toBeUndefined();
+    expect(PRIVACY_DEFAULTS.showInventory).toBe(false);
+  });
+  it("hands it over once the member turns showInventory on", () => {
+    const out = publicView({ ...full(), inventory }, { ...PRIVACY_DEFAULTS, showInventory: true });
+    expect(out.inventory).toEqual(inventory);
+  });
+  it("reads a stored blob without the flag as off, so nobody is opted in by the flag shipping", () => {
+    expect(resolvePrivacy({ showHome: true }).showInventory).toBe(false);
+    expect(resolvePrivacy({ showInventory: "true" }).showInventory).toBe(false);
+  });
+});

@@ -6,6 +6,11 @@
  *   GET  /api/season-plans/mine          your own plan, seats and applications
  *   PUT  /api/season-plans/mine          save your plan as its next version
  *   POST /api/season-plans/mine/file     file the newest version
+ *   PUT  /api/season-plans/mine/card     save only the card's groups: goals served
+ *                                        and how each helps, seasonal goals, card
+ *                                        words; the rest carries from the newest
+ *                                        version (player role card PR 6)
+ *   PUT  /api/season-plans/mine/load     this moon's load, 1 (Healthy) to 5 (Heavy)
  *
  * Plus one job, `season-plan-notices`, twice a day: "Plan your season" when the
  * window opens, and a reminder to anybody not filed halfway through it and three
@@ -53,16 +58,30 @@ import {
   type PlanSeason,
   type PlanTarget,
 } from "../../shared/seasonPlans";
+import { parseCardWords, parseMoonLoad, parseSeasonalGoals, parseServesGoals } from "../../shared/seasonPlanWords";
 import { applicationHref, STATUS_WORDS, type ApplicationStatus } from "../../shared/seatApplications";
+import { partSuggestions, type PartSuggestions, type SuggestionSeat, type TermsRank } from "../../shared/seasonPartSuggestions";
 import { civilDateKey } from "../../shared/lunar";
 import type { AppDeps } from "../lib/appDeps";
-import { listOrgAssignments, listOrgRoles, type LapseContext } from "../lib/orgChart";
+import { listOrgAssignments, listOrgRoles, type LapseContext, type OrgRole } from "../lib/orgChart";
 import { userIdForHandle } from "../lib/profile";
 import { villageClock } from "../lib/stewardship";
 import { registerJob } from "../lib/scheduler";
 import { runSeasonPlanNotices } from "../lib/seasonPlanNotices";
-import { consentedBetween, fileNewestVersion, filedMembers, insertPlanVersion, planVersions, plansInSeason, type StoredPlan } from "../repos/seasonPlans";
-import { applicationsInSeason, type StoredApplication } from "../repos/seatApplications";
+import {
+  consentedBetween,
+  fileNewestVersion,
+  filedMembers,
+  insertPlanVersion,
+  latestCardWords,
+  moonLoadOf,
+  planToStore,
+  planVersions,
+  plansInSeason,
+  setMoonLoad,
+  type StoredPlan,
+} from "../repos/seasonPlans";
+import { applicationsInSeason, readApplications, type StoredApplication } from "../repos/seatApplications";
 
 /** Everything a member's plans hold, for `GET /api/profile/export`. */
 export { plansOfMember as seasonPlansForMember } from "../repos/seasonPlans";
@@ -75,8 +94,83 @@ export const SEASON_PLAN_EVERY_MS = 12 * 60 * 60 * 1000;
 const SAVES_PER_WINDOW = 30;
 const SAVE_WINDOW_MS = 10 * 60 * 1000;
 
+/** Twelve moon reads in ten minutes per member: a slider dragged and let go a few times stays under it. */
+const LOADS_PER_WINDOW = 12;
+
+/** The groups the card's own editor saves. Everything else on a plan belongs to Your season. */
+const CARD_GROUPS = ["servesGoals", "seasonalGoals", "cardWords"] as const;
+
+/**
+ * DID THE FILED PART CHANGE? PURE.
+ *
+ * True when the newest version differs from the filed one in anything the
+ * village reads. Card words are the player's own description, saved from the
+ * card at any time, so a save that changed only them leaves the plan filed.
+ */
+export function changedSinceFiling(newest: StoredPlan | null, filed: StoredPlan | null): boolean {
+  if (!newest || !filed || newest.version <= filed.version) return false;
+  const part = (p: StoredPlan) =>
+    JSON.stringify([p.aim, p.servesGoals, p.seasonalGoals, p.commitments ?? {}, p.handingBack]);
+  return part(newest) !== part(filed);
+}
+
 /** The statuses that mean the village has not answered yet. */
 const WAITING: readonly ApplicationStatus[] = ["awaiting-holder", "voting"];
+
+/** An application's terms speak for its seats while it is adopted or still being answered. */
+const TERMS_RANK_OF: Partial<Record<ApplicationStatus, TermsRank>> = {
+  adopted: "adopted",
+  "awaiting-holder": "applied",
+  voting: "applied",
+  "held-full": "applied",
+};
+
+/**
+ * YOUR PART, STARTED FROM YOUR SEATS (2026-10-21). PURE.
+ *
+ * The seats a member holds, then the seats they applied for this season, each
+ * with the terms that speak for it: the application a seating came through,
+ * the member's own applications naming the seat, and the seat's offer. Terms
+ * are read only for a reader holding `terms.read`, the rung every other read
+ * of terms needs; below it a seat brings only what it answers for, which is on
+ * the public role card. Only quests and measures leave this function
+ * (shared/seasonPartSuggestions.ts), so no money key reaches the page.
+ */
+export function suggestionsFor(input: {
+  held: ReadonlyArray<{ id: string; heldThrough: string | null }>;
+  applications: readonly StoredApplication[];
+  /** The applications seatings came through, by id, read in one batch. */
+  heldThrough: ReadonlyMap<string, StoredApplication>;
+  roles: readonly Pick<OrgRole, "id" | "name" | "accountabilities" | "termsOffer">[];
+  termsReadable: boolean;
+}): PartSuggestions {
+  const roleOf = new Map(input.roles.map((r) => [r.id, r]));
+  const live = input.applications.filter((a) => TERMS_RANK_OF[a.status] !== undefined);
+  const order: string[] = [];
+  for (const h of input.held) if (!order.includes(h.id)) order.push(h.id);
+  for (const a of live) for (const id of a.seatIds) if (!order.includes(id)) order.push(id);
+  const seats: SuggestionSeat[] = order.map((seatId) => {
+    const role = roleOf.get(seatId);
+    const terms: Array<{ rank: TermsRank; settings: unknown }> = [];
+    if (input.termsReadable) {
+      const seen = new Set<string>();
+      const through = input.held.find((h) => h.id === seatId)?.heldThrough;
+      const seated = through ? input.heldThrough.get(through) : undefined;
+      if (seated) {
+        seen.add(seated.id);
+        terms.push({ rank: "adopted", settings: seated.settings });
+      }
+      for (const a of live) {
+        if (seen.has(a.id) || !a.seatIds.includes(seatId)) continue;
+        seen.add(a.id);
+        terms.push({ rank: TERMS_RANK_OF[a.status] as TermsRank, settings: a.settings });
+      }
+      if (role && role.termsOffer != null) terms.push({ rank: "offer", settings: role.termsOffer });
+    }
+    return { seatId, name: role?.name ?? seatId, accountabilities: role?.accountabilities ?? [], terms };
+  });
+  return partSuggestions(seats);
+}
 
 type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "getPool" | "notify" | "overLimit" | "members" | "isPresent"> & {
   /** The one gate's context, so the page can say whether this member may apply (terms.read) before they try (red team U5). */
@@ -189,6 +283,8 @@ export function register(app: Express, deps: Deps): void {
     return {
       aim: p.aim,
       servesGoal: p.servesGoal,
+      servesGoals: p.servesGoals,
+      seasonalGoals: p.seasonalGoals,
       quests: p.commitments?.quests ? { min: p.commitments.quests.perMoonMin ?? null, max: p.commitments.quests.perMoonMax ?? null } : null,
       measures: (p.commitments?.scoreboard?.measures ?? []).map((m) => ({ measure: m.measure, target: m.target ?? null })),
     };
@@ -236,13 +332,15 @@ export function register(app: Express, deps: Deps): void {
           handle: typeof m.handle === "string" && m.handle ? m.handle : null,
           filed: !!filed,
           filedOn: filed?.filedAt ? civilDateKey(filed.filedAt, tz) : null,
-          changedSinceFiling: !!filed && !!newest && newest.version > filed.version,
+          changedSinceFiling: changedSinceFiling(newest, filed),
           seats: (seats.get(id) ?? []).map((s) => ({ id: s.id, name: s.name })),
           handingBack: (filed?.handingBack ?? []).map((sid) => ({ id: sid, name: nameOf(sid) })),
           applications: mine,
           waiting: mine.some((a) => WAITING.includes(a.status)),
           aim: words?.aim ?? null,
           servesGoal: words?.servesGoal ?? null,
+          servesGoals: words?.servesGoals ?? [],
+          seasonalGoals: words?.seasonalGoals ?? [],
           questsThisMoon: { done: consented.get(id) ?? 0, min: words?.quests?.min ?? null, max: words?.quests?.max ?? null },
           measures: words?.measures ?? [],
         };
@@ -270,24 +368,61 @@ export function register(app: Express, deps: Deps): void {
     return user;
   }
 
-  async function mineOut(userId: string) {
+  /** The one gate's word on `terms.read` for this member. Without a context the route is in a test that grants it. */
+  async function readsTerms(user: any): Promise<boolean> {
+    return deps.capabilityCtx ? hasCapability("terms.read", await deps.capabilityCtx(user)) : true;
+  }
+
+  /** This moon's id on the village clock, the key a moon load is stored under. */
+  const moonId = (at: Date) => clock().idFor(at);
+
+  /** This moon's load as the page reads it. */
+  async function loadOut(userId: string, at: Date) {
+    const l = await moonLoadOf(getPool(), userId, moonId(at));
+    return l ? { cycleId: l.cycleId, level: l.level } : null;
+  }
+
+  async function mineOut(userId: string, termsReadable: boolean) {
     const at = now();
     const target = targetAt(at);
-    if (!target) return { season: null, window: null, plan: null, filed: null, heldSeats: [], applications: [], questsThisMoon: { done: 0 } };
+    // No season to plan still has seats in it: the profile's "Your roles" lists what the member holds either way.
+    // No suggestions here: with no season there is no plan form to fill.
+    if (!target) {
+      return {
+        season: null,
+        window: null,
+        plan: null,
+        filed: null,
+        heldSeats: (await heldSeats()).get(userId) ?? [],
+        applications: [],
+        questsThisMoon: { done: 0 },
+        suggestions: null,
+        cardWords: await latestCardWords(getPool(), userId),
+        moonLoad: await loadOut(userId, at),
+      };
+    }
     const pool = getPool();
     const tz = seasonState().timezone || "UTC";
     const seasonId = target.season.id;
-    const [versions, seats, apps, nameOf, consented] = await Promise.all([
+    const [versions, held, apps, roles, consented] = await Promise.all([
       planVersions(pool, userId, seasonId),
       heldSeats(),
       applicationsInSeason(pool, seasonId, userId),
-      seatNamer(),
+      listOrgRoles(pool),
       (async () => {
         const moon = thisMoon(at);
         return consentedBetween(pool, moon.from, moon.to);
       })(),
     ]);
+    const names = new Map(roles.map((r) => [r.id, r.name]));
+    const nameOf = (id: string) => names.get(id) ?? id;
+    const seats = held.get(userId) ?? [];
+    // The terms each seating came through, in one read, and only for a reader who may read terms.
+    const throughIds = termsReadable ? Array.from(new Set(seats.map((s) => s.heldThrough).filter((id): id is string => !!id))) : [];
+    const through = new Map((throughIds.length ? await readApplications(pool, throughIds) : []).map((a) => [a.id, a]));
     const { newest, filed } = latestOf(versions);
+    // Card words carry across seasons until the member writes this season's.
+    const cardWords = newest ? newest.cardWords : await latestCardWords(pool, userId);
     return {
       season: seasonOut(target),
       window: planWindowPayload(target, at),
@@ -296,16 +431,22 @@ export function register(app: Express, deps: Deps): void {
             version: newest.version,
             aim: newest.aim,
             servesGoal: newest.servesGoal,
+            servesGoals: newest.servesGoals,
+            seasonalGoals: newest.seasonalGoals,
             commitments: newest.commitments ?? {},
             handingBack: newest.handingBack,
             savedOn: civilDateKey(newest.createdAt, tz),
           }
         : null,
       filed: filed ? { version: filed.version, filedOn: filed.filedAt ? civilDateKey(filed.filedAt, tz) : null } : null,
-      changedSinceFiling: !!filed && !!newest && newest.version > filed.version,
-      heldSeats: seats.get(userId) ?? [],
+      changedSinceFiling: changedSinceFiling(newest, filed),
+      heldSeats: seats,
       applications: apps.filter((a) => a.status !== "withdrawn").map((a) => appOut(a, nameOf)),
       questsThisMoon: { done: consented.get(userId) ?? 0 },
+      // Suggestions for Your part. The page shows them; nothing is saved until the member saves.
+      suggestions: suggestionsFor({ held: seats, applications: apps, heldThrough: through, roles, termsReadable }),
+      cardWords,
+      moonLoad: await loadOut(userId, at),
     };
   }
 
@@ -313,8 +454,8 @@ export function register(app: Express, deps: Deps): void {
     const user = await yours(req, res);
     if (!user) return;
     // Applying for a seat opens at the member rung (`terms.read`); a guest is told so up front (red team U5).
-    const mayApply = deps.capabilityCtx ? hasCapability("terms.read", await deps.capabilityCtx(user)) : true;
-    res.json({ ...(await mineOut(String(user.id))), mayApply });
+    const mayApply = await readsTerms(user);
+    res.json({ ...(await mineOut(String(user.id), mayApply)), mayApply });
   });
 
   app.put("/api/season-plans/mine", async (req, res) => {
@@ -333,9 +474,87 @@ export function register(app: Express, deps: Deps): void {
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     const held = new Set((await heldSeats()).get(userId)?.map((s) => s.id) ?? []);
     const stray = parsed.plan.handingBack.find((id) => !held.has(id));
-    if (stray) return res.status(400).json({ error: "You can only hand back a seat you hold.", field: "handingBack", seatId: stray });
-    await insertPlanVersion(getPool(), userId, target.season.id, parsed.plan);
-    res.json(await mineOut(userId));
+    if (stray) return res.status(400).json({ error: "You can only hand back a role you hold.", field: "handingBack", seatId: stray });
+    const pool = getPool();
+    const versions = await planVersions(pool, userId, target.season.id);
+    const newest = versions.length ? versions[versions.length - 1] : null;
+    // A group the body leaves out keeps what the newest version holds.
+    const carried = newest ? null : await latestCardWords(pool, userId);
+    await insertPlanVersion(pool, userId, target.season.id, planToStore(parsed.plan, newest, carried));
+    res.json(await mineOut(userId, await readsTerms(user)));
+  });
+
+  /*
+   * THE CARD'S OWN EDITOR SAVES HERE. Only the groups it names: goals served
+   * and how each helps, seasonal goals, card words. Every other part of the
+   * plan carries from the newest version, so a card save never clears the aim,
+   * the commitments or a seat handed back. It is still a new version, by the
+   * same insert rule as every save. A change to card words alone leaves a
+   * filed plan filed (`changedSinceFiling`).
+   */
+  app.put("/api/season-plans/mine/card", async (req, res) => {
+    const user = await yours(req, res);
+    if (!user) return;
+    const userId = String(user.id);
+    if (await overLimit(`season-plan:${userId}`, SAVES_PER_WINDOW, SAVE_WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_saves", message: "That is a lot of saves in a few minutes. Wait a little and try again." });
+    }
+    const b = (req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {}) as Record<string, unknown>;
+    const stray = Object.keys(b).find((k) => !(CARD_GROUPS as readonly string[]).includes(k));
+    if (stray) return res.status(400).json({ error: "The card saves goals served, seasonal goals and card words. The rest is saved on Your season.", field: stray });
+    if (!CARD_GROUPS.some((k) => b[k] !== undefined)) return res.status(400).json({ error: "Nothing to save.", field: "body" });
+    const target = targetAt(now());
+    if (!target) {
+      return res.status(409).json({ error: "no_season", message: "There is no season to plan yet. Planning opens one moon before the next season starts." });
+    }
+    const goals = (target.season.goals ?? []).map((g) => String(g?.text ?? "").trim()).filter(Boolean);
+    const served = parseServesGoals(b.servesGoals, goals);
+    if (!served.ok) return res.status(400).json({ error: served.error, field: served.field });
+    const seasonal = parseSeasonalGoals(b.seasonalGoals);
+    if (!seasonal.ok) return res.status(400).json({ error: seasonal.error, field: seasonal.field });
+    const words = parseCardWords(b.cardWords);
+    if (!words.ok) return res.status(400).json({ error: words.error, field: words.field });
+
+    const pool = getPool();
+    const versions = await planVersions(pool, userId, target.season.id);
+    const newest = versions.length ? versions[versions.length - 1] : null;
+    const servesGoals = served.value !== undefined ? served.value : newest?.servesGoals.length ? newest.servesGoals : null;
+    const plan = planToStore(
+      {
+        aim: newest?.aim ?? null,
+        servesGoal: servesGoals?.[0]?.goal ?? null,
+        servesGoals,
+        commitments: newest?.commitments ?? {},
+        handingBack: newest?.handingBack ?? [],
+        ...(seasonal.value !== undefined ? { seasonalGoals: seasonal.value } : {}),
+        ...(words.value !== undefined ? { cardWords: words.value } : {}),
+      },
+      newest,
+      newest ? null : await latestCardWords(pool, userId),
+    );
+    await insertPlanVersion(pool, userId, target.season.id, plan);
+    res.json(await mineOut(userId, await readsTerms(user)));
+  });
+
+  /*
+   * THIS MOON'S LOAD, the member's own read from Healthy (1) to Heavy (5).
+   * Owner only: the row is always the signed-in member's, and nothing in the
+   * body can name anybody else. One row per member per moon on the village
+   * clock; a second read the same moon replaces the first. No season is
+   * needed: a moon has a load whether or not a season is being planned.
+   */
+  app.put("/api/season-plans/mine/load", async (req, res) => {
+    const user = await yours(req, res);
+    if (!user) return;
+    const userId = String(user.id);
+    if (await overLimit(`moon-load:${userId}`, LOADS_PER_WINDOW, SAVE_WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many_saves", message: "Wait a little and try again." });
+    }
+    const parsed = parseMoonLoad((req.body ?? {}).level);
+    if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
+    const at = now();
+    const l = await setMoonLoad(getPool(), userId, moonId(at), parsed.value);
+    res.json({ moonLoad: { cycleId: l.cycleId, level: l.level } });
   });
 
   app.post("/api/season-plans/mine/file", async (req, res) => {
@@ -355,6 +574,6 @@ export function register(app: Express, deps: Deps): void {
     const refusal = fileRefusal(newest);
     if (refusal) return res.status(409).json({ error: "not_ready", message: refusal });
     if (newest && !newest.filedAt) await fileNewestVersion(pool, userId, target.season.id);
-    res.json(await mineOut(userId));
+    res.json(await mineOut(userId, await readsTerms(user)));
   });
 }

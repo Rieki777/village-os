@@ -66,15 +66,15 @@ export function PeopleLockNote({
         <Users className="w-6 h-6 text-sage" />
       </div>
       <p className="font-display text-2xl font-bold text-foreground mb-2">
-        {seats} {seats === 1 ? "seat" : "seats"}, {held} of them held
+        {seats} {seats === 1 ? "place" : "places"}, {held} of them held
       </p>
       <p className="text-muted-foreground mb-6 leading-relaxed">
         This village keeps the names of the people holding them for members. Every circle,
-        every seat and every open call is on this page.
+        every role and every open call is on this page.
       </p>
       {people.signedIn ? (
         <p className="text-sm text-muted-foreground">
-          Seeing who holds a seat is granted by role here, and your account does not carry it yet.
+          Seeing who holds a role is a power here, and your account does not carry it yet.
         </p>
       ) : (
         <Link

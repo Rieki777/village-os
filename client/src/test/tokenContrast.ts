@@ -50,7 +50,7 @@ import { contrastRatio } from "@shared/brandTokens";
 
 export type Scheme = "light" | "dark";
 
-type Rgba = { r: number; g: number; b: number; a: number };
+export type Rgba = { r: number; g: number; b: number; a: number };
 
 export interface TextContrast {
   /** The element's own text, trimmed. */
@@ -178,7 +178,7 @@ function oklchToRgb(l: number, c: number, hDeg: number): [number, number, number
   return [enc(lin[0]), enc(lin[1]), enc(lin[2])];
 }
 
-function parseColor(value: string, vars: Record<string, string>, depth = 0): Rgba {
+export function parseColor(value: string, vars: Record<string, string>, depth = 0): Rgba {
   if (depth > 12) throw new Error(`colour reference loop at ${value}`);
   const v = value.trim();
   const varRef = /^var\((.*)\)$/.exec(v);
@@ -209,10 +209,10 @@ function parseColor(value: string, vars: Record<string, string>, depth = 0): Rgb
   throw new Error(`cannot read colour value "${v}"`);
 }
 
-const toHex = ({ r, g, b }: Rgba) =>
+export const toHex = ({ r, g, b }: Rgba) =>
   "#" + [r, g, b].map((c) => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, "0")).join("");
 
-const over = (top: Rgba, bottom: Rgba): Rgba => ({
+export const over = (top: Rgba, bottom: Rgba): Rgba => ({
   r: top.r * top.a + bottom.r * (1 - top.a),
   g: top.g * top.a + bottom.g * (1 - top.a),
   b: top.b * top.a + bottom.b * (1 - top.a),
@@ -249,7 +249,7 @@ const effectiveClasses = (el: Element, scheme: Scheme) => baseClasses(el).concat
 const describeEl = (el: Element) => `<${el.tagName.toLowerCase()} class="${el.getAttribute("class") ?? ""}">`;
 
 /** The colour a `text-*` or `bg-*` utility paints, or null when it is not a colour utility. */
-function utilityColour(prefix: "text" | "bg", cls: string, vars: Record<string, string>, el: Element): Rgba | null {
+export function utilityColour(prefix: "text" | "bg", cls: string, vars: Record<string, string>, el: Element): Rgba | null {
   if (!cls.startsWith(prefix + "-")) return null;
   const rest = cls.slice(prefix.length + 1);
   if (prefix === "text" && (TEXT_NOT_COLOUR.has(rest) || /^\[[\d.]+(px|rem|em)\]$/.test(rest))) return null;

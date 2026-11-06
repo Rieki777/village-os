@@ -9,6 +9,7 @@
  * Modules tab — platform language, never one village's brand.
  */
 import type { Capability } from "./capabilities";
+import type { SetupNeed } from "./setupNeeds";
 
 export type ModuleLifecycle = "off" | "preview" | "members" | "public";
 
@@ -359,6 +360,15 @@ export interface ModuleDef {
    * `group`. Every `vendor.secretKeys` slot must be planted by a seed here.
    */
   guild?: readonly string[];
+  /**
+   * THE NEEDS: everything besides seeds this module waits for, a dial to set,
+   * words to write, content to make, a person to hold a power, a live check
+   * (shared/setupNeeds.ts). A seed stays in `guild` and is never repeated here.
+   * Optional in the TYPE only so test fixtures stay small; `setupNeedsProblems`
+   * refuses a module whose setup is not "none" with neither a required need
+   * nor a seed.
+   */
+  setupNeeds?: readonly SetupNeed[];
   /** The named counterparty. Required at connected and managed, absent at included. */
   vendor?: ModuleVendor;
   /**
@@ -512,7 +522,7 @@ export const MODULES: ModuleDef[] = [
     requires: [],
     recommends: [],
     capabilities: ["quest.consent"],
-    variableKeys: ["quest.consent_cap_mode", "quest.consent_cap_multiplier", "quest.require_submission_before_consent"],
+    variableKeys: ["quest.require_submission_before_consent"],
     apiPrefixes: ["/api/quests", "/api/game/quests"],
   },
   {
@@ -592,6 +602,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "map",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-circle",
+        kind: "content",
+        ref: "map",
+        title: "Draw one circle",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "know-and-decide",
@@ -602,7 +627,7 @@ export const MODULES: ModuleDef[] = [
     // ADR, not this round.
     name: "How Power Is Held",
     description:
-      "The living org chart: circles, the roles that orbit them, who holds each seat, which seats are open calls, plus a concierge that routes 'I want to help with X' to the right person.",
+      "The living org chart: circles, the roles that orbit them, who holds each role, which roles are open calls, plus a concierge that routes 'I want to help with X' to the right person.",
     requires: [],
     recommends: [],
     capabilities: ["map.viewPeople", "map.contact", "map.photograph", "map.curatePhotos"],
@@ -628,6 +653,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "resources",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-flow",
+        kind: "content",
+        ref: "resources",
+        title: "Show how one resource flows",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=resources-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -752,6 +792,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "stays",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-room",
+        kind: "content",
+        ref: "stays",
+        title: "Post one room and a price",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=stays-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -787,6 +842,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "automation",
     guild: ["riverside-webhook-secret", "anthropic-api-key"],
+    setupNeeds: [
+      {
+        id: "first-recording",
+        kind: "content",
+        ref: "automation",
+        title: "Feed it one call recording",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=calls-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -813,6 +883,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "health",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-measurement",
+        kind: "content",
+        ref: "health",
+        title: "Record one measurement of the land",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=health-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "village-content",
     group: "know-and-decide",
@@ -836,6 +921,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "library",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-item",
+        kind: "content",
+        ref: "library",
+        title: "Put one item on the shelves",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=library-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -880,6 +980,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "badges",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-badge",
+        kind: "content",
+        ref: "badges",
+        title: "Create a badge and award it once",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=badges-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "recognise",
@@ -898,6 +1013,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "exchange",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-listing",
+        kind: "content",
+        ref: "exchange",
+        title: "List a token and post its price",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=exchange-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -941,6 +1071,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "redemption",
     guild: [],
+    setupNeeds: [
+      {
+        id: "process-text",
+        kind: "decision",
+        ref: "redemption.process_text",
+        title: "Write how redemption works here",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/redemption#setting-redemption.process_text",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // A redemption row names the member who asked, what they asked for, and
     // who decided. That is a named person's financial request.
@@ -1002,6 +1147,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "commerce",
     guild: ["stripe-secret-key", "stripe-webhook"],
+    setupNeeds: [
+      {
+        id: "first-product",
+        kind: "content",
+        ref: "commerce",
+        title: "Create one product",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=products",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "host-and-earn",
@@ -1039,6 +1199,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "crowdpool",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-campaign",
+        kind: "content",
+        ref: "crowdpool",
+        title: "Link one hub campaign",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/crowdpool#setting-config",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // The cache holds hub-public campaign content and the public names its
     // feed already shows. No member of THIS village appears in it at all.
@@ -1081,6 +1256,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "tools",
     guild: [],
+    setupNeeds: [
+      {
+        id: "first-tool",
+        kind: "content",
+        ref: "tools",
+        title: "Add one tool card",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/admin?tab=tools-admin",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1120,6 +1310,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "events",
     guild: [],
+    setupNeeds: [
+      {
+        id: "hemisphere",
+        kind: "decision",
+        ref: "calendar.hemisphere",
+        title: "Say which hemisphere this village is in",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/events#setting-calendar.hemisphere",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     dataClass: "member-pii",
     group: "coordinate",
@@ -1218,6 +1423,101 @@ export const MODULES: ModuleDef[] = [
     // entries stay in their tables and come back intact when it is turned on.
   },
   {
+    id: "gene-keys",
+    guild: [],
+    tier: "included",
+    // A reading of each member's own birth: their Gene Keys lines and Human
+    // Design type. No birth date, time or place is ever stored (drizzle/0272).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Gene Keys",
+    description:
+      "Each member can find their Gene Keys lines and Human Design type from their birth details, read on their own device so the details never leave it. The lines show as a seal on their portrait unless they hide them, a circle sees which of the six lines it holds, and the village guide can shape suggestions to how a member works best when they say yes.",
+    requires: [],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/gene-keys"],
+    // No openStateCheck: it holds nothing anybody is owed. Off hides every
+    // surface; saved results stay in their table and return when it is on.
+  },
+  {
+    id: "session-card",
+    guild: [],
+    tier: "included",
+    // A card names the people present and holds a line of words for each one
+    // read, drawn from their saved Gene Keys result. Cards are deleted when
+    // their session closes (drizzle/0296).
+    dataClass: "member-pii",
+    group: "connect",
+    setup: "none",
+    name: "Session Card",
+    description:
+      "An optional card anyone in a live session can pull at the start, as often as they like. It reads today's sky in both Human Design and Western astrology, weaves in the Gene Keys of the people present who said yes, names each person, and offers the room a few ways to hold the session. Each person's own line stays private until they share it, and the cards are deleted when the session closes.",
+    // The card lives in a session's room and reads the lines Gene Keys saved.
+    requires: ["sessions", "gene-keys"],
+    recommends: [],
+    capabilities: [],
+    variableKeys: [],
+    apiPrefixes: ["/api/session-card"],
+    // No openStateCheck: it holds nothing anybody is owed, and nothing past
+    // the session it was pulled in.
+  },
+  {
+    id: "moon-review",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "work-approver",
+        kind: "hands",
+        ref: "moon.approve",
+        title: "Seat someone in a power group that approves the work in moon recaps",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/moon-review.md Setup; shared/moonRecap.ts eligibleApprovers",
+      },
+      {
+        id: "invoice-approver",
+        kind: "hands",
+        ref: "cash.pay",
+        title: "Choose who approves invoices and records the pay",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=cash-payouts",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/moon-review.md Setup; shared/moonRecap.ts eligibleApprovers",
+      },
+    ],
+    tier: "included",
+    // A recap names a member and what they did; a pay route holds their legal
+    // name and address, and an invoice holds what they are owed.
+    dataClass: "member-pii",
+    group: "coordinate",
+    // A recap sends with no pay route and no payer, so the module works the
+    // moment it is on. Invoices wait on the payers document and a confirmed
+    // route, and say so in their own sentences.
+    setup: "none",
+    name: "End-of-Moon Review",
+    description:
+      "Once a moon, each member who holds a role gathers what they delivered, checks it against their role cards and the season goals, does a role audit and sends a recap. When their role's adopted terms carry money they also send a draft invoice. One person approves the work and a different person approves the invoice, neither of them the member. Pay is recorded here and paid outside the platform.",
+    requires: [],
+    // The room sections live in Live Sessions; the role audit lands in the
+    // circle backlog; Sera drafts from the knowledge library.
+    recommends: ["sessions", "governance", "saberra"],
+    capabilities: ["moon.approve", "moon.approve_alone", "moon.approve_own"],
+    variableKeys: [],
+    apiPrefixes: ["/api/me/moon", "/api/me/pay-route", "/api/moon-review"],
+    // No openStateCheck yet: what a member is owed lives in cash_owed, which
+    // the cash payouts desk reads whether this module is on or off.
+  },
+  {
     id: "sessions",
     guild: [],
     tier: "included",
@@ -1234,16 +1534,16 @@ export const MODULES: ModuleDef[] = [
     setup: "none",
     name: "Live Sessions",
     description:
-      "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a seat. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
+      "A circle holds a working call together in real time: drop in with a shared breath, say how each person is arriving, build the agenda and consent to it, give every item its own page and clock, and leave with every action held by a person or a role. The record stays with the people who were there and the village's admins, and arrival words are erased when the session closes.",
     requires: [],
     // The close opens a gratitude round. Gratitude is core today, so this is
     // always met; it is named so the dependency reads true if that changes.
     recommends: ["gratitude"],
-    // None in v1. Each door is a member's own, the room's facilitator is a
+    // One. Each room door is a member's own, the room's facilitator is a
     // fact of the session itself, and an admin reads closed records through
-    // `isAdmin`. A facilitation capability can come later without a
-    // migration, because nothing stores one.
-    capabilities: [],
+    // `isAdmin`. Keeping the village's meeting templates (0291) asks the gate
+    // for `session.template`, which opens at the member rung.
+    capabilities: ["session.template"],
     /*
      * `calendar.seasons` is listed here as well as owned by the calendar's
      * namespace, because the room is the only surface that reads it: the
@@ -1258,7 +1558,7 @@ export const MODULES: ModuleDef[] = [
      * moon and falls back to the north on an older stamp.
      */
     variableKeys: ["sessions.place_line", "sessions.default_minutes", "calendar.seasons"],
-    apiPrefixes: ["/api/sessions"],
+    apiPrefixes: ["/api/sessions", "/api/session-templates"],
     // No openStateCheck: a session holds no value anybody is owed. Off hides
     // the surface, and closed records stay in their tables for when it is
     // turned back on.
@@ -1294,7 +1594,35 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: "hypha",
-    guild: ["basescan-api-key"],
+    guild: ["basescan-api-key", "base-rpc-url"],
+    setupNeeds: [
+      {
+        id: "dho-address",
+        kind: "decision",
+        ref: "hypha.org_url",
+        title: "Set your DHO address",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/hypha#setting-hypha.org_url",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+      {
+        id: "first-contract",
+        kind: "content",
+        ref: "hypha",
+        title: "Confirm one token contract",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/hypha",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "included",
     // The module's own tables hold contract addresses, what those contracts
     // call themselves, village-level supply and treasury figures, and a log of
@@ -1378,6 +1706,73 @@ export const MODULES: ModuleDef[] = [
     // verified sending domain, a key for it, and the sealing key the stored
     // provider key and delivery-report secret are kept under.
     guild: ["resend-account", "resend-setup-key", "resend-sending-domain", "resend-api-key", "resend-webhook-secret", "village-secrets-key"],
+    setupNeeds: [
+      {
+        id: "sender",
+        kind: "words",
+        ref: "comms-settings.senderName",
+        title: "Name the sender your letters come from",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "postal-address",
+        kind: "words",
+        ref: "comms-settings.postalAddress",
+        title: "Give the postal address for the footer",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "test-email",
+        kind: "check",
+        ref: "comms.test",
+        title: "Send yourself a test email and see it delivered",
+        scope: "village",
+        phase: "before-launch",
+        need: "required",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "who-runs-comms",
+        kind: "hands",
+        ref: "comms.manage",
+        title: "Choose who runs the village's email",
+        scope: "village",
+        phase: "after-launch",
+        need: "recommended",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+      {
+        id: "consent-words",
+        kind: "words",
+        ref: "comms-settings.consentText",
+        title: "Read the consent words on public forms",
+        scope: "village",
+        phase: "later",
+        need: "optional",
+        fixAt: "/admin?tab=comms-settings",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/comms.md Setup; server/lib/comms/setup.ts buildChecklist",
+      },
+    ],
     /*
      * REQUIRED, because the parts that make email arrive are the village's own
      * and no default can stand in for them: its provider key, a sending
@@ -1455,6 +1850,21 @@ export const MODULES: ModuleDef[] = [
   {
     id: "saberra",
     guild: ["saberra-api-secret"],
+    setupNeeds: [
+      {
+        id: "service-address",
+        kind: "content",
+        ref: "saberra",
+        title: "Give it this village's own address at the service",
+        scope: "village",
+        phase: "before-enable",
+        need: "required",
+        fixAt: "/modules/saberra#setting-config",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "server/lib/modules.ts READINESS_HINTS and READINESS_TARGETS",
+      },
+    ],
     tier: "connected",
     dataClass: "village-content",
     group: "know-and-decide",

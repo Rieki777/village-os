@@ -286,7 +286,8 @@ describe("hasCapability truth table", () => {
         expect(BADGE_GRANTABLE[SEAT]).toBe(false);
         expect(isBadgeGrantable(SEAT)).toBe(false);
         for (const cap of ALL_CAPABILITIES) {
-          if (cap === SEAT) continue;
+          // `moon.approve` is fenced too (0313): see the drift check below.
+          if (cap === SEAT || cap.startsWith("moon.approve")) continue;
           expect(isBadgeGrantable(cap), cap).toBe(true);
         }
       });
@@ -329,8 +330,12 @@ describe("hasCapability truth table", () => {
         expect(Object.keys(BADGE_GRANTABLE).sort()).toEqual([...ALL_CAPABILITIES].sort());
       });
 
-      it("fences exactly one key, so a widening is a deliberate edit and not a drift", () => {
-        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto"]);
+      it("fences exactly four keys, so a widening is a deliberate edit and not a drift", () => {
+        // `moon.approve` (0313, the end-of-moon review): an approval of other
+        // people's work toward their pay sits on a power group the village
+        // seats, so an admin cannot mint a badge and approve it alone. Its two
+        // siblings (decisions 18 and 19) come from named power groups only.
+        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own"]);
       });
     });
 
@@ -375,7 +380,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty-one keys: the nineteen the ruling was given in, the comms power, and the decide power", () => {
+    it("is twenty-three keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch and cash.pay", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -399,10 +404,38 @@ describe("hasCapability truth table", () => {
        * to hold this power", and on 2026-10-20 he asked for it to be
        * transferable like the village's other powers. Holding it at launch is
        * how the stewards hold it by default, so it joins this set by design.
+       *
+       * TWENTY-TWO WITH `module.switch`, Rye's ruling of 2026-10-09: after launch
+       * a live holder of the modules power turns a module on directly, so
+       * `module.switch` is a power a village hands to a role, and the founding
+       * stewards take it with the rest at launch. It is a new key born
+       * transferable, so the complement stays 16.
+       *
+       * CONFIRMED BY RYE ON 2026-10-22, in as many words: "confirm 22 and 12".
+       * His 2026-10-09 ruling records TWENTY, and the three powers above are why
+       * it reads 22 - comms.manage, org.decide and module.switch were each judged
+       * transferable after he counted. Nobody mis-implemented anything; the set is
+       * DERIVED, so it recounted itself. The reasoning he accepted: this set is
+       * what the founding role holds at launch and can hand over, so leaving a
+       * power OUT would mean nobody holds it at all - the opposite of what the
+       * handover is for.
+       *
+       * A FURTHER transferable power still needs his word. The count is a reading
+       * of "all steward powers", not an implementation detail, and the check below
+       * exists so the next one asks him rather than drifting past.
+       *
+       * TWENTY-THREE WITH `cash.pay`, and it asked him. It was born held back
+       * (0285) for exactly the reason above, this test refused the 23rd power
+       * when it tried to cross without his word, and he gave it on 2026-10-30:
+       * "yes and this one is then given to a finance role as well". The seeded
+       * Treasury role grants it too (server/lib/starterRoles.ts). A key
+       * RECLASSIFIED from held back, so the complement fell from 17 to 16.
        */
-      expect(HANDOVER_SET).toHaveLength(21);
+      expect(HANDOVER_SET).toHaveLength(23);
       expect(HANDOVER_SET).toContain("comms.manage");
       expect(HANDOVER_SET).toContain("org.decide");
+      expect(HANDOVER_SET).toContain("module.switch");
+      expect(HANDOVER_SET).toContain("cash.pay");
     });
 
     it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {
@@ -436,6 +469,25 @@ describe("hasCapability truth table", () => {
       expect(holdsAll, "the holds-all-N sentence").not.toBeNull();
 
       const notTransferable = ALL_CAPABILITIES.filter((c) => !TRANSFERABLE[c]).length;
+
+      // THE WHOLE PARAGRAPH, NOT THREE SENTENCES. The first version of this test
+      // parsed only the three sentences above, and on 2026-10-21 a FOURTH sentence
+      // carrying numbers auto-merged into that comment and shipped wrong: it said
+      // `module.switch` "was the first through that door" and gave the pair as
+      // "21 and 16", which was true of the tree it was written on and false once
+      // `org.decide` landed ahead of it. No conflict marker, and the check did not
+      // look at it. The paragraph narrates its own drift in order, so the LAST pair
+      // of numbers in it is a claim about the present and must be the present.
+      const doc = src.slice(0, src.indexOf("export const HANDOVER_SET"));
+      const para = doc.slice(doc.lastIndexOf("/**"));
+      const pairs = [...para.matchAll(/(\d+) and (\d+)/g)];
+      expect(pairs.length, "the paragraph should narrate its drift as N and M pairs").toBeGreaterThan(0);
+      const last = pairs[pairs.length - 1];
+      expect(
+        [Number(last[1]), Number(last[2])],
+        `the last "N and M" in the paragraph is a claim about today: "${last[0]}"`,
+      ).toEqual([HANDOVER_SET.length, notTransferable]);
+
       expect(Number(transferable![1]), "transferable count in the comment").toBe(HANDOVER_SET.length);
       expect(Number(holdsAll![1]), "holds-all count in the comment").toBe(HANDOVER_SET.length);
       expect(Number(other![1]), "non-transferable count in the comment").toBe(notTransferable);

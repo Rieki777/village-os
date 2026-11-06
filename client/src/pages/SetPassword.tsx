@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { ShowPasswordButton } from "@/components/auth/ShowPasswordButton";
+import { m } from "framer-motion";
 import { KeyRound, CheckCircle2 } from "lucide-react";
 import { TOKEN_KEY } from "@/lib/gameApi";
 import { writeStored } from "@/lib/safeStorage";
@@ -15,6 +16,7 @@ export default function SetPassword() {
   const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -65,7 +67,7 @@ export default function SetPassword() {
     <Layout>
       <section className="py-24 bg-gradient-to-b from-teal/10 to-background min-h-[70vh]">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-md mx-auto bg-card border border-border rounded-2xl shadow-sm p-8"
@@ -102,26 +104,32 @@ export default function SetPassword() {
                       Both fields carry a real one, plus the autocomplete
                       token that lets a password manager offer to save. */}
                   <label htmlFor="set-password-new" className="sr-only">New password</label>
+                  <div className="relative">
                   <input
                     id="set-password-new"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
                     value={pw}
                     onChange={(e) => setPw(e.target.value)}
                     placeholder="New password (8+ characters)"
                     autoFocus
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full pl-4 pr-12 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
+                  <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+                  </div>
                   <label htmlFor="set-password-repeat" className="sr-only">Repeat the new password</label>
+                  <div className="relative">
                   <input
                     id="set-password-repeat"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     autoComplete="new-password"
                     value={pw2}
                     onChange={(e) => setPw2(e.target.value)}
                     placeholder="Repeat it"
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full pl-4 pr-12 py-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   />
+                  <ShowPasswordButton shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+                  </div>
                   {/* role="alert": the only signal that a password did not
                       save. Setting a password is not optional and there is no
                       second route to it. */}
@@ -136,7 +144,7 @@ export default function SetPassword() {
                 </form>
               </>
             )}
-          </motion.div>
+          </m.div>
         </div>
       </section>
     </Layout>

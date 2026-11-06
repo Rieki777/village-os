@@ -47,6 +47,15 @@ describe("the Resend key's health", () => {
     expect(resendKeyHealth({ configured: true }, row({ status: "bounced" })).detail).toContain("bounced");
   });
 
+  it("asks again once a new key is saved, so an old key's test never speaks for it", () => {
+    const savedAt = new Date((1_800_000_000 + 60) * 1000).toISOString();
+    const typed = { configured: true, source: "admin", setAt: savedAt };
+    const old = resendKeyHealth(typed, row({ status: "delivered" }));
+    expect(old.state).toBe("partial");
+    expect(old.detail).toContain("saved after the last test email");
+    expect(resendKeyHealth(typed, row({ status: "delivered", createdAt: 1_800_000_000 + 120 })).state).toBe("ok");
+  });
+
   it("reads the ledger only when there is a key to check", async () => {
     let asked = 0;
     const pool = { query: async () => { asked += 1; return [[]]; } } as any;

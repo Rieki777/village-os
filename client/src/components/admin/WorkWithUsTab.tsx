@@ -17,35 +17,21 @@
  * violation in the client, and there is no ESLint in this repo to have caught
  * it.
  *
- * It now reads the name through `useTokenName`, the repo's canonical reader
- * for this exact value with this exact fallback, called unconditionally at the
- * top with the other hooks.
+ * THE FIELD THAT HOOK LABELLED IS GONE, and the hook with it. It set the
+ * Gratitude an accepted proposal minted, and Rye ruled on 2026-10-23 that
+ * "GRATITUDE is only sent from player to player using the send gratitude
+ * function, gratitude is not distributed in any other way!" An accepted
+ * proposal pays work tokens from the Mint panel's `proposal.accepted` rules
+ * (server/lib/proposalAward.ts), and this tab says where to set them.
  */
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders } from "./adminApi";
-import { useTokenName } from "@/hooks/useTokenNames";
 
 export default function WorkWithUsTab({ password }: { password: string }) {
   const [cfg, setCfg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
-  /*
-   * HOISTED, and it must stay hoisted. This read used to sit inline in the
-   * JSX, below `if (!cfg) return <Loading/>`, which made it a CONDITIONAL
-   * hook: the loading render never reached it, the loaded render did, the
-   * hook count changed between the two and React threw "Rendered more hooks
-   * than during the previous render". The tab crashed to the error screen
-   * every single time it was opened, because the fetch always resolves after
-   * the first paint. `useGameConfig` is a hook, not a getter, however much
-   * `useGameConfig()?.currency?.name` reads like one.
-   *
-   * `useTokenName` rather than a hoisted `useGameConfig`: it is the repo's
-   * canonical reader for this exact value, carries the same "recognition"
-   * fallback character for character, and additionally treats a name that is
-   * only whitespace as absent, which the inline expression did not.
-   */
-  const recognitionName = useTokenName();
 
   useEffect(() => {
     fetch(`${API_BASE}/admin/work-with-us-config`, { headers: authHeaders(password) })
@@ -98,8 +84,10 @@ export default function WorkWithUsTab({ password }: { password: string }) {
             <input type="text" value={cfg.assistantName ?? ""} onChange={(e) => setCfg({ ...cfg, assistantName: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700 block mb-1">{recognitionName} on accepted proposal</label>
-            <input type="number" min={0} value={cfg.acceptGratitude ?? 0} onChange={(e) => setCfg({ ...cfg, acceptGratitude: parseInt(e.target.value) || 0 })} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+            <p className="text-sm font-medium text-gray-700 mb-1">What an accepted proposal pays</p>
+            <p className="text-xs text-gray-500">
+              The village&apos;s work tokens, set on the Mint panel under &quot;The village accepts a member&apos;s proposal to work with it&quot;.
+            </p>
           </div>
         </div>
 

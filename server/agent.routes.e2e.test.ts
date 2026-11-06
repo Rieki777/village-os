@@ -22,6 +22,7 @@
  * Order-dependent (fixtures build on each other): run the whole file, never a
  * -t slice. Skips loudly without TEST_DATABASE_URL.
  */
+import { createHash, randomBytes } from "crypto";
 import fs from "fs";
 import http from "http";
 import os from "os";
@@ -29,7 +30,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, untilALockIsAwaited, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -88,7 +89,7 @@ beforeAll(async () => {
   if (!fs.existsSync(DIST)) throw new Error(`${DIST} is missing. Run \`pnpm build\` before the agent route test.`);
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-agent-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 });
+  pool = testPool(testDb, { connectionLimit: 4 });
 
   // The model stub: answers a member-mode question with a reply, an aboutYou
   // sentence and a draft naming the fixture gathering.
@@ -184,7 +185,7 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
   it("serves the four skills and the OpenAPI slice to anyone", async () => {
     const skills = await call("GET", "/api/agent/v1/skills", undefined, "");
     expect(skills.status).toBe(200);
-    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-directory", "village-intents", "village-map"]);
+    expect(skills.json.skills.map((s: any) => s.name).sort()).toEqual(["village-calendar", "village-circles", "village-directory", "village-intents", "village-map", "village-moon"]);
     const one = await call("GET", "/api/agent/v1/skills/village-calendar/SKILL.md", undefined, "");
     expect(one.status).toBe(200);
     expect(one.text).toContain("name: village-calendar");
@@ -339,6 +340,15 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     const [[audit]] = await pool.query<any[]>("SELECT actor_kind, audience FROM health_events WHERE kind = 'event_rsvp' AND actor_user_id = ? ORDER BY at DESC LIMIT 1", [ana.id]);
     expect(audit.actor_kind).toBe("agent");
     expect(audit.audience).toBe("admin");
+    // The same yes cannot be sent twice: Ana says no on the web, and the old token cannot set it back.
+    const web2 = await call("POST", `/api/events/${eventId}/rsvp`, { status: "declined" }, ana.token);
+    expect(web2.status).toBe(200);
+    const replay = await call("POST", path_, { status: "going", confirm: true, confirmToken: first.json.confirmToken, echo: first.json.echo }, vat.ana);
+    expect(replay.status).toBe(409);
+    expect(replay.json.error).toBe("spent");
+    const [[stillNo]] = await pool.query<any[]>("SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?", [eventId, ana.id]);
+    expect(stillNo.status, "the replay wrote nothing").toBe("declined");
+    expect((await call("POST", `/api/events/${eventId}/rsvp`, { status: "going" }, ana.token)).status).toBe(200);
     // And me/rsvps now shows it.
     const mine = await call("GET", "/api/agent/v1/me/rsvps", undefined, vat.ana);
     expect(mine.json.events.map((e: any) => e.id)).toEqual([eventId]);
@@ -472,6 +482,37 @@ describe.skipIf(!DB_CONFIGURED)("your agent over HTTP", () => {
     expect(rows.length).toBeGreaterThanOrEqual(4);
     for (const r of rows) { expect(r.actor_kind).toBe("agent"); expect(r.audience).toBe("admin"); }
   });
+
+  it("dies with its holder: erasing the member ends every token they made, and the rows go", async () => {
+    // The erasure keeps the member row as a tombstone and bumps tokenVersion,
+    // which kills sessions. An agent token is not a session: the resolver mints
+    // a fresh one from the row, so the bump alone never reached it.
+    const dora = await register("Dora", "agent-dora");
+    const minted = await call("POST", "/api/agent/tokens", { name: "dora laptop", scopes: ["calendar.read", "directory.read", "me.read"] }, dora.token);
+    expect(minted.status).toBe(200);
+    const vatDora = String(minted.json.token);
+    expect((await call("GET", "/api/agent/v1/me", undefined, vatDora)).status, "alive before the erasure").toBe(200);
+
+    const gone = await call("POST", "/api/profile/delete-account", { password: "AgentTest123!" }, dora.token);
+    expect(gone.status, JSON.stringify(gone.json)).toBe(200);
+
+    for (const route of ["/api/agent/v1/me", "/api/agent/v1/directory", "/api/agent/v1/calendar"]) {
+      expect((await call("GET", route, undefined, vatDora)).status, `${route} answered an erased member's agent`).toBe(401);
+    }
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ?", [dora.id]); // module-review-ok: a test asserting the token rows did not outlive the erased member; the product has no reader for a count it is supposed to have emptied
+    expect(Number(rows[0].n), "the token rows outlived the member").toBe(0);
+
+    // The second layer, pinned on its own: a row that escaped the sweep (minted
+    // in a race, restored from a backup) still finds no holder to act for.
+    const stray = "vat_" + randomBytes(32).toString("base64url");
+    await pool.query( // module-review-ok: a fixture minting a row the product CANNOT mint, to prove a token that escaped the sweep still finds no holder
+      "INSERT INTO agent_tokens (id, user_id, name, token_hash, prefix, scopes, expires_at) VALUES (?,?,?,?,?,?, UTC_TIMESTAMP() + INTERVAL 90 DAY)",
+      ["atk-stray-dora", dora.id, "stray", createHash("sha256").update(stray, "utf8").digest("hex"), stray.slice(0, 10), JSON.stringify(["me.read"])],
+    );
+    const strayRead = await call("GET", "/api/agent/v1/me", undefined, stray);
+    expect(strayRead.status, "a surviving row reopened the erased member").toBe(401);
+    expect(strayRead.json.reason).toBe("holder gone");
+  });
 });
 
 /**
@@ -534,6 +575,13 @@ describe.skipIf(!DB_CONFIGURED)("the founder's agent drafts the map", () => {
     expect(after.json.canEdit).toBe(true);
     expect(JSON.parse(after.json.draft.scene)).toEqual(scene);
     expect(after.json.draft.baseVersion).toBe(0);
+    // The same token keeps no second draft. The echo names the draft it replaces, which the first
+    // save just changed, so the echo check usually refuses first; the spend book holds when it would not.
+    const replay = await call("POST", "/api/agent/v1/map/draft", {
+      scene, confirm: true, confirmToken: first.json.confirmToken, echo: first.json.echo,
+    }, vat.mapMaker);
+    expect(replay.status).toBe(409);
+    expect(["spent", "echo_mismatch"]).toContain(replay.json.error);
     const config = await call("GET", "/api/map/config", undefined, "");
     expect(config.json.scene, "the live map is untouched").toBeNull();
   });
@@ -542,5 +590,318 @@ describe.skipIf(!DB_CONFIGURED)("the founder's agent drafts the map", () => {
     const r = await call("GET", "/api/uploads/masterplan-1790000000000-abcde.pdf", undefined, vat.mapMaker);
     expect(r.status).toBe(401);
     expect(r.json.error).toBe("agent_token_scope");
+  });
+});
+
+/**
+ * A NEW PASSWORD ENDS THE AGENT TOO (lane tokens-on-reset). Setting a password
+ * and an admin's "revoke sessions" bump tokenVersion, which ends every session.
+ * An agent token is not a session: the resolver mints one from the holder's
+ * CURRENT tokenVersion on every call, so the bump alone never reached it, and
+ * someone holding a stolen password could mint a token for up to a year that
+ * outlived the reset that answered the theft.
+ *
+ * The link is made here with the fixture secret. It is the same link the reset
+ * letter carries (server/routes/authRecovery.ts), and this server has no mail
+ * provider to read a letter back from.
+ */
+describe.skipIf(!DB_CONFIGURED)("a new password or a session revoke ends every agent token", () => {
+  const SIGNING = "agent-routes-token-secret"; // module-review-ok: the fixture signing secret this file boots its server with
+  const SCOPES = ["calendar.read", "directory.read", "me.read"];
+
+  async function mintFor(who: { token: string }, name: string): Promise<string> {
+    const minted = await call("POST", "/api/agent/tokens", { name, scopes: SCOPES, ttlDays: 365 }, who.token);
+    expect(minted.status, `${name} must mint`).toBe(200);
+    const value = String(minted.json.token);
+    expect((await call("GET", "/api/agent/v1/me", undefined, value)).status, `${name} answers before`).toBe(200);
+    return value;
+  }
+
+  async function expectRevoked(values: string[], when: string): Promise<void> {
+    for (const value of values) {
+      const dead = await call("GET", "/api/agent/v1/me", undefined, value);
+      expect(dead.status, `a token outlived ${when}`).toBe(401);
+      expect(dead.json.reason).toBe("revoked");
+    }
+  }
+
+  /** One audit line per revoked token, the line the single revoke writes. */
+  async function expectAudited(userId: string, n: number): Promise<void> {
+    const [ids] = await pool.query<any[]>("SELECT id FROM agent_tokens WHERE user_id = ? AND revoked_at IS NOT NULL", [userId]); // module-review-ok: reading back the rows the route revoked
+    expect(ids.length, "revoked rows").toBe(n);
+    for (const { id } of ids) {
+      const [lines] = await pool.query<any[]>( // module-review-ok: reading back the audit rows the route wrote
+        "SELECT actor_kind, audience FROM health_events WHERE kind = 'agent_token' AND entity_ref = ? AND text = ?",
+        [id, `revoked agent token ${id}`],
+      );
+      expect(lines, `the audit line for ${id}`).toHaveLength(1);
+      expect(lines[0]).toMatchObject({ actor_kind: "agent", audience: "admin" });
+    }
+  }
+
+  /**
+   * What else a stolen session can leave standing for an agent (adversarial
+   * round 1, findings 0 and 33): a private calendar address, which never
+   * expires; an inbox on the thief's host, which the week ahead and the weekly
+   * digest keep posting to; and a model key on the thief's endpoint, which
+   * every question the member asks is sent to. TEST-NET-1 is a public-range
+   * literal both guards admit with no DNS. Returns the feed's path.
+   */
+  async function plantReach(who: { token: string }): Promise<string> {
+    const feed = await call("POST", "/api/events/feed/token", {}, who.token);
+    expect(feed.status, "the private calendar address must be made").toBe(200);
+    const url = new URL(String(feed.json.url));
+    const feedPath = `${url.pathname}${url.search}`;
+    expect((await call("GET", feedPath, undefined, "")).status, "the private calendar answers before").toBe(200);
+    expect((await call("PUT", "/api/agent/inbox", { url: "https://192.0.2.10/agent" }, who.token)).status, "the inbox must be set").toBe(200);
+    const key = await call("PUT", "/api/agent/key", { provider: "openai_compatible", baseUrl: "https://192.0.2.10", model: "m", key: "planted-key-0123" }, who.token);
+    expect(key.status, JSON.stringify(key.json)).toBe(200);
+    return feedPath;
+  }
+
+  async function reachRows(userId: string): Promise<{ inbox: number; key: number }> {
+    const [[inbox]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_inboxes WHERE user_id = ?", [userId]); // module-review-ok: reading back the rows the route ended
+    const [[key]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM member_llm_keys WHERE user_id = ?", [userId]); // module-review-ok: reading back the rows the route ended
+    return { inbox: Number(inbox.n), key: Number(key.n) };
+  }
+
+  /** Soft, so one run names every part that outlived it. */
+  async function expectReachEnded(userId: string, feedPath: string, when: string): Promise<void> {
+    expect.soft((await call("GET", feedPath, undefined, "")).status, `the private calendar address outlived ${when}`).toBe(404);
+    const rows = await reachRows(userId);
+    expect.soft(rows.inbox, `the agent inbox outlived ${when}`).toBe(0);
+    expect.soft(rows.key, `the model key outlived ${when}`).toBe(0);
+  }
+
+  async function expectReachStands(userId: string, feedPath: string, when: string): Promise<void> {
+    expect((await call("GET", feedPath, undefined, "")).status, `another member's calendar address died with ${when}`).toBe(200);
+    expect(await reachRows(userId), `another member's inbox or key died with ${when}`).toEqual({ inbox: 1, key: 1 });
+  }
+
+  /**
+   * A delegation the stolen session gave and the delegate accepted
+   * (adversarial round 3, finding 8). Written straight to the table because
+   * the governance routes are a module this suite does not open; what is
+   * under test is that both doors end it and tell the member.
+   */
+  async function giveVote(delegatorId: string, delegateId: string): Promise<void> {
+    await pool.query("INSERT INTO delegations (delegator_id, delegate_id, created_at, revoked_at, accepted_at) VALUES (?, ?, NOW(), NULL, NOW())", [delegatorId, delegateId]); // module-review-ok: seeding the scratch schema this suite provisioned
+  }
+
+  async function voteGiven(delegatorId: string): Promise<{ live: boolean; told: number }> {
+    const [[row]] = await pool.query<any[]>("SELECT revoked_at FROM delegations WHERE delegator_id = ?", [delegatorId]); // module-review-ok: reading back the row the route ended
+    const [[told]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND dedupe_key LIKE 'delegation-ended-by-reset:%'", [delegatorId]); // module-review-ok: reading back the notice the route wrote
+    return { live: !!row && row.revoked_at === null, told: Number(told.n) };
+  }
+
+  it("setting a new password through the real link ends every token the member made, and theirs only", async () => {
+    const eli = await register("Eli Moss", "agent-eli");
+    const laptop = await mintFor(eli, "eli laptop");
+    const phone = await mintFor(eli, "eli phone");
+    const eliFeed = await plantReach(eli);
+    const gil = await register("Gil Ortiz", "agent-gil");
+    const bystander = await mintFor(gil, "gil laptop");
+    const gilFeed = await plantReach(gil);
+    await giveVote(eli.id, gil.id);
+    await giveVote(gil.id, eli.id);
+
+    const { makeSetPasswordToken } = await import("./lib/memberTokens");
+    const [[row]] = await pool.query<any[]>("SELECT token_version FROM users WHERE id = ?", [eli.id]); // module-review-ok: the version the reset letter binds its link to
+    const link = makeSetPasswordToken(SIGNING, eli.id, Number(row.token_version));
+    const reset = await call("POST", "/api/auth/set-password", { token: link, password: "AgentReset456!" }, "");
+    expect(reset.status, JSON.stringify(reset.json)).toBe(200);
+    expect(await voteGiven(eli.id), "the vote the member handed on outlived the password reset, or they were not told once").toEqual({ live: false, told: 1 });
+    expect(await voteGiven(gil.id), "the vote another member handed TO them was ended").toEqual({ live: true, told: 0 });
+
+    await expectRevoked([laptop, phone], "the password reset");
+    await expectAudited(eli.id, 2);
+    await expectReachEnded(eli.id, eliFeed, "the password reset");
+    expect((await call("GET", "/api/agent/inbox", undefined, String(reset.json.token))).json.inbox, "the panel still shows an inbox").toBeNull();
+    expect((await call("GET", "/api/agent/key", undefined, String(reset.json.token))).json.key, "the panel still shows a key").toBeNull();
+    expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this reset").toBe(200);
+    await expectReachStands(gil.id, gilFeed, "this reset");
+
+    // The member keeps their agent: the session the reset hands back mints a fresh token, and it answers.
+    // The mint asks for the tokenVersion this session was signed at, which the reset moved (adversarial round 4).
+    const after = await call("POST", "/api/agent/tokens", { name: "eli after", scopes: SCOPES }, String(reset.json.token));
+    expect(after.status, JSON.stringify(after.json)).toBe(200);
+    // And a private calendar address, made the same way, answers.
+    const feedAfter = await call("POST", "/api/events/feed/token", {}, String(reset.json.token));
+    expect(feedAfter.status, JSON.stringify(feedAfter.json)).toBe(200);
+    const feedAfterUrl = new URL(String(feedAfter.json.url));
+    expect((await call("GET", `${feedAfterUrl.pathname}${feedAfterUrl.search}`, undefined, "")).status, "the address made after the reset does not answer").toBe(200);
+    expect((await call("GET", "/api/agent/v1/me", undefined, String(after.json.token))).status).toBe(200);
+    // And sets an inbox and a key again. Both writes ask for the tokenVersion
+    // this session was signed at, which the reset moved (adversarial round 2, finding 15).
+    const inboxAfter = await call("PUT", "/api/agent/inbox", { url: "https://192.0.2.10/agent" }, String(reset.json.token));
+    expect(inboxAfter.status, JSON.stringify(inboxAfter.json)).toBe(200);
+    const keyAfter = await call("PUT", "/api/agent/key", { provider: "anthropic", key: "sk-ant-after-0000" }, String(reset.json.token));
+    expect(keyAfter.status, JSON.stringify(keyAfter.json)).toBe(200);
+    expect(await reachRows(eli.id)).toEqual({ inbox: 1, key: 1 });
+  });
+
+  it("an admin's revoke sessions ends every token the member made, and says how many", async () => {
+    const fay = await register("Fay Lund", "agent-fay");
+    const laptop = await mintFor(fay, "fay laptop");
+    const phone = await mintFor(fay, "fay phone");
+    const fayFeed = await plantReach(fay);
+    const hal = await register("Hal Brook", "agent-hal");
+    const bystander = await mintFor(hal, "hal laptop");
+    const halFeed = await plantReach(hal);
+    await giveVote(fay.id, hal.id);
+
+    const revoke = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
+    expect(revoke.status, JSON.stringify(revoke.json)).toBe(200);
+    expect(await voteGiven(fay.id), "the vote the member handed on outlived the admin's revoke, or they were not told once").toEqual({ live: false, told: 1 });
+
+    await expectRevoked([laptop, phone], "the admin's revoke sessions");
+    expect(revoke.json.agentTokensRevoked).toBe(2);
+    await expectAudited(fay.id, 2);
+    await expectReachEnded(fay.id, fayFeed, "the admin's revoke sessions");
+    expect(revoke.json.agentReachEnded, "the answer says what else ended").toEqual({ agentTokens: 2, feeds: 1, inbox: true, key: true, invites: 0, circleFeed: 0, delegation: true });
+    expect((await call("GET", "/api/profile", undefined, fay.token)).status, "the session itself still dies").toBe(401);
+    expect((await call("GET", "/api/agent/v1/me", undefined, bystander)).status, "another member's token died with this revoke").toBe(200);
+    await expectReachStands(hal.id, halFeed, "this revoke");
+
+    // A second press finds nothing left to end, and writes no second audit line.
+    const again = await call("POST", `/api/admin/users/${fay.id}/revoke-sessions`, {});
+    expect(again.json.agentTokensRevoked).toBe(0);
+    expect(again.json.agentReachEnded.delegation, "a second press ended a delegation again").toBe(false);
+    expect((await voteGiven(fay.id)).told, "a second press told the member again").toBe(1);
+    await expectAudited(fay.id, 2);
+  });
+
+  /**
+   * A RESET THAT FAILS PART WAY LEAVES THE LINK WORKING (adversarial round 1,
+   * finding 28). The reset used to change the password, which spends the link,
+   * and only then end the agent. When that end threw, the member was told
+   * "Try again", the retry was refused as a used link, and every token stood.
+   * Renaming the token table for one request makes the end throw the way a
+   * dropped connection would, on this suite's own scratch schema.
+   */
+  it("a reset whose agent end fails changes nothing, and the same link finishes it", async () => {
+    const kit = await register("Kit Vale", "agent-kit");
+    const laptop = await mintFor(kit, "kit laptop");
+    const { makeSetPasswordToken } = await import("./lib/memberTokens");
+    const [[row]] = await pool.query<any[]>("SELECT token_version FROM users WHERE id = ?", [kit.id]); // module-review-ok: the version the reset letter binds its link to
+    const link = makeSetPasswordToken(SIGNING, kit.id, Number(row.token_version));
+
+    await pool.query("RENAME TABLE agent_tokens TO agent_tokens_away"); // module-review-ok: breaking the token table on this suite's scratch schema for one request
+    let failed: Awaited<ReturnType<typeof call>>;
+    try {
+      failed = await call("POST", "/api/auth/set-password", { token: link, password: "AgentReset789!" }, "");
+    } finally {
+      await pool.query("RENAME TABLE agent_tokens_away TO agent_tokens"); // module-review-ok: putting the table back
+    }
+    expect(failed.status, "the reset must fail while the agent cannot be ended").toBe(500);
+    expect.soft((await call("GET", "/api/profile", undefined, kit.token)).status, "the credential changed although ending the agent failed").toBe(200);
+
+    const retry = await call("POST", "/api/auth/set-password", { token: link, password: "AgentReset789!" }, "");
+    expect(retry.status, `the same link could not finish the reset: ${JSON.stringify(retry.json)}`).toBe(200);
+    await expectRevoked([laptop], "a reset finished on the second try");
+    expect((await call("GET", "/api/profile", undefined, kit.token)).status, "the old session outlived the finished reset").toBe(401);
+  });
+
+  /**
+   * An admin's revoke is the lever for a compromise, so the sessions end FIRST
+   * and never wait on the agent. A failure ending the rest answers 500, which
+   * the admin reads as "Revoke failed", and a second press finishes it.
+   */
+  it("an admin's revoke whose agent end fails still ends the sessions, and a second press finishes it", async () => {
+    const lia = await register("Lia Shore", "agent-lia");
+    const laptop = await mintFor(lia, "lia laptop");
+
+    await pool.query("RENAME TABLE agent_tokens TO agent_tokens_away"); // module-review-ok: breaking the token table on this suite's scratch schema for one request
+    let failed: Awaited<ReturnType<typeof call>>;
+    try {
+      failed = await call("POST", `/api/admin/users/${lia.id}/revoke-sessions`, {});
+    } finally {
+      await pool.query("RENAME TABLE agent_tokens_away TO agent_tokens"); // module-review-ok: putting the table back
+    }
+    expect(failed.status, "a revoke that could not end the agent must say so").toBe(500);
+    expect((await call("GET", "/api/profile", undefined, lia.token)).status, "the sessions outlived a revoke whose agent end failed").toBe(401);
+    expect((await call("GET", "/api/agent/v1/me", undefined, laptop)).status, "the token was ended although its table was away").toBe(200);
+
+    const again = await call("POST", `/api/admin/users/${lia.id}/revoke-sessions`, {});
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json.agentTokensRevoked).toBe(1);
+    await expectRevoked([laptop], "the second press");
+  });
+});
+
+/**
+ * THE TWO MINTS ASK FOR THE SESSION'S OWN VERSION, OVER HTTP (adversarial
+ * round 4, carried). `POST /api/agent/tokens` and `POST /api/events/feed/token`
+ * pass the tokenVersion the request's session was checked at, and the mint
+ * writes only while the member's row still carries it (`whileSessionHolds`).
+ * The database tests in server/lib/agentTokens.reset.test.ts pin the mint
+ * function; these pin that each route hands it the real version.
+ *
+ * The bump has to land AFTER the session check, or the session check refuses
+ * it first and the mint's own question is never asked. So this suite holds
+ * the member's row FOR UPDATE, sends the request (the session check is a
+ * plain read and passes), waits until the mint stands behind that lock, and
+ * then bumps the version the way a new password does and lets go. The mint
+ * then reads a version its session no longer has and must refuse 401 with
+ * nothing written. A route that handed the mint any other number than the
+ * session's own would make the token or the address here.
+ */
+describe.skipIf(!DB_CONFIGURED)("the two mints refuse a session a new password ended after its check", () => {
+  const SCOPES = ["me.read"];
+
+  async function liveTokens(userId: string): Promise<number> {
+    const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM agent_tokens WHERE user_id = ? AND revoked_at IS NULL", [userId]); // module-review-ok: reading back what the route wrote
+    return Number(row.n);
+  }
+  async function liveFeeds(userId: string): Promise<number> {
+    const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM calendar_feed_tokens WHERE user_id = ? AND revoked_at IS NULL", [userId]); // module-review-ok: reading back what the route wrote
+    return Number(row.n);
+  }
+
+  /** Send `send` while the member's row is held, bump the version behind the waiting mint, and return its answer. */
+  async function bumpedBehindTheMint(userId: string, send: () => Promise<{ status: number; json: any }>) {
+    const conn = await pool.getConnection();
+    let answered = false;
+    try {
+      await conn.beginTransaction();
+      await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [userId]); // module-review-ok: holding the member's row on this suite's scratch schema, as a reset's bump would
+      const sent = send().then((r) => { answered = true; return r; });
+      await untilALockIsAwaited(pool);
+      // A lock wait on this schema can be a stale row on a local MariaDB, so
+      // also give a mint nothing holds back time to answer, and fail by name if it did.
+      await new Promise((r) => setTimeout(r, 400));
+      expect(answered, "the mint answered without waiting for the member's row, so the bump below is not after its check").toBe(false);
+      await conn.query("UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = ?", [userId]); // module-review-ok: the bump a new password makes, on this suite's scratch schema
+      await conn.commit();
+      return await sent;
+    } catch (err) {
+      await conn.rollback().catch(() => undefined);
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  it("POST /api/agent/tokens: a session the bump ended after its check gets 401 and no token", async () => {
+    const ivo = await register("Ivo Marsh", "agent-ivo");
+    expect(await liveTokens(ivo.id)).toBe(0);
+
+    const out = await bumpedBehindTheMint(ivo.id, () => call("POST", "/api/agent/tokens", { name: "ivo race", scopes: SCOPES }, ivo.token));
+
+    expect(out.status, `the mint wrote for a session the bump ended: ${JSON.stringify(out.json)}`).toBe(401);
+    expect(out.json?.token, "a refused mint carried a token").toBeUndefined();
+    expect(await liveTokens(ivo.id), "a token outlived the bump that ended its session").toBe(0);
+    expect((await call("GET", "/api/profile", undefined, ivo.token)).status, "the old session itself still answers").toBe(401);
+  });
+
+  it("POST /api/events/feed/token: a session the bump ended after its check gets 401 and no address", async () => {
+    const una = await register("Una Fell", "agent-una");
+    expect(await liveFeeds(una.id)).toBe(0);
+
+    const out = await bumpedBehindTheMint(una.id, () => call("POST", "/api/events/feed/token", {}, una.token));
+
+    expect(out.status, `the mint wrote for a session the bump ended: ${JSON.stringify(out.json)}`).toBe(401);
+    expect(out.json?.url, "a refused mint carried an address").toBeUndefined();
+    expect(await liveFeeds(una.id), "a private calendar address outlived the bump that ended its session").toBe(0);
   });
 });

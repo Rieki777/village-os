@@ -1,0 +1,232 @@
+{
+  "hero": {
+    "name": "Good Neighbor Criteria",
+    "intro": "This is not a legal document or a list of rules. This is a heartfelt covenant, a living agreement that expresses the values we embody together and the commitment we make to one another as neighbors.",
+    "quote": "We are called to be architects of the future, not its victims.",
+    "eyebrow": "Our Living Covenant",
+    "quoteBy": "Buckminster Fuller"
+  },
+  "values": {
+    "items": [
+      {
+        "body": "We don't just sustain, we heal. This community is built on the belief that humans can actively restore the land, water systems, and ecosystems we depend on. We leave things better than we found them.",
+        "title": "Regenerative Living"
+      },
+      {
+        "body": "We practice radical responsibility alongside deep interdependence. That means you show up for yourself and for the whole. We know that a single person's wellbeing affects everyone's.",
+        "title": "Community Care"
+      },
+      {
+        "body": "Your life here has meaning. You're not just living in a nice place, you're aligning your unique gifts with what {village} needs. This is the heart of the {village} R-Ikigai.",
+        "title": "Regenerative Purpose"
+      }
+    ],
+    "heading": "What {village} Values, and Why It Matters"
+  },
+  "closing": {
+    "body": "The {good-neighbor} exist because we believe something rare is possible here: a community where freedom and belonging, individual purpose and collective thriving, human flourishing and ecological regeneration all reinforce each other.",
+    "body2": "If that resonates, and you're ready to live by these criteria and give this place your best, the belonging you get back here is real. Welcome home.",
+    "heading": "A Final Word",
+    "commitLabel": "Sign the {commitment}",
+    "eventsLabel": "Attend a Community Call"
+  },
+  "process": {
+    "intro": "These criteria are not a checklist to complete in isolation. They're a conversation starter. Here's how we assess fit:",
+    "steps": [
+      {
+        "body": "You learn about {village} through events, tours, and conversations. You ask hard questions.",
+        "title": "Initial Exploration"
+      },
+      {
+        "body": "You attend potlucks, workshops, and gatherings. You get to know people. They get to know you.",
+        "title": "Community Engagement"
+      },
+      {
+        "body": "If you're serious about residency, you have structured conversations with the Resident Circle about your values, your history, your commitment, and your concerns.",
+        "title": "Deep Conversation"
+      },
+      {
+        "body": "You authorize a standard background check and reference check.",
+        "title": "Background Check"
+      },
+      {
+        "body": "A period of participation before full commitment, so both you and the community can assess genuine fit.",
+        "title": "Observation Period"
+      },
+      {
+        "body": "Current residents and the Resident Circle give their consent. The bar is genuine consent with no reasoned objections, not unanimous agreement.",
+        "title": "Resident Consent"
+      },
+      {
+        "body": "If approved, we celebrate your commitment with the whole community. Welcome home.",
+        "title": "Celebration"
+      }
+    ],
+    "heading": "The Conversation, Not Just the Criteria"
+  },
+  "criteria": {
+    "intro": "Think of these as the operating system for our shared life. They describe who we are, how we show up for each other, and what makes {village} work as a living organism.",
+    "items": [
+      {
+        "note": "",
+        "title": "Core Values Alignment",
+        "subtitle": "You Live the Vision",
+        "practice1": "You engage with the community intentionally: show up to potlucks, participate in circles, take your voice seriously.",
+        "practice2": "You're curious about how things work here: our governance, our economy, our values.",
+        "practice3": "You accept that community life sometimes requires conversations you'd rather skip. We do it anyway, with care.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You understand and embrace {village}'s vision of regenerative living and community stewardship. You're genuinely interested in being part of a living experiment, not just finding a nice place to live."
+      },
+      {
+        "note": "What disqualifies someone: Unwillingness to engage in honest conversation or a pattern of avoiding conflict through manipulation, blame, or withdrawal.",
+        "title": "Communication & Conflict Resolution",
+        "subtitle": "You Practice Authentic Relating",
+        "practice1": "You attend our community training in NVC or conflict resolution (required for residents).",
+        "practice2": "When something's bothering you, you address it directly, not through gossip or silence.",
+        "practice3": "You're willing to apologize, make repairs, and evolve.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You're willing to learn and practice Nonviolent Communication (NVC) or similar practices for authentic relating. You see conflict as a doorway to deeper connection, not a threat."
+      },
+      {
+        "note": "This is not about wealth. {village} welcomes teachers, artists, young families, retirees, and remote workers. What matters is alignment and honesty.",
+        "title": "Financial Responsibility",
+        "subtitle": "You Can Meet Your Obligations",
+        "practice1": "You've done the math on housing, land leases, HOA fees, village dues, and shared costs.",
+        "practice2": "You have a clear income source or savings to cover your commitment for at least 3-5 years.",
+        "practice3": "If circumstances change, you communicate early. You don't disappear or default.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You have the financial capacity to sustain your commitment to {village}. You're honest about your resources and realistic about what you can afford."
+      },
+      {
+        "note": "This is not about perfection. We all have seasons of high and lower capacity. What matters is consistent engagement and honesty.",
+        "title": "Contribution to Community Life",
+        "subtitle": "You Show Up and Participate",
+        "practice1": "You identify your {village} R-Ikigai: the intersection of what you love, what you're good at, and what {village} needs.",
+        "practice2": "You propose contributions and take on quests and roles.",
+        "practice3": "You participate in circles aligned with your interests and gifts.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You give your time, energy, or skills to the community in some way. You're not just a consumer of community benefits, you're a co-creator."
+      },
+      {
+        "note": "",
+        "title": "Respect for Land, Nature, and All Beings",
+        "subtitle": "You Are a Steward",
+        "practice1": "You follow our water conservation guidelines and waste reduction practices.",
+        "practice2": "You participate in land stewardship (gardening, trail maintenance, reforestation) or support those who do.",
+        "practice3": "You treat shared spaces with care, as if they're your own responsibility.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You understand that {village}'s land is sacred and alive. You practice stewardship: protecting water, supporting regeneration, leaving no trace where possible."
+      },
+      {
+        "note": "",
+        "title": "Cultural Openness & Intergenerational Respect",
+        "subtitle": "You Value Diversity",
+        "practice1": "You engage respectfully with our local neighbors and team members.",
+        "practice2": "You support the goal of 30%+ local representation in leadership and decision-making.",
+        "practice3": "You honor elders, welcome children, and understand that multi-generational living is central to our vision.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You genuinely value diversity and different ways of being. You're open to learning from people of different cultures, ages, backgrounds, and perspectives."
+      },
+      {
+        "note": "A background check is not automatically disqualifying. Many people have complicated histories. What matters is honesty, accountability, and demonstrated commitment to change.",
+        "title": "Background Check Acknowledgment",
+        "subtitle": "Safety and Trust for Everyone",
+        "practice1": "You'll provide identifying information and authorize a background check.",
+        "practice2": "Results are reviewed confidentially by the Resident Circle.",
+        "practice3": "A background check is one input among many in our evaluation of cultural fit.",
+        "practice4": "",
+        "practice5": "",
+        "description": "You're willing to undergo a standard background check as part of our resident vetting process. This is about safety and trust for the whole community."
+      },
+      {
+        "note": "This applies only to families with children. Non-parents support children's wellbeing in other ways.",
+        "title": "Children's Play Day Participation",
+        "subtitle": "For Families",
+        "practice1": "You attend one Children's Play Day as part of your onboarding, a chance for the village to meet your family.",
+        "practice2": "You practice village parenting, understanding that raising children is a collective responsibility.",
+        "practice3": "You support the school pilot and educational initiatives.",
+        "practice4": "",
+        "practice5": "",
+        "description": "If you're a parent or guardian, you understand that children are central to {village}'s vision. You participate in at least one Children's Play Day as part of the joining process."
+      }
+    ],
+    "heading": "The {good-neighbor}"
+  },
+  "commitments": {
+    "intro": "This covenant is two-way. If you commit to the {good-neighbor}, {village} commits to you:",
+    "items": [
+      {
+        "text": "Create a genuinely supportive and thriving community"
+      },
+      {
+        "text": "Practice transparent governance and decision-making"
+      },
+      {
+        "text": "Share financial benefits from commercial enterprises with all residents"
+      },
+      {
+        "text": "Protect your investment and provide stability (30-99 year land leases with renewal options)"
+      },
+      {
+        "text": "Honor your voice and participation in decisions that affect you"
+      },
+      {
+        "text": "Support your growth, learning, and evolution"
+      },
+      {
+        "text": "Celebrate your contributions and make your belonging real"
+      },
+      {
+        "text": "Handle conflict with care and commitment to resolution"
+      },
+      {
+        "text": "Protect the land and ecological integrity for generations"
+      }
+    ],
+    "heading": "What {village} Commits to You"
+  },
+  "dealbreakers": {
+    "intro": "We want to be honest about this. Some behaviors or commitments are incompatible with {village}'s vision.",
+    "groups": [
+      {
+        "item1": "History of violence, sexual abuse, or serious harm to others (except with demonstrated accountability and healing over substantial time)",
+        "item2": "Current patterns of manipulation, coercion, or abuse",
+        "item3": "Unwillingness to engage in conflict resolution or take responsibility for harm",
+        "item4": "",
+        "item5": "",
+        "category": "Active Harm or Abuse"
+      },
+      {
+        "item1": "Viewing the community purely as a resource to exploit",
+        "item2": "Refusal to contribute or participate in shared governance",
+        "item3": "Consistent dishonesty or fraud",
+        "item4": "",
+        "item5": "",
+        "category": "Fundamentally Extractive Mindset"
+      },
+      {
+        "item1": "Deep opposition to regenerative living practices",
+        "item2": "Unwillingness to respect the land or honor our environmental commitments",
+        "item3": "Active resistance to cultural diversity or multi-generational inclusion",
+        "item4": "",
+        "item5": "",
+        "category": "Misalignment on Core Values"
+      },
+      {
+        "item1": "Insistence on top-down authority or individual control",
+        "item2": "Refusal to practice authentic communication or engage in conflict resolution",
+        "item3": "Inability or unwillingness to honor consent-based decision-making",
+        "item4": "",
+        "item5": "",
+        "category": "Incompatibility with Our Governance"
+      }
+    ],
+    "heading": "Clear Dealbreakers"
+  }
+}

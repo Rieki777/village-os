@@ -46,6 +46,8 @@ export interface NextActionFacts {
   joining: Joining;
   claims: ReadonlyArray<{ status?: unknown }>;
   budget: { remaining: number; total: number };
+  /** True only while the gene-keys module is on and this member has saved no lines. Absent means "not asked". */
+  geneKeysMissing?: boolean;
 }
 
 /** True when this rule is the member's step, given their facts. */
@@ -55,10 +57,26 @@ function applies(when: NextActionRule["when"], f: NextActionFacts): boolean {
     case "membership-waiting": return f.joining === "waiting";
     case "no-membership": return f.joining === "unsigned";
     case "no-quest-claimed": return f.claims.length === 0;
+    case "no-gene-keys": return f.geneKeysMissing === true;
     case "quest-in-progress": return f.claims.some((c) => c.status === "claimed" || c.status === "submitted");
     case "gratitude-unspent": return f.budget.remaining > 0 && f.budget.total > 0;
     case "always": return true;
   }
+}
+
+/**
+ * BEFORE LAUNCH, A FOUNDER'S NEXT STEP IS THE VILLAGE ITSELF. The member rules
+ * above told a founder of a village with no members yet to do the training,
+ * which is a step for someone joining, not for someone still setting the place
+ * up (the founder-path pass of 2026-11-01). While founder power stands (the
+ * village has not voted to start its Game), a founder or admin is sent to the
+ * setup game, which lists everything the village still needs; after launch
+ * they get the member rules like everyone else.
+ */
+export const FOUNDER_SETUP_STEP = { id: "founder-setup", label: "Set up your village", href: "/setup-game" } as const;
+
+export function founderStepFor(role: unknown, founderPowerStands: boolean): typeof FOUNDER_SETUP_STEP | null {
+  return founderPowerStands && (role === "founder" || role === "admin") ? FOUNDER_SETUP_STEP : null;
 }
 
 /** The first rule that applies, in order; the last rule when none does. */

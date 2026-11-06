@@ -2,18 +2,65 @@
 # Keep this fast and boring: the same three commands every session runs locally
 # (MODULES_MASTER_PLAN.md Part 2.3), plus an advisory audit and a bundle report.
 #
-# Order matters: build BEFORE test — server/loop.e2e.test.ts boots dist/index.js.
+# Three jobs, since 2026-10-21 (Rye: "split the tests"):
+#
+#   verify          install, both typechecks, every guard, the build, the budgets
+#   test (i/N)      the vitest suite in N shards, each against its own MySQL
+#   tests-ran-once  reads every shard's report back: each file once, all passed
+#
+# Each test shard builds before it tests: the e2e suites boot dist/index.js.
 name: ci
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "wt/*-integration*"]
   pull_request:
 
-# A branch push with an open PR fires this workflow TWICE: once for the push
-# (the branch as it stands) and once for the pull_request (the branch already
-# merged with main). Both are worth having and they test different trees, so
-# neither trigger is removed. What IS waste is a superseded run: push twice in
+# WHICH BRANCHES GET A PUSH RUN, and why most do not (Rye, 2026-11-01:
+# "Yes, free fix").
+#
+# A branch push with an open PR used to fire this workflow TWICE, once for the
+# push (the branch as it stands) and once for the pull_request (the branch
+# already merged with main). On the free plan that is 20 concurrent jobs against
+# a fleet of lanes: at 04:35Z on 2026-11-01 about 50 runs were queued behind 5
+# running, with each run taking 16 to 60 minutes. Half of that queue was testing
+# a tree nobody lands.
+#
+# So `push` is now limited to `main` and integration branches
+# (`wt/*-integration*`, which may have no pull request to run on). A lane PR
+# branch, and a batch branch, gets the pull_request run alone, which is the
+# more informative of the two anyway because it tests the branch ALREADY
+# MERGED with main, which is nearer to what lands.
+#
+# BATCHES TOO, since 2026-11-01. A batch is composed on current main, so
+# main is usually already inside it, and then GitHub's merge ref has exactly
+# the batch head's tree: the push run and the pull_request run tested the
+# same bytes. Measured on batches 73, 74, neutral and 76, all four. When main
+# HAS moved, the pull_request run tests batch plus main, which is what
+# `gh pr merge --merge` lands, and the push run tests a tree that never lands.
+# The three base-reading gates (migration numbers, migration compatibility,
+# economics narrative) compare with main on both events for a PR based on
+# main. What the push run alone gave: a second roll of the dice on a flake,
+# which DOUBLED the chance a flake blocked a batch (batch 75 flaked on both),
+# and a run for a batch whose PR conflicts, which cannot land anyway. It cost
+# a full cycle, about 48 runner-minutes, per batch push. main still gets its
+# push run after every landing.
+#
+# WHAT THIS MOVED, for whoever reads the merge gate next. A COMPONENT is ready
+# when its pull_request run is green at its frozen SHA, and so is a BATCH: its
+# pull_request run, every job, at the frozen head, is the gate standing between
+# a tree and production. Open the batch's PR when you push it, because until
+# then it has no run at all. Two consequences worth knowing:
+#
+#   - A CONFLICTING pull request gets no pull_request run, so a conflicted lane
+#     branch now has NO run at all rather than a push run. Its lane has to merge
+#     main before anybody can verify it, even though the generated-doc conflict
+#     every batch landing causes is the integrator's to resolve, never a lane's.
+#   - A lane can no longer read a dist-budget number off its own branch alone.
+#     The pull_request number includes what has landed since it branched, which
+#     is the number that matters at landing anyway.
+#
+# What IS waste is a superseded run: push twice in
 # a minute and the first job keeps a runner for its full length while its
 # result can no longer matter. The group keys on the event name as well as the
 # ref so a push run never cancels the merge-with-main run that is the more
@@ -38,6 +85,10 @@ defaults:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # 20, cut from 40 on 2026-10-21 when the suite moved out to the `test` jobs below.
+    # Everything left here took 4m40s on b878eaf (the guard self-tests 2m21s of it,
+    # the build 13s), so 20 is four times the job and still cancels a hung step long
+    # before a runner is wasted. The history of the old limit, for whoever reads it:
     # 25, raised from 15 on 2026-09-15: verify on 9f560fc took 14m43s (Test 10m38s), and
     # on 1364bdb it took 15m05s and was cancelled mid-Test by this limit, not by a failure.
     # The suite grows with every lane; cancelled reads like a red, so keep real headroom.
@@ -45,9 +96,10 @@ jobs:
     # 22m44s and 22m16s on bebd522, against 15m27s on b54035d before it, so the suite sat
     # 2.5 minutes under the limit. During that day's GitHub Actions outage, f4aa5b2 and
     # f62f0ac ran all 57 steps green in about 27 minutes and were reported cancelled.
-    # release.yml publishes only a commit this job passed, so one slow runner at the
-    # limit refuses a release.
-    timeout-minutes: 40
+    # release.yml publishes only a commit ci passed, so one slow runner at the limit
+    # refuses a release. On 2026-10-21 a run was cancelled at 40m22s on a tree whose
+    # twin passed in 30m34s, with the suite 85% of the job, and the suite was split.
+    timeout-minutes: 20
     services:
       # S5: the DB-backed suites (server/db/*.test.ts) run against a real MySQL.
       # The harness provisions its own scratch schema and applies every
@@ -185,6 +237,31 @@ jobs:
         # exits 1 and says so rather than printing the same line as "found
         # nothing".
         run: node scripts/check-migration-numbers.mjs
+
+      - name: Migration SQL calls only functions production has run
+        # WHY THIS IS A SEPARATE STEP FROM THE TWO BELOW, and what it cost to
+        # learn. On 2026-11-01 batch 74 merged with 0298, which computed a
+        # derived id in SQL with SHA1(). Every gate in this workflow was green,
+        # the compat gate included, because that gate applies migrations to the
+        # mysql:8 service container above and mysql:8 has SHA1 built in. The
+        # production engine does not. The deploy failed after 15.5 minutes with
+        #
+        #     FAIL: 0298_a_season_goal_keeps_its_name.sql
+        #       -> FUNCTION railway.SHA1 does not exist (statement 7 of 8)
+        #
+        # and left the instance with six of eight statements applied and no
+        # version of the app that would boot. So RUNNING a migration on CI's
+        # database proves it runs on CI's database, and nothing more. This step
+        # is the text rule that closes the gap: an ALLOW-LIST of every function
+        # name a migration already applied on production carries, which fails
+        # closed on a new one. A deny-list could not have caught SHA1, because
+        # nobody had written SHA1 down.
+        #
+        # Reads drizzle/ only. No node_modules, no database, well under a
+        # second. Its own self-test runs in the self-tests step below and
+        # includes the control: 0298's original statement 7 goes red with SHA1
+        # named and the Railway log line quoted.
+        run: node scripts/check-migration-sql.mjs
 
       - name: Migration compatibility (expand, never contract)
         # The gate above asks whether a migration can be TOLD APART from
@@ -704,6 +781,15 @@ jobs:
         # are cheap to reconcile. `--list` prints the surface.
         run: node scripts/check-economics-narrative.mjs
 
+      - name: Typed payout guard
+        # No page states a payout figure it did not read from data. The
+        # Co-Creators Guide typed "40-300" Gratitude for quests and
+        # "200-500/month" for roles, and nothing paid either (Rye, 2026-10-21).
+        # Since 0265 every quest and role carries its own value and token
+        # amounts, and cards read them through `pay`. Its self-test runs with
+        # the others in `run-self-tests.mjs`.
+        run: node scripts/check-typed-payouts.mjs
+
       - name: Token doc, self-test
         # The generator's own fixture suite: the UPDATE sweep it exists to
         # catch, the statement shapes it must refuse rather than skip, and the
@@ -825,38 +911,41 @@ jobs:
         # Before the build, with the other guards: it reads source files.
         run: node scripts/check-boot-imports.mjs
 
+      - name: Test pools pin their session zone
+        # A REPO-WIDE RATCHET THAT ONLY A TEST ENFORCED, until now.
+        #
+        # server/testPoolRatchet.test.ts spawns this script, so the only thing
+        # running it in CI was whichever of the four shards that file landed in.
+        # Every gate list built from the workflows therefore missed it, INCLUDING
+        # scripts/module-facts.mjs, which CLAUDE.md calls authoritative:
+        #
+        #   node scripts/module-facts.mjs | grep -c test-pool   ->  0
+        #
+        # On 2026-10-22 a local runner built from this file reported 43 of 43
+        # gates PASS on the very tree that took #532's push run red. Naming the
+        # script here costs a second and makes it visible to every such list.
+        #
+        # The baseline is 0 as of the sweep that pinned all 187: a new
+        # mysql.createPool in a test file is now a refusal, and the fix is
+        # testPool(db, { ... }) from server/db/testDb.ts, which sets the same
+        # timezone AND pins the session zone. Local MySQL and this runner both
+        # run UTC, so neither can ever show you the bug you are committing.
+        #
+        # Dependency-free, no database.
+        run: node scripts/check-test-pool-timezone.mjs
+
       - name: Build
         id: build
-        # Runs even behind a failed guard, for the same reason the suite does,
-        # and because the suite is useless without it: the e2e reach tests read
-        # dist/index.js directly and fail with "dist/index.js is missing" if it
-        # was never produced. Measured, not assumed: with only the suite made
-        # conditional, a deliberately failed doc guard gave Build: skipped and
-        # Test: failure, and that failure named the missing bundle rather than
-        # anything a reader could act on.
+        # Runs even behind a failed guard, so a guard failure and a build
+        # failure are reported as the two different facts they are. The suite
+        # no longer runs here: each `test (i/N)` job below builds its own
+        # bundle, so it never waits on this job or depends on its guards.
         if: ${{ !cancelled() }}
         run: pnpm build
 
-      - name: Test
-        # RUNS EVEN WHEN AN EARLIER GUARD FAILED. This job is 35 sequential
-        # steps and the suite is the 33rd, so without this one red guard means
-        # the tests never ran and the build reports a single red step either
-        # way. CI was red for five commits that way, and for those five nothing
-        # exercised the code at all. A guard failure and a test failure are
-        # different facts and the build should report both.
-        #
-        # `!cancelled()` rather than `always()`, deliberately. This workflow
-        # sets cancel-in-progress on a group keyed by ref, and with the current
-        # merge rate runs are cancelled constantly: three of mine were
-        # cancelled inside 90 seconds one afternoon. `always()` would keep a
-        # ten-minute suite running on every one of them. `!cancelled()` keeps
-        # the point of the change, which is that a failing guard no longer
-        # hides the suite, without paying for runs nobody is waiting on.
-        # Gated on the build SUCCEEDING, not merely on not-cancelled. A suite
-        # run against a bundle that was never built reports a missing file and
-        # buries the real failure, which is worse than not running at all.
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: pnpm test
+      # (The suite ran here as one `Test` step until 2026-10-21, 25.8 of this
+      # job's 30.5 minutes. It now runs in the `test (i/N)` jobs below, and
+      # `tests-ran-once` proves the shards between them ran every file.)
 
       - name: Bundle budget
         # A report nobody reads is not a guard. The plan called for a threshold
@@ -897,9 +986,23 @@ jobs:
         # a lane can run the identical measurement before pushing. The budget
         # numbers still live here, and the script reads them from this file
         # when the environment does not supply them, so there is one authority.
+        #
+        # MAX_BOOT_JS_KB is every script index.html loads, in real bytes, and
+        # it is the number a visitor pays before the first page renders. Main
+        # JS reads one file, so it fell from 620 to 362 KB on 2026-10-31 when
+        # the small-module groups in vite.config.ts moved react and the shared
+        # boot modules into their own boot chunks, while the first page loaded
+        # the same 731 KB. So main JS came DOWN to 400 at the same time, and
+        # this ceiling sits at that day's figure plus a little.
         env:
-          MAX_MAIN_JS_KB: 700
-          MAX_TOTAL_DIST_KB: 6600
+          MAX_MAIN_JS_KB: 400
+          MAX_BOOT_JS_KB: 750
+          # 7000 since 2026-11-02 (decision by Rye; was 6600). The total is
+          # BLOCK-CHARGED: du on ext4 bills every file a whole 4 KB block, so
+          # splitting a chunk raises it without slowing any visitor. The
+          # visitor-facing limits above, MAX_MAIN_JS_KB (400) and
+          # MAX_BOOT_JS_KB (750), are unchanged and are the real guard.
+          MAX_TOTAL_DIST_KB: 7000
           MAX_SINGLE_IMAGE_KB: 400
         run: |
           echo "## Bundle sizes" >> "$GITHUB_STEP_SUMMARY"
@@ -960,3 +1063,207 @@ jobs:
         # or an explicit ignore with a dated reason. Do not re-add
         # continue-on-error: it cannot tell the two cases apart either.
         run: node scripts/dependency-audit.mjs
+
+      - name: Gate summary
+        # ONE TABLE, so nobody reads 60 step logs to learn which gate went red.
+        # It lists every step of this job with its outcome, failures first, on
+        # the run's summary page next to the bundle sizes above and the shard
+        # report tests-ran-once writes.
+        #
+        # A gate that never ran is shown as NOT RUN, not as passed: steps stop
+        # at the first red one, so everything after a failure is skipped, and a
+        # skipped gate has proved nothing.
+        #
+        # Reporting only. `always()` so it reports a red job, and
+        # continue-on-error so a GitHub API hiccup here can never turn a green
+        # job red or a red one green; the job's verdict is the steps above.
+        # The default token is read-all on this repository, which covers the
+        # actions API.
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100"             --jq '.jobs[] | select(.name == "verify") | .steps[]
+                  | select(.name | test("^(Set up job|Initialize containers|Run actions/|Run pnpm/|Post |Stop containers|Complete job|Gate summary$)") | not)
+                  | [(.conclusion // .status), .name] | @tsv' > "$RUNNER_TEMP/gates.tsv"
+          total=$(wc -l < "$RUNNER_TEMP/gates.tsv")
+          passed=$(awk -F'\t' '$1 == "success"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          failed=$(awk -F'\t' '$1 == "failure"' "$RUNNER_TEMP/gates.tsv" | wc -l)
+          notrun=$(( total - passed - failed ))
+          {
+            if [ "$failed" -eq 0 ] && [ "$notrun" -eq 0 ]; then
+              echo "## Gates: all ${total} passed"
+            else
+              echo "## Gates: ${failed} FAILED, ${notrun} not run, ${passed} of ${total} passed"
+              echo
+              awk -F'\t' '$1 == "failure" { print "- :x: **" $2 "**" }' "$RUNNER_TEMP/gates.tsv"
+              awk -F'\t' '$1 != "failure" && $1 != "success" { print "- :white_circle: " $2 " (not run: " $1 ")" }' "$RUNNER_TEMP/gates.tsv"
+            fi
+            echo
+            echo "<details><summary>Every step of verify</summary>"
+            echo
+            echo "| | Step |"
+            echo "|---|---|"
+            awk -F'\t' '{ icon = ($1 == "success") ? ":white_check_mark:" : ($1 == "failure") ? ":x:" : ":white_circle:"; print "| " icon " | " $2 " |" }' "$RUNNER_TEMP/gates.tsv"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "gates: ${passed} passed, ${failed} failed, ${notrun} not run, of ${total}"
+
+  # THE SUITE, IN SHARDS. Split out of `verify` on 2026-10-21 by Rye's ruling
+  # ("split the tests"). Measured on b878eaf, the last single-job run: Test was
+  # 31m40s of a 40-minute job, 855 files, 23.1 minutes of that inside the files
+  # themselves. The time is NOT where the names suggest: the 74 e2e files were
+  # 4.8 minutes and the 781 others 18.3, ten minutes of it in the living-map
+  # suites under shared/mapArtifact*. So an "e2e job and a unit job" split
+  # would have left one job at about 26 minutes; this shards the whole suite.
+  #
+  # vitest's --shard hashes each file path and hands every shard an equal COUNT
+  # of files. Replaying that hash over b878eaf's per-file timings puts the four
+  # shards at 9.2, 7.1, 7.9 and 7.5 minutes of test time, plus about two and a
+  # half minutes each of containers, install and build.
+  #
+  # TO CHANGE THE SHARD COUNT, edit the list below AND `--shards` in
+  # tests-ran-once. The job total in each shard's command and report name comes
+  # from `strategy.job-total`, so a list and a --shards that disagree fail
+  # tests-ran-once by name instead of passing with a shard unread.
+  #
+  # Expanded job names are `test (1/4)` through `test (4/4)`.
+  #
+  # WHAT EACH SHARD STILL GUARANTEES ON ITS OWN. `vitest run --shard=i/N` is a
+  # WHOLE run as server/db/provisioningReport.ts reads argv (every argument is a
+  # flag, and provisioningReport.test.ts pins this exact argv), and CI is set,
+  # so a shard with no TEST_DATABASE_URL, or one that provisioned no scratch
+  # schema, fails its own job with the same message the single run gave. Each
+  # shard prints its own provisioning receipt, builds its own template schema
+  # in its own MySQL, and checks its own bundle against distFreshness.
+  test:
+    name: test (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-latest
+    # 30: about four times the slowest shard's measured test time, with room
+    # for the suite to keep growing and for the 4x runner-to-runner spread
+    # this repository has measured on identical content.
+    timeout-minutes: 30
+    strategy:
+      # One red shard must not cancel the others: a cancelled shard reads as
+      # a cut run, and the other shards' failures are facts worth having.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      # The same MySQL as `verify` above, for the same reasons: the
+      # mirror.gcr.io pull-through cache (no credentials, no secret store that
+      # some events lack) and the datadir on tmpfs. Read the comments on
+      # verify's service before changing either.
+      mysql:
+        image: mirror.gcr.io/library/mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ci-test
+        ports:
+          - 3306:3306
+        options: >-
+          --tmpfs /var/lib/mysql:rw,size=4g
+          --health-cmd "mysqladmin ping -h localhost -pci-test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      TEST_DATABASE_URL: mysql://root:ci-test@127.0.0.1:3306/mysql
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history, exactly as verify checks out, so no test can meet a
+          # shallower tree here than it met when the suite ran in that job.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        id: build
+        # Each shard builds its own bundle: 13 seconds on b878eaf, cheaper
+        # than handing an artifact between jobs, and it keeps every shard
+        # independent of verify, so a failed guard can never hide the suite.
+        run: pnpm build
+
+      - name: Test
+        id: test
+        # Gated on the build SUCCEEDING. A suite run against a bundle that was
+        # never built reports a missing file and buries the real failure.
+        #
+        # The reporters: `default` and `github-actions` are what vitest picks
+        # by itself on a runner, and naming any reporter replaces that
+        # default, so both are named again. `json` writes the report that
+        # tests-ran-once reads back.
+        if: ${{ steps.build.outcome == 'success' }}
+        run: >-
+          pnpm test
+          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default
+          --reporter=github-actions
+          --reporter=json
+          --outputFile.json=test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
+
+      - name: Upload the shard report
+        # Even when the suite failed: a failed shard's report is what tells
+        # tests-ran-once which files failed, as against which never ran.
+        #
+        # The run attempt is in the name so `gh run rerun --failed` is enough.
+        # Under one name per shard, a re-run left two same-named artifacts and
+        # the download took attempt 1's red report (batch 75, 2026-11-01), so
+        # only a FULL re-run cleared a flake. tests-ran-once now reads the
+        # newest attempt per shard (latestAttempts in check-test-shards.mjs).
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-shard-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: test-results/shard-${{ matrix.shard }}-of-${{ strategy.job-total }}-attempt-${{ github.run_attempt }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # EVERY FILE, ONCE, PASSED. A split suite can lose a file between shards, or
+  # run one twice, while every shard reports green about the files it was
+  # handed. This reads each shard's JSON report back against the file list
+  # vitest resolves for the WHOLE suite and fails on a file in no shard, in two,
+  # one nobody listed, one that failed or skipped whole, or a missing shard.
+  # The reasoning, and what it cannot see, are in scripts/check-test-shards.mjs;
+  # its self-test runs with the others in verify.
+  #
+  # `!cancelled()` so it still reports when a shard went red: it then says
+  # which files failed, and confirms nothing else fell through.
+  tests-ran-once:
+    needs: test
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        # vitest itself resolves the expected file list from vitest.config.ts,
+        # so the comparison uses the same include globs the shards ran under.
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the shard reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-results-shard-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Every test file ran exactly once and passed
+        if: ${{ !cancelled() }}
+        run: node scripts/check-test-shards.mjs --shards 4 --dir test-results

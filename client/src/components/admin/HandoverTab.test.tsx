@@ -23,7 +23,7 @@
  * this component's wiring, and the route behind it has its own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 
@@ -53,7 +53,9 @@ describe("HandoverTab", () => {
       vi.fn(async () => ({ ok: true, json: async () => PAYLOAD })),
     );
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -157,6 +159,7 @@ async function choose(roleId: string) {
 
 describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -179,14 +182,14 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
   it("says nothing when the server sent no count, because no number is not zero", async () => {
     fakeServer();
     await choose("older");
-    await screen.findByRole("button", { name: "Give this role the power" });
+    await screen.findByRole("button", { name: "Give this group the power" });
     expect(screen.queryByText(/Nobody holds/)).not.toBeInTheDocument();
   });
 
   it("still grants the power to a role nobody holds", async () => {
     const server = fakeServer();
     const user = await choose("steward-circle");
-    await user.click(screen.getByRole("button", { name: "Give this role the power" }));
+    await user.click(screen.getByRole("button", { name: "Give this group the power" }));
     await waitFor(() => expect(server.writes()).toHaveLength(1));
     const [put] = server.writes();
     expect(put.method).toBe("PUT");
@@ -207,13 +210,13 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
     }));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = await choose("steward-circle");
-    await user.click(screen.getByRole("button", { name: "Give this role the power" }));
+    await user.click(screen.getByRole("button", { name: "Give this group the power" }));
 
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
     const question = String(confirm.mock.calls[0][0]);
     expect(question).toContain("Steward Circle would be the first");
     expect(question).toContain("Anyone in it could let somebody in.");
-    expect(question).toContain("OK gives Steward Circle the power. Cancel leaves the role as it is.");
+    expect(question).toContain("OK gives Steward Circle the power. Cancel leaves the group as it is.");
     expect(question).toContain("Nobody holds Steward Circle yet.");
     expect(question).not.toMatch(/\btick\b/i);
     // Cancel on the question: the first, unanswered PUT is the only write.
@@ -223,6 +226,7 @@ describe("HandoverTab: a power for a role nobody holds (ask 5)", () => {
 
 describe("HandoverTab: is the village ready to hold this power (ask 6)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -338,6 +342,7 @@ function heldServer(deleteAnswer: (glass: boolean) => { status: number; json: an
 
 describe("HandoverTab: bringing a power back (ask 7)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -420,6 +425,7 @@ describe("HandoverTab: bringing a power back (ask 7)", () => {
  */
 describe("HandoverTab: the last power moves the pen (0219)", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

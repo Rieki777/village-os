@@ -1,0 +1,180 @@
+{
+  "faq": {
+    "heading": "Investor FAQs"
+  },
+  "hero": {
+    "intro": "Capital Contributors offer financial resources, credit lines, investments, or other capital resources. We prioritize investors who share the vision - capital structured to deliver real returns while keeping the village in the hands of the people who call it home.",
+    "eyebrow": "Capital Contributor Journey",
+    "headline": "Invest in Regeneration",
+    "highlight": "Regeneration",
+    "primaryLabel": "Request Investor Pack",
+    "primaryTarget": "#pack-form",
+    "contactSubject": "Investment Commitment",
+    "secondaryLabel": "Join Community Call",
+    "secondaryTarget": "#events"
+  },
+  "steps": {
+    "intro": "Track your progress as you explore investment opportunities at {village}.",
+    "items": [
+      {
+        "stage": "Curious",
+        "title": "Discover {village}",
+        "bullet1": "Understand our mission and values",
+        "bullet2": "Learn about the land and location",
+        "bullet3": "Meet the founding team",
+        "bullet4": "Ask questions in a live Q&A",
+        "actionLabel": "Join Community Call",
+        "description": "Learn about our vision, values, and regenerative approach to community development.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Interested",
+        "title": "Request Investor Pack",
+        "bullet1": "15-year financial proformas",
+        "bullet2": "Feasibility study with market analysis",
+        "bullet3": "Development timeline and phases",
+        "bullet4": "Legal structure overview",
+        "actionLabel": "Request Pack",
+        "description": "Receive the full investor pack: feasibility study, proformas, and development timeline.",
+        "actionTarget": "#pack-form"
+      },
+      {
+        "stage": "Exploring",
+        "title": "Schedule Investment Call",
+        "bullet1": "Discuss investment options",
+        "bullet2": "Review financial projections",
+        "bullet3": "Understand debt vs equity structures",
+        "bullet4": "Explore your path to residency",
+        "actionLabel": "Schedule Call",
+        "description": "Connect one-on-one with our team to discuss your investment goals and how they align with {village}.",
+        "actionTarget": "#call-form"
+      },
+      {
+        "stage": "Committed",
+        "title": "Make Your Commitment",
+        "bullet1": "Select investment structure",
+        "bullet2": "Review and sign agreements",
+        "bullet3": "Transfer funds securely",
+        "bullet4": "Receive investor updates",
+        "actionLabel": "Contact Team",
+        "description": "Choose your investment vehicle and formalize your contribution to the {village} vision.",
+        "actionTarget": "#contact"
+      }
+    ],
+    "heading": "Your Investment Journey"
+  },
+  "phases": {
+    "intro": "With the potential 1% regenerative development loan, multiple phases can proceed simultaneously.",
+    "items": [
+      {
+        "name": "Resort & Retreat Center",
+        "units": "120-150 keys",
+        "status": "Planning",
+        "progress": "15"
+      },
+      {
+        "name": "Health Center",
+        "units": "1 facility",
+        "status": "Planning",
+        "progress": "10"
+      },
+      {
+        "name": "Community Center & Café",
+        "units": "1 facility",
+        "status": "Planning",
+        "progress": "20"
+      },
+      {
+        "name": "Show Homes",
+        "units": "10 homes",
+        "status": "Planning",
+        "progress": "25"
+      },
+      {
+        "name": "Residential Lots",
+        "units": "150+ lots",
+        "status": "Future",
+        "progress": "5"
+      }
+    ],
+    "heading": "Development Phases",
+    "activeStatus": "Planning"
+  },
+  "closing": {
+    "body": "Connect with our team to discuss how {village} fits your investment goals.",
+    "heading": "Ready to Explore?",
+    "primaryLabel": "Request Investor Pack",
+    "primaryTarget": "#pack-form",
+    "secondaryLabel": "View the Master Plan",
+    "secondaryTarget": "/master-plan"
+  },
+  "figures": {
+    "empty": "This village has not published any figures yet.",
+    "intro": "The figures this village has stated about its own land and its own raise.",
+    "tiles": [
+      {
+        "id": "appreciation",
+        "title": "Land Value",
+        "detail": "Change in the value of this village's land."
+      },
+      {
+        "id": "appraisal",
+        "title": "Appraisal",
+        "detail": "Current property valuation."
+      },
+      {
+        "id": "projectedReturn",
+        "title": "Projected Return",
+        "detail": "Based on phased development."
+      },
+      {
+        "id": "targetRaise",
+        "title": "Target Raise",
+        "detail": "What this phase is raising."
+      }
+    ],
+    "heading": "Key Numbers",
+    "disclaimer": "Past performance and projections are not guarantees of future results."
+  },
+  "callForm": {
+    "thanks": "Thank you! Our team will be in touch within 48 hours.",
+    "timeHint": "e.g., Tuesday 2pm EST"
+  },
+  "packForm": {
+    "rangeHint": "e.g., $50K - $250K"
+  },
+  "personas": {
+    "intro": "People with different goals and backgrounds are building at {village}. See if your story is here.",
+    "items": [
+      {
+        "title": "Digital Nomad Couple",
+        "subtitle": "Invest from anywhere, build your future haven"
+      },
+      {
+        "title": "Worldschooling Family",
+        "subtitle": "Create a home base while the world is your classroom"
+      },
+      {
+        "title": "Retiree/Snowbird",
+        "subtitle": "A sanctuary of your own, with community and returns"
+      },
+      {
+        "title": "Longevity Seeker",
+        "subtitle": "Where your years are extended by regenerative living"
+      },
+      {
+        "title": "Remote Exec/Founder",
+        "subtitle": "Build wealth while building a better world"
+      },
+      {
+        "title": "Local & Regional Professional",
+        "subtitle": "Invest in your homeland's regenerative future"
+      }
+    ],
+    "heading": "Who Invests in {village}?"
+  },
+  "accreditation": {
+    "reminder": "Please confirm you are an accredited investor.",
+    "statement": "I confirm I am an accredited investor."
+  }
+}

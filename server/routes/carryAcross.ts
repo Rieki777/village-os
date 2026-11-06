@@ -108,7 +108,7 @@ export function register(app: Express, deps: CarryDeps): void {
     // The seating door's gate, in its order: `org.seat`, then `org.seatAgent` for an agent.
     if (!(await guardCapability(req, res, "org.seat"))) return;
     if ((await seatsAnAgent(seatingId)) && !(await guardCapability(req, res, "org.seatAgent"))) return;
-    if (!seatingId || !toSeatId) return res.status(400).json({ error: "Say who moves and to which seat." });
+    if (!seatingId || !toSeatId) return res.status(400).json({ error: "Say who moves and to which role." });
     const draftId = await publishedDraftFor(getPool(), String(req.params.batchId));
     if (!draftId) return res.status(404).json({ error: "This change has no published structure yet." });
     const actor = await actorOf(req);

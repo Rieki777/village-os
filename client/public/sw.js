@@ -19,9 +19,34 @@
  */
 const CACHE = "grounds-v1";
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
   // Nothing to precache. Take over as soon as the old worker lets go.
   self.skipWaiting();
+  /*
+   * AND KEEP EVERY OTHER REQUEST OFF THIS WORKER ENTIRELY.
+   *
+   * The fetch handler below returns early for anything that is not the
+   * artifact, but returning early is not free: the browser still has to
+   * start this worker for every navigation and hand it every asset and API
+   * request before it can go to the network. Static routing (Chromium 123
+   * and later) settles that at install time instead: /grounds/ goes to the
+   * fetch handler exactly as before, and everything else goes straight to
+   * the network without waking the worker. Rules are tried in order and the
+   * first match wins.
+   *
+   * Where the API is missing (Firefox, Safari) nothing changes, and a
+   * rejected rule set is swallowed so it can never fail the install.
+   */
+  if (typeof event.addRoutes === "function" && typeof URLPattern === "function") {
+    event.waitUntil(
+      event
+        .addRoutes([
+          { condition: { urlPattern: new URLPattern({ pathname: "/grounds/*" }) }, source: "fetch-event" },
+          { condition: { urlPattern: new URLPattern({}) }, source: "network" },
+        ])
+        .catch(() => {}),
+    );
+  }
 });
 
 self.addEventListener("activate", (event) => {

@@ -108,7 +108,7 @@ export default function CalendarFeedCard({ signedIn }: { signedIn: boolean }) {
               <p className="font-medium text-foreground mb-1">Your private feed</p>
               <p className="text-xs text-muted-foreground mb-1.5">
                 Adds what only you may see: your loans due, your circle's items, your answers. The address is a key.
-                It is shown once; anyone holding it reads your feed, so revoke it if it leaks.
+                It is shown once; anyone holding it reads your feed, so revoke it if it leaks. A new password ends it too, so make a new one after a reset.
               </p>
               {minted && (
                 <div className="flex items-center gap-2 mb-2">

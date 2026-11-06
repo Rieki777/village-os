@@ -55,6 +55,8 @@
 import Layout from "@/components/Layout";
 import ConsentQueue, { useConsentClaims } from "@/components/review/ConsentQueue";
 import OwedPostings from "@/components/review/OwedPostings";
+import OwedCancels, { type OwedCancelsSummary } from "@/components/review/OwedCancels";
+import { announceErasureRetry, type ErasureRetryAnswer } from "@/components/review/erasureRetry";
 import ProposedSeatPreview from "@/components/power/ProposedSeatPreview";
 import { blockedReasons, NOTHING_LEFT_OUT, notReadLines, type NotRead } from "@/components/review/draftNotes";
 import { useCallback, useEffect, useState } from "react";
@@ -64,6 +66,7 @@ import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
+import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
@@ -250,6 +253,8 @@ export default function Review() {
      * crash on the queue screen.
      */
     local?: { count: number; oldestSince: string | null; stoppedAt: Record<string, number> };
+    /** The third kind: a departed member's recurring payment a person still has to cancel. Optional for the same reason. */
+    subscriptions?: OwedCancelsSummary;
   } | null>(null);
   const [asking, setAsking] = useState(false);
 
@@ -267,39 +272,12 @@ export default function Review() {
     setAsking(true);
     try {
       const r = await fetch("/api/review/erasure/retry", { method: "POST", headers: headers() });
-      const d = (await r.json().catch(() => ({}))) as {
-        asked?: number;
-        finished?: number;
-        resumed?: number;
-        swept?: number;
-        error?: string;
-      };
+      const d = (await r.json().catch(() => ({}))) as ErasureRetryAnswer;
       if (!r.ok) {
         toast.error(d?.error ?? "That did not go through");
         return;
       }
-      const finished = d.finished ?? 0;
-      // The two halves are reported separately because they are separate work.
-      // Folding a finished local sweep into the vendor count would say a store
-      // confirmed something no store was ever asked about.
-      const swept = d.swept ?? 0;
-      if (d.resumed) {
-        toast.success(
-          swept > 0
-            ? `${swept} of ${d.resumed} unfinished sweeps completed here.`
-            : `${d.resumed} unfinished sweeps are still stuck. The queue says which step.`,
-        );
-      }
-      if (d.asked) {
-        toast.success(
-          finished > 0
-            ? `${finished} of ${d.asked} finished. The rest have still not confirmed.`
-            : `Asked about ${d.asked}. None of them confirmed yet.`,
-        );
-      }
-      // A press that found nothing to do still says so. A silent button is one
-      // a steward presses again, and again.
-      if (!d.resumed && !d.asked) toast.success("Nothing was outstanding.");
+      announceErasureRetry(d);
       await load();
     } catch {
       toast.error("Could not reach the server");
@@ -429,7 +407,7 @@ export default function Review() {
         const blocked = Number(d.blocked ?? 0);
         if (blocked > 0 && draftId) {
           setStuck((s) => ({ ...s, [draftId]: { blocked, lines: blockedReasons(d.blockedLines) } }));
-          toast.error("Accepted, and this seat cannot apply yet. The reason is on this page, beside a way to withdraw it.");
+          toast.error("Accepted, and this role cannot apply yet. The reason is on this page, beside a way to withdraw it.");
         } else {
           toast.success("Accepted");
         }
@@ -559,7 +537,7 @@ export default function Review() {
       }
       if (blocked > 0) {
         toast.error(
-          `${body.accepted} accepted, and ${blocked} of the seats cannot apply. This draft will not publish ` +
+          `${body.accepted} accepted, and ${blocked} of the roles cannot apply. This draft will not publish ` +
             `until those are dealt with. The reasons are on this page, beside a way to withdraw it and put ` +
             `these proposals back in the queue.`,
         );
@@ -573,15 +551,20 @@ export default function Review() {
   };
 
   const acceptQuest = async (q: QuestCard, typed: QuestTyped) => {
-    if (!typed.gratitude.trim()) {
-      toast.error("Type what this quest pays before it goes on the board.");
+    // The value and its token amounts (0265). The server checks them again.
+    const options = await loadPayOptions();
+    const body = draftToBody(typed.pay, options?.quest ?? [], options?.currency ?? "", { required: true });
+    if (!body.ok) {
+      toast.error(body.error);
       return;
     }
     setBusy(q.id);
     try {
       const ok = await post(`/api/review/quests/${q.id}/accept`, {
         reward: {
-          gratitude: typed.gratitude.trim(),
+          valueMinor: body.valueMinor,
+          valueTokens: body.valueTokens,
+          cashMinor: body.cashMinor,
           stayCreditReward: typed.stayCreditReward.trim() === "" ? null : Number(typed.stayCreditReward),
         },
         // The words as the steward left them: the one way a name typed into an idea comes out before the board.
@@ -718,6 +701,10 @@ export default function Review() {
           </div>
         )}
 
+        {/* A recurring payment a departed member's erasure could not cancel. */}
+        <OwedCancels summary={owed?.subscriptions} aged={agedFor(owed?.subscriptions?.oldestSince ?? null)} busy={asking}
+          onFinish={() => void askAgain()} headers={headers} onChanged={() => void load()} />
+
         {/* What the village still owes somebody who left. The only item on
             this screen about a person already gone, and it is here because
             nothing else will ever ask about them again. */}
@@ -775,7 +762,7 @@ export default function Review() {
             <p className="text-sm text-muted-foreground mt-2">
               {s.unpreviewable
                 ? "This draft could not be checked. Withdrawing puts its proposals back in the queue, so you can accept them again."
-                : `${s.blocked} of its seats are blocked. Withdrawing puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.`}
+                : `${s.blocked} of its roles are blocked. Withdrawing puts its proposals back in the queue, so you can accept fewer at a time or deal with the reasons below first.`}
             </p>
             {s.lines.length > 0 && (
               <ul className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -821,11 +808,11 @@ export default function Review() {
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
               {notRead.published
-                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a seat, ${
+                ? `That draft is live now, so these fields cannot ride in on a withdraw. If one belongs on a role, ${
                     // The Org Chart is an admin screen, and a steward is often no admin: same signal as the limit's button.
                     queue?.mayChangeProposalLimit === true ? "write it" : "ask an admin to write it"
-                  } onto that seat in the Org Chart. If none of them belongs on a seat, there is nothing to do.`
-                : "The draft publishes without them. If one belongs on a seat, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the seat has and accept again. If none of them belongs on a seat, there is nothing to do."}
+                  } onto that role in the Org Chart. If none of them belongs on a role, there is nothing to do.`
+                : "The draft publishes without them. If one belongs on a role, withdraw the draft, which puts its proposals back in the queue, then write that value as text under a field the role has and accept again. If none of them belongs on a role, there is nothing to do."}
             </p>
             <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               {notRead.lines.map((n, i) => (

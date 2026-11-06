@@ -1,0 +1,112 @@
+{
+  "cta": {
+    "body": "Your journey begins with a Community Call. Come meet the team, ask your questions, and feel what's possible here.",
+    "heading": "Ready to Call This Home?",
+    "primaryLabel": "Return to Resident Journey",
+    "secondaryLabel": "Read Good Neighbor Principles"
+  },
+  "hero": {
+    "intro": "Living at {village} means you are not a tenant. You are a co-owner of the whole village. These are the rights that protect you and the responsibilities that make this place worth protecting.",
+    "eyebrow": "Resident Space",
+    "headline": "Your Rights and Responsibilities"
+  },
+  "rights": {
+    "intro": "These rights are protected by community governance structures and the Land Share Agreement, not by goodwill alone.",
+    "items": [
+      {
+        "title": "Your Land Share is Yours",
+        "description": "Your Land Share Agreement gives you long-term security on your piece of this land, renewable, transferable to your children{transfer}, and protected by community ownership structures that ensure the land itself can never be sold away from the community."
+      },
+      {
+        "title": "Security Through Community Ownership",
+        "description": "The land belongs to all of us collectively. That means no single person can take it away, sell it off, or change its use without community consent. Your home sits on ground that is held in trust for the whole, including your family, and the families that come after."
+      },
+      {
+        "title": "Voice in Community Life",
+        "description": "Residents hold full voice in the Circles that govern daily community life. As you grow into the community and reach the appropriate milestones, your governance rights deepen, from participating in decisions that affect your daily life to shaping the long-term direction of {village}."
+      },
+      {
+        "title": "Access to All Commons",
+        "description": "The trails, food forests, gathering spaces, streams, ponds, and the shared land are yours to use and enjoy. Seasonal festivals, community events, potlucks, and village celebrations are part of your life here."
+      },
+      {
+        "title": "Community Services and Care",
+        "description": "As a resident, you have access to the wellness programs, education offerings, healing arts, and community care that {village} develops together. The businesses and services that grow here serve the community first."
+      },
+      {
+        "title": "A Share in What We Build",
+        "description": "The vision is a community where shared business profits make life here net-positive for every resident."
+      }
+    ],
+    "eyebrow": "What You Hold",
+    "heading": "Your Rights as a Resident"
+  },
+  "finances": {
+    "body": "Village dues exist to keep the infrastructure running, water, power, roads, shared maintenance. Right now, they're a cost. The longer-term vision is different: as {village}'s shared businesses mature, the retreat center, the cafe, the wellness center, the artisan market, the education programs, the revenue they generate flows back into the community.",
+    "body2": "The goal is a life here that is economically net-positive. Where your business participation or your role in community operations covers your dues and gives you back more than you put in.",
+    "body3": "This is what \"Wealth Through Contribution\" actually means. Not a promise. A design intention we're building toward together.",
+    "heading": "The Vision for Your Finances Here"
+  },
+  "ownership": {
+    "body": "The land at {village} is held collectively, not by a landlord, not by a developer, not by any single person. Every resident is a steward of the whole of it. Your home is your private space. The rest belongs to all of you. Approach every interaction with the land and the community from that place: this is mine, and it's also all of ours.",
+    "heading": "You Live Here. This Is Yours."
+  },
+  "progression": {
+    "intro": "The longer you live here, the deeper your governance voice becomes. This is a recognition of wisdom that can only come from time, presence, and commitment.",
+    "stages": [
+      {
+        "level": "Resident",
+        "years": "Year 1+",
+        "description": "Full access to commons, housing rights, community participation"
+      },
+      {
+        "level": "Established Resident",
+        "years": "Year 3+",
+        "description": "Deeper governance voice, eligible for Circle Representative roles"
+      },
+      {
+        "level": "Long-Term Resident",
+        "years": "Year 7+",
+        "description": "Senior voice in community decisions, Sage eligibility, rights of nature representation"
+      }
+    ],
+    "eyebrow": "Deepening Over Time",
+    "heading": "Rights Grow With Your Roots",
+    "footnote": "Year thresholds are approximate and will be confirmed in the Resident Agreement."
+  },
+  "responsibilities": {
+    "intro": "This is what it means to live here: the beautiful parts and the full weight of belonging to a place and the people in it.",
+    "items": [
+      {
+        "title": "Care for Your Home and Its Surroundings",
+        "description": "Your home is your space and the community's landscape. Maintain your home to a standard that honors the land around it, keeping shared pathways clear, managing your immediate space with care, and contributing to the beauty of the village."
+      },
+      {
+        "title": "Act as a Co-Owner",
+        "description": "You live here. This place is yours as much as it is anyone's. Pick up what needs picking up. Notice what others might miss. Bring a co-owner's eye to every interaction with the land, the buildings, and the community. Not because you have to, because this place is actually yours."
+      },
+      {
+        "title": "Contribute to Maintenance",
+        "description": "The village runs on the shared effort of its residents. Every resident contributes time to the maintenance of shared spaces, infrastructure, and community assets. This isn't outsourced, it's how we stay alive. Details of your contribution commitment are agreed during your residency onboarding."
+      },
+      {
+        "title": "Village Dues",
+        "description": "Monthly village dues cover utilities, shared infrastructure maintenance, and community services. The vision is for dues to be fully covered by profits from {village}'s shared businesses, the retreat center, cafe, wellness offerings, and other enterprises, creating a net-positive financial life for all residents. Exact monthly amounts will be shared before signing your Land Share Agreement."
+      },
+      {
+        "title": "Participate in Community Processes",
+        "description": "Living here means showing up, to Circle meetings that affect your domain, to conflict resolution processes when they arise, to seasonal votes, and to the community governance that keeps everything running. Showing up is required. It's what makes self-governance real."
+      },
+      {
+        "title": "Honor the Good Neighbor Principles",
+        "description": "The Good Neighbor principles are a living guide to how we share space here. They cover noise, boundaries, shared resources, children and families, and how we handle conflict. Every resident commits to upholding and practicing them."
+      },
+      {
+        "title": "Raise the Next Generation Together",
+        "description": "Children here are raised by the whole village, not just their parents. As a resident, you share responsibility for a child-safe, child-enriching environment, showing up for Children's Play Days, respecting family spaces, and contributing to the culture that children grow up in."
+      }
+    ],
+    "eyebrow": "What You Carry",
+    "heading": "Your Responsibilities as a Resident"
+  }
+}

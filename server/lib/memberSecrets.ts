@@ -28,6 +28,8 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { keyEnvProblem, keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { guardOutboundUrl } from "./toolcheck";
+import { whileSessionHolds } from "./sessionHold";
+import { upsertMemberKeyOn } from "../repos/memberAgent";
 
 export type { Sealed };
 
@@ -125,13 +127,20 @@ export interface StoreInput {
  * Store (or replace) a member's key. Returns the view the panel shows.
  * The caller has already checked `memberSecretsConfigured`; this throws the
  * sentence if it was not, so a route that forgets still cannot store.
+ *
+ * `sessionVersion` is the tokenVersion the request's session was checked at.
+ * The key is stored only while the member's row still carries it; a session
+ * that a new password, a revoke or signing out ended since its check gets
+ * status 401 and nothing is written (`whileSessionHolds`). Every other refusal
+ * carries no status, and the route answers it 400.
  */
 export async function storeMemberKey(
   pool: Pool,
   userId: string,
   input: StoreInput,
   env: NodeJS.ProcessEnv = process.env,
-): Promise<{ ok: true; view: MemberKeyView } | { ok: false; error: string }> {
+  sessionVersion: number,
+): Promise<{ ok: true; view: MemberKeyView } | { ok: false; status?: 401; error: string }> {
   if (!memberSecretsConfigured(env)) return { ok: false, error: NO_MEMBER_SECRETS_KEY_SENTENCE };
   if (!MEMBER_KEY_PROVIDERS.includes(input.provider)) return { ok: false, error: "Unknown provider" };
   const key = String(input.key ?? "").trim();
@@ -155,13 +164,29 @@ export async function storeMemberKey(
   const sealed = seal(key, env);
   const last4 = key.slice(-4);
   const compat = input.provider === "openai_compatible";
-  await pool.query(
-    "INSERT INTO member_llm_keys (user_id, provider, base_url, model, ciphertext, iv, tag, last4, set_at) " +
-      "VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) " +
-      "ON DUPLICATE KEY UPDATE provider = VALUES(provider), base_url = VALUES(base_url), model = VALUES(model), " +
-      "ciphertext = VALUES(ciphertext), iv = VALUES(iv), tag = VALUES(tag), last4 = VALUES(last4), set_at = CURRENT_TIMESTAMP",
-    [userId, input.provider, compat ? base.url : null, compat ? model : null, sealed.ciphertext, sealed.iv, sealed.tag, last4],
+  // Written under the member's row lock, and only while the row is still the
+  // session's, for the reason `setInbox` gives (server/lib/agentInbox.ts): a
+  // request that passed its session check and then waited on the base URL's
+  // DNS lookup can reach this write after an erasure's sweep, a new password
+  // or a revoke has ended everything that stood.
+  const held = await whileSessionHolds(pool, userId, sessionVersion, (conn) =>
+    upsertMemberKeyOn(conn, {
+      userId,
+      provider: input.provider,
+      baseUrl: compat ? base.url : null,
+      model: compat ? model : null,
+      ciphertext: sealed.ciphertext,
+      iv: sealed.iv,
+      tag: sealed.tag,
+      last4,
+    }),
   );
+  if (!held.ok && held.refusal === "session_ended") return { ok: false, status: 401, error: "auth_required" };
+  if (!held.ok) {
+    // A tombstone keeps no third-party credential.
+    await removeMemberKey(pool, userId);
+    return { ok: false, error: "This account can no longer hold an assistant key" };
+  }
   const view = await memberKeyView(pool, userId);
   return view ? { ok: true, view } : { ok: false, error: "The key did not save" };
 }

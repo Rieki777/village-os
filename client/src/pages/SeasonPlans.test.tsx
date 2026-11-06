@@ -184,11 +184,11 @@ describe("your own season", () => {
     render(<MySeason />);
     const carry = await screen.findAllByRole("link", { name: "Carry on" });
     expect(carry[0].getAttribute("href")).toBe("/propose?type=role_application&seat=seat-host&renew=seat-host&season=s-next");
-    expect(screen.getByRole("link", { name: "Apply for a seat" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
+    expect(screen.getByRole("link", { name: "Apply for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
     expect(screen.getByText("Open until 31 March 2027.")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Hand it back" })[1]);
-    expect(screen.getByText("You hand this seat back when the season turns.")).toBeTruthy();
+    expect(screen.getByText("You hand this role back when the season turns.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Your aim"), { target: { value: "The gate opens on time every market day." } });
     fireEvent.click(screen.getByRole("button", { name: "File my season" }));
     await waitFor(() => expect(asked.some((a) => a.url === "/api/season-plans/mine/file")).toBe(true));
@@ -197,12 +197,12 @@ describe("your own season", () => {
     expect(await screen.findByText("Filed. The village can read your season.")).toBeTruthy();
   });
 
-  it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a seat (red team U5, U11)", async () => {
+  it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a role (red team U5, U11)", async () => {
     mine = () => json({ ...MINE, mayApply: false });
     render(<MySeason />);
-    expect(await screen.findByText("Applying for a seat opens at the member rung. Once you reach it, you can apply here.")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Apply for a seat" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Propose a seat" })).toBeNull();
+    expect(await screen.findByText("Applying for a role opens at the member rung. Once you reach it, you can apply here.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Apply for a role" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Propose a role" })).toBeNull();
   });
 
   it("says carry on only of a seat held before the application, never of one it seated (red team U9)", async () => {
@@ -266,5 +266,17 @@ describe("the banner", () => {
     season = { ...base, planWindow: { ...VILLAGE.window, state: "closed" } };
     render(<SeasonBanner />);
     expect(screen.queryByRole("link", { name: "Plan your season" })).toBeNull();
+  });
+
+  it("gives the end-of-season governance reminder to a member, and never to a visitor", () => {
+    signedIn = { id: "u-ana" };
+    season = { ...base, planWindow: null };
+    render(<SeasonBanner />);
+    expect(document.body.textContent).toContain("run the end-of-season governance");
+    cleanup();
+    signedIn = null;
+    render(<SeasonBanner />);
+    expect(document.body.textContent).toContain("Season Now");
+    expect(document.body.textContent).not.toContain("end-of-season governance");
   });
 });

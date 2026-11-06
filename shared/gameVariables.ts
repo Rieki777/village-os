@@ -86,10 +86,12 @@ export function normaliseLongText(raw: string): string {
  *               domain of the Hypha proposal loop. The platform's min/max
  *               BOUNDS stay Ring 0: governance moves a value within its
  *               bounds, never the bounds.
- *   "founder" — Ring 1: tunable, but by the founder/admin only — legal
- *               posture, infrastructure, privacy windows, abuse guards.
- *               Shown on the public page (everything is visible) but marked
- *               founder-held and never proposable.
+ *   "founder" — Ring 1: held by the founders — legal posture,
+ *               infrastructure, privacy windows, abuse guards. Shown on the
+ *               public page (everything is visible) and marked founder-held.
+ *               Anyone may PROPOSE a change to one (Rye, 2026-09-25); before
+ *               the start a founder adopts it, and after it the village votes
+ *               (server/lib/founderDials.ts).
  *
  * The ring on a def is the PLATFORM CEILING. A founder can close an "open"
  * variable to their community; nothing can open a "founder" one to it.
@@ -177,7 +179,26 @@ export interface VariableDef {
    * covered before somebody remembers to mark it.
    */
   withheld?: true;
+  /**
+   * THIS DIAL'S VALUE NOW LIVES IN THE SEALED INTEGRATION SECRETS, under the
+   * slot named here (server/lib/secrets.ts). The dial stays listed so the
+   * village can still see that the setting exists; its value is never stored
+   * as a game rule again.
+   *
+   * `tokens.base_rpc_url` is the case. A dedicated endpoint carries its key in
+   * the address, and as a plain variable it sat in every database dump, in the
+   * admin listing and in the amendment ledger. So `validateVariable` refuses
+   * any value but the default on every write path (an admin, a passed
+   * proposal, a change set), the admin listing reports the default instead of
+   * what is stored, and the boot pass in secrets.ts seals any value an older
+   * release left behind and then clears the row.
+   */
+  movedToSecret?: string;
 }
+
+/** The one refusal a dial whose value moved into the sealed store answers with. */
+export const MOVED_TO_SECRET_SENTENCE =
+  "This setting is kept under Admin, Integrations now, where it is sealed, because the address can carry a provider key. Save it there.";
 
 /**
  * Does this value look like it carries a credential? A provider key in the
@@ -292,9 +313,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "arrival.greeter_role",
     category: "Membership",
-    label: "The seat that greets a new arrival",
+    label: "The role that greets a new arrival",
     description:
-      "The role whose holders are told the moment somebody joins. Greeting belongs to a seat, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the seat is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
+      "The role whose holders are told the moment somebody joins. Greeting belongs to a role, so the village re-seats it each season and the message follows with nobody editing a setting. Leave it empty and the founders hear it, which is also what happens when the role is named and nobody is sitting in it: a village that has not built its org chart yet, and one whose greeter stepped down last week, both still find out that a person arrived. Paste the role id from the org chart.",
     type: "text",
     default: "",
   },
@@ -649,12 +670,27 @@ export const VARIABLES: VariableDef[] = [
     category: "The Mint",
     label: "Voice needed before a member can claim",
     description:
-      "How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a seat, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.",
+      "How much voice someone gathers before their chip turns claimable. What this really sets is how much attention your governance spends: every claim becomes a real proposal in your Hypha space, so a low number fills that space with small ones and a high number leaves people waiting a year for a loop that never visibly closes. At the seeded rates, 100 is ten confirmed quests, or two seasons holding a role, or a mix of both. A good way to pick it: decide how many claim proposals your circle can genuinely consider in one Claims Week, then set this so about that many members qualify.",
     type: "integer",
     default: "100",
     min: 1,
     max: 100000,
     unit: "voice",
+  },
+  {
+    // The equity twin of the dial above (0266). A claim on equity rides the
+    // same Claims Week, the same Hypha space and the same bridge gate as a
+    // claim on voice; only how much a member gathers first is its own.
+    key: "economy.equity_claim_threshold",
+    category: "The Mint",
+    label: "Earned equity needed before a member can claim",
+    description:
+      "How much earned equity someone gathers before they can carry it across to Hypha. Each claim becomes one proposal in your Hypha space and takes the member's whole balance, and claims open only in Claims Week, so each member raises at most one equity proposal a window. The default of 1 means any equity a member has earned can be claimed. Raise it if your circle would sooner consider fewer, larger claims. Nothing pays earned equity until your village turns on a rule that pays it.",
+    type: "integer",
+    default: "1",
+    min: 1,
+    max: 100000,
+    unit: "equity",
   },
   {
     key: "economy.claims_week_days",
@@ -712,7 +748,7 @@ export const VARIABLES: VariableDef[] = [
     category: "The Mint",
     label: "How much Voice wanes each cycle",
     description:
-      "How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a seat or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the seat and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.",
+      "How much of each member's Voice wanes at the close of each cycle. Voice that wanes is posted to the village's waning account, so nothing is destroyed and the books still balance. Nobody takes it: it simply does not keep, the way standing does not keep if you stop showing up. Set it to 0 and Voice never wanes. At the default of 1 percent, somebody holding 5 Voice loses 0.05 in a moon and earns it back many times over by holding a role or finishing one quest. An amount too small to reach your token's smallest unit wanes nothing at all, and the settlement counts how many members that was true of. Members who are in the middle of leaving are left alone until their exit is settled. Works with: 'Which Voice wanes' below, and the role and quest payouts under The Mint, because what wanes and what is earned settle against each other over time.",
     type: "percentage",
     default: "1",
     min: 0,
@@ -764,6 +800,18 @@ export const VARIABLES: VariableDef[] = [
       "When on, Gratitude cannot be sent silently. The message is what makes recognition mean something to the person receiving it.",
     type: "boolean",
     default: "true",
+  },
+  {
+    key: "gratitude.nudge_days_before_close",
+    category: "Gratitude",
+    label: "Days before close to nudge unsent gratitude",
+    description:
+      "How many days before a cycle closes each member who still has gratitude to send gets one warm note saying how much is left and when the cycle closes, with the people they worked with this cycle one tap away on the send panel. Once per member per cycle, never more. The note sends nothing itself: every gift still goes through the send panel. A member can turn it off in their notification settings. Set it to 0 to switch the nudge off for the whole village.",
+    type: "integer",
+    default: "3",
+    min: 0,
+    max: 14,
+    unit: "days",
   },
   /*
    * THE RHYTHM DIAL, AND WHY IT IS BACK.
@@ -867,9 +915,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.reassignment_cadence",
     category: "Progression",
-    label: "How often every seat reopens",
+    label: "How often every role reopens",
     description:
-      "A season can end with every seat vacated and offered again. Reopening on a rhythm is how a village keeps seats from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A seat can opt out on its own card, and a term can always end sooner.",
+      "A season can end with every role vacated and offered again. Reopening on a rhythm is how a village keeps roles from calcifying, because correcting a bad fit stops needing a confrontation and becomes a date everyone already knew about. A role can opt out on its own card, and a term can always end sooner.",
     type: "choice",
     default: "season_turn",
     choices: [
@@ -881,10 +929,10 @@ export const VARIABLES: VariableDef[] = [
       {
         value: "pattern_change",
         label: "When the season's shape changes",
-        hint: "A founding season can run across several turns without reopening every seat each time.",
+        hint: "A founding season can run across several turns without reopening every role each time.",
       },
       { value: "annual", label: "Once a year", hint: "One reopening a year, whatever the seasons did." },
-      { value: "never", label: "Never", hint: "Seats end only on their own term date, or when somebody steps down." },
+      { value: "never", label: "Never", hint: "Roles end only on their own term date, or when somebody steps down." },
     ],
   },
   {
@@ -901,7 +949,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Progression",
     label: "Most changes one outside batch can propose",
     description:
-      "How many seats one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
+      "How many roles one batch from an outside service can put into a single draft. A village's first import is often its whole structure arriving at once, so the limit starts high. Nothing publishes on a batch's say-so: a steward still reads every line and accepts it before any of it becomes the chart. Lower it once the village is built and imports settle into small changes. A draft somebody builds by hand is never held to it.",
     type: "integer",
     default: "500",
     min: 1,
@@ -909,33 +957,10 @@ export const VARIABLES: VariableDef[] = [
     unit: "changes",
   },
 
-  // ── Quests: how work becomes recognition ──────────────────────────────────
-  {
-    key: "quest.consent_cap_mode",
-    category: "Quests",
-    label: "How much can be released at consent",
-    description:
-      "Controls what a steward may award when consenting to finished work, and the most a consent can pay. A standing badge can lift a consent toward that top and never past it, so under the posted amount what a quest advertises is what it pays.",
-    type: "choice",
-    default: "posted",
-    choices: [
-      { value: "posted", label: "Exactly the posted amount", hint: "Safest. The board is the contract." },
-      { value: "capped", label: "The posted range, with a bonus ceiling above it", hint: "Never below the posted floor. Exceptional work can earn up to a multiple of the posted top." },
-      { value: "unlimited", label: "Any amount", hint: "No ceiling. Only sensible with a very small, very trusted admin group." },
-    ],
-  },
-  {
-    key: "quest.consent_cap_multiplier",
-    category: "Quests",
-    label: "Bonus ceiling multiplier",
-    description:
-      "When the cap mode allows a bonus ceiling, this is that ceiling as a multiple of the top of the posted range. 2 means a quest posted at 50-100 can pay at most 200, badges included.",
-    type: "decimal",
-    default: "2",
-    min: 1,
-    max: 100,
-    unit: "x posted",
-  },
+  // ── Quests: how finished work is witnessed ────────────────────────────────
+  // The three dials that bounded a Gratitude grant at consent left with the
+  // grant (Rye, 2026-10-21): no quest pays Gratitude, and a quest pays what it
+  // says (0265). A village's stored row for one is harmless and read by nothing.
   {
     key: "quest.require_submission_before_consent",
     category: "Quests",
@@ -944,15 +969,6 @@ export const VARIABLES: VariableDef[] = [
       "When on, value can only be released for work that was actually filed. Turning this off lets an admin credit a quest nobody submitted, which breaks the promise that credit follows shown work.",
     type: "boolean",
     default: "true",
-  },
-  {
-    key: "quest.allow_zero_consent",
-    category: "Quests",
-    label: "Allow consenting at zero",
-    description:
-      "When on, a steward may consent any claim at 0, meaning 'acknowledged, no recognition', whatever the quest advertises. The claim completes with no recognition, and no token the village's quest-completion rules would pay moves either, voice and credits included. A stay-credit reward the quest itself carries still releases, because a person set that payment on the quest, so in a village that weights votes by stay credits such a quest still moves weight. When off, 0 is possible only on a quest that advertises 0, such as one that pays in stay credits alone.",
-    type: "boolean",
-    default: "false",
   },
   {
     key: "quest.self_consent_until_members",
@@ -1075,7 +1091,7 @@ export const VARIABLES: VariableDef[] = [
     label: "Which decisions a steward can stop",
     criticality: "constitutional",
     description:
-      "A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the seat can never stop its own removal.",
+      "A steward can stop a decision the village has already carried, inside the window before it lands, and has to say why. This names which kinds of decision are inside that reach. Leave it as all while the village is young; name a shorter list, or none, as it learns to trust its own agreements. A village with no steward and self-executing agreements is a healthy village, not a broken one. Advisory votes are never in reach, because they change nothing. Neither is the ballot that seats or unseats a steward, so the role can never stop its own removal.",
     type: "text",
     default: "all",
   },
@@ -1104,7 +1120,7 @@ export const VARIABLES: VariableDef[] = [
     label: "Which sizes of decision a steward can stop",
     criticality: "constitutional",
     description:
-      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the seat can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+      "Every decision carries a size: routine, structural, or constitutional. This names the sizes a steward may stop inside the window before a decision lands, and a veto needs the decision to be in reach on both this list and the one above. The default is constitutional on its own, so the role can pause the changes that reshape the village and leaves the smaller ones alone. Write them separated by commas, or write all. Leave it empty and no steward can stop anything, which is a healthy village and not a broken one. Changing this is priced at the top tier and no steward can stop the change, because a role that could veto an edit to its own limits would have none.",
     type: "text",
     default: "constitutional",
   },
@@ -1139,7 +1155,7 @@ export const VARIABLES: VariableDef[] = [
     label: "A veto needs a majority of the stewards",
     criticality: "constitutional",
     description:
-      "Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated seats, so one seat alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a seat that could veto an edit to its own limits would have none.",
+      "Off by default, and off means any one seated steward can stop a decision on their own. Turn it on and a village with several stewards runs them as a council: stopping a decision then takes a majority of the seated roles, so one role alone cannot hold the village up. Changing this is priced at the top tier, and no steward can stop the change, because a role that could veto an edit to its own limits would have none.",
     type: "boolean",
     default: "false",
   },
@@ -1275,17 +1291,17 @@ export const VARIABLES: VariableDef[] = [
     label: "When seating a role can go to the vote",
     criticality: "structural",
     description:
-      "The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a seat nobody can be asked to fill is a seat that stays empty until the calendar allows it.",
+      "The window a proposal that asks somebody to sit in a role opens in, in the same words as the change set window above. Hold this one open while a village is young: a role nobody can be asked to fill is a role that stays empty until the calendar allows it.",
     type: "text",
     default: "always_open",
   },
   {
     key: "governance.window_role_unseat",
     category: "Governance",
-    label: "When taking a seat back can go to the vote",
+    label: "When taking a role back can go to the vote",
     criticality: "structural",
     description:
-      "The window a proposal that takes a seat back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.",
+      "The window a proposal that takes a role back opens in, in the same words as the change set window above. A village that windows this one is choosing to wait before it can remove somebody, so leave it always open unless you have a reason you can say out loud.",
     type: "text",
     default: "always_open",
   },
@@ -1615,20 +1631,20 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "governance.nonhuman_in_quorum",
     category: "Governance",
-    label: "Seats speaking for other beings count toward quorum",
+    label: "Roles speaking for other beings count toward quorum",
     criticality: "constitutional",
     description:
-      "Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that seat and casts its vote. This says whether the weight on such a seat is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the seat still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.",
+      "Your village can seat a voice for a being that is not a person: a mountain, a river, the trees, the wolves. A member or a bot holds that role and casts its vote. This says whether the weight on such a role is part of the count that decides whether enough of the village turned up. Off, which is how it ships, leaves that weight out of the count on both sides of the sum, and a vote cast from the role still counts toward agreement. On counts it like any member's, and weight that provably cannot answer drops out of the count instead.",
     type: "boolean",
     default: "false",
   },
   {
     key: "governance.absent_cycles",
     category: "Governance",
-    label: "Cycles of silence before a seat leaves the count",
+    label: "Cycles of silence before a role leaves the count",
     criticality: "constitutional",
     description:
-      "When seats speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a seat's weight drops out of the count. A seat nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.",
+      "When roles speaking for other beings do count toward quorum, this is how many cycles of casting nothing it takes before such a role's weight drops out of the count. A role nobody holds drops out straight away. The weight is always shown beside the people count, so the village can see how much of its Voice is silent. Nothing here changes a threshold: it changes what the threshold is measured against.",
     type: "integer",
     default: "3",
     min: 1,
@@ -1669,10 +1685,11 @@ export const VARIABLES: VariableDef[] = [
     category: "Tokens",
     label: "Base RPC endpoint",
     description:
-      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number.",
+      "Where balances are read from. A public endpoint is fine to start; a dedicated one is more reliable under load. If this fails, the platform shows nothing, never a wrong number. Saved under Admin, Integrations, where it is sealed, because a dedicated endpoint carries its key in the address. The host variable BASE_RPC_URL works too.",
     type: "text",
     default: "https://mainnet.base.org",
     withheld: true,
+    movedToSecret: "base_rpc_url",
   },
 
   // ── Hypha (S13): the SINGLE home for the DHO URL. Everything share-like —
@@ -2097,7 +2114,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Village map",
     label: "Show the map's structure to visitors",
     description:
-      "When the map module is public, anonymous visitors see circles, role titles and seat counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.",
+      "When the map module is public, anonymous visitors see circles, role titles and holder counts, never names or faces. Off hides the map from visitors entirely, even at public lifecycle.",
     type: "boolean",
     default: "true",
   },
@@ -2144,8 +2161,8 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "map.vacant_highlight",
     category: "Village map",
-    label: "Highlight vacant seats",
-    description: "Vacant roles pulse gently as an open call. Off renders them as plain grey rings.",
+    label: "Highlight openings",
+    description: "Openings pulse gently as an open call. Off renders them as plain grey rings.",
     type: "boolean",
     default: "true",
   },
@@ -2251,12 +2268,21 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.public_people",
     category: "The village's people",
-    label: "Show who holds each seat to visitors",
+    label: "Show who holds each role to visitors",
     description:
-      "On, anyone can read the first names of the people holding each seat on the Team, Roles and Circles pages. Off keeps those names for signed-in members whose role or badge grants map.viewPeople, and a visitor still sees every circle, every seat, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
+      "On, anyone can read the first names of the people holding each role on the Team, Roles and Circles pages, and a visitor reads members by first name elsewhere. Off, a visitor who is not signed in reads no member's name, handle, address or portrait on any page: the pulse, the decisions, profiles and role cards included. Signed-in members whose role or badge grants map.viewPeople still read who holds each role, and a visitor still sees every circle, every role, and how many of them are filled. This is the secret society setting. It moves names only: the shape of the village stays public at both settings.",
     type: "boolean",
     default: "true",
     ring: "founder",
+  },
+  {
+    key: "org.ccos_terms",
+    category: "The village's people",
+    label: "Show the CCOS term on circle and role card headings",
+    description:
+      "Each heading on a circle card, and on each role in full on a player's card, is plain words, like \"What we look after\" or \"What I can decide on my own\". On, hovering or tapping a heading also shows the matching heading in the CCOS Circle Charter or Role Card, like \"CCOS: Domains\", for a village that writes its charters and roles with it. Off keeps the plain headings and shows no term.",
+    type: "boolean",
+    default: "true",
   },
 
   // ── Events (0059; visible in Admin only while the module is non-off) ─────
@@ -2314,6 +2340,27 @@ export const VARIABLES: VariableDef[] = [
   },
 
   // ── Messaging (visible in Admin only while the module is non-off) ─────────
+  {
+    key: "companions.max_questions_per_day",
+    category: "Companions",
+    label: "Questions one companion may ask a day",
+    description:
+      "The most questions each companion brings a member in one village day. Drafts are never held back by this, because a draft that wants to move money should always be seen. A member may lower it for any of their companions. More than 3 is not offered: that ceiling waits on a founder's ruling. A question over the limit waits for the next morning.",
+    type: "integer",
+    default: "3",
+    min: 0,
+    max: 3,
+    unit: "questions",
+  },
+  {
+    key: "companions.role_ids",
+    category: "Companions",
+    label: "Roles that have a companion",
+    description:
+      "Which roles give their holders a companion that speaks for the role. Write all for every role, leave it empty for none, or paste role ids from the org chart separated by commas. The personal companion is always there for every member, whatever this says.",
+    type: "text",
+    default: "all",
+  },
   {
     key: "messaging.sends_per_minute",
     category: "Messages",
@@ -2806,20 +2853,44 @@ export const VARIABLES: VariableDef[] = [
     type: "boolean",
     default: "true",
   },
-
-  // ── Recognition issuance that used to hide in a content document ──────────
+  /*
+   * THE SETUP GAME'S CO-SIGN (migration 0306, server/lib/plantingRequests.ts).
+   * After launch a keystone key waits for a second admin, or, in a village with
+   * nobody else to co-sign, lands after a cooling-off the steward and founder
+   * role holders can object inside. Founder-held: they bound the safety of the
+   * village's own keys.
+   */
   {
-    key: "gratitude.proposal_accept_award",
-    category: "Gratitude",
-    label: "Recognition for an accepted Work With Us proposal",
+    key: "platform.cosign_cooling_hours",
+    category: "Platform",
+    label: "Cooling-off before a key lands with nobody to co-sign",
     description:
-      "How much recognition is minted for a member whose Work With Us proposal is accepted. This used to live inside the Work With Us content settings with no bounds; it is issuance, so it belongs here with the other Gratitude dials.",
+      "After launch, saving a key that touches money, email or the hosting waits for a second admin. A village with only one admin waits this many hours instead, and the steward and founder role holders are told and can decline it in that time.",
     type: "integer",
-    default: "100",
-    min: 0,
-    max: 100000,
-    unit: "Gratitude",
+    default: "48",
+    min: 1,
+    max: 336,
+    unit: "hours",
   },
+  {
+    key: "platform.cosign_expiry_hours",
+    category: "Platform",
+    label: "How long a key waits for its co-sign",
+    description:
+      "After launch, a key that needs a second admin's co-sign waits this many hours. Unsigned by then, it is dropped and its value wiped, and the admin who asked can save it again.",
+    type: "integer",
+    default: "72",
+    min: 1,
+    max: 720,
+    unit: "hours",
+  },
+
+  // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
+  // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
+  // only sent from player to player using the send gratitude function, gratitude
+  // is not distributed in any other way!" An accepted proposal pays the Mint
+  // panel's `proposal.accepted` rules now (server/lib/proposalAward.ts). A stored
+  // override row for the key is never read.
 
   // ── Per-member daily activity caps that were hardcoded ────────────────────
   {
@@ -2924,7 +2995,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Calendar",
     label: "Your village's own seasons",
     description:
-      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Dry: 12-01, Green: 05-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
+      "The seasons your village names, each with the day it starts, as Name: MM-DD separated by commas. For example: Planting: 03-01, Harvest: 09-01. A season runs until the next one starts and wraps round the new year, and a name can come back later in the year. Live sessions stamp the season they open in. Leave it blank and the room uses spring, summer, autumn and winter by your hemisphere, or names no season when your land sits in the tropics.",
     type: "text",
     default: "",
     unit: "list",
@@ -2993,17 +3064,22 @@ export const VARIABLES: VariableDef[] = [
   // and it is the community's question to hold: what a leaver keeps is the
   // most community-shaped number in this file.
   //
-  // EVERY DEFAULT HERE REPRODUCES TODAY, EXACTLY. `sweepBalances`
-  // (server/lib/exit.ts) reads these five dials now, and on the defaults below
-  // it does what it always did: every positive balance moves in full to
-  // sys:exit-settlement, nothing is held back, and no date gates the settle.
-  // So a village that never opens this panel keeps the departure it already
-  // has. `shared/gameVariables.test.ts` asserts each of the ten defaults by
-  // name, and `server/lib/exitDefaults.test.ts` runs a whole departure on them
-  // and compares every ledger row to the ones origin/main writes.
+  // THE DEFAULTS FOLLOW THE FOUNDER'S RULING OF 2026-10-23. "As a general rule
+  // members keep their tokens", and asked whether a leaver stays on as a
+  // former member or is erased after carrying their voice and equity to
+  // Hypha, Rye answered "a if b hasn't already happened". So on the defaults
+  // below a leaver keeps every credit, Voice and equity balance, and resolve
+  // (`resolveExit`, server/lib/exitResolve.ts) keeps their account as a
+  // former member while any of it is held. Recognition is the one kind still
+  // settled at 0, because it is a record of thanks and it is what shares the
+  // cycle pool. Until that ruling every share defaulted to 0 and every positive
+  // balance moved in full to sys:exit-settlement; a village that stored its
+  // own values keeps them, and one that never touched a dial inherits these.
+  // `shared/gameVariables.test.ts` asserts each of the ten defaults by name,
+  // and `server/lib/exitDefaults.test.ts` runs a whole departure on them.
   //
   // TWO THINGS ACT ON THESE. The save-time guard, `exitLeverProblem`
-  // (server/lib/exitPolicy.ts), refuses six incoherent combinations with one
+  // (server/lib/exitPolicy.ts), refuses five incoherent combinations with one
   // sentence each, and it now runs inside `setVariable` so a passed proposal
   // meets it as well as an admin. The SETTLEMENT reads the five dials that
   // decide what moves: the four keep shares, the remainder account, the
@@ -3019,9 +3095,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of credits a leaver keeps",
     description:
-      "The share of each credit token a departing member keeps when their balance is settled. At 0, where this starts, the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.",
+      "The share of each credit token a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. At 40 they keep forty percent of every credit token they hold and the village receives the other sixty. This counts by KIND and never by token name, so a village that mints its own credits gets the same answer as one running the platform's. The share is worked out in the token's smallest unit and rounded DOWN, so what a leaver keeps plus what the village receives is exactly what they held, to the last unit. Works with: 'Where the rest of a settled balance goes' and 'Days of cooling before a balance settles'. The settle act records the shares it actually applied onto the exit, so a dial moved afterwards never rewrites what happened.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3031,9 +3107,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of Voice a leaver keeps",
     description:
-      "The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 0 the whole holding settles the way it does today. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit, which is where this starts, the whole holding moves whatever share you set here, so this dial only changes a departure once the other one does.",
+      "The share of a departing member's Voice that 'What happens to Voice at a departure' is applied to. At 100, where this starts, that is the whole holding, and with keep chosen there, which is where that dial starts, the member keeps all of it. At 0 the whole holding settles to the account named in 'Where the rest of a settled balance goes'. Above 0, the shape of what happens to that share is the other dial's answer: forfeit sends it with everything else, keep leaves it where it is, convert turns it into credits at the rate below. Voice that was earned and Voice that was bought are treated alike, because the ledger holds one balance for both. At forfeit the whole holding moves whatever share you set here.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3055,9 +3131,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "Share of equity a leaver keeps",
     description:
-      "Here so all four kinds of token are visible in one place. Any value above 0 is refused when you save it: equity is governed on Base under Hypha, this platform never moves it, and a boot invariant requires zero equity rows in this ledger. What happens to equity when somebody leaves is decided where it lives. Leave it at 0.",
+      "The share of each equity token this ledger holds, Earned Equity among them, that a departing member keeps when their balance is settled. At 100, where this starts, they keep all of it, by the founder's ruling that members keep their tokens, and a member still holding any stays on as a former member when their exit resolves. At 0 the whole balance moves to the account named in 'Where the rest of a settled balance goes'. The village's equity on Base under Hypha is outside this dial: this ledger holds no rows of it, so there is nothing of it here to settle.",
     type: "percentage",
-    default: "0",
+    default: "100",
     min: 0,
     max: 100,
     unit: "% kept",
@@ -3110,19 +3186,19 @@ export const VARIABLES: VariableDef[] = [
     category: "Exit",
     label: "What happens to Voice at a departure",
     description:
-      "Voice is the one holding that is also standing in the village, so it gets its own answer. Forfeit is what happens today. Keep is refused while a resolved exit turns the account into a tombstone, and the refusal says when it becomes available. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused as well. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
+      "Voice is the one holding that is also standing in the village, so it gets its own answer. Keep is where this starts, by the founder's ruling of 2026-10-23: the member keeps the share set under 'Share of Voice a leaver keeps', and while they hold any of it their exit resolves with the account kept, as a former member. Forfeit sends the share with everything else, which is what a departure did before that ruling. Convert needs a rate under it and a share of Voice the leaver keeps, because only that share converts, so convert with a rate of 0 or a share of 0 is refused. Works with: 'Share of Voice a leaver keeps' and 'Credits per Voice when converting'.",
     type: "choice",
-    default: "forfeit",
+    default: "keep",
     choices: [
       {
         value: "forfeit",
         label: "It goes with everything else",
-        hint: "The share settles to the account above, which is what a departure does today.",
+        hint: "The share settles to the account above, which is what a departure did before the ruling of 2026-10-23.",
       },
       {
         value: "keep",
         label: "The member keeps it",
-        hint: "Refused for now. A resolved exit anonymizes the account, and a tombstone cannot hold voting weight, so this opens once a village can record a departure without one.",
+        hint: "Where this starts. The Voice stays in their account, and the account stays on as a former member while it holds anything of value.",
       },
       {
         value: "convert",
@@ -3269,6 +3345,24 @@ export const VARIABLES: VariableDef[] = [
     unit: "members",
   },
 
+  // ── Task boards (spec section 17, A6) ─────────────────────────────────────
+  //
+  // READ by server/repos/memberTasks.ts `listIsOn` and every count of who has
+  // a board (memberTaskFeedback `syncableLinks` and `redirectPeople`,
+  // saberraBridge `bridgeLists`): a member's access row decides, and with no
+  // row this does. ON by default because a board that starts off is a board
+  // nobody uses, and the end-of-moon recap starts from the board's own marks.
+  // Off restores the earlier behaviour exactly. No access rows are written.
+  {
+    key: "memberTasks.listDefault",
+    category: "Journal",
+    label: "Every member has a task board unless a steward turns one off",
+    description:
+      "When on, every member has a task board on their profile unless a steward turns theirs off, and a member linked to Organisational Memory has their tasks brought in. When off, a board stays off until a steward turns it on for that member, which is how boards worked before.",
+    type: "boolean",
+    default: "true",
+  },
+
   // ── Live Sessions: the room's own words and its usual length ──────────────
   //
   // READ by server/lib/liveSessions.ts: `placeLine` reads the first into the
@@ -3410,6 +3504,7 @@ const CYCLE_APPLY_KEYS = new Set([
   // The claim dials shape what a member is told they can do THIS season, so a
   // mid-season change would move the goalposts under somebody already counting.
   "economy.voice_claim_threshold",
+  "economy.equity_claim_threshold",
   "economy.claims_week_days",
   "economy.claims_week_starts",
   "gratitude.base_budget",
@@ -3483,6 +3578,9 @@ export function governanceWindowSyntaxProblem(raw: string): string | null {
  * same message without a round trip.
  */
 export function validateVariable(def: VariableDef, raw: string): string | null {
+  // First, before any type rule: a dial whose value moved into the sealed
+  // store takes its default (which is how its old row is cleared) and nothing else.
+  if (def.movedToSecret && raw !== def.default) return MOVED_TO_SECRET_SENTENCE;
   if (def.type === "boolean") {
     return ["true", "false", "1", "0"].includes(raw) ? null : "Must be true or false.";
   }

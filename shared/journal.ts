@@ -146,7 +146,7 @@ export const JOURNAL_PRACTICE_DEFS: Record<JournalPractice, JournalPracticeDef> 
       {
         key: "role-tension",
         prompt: "What tension are you experiencing in your role right now?",
-        hint: "Something in what your seat holds that is not working, or could work better.",
+        hint: "Something in what your role holds that is not working, or could work better.",
         light: true,
       },
       {
@@ -174,10 +174,10 @@ export const JOURNAL_PRACTICE_DEFS: Record<JournalPractice, JournalPracticeDef> 
     questions: [
       { key: "decided", prompt: "What got decided?", light: true },
       { key: "why", prompt: "Why that, and what else was on the table?", light: true },
-      { key: "holds", prompt: "Which seat holds it now, and by when?", light: true },
+      { key: "holds", prompt: "Which role holds it now, and by when?", light: true },
       { key: "tension", prompt: "What tension is still open?", light: true },
       { key: "new-player", prompt: "If a new player asked about this, what would you tell them?", light: true },
-      { key: "game", prompt: "What game is this?", hint: "A quest, a vote, a seat, a moon, a tension.", light: false },
+      { key: "game", prompt: "What game is this?", hint: "A quest, a vote, a role, a moon, a tension.", light: false },
       { key: "elsewhere", prompt: "Would you decide it the same way in another village?", light: false },
       { key: "differently", prompt: "What would you have done differently?", light: false },
     ],

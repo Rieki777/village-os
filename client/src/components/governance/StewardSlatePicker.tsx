@@ -53,11 +53,11 @@ export default function StewardSlatePicker({
   if (candidates.length === 0) return null;
   return (
     <div className="mt-4 border-t border-stone-900/10 pt-4">
-      <p className="text-sm font-semibold text-stone-900">Who carries the steward's seat</p>
+      <p className="text-sm font-semibold text-stone-900">Who carries the steward role</p>
       <p className="mt-1 text-xs text-stone-600 max-w-lg leading-relaxed">
         You are choosing this list, and the proposal says so. Everyone you pick answers for themselves, and carrying the
-        seat for this first season means holding all {powerCount} of the powers this village has to give. Founding
-        members only for this first season. After it, anybody can raise their hand for the seat and the village votes
+        role for this first season means holding all {powerCount} of the powers this village has to give. Founding
+        members only for this first season. After it, anybody can raise their hand for the role and the village votes
         them in.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -81,7 +81,7 @@ export default function StewardSlatePicker({
       </div>
       <p className="mt-2 text-xs text-stone-500">
         {chosen.length === 0
-          ? "Nobody picked, so the village starts with the seat empty. That stops nothing, and the village can vote somebody into it whenever it likes."
+          ? "Nobody picked, so the village starts with the role empty. That stops nothing, and the village can vote somebody into it whenever it likes."
           : `${chosen.length} named. Whoever accepts before the vote closes is seated when it carries.`}
       </p>
     </div>

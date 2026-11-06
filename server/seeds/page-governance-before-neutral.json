@@ -1,0 +1,100 @@
+{
+  "hero": {
+    "eyebrow": "How We Govern",
+    "headline": "Power Belongs to the Circle, Not the Person",
+    "intro": "{village} uses sociocracy, a consent-based governance system where every voice can influence decisions. While the systems are still finding their feet, members elect stewards who can veto a decision, and those same members can vote a steward out."
+  },
+  "principles": {
+    "heading": "The Core Principles",
+    "items": [
+      {
+        "title": "Consent over consensus",
+        "body": "We don't need everyone to love a decision. We need no one to have a serious objection. This keeps us moving without demanding perfection."
+      },
+      {
+        "title": "Circles, not hierarchy",
+        "body": "Decisions are made in the circle closest to the work. The Development Circle governs the build. The Community Circle governs the human experience. No top-down override."
+      },
+      {
+        "title": "Transparency by default",
+        "body": "Meeting notes, decisions, and proposals are recorded and accessible to all members. Nothing happens in secret."
+      }
+    ]
+  },
+  "decision": {
+    "heading": "How a Decision Gets Made",
+    "intro": "Every decision follows the same simple path.",
+    "steps": [
+      {
+        "text": "Someone senses a tension or opportunity."
+      },
+      {
+        "text": "They bring a proposal to their circle."
+      },
+      {
+        "text": "The circle discusses, amends, and tests for consent."
+      },
+      {
+        "text": "If no one has a paramount objection, the proposal passes."
+      },
+      {
+        "text": "The decision is logged and published."
+      }
+    ]
+  },
+  "circles": {
+    "heading": "Circles and Their Domains",
+    "intro": "Authority lives close to the work. Each circle governs its domain and reports up only when something crosses boundaries.",
+    "linkLabel": "See all circles in detail",
+    "items": [
+      {
+        "name": "General Coordinating Circle",
+        "body": "Where the circles meet: the four leads and circle representatives, coordinating strategy, budget stewardship, and decisions that cross circle boundaries."
+      },
+      {
+        "name": "Outreach & Growth Circle",
+        "body": "Connects with people and guides their whole journey into the village: marketing, sales, social media, and membership & onboarding as one flow."
+      },
+      {
+        "name": "Community Circle",
+        "body": "The lived experience: events, hospitality, stays on the land, and the governance and team-health practices that keep the human systems honest."
+      },
+      {
+        "name": "Development Circle",
+        "body": "The physical realization: master planning, architecture, permitting, construction, land operations, and regenerative systems."
+      },
+      {
+        "name": "Finance & Business Circle",
+        "body": "Stewards the money and builds the engines that generate it: financial operations, the legal container, and business development."
+      }
+    ]
+  },
+  "conflict": {
+    "heading": "Conflict Resolution",
+    "first": "When tension shows up, it goes through three stages. First, the people involved have a direct conversation, supported by our shared practice of nonviolent communication. Most things resolve here.",
+    "second": "If that doesn't land, a facilitated conversation is requested. A trained member from a different circle helps both sides be heard and find a path forward.",
+    "third": "If the tension still won't resolve, the relevant circle holds a mediation. No one is removed from the community without a circle consent vote. We err on the side of repair and reintegration whenever possible."
+  },
+  "stewards": {
+    "heading": "Stewards, and Why They Are Temporary",
+    "first": "The community votes stewards in. A steward holds a veto: once a major proposal passes, a steward has {veto} to stop it before it takes effect. That window exists so somebody with the whole picture can catch a decision that would cause harm or break something the village depends on.",
+    "second": "A veto is answerable. It is recorded with the steward's name and their stated reason, both visible to every member, so stopping a decision costs a steward something and cannot be done quietly.",
+    "third": "The community checks the stewards. Members who put a steward in can vote that steward out, and the settings governing stewards are the one thing no steward may veto, so a role can never defend itself against the village that granted it.",
+    "fourth": "These are training wheels. Stewards exist while the systems are young and still being proven, and the village can lower or retire the role by vote once it no longer needs them."
+  },
+  "rules": {
+    "heading": "How Rules Evolve",
+    "body": "The agreements we launch with are not permanent. Any member can propose a change through their circle. Rules that no longer serve the community get amended or removed. Governance is alive; it grows with us."
+  },
+  "hypha": {
+    "heading": "The Hypha Platform",
+    "body": "Governance is logged on Hypha, an open-source platform owned by its contributors. Every proposal, vote, and contribution is transparent and traceable. Value in, value out.",
+    "linkLabel": "Learn more in the Game Guide"
+  },
+  "cta": {
+    "heading": "Ready to help govern?",
+    "body": "Join the circle closest to your gifts and start shaping the village from the inside.",
+    "stewardLabel": "Become a Steward",
+    "commitmentLabel": "Sign the {commitment}"
+  }
+}

@@ -153,7 +153,7 @@ export async function buildRetrospective(
         id: `seat-never-filled:${s.id}`,
         kind: "org_role", entityId: s.id, name: s.name,
         reading: "Declared for this season and never held by anyone.",
-        meaning: "Either the village does not need this seat, or nobody was ever asked. Both are worth deciding on purpose.",
+        meaning: "Either the village does not need this role, or nobody was ever asked. Both are worth deciding on purpose.",
         action: "drop_from_pattern",
         evidence: { seats: Number(s.seats), everHeld: 0 },
       }));
@@ -162,7 +162,7 @@ export async function buildRetrospective(
         id: `seat-silent:${s.id}`,
         kind: "org_role", entityId: s.id, name: s.name,
         reading: "Held all season, with nothing recorded against whoever held it.",
-        meaning: "The seat may be ceremonial, or the holder may have needed support nobody offered. It is not evidence of laziness.",
+        meaning: "The role may be ceremonial, or the holder may have needed support nobody offered. It is not evidence of laziness.",
         action: "support_holder",
         evidence: { holders: held, events: 0 },
       }));
@@ -182,7 +182,7 @@ export async function buildRetrospective(
         id: `seat-broad:${s.id}`,
         kind: "org_role", entityId: s.id, name: s.name,
         reading: `Carries ${accountabilities} accountabilities.`,
-        meaning: "A seat answerable for this many separate things cannot be held well by one person, and cannot be handed over cleanly either.",
+        meaning: "A role answerable for this many separate things cannot be held well by one person, and cannot be handed over cleanly either.",
         action: "grow_into_circle",
         evidence: { accountabilities },
       }));
@@ -204,7 +204,7 @@ export async function buildRetrospective(
         id: `seat-sole-critical:${s.id}`,
         kind: "org_role", entityId: s.id, name: s.name,
         reading: "Marked critical, and one person is the only holder.",
-        meaning: "Nothing is wrong with the seat or the holder. It has no second pair of hands, so it stops when they do, and a second holder is cheaper to find now than in the week it stops.",
+        meaning: "Nothing is wrong with the role or the holder. It has no second pair of hands, so it stops when they do, and a second holder is cheaper to find now than in the week it stops.",
         action: "recruit",
         evidence: { holders: 1, criticality: "high" },
       }));
@@ -234,8 +234,8 @@ export async function buildRetrospective(
       observations.push(obs({
         id: `person-carrying:${uid}`,
         kind: "gap", entityId: uid, name: who[0]?.name ?? "A member",
-        reading: `Produced ${Math.round(share * 100)}% of everything recorded this season, across ${held.length} seat(s).`,
-        meaning: "One person carrying most of the village is the failure that ends projects, and the seats they hold are the ones to grow into circles first.",
+        reading: `Produced ${Math.round(share * 100)}% of everything recorded this season, across ${held.length} role(s).`,
+        meaning: "One person carrying most of the village is the failure that ends projects, and the roles they hold are the ones to grow into circles first.",
         action: "grow_into_circle",
         evidence: {
           share: Math.round(share * 100),
@@ -328,7 +328,7 @@ export async function buildRetrospective(
         observations.push(obs({
           id: `circle-empty:${c.id}`,
           kind: "circle", entityId: c.id, name: c.name,
-          reading: "Ran all season with no seats in it.",
+          reading: "Ran all season with no roles in it.",
           meaning: "A circle with nobody accountable for anything is a heading. Members read it as structure that exists, which makes the whole chart harder to trust.",
           action: "mark_dormant",
           evidence: { seats: 0 },
@@ -353,7 +353,7 @@ export async function buildRetrospective(
       id: `gap:${String(u.query).slice(0, 40)}`,
       kind: "gap", entityId: null, name: String(u.query),
       reading: `Asked ${u.n} time(s) this season, and nothing on the map answered it.`,
-      meaning: "This is work somebody wanted to do and could not find a way into. It is the clearest evidence a village ever gets that a seat is missing.",
+      meaning: "This is work somebody wanted to do and could not find a way into. It is the clearest evidence a village ever gets that a role is missing.",
       action: "add_seat",
       evidence: { asked: Number(u.n) },
     }));

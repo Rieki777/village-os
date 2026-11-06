@@ -15,7 +15,7 @@
  * Any read but the queue and the accept is refused, so this file stays about the card.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
@@ -28,12 +28,16 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
+  // The owed-postings panel names each token through useTokenNameMap, which
+  // reads the village's own names from the game config (readiness, R-words).
+  useGameConfig: () => ({ currency: { names: {} } }),
 }));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 import Review from "./Review";
+import { forgetPayOptions } from "@/components/WorkValueEditor";
 
 const ANSWERS = [
   "What they bring: Two afternoons and my own seeds",
@@ -63,6 +67,14 @@ function serve(quests: unknown[], drops: unknown[] = []) {
         json: async () => ({ batches: [], quests, drops, counts: { proposals: 0, quests: quests.length } }),
       };
     }
+    // What a quest may pay in this village (0265): one token, with its ceiling and standard amount.
+    if (String(url).startsWith("/api/quests/pay-options")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ currency: "CRC", quest: [{ token: "credits", name: "Village Credits", ceiling: 250, standard: 25, decimals: 2 }], role: [] }),
+      };
+    }
     if (String(url).startsWith("/api/review/quests/")) {
       return { ok: true, status: 200, json: async () => ({ success: true, questId: "q-new" }) };
     }
@@ -80,8 +92,12 @@ const renderReview = () =>
   );
 
 describe("a quest idea on /review says where it came from, and what the person answered", () => {
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
+    // The editor keeps the pay options for the page; each case reads its own.
+    forgetPayOptions();
   });
 
   it("names the form, and puts each answer on its own line beneath the idea", async () => {
@@ -115,13 +131,16 @@ describe("a quest idea on /review says where it came from, and what the person a
 
     // The number a person typed comes out before anybody else can read it.
     fireEvent.change(asks, { target: { value: "Turn the old bookcase into a seed library." } });
-    fireEvent.change(screen.getByLabelText("What this quest pays"), { target: { value: "50-100" } });
+    // A value in the village's currency, and the token boxes open on the standard amounts.
+    await waitFor(() => expect((screen.getByLabelText("Village Credits") as HTMLInputElement).value).toBe("25"));
+    fireEvent.change(screen.getByLabelText(/What it is worth/), { target: { value: "25000" } });
     fireEvent.click(screen.getByRole("button", { name: "Put it on the board" }));
 
     const accepted = () => fetchMock.mock.calls.find(([url]) => String(url) === "/api/review/quests/qp-1/accept");
     await waitFor(() => expect(accepted()).toBeTruthy());
     expect(JSON.parse(String(accepted()![1]?.body))).toEqual({
-      reward: { gratitude: "50-100", stayCreditReward: null },
+      // 0285: an empty cash box sends null, which stores no cash.
+      reward: { cashMinor: null, valueMinor: 2500000, valueTokens: [{ token: "credits", amount: 25 }], stayCreditReward: null },
       edits: { title: "Build a seed library shelf", description: "Turn the old bookcase into a seed library." },
     });
   });
@@ -142,6 +161,7 @@ describe("a quest idea on /review says where it came from, and what the person a
 
 describe("the refusal count says what was kept", () => {
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 

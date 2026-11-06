@@ -110,10 +110,14 @@ export function allVariables(): Array<
 > {
   return VARIABLES.map((def) => {
     const raw = overrides[def.key];
+    // A dial whose value moved into the sealed store never shows what an older
+    // release left in its row: that row is a credential waiting for the boot
+    // pass to seal it, and this listing goes to a browser.
+    const shown = def.movedToSecret ? undefined : raw;
     return {
       ...def,
-      value: raw ?? def.default,
-      parsed: parseVariable(def, raw),
+      value: shown ?? def.default,
+      parsed: parseVariable(def, shown),
       isDefault: raw === undefined || raw === def.default,
       // A SECOND FACT, and not the negation of the first. `isDefault` asks
       // what the value IS; this asks whether anybody here ever said so. They

@@ -1,6 +1,6 @@
 # Capabilities
 
-Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 37 keys, 8 steps.
+Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 44 keys, 8 steps.
 
 There is ONE capability gate, `capabilityDecision()` in `shared/capabilities.ts`, and every permission answer in the product comes through it. The order it resolves in IS the policy: it decides whether a warning badge's deny survives an appointment, and whether an administrator still outranks a village on a power that village has taken over.
 
@@ -94,7 +94,7 @@ These rows are not a description of the order. They are answers: the generator c
 
 ## Every capability key
 
-37 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `steward`, `comms`.
+44 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `cash`, `module`, `steward`, `comms`, `session`, `companion`, `moon`.
 
 Four columns need a word before the tables:
 
@@ -128,7 +128,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `map.viewPeople` | See who holds seats on the village map | yes | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
+| `map.viewPeople` | See who holds roles on the village map | yes | yes | no | `guest` (rung 2 of 12) | How Power Is Held |
 | `map.contact` | Reach a role holder through the contact relay | yes | yes | no | `member` (rung 5 of 12) | How Power Is Held |
 | `map.edit` | Draft changes to the land in build mode | yes | yes | no | no rung | no module |
 | `map.publish` | Publish a draft onto the live map | yes | yes | yes | no rung | no module |
@@ -139,7 +139,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `terms.read` | Read what each seat offers, money included | yes | yes | no | `member` (rung 5 of 12) | no module |
+| `terms.read` | Read what each role offers, money included | yes | yes | no | `member` (rung 5 of 12) | no module |
 
 ### `feed`
 
@@ -191,8 +191,8 @@ Four columns need a word before the tables:
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
 | `org.declare` | Declare how the village holds power | yes | yes | yes | no rung | no module |
-| `org.seat` | Seat and unseat the holders of the village's seats | yes | yes | yes | no rung | no module |
-| `org.seatAgent` | Seat and unseat the software agents that hold seats | yes | yes | yes | no rung | no module |
+| `org.seat` | Records role changes after the circle consents | yes | yes | yes | no rung | no module |
+| `org.seatAgent` | Seat and unseat the software agents that hold roles | yes | yes | yes | no rung | no module |
 | `org.decide` | Publish a change to the village's structure, or put it to the village | yes | yes | yes | no rung | no module |
 
 ### `ballot`
@@ -238,6 +238,18 @@ Four columns need a word before the tables:
 | --- | --- | --- | --- | --- | --- | --- |
 | `redemption.confirm` | Confirm that a member was paid, and destroy the tokens they redeemed | yes | yes | yes | no rung | Redemption |
 
+### `cash`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cash.pay` | Read the cash the village owes its members, and mark a payment made | yes | yes | yes | no rung | no module |
+
+### `module`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `module.switch` | Turn a module on for the village | yes | yes | yes | no rung | no module |
+
 ### `steward`
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
@@ -250,21 +262,41 @@ Four columns need a word before the tables:
 | --- | --- | --- | --- | --- | --- | --- |
 | `comms.manage` | Run the village's email: its automations, their words, and letters | yes | yes | yes | no rung | Village Comms |
 
+### `session`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `session.template` | Keep the village's meeting templates | yes | yes | no | `member` (rung 5 of 12) | Live Sessions |
+
+### `companion`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `companion.use` | Keep AI companions, answer their questions and decide their drafts | yes | yes | no | `member` (rung 5 of 12) | no module |
+
+### `moon`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `moon.approve` | Approve the work in a member's end-of-moon recap | yes | no | no | no rung | End-of-Moon Review |
+| `moon.approve_alone` | Give both approvals of a member's end-of-moon recap by yourself | yes | no | no | no rung | End-of-Moon Review |
+| `moon.approve_own` | Approve your own end-of-moon recap and invoice, marked for review | yes | no | no | no rung | End-of-Moon Review |
+
 ## The voices
 
-5 of the 37 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
+5 of the 44 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
 
 ## The keys no badge may grant
 
-1 of the 37 keys cannot be handed out by a badge: `steward.veto`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
+4 of the 44 keys cannot be handed out by a badge: `steward.veto`, `moon.approve`, `moon.approve_alone` and `moon.approve_own`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
 
 The line this draws is narrow on purpose. A key stays grantable while an ordinary admin route can already put it on a role or a rung, because closing the badge door on those would be a new policy rather than a fix. The keys above are the ones with no admin route left to them at all.
 
 ## The keys a village can take off the admin panel
 
-21 of the 37 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `steward.veto` and `comms.manage`.
+23 of the 44 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `module.switch`, `steward.veto` and `comms.manage`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -285,10 +317,12 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Exchange | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | Redemption | `redemption` | `redemption.confirm` |
 | Village Calendar | `events` | `event.rsvp`, `event.manage` |
+| End-of-Moon Review | `moon-review` | `moon.approve`, `moon.approve_alone`, `moon.approve_own` |
+| Live Sessions | `sessions` | `session.template` |
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 | Village Comms | `comms` | `comms.manage` |
 
-15 keys are declared by no module: `terms.read`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve` and `steward.veto`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+18 keys are declared by no module: `terms.read`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `cash.pay`, `module.switch`, `steward.veto` and `companion.use`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -297,13 +331,13 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
 ```json
 {
   "counts": {
-    "keys": 37,
+    "keys": 44,
     "steps": 8,
     "voices": 5,
-    "villageHoldable": 21,
-    "badgeUngrantable": 1,
-    "climbable": 14,
-    "undeclared": 15
+    "villageHoldable": 23,
+    "badgeUngrantable": 4,
+    "climbable": 16,
+    "undeclared": 18
   },
   "breakGlassSeat": "steward.veto",
   "resolutionOrder": [
@@ -429,7 +463,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "map.viewPeople",
-      "label": "See who holds seats on the village map",
+      "label": "See who holds roles on the village map",
       "deniable": true,
       "transferable": false,
       "stageUnlock": "guest",
@@ -440,7 +474,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "terms.read",
-      "label": "Read what each seat offers, money included",
+      "label": "Read what each role offers, money included",
       "deniable": true,
       "transferable": false,
       "stageUnlock": "member",
@@ -648,7 +682,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "org.seat",
-      "label": "Seat and unseat the holders of the village's seats",
+      "label": "Records role changes after the circle consents",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
@@ -657,7 +691,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "org.seatAgent",
-      "label": "Seat and unseat the software agents that hold seats",
+      "label": "Seat and unseat the software agents that hold roles",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
@@ -730,6 +764,24 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       ]
     },
     {
+      "key": "cash.pay",
+      "label": "Read the cash the village owes its members, and mark a payment made",
+      "deniable": true,
+      "transferable": true,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
+    },
+    {
+      "key": "module.switch",
+      "label": "Turn a module on for the village",
+      "deniable": true,
+      "transferable": true,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
+    },
+    {
       "key": "steward.veto",
       "label": "Stop a carried decision inside its window, and say why",
       "deniable": false,
@@ -747,6 +799,59 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "stageRung": null,
       "modules": [
         "comms"
+      ]
+    },
+    {
+      "key": "session.template",
+      "label": "Keep the village's meeting templates",
+      "deniable": true,
+      "transferable": false,
+      "stageUnlock": "member",
+      "stageRung": 5,
+      "modules": [
+        "sessions"
+      ]
+    },
+    {
+      "key": "companion.use",
+      "label": "Keep AI companions, answer their questions and decide their drafts",
+      "deniable": true,
+      "transferable": false,
+      "stageUnlock": "member",
+      "stageRung": 5,
+      "modules": []
+    },
+    {
+      "key": "moon.approve",
+      "label": "Approve the work in a member's end-of-moon recap",
+      "deniable": true,
+      "transferable": false,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": [
+        "moon-review"
+      ]
+    },
+    {
+      "key": "moon.approve_alone",
+      "label": "Give both approvals of a member's end-of-moon recap by yourself",
+      "deniable": true,
+      "transferable": false,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": [
+        "moon-review"
+      ]
+    },
+    {
+      "key": "moon.approve_own",
+      "label": "Approve your own end-of-moon recap and invoice, marked for review",
+      "deniable": true,
+      "transferable": false,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": [
+        "moon-review"
       ]
     }
   ],

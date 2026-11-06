@@ -40,12 +40,39 @@ let child: ChildProcess | undefined;
 let testDb: TestDb | undefined;
 let dataDir = "";
 
+/*
+ * THE MAP ARTIFACT FOLLOWS THE MAP MODULE (readiness R056), and every module
+ * ships off, so on this fresh schema /grounds/* answers 404 until somebody turns
+ * the map on. The two cases below that need the artifact served ask for it
+ * here: a founder is bootstrapped once and switches the map to public. Memoised,
+ * so whichever case runs first pays and the other reuses it.
+ */
+let mapTurnedOn: Promise<void> | null = null;
+function mapOn(): Promise<void> {
+  mapTurnedOn ??= (async () => {
+    const post = (route: string, body: unknown, token = "") =>
+      fetch(BASE + route, { // module-review-ok: the test client dialling its own in-process server on localhost, as every e2e suite does
+        method: route.includes("/lifecycle") ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(body),
+      }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) }));
+    const boot = await post("/api/admin/bootstrap", { password: ADMIN, email: `founder-${PORT}@example.test`, name: "Hygiene Founder" });
+    const claim = decodeURIComponent(String(boot.json?.claimUrl ?? "").match(/token=([^&]+)/)?.[1] ?? "");
+    const setPw = await post("/api/auth/set-password", { token: claim, password: "Hygiene123!" });
+    const founder = String(setPw.json?.token ?? "");
+    expect(founder, "the founder must hold a session to turn the map on").toBeTruthy();
+    const on = await post("/api/admin/modules/map/lifecycle", { lifecycle: "public" }, founder);
+    expect(on.status, JSON.stringify(on.json)).toBe(200);
+  })();
+  return mapTurnedOn;
+}
+
 /** The set every response carries, whatever it is. */
 const EXPECTED: Array<[string, string]> = [
   ["x-content-type-options", "nosniff"],
   ["referrer-policy", "strict-origin-when-cross-origin"],
   ["x-frame-options", "SAMEORIGIN"],
-  ["content-security-policy", "frame-ancestors 'self'"],
+  ["cross-origin-opener-policy", "same-origin"],
   // The microphone is this origin's own: speech input needs it (journal QA,
   // 2026-10-02, found every mic refused with `not-allowed` under `()`).
   ["permissions-policy", "camera=(), microphone=(self), geolocation=()"],
@@ -110,6 +137,15 @@ describe.skipIf(!DB_CONFIGURED)("security response headers", () => {
       for (const [name, value] of EXPECTED) {
         expect(res.headers.get(name), `${route} is missing ${name}`).toBe(value);
       }
+      // The page policy (server/lib/securityHeaders.ts) carries a per-build hash,
+      // so assert what must hold rather than the exact string: framing stays
+      // same-origin, and no script runs unless it came from this origin.
+      const csp = res.headers.get("content-security-policy") ?? "";
+      expect(csp, `${route} CSP`).toContain("frame-ancestors 'self'");
+      expect(csp, `${route} CSP`).toContain("object-src 'none'");
+      const scriptSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src ")) ?? "";
+      expect(scriptSrc, `${route} script-src`).toMatch(/^script-src 'self'/);
+      expect(scriptSrc, `${route} script-src`).not.toMatch(/'unsafe-inline'|'unsafe-eval'/);
     });
   }
 
@@ -126,13 +162,22 @@ describe.skipIf(!DB_CONFIGURED)("security response headers", () => {
   });
 
   it("still let /map embed the map artifact it lives on", async () => {
+    // Off first: a village that never turned the map on serves no artifact.
+    const off = await fetch(`${BASE}/grounds/index.html`); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    expect(off.status).toBe(404);
+    expect(await off.json()).toEqual({ error: "module_disabled", module: "map" });
+    await mapOn();
     // frame-ancestors 'self' and X-Frame-Options SAMEORIGIN both permit the
     // same-origin iframe the shell renders. If the artifact stops serving, or
     // the policy tightens past 'self', this is where it shows.
     const res = await fetch(`${BASE}/grounds/index.html`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    // The artifact is inline scripts throughout, so it keeps framing and the
+    // three directives that break nothing, and no script-src at all.
+    expect(res.headers.get("content-security-policy")).toBe(
+      "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
+    );
     expect(res.headers.get("x-frame-options")).toBe("SAMEORIGIN");
   });
 });
@@ -239,6 +284,7 @@ describe.skipIf(!DB_CONFIGURED)("a path that looks like a file fails like one", 
   it("still serves every real file, static and generated", async () => {
     const art = fs.readdirSync(IMAGES).find((f) => f.endsWith(".webp"));
     expect(art, "dist/public/images/modules must hold module art; run pnpm build").toBeTruthy();
+    await mapOn(); // /grounds/manifest.json is the map's own probe, so it needs the map on
     const real: Array<[string, RegExp]> = [
       [`/images/modules/${art}`, /image\/webp/],
       ["/images/modules/manifest.json", /json/],

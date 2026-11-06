@@ -66,6 +66,8 @@ export interface SystemSettingsPatch {
   webhookConnectedAt?: string | null;
   webhookConnectedBy?: string | null;
   webhookId?: string | null;
+  keyRights?: "full" | "sending" | null;
+  keyRightsFor?: string | null;
 }
 
 /**
@@ -86,6 +88,8 @@ export async function recordCommsSettings(pool: Pool, patch: SystemSettingsPatch
   if ("webhookConnectedAt" in patch) clean.webhookConnectedAt = short(patch.webhookConnectedAt, 40);
   if ("webhookConnectedBy" in patch) clean.webhookConnectedBy = short(patch.webhookConnectedBy, 255);
   if ("webhookId" in patch) clean.webhookId = short(patch.webhookId, 128);
+  if ("keyRights" in patch) clean.keyRights = patch.keyRights === "full" || patch.keyRights === "sending" ? patch.keyRights : null;
+  if ("keyRightsFor" in patch) clean.keyRightsFor = short(patch.keyRightsFor, 200);
   if (Object.keys(clean).length) await mergeCommsSettings(pool, clean);
   return readCommsSettings(pool);
 }

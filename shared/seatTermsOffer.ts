@@ -55,9 +55,14 @@ export function proposeTermsHref(seatId: string): string {
  * `null` (and absent) is "no terms on offer", which is a real answer and
  * different from an empty set of terms. Anything else goes through the one
  * parser, and a refusal is said in the parser's own first sentence.
+ *
+ * `newWrite` is for an offer being written (a draft's preview and publish):
+ * it adds the CCOS limit on how many measures a scoreboard names. A stored
+ * offer is read without it, so an older one keeps loading.
  */
 export function readTermsOffer(
   raw: unknown,
+  opts: { newWrite?: boolean } = {},
 ): { ok: true; settings: SeatSettings | null } | { ok: false; problem: string } {
   if (raw === null || raw === undefined) return { ok: true, settings: null };
   let value = raw;
@@ -68,7 +73,7 @@ export function readTermsOffer(
       return { ok: false, problem: "These terms could not be read." };
     }
   }
-  const parsed = parseSeatSettings(value);
+  const parsed = parseSeatSettings(value, { newWrite: opts.newWrite === true });
   if (!parsed.ok || !parsed.settings) {
     return { ok: false, problem: parsed.problems[0]?.message ?? "These terms could not be read." };
   }

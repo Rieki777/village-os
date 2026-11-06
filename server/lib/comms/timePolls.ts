@@ -109,11 +109,13 @@ import { expandOccurrences, getCalendarRow, type CalendarRow } from "../calendar
 import { updateGathering } from "../gatherings";
 import { icsEscape, icsFold, icsUtc } from "../icsFeed";
 import type { NotifyInput, NotifyResult } from "../notify";
+import { isTombstone } from "../oauthAccounts";
 import { numberVar } from "../variables";
 import { villageTimezone } from "../villageReaders";
 import type { ActionHandler, ActResult } from "./actions";
 import { ensureContact } from "./contacts";
 import { touch } from "./journeys";
+import { LINK_PERSON_GONE, linkPersonStands } from "./linkPerson";
 import { signLink, type LinkPayload } from "./links";
 import { post, type PostOfficeDeps } from "./postOffice";
 import { loadEmailVillage, renderTemplate, type EmailVillage } from "./render";
@@ -739,7 +741,12 @@ interface Recipient {
   timezone: string | null;
 }
 
-/** Who a person key reaches by email: a guest's contact, or a member's account. Null when nobody can be written to. */
+/**
+ * Who a person key reaches by email: a guest's contact, or a member's account.
+ * Null when nobody can be written to. A tombstone is nobody: its address is
+ * the erasure's own placeholder, and writing to it would make the erased
+ * member a fresh contact (`ensureContact` keeps any well-formed address).
+ */
 async function recipientFor(deps: TimePollDeps, personKey: string): Promise<Recipient | null> {
   const pool = deps.getPool();
   const guest = contactIdOfGuestKey(personKey);
@@ -748,7 +755,7 @@ async function recipientFor(deps: TimePollDeps, personKey: string): Promise<Reci
     return c ? { personKey, email: c.email, name: c.name, userId: null, contactId: c.id, timezone: c.timezone } : null;
   }
   const m = await deps.members.byId(personKey);
-  if (!m || m.isExample || typeof m.email !== "string" || !m.email.trim()) return null;
+  if (!m || m.isExample || typeof m.email !== "string" || !m.email.trim() || isTombstone({ email: m.email })) return null;
   const contact = await ensureContact({ getPool: deps.getPool }, { email: m.email, name: m.name ?? null, userId: m.id, source: "account" });
   if (!contact) return null;
   const row = await contactById(pool, contact.id);
@@ -999,7 +1006,7 @@ export async function invite(deps: TimePollDeps, eventId: string, input: InviteI
   if (deps.notify) {
     for (const userId of Array.from(new Set(input.members))) {
       const m = await deps.members.byId(userId);
-      if (!m || m.isExample) continue;
+      if (!m || m.isExample || isTombstone({ email: String(m.email ?? "") })) continue;
       const result = await deps.notify({
         userId,
         type: "time_poll_open",
@@ -1019,11 +1026,19 @@ export async function invite(deps: TimePollDeps, eventId: string, input: InviteI
 const pollIdOf = (p: LinkPayload): string | null => (typeof p.p === "string" && p.p ? p.p : null);
 const personOf = (p: LinkPayload): string | null => (typeof p.k === "string" && p.k ? p.k : null);
 
+/** The refusal a vote link reads once the person it names is gone (./linkPerson.ts). */
+export const VOTER_GONE = { ok: false as const, status: 404, error: LINK_PERSON_GONE };
+
 /**
  * `time_vote`: the link a vote email carries for one time. The page shows the
  * live tally, the person's own picks, and a button per time to pick it or
  * take it back. Nothing happens until a press (5.4): mail scanners open every
  * link in an email.
+ *
+ * The link lives 120 days and outlives an erasure, so the page and the press
+ * both ask whether its person still stands. An erased member's link opens
+ * nothing and votes nothing: erasure already took every vote they had, so
+ * there is nothing for it to take back either.
  */
 export function timeVoteAction(deps: TimePollDeps): ActionHandler {
   async function describe(payload: LinkPayload) {
@@ -1031,6 +1046,7 @@ export function timeVoteAction(deps: TimePollDeps): ActionHandler {
     const personKey = personOf(payload);
     const poll = pollId ? await pollById(deps.getPool(), pollId) : null;
     if (!poll || !personKey) return null;
+    if (!(await linkPersonStands(deps, personKey))) return null;
     const row = await getCalendarRow(deps.getPool(), poll.eventId);
     const view = await pollView(deps, poll.eventId, { personKey, signedIn: false, canManage: false });
     if (!view || !row) return null;
@@ -1075,6 +1091,7 @@ export function timeVoteAction(deps: TimePollDeps): ActionHandler {
       if (!pollId || !personKey) return { ok: false, status: 404, error: "This vote is gone." };
       const m = typeof body.choice === "string" ? body.choice.match(/^(yes|no):([A-Za-z0-9_]{1,64})$/) : null;
       if (!m) return { ok: false, status: 400, error: "Pick a time." };
+      if (!(await linkPersonStands(deps, personKey))) return VOTER_GONE;
       const result = await vote(deps, pollId, personKey, m[1] === "yes" ? { add: m[2] } : { remove: m[2] });
       if (!result.ok) return { ok: false, status: result.status, error: result.error };
       return {

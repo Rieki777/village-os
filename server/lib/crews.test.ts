@@ -9,7 +9,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { cleanCrewName, crewsRepo, newInviteCode, type CrewsRepo } from "./crews";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -54,7 +54,7 @@ describe("newInviteCode", () => {
 describe.skipIf(!configured)("crewsRepo (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 });
+    pool = testPool(db, { connectionLimit: 8 });
     crews = crewsRepo(pool);
   });
 

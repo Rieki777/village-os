@@ -27,7 +27,7 @@ import mysql from "mysql2/promise";
 import { faucetAccounts, mintView, publicSupply } from "./lib/economy";
 import { loadTokenRegistry, memberAccount, postTransfer, registerToken } from "./lib/ledger";
 import { loadVariables } from "./lib/variables";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 
@@ -35,13 +35,15 @@ let db: TestDb;
 let pool: mysql.Pool;
 
 /**
- * The five the migrations seed, written out so the assertion is a claim about
+ * The six the migrations seed, written out so the assertion is a claim about
  * the MIGRATIONS and not a restatement of whatever the query returned. If a
- * lane seeds a sixth upstream faucet, this list is the thing that goes red,
+ * lane seeds another upstream faucet, this list is the thing that goes red,
  * and the two cases below are what say the supply surfaces already handle it.
+ * It went red as designed when 0266 seeded `sys:equity-mint`.
  */
 const SEEDED_FAUCETS = [
   "sys:cycle-pool",
+  "sys:equity-mint",
   "sys:gratitude-pool",
   "sys:library-mint",
   "sys:mint",
@@ -56,7 +58,7 @@ const PROBE_SOURCE = "probe_issue";
 describe.skipIf(!configured)("the faucet set the supply surfaces read", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 5 }); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     await loadTokenRegistry(pool);
     await loadVariables(pool);
   });

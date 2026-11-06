@@ -217,6 +217,32 @@ linking grants no power the mailbox did not already carry, and refusing would
 lock real members out of accounts they own while leaving the mailbox path
 exactly as open as it was.
 
+**A password nobody confirmed from the address is ended by the link** (readiness
+finding R104). The argument above protects the Google holder; it says nothing
+about whoever set the existing password. Email sign-up never asked whether the
+person typing an address reads it, so a stranger could make a password account
+at the address a future member, or the founder, would later bring to Google.
+Linking that row and leaving the password live handed the real owner an account
+the stranger could still sign into, with every session the stranger had.
+
+So `users.email_verified_at` records when the address's owner proved it: a
+redeemed address-proof letter (sent at sign-up, and it also asks for the
+account's own session or password, so a click from somebody who never made the
+account confirms nothing), a redeemed set-password link, or a Google sign-in at
+that address. A Google sign-in onto a row with a password and no such proof
+clears the password and moves `tokenVersion` in the same locked update as the
+link, so every earlier session dies, and ends the agent reach (agent tokens,
+feeds, inbox, model key, invitations, delegation) around it. That is exactly
+what a reset from the same mailbox would do, without the round trip, and it
+works on a village with no email set up. The same applies on a subject match,
+because a link written before this fix may sit on a planted account. A member
+who set that password themselves is told by letter, and sets a new one with
+`forgot-password`. A confirmed password is never touched.
+
+The founder grant refuses a row holding a password nobody confirmed, and
+bootstrap ends such a password before it raises the row and returns a claim
+link instead.
+
 **`email_verified` is required and is not negotiable.** A Google account can
 carry an address whose owner never proved they hold it. Accepting one would
 mean an attacker signs up to Google claiming the founder's address, clicks

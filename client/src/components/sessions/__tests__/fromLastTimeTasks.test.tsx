@@ -178,6 +178,27 @@ describe("the action check reads the circle's tasks", () => {
     fireEvent.click(screen.getByRole("button", { name: ROOM_COPY.addActionCheck }));
     await waitFor(() => expect(added).toEqual([{ title: ROOM_COPY.actionCheckTitle, aim: "report", minutes: 5, fromSessionId: 3 }]));
   });
+
+  it("offers the action check once a room has one, whichever earlier session it points back to", () => {
+    // Somebody who was in the last call brought it in from there; this viewer reads only an older session's tasks.
+    const check = {
+      id: 90,
+      title: ROOM_COPY.actionCheckTitle,
+      aim: "report" as const,
+      minutes: 5,
+      position: 1,
+      status: "waiting" as const,
+      presenterUserId: 1,
+      addedBy: 1,
+      startedAt: null,
+      endedAt: null,
+      usedSeconds: 0,
+      fromSessionId: 99,
+    };
+    render(<FromLastTime view={makeView({ circleTasks: circleTasks(), items: [check] })} actions={doors()} />);
+    expect(screen.getByRole("heading", { name: SESSION_COPY.carriedActions })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ROOM_COPY.addActionCheck })).toBeNull();
+  });
 });
 
 describe("the readings under it", () => {

@@ -11,7 +11,7 @@ Provenance: platform
 
 Three tables of declarations, all carrying `is_example`:
 
-- `spending_rules`: scope (a circle or a seat), a ceiling in minor units plus a unit code, who says yes (`none`, `circle-consent`, `lead`, `founders`, `treasury`, `hypha`, `other` with a required note), which pot pays (`treasury`, `circle-budget`, `member`, `grant`, `sponsor`, `other` with a required note), and visibility (`village`, or `holders` of that scope only). Two rows per scope answer the pair "alone" and "with permission".
+- `spending_rules`: scope (a circle or a role), a ceiling in minor units plus a unit code, who says yes (`none`, `circle-consent`, `lead`, `founders`, `treasury`, `hypha`, `other` with a required note), which pot pays (`treasury`, `circle-budget`, `member`, `grant`, `sponsor`, `other` with a required note), and visibility (`village`, or `holders` of that scope only). Two rows per scope answer the pair "alone" and "with permission".
 - `funding_sources`: name, kind (`donations`, `memberships`, `stays`, `grants`, `sales`, `land-or-lease`, `investors`, `other` with a required note), and either a share of the whole or an amount a year. Both amounts absent is a real answer.
 - `circle_budgets`: what a circle is given, per season or standing, and SINCE 0200 the row also says WHICH MODEL it runs on. Under `mode = 'cap'`, the original and the default for every row that predates 0200, it is a declared envelope: nothing decrements it, and the two caps (`amount_minor` a season, `cycle_amount_minor` a cycle) are compared against a sum taken over `token_ledger` when somebody asks. Under `mode = 'treasury'` the village mints the circle real tokens up front into `sys:circle:<circleId>`, and the circle keeps whatever it does not spend when the period turns. That difference is deliberate: a cap creates an incentive to spend the whole cap and a treasury creates an incentive to save. A change BETWEEN the two is queued and lands at the next period boundary, so a circle finishes its season on the model it started with (`pending_mode`, `pending_from`). A circle going dormant has its treasury swept to the village's master treasury, or retired through the same account redemption burns to when the village has none, and `dormant_held_minor` records what it held so a steward reviving it can be told; reissuing is a new mint and meets the village's issuance cap.
 
@@ -28,8 +28,8 @@ A unit test reads `server/lib/resources.ts` and holds every INSERT, UPDATE and D
 
 ## Tiers
 
-- Admins and declarers (admin, `org.declare`, or a live `represents_circle` seat) read everything. A declarer WRITES only for their own circle: an edit must clear the gate for the row it overwrites, not only the destination it names.
-- A member reads `village` rules plus `holders` rules for a seat they hold or a circle they hold a seat in. A rule outside that answers 404, existence hidden.
+- Admins and declarers (admin, `org.declare`, or a live `represents_circle` role) read everything. A declarer WRITES only for their own circle: an edit must clear the gate for the row it overwrites, not only the destination it names.
+- A member reads `village` rules plus `holders` rules for a role they hold or a circle they hold a role in. A rule outside that answers 404, existence hidden.
 - A stranger, only while the map's public structure switch is on, reads funding sources as name and kind. No amounts, no rules, no budgets, no measured figures.
 - Module off and preview answer the byte-identical 404 every module answers.
 
@@ -37,11 +37,11 @@ A unit test reads `server/lib/resources.ts` and holds every INSERT, UPDATE and D
 
 ## The one action
 
-`POST /api/resources/requests` validates the ask against the rule: it must name a seat the asker holds, sit at or under the ceiling, carry a purpose, and the rule must actually require an approval. The answer is a pre-fill (category, title, body, `meta.resourcesRequest`) that the client posts ONCE to `POST /api/forum/threads`, the one decision primitive, with the forum composer's own busy guard. The same author asking the same rule and amount again while that decision stays open answers 409 with the open thread's id. The forum's own gates hold unchanged: `proposal.open` to open a decision, the decided-state meta stripped server-side at create.
+`POST /api/resources/requests` validates the ask against the rule: it must name a role the asker holds, sit at or under the ceiling, carry a purpose, and the rule must actually require an approval. The answer is a pre-fill (category, title, body, `meta.resourcesRequest`) that the client posts ONCE to `POST /api/forum/threads`, the one decision primitive, with the forum composer's own busy guard. The same author asking the same rule and amount again while that decision stays open answers 409 with the open thread's id. The forum's own gates hold unchanged: `proposal.open` to open a decision, the decided-state meta stripped server-side at create.
 
 ## The lens
 
-Drawn through the power map's `lenses` seam and the layout's `pad` argument; no map file changes hands. Declared flows are dotted strokes, measured flows are solid, and the key says both words, because a promise and a count are different facts. Sources ring the village, budgets arc from a treasury node to circle centres with stroke width carrying size, seats wear "up to X alone" pills where an approval-free rule applies, and approval marks point at whoever says yes. A currency pair with no exchange rate on file is said in words and shown unconverted: the ECB's daily list carries no CRC, so a colones amount stays a colones amount until an admin records a manual rate.
+Drawn through the power map's `lenses` seam and the layout's `pad` argument; no map file changes hands. Declared flows are dotted strokes, measured flows are solid, and the key says both words, because a promise and a count are different facts. Sources ring the village, budgets arc from a treasury node to circle centres with stroke width carrying size, roles wear "up to X alone" pills where an approval-free rule applies, and approval marks point at whoever says yes. A currency pair with no exchange rate on file is said in words and shown unconverted: the ECB's daily list carries no CRC, so a colones amount stays a colones amount until an admin records a manual rate.
 
 ## Vocabulary and the village's own words
 
@@ -73,7 +73,7 @@ The one aggregate is `blocking`, a list of reasons a bonus cannot be considered 
 
 That gap also explains the key. `ballots.subject_ref` is varchar(64) and a circle id plus a season id is 129 characters, so a ballot cannot name both. The ballot's subject is the commitment RECORD, whose id fits, the way a mechanics ballot names a proposal. A village with nothing written down has nothing for the ballot to point at, so the two gaps are one gap.
 
-**Who votes has not been decided.** `drizzle/0095_governance_prune.sql` removed `ballots.circle_id` because a circle has no roll to build an electorate from: circles are pointed at by permission groups and by org seats, and neither is a list of who votes. So the electorate is a query parameter, the route serves `village` and refuses `circle` with that reason, and `ruling` rides every answer saying the choice is open. A circle voting yes on its own completion to release its own bonus has the shape of a circle voting itself a bigger budget.
+**Who votes has not been decided.** `drizzle/0095_governance_prune.sql` removed `ballots.circle_id` because a circle has no roll to build an electorate from: circles are pointed at by permission groups and by org roles, and neither is a list of who votes. So the electorate is a query parameter, the route serves `village` and refuses `circle` with that reason, and `ruling` rides every answer saying the choice is open. A circle voting yes on its own completion to release its own bonus has the shape of a circle voting itself a bigger budget.
 
 ### What the reading cannot see
 

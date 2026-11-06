@@ -26,6 +26,12 @@
  *     `isAgent` on a member-tier holder row. The route adds
  *     `village: { decidesBy, decidesByGloss }` (`villageWay`) beside
  *     `people` under the same rule.
+ *   - Both, in the CORE (0268): `bringMe`, `notMine` and `runbook`, the
+ *     role's handover words. They sit where `domain` sits, at every tier,
+ *     because they are the role's own words in the same sense.
+ *   - Both, in the CORE (0274): the CCOS words, `existsWhile`,
+ *     `authorities`, `responsibilities`, `signsStretched`, `flowsBack`,
+ *     `stepBack` and `timeCommitment`, on the same rule as the handover words.
  *
  * ── THE PRIVACY RULE FOR WHAT `/api/org` GAINED ────────────────────────────
  *
@@ -43,6 +49,12 @@
 import type { ModuleLifecycle } from "../../shared/modules";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
+import type { MintRule } from "./economy";
+import { payBadgeBoosts, rolePay, withPayBadges, type BadgeBoost } from "./workPay";
+
+/** Re-exported so the composition root reads the badges through the import it already has. */
+export { payBadgeBoosts };
+import type { StatedCash } from "../../shared/workValue";
 
 /**
  * The name a stranger reads for a seat an agent holds (0142).
@@ -115,6 +127,25 @@ export interface SeatProjectionCtx {
    * (server/lib/heldTerms.ts). Read at the `terms.read` tier only (red team U2).
    */
   heldTerms?: ReadonlyMap<string, unknown>;
+  /**
+   * The village's enabled rules for paying a role each cycle, read once by the
+   * route (server/lib/workPay.ts `rolePayRules`). Read at the `terms.read` tier
+   * only: what a role pays is money, and it sits beside the terms it belongs to.
+   */
+  payRules?: readonly MintRule[];
+  /**
+   * The badges that multiply token pay (`payBadgeBoosts`), so a role's card
+   * names them beside the lines they multiply. Absent draws no badge.
+   */
+  payBadges?: readonly BadgeBoost[];
+  /**
+   * Each role's health, read once for the page by `orgRoleExtras`
+   * (server/lib/orgRoleHealth.ts), at the tier that function was handed.
+   * `/api/org` only.
+   */
+  health?: ReadonlyMap<string, unknown>;
+  /** A member holder's handle, for the link to their card. Member tier, `/api/org` only. */
+  handleOf?: (userId: string) => string | null;
 }
 
 /**
@@ -298,7 +329,13 @@ function memberHolder(h: OrgAssignment, tier: SeatTier, ctx: SeatProjectionCtx):
       termEndsAt: h.termEndsAt ? h.termEndsAt.toISOString() : null,
     };
   }
-  return { ...row, note: h.note, lapsedReason: h.lapsedReason ?? null };
+  return {
+    ...row,
+    note: h.note,
+    lapsedReason: h.lapsedReason ?? null,
+    // The holder's handle at the member tier, so /roles can link "See their card".
+    ...(ctx.handleOf && h.holderKind === "member" && h.userId ? { handle: ctx.handleOf(h.userId) } : {}),
+  };
 }
 
 function projectHolders(held: OrgAssignment[], tier: SeatTier, ctx: SeatProjectionCtx): Array<Record<string, unknown>> {
@@ -322,6 +359,14 @@ function recruitmentPack(role: OrgRole) {
     locationExpectations: role.locationExpectations,
     compensationReality: role.compensationReality,
     evidenceRequired: role.evidenceRequired,
+    // The role's own value and list as stored (0265), for the editor that sets
+    // them. What they pay under the rules is `pay`, at the terms tier.
+    valueMinor: role.valueMinor ?? null,
+    valueCurrency: role.valueCurrency ?? null,
+    valueTokens: role.valueTokens ?? null,
+    // 0285: the cash it pays each cycle, as stored, for the same editor.
+    cashMinor: role.cashMinor ?? null,
+    cashCurrency: role.cashCurrency ?? null,
   };
 }
 
@@ -339,6 +384,29 @@ function termsOffer(role: OrgRole) {
     termsOffer: read.ok ? read.settings : null,
     termsOfferUnreadable: !read.ok,
     termsOfferAt: role.termsOfferAt ? new Date(role.termsOfferAt).toISOString() : null,
+  };
+}
+
+/**
+ * WHAT THE ROLE PAYS, `terms.read` TIER ONLY (0265, Rye 2026-10-21).
+ *
+ * The tokens come from the engine's own answer (`rolePay`), so the card shows
+ * what the cycle settlement would post. The cash is the money the terms on
+ * offer record, read here by the one parser and handed in: it is stated on the
+ * card and never paid by the platform, and the pay path may not read terms.
+ * Only a fixed amount or a range is cash; the other kinds say so in the drawer.
+ */
+function statedCash(role: OrgRole): StatedCash | null {
+  const read = readTermsOffer(role.termsOffer);
+  const pay = read.ok ? read.settings?.pay : undefined;
+  if (!pay || (pay.kind !== "fixed" && pay.kind !== "range")) return null;
+  return {
+    kind: pay.kind,
+    currency: pay.currency ?? null,
+    minor: pay.amountMinor ?? null,
+    minMinor: pay.minMinor ?? null,
+    maxMinor: pay.maxMinor ?? null,
+    per: pay.per ?? null,
   };
 }
 
@@ -368,6 +436,21 @@ export function projectSeat(
     domain: role.domain ?? null,
     accountabilities: role.accountabilities ?? [],
     whyItMatters: role.whyItMatters ?? null,
+    // 0268: the handover words, beside the domain and at its tier, because
+    // they are the role's words in the same sense (Rye, 2026-10-22). Null is
+    // nothing written; a reader draws "not written".
+    bringMe: role.bringMe ?? null,
+    notMine: role.notMine ?? null,
+    runbook: role.runbook ?? null,
+    // 0274: the CCOS words, at the domain's tier for the same reason. Null is
+    // nothing written, and the card draws nothing for it.
+    existsWhile: role.existsWhile ?? null,
+    authorities: role.authorities ?? null,
+    responsibilities: role.responsibilities ?? null,
+    signsStretched: role.signsStretched ?? null,
+    flowsBack: role.flowsBack ?? null,
+    stepBack: role.stepBack ?? null,
+    timeCommitment: role.timeCommitment ?? null,
     seats: role.seats,
     criticality: role.criticality,
     recruiting: role.recruiting,
@@ -376,8 +459,11 @@ export function projectSeat(
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
     ...(tier.terms ? termsOffer(role) : {}),
+    ...(tier.terms && ctx.payRules ? { pay: withPayBadges(rolePay(role, ctx.payRules, statedCash(role)), ctx.payBadges ?? []) } : {}),
     // The terms each live holder is seated on, beside what the seat offers (red team U2).
     ...(tier.terms && ctx.heldTerms ? { heldTerms: heldTermsOf(held, ctx.heldTerms, ctx) } : {}),
+    // Three facts and a dot per role, never a score (PR 3 of the player card).
+    ...(ctx.route === "org" && ctx.health ? { health: ctx.health.get(role.id) ?? null } : {}),
   };
   const holders = projectHolders(held, tier, ctx);
   if (ctx.route === "map") {

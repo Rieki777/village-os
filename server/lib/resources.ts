@@ -19,6 +19,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { formatMoney } from "../../shared/money";
 import { BUDGET_MODES, isBudgetMode, type BudgetMode, type PendingModeChange } from "../../shared/circleTreasury";
 import { moduleActivity } from "./modules";
+import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 
 // ── Vocabulary ──────────────────────────────────────────────────────────────
 // Every list carries `other` (R28): a village's own way is a real answer,
@@ -207,6 +208,9 @@ export function unitProblem(unit: unknown, tokenExists: (slug: string) => boolea
   const m = TOKEN_UNIT.exec(u);
   if (!m) return "A unit is a three letter currency code like CHF, or token:<slug> for a village token";
   if (!tokenExists(m[1])) return `No token called "${m[1]}" exists here`;
+  // A treasury in Gratitude would fund, spend and pay bonuses in it (Rye,
+  // 2026-10-23: Gratitude is only sent member to member).
+  if (m[1] === "gratitude") return GRATITUDE_ONLY_SENT;
   return null;
 }
 
@@ -219,7 +223,7 @@ function amountProblem(v: unknown, what: string): string | null {
 export function ruleProblem(body: any, tokenExists: (slug: string) => boolean): string | null {
   if (!body || typeof body !== "object") return "A rule must be an object";
   if (!["circle", "role"].includes(String(body.scope))) return "scope must be circle or role";
-  if (!String(body.scopeId ?? "").trim()) return "scopeId must name a circle or a seat";
+  if (!String(body.scopeId ?? "").trim()) return "scopeId must name a circle or a role";
   const amount = amountProblem(body.amountMinor, "amountMinor");
   if (amount) return amount;
   const unit = unitProblem(body.unit, tokenExists);
@@ -539,7 +543,7 @@ function approvalWords(rule: SpendingRuleRow, ctx: SentenceContext): string {
 }
 
 export function scopeWords(rule: SpendingRuleRow, ctx: SentenceContext): string {
-  return rule.scope === "role" ? `the ${ctx.roleName(rule.scopeId)} seat` : `the ${ctx.circleName(rule.scopeId)} circle`;
+  return rule.scope === "role" ? `the ${ctx.roleName(rule.scopeId)} role` : `the ${ctx.circleName(rule.scopeId)} circle`;
 }
 
 export interface FourAnswers {
@@ -590,7 +594,7 @@ export function answerFourQuestions(
     }
   }
   if (!mine.length) {
-    alone.push("No spending rule names a seat you hold yet. The village rules below still apply to everyone.");
+    alone.push("No spending rule names a role you hold yet. The village rules below still apply to everyone.");
   }
   const paidFrom = view.budgets.map((b) => {
     const amount = amountWords(b.amountMinor, b.unit, ctx.tokenWords);

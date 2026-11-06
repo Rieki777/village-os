@@ -1,0 +1,98 @@
+{
+  "menu": {
+    "pages": [
+      {
+        "id": "/investor",
+        "label": "Investor",
+        "subtitle": "Capital Contributor"
+      },
+      {
+        "id": "/steward",
+        "label": "Village Steward",
+        "subtitle": "Co-Creator"
+      },
+      {
+        "id": "/resident",
+        "label": "Resident",
+        "subtitle": "Co-Creator"
+      },
+      {
+        "id": "/prosperity",
+        "label": "Prosperity Creator",
+        "subtitle": "Business Builder"
+      },
+      {
+        "id": "/love-letter",
+        "label": "Sign the {commitment}",
+        "subtitle": ""
+      },
+      {
+        "id": "/visit",
+        "label": "Plan a Visit",
+        "subtitle": ""
+      },
+      {
+        "id": "/work-with-us",
+        "label": "Work With Us",
+        "subtitle": ""
+      },
+      {
+        "id": "/opportunities",
+        "label": "Business Opportunities",
+        "subtitle": ""
+      },
+      {
+        "id": "/housing",
+        "label": "Housing",
+        "subtitle": ""
+      },
+      {
+        "id": "/master-plan",
+        "label": "Master Plan",
+        "subtitle": ""
+      },
+      {
+        "id": "/team",
+        "label": "Our Team",
+        "subtitle": ""
+      },
+      {
+        "id": "/how-we-create",
+        "label": "How We Create",
+        "subtitle": ""
+      },
+      {
+        "id": "/good-neighbor",
+        "label": "Good Neighbor",
+        "subtitle": ""
+      },
+      {
+        "id": "/co-creators-guide",
+        "label": "Co-Creators Guide",
+        "subtitle": ""
+      },
+      {
+        "id": "/resident-rights",
+        "label": "Resident Rights",
+        "subtitle": ""
+      },
+      {
+        "id": "/steward-rights",
+        "label": "Steward Rights",
+        "subtitle": ""
+      },
+      {
+        "id": "/project-history",
+        "label": "Command Centre",
+        "subtitle": ""
+      }
+    ]
+  },
+  "share": {
+    "image": "",
+    "description": ""
+  },
+  "footer": {
+    "signoff": "Built with Pura Vida by"
+  }
+}

@@ -46,9 +46,9 @@
  * cannot publish.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { addMove, dropRefusal, settleAgainst, withMoves, type PendingMove } from "./arrange";
+import { addMove, dropRefusal, middleMoves, orderMoves, settleAgainst, withMoves, type PendingMove } from "./arrange";
 
-type Circle = { id: string; name: string; parentCircleId?: string | null; isExample?: boolean };
+type Circle = { id: string; name: string; parentCircleId?: string | null; isExample?: boolean; order?: number; layer?: string | null };
 
 /** How far a press travels before it is a drag, in CSS pixels. */
 const DRAG_PX = 6;
@@ -65,6 +65,10 @@ export interface Arrange {
   status: string;
   /** Record a move by name, as the picker does. It meets the same refusals a drop does. */
   propose(circleId: string, parentId: string | null): void;
+  /** Record moves that set order or layer (0286), with the sentence that says what changed. */
+  apply(made: PendingMove[], words: string): void;
+  /** Land what is carried on a drop target the lens drew, by click (the keyboard carry's pointer path). */
+  dropOn(where: string): void;
   /** Forget every move and anything being carried. */
   clear(): void;
   /** Forget the moves a publish just made true, or that no longer fit. */
@@ -73,6 +77,16 @@ export interface Arrange {
 
 const circleOf = (el: Element | null): string | null =>
   el?.closest?.("[data-circle-id]")?.getAttribute("data-circle-id") ?? null;
+
+/**
+ * A DROP TARGET THE LENS DRAWS WHILE A CIRCLE IS CARRIED (0286): "middle", or
+ * "order|<parent id>|<id,id,...>" naming the ring as it would read after the
+ * drop. It sits on top of the circles, so it wins the hit test.
+ */
+const slotOf = (el: Element | null): string | null => {
+  const v = el?.closest?.("[data-arrange-slot]")?.getAttribute("data-arrange-slot");
+  return v ? `slot:${v}` : null;
+};
 
 const PUT_DOWN = "Put down where it was.";
 
@@ -101,11 +115,34 @@ export function useArrange({
     setTarget(null);
   }, []);
 
+  const record = useCallback((made: PendingMove[], words: string) => {
+    const circles = now.current.live;
+    if (!circles || !made.length) return;
+    const refused = made.map((m) => dropRefusal(circles, now.current.moves, m.circleId, m.parentId)).find((r) => !!r);
+    if (refused) {
+      setNote(refused);
+      return;
+    }
+    setMoves((m) => made.reduce((acc, x) => addMove(circles, acc, x), m));
+    setNote(words);
+  }, []);
+
   const land = useCallback((circleId: string, where: string) => {
     const { live: circles, moves: made } = now.current;
     setPicked(null);
     setTarget(null);
     if (!circles) return;
+    if (where.startsWith("slot:")) {
+      const picture = withMoves(circles, made);
+      const name = picture.find((c) => c.id === circleId)?.name ?? circleId;
+      if (where === "slot:middle") {
+        record(middleMoves(picture, circleId), `${name} now holds the middle.`);
+        return;
+      }
+      const [, parent = "", csv = ""] = where.slice("slot:".length).split("|");
+      record(orderMoves(picture, parent || null, csv.split(",").filter(Boolean)), `${name} has a new place in the ring.`);
+      return;
+    }
     const parentId = where === "" ? null : where;
     const refused = dropRefusal(circles, made, circleId, parentId);
     if (refused) {
@@ -120,6 +157,23 @@ export function useArrange({
         : `${name(circleId)} now sits at the top of the village.`,
     );
   }, []);
+
+  const apply = useCallback(
+    (made: PendingMove[], words: string) => {
+      if (!now.current.on) return;
+      record(made, words);
+    },
+    [record],
+  );
+
+  const dropOn = useCallback(
+    (where: string) => {
+      const carrying = now.current.picked;
+      if (!now.current.on || !carrying) return;
+      land(carrying, where);
+    },
+    [land],
+  );
 
   const propose = useCallback(
     (circleId: string, parentId: string | null) => {
@@ -170,7 +224,7 @@ export function useArrange({
       if (!svg || !stack.length || !svg.contains(stack[0])) return null;
       for (const el of stack) {
         if (!svg.contains(el)) break;
-        const id = circleOf(el);
+        const id = slotOf(el) ?? circleOf(el);
         if (id) return id;
       }
       return "";
@@ -338,15 +392,19 @@ export function useArrange({
     };
   }, [on, svgRef, land, putDown]);
 
+
   const picture = useMemo(() => (live ? withMoves(live, moves) : []), [live, moves]);
   const nameOf = (id: string) => picture.find((c) => c.id === id)?.name ?? id;
+  const isSlot = !!target?.startsWith("slot:");
   const refusal =
-    picked !== null && target !== null && live ? dropRefusal(live, moves, picked, target === "" ? null : target) : null;
+    picked !== null && target !== null && live && !isSlot ? dropRefusal(live, moves, picked, target === "" ? null : target) : null;
 
   let status = note;
   if (picked) {
     if (target === null) {
       status = `Carrying ${nameOf(picked)}. Drop it on the circle it belongs inside, or press M on that circle. Shift and M puts it at the top of the village. Escape puts it down.`;
+    } else if (isSlot) {
+      status = target === "slot:middle" ? `Let go to give ${nameOf(picked)} the middle.` : `Let go to put ${nameOf(picked)} here in the ring.`;
     } else if (refusal) {
       status = refusal;
     } else {
@@ -357,5 +415,5 @@ export function useArrange({
     }
   }
 
-  return { moves, picked, target, refusal, status, propose, clear, settle };
+  return { moves, picked, target, refusal, status, propose, apply, dropOn, clear, settle };
 }

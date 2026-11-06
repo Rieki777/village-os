@@ -10,6 +10,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_EXIT_POLICY,
+  ELEMENT_NEUTRAL,
+  RETIRED_DEFAULT_TERMS,
   blankTerms,
   exitElementRefusal,
   exitLeverFindings,
@@ -84,6 +86,73 @@ describe("the acknowledgement cannot be ticked over the platform's words", () =>
     const sameNotice = { ...own(), voluntary: { ...own().voluntary, noticePeriodDays: 30 } };
     expect(platformDefaultTerms(normalizeExitPolicy(sameNotice))).toEqual([]);
   });
+
+  it("the platform's wording from before 2026-10-23 is still the platform's, so it cannot be published as the village's", () => {
+    /*
+     * A village that saved its draft before the ruling holds the old words,
+     * and `dbDocument.get()` never merges them away. Compared against today's
+     * wording alone they would no longer match, and the banner could be
+     * cleared over boilerplate nobody in the village wrote.
+     */
+    const old = {
+      ...own(),
+      voluntary: {
+        ...own().voluntary,
+        valuationMethod: RETIRED_DEFAULT_TERMS.valuationMethod[0],
+        unwindSteps: [...RETIRED_DEFAULT_TERMS.unwindSteps[0]],
+      },
+    };
+    expect(platformDefaultTerms(normalizeExitPolicy(old))).toEqual([
+      "How contributed value is honored",
+      "The steps of a voluntary departure",
+    ]);
+  });
+
+  it("today's voluntary terms say a holder stays on as a former member, and the old tombstone promise is retired", () => {
+    expect(DEFAULT_EXIT_POLICY.voluntary.valuationMethod).toContain("former member");
+    expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps.join(" ")).toContain("former member");
+    expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps).not.toContain(
+      "The account becomes a tombstone; contributions stay part of the village record",
+    );
+    expect(RETIRED_DEFAULT_TERMS.unwindSteps[0]).toContain(
+      "The account becomes a tombstone; contributions stay part of the village record",
+    );
+  });
+
+  it("a leaver reads before they go that kept Voice wanes like everyone's, and that cash still owed keeps the account (Rye, 2026-10-30)", () => {
+    expect(DEFAULT_EXIT_POLICY.voluntary.valuationMethod).toContain("Voice a former member keeps wanes under the same rule as everyone's.");
+    expect(DEFAULT_EXIT_POLICY.voluntary.unwindSteps).toContain(
+      "Anyone still holding tokens, or still owed cash, stays on as a former member, with their account and balances",
+    );
+  });
+
+  it("every wording the platform has shipped is still the platform's, today's included, so none can be published as the village's", () => {
+    /*
+     * The wording of 2026-10-23 joined the retired list on 2026-10-30, the
+     * day it changed. Each pair here is one release's terms exactly as it
+     * shipped them, and the guard has to name both terms for every one.
+     */
+    const shipped = [
+      { valuationMethod: DEFAULT_EXIT_POLICY.voluntary.valuationMethod, unwindSteps: [...DEFAULT_EXIT_POLICY.voluntary.unwindSteps] },
+      ...RETIRED_DEFAULT_TERMS.valuationMethod.map((valuationMethod, i) => ({
+        valuationMethod,
+        unwindSteps: [...RETIRED_DEFAULT_TERMS.unwindSteps[i]],
+      })),
+    ];
+    expect(shipped).toHaveLength(3);
+    for (const terms of shipped) {
+      const policy = normalizeExitPolicy({ ...own(), voluntary: { ...own().voluntary, ...terms } });
+      expect(platformDefaultTerms(policy), terms.valuationMethod).toEqual([
+        "How contributed value is honored",
+        "The steps of a voluntary departure",
+      ]);
+    }
+    // The one retired the day this case was written, word for word.
+    expect(RETIRED_DEFAULT_TERMS.valuationMethod).toContain(
+      "To be decided by the community: how contributed value is honored when someone leaves. Until then, a member who leaves keeps their tokens and their account, and stays on as a former member. Recognition stays on the village's books. The exit records what they still hold.",
+    );
+    expect(RETIRED_DEFAULT_TERMS.unwindSteps.some((s) => s.includes("Anyone still holding tokens stays on as a former member, with their account and balances"))).toBe(true);
+  });
 });
 
 describe("normalizing an admin body", () => {
@@ -137,7 +206,13 @@ describe("a published policy cannot leave a term empty", () => {
 });
 
 /*
- * ── THE EXIT LEVERS: SIX REFUSALS AND ONE WARNING (R4) ─────────────────────
+ * ── THE EXIT LEVERS: FIVE REFUSALS AND ONE WARNING (R4) ────────────────────
+ *
+ * There were seven refusals until 2026-10-23. A share of equity and keeping
+ * Voice were lifted by the founder's ruling that members keep their tokens:
+ * a leaver still holding value now stays on as a former member, which is the
+ * condition the Voice refusal itself named. Both are asserted below as
+ * coherent, so neither can come back by accident.
  *
  * Every case below is a POLICY a village could describe with the dials and the
  * engine could not honour. The sentences are asserted whole, never by a
@@ -210,7 +285,22 @@ describe("the platform's own defaults describe a policy the engine can honour", 
   it("the coherent case is not vacuous: the same reading with one dial moved does refuse", () => {
     // A guard that returned [] for everything would pass the test above. This
     // is the control that says the empty array meant something.
-    expect(exitLeverProblem(reading({ "exit.keep_pct.equity": "1" }))).not.toBeNull();
+    expect(exitLeverProblem(reading({ "exit.keep_pct.recognition": "1" }))).not.toBeNull();
+  });
+
+  it("on a village with a credit somebody can buy, the shipped defaults carry the warning and never a refusal", () => {
+    // A full credit keep with no vote is the shipped answer since the ruling,
+    // so a village that lists a credit token meets the withdrawal-window
+    // sentence on its test run. It saves: the warning is the village's to read.
+    const found = exitLeverFindings(reading({}, [platformCredit, buyable]));
+    expect(found.map((f) => f.severity)).toEqual(["warning"]);
+    expect(exitLeverProblem(reading({}, [platformCredit, buyable]))).toBeNull();
+  });
+
+  it("the neutral values an element pass reads are exactly the registry's defaults", () => {
+    // `exitElementRefusal` judges one dial against every other at its default,
+    // and the file keeps those written out. Held here so the two cannot drift.
+    expect({ ...ELEMENT_NEUTRAL }).toEqual(registryDefaults());
   });
 });
 
@@ -228,10 +318,13 @@ describe("what a leaver cannot keep, whatever the village types", () => {
     expect(exitLeverProblem(reading({ "exit.keep_pct.recognition": "0" }))).toBeNull();
   });
 
-  it("equity: this platform never moves it, so it cannot promise a share of it", () => {
-    expect(exitLeverProblem(reading({ "exit.keep_pct.equity": "10" }))).toBe(
-      "Equity is governed on Base under Hypha and this platform never moves it. What happens to it on departure is decided there.",
-    );
+  it("equity: any share is coherent since 2026-10-23, because Earned Equity is a platform token", () => {
+    // The refusal was written when the only equity token was the Hypha mirror,
+    // which this ledger never moves. Earned Equity (0266) is kind `equity` and
+    // platform-governed, and a leaver keeps it by the founder's ruling.
+    for (const share of ["0", "10", "100"]) {
+      expect(exitLeverProblem(reading({ "exit.keep_pct.equity": share }, [platformCredit, equityMirror])), share).toBeNull();
+    }
   });
 });
 
@@ -308,21 +401,29 @@ describe("the Voice pair", () => {
     ]);
     // A set carrying the share as well is coherent.
     expect(exitSetRefusals(reading({ ...zeroShare, "exit.keep_pct.voice": "1" }))).toEqual([]);
-    // And a zero share under forfeit is the shipped default, never refused.
+    // And a zero share is never refused outside convert, under keep or forfeit.
     expect(exitLeverProblem(reading({ "exit.keep_pct.voice": "0" }), "exit.keep_pct.voice")).toBeNull();
+    expect(
+      exitLeverProblem(reading({ "exit.keep_pct.voice": "0", "exit.voice_on_exit": "forfeit" }), "exit.keep_pct.voice"),
+    ).toBeNull();
   });
 
-  it("a rate of zero on its own is fine, because forfeit does not read it", () => {
+  it("a rate of zero on its own is fine, because only convert reads it", () => {
     // An empty state and a real zero are different facts. The rate at 0 while
-    // the mode says forfeit is the shipped default and describes nothing
+    // the mode says keep is the shipped default and describes nothing
     // impossible.
     expect(exitLeverProblem(reading({ "exit.voice_convert_rate": "0" }))).toBeNull();
   });
 
-  it("keeping Voice is refused, and the refusal says what would make it possible", () => {
-    expect(exitLeverProblem(reading({ "exit.voice_on_exit": "keep" }))).toBe(
-      "Keeping Voice needs an account that still exists after the departure, and a resolved exit makes the account a tombstone. This becomes available when a village can record a departure without one.",
-    );
+  it("keeping Voice is the shipped answer, and no share of it is refused", () => {
+    // Refused until 2026-10-23 because a resolved exit made the account a
+    // tombstone. A leaver still holding value now stays on as a former member
+    // (server/lib/exitResolve.ts), which is the condition that refusal named.
+    for (const share of ["0", "50", "100"]) {
+      expect(exitLeverProblem(reading({ "exit.voice_on_exit": "keep", "exit.keep_pct.voice": share })), share).toBeNull();
+    }
+    // And forfeit, the departure before the ruling, is still a village's to choose.
+    expect(exitLeverProblem(reading({ "exit.voice_on_exit": "forfeit" }))).toBeNull();
   });
 });
 
@@ -380,14 +481,18 @@ describe("the withdrawal window: a warning, and never a refusal", () => {
 });
 
 describe("which sentence a founder meets when two things are wrong at once", () => {
-  const twoWrong = { "exit.keep_pct.recognition": "5", "exit.voice_on_exit": "keep" };
+  // Burn with a token that has no faucet, beside a share of recognition. This
+  // pair held keeping Voice until 2026-10-23, when that stopped being wrong.
+  const twoWrong = { "exit.keep_pct.recognition": "5", "exit.remainder_account": "burn" };
+  const withOwnCredit = [platformCredit, ownCredit];
+  const read = (over: Record<string, string>) => reading(over, withOwnCredit);
 
   it("the refusal about the dial being written wins", () => {
-    // A founder editing the Voice mode is told about the Voice mode. Being
-    // handed the recognition sentence instead would send them to a field they
-    // did not touch.
-    expect(exitLeverProblem(reading(twoWrong), "exit.voice_on_exit")).toMatch(/^Keeping Voice needs/);
-    expect(exitLeverProblem(reading(twoWrong), "exit.keep_pct.recognition")).toMatch(/^Recognition is a record/);
+    // A founder editing the remainder account is told about the remainder
+    // account. Being handed the recognition sentence instead would send them
+    // to a field they did not touch.
+    expect(exitLeverProblem(read(twoWrong), "exit.remainder_account")).toMatch(/^Harvest Credit has no faucet/);
+    expect(exitLeverProblem(read(twoWrong), "exit.keep_pct.recognition")).toMatch(/^Recognition is a record/);
   });
 
   it("a refusal about a pair answers to either half of it", () => {
@@ -397,11 +502,11 @@ describe("which sentence a founder meets when two things are wrong at once", () 
   });
 
   it("with no key named, the first in order comes back", () => {
-    expect(exitLeverProblem(reading(twoWrong))).toMatch(/^Recognition is a record/);
+    expect(exitLeverProblem(read(twoWrong))).toMatch(/^Recognition is a record/);
   });
 
   it("a dial the founder is fixing stops refusing the moment they set it back", () => {
-    expect(exitLeverProblem(reading({ ...twoWrong, "exit.keep_pct.recognition": "0" }), "exit.keep_pct.recognition")).toBeNull();
+    expect(exitLeverProblem(read({ ...twoWrong, "exit.keep_pct.recognition": "0" }), "exit.keep_pct.recognition")).toBeNull();
   });
 
   it("TWO bad values do not deadlock each other: either one can be fixed first", () => {
@@ -410,17 +515,17 @@ describe("which sentence a founder meets when two things are wrong at once", () 
      * Every Exit dial is Ring 2, and the governance apply path writes through
      * `setVariable` without passing this guard, so a village can hold two
      * refused values at once. A route that judged a write against the whole
-     * reading would refuse BOTH repairs: fixing recognition fails on Voice,
-     * fixing Voice fails on recognition, and nobody can go first.
+     * reading would refuse BOTH repairs: fixing recognition fails on burn,
+     * fixing burn fails on recognition, and nobody can go first.
      */
-    expect(exitLeverProblem(reading(twoWrong), "exit.cooling_days")).toBeNull();
-    const fixVoice = reading({ ...twoWrong, "exit.voice_on_exit": "forfeit" });
-    expect(exitLeverProblem(fixVoice, "exit.voice_on_exit")).toBeNull();
-    const fixRecognition = reading({ ...twoWrong, "exit.keep_pct.recognition": "0" });
+    expect(exitLeverProblem(read(twoWrong), "exit.cooling_days")).toBeNull();
+    const fixBurn = read({ ...twoWrong, "exit.remainder_account": "settlement" });
+    expect(exitLeverProblem(fixBurn, "exit.remainder_account")).toBeNull();
+    const fixRecognition = read({ ...twoWrong, "exit.keep_pct.recognition": "0" });
     expect(exitLeverProblem(fixRecognition, "exit.keep_pct.recognition")).toBeNull();
     // Both are still standing as findings. The write route is silent about
     // the one it was not asked about; the test run is where it is reported.
-    expect(exitLeverFindings(reading(twoWrong)).map((f) => f.severity)).toEqual(["refusal", "refusal"]);
+    expect(exitLeverFindings(read(twoWrong)).map((f) => f.severity)).toEqual(["refusal", "refusal"]);
   });
 });
 
@@ -433,8 +538,16 @@ describe("the live adapter the write route calls", () => {
     );
   });
 
-  it("trims what it was handed, so a value with spaces is judged on its number", () => {
-    expect(exitLeverRefusal("exit.voice_on_exit", " keep ", DEFAULT_EXIT_POLICY, raw)).toMatch(/^Keeping Voice needs/);
+  it("trims what it was handed, so a value with spaces is judged on its word", () => {
+    // `convert` is matched exactly, so only a trimmed value can meet the
+    // zero-rate refusal the shipped rate of 0 sets up.
+    expect(exitLeverRefusal("exit.voice_on_exit", " convert ", DEFAULT_EXIT_POLICY, raw)).toMatch(/^A conversion at zero/);
+  });
+
+  it("passes keeping Voice and a share of equity straight through, the two refusals the ruling lifted", () => {
+    expect(exitLeverRefusal("exit.voice_on_exit", "keep", DEFAULT_EXIT_POLICY, raw)).toBeNull();
+    expect(exitLeverRefusal("exit.voice_on_exit", "forfeit", DEFAULT_EXIT_POLICY, raw)).toBeNull();
+    expect(exitLeverRefusal("exit.keep_pct.equity", "40", DEFAULT_EXIT_POLICY, raw)).toBeNull();
   });
 
   it("passes a coherent write straight through", () => {
@@ -482,13 +595,14 @@ describe("the two predicates a change-set executor calls before it writes anythi
     expect(exitElementRefusal("exit.voice_on_exit", "convert")).toBeNull();
     expect(exitElementRefusal("exit.cooling_days", "365")).toBeNull();
 
-    // The four that are wrong on their own come back with their own sentence.
+    // The two that are wrong on their own come back with their own sentence.
     expect(exitElementRefusal("exit.keep_pct.recognition", "40")).toBe(
       "Recognition is a record of what happened, not a holding. It stays on the village's books either way, so a share of it is not a thing a leaver can keep. Leave this share at zero.",
     );
-    expect(exitElementRefusal("exit.keep_pct.equity", "1")).toContain("governed on Base under Hypha");
-    expect(exitElementRefusal("exit.voice_on_exit", "keep")).toContain("makes the account a tombstone");
     expect(exitElementRefusal("exit.remainder_account", "burn", [ownCredit])).toContain("no faucet");
+    // And the two the ruling of 2026-10-23 lifted come back with nothing.
+    expect(exitElementRefusal("exit.keep_pct.equity", "1")).toBeNull();
+    expect(exitElementRefusal("exit.voice_on_exit", "keep")).toBeNull();
     // And burn is fine when every token this village issues has one.
     expect(exitElementRefusal("exit.remainder_account", "burn", [platformCredit])).toBeNull();
   });
@@ -600,5 +714,57 @@ describe("a stored policy gets fields it was saved before", () => {
   it("keeps a village's own edited questions over the platform's", () => {
     const theirs = { ...preGrounds(), involuntary: { ...preGrounds().involuntary, grounds: ["Only our question?"] } };
     expect(withPolicyDefaults(theirs).involuntary.grounds).toEqual(["Only our question?"]);
+  });
+
+  describe("a draft saved before 2026-10-23 still holds the platform's old words", () => {
+    /** What a village that saved its draft once, keeping the platform's terms, holds. */
+    const oldDraft = (placeholder: boolean | undefined) => ({
+      ...(placeholder === undefined ? {} : { placeholder }),
+      voluntary: {
+        noticePeriodDays: 21,
+        valuationMethod: RETIRED_DEFAULT_TERMS.valuationMethod[0],
+        unwindSteps: [...RETIRED_DEFAULT_TERMS.unwindSteps[0]],
+      },
+      involuntary: { decidingDomainId: "", appealDomainId: "", process: "Our process." },
+      restorative: { intakeContactRole: "", steps: ["Our repair step"] },
+    });
+
+    it("reads today's platform words in their place, because the old ones promise a tombstone to every leaver", () => {
+      for (const placeholder of [true, undefined]) {
+        const read = withPolicyDefaults(oldDraft(placeholder));
+        expect(read.voluntary.valuationMethod, String(placeholder)).toBe(DEFAULT_EXIT_POLICY.voluntary.valuationMethod);
+        expect(read.voluntary.unwindSteps, String(placeholder)).toEqual(DEFAULT_EXIT_POLICY.voluntary.unwindSteps);
+        // Nothing else moves: the village's own notice and process stay.
+        expect(read.voluntary.noticePeriodDays).toBe(21);
+        expect(read.involuntary.process).toBe("Our process.");
+      }
+    });
+
+    it("a draft saved between 2026-10-23 and 2026-10-30 reads today's words too, so a leaver learns about waning and cash", () => {
+      const between = oldDraft(true);
+      between.voluntary.valuationMethod = RETIRED_DEFAULT_TERMS.valuationMethod[1];
+      between.voluntary.unwindSteps = [...RETIRED_DEFAULT_TERMS.unwindSteps[1]];
+      const read = withPolicyDefaults(between);
+      expect(read.voluntary.valuationMethod).toBe(DEFAULT_EXIT_POLICY.voluntary.valuationMethod);
+      expect(read.voluntary.unwindSteps).toEqual(DEFAULT_EXIT_POLICY.voluntary.unwindSteps);
+      expect(read.voluntary.noticePeriodDays).toBe(21);
+    });
+
+    it("leaves a published policy exactly as the village saved it", () => {
+      // A village that published claimed the words as its own, so a read does
+      // not rewrite them, even when they match a retired platform wording.
+      const read = withPolicyDefaults(oldDraft(false));
+      expect(read.voluntary.valuationMethod).toBe(RETIRED_DEFAULT_TERMS.valuationMethod[0]);
+      expect(read.voluntary.unwindSteps).toEqual(RETIRED_DEFAULT_TERMS.unwindSteps[0]);
+    });
+
+    it("leaves a draft alone once a single word differs, because then the words are the village's", () => {
+      const edited = oldDraft(true);
+      edited.voluntary.unwindSteps[4] = "Our own last step";
+      edited.voluntary.valuationMethod = `${RETIRED_DEFAULT_TERMS.valuationMethod[0]} We will vote on it in spring.`;
+      const read = withPolicyDefaults(edited);
+      expect(read.voluntary.unwindSteps[4]).toBe("Our own last step");
+      expect(read.voluntary.valuationMethod).toContain("We will vote on it in spring.");
+    });
   });
 });

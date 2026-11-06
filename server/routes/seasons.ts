@@ -37,6 +37,7 @@ import { seasonDocumentToStore, suggestNextSeasonDates } from "../lib/seasonCale
 import { restampSeatsToCalendar, type RestampDeps } from "../lib/seatTermLanding";
 import { villageClock } from "../lib/stewardship";
 import { seasonSaved } from "../lib/seasonTurn";
+import { refreshLinkedGoalWords } from "../lib/sessionTemplates";
 import { planTargetAt, planWindowPayload } from "../../shared/seasonPlans";
 
 type SeasonConfig = { seasons: any[]; cadence: string; timezone: string };
@@ -73,7 +74,7 @@ export function register(app: Express, deps: Deps): void {
     try {
       seatVoteLandsAt = deps.seatVoteLandsAt().toISOString();
     } catch (err) {
-      console.warn("[season] seat vote landing forecast failed:", (err as Error)?.message ?? err);
+      console.warn("[season] role vote landing forecast failed:", (err as Error)?.message ?? err);
     }
     // Season plans (2026-10-09): the season members plan now and its window,
     // so the banner can say "Plan your season" while it is open. Days only, and
@@ -119,6 +120,8 @@ export function register(app: Express, deps: Deps): void {
     if (!saving.ok) return res.status(400).json({ error: saving.error });
     const before = seasonState().current?.id ?? null;
     await seasonRepo.put(saving.doc);
+    // 0298: links to a reworded goal take its new words. A failure is logged and never fails the save.
+    await refreshLinkedGoalWords(getPool(), seasonState().seasons).catch((e) => console.error("[seasons] linked goal words were not refreshed", e));
     const after = seasonState();
     if (after.current && after.current.id !== before) {
       await addActivity("season", `The season has turned: ${after.current.name}`, { actorUserId: adminActor(req)?.id, entityType: "season" });
@@ -134,10 +137,10 @@ export function register(app: Express, deps: Deps): void {
         notify,
       });
     } catch (e: any) {
-      console.error("[seasons] the season list saved and moving its seats failed:", e?.message ?? e);
+      console.error("[seasons] the season list saved and moving its roles failed:", e?.message ?? e);
       return res.status(500).json({
         ...after,
-        error: "The season list saved, and moving the seats that end with a season failed. Save again to retry moving them.",
+        error: "The season list saved, and moving the roles that end with a season failed. Save again to retry moving them.",
       });
     }
     // Seat applications waiting for the turn are seated now, not up to an hour later (season plans RC2).

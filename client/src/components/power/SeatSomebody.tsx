@@ -27,7 +27,7 @@
  * the server is what makes it safe.
  */
 import { useState } from "react";
-import { useSeatWord } from "@/lib/gameApi";
+import { useRoleWord, useSeatWord } from "@/lib/gameApi";
 import SeatTermField from "./SeatTermField";
 
 const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
@@ -50,6 +50,7 @@ export function SeatSomebody({
 }) {
   /* What this village calls one person's turn holding a role. Default "Seat". */
   const seatWord = useSeatWord();
+  const roleWord = useRoleWord();
   const [who, setWho] = useState("");
   const [agentName, setAgentName] = useState("");
   /* Every seat has a term (0199). Empty sends no date: the seat ends with the season. */
@@ -66,7 +67,7 @@ export function SeatSomebody({
     // Held rather than assumed. The control says a seating landed only when the
     // response said so, which is the whole of what the save-honesty rule asks.
     if (!ok) {
-      onFailed?.(`That ${seatWord.name.toLowerCase()} was not filled`);
+      onFailed?.(`That ${roleWord.name.toLowerCase()} was not filled`);
       return;
     }
     onSeated(seatingAnAgent ? "Agent seated" : "Seated");

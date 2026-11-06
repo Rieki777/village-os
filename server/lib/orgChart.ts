@@ -19,16 +19,21 @@
  * village genuinely knows better than the derivation, and it carries an
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
+import { isAgentAccount } from "../repos/agentAccounts";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
 import { circleStatusRows } from "../repos/circles";
+import { documentedSeatNames, forgetNamesInSeatJournals } from "../repos/orgSeatErasure";
 import {
   decidesByProblem,
   domainsProblem,
   shapeProblem,
 } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
+import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
+import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
+import { ccosWordsFromRow } from "../../shared/roleCcos";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -130,6 +135,53 @@ export interface OrgRole {
   termsOfferAt: Date | null;
   /** The member who published the offer. */
   termsOfferBy: string | null;
+  /**
+   * WHAT THE ROLE IS WORTH EACH CYCLE AND WHAT IT PAYS EACH SEAT (0265).
+   * The value is minor units of `valueCurrency`, NULL when nobody has set one.
+   * The list is human token amounts, NULL when the role has no list of its own
+   * and the village's standard `role.cycle` rules pay it. Unlike the terms above,
+   * the list IS read to pay: the cycle settlement prices each seat from it,
+   * under the rules' ceilings (`quoteWorkPay`, server/lib/economy.ts).
+   */
+  // Optional so a fixture written before 0265 still describes a role: absent
+  // reads exactly as NULL does, no value and no list of its own.
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: TokenAmount[] | null;
+  /**
+   * The cash the role pays each seat every cycle (0285), in minor units of
+   * `cashCurrency`. Owed when the cycle settles (`oweRoleCycleCash`,
+   * server/lib/cashOwed.ts) and never paid by the platform. NULL pays none.
+   * Separate from the cash its terms on offer state, which the pay path may
+   * never read (shared/seatSettings.boundary.test.ts).
+   */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
+  /**
+   * THE HANDOVER WORDS (0268, Rye 2026-10-22). "Bring me" and "Not mine to
+   * hold" are short lists; the runbook is words or one https link. They live
+   * on the role and change only through an `update_seat` or `create_seat`
+   * draft, so they outlive whoever holds it (shared/roleHandover.ts).
+   * Optional for the reason the value fields above are: absent reads exactly
+   * as NULL, nothing written.
+   */
+  bringMe?: string[] | null;
+  notMine?: string[] | null;
+  runbook?: string | null;
+  /**
+   * THE CCOS WORDS (0274, Rye 2026-10-22): "This role exists while", what it
+   * can decide on its own, what it does regularly, the three "Holding this
+   * role well" lines and the time chip. Structure like the handover words,
+   * and changed the same way, only through a draft (shared/roleCcos.ts).
+   * Optional for the same reason: absent reads exactly as NULL.
+   */
+  existsWhile?: string | null;
+  authorities?: string[] | null;
+  responsibilities?: string[] | null;
+  signsStretched?: string | null;
+  flowsBack?: string | null;
+  stepBack?: string | null;
+  timeCommitment?: string | null;
 }
 
 export interface OrgAssignment {
@@ -185,7 +237,7 @@ export interface OrgAssignment {
   applicationId?: string;
 }
 
-const ROLE_COLS =
+export const ROLE_COLS =
   "id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, expires_each_season, status_override, status_override_expires_at, icon, color, sort_order, is_example, archetypes, " +
   // The recruitment pack. Written since 0049, selected by nobody until now, so
   // every one of them was a column the API accepted and then swallowed.
@@ -195,9 +247,17 @@ const ROLE_COLS =
   "represents_circle, how_chosen, how_chosen_gloss, " +
   // 0256: the terms on offer. Selected here and projected only at the
   // `terms.read` tier (server/lib/seatProjection.ts).
-  "terms_offer, terms_offer_at, terms_offer_by";
+  "terms_offer, terms_offer_at, terms_offer_by, " +
+  // 0265: the value and the list. Projected at the `terms.read` tier.
+  "value_minor, value_currency, value_tokens, " +
+  // 0285: the cash it pays. Projected with the value, at the `terms.read` tier.
+  "cash_minor, cash_currency, " +
+  // 0268: the handover words. Structure like aim and domain, in every tier's core.
+  "bring_me, not_mine, runbook, " +
+  // 0274: the CCOS words. Structure like the handover words, in every tier's core.
+  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment";
 
-const ASSIGN_COLS =
+export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
   // missing here while `org_role_assignments` WAS registered with the
   // standing-examples machinery (examples.ts seeds rows with is_example = 1),
@@ -225,7 +285,7 @@ function asList(v: unknown): string[] {
   return [];
 }
 
-function rowToRole(r: any): OrgRole {
+export function rowToRole(r: any): OrgRole {
   return {
     id: r.id,
     circleId: r.circle_id ?? null,
@@ -258,10 +318,20 @@ function rowToRole(r: any): OrgRole {
     termsOffer: r.terms_offer ?? null,
     termsOfferAt: r.terms_offer_at ?? null,
     termsOfferBy: r.terms_offer_by ?? null,
+    valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
+    valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
+    valueTokens: readValueTokens(r.value_tokens),
+    cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
+    cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
+    bringMe: readStoredRoleList(r.bring_me),
+    notMine: readStoredRoleList(r.not_mine),
+    runbook: readStoredRunbook(r.runbook),
+    // 0274: the CCOS words, each through its reader.
+    ...ccosWordsFromRow(r),
   };
 }
 
-function rowToAssignment(r: any): OrgAssignment {
+export function rowToAssignment(r: any): OrgAssignment {
   return {
     id: r.id,
     orgRoleId: r.org_role_id,
@@ -727,10 +797,10 @@ export function structuralLoad(
     concentration: readable && seatingsLive > 0 ? holders.reduce((m, h) => Math.max(m, h.share), 0) : null,
     possibleDuplicates,
     note: readable
-      ? "Sole-held seats are the ones with no second holder, so they are what stops if that person stops. A seat with somebody named to carry it is a plan; the rest are the ones to name somebody for. Carrying a lot is a load and not a fault, and a seat one person carries alone is the first candidate to grow into a circle."
+      ? "Sole-held roles are the ones with no second holder, so they are what stops if that person stops. A role with somebody named to carry it is a plan; the rest are the ones to name somebody for. Carrying a lot is a load and not a fault, and a role one person carries alone is the first candidate to grow into a circle."
       : holders.length === 0
-        ? "No seats have holders yet, so there is no load to read."
-        : "One person holds every seat. That is what a founding looks like, not a finding. This reads once a second person is seated.",
+        ? "No roles have holders yet, so there is no load to read."
+        : "One person holds every role. That is what a founding looks like, not a finding. This reads once a second person is seated.",
   };
 }
 
@@ -779,7 +849,7 @@ export function describeOrgChange(before: OrgRole | null, after: Partial<OrgRole
   // written by the assistant's draft-publish path, and a whyItMatters-only edit
   // produced no journal line at all because `changes.length` gates the write.
   if (after.whyItMatters !== undefined && (after.whyItMatters ?? "") !== (before.whyItMatters ?? "")) {
-    lines.push("why this seat matters rewritten");
+    lines.push("why this role matters rewritten");
   }
   if (after.active !== undefined) say(after.active ? "reopened" : "rested", before.active, after.active);
   if (after.recruiting !== undefined) say("recruiting", before.recruiting, after.recruiting);
@@ -831,7 +901,7 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
   const cols = ["id", "name", "circle_id", "aim", "domain", "accountabilities", "seats", "sort_order"];
   const vals: unknown[] = [
     id,
-    String(body?.name ?? "New seat"),
+    String(body?.name ?? "New role"),
     body?.circleId || null,
     body?.aim ?? null,
     body?.domain ?? null,
@@ -876,7 +946,7 @@ export function statusOverrideProblem(v: unknown): string | null {
   if (v === null || v === undefined || v === "") return null;
   if (DECLARABLE_STATES.includes(v as SeatState)) return null;
   if (v === "expired") {
-    return "A seat cannot be declared expired. That is worked out from the terms on its holders.";
+    return "A role cannot be declared expired. That is worked out from the terms on its holders.";
   }
   return `A declared state must be one of: ${DECLARABLE_STATES.join(", ")}`;
 }
@@ -906,9 +976,10 @@ function writableColumn(js: string, body: any): { col: string; value: unknown } 
   return { col, value: body[js] === "" ? null : body[js] };
 }
 
-export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<boolean> {
+export async function updateOrgRole(pool: Pool, id: string, body: any, value?: OrgRoleValueEdit): Promise<boolean> {
   const sets: string[] = [];
   const args: any[] = [];
+  valueSets(value, sets, args);
   for (const js of Object.keys(WRITABLE)) {
     const w = writableColumn(js, body);
     if (!w) continue;
@@ -934,6 +1005,40 @@ export async function updateOrgRole(pool: Pool, id: string, body: any): Promise<
   args.push(id);
   const [r]: any = await pool.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
   return !!r?.affectedRows;
+}
+
+/**
+ * A role's value and its list (0265). The route checks both against the
+ * village's rules and stamps the currency before handing them in, and nothing
+ * else may write them, so they arrive apart from the body and ride the same
+ * UPDATE as the rest of the row. A field that is `undefined` is left alone;
+ * `null` clears it.
+ */
+export type OrgRoleValueEdit = {
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: TokenAmount[] | null;
+  /** 0285: the cash it pays, stamped with the village's currency like the value. */
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
+};
+
+function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
+  if (!v) return;
+  if (v.valueMinor !== undefined) {
+    const set = v.valueMinor !== null && !!v.valueCurrency;
+    sets.push("`value_minor` = ?", "`value_currency` = ?");
+    args.push(set ? Math.trunc(Number(v.valueMinor)) : null, set ? String(v.valueCurrency).toUpperCase() : null);
+  }
+  if (v.valueTokens !== undefined) {
+    sets.push("`value_tokens` = ?");
+    args.push(valueTokensToStore(v.valueTokens));
+  }
+  if (v.cashMinor !== undefined) {
+    const set = !!v.cashMinor && !!v.cashCurrency;
+    sets.push("`cash_minor` = ?", "`cash_currency` = ?");
+    args.push(set ? Math.trunc(Number(v.cashMinor)) : null, set ? String(v.cashCurrency).toUpperCase() : null);
+  }
 }
 
 /**
@@ -1001,7 +1106,20 @@ export async function seatHolder(
      * is never given a member account", which would have read as false the day
      * the first river got a vote.
      */
-    return { ok: false, reason: "A seat-plane agent holds its seat as documented, with no member account" };
+    return { ok: false, reason: "A role-plane agent holds its role as documented, with no member account" };
+  }
+  if (h.userId && (await isAgentAccount(pool, String(h.userId)))) {
+    /*
+     * AN AGENT ACCOUNT HOLDS NO ROLE (0319; addendum v6, B6 and B7). The
+     * Operations agent and Sera's agent are member accounts with `is_agent`,
+     * and the refusal above explains why a member-account agent must never be
+     * seated: it would pass the settlement job's `holder_kind = 'member'`
+     * filter and could open the declare door. The addendum asks only that it
+     * never hold a role carrying `moon.approve` or `cash.pay`; refusing every
+     * role keeps the settlement and declare paths closed as well, and an
+     * agent account needs no role to do its work.
+     */
+    return { ok: false, reason: "An agent account holds no role. Its access comes from its own scopes" };
   }
   const kind = h.userId ? "member" : "documented";
   if (kind === "documented" && !String(h.displayName ?? "").trim()) {
@@ -1041,7 +1159,7 @@ export async function seatHolder(
   } catch (e: any) {
     // The unique key is on (seat, active holder key), so this is the one
     // collision it exists to catch.
-    if (e?.code === "ER_DUP_ENTRY") return { ok: false, reason: "They already hold this seat" };
+    if (e?.code === "ER_DUP_ENTRY") return { ok: false, reason: "They already hold this role" };
     throw e;
   }
 }
@@ -1112,6 +1230,12 @@ export async function releaseSeatingsForUser(
  * because `documentedKey` derives it from the name and a slug is a name with
  * hyphens. Ending comes first: the key is part of a generated column under a
  * unique index while the seating is live, and NULL once it ends.
+ *
+ * The seat's journal goes before either (adversarial round 3, finding 12):
+ * "seated <name>" and the quoted claim lines are served to every account at
+ * the guest rung, and the names on the seatings are the only way to find
+ * those lines, so they are rewritten while the names are still there to read.
+ * See `forgetNamesInSeatJournals`.
  */
 export async function forgetDocumentedHolder(
   pool: Pool,
@@ -1124,6 +1248,7 @@ export async function forgetDocumentedHolder(
   );
   const key = (rows as any[])[0]?.holder_key;
   if (!key) return { found: false, seatings: 0 };
+  await forgetNamesInSeatJournals(pool, await documentedSeatNames(pool, String(key)));
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? " +
       "WHERE holder_key = ? AND holder_kind = 'documented' AND ended_at IS NULL",
@@ -1140,14 +1265,23 @@ export async function forgetDocumentedHolder(
 /**
  * Convert a documented holder into a real member holding, keeping the same
  * row so the seat's history does not restart when somebody finally signs up.
+ *
+ * NEVER FOR A MEMBER WHO HAS LEFT. An erasure keeps the user row as a
+ * tombstone, and a seating flipped to it is a holding the moon settlement pays
+ * and nothing releases, because the erasure's seating steps have already run.
+ * Refused here, in the same statement that writes, so every door that seats
+ * through this one is covered whatever it checked first.
  */
 export async function claimSeating(pool: Pool, assignmentId: string, userId: string): Promise<boolean> {
   const [r]: any = await pool.query(
     `UPDATE org_role_assignments
         SET holder_kind = 'member', user_id = ?, holder_key = ?
       WHERE id = ? AND ended_at IS NULL AND holder_kind = 'documented' AND is_example = 0
-        AND is_agent = 0`,
-    [userId, userId, assignmentId],
+        AND is_agent = 0
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = ? AND LOWER(u.email) LIKE '%@anonymized.invalid')
+        AND NOT EXISTS (SELECT 1 FROM users a WHERE a.id = ? AND a.is_agent = 1)`,
+    // 0319: an agent account holds no role, by this door either (seatHolder's refusal, and why).
+    [userId, userId, assignmentId, userId, userId],
   );
   return !!r?.affectedRows;
 }

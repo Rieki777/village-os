@@ -12,11 +12,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { hashInviteToken, inviteStanding, mintInviteToken } from "../lib/invites";
 import {
   claimInvite,
-  createInvite,
+  createInviteOn,
   inviteByHash,
   invitesBy,
   openInviteCount,
@@ -35,7 +35,12 @@ const nextId = () => `inv-t-${String(++seq).padStart(3, "0")}`;
 async function made(inviter: string, days = 14): Promise<{ id: string; token: string }> {
   const token = mintInviteToken();
   const id = nextId();
-  await createInvite(pool, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days });
+  const conn = await pool.getConnection();
+  try {
+    await createInviteOn(conn, { id, tokenHash: hashInviteToken(token), inviterUserId: inviter, days });
+  } finally {
+    conn.release();
+  }
   return { id, token };
 }
 
@@ -47,7 +52,7 @@ async function expire(id: string): Promise<void> {
 describe.skipIf(!configured)("member_invites on a real database", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 harness pool against the scratch schema
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 harness pool against the scratch schema
   });
 
   afterAll(async () => {

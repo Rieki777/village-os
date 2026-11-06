@@ -143,7 +143,7 @@ export const TYPE_CAPABILITY_REFUSALS: Partial<
       "A badge names people, so handing this one to named individuals would be a few members " +
       "choosing who else gets a say. The village can still take this power on: that is a power " +
       "transfer, where the power is named and the whole electorate votes on where it lives. " +
-      "The steward's seat moves only at a seating vote, which is the same rule from the other side.",
+      "The steward role moves only at a seating vote, which is the same rule from the other side.",
   },
   power_transfer: {
     keys: [],

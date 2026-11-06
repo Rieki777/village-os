@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import SeatPicksField from "./SeatPicksField";
+import { roleApplicationStart } from "./roleApplicationType";
 
 vi.mock("@/components/InfoTip", () => ({ default: () => null }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: { id: "u-ana" } }) }));
@@ -40,6 +41,15 @@ describe("picking seats", () => {
     const onChange = vi.fn();
     render(<SeatPicksField field={FIELD} value={["seat-full", "seat-open"]} onChange={onChange} invalid={false} footerNode={null} />);
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(["seat-open"]));
+    expect(screen.getByRole("status").textContent).toMatch(/Full seat is full/);
+  });
+
+  it("a link from the character page with several seats keeps the open ones and names the full one", async () => {
+    const start = roleApplicationStart("?type=role_application&seat=seat-open&seat=seat-full&seat=seat-mine");
+    const onChange = vi.fn();
+    render(<SeatPicksField field={FIELD} value={start?.answers.seatIds} onChange={onChange} invalid={false} footerNode={null} />);
+    // A holder may renew their own full seat; a full seat held by somebody else comes off.
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["seat-open", "seat-mine"]));
     expect(screen.getByRole("status").textContent).toMatch(/Full seat is full/);
   });
 });

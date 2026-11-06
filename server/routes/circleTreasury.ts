@@ -188,7 +188,7 @@ export function register(app: Express, deps: Deps): void {
         if (!deps.mayDeclare("village", ctx)) {
           return (
             "Minting into a circle's treasury takes admin or org.declare. A circle's own " +
-            "speaking seat can spend what its treasury holds and cannot mint into it"
+            "speaking role can spend what its treasury holds and cannot mint into it"
           );
         }
         const over = numberVar(COSIGN_OVER_KEY);
@@ -208,7 +208,7 @@ export function register(app: Express, deps: Deps): void {
         return null;
       }
       if (!deps.mayDeclare(circleId, ctx)) {
-        return "Moving a circle's money takes admin, org.declare, or this circle's speaking seat";
+        return "Moving a circle's money takes admin, org.declare, or this circle's speaking role";
       }
       if (action === "spend") {
         if (!ctx.userId) return "A spend has to name who is asking for it, and this request names nobody";

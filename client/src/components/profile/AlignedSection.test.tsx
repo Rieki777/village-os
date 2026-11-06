@@ -91,7 +91,7 @@ describe("your own", () => {
   it("says so when there is nothing yet", async () => {
     serve({ "/api/profile/alignments": () => json({ alignments: [] }) });
     render(<AlignedSection />);
-    expect(await screen.findByText("Nothing yet. When you align with the village's letter or apply for seats, the words you align with are kept here.")).toBeTruthy();
+    expect(await screen.findByText("Nothing yet. When you align with the village's letter or apply for roles, the words you align with are kept here.")).toBeTruthy();
   });
 
   it("your membership letter sits beside your seat terms, says what the village did with the signing, and opens its words in place", async () => {

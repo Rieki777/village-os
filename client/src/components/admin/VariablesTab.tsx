@@ -204,8 +204,8 @@ export default function VariablesTab({ password }: { password: string }) {
           </p>
           <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
             {moved.map((m) => (
-              <li key={m.id} className="text-xs text-gray-700">
-                <a href={`/admin?tab=modules&module=${m.id}`} className="text-teal-deep underline">
+              <li key={m.id} className="text-sm text-gray-900">
+                <a href={`/modules/${m.id}`} className="font-medium text-teal-deep underline">
                   {m.name}
                 </a>{" "}
                 {m.keys.length} setting{m.keys.length === 1 ? "" : "s"}

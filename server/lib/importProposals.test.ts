@@ -21,7 +21,7 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { subjectRefFor } from "./subjectRefs";
 import {
   EXTERNAL_PROPOSAL_KINDS,
@@ -66,7 +66,7 @@ function fromEnvelope(e: any) {
 describe.skipIf(!configured)("importing a batch file", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });
 
   afterAll(async () => {
@@ -177,7 +177,7 @@ describe.skipIf(!configured)("importing a batch file", () => {
 describe.skipIf(!configured)("a record about more than one person", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
   });
   afterAll(async () => {
     await pool?.end();

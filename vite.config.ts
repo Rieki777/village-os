@@ -3,6 +3,13 @@ import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
+import {
+  type ChunkFacts,
+  lazyRoutesFromApp,
+  routePreloadScript,
+  routePreloadTable,
+} from "./client/src/lib/routePreload";
+import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
 
 /**
  * Serve the Living Map artifact in DEV, from the same source the server uses.
@@ -89,8 +96,182 @@ function dropLegacyWoffFallback(): Plugin {
   };
 }
 
+/**
+ * Serve the unhinted copies of the packaged faces (client/src/fonts) in place
+ * of @fontsource's own files: the same glyphs, code points and layout
+ * features, without the TrueType hinting. 888 KB of the dist budget became
+ * 808 KB. client/src/lib/unhintedFonts.ts has the rule and
+ * `scripts/unhint-fonts.py --check` the proof that nothing else differs.
+ */
+function useUnhintedFonts(): Plugin {
+  const dir = path.resolve(import.meta.dirname, "client", "src", "fonts");
+  const available = new Set(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".woff2")) : []);
+  return {
+    name: "use-unhinted-fonts",
+    enforce: "pre",
+    transform(code, id) {
+      const file = id.split("?")[0].replace(/\\/g, "/");
+      if (!file.endsWith(".css") || !file.includes("/@fontsource")) return null;
+      const next = pointAtUnhintedFonts(code, available, "@/fonts");
+      return next === null ? null : { code: next, map: null };
+    },
+  };
+}
+
+/**
+ * Preload the visited route's own page chunk beside the main bundle.
+ *
+ * Every page but the eager three is `lazy()` (App.tsx), so on a first visit the
+ * page's chunk was requested only after the main bundle had downloaded and run:
+ * one more round trip in series. This emits `assets/route-preload-<hash>.js`, a
+ * few kilobytes that load `async` with the bundle, read `location`, and add
+ * `modulepreload` links for that page's chunk and its imports. The table comes
+ * from App.tsx's routes and this build's own chunk graph, so it cannot name a
+ * file that does not exist; client/src/lib/routePreload.ts has the rules and
+ * routePreload.test.ts holds them, including a check against the real App.tsx.
+ *
+ * An external file rather than an inline script, so a `script-src 'self'`
+ * policy covers it without a per-build hash. If App.tsx ever stops parsing,
+ * the table is empty, the build warns, and no file or tag is emitted: pages
+ * then load exactly as they did before this existed.
+ *
+ * Measured cost on the CI budgets: one asset of a few KB (one or two 4 KB
+ * blocks of MAX_TOTAL_DIST_KB) and nothing on the main chunk.
+ */
+function routeChunkPreload(): Plugin {
+  let base = "/";
+  let emitted: string | null = null;
+  return {
+    name: "route-chunk-preload",
+    apply: "build",
+    configResolved(config) {
+      base = config.base;
+    },
+    generateBundle(_options, bundle) {
+      emitted = null;
+      const app = fs.readFileSync(path.resolve(import.meta.dirname, "client", "src", "App.tsx"), "utf8");
+      const chunks: ChunkFacts[] = [];
+      for (const out of Object.values(bundle)) {
+        if (out.type !== "chunk") continue;
+        chunks.push({
+          fileName: out.fileName,
+          imports: out.imports,
+          isEntry: out.isEntry,
+          isDynamicEntry: out.isDynamicEntry,
+          facadeModuleId: out.facadeModuleId,
+          css: [...(out.viteMetadata?.importedCss ?? [])],
+        });
+      }
+      const table = routePreloadTable(lazyRoutesFromApp(app), chunks);
+      if (table.routes.length === 0) {
+        this.warn("route-chunk-preload: no route in client/src/App.tsx matched a page chunk, so nothing was emitted");
+        return;
+      }
+      const ref = this.emitFile({ type: "asset", name: "route-preload.js", source: routePreloadScript(table, base) });
+      emitted = this.getFileName(ref);
+    },
+    transformIndexHtml: {
+      order: "post",
+      handler() {
+        if (!emitted) return;
+        // fetchpriority: Chrome gives an async script Low priority, which would
+        // queue this behind the fonts and images it exists to get ahead of.
+        return [{ tag: "script", attrs: { async: true, fetchpriority: "high", src: base + emitted }, injectTo: "head" }];
+      },
+    },
+  };
+}
+
+/**
+ * SMALL SHARED MODULES SHARE TWO LAZY CHUNKS.
+ *
+ * Rollup gives every shared module its own chunk, and CI charges every file a
+ * whole 4 KB block (scripts/check-dist-budget.mjs), so a 300-byte API helper
+ * imported by two pages costs 4 KB. A module under this many bytes of source,
+ * imported by two or more modules and loaded only after the first page, goes
+ * into "smalls" (plain modules in shared/, client/src/lib/, client/src/hooks/)
+ * or "smallui" (components). See `smallGroupOf` for the exact rule.
+ *
+ * Measured on batch 62 (2026-10-31, with experimentalMinChunkSize 4096 below):
+ * 6500 KB block-charged with the old leaf-only rule, 6460 KB with this one
+ * (this rule without minChunkSize, 6528). The first page fetches the same
+ * code, about 242 KB gzipped either way, in more files: main JS reads 361 KB
+ * where it read 623 KB, because rollup moves the boot modules the groups
+ * import out of the entry chunk into shared boot chunks, which is why the
+ * MAX_BOOT_JS_KB budget exists. The groups are 31 KB ("smalls") and 58 KB
+ * ("smallui") gzipped. 6000 bytes measured 6492 KB; 12000 measured 6448 KB
+ * with a 77 KB "smallui", too much for a route's first paint to wait on.
+ * Measure all three budgets with check-dist-budget.mjs after any change.
+ *
+ * Four rules keep it safe, each one found by a build that broke without it:
+ * - `onlyExplicitManualChunks` (output, below). Without it rollup moves every
+ *   unassigned dependency of a group INTO the group, react included, and the
+ *   first page load then fetches the whole group (400 KB when tried).
+ * - Never a module the entry imports statically, for the same reason.
+ * - A group imports only packages, boot modules and its own or an earlier
+ *   group, and nothing the natural kit imports joins one, or two chunks import
+ *   each other and rollup warns of a circular chunk.
+ * - Two or more importers. A module with one importer already rides in that
+ *   importer's chunk, so grouping it saves nothing and only grows the group.
+ */
+const SMALL_MODULE_BYTES = 9000;
+/**
+ * The modules the entry imports statically, worked out on the first call and
+ * kept for the rest of the build. `vite build` is one build per process here;
+ * a `--watch` rebuild would read a stale set and only lose some grouping.
+ */
+let eagerModules: Set<string> | null = null;
+/** The natural interface kit, grouped into its own chunk below. */
+const NATURAL_KIT = /components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/;
+/**
+ * The two merged groups and where their members live. A "smalls" member is a
+ * plain module; a "smallui" member is a component. "smallui" may import
+ * "smalls" and never the reverse, so the two can never import each other.
+ */
+const SMALL_GROUPS = [
+  { name: "smalls", home: /[\\/]shared[\\/][^\\/]+\.ts$|client[\\/]src[\\/](lib|hooks)[\\/].+\.ts$/, mayImport: ["smalls"] },
+  { name: "smallui", home: /client[\\/]src[\\/]components[\\/].+\.tsx?$/, mayImport: ["smalls", "smallui"] },
+] as const;
+type SmallGroup = (typeof SMALL_GROUPS)[number]["name"];
+/** Each module's group, worked out once per build like `eagerModules`. */
+const smallVerdicts = new Map<string, SmallGroup | null>();
+
+type ModuleInfoOf = (id: string) => { code?: string | null; importers: readonly string[]; importedIds: readonly string[] } | null;
+
+/**
+ * Which merged group a module joins, or null. It must be small, lazy, shared
+ * by at least two importers (a module with one importer already rides in that
+ * importer's chunk and costs no block of its own), and import only packages,
+ * boot modules, or members of a group its own group may import. That last rule
+ * keeps each group closed, so no chunk of ours can import it back.
+ */
+function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): SmallGroup | null {
+  const known = smallVerdicts.get(id);
+  if (known !== undefined) return known;
+  // Provisionally none, so an import cycle settles as "not small" instead of looping.
+  smallVerdicts.set(id, null);
+  const m = info(id);
+  const group = SMALL_GROUPS.find((g) => g.home.test(id));
+  const ok =
+    !!group &&
+    !!m?.code &&
+    m.code.length < SMALL_MODULE_BYTES &&
+    !eager.has(id) &&
+    m.importers.length >= 2 &&
+    !NATURAL_KIT.test(id) &&
+    !m.importers.some((by) => NATURAL_KIT.test(by)) &&
+    m.importedIds.every((dep) => {
+      if (dep.includes("node_modules") || eager.has(dep)) return true;
+      const of = smallGroupOf(dep, info, eager);
+      return of !== null && (group.mayImport as readonly string[]).includes(of);
+    });
+  const verdict = ok ? group.name : null;
+  smallVerdicts.set(id, verdict);
+  return verdict;
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback()],
+  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
@@ -103,6 +284,15 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    /*
+     * Terser rather than esbuild's minifier, 2026-11-02 budget pass: about
+     * 40 KB less across dist/public and 4 KB less main JS for the same code.
+     * `module`/`toplevel` are safe because every chunk is an ES module, and
+     * ecma 2020 matches Vite's default "modules" browser target. Costs a few
+     * seconds of build time and nothing at runtime.
+     */
+    minify: "terser",
+    terserOptions: { module: true, toplevel: true, ecma: 2020, compress: { passes: 3, ecma: 2020 }, mangle: { toplevel: true }, format: { comments: false, ecma: 2020 } },
     rollupOptions: {
       output: {
         /**
@@ -150,7 +340,19 @@ export default defineConfig({
          * Verify any chunking change with `node scripts/check-dist-budget.mjs`,
          * which prints both measures.
          */
-        manualChunks: (id: string) => {
+        /*
+         * ON AT 4096, 2026-10-30, BESIDE THE SMALL-MODULE RULE BELOW. With that
+         * rule alone the dashboard measured 6584 KB of 6600, and the
+         * companions section (0295) took it to 6608. Measured on that tree:
+         * off, 6608 KB block-charged and main JS 620 KB; 4096, 6480 and 624;
+         * 8192, 6408 and 657. 4096 buys 128 KB of the ceiling for 4 KB of
+         * first load. The note above says why it is the weaker knob; take it
+         * off the day the total has room without it.
+         */
+        experimentalMinChunkSize: 4096,
+        // Groups hold only what manualChunks names: see SMALL_MODULE_BYTES.
+        onlyExplicitManualChunks: true,
+        manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
           if (id.includes("lucide-react")) return "icons";
           /*
            * The natural interface kit, one chunk instead of four.
@@ -162,10 +364,23 @@ export default defineConfig({
            * block. This is the merging fix the block-charge note above
            * describes, at the smallest scale it is worth doing.
            */
-          if (/components[\\/]natural[\\/]|lib[\\/]celebrated|shared[\\/]capabilities/.test(id)) {
+          if (NATURAL_KIT.test(id)) {
             return "natural";
           }
-          return undefined;
+          // SMALL SHARED MODULES, two lazy chunks: see SMALL_MODULE_BYTES above.
+          // Only modules the entry does NOT import statically, so the first
+          // page load fetches nothing it did not fetch before.
+          if (!eagerModules) {
+            eagerModules = new Set();
+            const stack = Array.from(getModuleIds()).filter((m) => getModuleInfo(m)?.isEntry);
+            while (stack.length) {
+              const m = stack.pop() as string;
+              if (eagerModules.has(m)) continue;
+              eagerModules.add(m);
+              for (const dep of getModuleInfo(m)?.importedIds ?? []) stack.push(dep);
+            }
+          }
+          return smallGroupOf(id, getModuleInfo, eagerModules) ?? undefined;
         },
       },
     },

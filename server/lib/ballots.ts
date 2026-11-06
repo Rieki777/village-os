@@ -550,7 +550,31 @@ export interface VoterStanding {
    * that is not the clock. See `offRollSentence`.
    */
   deniedByWarning: boolean;
+  /**
+   * Has this account left the village (`leftTheVillage`,
+   * server/lib/formerMember.ts)? Then no new vote, on any ballot, whatever the
+   * roll holds. Absent reads as no, so a caller that never asks changes
+   * nothing. See `LEFT_THE_VILLAGE_VOTE`.
+   */
+  leftTheVillage?: boolean;
 }
+
+/**
+ * WHAT A FORMER MEMBER IS TOLD, ON A ROLL OR OFF IT (Rye, 2026-10-30: "yes
+ * build all the exit suggestions!").
+ *
+ * The suggestion he approved: "Votes a leaver cast before leaving stand. After
+ * they leave they cannot cast new ones. The ballot's frozen roll stays as it
+ * is, so the quorum does not shift mid-vote." So a ballot that opened before they left still counts them
+ * on its roll and still holds whatever they cast, and nothing here rewrites
+ * either. What stops is the act: a first vote, a changed vote, and an
+ * objection filed directly, which on a consent ballot carries a no's weight.
+ * The sentence says what is true and what still stands, and nothing more.
+ */
+export const LEFT_THE_VILLAGE_VOTE =
+  "You have left the village, so you cannot cast a vote here now. Any vote you cast before you left still stands";
+export const LEFT_THE_VILLAGE_OBJECTION =
+  "You have left the village, so you cannot file an objection here now. Any objection you filed before you left still stands";
 
 /**
  * WHAT TO TELL SOMEBODY WHO IS NOT ON A ROLL, AND WHY THIS TAKES FOUR CASES.
@@ -656,6 +680,9 @@ export async function castVote(
   if (Date.parse(ballot.closesAt) <= Date.now()) {
     return { ok: false, error: "The voting period has ended. Votes are locked until a human closes the ballot" };
   }
+  // Before the roll is read: whether they are on it or not, the answer is the
+  // same, and it names the real reason (`LEFT_THE_VILLAGE_VOTE`).
+  if (standing?.leftTheVillage) return { ok: false, error: LEFT_THE_VILLAGE_VOTE };
   const [inRoll] = await pool.query<RowDataPacket[]>(
     "SELECT weight FROM ballot_electorate WHERE ballot_id = ? AND user_id = ?",
     [ballotId, userId],
@@ -706,6 +733,8 @@ export async function fileObjection(
   ballotId: string,
   userId: string,
   text: string,
+  /** The route's reading of the member, as `castVote` takes it. Only `leftTheVillage` is read here. */
+  standing?: Pick<VoterStanding, "leftTheVillage">,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const clean = String(text ?? "").trim().slice(0, 2000);
   if (!clean) return { ok: false, error: "An objection is its reasoning. Say what consequence or risk you see" };
@@ -715,6 +744,7 @@ export async function fileObjection(
     return { ok: false, error: "Objections belong to consent ballots. On a voting ballot, vote no and say why" };
   }
   if (ballot.status !== "open") return { ok: false, error: "This ballot has closed" };
+  if (standing?.leftTheVillage) return { ok: false, error: LEFT_THE_VILLAGE_OBJECTION };
   const [inRoll] = await pool.query<RowDataPacket[]>(
     "SELECT 1 FROM ballot_electorate WHERE ballot_id = ? AND user_id = ?",
     [ballotId, userId],

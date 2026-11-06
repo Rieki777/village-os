@@ -18,6 +18,16 @@
  * candidate who is the only live holder falls through to a ballot, and a
  * candidate who is one of several holders waits for one of the others.
  *
+ * Rye confirmed it for role proposals on 2026-10-31 (sheet item 24a): "The
+ * default for adopting a role proposal is those in founder roles until they
+ * give that power to the community to use governance to do", "Founder/steward
+ * roles". So an admin holding no such role does not adopt, and neither does
+ * the holder of any other role; once the village holds `org.seat`, nobody
+ * adopts at the door and the village decides. `adoptRefusal` is that rule, as
+ * it was. E8 (found end to end on main e1c5eb6) was the WORDS: the submit
+ * confirm promised "the founder, steward or organisation power" in a village
+ * where nobody held it. `adoptsClause` below reads who does.
+ *
  * ── WHAT A BALLOT MAY SAY ──────────────────────────────────────────────────
  *
  * A ballot's title and document are as public as the governance module: the
@@ -31,6 +41,7 @@
  */
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
 import type { HandOpenerRule } from "./powerHands";
+import { roleWithHolders } from "./roleHolderLabel";
 
 /** The ballot subject an application is voted under. 16 characters, inside varchar(24). */
 export const ROLE_APPLICATION = "role_application";
@@ -53,17 +64,17 @@ export const OPEN_STATUSES: readonly ApplicationStatus[] = ["awaiting-holder", "
 
 /** What each status reads as, on the page and in a list. Keyed by the union, so a new status cannot render blank. */
 export const STATUS_WORDS: Record<ApplicationStatus, string> = {
-  "awaiting-holder": "Waiting for a seat holder",
+  "awaiting-holder": "Waiting for a role holder",
   voting: "The village is voting",
   adopted: "Adopted",
   "not-adopted": "Not adopted",
   withdrawn: "Withdrawn",
-  "held-full": "Held, the seat is full",
+  "held-full": "Held, the role is full",
 };
 
 /** Where an application is read. Members only. */
 export function applicationHref(id: string): string {
-  return `/seat-applications/${encodeURIComponent(id)}`;
+  return `/role-applications/${encodeURIComponent(id)}`;
 }
 
 /** An application id: `sa-` and sixteen hex characters. */
@@ -111,12 +122,12 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const raw = Array.isArray(b.seatIds) ? b.seatIds : b.orgRoleId !== undefined && b.orgRoleId !== null && b.orgRoleId !== "" ? [b.orgRoleId] : [];
   const seatIds = raw.map((s) => String(s ?? "").trim()).filter((s) => s !== "");
-  if (seatIds.length < MIN_SEATS) return { ok: false, field: "seatIds", error: "Pick the seat you are applying for." };
+  if (seatIds.length < MIN_SEATS) return { ok: false, field: "seatIds", error: "Pick the role you are applying for." };
   if (seatIds.length > MAX_SEATS) {
-    return { ok: false, field: "seatIds", error: `One application holds at most ${MAX_SEATS} seats. Apply for the rest in a second one.` };
+    return { ok: false, field: "seatIds", error: `One application holds at most ${MAX_SEATS} roles. Apply for the rest in a second one.` };
   }
-  if (new Set(seatIds).size !== seatIds.length) return { ok: false, field: "seatIds", error: "Each seat appears once in an application." };
-  if (seatIds.some((s) => s.length > 64)) return { ok: false, field: "seatIds", error: "That seat id is longer than any seat this village has." };
+  if (new Set(seatIds).size !== seatIds.length) return { ok: false, field: "seatIds", error: "Each role appears once in an application." };
+  if (seatIds.some((s) => s.length > 64)) return { ok: false, field: "seatIds", error: "That role id is longer than any role this village has." };
 
   const note = words(b.note ?? b.fitStatement);
   const deliverables = words(b.deliverables);
@@ -198,6 +209,75 @@ export function putToVillageRefusal(rule: HandOpenerRule, actorId: string): Door
   };
 }
 
+// ── Who adopts, in words (E8) ────────────────────────────────────────────────
+
+/**
+ * What the sentence naming who adopts is read from, all of it off the same
+ * state `adoptRefusal` reads, never typed: so the words cannot promise a power
+ * nobody holds.
+ */
+export interface AdopterFacts {
+  /** The village holds `org.seat` (`capability_holding`): nobody adopts at the door, the village decides. */
+  villageHolds: boolean;
+  /** Somebody holds it live, the candidate included. */
+  heldLive: boolean;
+  /**
+   * The roles that carry it (`rolesCarrying`), each with the names of who
+   * holds it live through that role, the candidate LEFT OUT: nobody is named
+   * as adopting their own terms.
+   */
+  groups: ReadonlyArray<{ name: string; holders: readonly string[] }>;
+  /** It comes from a role proposal that changes roles, which is never put to a vote (Rye, 2026-10-22). */
+  changesRoles?: boolean;
+}
+
+/** The power, said the way a member reads it. */
+const PLACING_POWER = "the power to place people in roles";
+
+/** Once the village holds the power: what happens, as a whole sentence. */
+export const VOTE_DECIDES_WORDS = "The village holds the power to place people in roles, so the village decides it by vote.";
+/** The same, for a role proposal that changes roles, which never goes to a vote. */
+export const VOTE_CANNOT_WORDS =
+  "The village holds the power to place people in roles, and a proposal that changes roles never goes to a vote, so nobody can adopt it yet.";
+
+/** "A", "A or B", "A, B or C". */
+function orList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+}
+
+/** The whole sentence once the village holds the power, or null while a role does. PURE. */
+export function voteWords(f: AdopterFacts): string | null {
+  if (!f.villageHolds) return null;
+  return f.changesRoles ? VOTE_CANNOT_WORDS : VOTE_DECIDES_WORDS;
+}
+
+/**
+ * Who adopts, while a role holds the power, as the end of a sentence that
+ * starts in the middle: "Steward Circle (Rye, Rick) adopts it." PURE.
+ *
+ * A role is named as "Role (FirstName)" by `roleWithHolders` (Rye,
+ * 2026-10-30), so this is for signed-in views only, never a public page or a
+ * vendor. With nobody in it, the sentence says what has to happen first,
+ * because a proposal there waits for somebody who does not exist yet.
+ */
+export function adoptsClause(f: AdopterFacts): string {
+  const live = f.groups.filter((g) => g.holders.some((h) => String(h ?? "").trim())).map((g) => roleWithHolders(g.name, g.holders));
+  if (live.length) return `${orList(live)} adopts it.`;
+  const names = f.groups.map((g) => String(g.name ?? "").trim()).filter(Boolean);
+  if (!names.length) return `a founder or steward role adopts it. No role here carries ${PLACING_POWER} yet, so an admin gives it to one first.`;
+  const nobody = f.heldLive ? "Nobody else holds it yet" : "Nobody holds it yet";
+  return `whoever holds ${orList(names)} adopts it. ${nobody}, so an admin places someone in it first.`;
+}
+
+/** Who adopts it, as a sentence of its own, for the application page. PURE. */
+export function whoAdoptsWords(f: AdopterFacts): string {
+  const vote = voteWords(f);
+  if (vote) return vote;
+  const clause = adoptsClause(f);
+  return clause.charAt(0).toUpperCase() + clause.slice(1);
+}
+
 // ── The ballot's words ───────────────────────────────────────────────────────
 
 export interface BallotSeat {
@@ -208,7 +288,7 @@ export interface BallotSeat {
 /** "A, B and C". */
 export function seatList(names: readonly string[]): string {
   const clean = names.map((n) => n.trim()).filter(Boolean);
-  if (clean.length <= 1) return clean[0] ?? "a seat";
+  if (clean.length <= 1) return clean[0] ?? "a role";
   return `${clean.slice(0, -1).join(", ")} and ${clean[clean.length - 1]}`;
 }
 
@@ -228,12 +308,12 @@ export function applicationBallotDoc(seats: readonly BallotSeat[], applicationId
   const lines = [
     applicationBallotTitle(seats),
     "",
-    seats.length === 1 ? "THE SEAT" : "THE SEATS",
+    seats.length === 1 ? "THE ROLE" : "THE ROLES",
     ...seats.flatMap((s) => [`  ${s.name.trim()}`, ...(s.aim && s.aim.trim() ? [`    ${s.aim.trim()}`] : [])]),
     "",
     "WHAT THE VILLAGE DECIDES",
-    "  Whether a member's application to hold these seats, on the terms it sets, is adopted.",
-    "  If it carries, the member holds every seat it names on those terms, from the day it lands or a later first day the application sets.",
+    "  Whether a member's application to hold these roles, on the terms it sets, is adopted.",
+    "  If it carries, the member holds every role it names on those terms, from the day it lands or a later first day the application sets.",
     "",
     "Members read the application on its page.",
     `  ${applicationHref(applicationId)}`,
@@ -249,13 +329,13 @@ export function applicationNoticeTitle(kind: "opened" | "waiting" | "adopted" | 
     case "opened":
       return `The village is asked who holds ${seats}`;
     case "waiting":
-      return `An application waits for a seat holder: ${seats}`;
+      return `An application waits for a role holder: ${seats}`;
     case "adopted":
       return `Adopted: your application for ${seats}`;
     case "not-adopted":
       return `Not adopted: your application for ${seats}`;
     case "held-full":
-      return `Held, a seat is full: your application for ${seats}`;
+      return `Held, a role is full: your application for ${seats}`;
   }
 }
 

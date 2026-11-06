@@ -76,10 +76,10 @@ export default function StewardSlate({
   if (slate.members.length === 0) {
     return (
       <section className="rounded-xl border border-stone-200 bg-white p-5">
-        <h2 className="text-base font-bold text-stone-900">The steward's seat</h2>
+        <h2 className="text-base font-bold text-stone-900">The steward role</h2>
         <p className="mt-1 text-sm text-stone-600 leading-relaxed">
-          This proposal names nobody for the steward's seat, so the village starts with it empty. That stops nothing:
-          decisions land at their landing time either way, and the village can vote anybody into the seat whenever it
+          This proposal names nobody for the steward role, so the village starts with it empty. That stops nothing:
+          decisions land at their landing time either way, and the village can vote anybody into the role whenever it
           likes.
         </p>
       </section>
@@ -88,12 +88,12 @@ export default function StewardSlate({
 
   return (
     <section className="rounded-xl border border-stone-200 bg-white p-5">
-      <h2 className="text-base font-bold text-stone-900">Who carries the steward's seat</h2>
+      <h2 className="text-base font-bold text-stone-900">Who carries the steward role</h2>
       <p className="mt-1 text-sm text-stone-600 leading-relaxed">
         {slate.proposedBy
           ? `${slate.proposedBy} opened this vote and chose this list. Voting yes is voting for it as well as for starting the Game.`
           : "This list was chosen when the vote opened. Voting yes is voting for it as well as for starting the Game."}{" "}
-        Each person answers for themselves, and carrying the seat for this first season means holding all{" "}
+        Each person answers for themselves, and carrying the role for this first season means holding all{" "}
         {slate.powerCount} of the powers this village has to give.
       </p>
 
@@ -123,7 +123,7 @@ export default function StewardSlate({
           state a member most needs before they vote, and it is one sentence. */}
       <p className="mt-3 text-sm text-stone-600 leading-relaxed">
         {accepted === 0 && declined === slate.members.length
-          ? "Everybody named has declined, so this vote seats nobody and the seat starts empty."
+          ? "Everybody named has declined, so this vote seats nobody and the role starts empty."
           : accepted === 0
             ? "Nobody has accepted yet. Whoever accepts before this vote closes is seated when it carries."
             : `${accepted} of ${slate.members.length} ${accepted === 1 ? "has" : "have"} accepted. Whoever has accepted when this vote carries is seated.`}
@@ -134,7 +134,7 @@ export default function StewardSlate({
           {mine.answer === "declined" ? (
             <>
               <p className="text-sm text-stone-700 leading-relaxed">
-                You declined the steward's seat, and the village can see that. You can change your mind until this vote
+                You declined the steward role, and the village can see that. You can change your mind until this vote
                 closes.
               </p>
               <button
@@ -150,7 +150,7 @@ export default function StewardSlate({
           ) : (
             <>
               <p className="text-sm text-stone-700 leading-relaxed">
-                This proposal names you. Accepting happens with your vote, above. If you do not want the seat, say so
+                This proposal names you. Accepting happens with your vote, above. If you do not want the role, say so
                 here and the village sees your answer.
               </p>
               <button
@@ -160,7 +160,7 @@ export default function StewardSlate({
                 className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-lg border-2 border-coral bg-white px-4 py-2.5 text-sm font-semibold text-coral hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
               >
                 {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                <span>Decline the steward's seat</span>
+                <span>Decline the steward role</span>
               </button>
             </>
           )}

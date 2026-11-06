@@ -16,13 +16,17 @@
  */
 import type { Pool } from "mysql2/promise";
 import { latestTestEmail, type TestEmailRow } from "../../repos/commsOverview";
-import { testEmailDelivered } from "./setup";
+import { testEmailDelivered, testProvesKey } from "./setup";
 
 export type KeyHealth = { state: "ok" | "missing" | "partial"; detail: string };
 
 /** The answer, from the key's presence and the latest `comms.test` row. Pure. */
-export function resendKeyHealth(key: { configured: boolean }, test: TestEmailRow | null): KeyHealth {
+export function resendKeyHealth(key: { configured: boolean; source?: string; setAt?: string | null }, test: TestEmailRow | null): KeyHealth {
   if (!key.configured) return { state: "missing", detail: "No Resend key, no email leaves this deployment" };
+  // A test sent before this key was saved proved the key before it (testProvesKey, ./setup.ts).
+  if (test && !testProvesKey(test, key)) {
+    return { state: "partial", detail: "A new key was saved after the last test email. Send yourself a test from Comms Settings to prove this one" };
+  }
   if (testEmailDelivered(test)) return { state: "ok", detail: "The last test email was reported delivered" };
   if (!test) {
     return { state: "partial", detail: "A key is set and no test email has shown it works yet. Send yourself a test from Comms Settings" };
@@ -33,6 +37,6 @@ export function resendKeyHealth(key: { configured: boolean }, test: TestEmailRow
 }
 
 /** The `resend-key` launch row. */
-export async function resendKeyLaunchCheck(pool: Pool, key: { configured: boolean }): Promise<KeyHealth> {
+export async function resendKeyLaunchCheck(pool: Pool, key: { configured: boolean; source?: string; setAt?: string | null }): Promise<KeyHealth> {
   return resendKeyHealth(key, key.configured ? await latestTestEmail(pool) : null);
 }

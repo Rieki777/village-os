@@ -39,6 +39,8 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "2" } }
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "sessions", lifecycle: "members" }] }),
   useModuleOn: () => false,
+  // The room's card invitation reads Gene Keys through useModule; off here, as every module but sessions.
+  useModule: () => undefined,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -71,10 +73,16 @@ function doors(): RoomActions {
     patchEntry: (...a) => ok("patchEntry", ...a),
     deleteEntry: (...a) => ok("deleteEntry", ...a),
     respond: (...a) => ok("respond", ...a),
+    answerNight: (...a) => ok("answerNight", ...a),
+    decideAfterNight: (...a) => ok("decideAfterNight", ...a),
     act: (...a) => ok("act", ...a),
     hosts: (...a) => ok("hosts", ...a),
     close: (...a) => ok("close", ...a),
     toolFeedback: (...a) => ok("toolFeedback", ...a),
+    discard: (...a) => ok("discard", ...a),
+    library: async () => [],
+    bringFromLibrary: (...a) => ok("bringFromLibrary", ...a),
+    sendTension: (...a) => ok("sendTension", ...a),
   };
 }
 

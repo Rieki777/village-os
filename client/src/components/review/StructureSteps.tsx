@@ -53,11 +53,11 @@ export default function StructureSteps({
     },
     {
       title: "Live",
-      body: "Circles and seats publish together. People keep their seats, and a seat somebody holds is never retired.",
+      body: "Circles and roles publish together. People keep their roles, and a role somebody holds is never retired.",
     },
     {
       title: "Carry people across",
-      body: "Each person on the old chart gets a seat on the new one, one at a time. The old chart retires once nobody is left in it.",
+      body: "Each person on the old chart gets a role on the new one, one at a time. The old chart retires once nobody is left in it.",
     },
   ];
   const stateOf = (i: number): "done" | "now" | "next" =>

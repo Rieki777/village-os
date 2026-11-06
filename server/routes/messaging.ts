@@ -5,8 +5,11 @@
  *
  *   GET    /api/messages                     the inbox
  *   GET    /api/messages/people              who this member may write to
+ *   GET    /api/messages/unread              the menu's number, and nothing else
  *   POST   /api/messages/direct              open a one-to-one
  *   POST   /api/messages/groups              start a group
+ *   GET    /api/messages/work/:kind/:id      is there a chat for this quest or task, for me
+ *   POST   /api/messages/work/:kind/:id      open it (created when two people are on it)
  *   GET    /api/messages/:id                 one conversation and its messages
  *   POST   /api/messages/:id/messages        say something
  *   POST   /api/messages/:id/read            move the read mark
@@ -37,6 +40,15 @@
  * and stay first in register(). Express applies middleware in registration
  * order, so a `use` registered after its routes guards nothing.
  *
+ * SHARED WORK CHATS (server/lib/sharedWork.ts). A quest or a task with two or
+ * more people on it has one conversation whose members are exactly those
+ * people, reconciled against the record on every read: `requireConversation`
+ * syncs a shared-work thread BEFORE it checks membership, so somebody taken
+ * off the work meets the same 404 as anybody else, on their very next request.
+ * The inbox syncs the viewer's own work first, so a new chat is there when
+ * they look. Membership is the record's, so adding, removing, handing on,
+ * renaming and leaving are refused on these threads; muting is not.
+ *
  * REGISTERED WHERE IT WAS, because Express matches in registration order:
  * after the forum's moderation queue, before the village map's routes.
  */
@@ -51,6 +63,7 @@ import {
   addMembers as addConversationMembers,
   advanceRead,
   cleanText,
+  conversationById,
   conversationFor,
   createGroup,
   editMessage,
@@ -74,6 +87,10 @@ import {
 } from "../lib/messaging";
 import { moduleActivity, requireModule } from "../lib/modules";
 import { numberVar } from "../lib/variables";
+import { isWorkConversation, isWorkKind, syncWork, workOf, type WorkDeps, type WorkKind } from "../lib/sharedWork";
+
+/** Why a shared-work chat refuses membership changes. Muting stays open. */
+const WORK_MEMBERSHIP_REFUSAL = "Everyone on the work is in this chat while they are on it. Mute it to quiet it";
 
 type Deps = Pick<
   AppDeps,
@@ -90,7 +107,8 @@ type Deps = Pick<
   | "notifyReportReviewed"
   | "overLimit"
   | "getPool"
->;
+> &
+  Partial<Pick<AppDeps, "lapseContext">>;
 
 export function register(app: Express, deps: Deps): void {
   const {
@@ -129,8 +147,33 @@ export function register(app: Express, deps: Deps): void {
     return other?.name ? firstName(other.name) : "A member";
   }
 
+  /**
+   * The shared-work chats read who is on the work through these. Addressable
+   * means the same as for a direct thread: never an example identity, a
+   * tombstone or an unclaimed account.
+   */
+  const workDeps: WorkDeps = {
+    getPool,
+    lapseContext: deps.lapseContext ? () => deps.lapseContext!() : undefined,
+    isAddressable: async (id) => !!(await addressableMember(id)),
+  };
+
+  /** Bring a shared-work thread in line with its record. Never fails the read it rides on. */
+  async function syncIfWork(conversationId: string): Promise<void> {
+    const c = await conversationById(getPool(), conversationId);
+    if (!c || !isWorkConversation(c) || !c.contextId) return;
+    try {
+      await syncWork(c.contextType as WorkKind, c.contextId, workDeps);
+    } catch (e) {
+      console.error("[messaging] could not sync the shared work chat", conversationId, e);
+    }
+  }
+
   /** Membership or nothing. The 404 body is identical for both misses. */
   async function requireConversation(req: express.Request, res: express.Response, user: any) {
+    // A shared-work thread is synced first, so membership is read against who
+    // is on the work NOW. Same 404 either way: the sync answers nothing itself.
+    await syncIfWork(String(req.params.id));
     const found = await conversationFor(getPool(), String(req.params.id), user.id);
     if (!found) {
       res.status(404).json({ error: "Not found" });
@@ -172,6 +215,25 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/messages", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to see your messages" });
+    // The viewer's shared work first: chats for work they just joined appear,
+    // and chats for work they left stop listing them.
+    try {
+      const keys = await workOf(user.id, workDeps);
+      for (const e of await inboxFor(getPool(), user.id)) {
+        if (isWorkConversation(e.conversation) && e.conversation.contextId) {
+          keys.push({ kind: e.conversation.contextType as WorkKind, id: e.conversation.contextId });
+        }
+      }
+      const seen = new Set<string>();
+      for (const k of keys) {
+        const key = `${k.kind}:${k.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        await syncWork(k.kind, k.id, workDeps);
+      }
+    } catch (e) {
+      console.error("[messaging] could not sync shared work for", user.id, e);
+    }
     const entries = await inboxFor(getPool(), user.id);
     res.json({
       unreadTotal: await totalUnreadFor(getPool(), user.id),
@@ -236,6 +298,17 @@ export function register(app: Express, deps: Deps): void {
     res.json(matches);
   });
 
+  /**
+   * The menu's number: one COUNT, nothing else, so the avatar menu can ask
+   * every time it opens without paying for the whole inbox. Registered before
+   * /api/messages/:id, or Express would read "unread" as a conversation id.
+   */
+  app.get("/api/messages/unread", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    res.json({ unreadTotal: await totalUnreadFor(getPool(), user.id) });
+  });
+
   /** Open (or reopen) the direct thread with one other member. */
   app.post("/api/messages/direct", async (req, res) => {
     const user = await authedUser(req);
@@ -286,6 +359,39 @@ export function register(app: Express, deps: Deps): void {
     }
     const conversation = await createGroup(getPool(), { createdBy: user.id, name, memberIds: wanted });
     res.json({ id: conversation.id, kind: conversation.kind, title: conversation.name });
+  });
+
+  /**
+   * The chat for a quest or a task, as the Chat button asks about it. Answers
+   * only about the viewer's own place in it: `available` is true when they are
+   * on the work and it has two or more people. Somebody not on the work gets
+   * the same answer as for work that does not exist, and never a member list.
+   */
+  app.get("/api/messages/work/:kind/:id", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const kind = String(req.params.kind);
+    if (!isWorkKind(kind)) return res.status(404).json({ error: "Not found" });
+    const synced = await syncWork(kind, String(req.params.id), workDeps);
+    const on = !!synced.work && synced.work.people.includes(user.id);
+    const member = on && synced.conversation ? await conversationFor(getPool(), synced.conversation.id, user.id) : null;
+    res.json({
+      available: !!member,
+      conversationId: member ? member.conversation.id : null,
+      people: on && synced.work ? synced.work.people.length : 0,
+    });
+  });
+
+  /** Open the chat for a quest or a task, or the same 404 for anybody not in it. */
+  app.post("/api/messages/work/:kind/:id", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const kind = String(req.params.kind);
+    if (!isWorkKind(kind)) return res.status(404).json({ error: "Not found" });
+    const synced = await syncWork(kind, String(req.params.id), workDeps);
+    const member = synced.conversation ? await conversationFor(getPool(), synced.conversation.id, user.id) : null;
+    if (!member) return res.status(404).json({ error: "Not found" });
+    res.json({ id: member.conversation.id, kind: member.conversation.kind, title: member.conversation.name });
   });
 
   /** One thread: membership proven first, then a page of its messages. */
@@ -400,6 +506,9 @@ export function register(app: Express, deps: Deps): void {
       await setMuted(getPool(), found.conversation.id, user.id, !!req.body.muted);
     }
     if (req.body?.name !== undefined) {
+      if (isWorkConversation(found.conversation)) {
+        return res.status(400).json({ error: "A shared work chat is titled by the work" });
+      }
       if (found.conversation.kind === "direct") {
         return res.status(400).json({ error: "A direct conversation is titled by who is in it" });
       }
@@ -422,6 +531,9 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const found = await requireConversation(req, res, user);
     if (!found) return;
+    if (isWorkConversation(found.conversation)) {
+      return res.status(400).json({ error: WORK_MEMBERSHIP_REFUSAL });
+    }
     await leaveConversation(getPool(), found.conversation.id, user.id);
     res.json({ success: true });
   });
@@ -431,6 +543,9 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const found = await requireConversation(req, res, user);
     if (!found) return;
+    if (isWorkConversation(found.conversation)) {
+      return res.status(400).json({ error: WORK_MEMBERSHIP_REFUSAL });
+    }
     if (found.conversation.kind === "direct") {
       return res.status(400).json({ error: "A direct conversation holds exactly two people. Start a group instead" });
     }
@@ -461,6 +576,9 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const found = await requireConversation(req, res, user);
     if (!found) return;
+    if (isWorkConversation(found.conversation)) {
+      return res.status(400).json({ error: WORK_MEMBERSHIP_REFUSAL });
+    }
     if (found.conversation.kind === "direct") {
       return res.status(400).json({ error: "Neither person can remove the other from a direct conversation" });
     }
@@ -483,6 +601,9 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const found = await requireConversation(req, res, user);
     if (!found) return;
+    if (isWorkConversation(found.conversation)) {
+      return res.status(400).json({ error: WORK_MEMBERSHIP_REFUSAL });
+    }
     if (found.conversation.kind === "direct") {
       return res.status(400).json({ error: "A direct conversation has no owner" });
     }

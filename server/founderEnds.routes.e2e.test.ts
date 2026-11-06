@@ -34,7 +34,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
 import { waitForHealth } from "./db/e2eBoot";
 
@@ -158,7 +158,7 @@ beforeAll(async () => {
    * the moment it is about.
    */
   testDb = await provisionTestDb({ gameStarted: false });
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY
@@ -268,6 +268,17 @@ beforeAll(async () => {
   expect((await call("POST", "/api/admin/launch/confirm", {
     body: { id: "backups-drilled", done: true },
   })).status).toBe(200);
+
+  /*
+   * THE VILLAGE'S CLOCK, WHICH BLOCKS THE LAUNCH VOTE SINCE READINESS R059.
+   * The platform keeps UTC until a founder answers, and confirming the zone
+   * already showing is an answer, so this village keeps UTC and says so.
+   */
+  const zone = (await call("GET", "/api/admin/seasons")).json;
+  const confirmedZone = await call("PUT", "/api/admin/seasons", {
+    body: { seasons: zone.seasons, cadence: zone.cadence, timezone: zone.timezone, confirmTimezone: true },
+  });
+  expect(confirmedZone.status, JSON.stringify(confirmedZone.json)).toBe(200);
 
   /*
    * THE FOUNDER'S ANSWER ABOUT THE VILLAGE-WIDE ISSUANCE CAP, WHICH IS NEW AND

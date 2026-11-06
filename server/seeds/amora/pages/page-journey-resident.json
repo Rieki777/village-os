@@ -1,0 +1,231 @@
+{
+  "faq": {
+    "heading": "Common Questions"
+  },
+  "dues": {
+    "heading": "Village Dues",
+    "fallback": "As a resident, you'll pay Village Dues that cover utilities, maintenance, and community services. Together, we work to reduce costs and create surplus that benefits everyone.",
+    "linkLabel": "How we create together",
+    "linkTarget": "/how-we-create"
+  },
+  "hero": {
+    "intro": "The Resident Space is for those coordinating the success of the whole Village from the perspective of Residents. Find your place in a loving community where all beings belong and thrive.",
+    "eyebrow": "Resident Co-Creator Journey",
+    "headline": "Make {village} Home",
+    "highlight": "Home",
+    "primaryLabel": "Start with Community Call",
+    "primaryTarget": "#events",
+    "secondaryLabel": "Explore Housing",
+    "secondaryTarget": "/housing"
+  },
+  "steps": {
+    "intro": "Each step helps both sides decide. You figure out if {village} is right for you; we figure out the same.",
+    "items": [
+      {
+        "stage": "Visitor",
+        "title": "Attend Community Call",
+        "bullet1": "Meet the founding team",
+        "bullet2": "Learn about our vision",
+        "bullet3": "Ask questions live",
+        "bullet4": "Connect with other visitors",
+        "actionLabel": "Join Community Call",
+        "description": "Learn about the basics and ask any immediate questions about living at {village}.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Guest",
+        "title": "Attend Community Events",
+        "bullet1": "Weekly potluck dinners",
+        "bullet2": "Land tours with the founding team",
+        "bullet3": "Community celebrations",
+        "bullet4": "Children's events and family gatherings",
+        "actionLabel": "View Events",
+        "description": "Join potlucks, land tours, and community gatherings to experience {village}'s living culture.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Founding Seeder",
+        "title": "Become a Founding Seeder",
+        "bullet1": "Join the Founding Seeders waitlist",
+        "bullet2": "First access to homes and land",
+        "bullet3": "Priority as lots are released",
+        "bullet4": "No obligation to purchase",
+        "actionLabel": "Become a Founding Seeder",
+        "description": "Join the Founding Seeders, our waitlist of soul-aligned people securing first access to homes and land at {village}. This is how you raise your hand and say: I'm serious about this.",
+        "actionTarget": ""
+      },
+      {
+        "stage": "Participant",
+        "title": "Community Training",
+        "bullet1": "Do the training, or show you already live it",
+        "bullet2": "Nonviolent Communication basics",
+        "bullet3": "Authentic relating practices",
+        "bullet4": "Consent-based decision making",
+        "actionLabel": "Learn About Training",
+        "description": "Either complete our training in NVC (Nonviolent Communication), authentic relating, and other community practices, or demonstrate you already know and live these essential practices.",
+        "actionTarget": "/training"
+      },
+      {
+        "stage": "Member",
+        "title": "Sign the {commitment} / Formal Membership",
+        "bullet1": "Read the founding principles",
+        "bullet2": "Attend a membership orientation",
+        "bullet3": "Sign the membership agreement",
+        "bullet4": "Receive your member welcome package",
+        "actionLabel": "Read the {commitment}",
+        "description": "Become an official member of the community by signing the membership agreement.",
+        "actionTarget": "/love-letter"
+      },
+      {
+        "stage": "Explorer",
+        "title": "Explore Housing Options",
+        "bullet1": "Browse available lots",
+        "bullet2": "Review home design options",
+        "bullet3": "Understand pricing tiers",
+        "bullet4": "Explore financing options",
+        "actionLabel": "View Housing Options",
+        "description": "Browse available lots and housing options to find your perfect spot in the village.",
+        "actionTarget": "/housing"
+      },
+      {
+        "stage": "Deposit",
+        "title": "Put Down a Deposit on Your Future Home",
+        "bullet1": "Fully refundable deposit",
+        "bullet2": "{deposit-summary}",
+        "bullet3": "Reserves your future home",
+        "bullet4": "Priority on your chosen lot",
+        "actionLabel": "Reserve Your Home",
+        "description": "Secure your future home with a fully refundable deposit{range}. This holds your place and starts the real conversation.",
+        "actionTarget": "/reserve"
+      },
+      {
+        "stage": "Applicant",
+        "title": "Background Check",
+        "bullet1": "Follows your deposit",
+        "bullet2": "Standard background verification",
+        "bullet3": "Community safety commitment",
+        "bullet4": "Confidential handling",
+        "actionLabel": "Coming Soon",
+        "description": "Once your deposit is down, we complete a background check together. It's part of our commitment to community safety{background-note}.",
+        "actionTarget": ""
+      },
+      {
+        "stage": "Fireside",
+        "title": "Fireside Dinner With the Founding Team",
+        "bullet1": "Intimate 1-on-1 with the founders",
+        "bullet2": "In person on the land, or online",
+        "bullet3": "A friendship ritual, not an interview",
+        "bullet4": "Explore mutual fit and commitment",
+        "actionLabel": "By Invitation",
+        "description": "You're invited to an intimate 1-on-1 fireside dinner with the founding team, in person on the land, or online if you can't make it. A casual, beautiful friendship ritual where both sides explore the commitment fully.",
+        "actionTarget": ""
+      },
+      {
+        "stage": "Family Day",
+        "title": "Children's Play Day",
+        "bullet1": "Meet other families",
+        "bullet2": "Experience child-friendly spaces",
+        "bullet3": "Learn about our school plans",
+        "bullet4": "Connect with parents",
+        "actionLabel": "View Family Events",
+        "description": "If you have children, attend our family day to see how kids thrive in our community.",
+        "actionTarget": "#events"
+      },
+      {
+        "stage": "Initiate",
+        "title": "Resident Right of Passage",
+        "bullet1": "Demonstrate commitment",
+        "bullet2": "Present to residents",
+        "bullet3": "Receive community consent",
+        "bullet4": "Celebrate your passage",
+        "actionLabel": "Good Neighbor Criteria",
+        "description": "Complete the passage with a vote from current residents. Review the Good Neighbor criteria.",
+        "actionTarget": "/good-neighbor"
+      },
+      {
+        "stage": "Landowner",
+        "title": "Purchase Land Share Agreement",
+        "bullet1": "Review agreement terms",
+        "bullet2": "Secure financing if needed",
+        "bullet3": "Complete land credits",
+        "bullet4": "Sign your agreement",
+        "actionLabel": "Learn About Land Shares",
+        "description": "Secure your land with a Land Share Agreement and required Land Credits.",
+        "actionTarget": ""
+      },
+      {
+        "stage": "Builder",
+        "title": "Build Your Home",
+        "bullet1": "Choose your home design",
+        "bullet2": "Select your builder",
+        "bullet3": "Follow building guidelines",
+        "bullet4": "Create your dream home",
+        "actionLabel": "Building Guidelines",
+        "description": "Work with our approved builders or bring your own plans. Observe Resident Governance.",
+        "actionTarget": "/housing"
+      },
+      {
+        "stage": "Resident",
+        "title": "Move In Celebration!",
+        "bullet1": "Community welcome ceremony",
+        "bullet2": "Meet your neighbors",
+        "bullet3": "Begin village life",
+        "bullet4": "Celebrate your new home",
+        "actionLabel": "Welcome Home",
+        "description": "Welcome home! Celebrate with the {village} Family and begin your life in the village.",
+        "actionTarget": ""
+      }
+    ],
+    "heading": "Your Path to Residency"
+  },
+  "rights": {
+    "body": "As a resident you are a co-owner of this village, not a tenant. Read the full covenant that protects you and defines what we're building together.",
+    "heading": "Your Rights and Responsibilities",
+    "ctaLabel": "Read Rights and Responsibilities",
+    "ctaTarget": "/resident-rights"
+  },
+  "tenure": {
+    "body": "Your Land Share Agreement gives you long-term access to your land with the ability to renew and pass down to your children{transfer-note}. The structure holds ownership in the community and gives your family security.",
+    "heading": "Land Share Agreements"
+  },
+  "titles": {
+    "body": "{village} marks long presence with a title. These titles are honorary: they carry no voice in governance and no rights today. Voice comes from what you contribute, and a village may decide later to attach powers of its own to these titles.",
+    "items": [
+      {
+        "level": "Resident",
+        "years": "",
+        "description": "Your arrival, you've made the village your home"
+      },
+      {
+        "level": "Guardian",
+        "years": "7 years",
+        "description": "Deep roots, steward of community traditions"
+      },
+      {
+        "level": "Elder",
+        "years": "21 years",
+        "description": "Village wisdom keeper, mentor to new residents"
+      },
+      {
+        "level": "Sage",
+        "years": "49 years",
+        "description": "Intergenerational bridge, keeper of the village's longest memory"
+      }
+    ],
+    "heading": "Titles for Time Here"
+  },
+  "closing": {
+    "body": "Start with a community call to learn about life at {village}, then explore our housing options and available lots.",
+    "heading": "Find Your Home",
+    "primaryLabel": "Join Community Call",
+    "primaryTarget": "#events",
+    "secondaryLabel": "View Housing Options",
+    "secondaryTarget": "/housing"
+  },
+  "nextStep": {
+    "body": "Schedule a village visit to experience {village} firsthand and ask any questions about becoming a resident.",
+    "heading": "Your Next Step",
+    "ctaLabel": "Schedule a Village Visit",
+    "ctaTarget": "/visit"
+  }
+}

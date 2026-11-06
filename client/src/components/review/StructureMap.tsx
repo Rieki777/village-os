@@ -34,7 +34,7 @@ const DASHED = (s: MapStatus) => s === "retire" || s === "moved";
 
 export const STATUS_WORDS: Record<MapStatus, string> = {
   new: "New",
-  match: "Takes over a live seat",
+  match: "Takes over a live role",
   retire: "Retiring",
   moved: "Moves out",
   same: "Stays as it is",

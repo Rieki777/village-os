@@ -9,7 +9,7 @@
  * never carries it.
  */
 import Layout from "@/components/Layout";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { Bug, Check, Lightbulb, Loader2 } from "lucide-react";
 
@@ -26,6 +26,12 @@ export default function Feedback() {
   const [hp, setHp] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState<null | { shared: boolean }>(null);
+  // The panel replaces the form and its button, so focus would fall to
+  // <body> and nothing would be read. Focus goes to the panel, which reads it.
+  const received = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sent) received.current?.focus();
+  }, [sent]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -64,7 +70,7 @@ export default function Feedback() {
       <section className="py-8 bg-background">
         <div className="container max-w-xl">
           {sent ? (
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <div ref={received} tabIndex={-1} className="bg-card border border-border rounded-xl p-8 text-center outline-none">
               <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Check className="w-6 h-6 text-emerald-700" />
               </div>

@@ -29,6 +29,7 @@
 import type { Pool } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
+import { readBadgeMultipliers } from "./badges";
 
 export type PatternKind = "circle" | "org_role" | "badge" | "quest";
 
@@ -152,43 +153,52 @@ export async function seasonallyDormantBadgeIds(
 }
 
 /**
- * A member's live reward multiplier, from every badge they hold whose powers
- * are awake. Multipliers compound, because two distinct standings both being
+ * A member's live pay multipliers, token by token, from every badge they hold
+ * whose powers are awake (Rye, 2026-10-23: "badges that have multipliers should
+ * multiply token pay (the multiplier is attached to a token, so voice, credits,
+ * etc)"). `{ "village-voice": 1.5 }` multiplies what this member is paid in
+ * Village Voice for a quest, a role each cycle and an accepted proposal, and
+ * nothing else. A token no badge names is absent, which is a factor of 1.
+ *
+ * Multipliers on one token compound, because two distinct standings both being
  * honoured is the behaviour a village expects.
  */
-/** No stack of badges may multiply a reward past this. Caps fail closed. */
+/** No stack of badges may multiply one token's pay past this. Caps fail closed. */
 export const MAX_REWARD_MULTIPLIER = 3;
 
-export async function rewardMultiplierFor(
+export async function rewardMultipliersFor(
   pool: Pool,
   userId: string,
   dormant: string[],
-): Promise<number> {
+): Promise<Record<string, number>> {
   const [rows]: any = await pool.query(
-    `SELECT b.id, b.multiplier FROM badge_awards a
+    `SELECT b.id, b.multipliers FROM badge_awards a
        JOIN badges b ON b.id = a.badge_id
-      WHERE a.user_id = ? AND b.active = 1 AND b.multiplier IS NOT NULL
+      WHERE a.user_id = ? AND b.active = 1 AND b.multipliers IS NOT NULL
         AND a.is_example = 0 AND b.is_example = 0
         -- A self badge is a member's own declaration and a hypha badge is an
-        -- external mirror. Both gate nothing by design, and a reward
-        -- multiplier is a power, so neither may carry one: self-claiming is
-        -- an open route, and it must never reach the faucet.
+        -- external mirror. Both gate nothing by design, and a pay multiplier
+        -- is a power, so neither may carry one: self-claiming is an open
+        -- route, and it must never reach a faucet.
         AND b.kind NOT IN ('self','hypha')
         AND (a.expires_at IS NULL OR a.expires_at > NOW())`,
     [userId],
   );
   const skip = new Set(dormant);
-  let m = 1;
+  const out: Record<string, number> = {};
   for (const r of rows as any[]) {
     if (skip.has(r.id)) continue;
-    const v = Number(r.multiplier);
-    if (Number.isFinite(v) && v > 0) m *= v;
+    for (const [token, factor] of Object.entries(readBadgeMultipliers(r.multipliers) ?? {})) {
+      // Gratitude is only ever sent member to member, so nothing pays in it.
+      if (token === "gratitude") continue;
+      const v = Number(factor);
+      if (Number.isFinite(v) && v > 0) out[token] = (out[token] ?? 1) * v;
+    }
   }
   // Multipliers compound, so a handful of generous badges could otherwise
-  // mint an unbounded amount from a faucet that cannot refuse it. This bounds
-  // the person across every quest; the consent cap also bounds what any one
-  // quest can pay, badges included (`payoutFor`, server/lib/questConsent.ts).
-  return Math.min(m, MAX_REWARD_MULTIPLIER);
+  // multiply one token without end. This bounds the person, per token.
+  for (const token of Object.keys(out)) out[token] = Math.min(out[token], MAX_REWARD_MULTIPLIER);
+  return out;
 }
 
 // ── The roll ────────────────────────────────────────────────────────────────

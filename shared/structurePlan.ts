@@ -49,6 +49,8 @@
  * Pure: no pool, no clock.
  */
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
+import type { RoleWordsLike } from "./roleFieldChanges";
+import { ROLE_CCOS_FIELDS } from "./roleCcos";
 
 /** What the source's own status says, in the four words it uses, or `other`. */
 export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
@@ -69,6 +71,74 @@ export function sourceStatusOf(v: unknown): SourceStatus | null {
   if (label === null) return null;
   const k = label.toLowerCase();
   return k === "active" || k === "proposed" || k === "vacant" || k === "archived" ? k : "other";
+}
+
+/**
+ * What a source's pay status means, in four standings, as the source's
+ * Operations role described its values on 2026-10-30: Active is settled,
+ * Proposed and Under Review are pending, and Deferred is decided and not
+ * paying yet (usually waiting on funding), which is NOT the same as proposed.
+ */
+export type SourcePayStanding = "settled" | "pending" | "agreed-not-paying" | "other";
+
+/**
+ * What the source holds a seat to pay. Information for the steward reading
+ * the structure: it is never written to a seat, and the review never offers
+ * it as this village's figure. `monthlyUsd` is ONE blended figure for the
+ * whole arrangement, not cash alone, because that is all the source holds.
+ */
+export interface SourcePay {
+  /** The source's model, as written ("Stipend", "Volunteer", "Hybrid"...). */
+  model: string | null;
+  standing: SourcePayStanding | null;
+  /** The status as the source wrote it. */
+  statusLabel: string | null;
+  /** The source's own words on the terms. Prose, shown to a steward only. */
+  terms: string | null;
+  /** US dollars a month, as the source holds it. */
+  monthlyUsd: number | null;
+}
+
+/** A source's pay status read into its standing. Null when none was sent. */
+export function sourcePayStandingOf(label: string | null): SourcePayStanding | null {
+  if (label === null) return null;
+  const k = label.trim().toLowerCase();
+  if (k === "active") return "settled";
+  if (k === "proposed" || k === "under review") return "pending";
+  if (k === "deferred") return "agreed-not-paying";
+  return "other";
+}
+
+/** A dollar figure from a number or a "$1,200.50" string. Null for anything else, negative, or absurd. */
+function dollarsOf(v: unknown): number | null {
+  let n: number | null = null;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string") {
+    const t = v.trim().replace(/^\$/, "").replace(/,/g, "");
+    if (/^\d+(\.\d{1,2})?$/.test(t)) n = Number(t);
+  }
+  return n !== null && Number.isFinite(n) && n >= 0 && n < 1e9 ? n : null;
+}
+
+/**
+ * The `sourcePay` a seat carries, read defensively: the payload may have been
+ * edited or sent by something other than this village's reader. Null when it
+ * says nothing at all.
+ */
+export function readSourcePay(v: unknown): SourcePay | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const str = (x: unknown, max: number): string | null =>
+    typeof x === "string" && x.trim() !== "" ? x.trim().slice(0, max) : null;
+  const statusLabel = str(o.status, 60);
+  const out: SourcePay = {
+    model: str(o.model, 60),
+    standing: sourcePayStandingOf(statusLabel),
+    statusLabel,
+    terms: str(o.terms, 600),
+    monthlyUsd: dollarsOf(o.monthlyUsd),
+  };
+  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null ? out : null;
 }
 
 /** The proposal kinds that change the chart. Everything else in a batch is a note. */
@@ -143,6 +213,12 @@ export interface PlanLiveSeat {
   isExample: boolean;
   /** How many people hold it now, from this village's own seatings. */
   holders: number;
+  /**
+   * The live role's own words, so the review can say what a move would
+   * change field by field (shared/roleFieldChanges.ts). Optional: a reader
+   * without them lists no before.
+   */
+  words?: RoleWordsLike;
 }
 
 // ── The plan ─────────────────────────────────────────────────────────────
@@ -200,6 +276,8 @@ export interface PlanSeat {
   otherCircles: string[];
   /** The source pointed at a circle its own read did not hold. */
   circleUnresolvedAtSource: boolean;
+  /** What the source holds this seat to pay, or null. Never written to the seat. */
+  sourcePay: SourcePay | null;
   sent: Record<string, unknown>;
 }
 
@@ -368,8 +446,8 @@ export function planStructure(
       const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
       const circleId = typeof seat.payload.circleId === "string" && seat.payload.circleId ? seat.payload.circleId : null;
       let problem: string | null = null;
-      if (name.trim() === "") problem = "This seat came with no name";
-      else if (liveSeatIds.has(id)) problem = `A seat with the id "${id}" already exists`;
+      if (name.trim() === "") problem = "This role came with no name";
+      else if (liveSeatIds.has(id)) problem = `A role with the id "${id}" already exists`;
       seats.push({
         key: `${p.id}#${index}`,
         proposalId: p.id,
@@ -388,6 +466,7 @@ export function planStructure(
           ? (sent.sourceOtherCircles as unknown[]).filter((x): x is string => typeof x === "string")
           : [],
         circleUnresolvedAtSource: sent.sourceCircleUnresolved === true,
+        sourcePay: readSourcePay(sent.sourcePay),
         sent,
       });
     });
@@ -455,8 +534,18 @@ export interface DecidedStructure {
   problems: string[];
 }
 
-/** The seat fields an update carries across. `seats` is never one: the live count holds its people. */
-const UPDATE_FIELDS = ["name", "aim", "domain", "whyItMatters", "accountabilities", "criticality", "recruiting"] as const;
+/**
+ * The seat fields an update carries across. `seats` is never one: the live count holds its people.
+ *
+ * The role's own words go across too: the handover words of 0268 and the CCOS
+ * words of 0274. The review lists each of them before and after under a
+ * moved role (`RoleFieldChanges`), so an update that dropped them would
+ * publish less than the steward read and consented to.
+ */
+const UPDATE_FIELDS = [
+  "name", "aim", "domain", "whyItMatters", "accountabilities", "criticality", "recruiting",
+  "bringMe", "notMine", "runbook", ...ROLE_CCOS_FIELDS,
+] as const;
 
 /**
  * Apply a steward's decisions to a plan.
@@ -510,10 +599,10 @@ export function decideStructure(
     if (!inChange(s.key)) continue;
     const choice = s.match ? conflicts[s.key] : undefined;
     if (choice?.choice === "leave") continue;
-    if (s.problem) problems.push(`${s.name || "A seat"}: ${s.problem}. Leave it out to go ahead.`);
+    if (s.problem) problems.push(`${s.name || "A role"}: ${s.problem}. Leave it out to go ahead.`);
     if (s.circleProblem) problems.push(`"${s.name}": ${s.circleProblem}. Leave it out to go ahead.`);
     if (s.circleId && leftOutNewIds.has(s.circleId)) {
-      problems.push(`"${s.name}" sits in "${nameOfCircle(s.circleId)}", which is left out. Keep the circle or leave the seat out.`);
+      problems.push(`"${s.name}" sits in "${nameOfCircle(s.circleId)}", which is left out. Keep the circle or leave the role out.`);
     }
     if (!s.match) {
       creates.push(s);
@@ -538,8 +627,8 @@ export function decideStructure(
   if (unsettled > 0) {
     problems.push(
       unsettled === 1
-        ? "One seat already exists here. Choose what happens to it."
-        : `${unsettled} seats already exist here. Choose what happens to each one.`,
+        ? "One role already exists here. Choose what happens to it."
+        : `${unsettled} roles already exist here. Choose what happens to each one.`,
     );
   }
 
@@ -560,9 +649,9 @@ export function decideStructure(
   for (const [key, typed] of Array.from(renames.entries())) {
     const seat = plan.seats.find((s) => s.key === key)!;
     if (typed === "") problems.push(`Type a new name for the second "${seat.name}", or choose another option.`);
-    else if (typed.length > 120) problems.push(`"${typed.slice(0, 40)}" is longer than a seat name can be.`);
-    else if (liveNames.has(seatNameKey(typed))) problems.push(`A live seat is already called "${typed}". Type a name of its own.`);
-    else if ((finalNames.get(seatNameKey(typed)) ?? 0) > 1) problems.push(`Two seats in this change would be called "${typed}".`);
+    else if (typed.length > 120) problems.push(`"${typed.slice(0, 40)}" is longer than a role name can be.`);
+    else if (liveNames.has(seatNameKey(typed))) problems.push(`A live role is already called "${typed}". Type a name of its own.`);
+    else if ((finalNames.get(seatNameKey(typed)) ?? 0) > 1) problems.push(`Two roles in this change would be called "${typed}".`);
   }
 
   // ── Retiring the old chart ──

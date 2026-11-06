@@ -4,8 +4,13 @@ import { fetchConfigCached } from "@/lib/gameApi";
 import { readStoredJson, removeStored, writeStoredJson } from "@/lib/safeStorage";
 import { useAuth } from "@/contexts/AuthContext";
 import GuideChat from "@/components/GuideChat";
+import NameYourGuide from "@/components/NameYourGuide";
+import { guideAudience, guideName } from "@shared/guideName";
 import { submitProposal } from "@/lib/proposals";
 import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { WORK_WITH_US_PAGE } from "@shared/pageContent/workWithUs";
 import {
   Handshake,
   MessageCircle,
@@ -59,10 +64,17 @@ const PROPOSAL_FIELDS: { key: keyof Proposal; label: string; hint: string; requi
   { key: "maintenance", label: "Maintenance & longevity", hint: "What keeps it alive and well? Ongoing care, who's responsible, cost over time, expected lifespan.", required: true, rows: 3 },
 ];
 
+/*
+ * THE FOUR OPTIONS A PAGE SHOWS WHEN THE CONFIG COULD NOT BE READ, and only then.
+ * A village that deleted every option in Make it yours, Work With Us saves an
+ * empty list, and an empty list is its answer: no options. This used to test
+ * the list's LENGTH, so deleting all four brought these four straight back on
+ * the public page, the exact words the founder had just removed.
+ */
 const RECIPROCITY_FALLBACK: ReciprocityOption[] = [
   { value: "Financial - Cash", title: "Financial: Cash", desc: "A direct payment for your work, materials, or service: upfront, on milestones, or on completion." },
-  { value: "Tokens", title: "Tokens", desc: "Value held within the community ecosystem, credit you can use at the café and across the village." },
-  { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share, e.g. 10% of revenue in exchange for rent or water infrastructure." },
+  { value: "Tokens", title: "Tokens", desc: "You earn contribution tokens." },
+  { value: "Joint Venture", title: "Joint Venture", desc: "You operate autonomously, and the community holds a share, e.g. part of your revenue in exchange for space on the land." },
   { value: "Memorandum of Understanding", title: "Memorandum of Understanding", desc: "A clear, living exchange of contribution, e.g. you grow vegetables, share some harvest, and add to the beauty of the land." },
 ];
 
@@ -78,19 +90,26 @@ export default function WorkWithUs() {
    * first paint, whatever they had called their own village.
    */
   const [projectName, setProjectName] = useState("this village");
-  /* Four of the five sentences below put the name mid-sentence and two start
-   * with it, and a real village name is already capitalised, so this is a
-   * no-op for every named village and grammar for the stand-in. */
+  /* The intro's stand-in opens a sentence with the name, and a real village
+   * name is already capitalised, so this is a no-op for every named village
+   * and grammar for the stand-in. */
   const projectNameSentenceStart = projectName.charAt(0).toUpperCase() + projectName.slice(1);
   const [wwu, setWwu] = useState<WwuConfig | null>(null);
+  const [wwuFailed, setWwuFailed] = useState(false);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [mode, setMode] = useState<"ai" | "form">("form");
   const [submitted, setSubmitted] = useState(false);
   const [form, setForm] = useState<Proposal>(EMPTY);
+  // The reciprocity line and the thank-you are the village's own, from Admin,
+  // Pages, Work With Us (shared/pageContent/workWithUs.ts).
+  const page = usePageContent(WORK_WITH_US_PAGE);
 
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.project?.name) setProjectName(c.project.name); });
-    fetch("/api/work-with-us-config").then((r) => r.json()).then(setWwu).catch(() => { /* fallback copy */ });
+    fetch("/api/work-with-us-config")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(setWwu)
+      .catch(() => setWwuFailed(true));
     fetch("/api/assistant/status")
       .then((r) => r.json())
       .then((d) => { setAiAvailable(!!d.available); setMode(d.available ? "ai" : "form"); })
@@ -107,8 +126,18 @@ export default function WorkWithUs() {
     if (user) setForm((f) => ({ ...f, name: f.name || user.name || "", email: f.email || user.email || "" }));
   }, [user]);
 
-  const reciprocityOptions = wwu?.reciprocityOptions?.length ? wwu.reciprocityOptions : RECIPROCITY_FALLBACK;
-  const assistantName = wwu?.assistantName || "Maia";
+  // The village's list once it has answered, an empty one included. Nothing
+  // while it is on its way, so a list the founder emptied never flashes the
+  // compiled four first; the compiled four only when the read failed.
+  const reciprocityOptions: ReciprocityOption[] = wwu
+    ? Array.isArray(wwu.reciprocityOptions) ? wwu.reciprocityOptions : RECIPROCITY_FALLBACK
+    : wwuFailed ? RECIPROCITY_FALLBACK : [];
+  // The village's own name for its guide, or "the village guide" (shared/guideName.ts).
+  // Ready once the document answers, so a named guide is never shown as the neutral label first.
+  const audience = guideAudience(user);
+  const guide = guideName(wwu?.assistantName, audience);
+  const assistantName = guide.name;
+  const guideReady = wwu !== null || wwuFailed;
 
   const saveDraft = (next: Proposal) => {
     setForm(next);
@@ -126,10 +155,13 @@ export default function WorkWithUs() {
         <section className="bg-teal-band text-white py-24">
           <div className="container max-w-2xl mx-auto px-4 text-center">
             <CheckCircle2 className="w-14 h-14 text-amber-on-band mx-auto mb-6" />
-            <h1 className="font-display text-4xl font-bold mb-4">Your proposal is with us</h1>
-            <p className="text-white text-lg">
-              Thank you for offering your gifts to {projectName}. A reply can take up to a month,
-              and there's room to talk it through and revise.
+            {/* A longer heading the village wrote steps down a size on a
+                phone: at its 48-character limit it ran five lines at 320px. */}
+            <h1 className={`font-display ${Array.from(page?.thanks.fields.heading ?? "").length > 32 ? "text-3xl md:text-4xl" : "text-4xl"} font-bold mb-4 break-words${page ? "" : " invisible"}`}>
+              {page?.thanks.fields.heading || "\u00a0"}
+            </h1>
+            <p className="text-white text-lg break-words">
+              <Emphasized text={page?.thanks.fields.body ?? ""} />
             </p>
           </div>
         </section>
@@ -158,7 +190,7 @@ export default function WorkWithUs() {
       {/* Mode toggle */}
       <div className="bg-stone-50 border-b border-stone-200">
         <div className="container max-w-3xl mx-auto px-4 flex gap-2 py-3">
-          {aiAvailable && (
+          {aiAvailable && guideReady && (
             <button
               onClick={() => setMode("ai")}
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
@@ -181,8 +213,9 @@ export default function WorkWithUs() {
 
       <section className="bg-stone-50 py-12">
         <div className="container max-w-3xl mx-auto px-4">
+          <NameYourGuide guide={guide} audience={audience} ready={guideReady && !!aiAvailable} />
           {mode === "ai" && aiAvailable ? (
-            <GuideChat
+            !guideReady ? null : <GuideChat
               kind="work-with-us"
               projectName={projectName}
               assistantName={assistantName}
@@ -194,7 +227,7 @@ export default function WorkWithUs() {
             />
           ) : (
             /* ProposalForm's one use of the name opens a sentence with it. */
-            <ProposalForm projectName={projectNameSentenceStart} reciprocityOptions={reciprocityOptions} form={form} setForm={saveDraft} onSubmitted={onSubmitted} />
+            <ProposalForm reciprocityLede={page?.reciprocity.fields.lede ?? null} reciprocityOptions={reciprocityOptions} form={form} setForm={saveDraft} onSubmitted={onSubmitted} />
           )}
         </div>
       </section>
@@ -210,9 +243,10 @@ export default function WorkWithUs() {
 // ── The structured form ──────────────────────────────────────────────────────
 
 function ProposalForm({
-  projectName, reciprocityOptions, form, setForm, onSubmitted,
+  reciprocityLede, reciprocityOptions, form, setForm, onSubmitted,
 }: {
-  projectName: string;
+  /** Null until the page's words arrive. */
+  reciprocityLede: string | null;
   reciprocityOptions: ReciprocityOption[];
   form: Proposal;
   setForm: (p: Proposal) => void;
@@ -250,7 +284,9 @@ function ProposalForm({
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim()) { setError("Add your name and email so we know who we're speaking with."); return; }
     for (const f of PROPOSAL_FIELDS) if (f.required && !String(form[f.key]).trim()) { setError(`Answer this to continue: ${f.label}.`); return; }
-    if (form.reciprocity.length === 0) { setError("Choose at least one form of reciprocity that fits."); return; }
+    // Only a village that offers options can ask for one. With none listed
+    // the person describes the exchange in their own words below.
+    if (reciprocityOptions.length > 0 && form.reciprocity.length === 0) { setError("Choose at least one form of reciprocity that fits."); return; }
     setError("");
     setSubmitting(true);
     const ok = await submitProposal("work-with-us", { ...form, [FORM_CONSENT_FIELD]: consent }, hp);
@@ -317,9 +353,13 @@ function ProposalForm({
       {/* Reciprocity */}
       <div>
         <h2 className="font-display text-xl font-bold text-teal-deep mb-1">Reciprocity</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          {projectName} is built on reciprocity, and there's more than one way to be valued here. Select any that fit. <span className="text-red-500">*</span>
+        <p className={`text-sm text-muted-foreground mb-4 break-words${reciprocityLede === null ? " invisible" : ""}`}>
+          <Emphasized text={reciprocityLede ?? "\u00a0"} />
+          {reciprocityOptions.length > 0 && (
+            <> Select any that fit. <span className="text-red-500">*</span></>
+          )}
         </p>
+        {reciprocityOptions.length > 0 && (
         <div className="grid md:grid-cols-2 gap-3 mb-4">
           {reciprocityOptions.map((o) => {
             const on = form.reciprocity.includes(o.value);
@@ -343,6 +383,7 @@ function ProposalForm({
             );
           })}
         </div>
+        )}
         <label htmlFor="work-reciprocity" className="block text-sm font-semibold text-foreground mb-1">Tell us more about the exchange you're proposing</label>
         <p className="text-xs text-muted-foreground mb-2">Amounts, structure, percentages, a blend, or something we haven't listed.</p>
         <textarea id="work-reciprocity" value={form.reciprocityDetail} onChange={(e) => set("reciprocityDetail", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg outline-none focus:border-teal-deep resize-y" />

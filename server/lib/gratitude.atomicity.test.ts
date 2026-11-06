@@ -30,7 +30,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { balanceOf, loadTokenRegistry, memberAccount } from "./ledger";
 import { loadVariables } from "./variables";
 import { budgetFor, sendGratitude, type GratitudeDeps } from "./gratitude";
@@ -191,7 +191,7 @@ async function notesBetween(from: string, to: string): Promise<number> {
 describe.skipIf(!configured)("a gratitude note and its credit", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
   }, 240_000);

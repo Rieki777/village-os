@@ -276,7 +276,7 @@ describe("the four questions", () => {
 
   it("stays honest when nothing names the viewer", () => {
     const answers = answerFourQuestions({ rules, budgets: [], sources: [] }, viewer({}), ctx);
-    expect(answers.alone[0]).toContain("No spending rule names a seat you hold yet");
+    expect(answers.alone[0]).toContain("No spending rule names a role you hold yet");
     expect(answers.comesFrom[0]).toContain("No funding source is written down yet");
   });
 });

@@ -26,6 +26,7 @@
 import crypto from "node:crypto";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { numberVar } from "./variables";
+import { emailAccent, NEUTRAL_ACCENT } from "./emailAccent";
 
 /**
  * Fallback only — the live ceiling is the notify.daily_email_cap game
@@ -45,6 +46,18 @@ export interface NotifyInput {
   link?: string | null;
   actorUserId?: string | null;
   dedupeKey: string;
+}
+
+/**
+ * Who a notice to the admins is about, when it is about a member.
+ *
+ * A producer whose title names a member passes them as the actor. The erasure
+ * sweep finds every row that names a departed member by its actor
+ * (server/repos/noticesNaming.ts), and a row written with none kept the
+ * member's full name on every admin's bell after they had gone.
+ */
+export interface NoticeAbout {
+  actorUserId?: string | null;
 }
 
 export interface NotifyPrefs {
@@ -97,6 +110,14 @@ export interface NotifyPrefs {
    * in one click, and the notification itself lands either way.
    */
   celebrations: "on" | "off";
+  /**
+   * The gratitude nudge (server/lib/gratitudeNudge.ts): one note a few days
+   * before the cycle closes, while there is gratitude left to send. Default
+   * on, off in one click, and off means no bell row either: it is the one
+   * notice that exists only to invite, so a member who said no hears nothing.
+   * Its email, when on, rides `gratitudeEmail`.
+   */
+  gratitudeNudge: "on" | "off";
 }
 
 /** Junk-tolerant, field-by-field: a malformed blob degrades to defaults. */
@@ -116,6 +137,7 @@ export function resolveNotifyPrefs(prefs: any): NotifyPrefs {
     tasksEmail: pick(n.tasksEmail, ["immediate", "daily", "off"], "immediate"),
     weeklyBrief: pick(n.weeklyBrief, ["on", "off"], "on"),
     celebrations: pick(n.celebrations, ["on", "off"], "on"),
+    gratitudeNudge: pick(n.gratitudeNudge, ["on", "off"], "on"),
   };
 }
 
@@ -177,6 +199,9 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
   if (p.emailsOff) return "off";
   switch (type) {
     case "gratitude":
+    // The nudge before a cycle closes is about gratitude too, so it rides the
+    // same preference: the daily digest by default, the bell only if chosen.
+    case "gratitude_nudge":
       return p.gratitudeEmail;
     case "quest_consented":
     case "quest_declined":
@@ -285,6 +310,24 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     case "session_task_back":
     case "session_task_unheld":
       return "daily";
+    // The agenda library: an item a member brought went onto an agenda, and
+    // how it left that session. In the bell only, ON PURPOSE and said here so
+    // it is not mistaken for a kind nobody registered: no email preference a
+    // member has set covers an agenda item (`tasksEmail` is about tasks), and
+    // a member who wants these by email can be offered that later.
+    case "session_item_taken":
+    case "session_item_settled":
+    // A circle meeting tomorrow: the bell, for the same reason. No preference covers a
+    // meeting reminder yet.
+    case "session_coming_up":
+    // The advice process: the bell, for the same reason. No preference covers advice yet.
+    case "session_advice_asked":
+    case "session_advice_given":
+    case "session_advice_decided":
+    // A night on a proposal after the call (0281): the bell, for the same reason.
+    case "session_night_open":
+    case "session_night_settled":
+      return "off";
     // A decision on something the member applied for, offered, or raised a
     // hand for. Immediate on purpose: this is the answer they have been
     // waiting weeks for, and it only ever fires on a real transition.
@@ -364,6 +407,11 @@ export interface NotifyDeps {
   origin(): string;
   projectName(): string;
   /**
+   * The village's brand colour for an email's band, buttons and links
+   * (`brandColour`, server/lib/themeCss.ts). Absent: the platform's neutral.
+   */
+  brandColour?(): string;
+  /**
    * Is this recipient a present person. The host binds the ONE predicate
    * (server/lib/memberPresence.ts) to its session secret and hands it over, so
    * a tombstone or an unclaimed account gets no mail and no bell, and a member
@@ -428,9 +476,12 @@ async function underDailyCap(pool: Pool, userId: string): Promise<boolean> {
  * body. Exported for the Live Sessions task emails (server/lib/sessionTaskMail.ts),
  * which pass the name already escaped.
  */
-export function emailShell(projectName: string, inner: string): string {
-  return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:#2D5A5A;color:#fff;padding:18px 24px"><div style="font-size:16px;font-weight:700">${projectName}</div></div><div style="padding:22px 24px;line-height:1.6">${inner}</div></div></body></html>`;
+export function emailShell(projectName: string, inner: string, accent: string = NEUTRAL_ACCENT): string {
+  return `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;background:#f9fafb;padding:24px;color:#1f2937"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb"><div style="background:${emailAccent(accent)};color:#fff;padding:18px 24px"><div style="font-size:16px;font-weight:700">${projectName}</div></div><div style="padding:22px 24px;line-height:1.6">${inner}</div></div></body></html>`;
 }
+
+/** The colour a notice email wears: the village's brand colour, else the neutral. */
+const accentOf = (deps: Pick<NotifyDeps, "brandColour">): string => emailAccent(deps.brandColour?.());
 
 async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: string }) {
   const user = await deps.memberById(n.userId);
@@ -455,15 +506,17 @@ async function maybeEmailImmediate(deps: NotifyDeps, n: NotifyInput & { id: stri
   if (!clearsDailyEmailCap(n.type) && !(await underDailyCap(deps.pool, n.userId))) return;
 
   const url = deps.origin() + (n.link ?? "/profile");
+  const accent = accentOf(deps);
   const mail = await deps.sendEmail({
     to: [user.email],
     subject: n.title,
     html: emailShell(
       deps.projectName(),
       `<h2 style="margin:0 0 8px;font-size:17px">${escapeHtml(n.title)}</h2>` +
-        (n.body ? `<p style="margin:0 0 14px;color:#4b5563;border-left:3px solid #2D5A5A;padding-left:10px">${escapeHtml(n.body)}</p>` : "") +
-        `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:#2D5A5A;color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">See it on your profile</a></p>` +
+        (n.body ? `<p style="margin:0 0 14px;color:#4b5563;border-left:3px solid ${accent};padding-left:10px">${escapeHtml(n.body)}</p>` : "") +
+        `<p><a href="${escapeHtml(url)}" style="display:inline-block;background:${accent};color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">See it on your profile</a></p>` +
         `<p style="color:#9ca3af;font-size:12px;margin-top:18px">Choose which emails you get on your profile page.</p>`,
+      accent,
     ),
     idempotencyKey: `notify:${n.id}`,
     origin: "notify.immediate",
@@ -514,15 +567,16 @@ export async function runNotificationDigest(deps: NotifyDeps): Promise<{ users: 
     if (!daily.length) continue;
 
     const subject = daily.length === 1 ? String(daily[0].title) : `${daily.length} things happened while you were away`;
+    const accent = accentOf(deps);
     const items = daily
       .slice(0, 10)
-      .map((r) => `<li style="margin:4px 0"><a href="${escapeHtml(deps.origin() + (r.link ?? "/profile"))}" style="color:#2D5A5A">${escapeHtml(String(r.title))}</a></li>`)
+      .map((r) => `<li style="margin:4px 0"><a href="${escapeHtml(deps.origin() + (r.link ?? "/profile"))}" style="color:${accent}">${escapeHtml(String(r.title))}</a></li>`)
       .join("");
     const more = daily.length > 10 ? `<p style="color:#6b7280">…and ${daily.length - 10} more.</p>` : "";
     const mail = await deps.sendEmail({
       to: [user.email],
       subject,
-      html: emailShell(deps.projectName(), `<h2 style="margin:0 0 10px;font-size:17px">While you were away</h2><ul style="padding-left:18px;margin:0 0 10px">${items}</ul>${more}<p><a href="${escapeHtml(deps.origin() + "/profile")}" style="color:#2D5A5A;font-weight:600">See everything</a></p>`),
+      html: emailShell(deps.projectName(), `<h2 style="margin:0 0 10px;font-size:17px">While you were away</h2><ul style="padding-left:18px;margin:0 0 10px">${items}</ul>${more}<p><a href="${escapeHtml(deps.origin() + "/profile")}" style="color:${accent};font-weight:600">See everything</a></p>`, accent),
       idempotencyKey: `digest:${userId}:${day}`,
       origin: "notify.digest",
       userId,
@@ -630,8 +684,9 @@ export async function runWeeklyBrief(deps: NotifyDeps, opts: RunWeeklyBriefOpts)
             deps.projectName(),
             `<h2 style="margin:0 0 6px;font-size:17px">${escapeHtml(rendered.subject)}</h2>` +
               rendered.html +
-              `<p style="margin:16px 0 0"><a href="${escapeHtml(deps.origin() + `/events?brief=${opts.weekKey}`)}" style="display:inline-block;background:#2D5A5A;color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">Open the calendar</a></p>` +
+              `<p style="margin:16px 0 0"><a href="${escapeHtml(deps.origin() + `/events?brief=${opts.weekKey}`)}" style="display:inline-block;background:${accentOf(deps)};color:#fff;border-radius:8px;padding:9px 16px;text-decoration:none;font-weight:600">Open the calendar</a></p>` +
               `<p style="color:#9ca3af;font-size:12px;margin-top:18px">You can turn the weekly brief off on the calendar page, under the brief itself.</p>`,
+            accentOf(deps),
           ),
           // The same key as the in-app row, so a brief is one email per member per week.
           idempotencyKey: `brief:${opts.weekKey}:${user.id}`,

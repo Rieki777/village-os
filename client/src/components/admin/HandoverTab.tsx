@@ -119,10 +119,10 @@ export default function HandoverTab({ password }: { password: string }) {
         const esc: Array<{ capability: string; consequence: string }> = d.escalations ?? [];
         const one = esc.length === 1;
         const question = [
-          `No other role in the village carries ${one ? "this power" : "these powers"}, so ${role.name} would be the first.`,
+          `No other power group in the village carries ${one ? "this power" : "these powers"}, so ${role.name} would be the first.`,
           esc.map((e) => `Anyone in it could ${e.consequence}.`).join("\n"),
           nobodyHolds(role) ? emptyRoleWarning(role.name) : "",
-          `OK gives ${role.name} ${one ? "the power" : "all of them"}. Cancel leaves the role as it is.`,
+          `OK gives ${role.name} ${one ? "the power" : "all of them"}. Cancel leaves the group as it is.`,
         ].filter(Boolean).join("\n\n");
         if (!window.confirm(question)) { setBusy(""); return; }
         res = await fetch(`${API_BASE}/admin/roles/${roleId}/capabilities`, {
@@ -204,7 +204,7 @@ export default function HandoverTab({ password }: { password: string }) {
         <h2 className="font-display text-xl font-semibold">The handover</h2>
         <p className="text-sm text-muted-foreground mt-2">
           Every power below has somebody behind it. A power the village holds is one
-          you stop passing by being an admin: whoever sits in the holding role acts on
+          you stop passing by being an admin: whoever is in the holding group acts on
           their own account, and you can still reach past it on a day something has
           gone wrong. Reaching past writes a line on the village feed naming the power
           and your name, and tells whoever holds it.
@@ -262,7 +262,7 @@ export default function HandoverTab({ password }: { password: string }) {
                     value={chosen}
                     onChange={(e) => setPicking((prev) => ({ ...prev, [p.capability]: e.target.value }))}
                   >
-                    <option value="">Choose a role</option>
+                    <option value="">Choose a power group</option>
                     {roles.filter((r) => !r.isExample).map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
@@ -273,7 +273,7 @@ export default function HandoverTab({ password }: { password: string }) {
                       disabled={busy === p.capability}
                       onClick={() => grant(chosen, p.capability)}
                     >
-                      Give this role the power
+                      Give this group the power
                     </button>
                   )}
                   {chosen && canHold.some((r) => r.id === chosen) && (

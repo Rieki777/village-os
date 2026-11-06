@@ -17,21 +17,99 @@
  * `settleAgainst` takes those moves off again, so the list the bar offers to
  * publish is always one that publishes.
  */
-import { parentingRefusal, type CircleLink } from "@shared/circleView";
+import { parentingRefusal, type CircleLayer, type CircleLink } from "@shared/circleView";
 
 export interface PendingMove {
   circleId: string;
   /** The circle it now sits inside, or null for the top of the village. */
   parentId: string | null;
+  /** Its place among its siblings (0286), when the move sets one. */
+  order?: number;
+  /** Its governance layer (0286), when the move sets one; null clears it. */
+  layer?: CircleLayer | null;
 }
 
-type Circle = CircleLink & { name?: string; isExample?: boolean };
+type Circle = CircleLink & { name?: string; isExample?: boolean; order?: number; layer?: string | null };
 
 /** The circles as the pending moves leave them. A circle's last move wins. */
 export function withMoves<T extends Circle>(circles: T[], moves: PendingMove[]): T[] {
   if (!moves.length) return circles;
-  const to = new Map(moves.map((m) => [m.circleId, m.parentId] as const));
-  return circles.map((c) => (to.has(c.id) ? { ...c, parentCircleId: to.get(c.id) ?? null } : c));
+  const to = new Map(moves.map((m) => [m.circleId, m] as const));
+  return circles.map((c) => {
+    const m = to.get(c.id);
+    if (!m) return c;
+    return {
+      ...c,
+      parentCircleId: m.parentId ?? null,
+      ...(m.order !== undefined ? { order: m.order } : {}),
+      ...(m.layer !== undefined ? { layer: m.layer } : {}),
+    };
+  });
+}
+
+/** Whether the published circle already sits exactly as this move would leave it. */
+function alreadyTrue(live: Circle[], m: PendingMove): boolean {
+  const c = live.find((x) => x.id === m.circleId);
+  if (!c) return false;
+  return (
+    (c.parentCircleId ?? null) === m.parentId &&
+    (m.order === undefined || (c.order ?? 0) === m.order) &&
+    (m.layer === undefined || (c.layer ?? null) === m.layer)
+  );
+}
+
+/**
+ * THE RING, IN THE ORDER A READER MEETS IT (0286). Putting circles in a new
+ * order writes a place for each (10, 20, 30, so a later insert has room), and
+ * gives a sibling with no layer the plain one, `operating`. A pack with no layer
+ * set anywhere rings by size, so without that the order you chose would not
+ * show. The middle is untouched: an operating circle never takes it.
+ */
+export function orderMoves(picture: Circle[], parentId: string | null, sequence: string[]): PendingMove[] {
+  return sequence.map((id, i) => {
+    const c = picture.find((x) => x.id === id);
+    return {
+      circleId: id,
+      parentId,
+      order: (i + 1) * 10,
+      ...(c && !c.layer ? { layer: "operating" as CircleLayer } : {}),
+    };
+  });
+}
+
+/**
+ * THE MIDDLE (0286): this circle becomes its container's lead, and a sibling
+ * that held the middle as link or lead goes back to operating, so one circle
+ * holds it and the reader can tell which.
+ */
+export function middleMoves(picture: Circle[], circleId: string): PendingMove[] {
+  const moving = picture.find((c) => c.id === circleId);
+  if (!moving) return [];
+  const parentId = moving.parentCircleId ?? null;
+  const out: PendingMove[] = [{ circleId, parentId, layer: "lead" }];
+  for (const c of picture) {
+    if (c.id === circleId || (c.parentCircleId ?? null) !== parentId) continue;
+    if (c.layer === "lead" || c.layer === "link") out.push({ circleId: c.id, parentId, layer: "operating" });
+  }
+  return out;
+}
+
+/** One sibling earlier (-1) or later (+1) round the ring, as `orderMoves` writes it. */
+export function nudgeMoves(picture: Circle[], circleId: string, step: -1 | 1): PendingMove[] {
+  const moving = picture.find((c) => c.id === circleId);
+  if (!moving) return [];
+  const parentId = moving.parentCircleId ?? null;
+  const rank: Record<string, number> = { link: 0, lead: 1, operating: 2, advisory: 3, council: 4 };
+  const r = (c: Circle) => rank[c.layer ?? ""] ?? 2;
+  const ring = picture
+    .filter((c) => (c.parentCircleId ?? null) === parentId && !(c.layer === "lead" || c.layer === "link"))
+    .sort((a, b) => r(a) - r(b) || (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id))
+    .map((c) => c.id);
+  const at = ring.indexOf(circleId);
+  const to = at + step;
+  if (at === -1 || to < 0 || to >= ring.length) return [];
+  [ring[at], ring[to]] = [ring[to], ring[at]];
+  return orderMoves(picture, parentId, ring);
 }
 
 /** Why dropping `circleId` into `parentId` is refused, in words, or null when it may land. */
@@ -58,9 +136,16 @@ export function dropRefusal(
  * the Publish count honest: "3 moves" means three things will change.
  */
 export function addMove(live: Circle[], moves: PendingMove[], move: PendingMove): PendingMove[] {
+  const before = moves.find((m) => m.circleId === move.circleId);
   const rest = moves.filter((m) => m.circleId !== move.circleId);
-  const liveParent = live.find((c) => c.id === move.circleId)?.parentCircleId ?? null;
-  return liveParent === move.parentId ? rest : [...rest, move];
+  // A later move on the same circle keeps what the earlier one set and it did not.
+  const merged: PendingMove = {
+    circleId: move.circleId,
+    parentId: move.parentId,
+    ...(move.order !== undefined ? { order: move.order } : before?.order !== undefined ? { order: before.order } : {}),
+    ...(move.layer !== undefined ? { layer: move.layer } : before?.layer !== undefined ? { layer: before.layer } : {}),
+  };
+  return alreadyTrue(live, merged) ? rest : [...rest, merged];
 }
 
 /**
@@ -106,8 +191,7 @@ export function settleAgainst(
   const dropped: Array<{ move: PendingMove; words: string | null }> = [];
   const applied: PendingMove[] = [];
   for (const m of publishOrder(live, moves)) {
-    const circle = live.find((c) => c.id === m.circleId);
-    if (circle && (circle.parentCircleId ?? null) === m.parentId) {
+    if (alreadyTrue(live, m)) {
       dropped.push({ move: m, words: null });
       continue;
     }
@@ -126,7 +210,12 @@ export function settleAgainst(
 /** A move in the words the Arrange bar lists it in. */
 export function describeMove(circles: Circle[], move: PendingMove): string {
   const name = (id: string) => circles.find((c) => c.id === id)?.name ?? id;
-  return move.parentId
-    ? `${name(move.circleId)} moves inside ${name(move.parentId)}`
-    : `${name(move.circleId)} moves to the top of the village`;
+  const live = circles.find((c) => c.id === move.circleId);
+  const moves = (live?.parentCircleId ?? null) !== move.parentId || (move.order === undefined && move.layer === undefined);
+  const parts: string[] = [];
+  if (moves) parts.push(move.parentId ? `moves inside ${name(move.parentId)}` : "moves to the top of the village");
+  if (move.layer === "lead" || move.layer === "link") parts.push("takes the middle");
+  else if (move.layer !== undefined && move.order === undefined) parts.push(move.layer ? `becomes ${move.layer}` : "loses its layer");
+  if (move.order !== undefined) parts.push(`takes place ${move.order / 10} in the ring`);
+  return `${name(move.circleId)} ${parts.join(", and ")}`;
 }

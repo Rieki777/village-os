@@ -20,8 +20,10 @@ import {
   belowTop,
   boxAt,
   buildLabelPlan,
+  CONTAINER_LABEL_INSET,
   containerTop,
   labelHalfWidth,
+  meetsDisc,
   overlaps,
   promotedLabelTop,
   type CirclePlacement,
@@ -54,8 +56,31 @@ describe("a name pushed outside its circle", () => {
     expect(overlaps(boxAt(placed.top, 300, child), holderName)).toBe(false);
   });
 
+  /*
+   * Live at 1440x1000, 2026-10-30, with no layer set: the biggest circle took
+   * the middle, and a ring circle's name was drawn into its disc. A sibling's
+   * disc is ground a name must keep off, as much as another name.
+   */
+  const own = { x: 300, y: 200, r: 40 };
+  const bigBelow = { x: 300, y: 200 + 40 + 150, r: 140 };
+  const bigAbove = { x: 300, y: 200 - 40 - 150, r: 140 };
+
+  it("keeps off a sibling's disc, as well as other names", () => {
+    const placed = promotedLabelTop(child, 300, [], [own, bigAbove]);
+    expect(placed.below).toBe(true);
+    expect(meetsDisc(boxAt(placed.top, 300, child), bigAbove)).toBe(false);
+    expect(meetsDisc(boxAt(placed.top, 300, child), own)).toBe(false);
+  });
+
+  it("sits beside its circle when above and below are both taken", () => {
+    const placed = promotedLabelTop(child, 300, [], [own, bigAbove, bigBelow]);
+    expect(placed.dx).not.toBe(0);
+    const box = boxAt(placed.top, 300 + placed.dx, child);
+    for (const d of [own, bigAbove, bigBelow]) expect(meetsDisc(box, d)).toBe(false);
+  });
+
   it("stays above when nothing is in the way", () => {
-    expect(promotedLabelTop(child, 300, [])).toEqual({ top: aboveTop(child), below: false });
+    expect(promotedLabelTop(child, 300, [])).toEqual({ top: aboveTop(child), below: false, dx: 0 });
   });
 
   /*
@@ -170,12 +195,25 @@ describe("the whole picture, placed in one pass", () => {
   it("puts a holder's name inside its top edge and a leaf's across its middle", () => {
     const plan = buildLabelPlan(scene(), PX_PER_WORLD);
     const general = plan.get("general")!;
-    expect(general.top).toBe(containerTop({ y: 0, r: 220, lines: general.lines, fontSize: general.fontSize, lineHeight: general.lineHeight }));
+    // Its corners would want it lower, onto the small circle it holds near the
+    // top, so the plain inset decides.
+    expect(general.top).toBe(-220 + Math.max(CONTAINER_LABEL_INSET, general.fontSize * 0.8 + 8));
     const solo = buildLabelPlan(
       [{ id: "solo", x: 0, y: 40, r: 200, depth: 0, name: "Circle", shown: true, hasChildren: false, forming: false }],
       PX_PER_WORLD,
     ).get("solo")!;
     expect(solo.top).toBeCloseTo(40, 5);
+  });
+
+  it("keeps a wide holder's name inside by its corners, when nothing it holds is under them", () => {
+    // Live at 390x844, 2026-10-30: the top name's ends rose over its own edge
+    // and into the season words outside the village.
+    const circles = scene().filter((c) => c.id === "general");
+    const general = buildLabelPlan(circles, PX_PER_WORLD).get("general")!;
+    const shape = { y: 0, r: 220, lines: general.lines, fontSize: general.fontSize, lineHeight: general.lineHeight };
+    expect(general.top).toBe(containerTop(shape));
+    const box = boxAt(general.top, 0, shape);
+    for (const x of [-box.halfWidth, box.halfWidth]) expect(Math.hypot(x, box.top)).toBeLessThan(220);
   });
 
   it("does not move out of the way of a name nobody can see", () => {

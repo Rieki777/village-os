@@ -52,15 +52,51 @@ import StructureMap, { StructureMapList } from "@/components/review/StructureMap
 import StructureDraft, { type DraftAnswer } from "@/components/review/StructureDraft";
 import type { CarryAnswer } from "@/components/review/CarryAcross";
 import StructureSteps from "@/components/review/StructureSteps";
+import { RoleFieldChanges } from "@/components/review/RoleFieldChanges";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import {
   decideStructure,
   type ConflictChoice,
   type PlanSeat,
+  type SourcePay,
+  type SourcePayStanding,
   type StructureDecisions,
   type StructurePlan,
 } from "@shared/structurePlan";
 import { MODULES_BY_ID } from "@shared/modules";
+
+/** How each pay standing opens its line. The figure is information, never this village's pay. */
+const PAY_LEAD: Record<SourcePayStanding, (source: string, label: string | null) => string> = {
+  settled: (source) => `Pay in ${source}`,
+  pending: (source) => `Pay in ${source}, still pending`,
+  "agreed-not-paying": (source) => `Pay in ${source}, agreed and not paying yet`,
+  other: (source, label) => (label ? `Pay in ${source}, marked ${label}` : `Pay in ${source}`),
+};
+
+const usd = (n: number): string =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  }).format(n);
+
+/**
+ * What the source holds a role to pay, in words for the steward reading the
+ * structure. The source's target is one figure for the whole arrangement, so
+ * the line says so. Pay itself is set on the role's own terms, here.
+ */
+export function sourcePayWords(p: SourcePay, source: string): string[] {
+  const lead = p.standing ? PAY_LEAD[p.standing](source, p.statusLabel) : `Pay in ${source}`;
+  const what = [p.model, p.monthlyUsd !== null ? `${usd(p.monthlyUsd)} a month for the whole arrangement` : null]
+    .filter((x): x is string => !!x)
+    .join(", ");
+  const out: string[] = [];
+  if (what) out.push(`${lead}: ${what}`);
+  else if (p.standing) out.push(lead);
+  if (p.terms) out.push(`Pay terms in ${source}: ${p.terms.length > 200 ? `${p.terms.slice(0, 199)}…` : p.terms}`);
+  return out;
+}
 
 interface PlanAnswer {
   batchId: string;
@@ -73,8 +109,12 @@ interface PlanAnswer {
   waiting?: number;
   /** The draft this batch was accepted into, or null. Absent from an older server. */
   draft?: DraftAnswer | null;
-  /** Whether this viewer may publish that draft, as the publish route decides. */
+  /** Whether this viewer may publish that draft, as the publish routes decide. */
   mayPublish?: boolean;
+  /** Which publish route admits this viewer: a holder's, or the admin panel's. Absent from an older server. */
+  publishDoor?: "power" | "admin" | null;
+  /** Whether this viewer keeps the review queue. A holder who does not reads the draft only. Absent from an older server. */
+  mayModerate?: boolean;
   /** Once the draft is live: who still sits on the old chart. Absent from an older server. */
   carry?: CarryAnswer | null;
 }
@@ -187,6 +227,8 @@ export default function StructureReview() {
               waiting={data.waiting ?? 0}
               source={source}
               mayPublish={data.mayPublish === true}
+              publishDoor={data.publishDoor === "power" ? "power" : "admin"}
+              mayModerate={data.mayModerate !== false}
               carry={data.carry ?? null}
               batchId={batchId}
               headers={headers}
@@ -331,16 +373,16 @@ export default function StructureReview() {
   const newSeatsCount = plan.seats.filter((s) => !s.match).length;
   const summary =
     `${source} suggests ${plural(plan.circles.filter((c) => c.status === "new").length, "new circle", "new circles")} ` +
-    `and ${plural(plan.seats.length, "seat", "seats")}` +
-    (plan.seats.some((s) => s.match) ? `, ${plural(plan.seats.filter((s) => s.match).length, "of them named", "of them named")} like a seat this village already has` : "") +
-    `. Nothing here is live. Read what changes on the map, settle the seats that already exist, then accept it into a draft.`;
+    `and ${plural(plan.seats.length, "role", "roles")}` +
+    (plan.seats.some((s) => s.match) ? `, ${plural(plan.seats.filter((s) => s.match).length, "of them named", "of them named")} like a role this village already has` : "") +
+    `. Nothing here is live. Read what changes on the map, settle the roles that already exist, then accept it into a draft.`;
 
   const caption =
     view === "before"
-      ? `Today: ${plural(model.circles.length, "circle", "circles")} and ${plural(model.seats.length, "seat", "seats")}.`
+      ? `Today: ${plural(model.circles.length, "circle", "circles")} and ${plural(model.seats.length, "role", "roles")}.`
       : view === "after"
         ? `If this publishes: ${retire ? "the new structure, with the old chart retired where nobody sits" : "the new structure beside today's chart"}.`
-        : `Green is new, gold takes over a live seat, dashed retires or moves out.${retire ? "" : " Today's chart stays live beside it."}`;
+        : `Green is new, gold takes over a live role, dashed retires or moves out.${retire ? "" : " Today's chart stays live beside it."}`;
 
   // Seats grouped under the circle they would sit in.
   const groups: Array<{ key: string; circleKey: string | null; name: string; meta: string; purpose: string | null; seats: PlanSeat[]; problem: string | null }> = [];
@@ -372,7 +414,7 @@ export default function StructureReview() {
   const sourceNotes = (s: PlanSeat): string[] => {
     const out: string[] = [];
     if (s.sourceStatus === "proposed") out.push(`Proposed in ${source}`);
-    else if (s.sourceStatus === "vacant") out.push(`Open seat: nobody holds it in ${source}`);
+    else if (s.sourceStatus === "vacant") out.push(`Open role: nobody holds it in ${source}`);
     else if (s.sourceStatus === "other" && s.sourceStatusLabel) out.push(`${source} marks it ${s.sourceStatusLabel}`);
     if (s.otherCircles.length) out.push(`${source} also lists it under ${s.otherCircles.join(", ")}`);
     if (s.circleUnresolvedAtSource) out.push(`${source} names a circle for it that this read did not include`);
@@ -384,14 +426,14 @@ export default function StructureReview() {
         ? `Archived in ${source}.`
         : `Its circle${a.circleName ? `, ${a.circleName},` : ""} is archived in ${source}.`;
     if (!a.liveMatch) return `${base} Not proposed.`;
-    return `${base} This village still has ${a.kind === "circle" ? "a circle" : "a seat"} called ${a.liveMatch}, and it stays as it is.`;
+    return `${base} This village still has ${a.kind === "circle" ? "a circle" : "a role"} called ${a.liveMatch}, and it stays as it is.`;
   };
 
   const pill = (s: PlanSeat) => {
     if (exclude.has(s.key)) return <span className={`${pillBase} text-muted-foreground border-border`}>Left out</span>;
-    if (!s.match) return <span className={`${pillBase} text-open border-current`}>New seat</span>;
+    if (!s.match) return <span className={`${pillBase} text-open border-current`}>New role</span>;
     const c = conflicts[s.key];
-    if (c?.choice === "update") return <span className={`${pillBase} text-notice border-current`}>Updates live seat</span>;
+    if (c?.choice === "update") return <span className={`${pillBase} text-notice border-current`}>Updates live role</span>;
     if (c?.choice === "rename") return <span className={`${pillBase} text-open border-current`}>Added as new</span>;
     return <span className={`${pillBase} text-destructive border-current`}>Needs your call</span>;
   };
@@ -426,8 +468,8 @@ export default function StructureReview() {
           <div className={`${card} flex flex-wrap`} role="list" aria-label="What this change does">
             {[
               { n: counts.newCircles, label: "New circles", tone: "text-open" },
-              { n: counts.newSeats, label: "New seats", tone: "text-open" },
-              { n: counts.matched, label: "Match live seats", tone: "text-notice" },
+              { n: counts.newSeats, label: "New roles", tone: "text-open" },
+              { n: counts.matched, label: "Match live roles", tone: "text-notice" },
               { n: counts.retiringCircles, label: "Old circles retiring", tone: "text-muted-foreground" },
               { n: counts.unsettled, label: "Need your call", tone: "text-destructive" },
             ].map((s, i) => (
@@ -476,7 +518,7 @@ export default function StructureReview() {
               )}
               <div className="flex flex-wrap gap-3.5 text-xs text-muted-foreground items-center">
                 <span className="inline-flex items-center gap-1.5"><i className="inline-block w-3 h-3 rounded-full bg-open" aria-hidden="true" />New</span>
-                <span className="inline-flex items-center gap-1.5"><i className="inline-block w-3 h-3 rounded-full bg-notice" aria-hidden="true" />Takes over a live seat</span>
+                <span className="inline-flex items-center gap-1.5"><i className="inline-block w-3 h-3 rounded-full bg-notice" aria-hidden="true" />Takes over a live role</span>
                 <span className="inline-flex items-center gap-1.5"><i className="inline-block w-3 h-3 rounded-full border border-dashed border-muted-foreground" aria-hidden="true" />Retiring</span>
                 <span className="inline-flex items-center gap-1.5"><i className="inline-block w-3 h-3 rounded-full bg-muted-foreground" aria-hidden="true" />Stays as it is</span>
                 <button type="button" onClick={() => setAsList((v) => !v)} className="ml-auto underline underline-offset-2 min-h-[32px]">
@@ -487,7 +529,7 @@ export default function StructureReview() {
                 <div className="text-sm grid gap-1" data-testid="carry-first">
                   <p className="font-semibold">Carry people first</p>
                   <p className="text-muted-foreground">
-                    These old seats have people in them, so they stay until each person has a seat in the new chart.
+                    These old roles have people in them, so they stay until each person has a role in the new chart.
                   </p>
                   <ul className="list-disc pl-5 text-muted-foreground">
                     {decided.retire.carryFirst.map((s) => (
@@ -505,10 +547,10 @@ export default function StructureReview() {
                 <div className="flex flex-wrap justify-between items-baseline gap-2.5">
                   <h2 id="h-conf" className="font-display text-[22px]">
                     {matchedIn.length === 0
-                      ? "No seats already exist"
+                      ? "No roles already exist"
                       : matchedIn.length === 1
-                        ? "One seat already exists"
-                        : `${matchedIn.length} seats already exist`}
+                        ? "One role already exists"
+                        : `${matchedIn.length} roles already exist`}
                   </h2>
                   <span className="text-[11px] tracking-[0.16em] uppercase text-muted-foreground font-semibold" data-testid="to-settle">
                     {counts.unsettled ? `${counts.unsettled} to settle` : "All settled"}
@@ -516,7 +558,7 @@ export default function StructureReview() {
                 </div>
                 {matchedIn.length > 0 && (
                   <p className="text-muted-foreground">
-                    {source} names {plural(matchedIn.length, "seat", "seats")} this village already has. Choose what each one does before this can be accepted.
+                    {source} names {plural(matchedIn.length, "role", "roles")} this village already has. Choose what each one does before this can be accepted.
                   </p>
                 )}
                 <div className="grid gap-2.5">
@@ -544,16 +586,16 @@ export default function StructureReview() {
                         <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label={`What happens to ${s.name} in ${circleName(s.circleId)}`}>
                           {[
                             {
-                              label: "Use our existing seat here",
+                              label: "Use our existing role here",
                               says: `${live.name} moves into ${circleName(s.circleId)}. ${live.holders ? "Whoever holds it keeps it." : "Nobody holds it yet."}`,
                               on: choice?.choice === "update",
                               disabled: otherTakes && choice?.choice !== "update",
-                              title: otherTakes ? "The other seat with this name already uses the existing seat" : undefined,
+                              title: otherTakes ? "The other role with this name already uses the existing role" : undefined,
                               pick: () => choose(s, { choice: "update" }),
                             },
                             {
-                              label: "Keep both seats",
-                              says: `A second seat beside ${live.name}, under a name you type.`,
+                              label: "Keep both roles",
+                              says: `A second role beside ${live.name}, under a name you type.`,
                               on: choice?.choice === "rename",
                               disabled: false,
                               title: undefined,
@@ -561,7 +603,7 @@ export default function StructureReview() {
                             },
                             {
                               label: "Skip this one",
-                              says: `${live.name} stays as it is. This seat waits in the queue.`,
+                              says: `${live.name} stays as it is. This role waits in the queue.`,
                               on: false,
                               disabled: false,
                               title: undefined,
@@ -586,7 +628,7 @@ export default function StructureReview() {
                         </div>
                         {choice?.choice === "rename" && (
                           <label className="grid gap-1 text-sm">
-                            <span>A name of its own. A second seat with the same name stays blocked.</span>
+                            <span>A name of its own. A second role with the same name stays blocked.</span>
                             <input
                               type="text"
                               value={choice.name}
@@ -599,9 +641,9 @@ export default function StructureReview() {
                         )}
                         <p className="text-[13px] text-muted-foreground">
                           {choice?.choice === "update"
-                            ? `The live seat moves into ${circleName(s.circleId)} with ${source}'s wording. Whoever holds it keeps it.`
+                            ? `The live role moves into ${circleName(s.circleId)} with ${source}'s wording. Whoever holds it keeps it.`
                             : choice?.choice === "rename"
-                              ? "A new seat beside the live one, under the name you type."
+                              ? "A new role beside the live one, under the name you type."
                               : "Pick one. Nothing is decided for you."}
                         </p>
                       </div>
@@ -642,7 +684,7 @@ export default function StructureReview() {
                           <div className="min-w-0">
                             <h3 className="font-display text-[17px]">{g.name}</h3>
                             <p className="text-xs text-muted-foreground">
-                              {[g.meta, plural(g.seats.length, "seat", "seats")].filter(Boolean).join(" · ")}
+                              {[g.meta, plural(g.seats.length, "role", "roles")].filter(Boolean).join(" · ")}
                             </p>
                             {g.purpose && <p className="text-xs text-muted-foreground mt-0.5">{g.purpose}</p>}
                             {c?.sourceStatus === "proposed" && (
@@ -661,7 +703,7 @@ export default function StructureReview() {
                         </div>
                         {g.seats.length === 0 && (
                           <p className="px-4 py-3 text-[13px] text-muted-foreground border-b border-border">
-                            No seats in this circle yet. It arrives empty.
+                            No roles in this circle yet. It arrives empty.
                           </p>
                         )}
                         {g.seats.map((s) => (
@@ -684,16 +726,28 @@ export default function StructureReview() {
                               <p className="font-semibold">
                                 {conflicts[s.key]?.choice === "rename" && (conflicts[s.key] as { name: string }).name.trim()
                                   ? (conflicts[s.key] as { name: string }).name
-                                  : s.name || "A seat with no name"}
+                                  : s.name || "A role with no name"}
                               </p>
                               {s.aim && <p className="text-[13px] text-muted-foreground">{s.aim}</p>}
                               {sourceNotes(s).map((n) => (
                                 <p key={n} className="text-xs text-notice">{n}</p>
                               ))}
+                              {s.sourcePay &&
+                                sourcePayWords(s.sourcePay, source).map((n) => (
+                                  <p key={n} className="text-xs text-muted-foreground">{n}</p>
+                                ))}
                               {s.circleProblem && <p className="text-[13px] text-destructive">{s.circleProblem}</p>}
                               {s.problem && <p className="text-[13px] text-destructive">{s.problem}</p>}
                               {s.match && !settledOrOut(s) && (
                                 <p className="text-[13px] text-muted-foreground">Settle it above.</p>
+                              )}
+                              {/* A move lists the live words it changes; a new role, or one added under its own name, lists what it writes. */}
+                              {(!s.match || conflicts[s.key]?.choice === "update" || conflicts[s.key]?.choice === "rename") && (
+                                <RoleFieldChanges
+                                  payload={s.payload}
+                                  match={conflicts[s.key]?.choice === "update" ? s.match : null}
+                                  liveSeats={plan.live.seats}
+                                />
                               )}
                               <details className="text-xs text-muted-foreground mt-1">
                                 <summary className="cursor-pointer min-h-[24px]">What {source} sent</summary>
@@ -710,7 +764,7 @@ export default function StructureReview() {
                   })}
                 </div>
                 {newSeatsCount === 0 && plan.seats.length === 0 && (
-                  <p className="text-sm text-muted-foreground">This arrival carries circles and no seats.</p>
+                  <p className="text-sm text-muted-foreground">This arrival carries circles and no roles.</p>
                 )}
               </section>
 
@@ -720,13 +774,13 @@ export default function StructureReview() {
                     <summary className="cursor-pointer min-h-[24px] text-sm text-muted-foreground">
                       <span id="h-arch">Archived in {source}</span> ·{" "}
                       {plural(plan.archived.filter((a) => a.kind === "circle").length, "circle", "circles")},{" "}
-                      {plural(plan.archived.filter((a) => a.kind === "seat").length, "seat", "seats")}. Left out of this change.
+                      {plural(plan.archived.filter((a) => a.kind === "seat").length, "role", "roles")}. Left out of this change.
                     </summary>
                     <ul className="grid gap-2 mt-2">
                       {plan.archived.map((a) => (
                         <li key={a.key} className="text-[13px]">
-                          <span className="font-semibold">{a.name || (a.kind === "circle" ? "A circle with no name" : "A seat with no name")}</span>
-                          <span className="text-muted-foreground"> · {a.kind === "circle" ? "Circle" : "Seat"} · {archivedWhy(a)}</span>
+                          <span className="font-semibold">{a.name || (a.kind === "circle" ? "A circle with no name" : "A role with no name")}</span>
+                          <span className="text-muted-foreground"> · {a.kind === "circle" ? "Circle" : "Role"} · {archivedWhy(a)}</span>
                         </li>
                       ))}
                     </ul>
@@ -749,7 +803,7 @@ export default function StructureReview() {
                     </button>
                     {!canAccept && !done && (
                       <span className="text-[13px] text-muted-foreground">
-                        {counts.unsettled ? "Settle each seat that already exists first." : decided.problems[0] ?? ""}
+                        {counts.unsettled ? "Settle each role that already exists first." : decided.problems[0] ?? ""}
                       </span>
                     )}
                   </div>
@@ -809,7 +863,7 @@ export default function StructureReview() {
                 <b className="text-open">Accepted into a draft</b>
               ) : counts.unsettled ? (
                 <>
-                  <b className="text-destructive">{plural(counts.unsettled, "seat needs", "seats need")} your call</b>
+                  <b className="text-destructive">{plural(counts.unsettled, "role needs", "roles need")} your call</b>
                   <span className="text-muted-foreground"> · {plural(counts.kept, "change", "changes")} kept</span>
                 </>
               ) : decided.problems.length ? (

@@ -446,7 +446,9 @@ function measureOnNearestGround(where: Located, village: Village) {
  */
 const HERO: { label: string; anchor: RegExp }[] = [
   { label: "the Housing hero heading", anchor: /Housing at \{villageName\}/ },
-  { label: "the Housing hero paragraph", anchor: /Find your place here/ },
+  // The sentence is the village's own since 2026-10-22 (Admin, Pages,
+  // Housing), so the paragraph is found by the field it renders.
+  { label: "the Housing hero paragraph", anchor: /hero\?\.lede/ },
 ];
 
 describe("the Housing hero reads on the band for every village, light only", () => {
@@ -604,7 +606,6 @@ const FIXED: Record<string, number> = {
   "client/src/components/QuestActions.tsx": 2,
   "client/src/components/admin/ContentEditorTab.tsx": 1,
   "client/src/components/profile/InvitePanel.tsx": 1,
-  "client/src/components/ui/badge.tsx": 1,
   "client/src/components/ui/button.tsx": 1,
   "client/src/pages/Admin.tsx": 12,
   // The Comms setup editors took one of Admin.tsx's fixed hovers with them; the total stays 63.
@@ -622,12 +623,15 @@ const FIXED: Record<string, number> = {
   "client/src/pages/NotFound.tsx": 1,
   "client/src/pages/Opportunities.tsx": 1,
   "client/src/pages/ProjectHistory.tsx": 5,
-  "client/src/pages/ProsperityJourney.tsx": 3,
+  // The journey pages draw each step's button from ONE class list since their
+  // steps became admin-edited rows (2026-10-22): Prosperity's three fixed gold
+  // buttons and Resident's two are one each, still fixed. The total is 60.
+  "client/src/pages/ProsperityJourney.tsx": 1,
   "client/src/pages/ProposeQuest.tsx": 2,
   "client/src/pages/QuestDetail.tsx": 1,
   "client/src/pages/Quests.tsx": 2,
   "client/src/pages/RequestMembership.tsx": 2,
-  "client/src/pages/ResidentJourney.tsx": 2,
+  "client/src/pages/ResidentJourney.tsx": 1,
   "client/src/pages/ResidentRights.tsx": 1,
   "client/src/pages/SetPassword.tsx": 1,
   "client/src/pages/StewardRights.tsx": 1,
@@ -637,11 +641,13 @@ const FIXED: Record<string, number> = {
 
 describe("under the pointer, a brand button stays readable and visibly moves, light only", () => {
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(63);
+    // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
+    // other primitives nothing imported. Its one fixed hover left with the file.
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(59);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(63 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(59 + 25);
   });
 
   for (const list of POINTER_LISTS) {
@@ -663,8 +669,8 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
     });
   }
 
-  // The platform button's legacy class name, which index.css flags for a coordinated rename.
-  const LEGACY_BUTTON = "btn-amora"; // brand-ok: the stylesheet's legacy class name, read here to measure it
+  // The platform button's class, `btn-village` since readiness R066 (it carried the first village's name).
+  const LEGACY_BUTTON = "btn-village";
   it(`.${LEGACY_BUTTON} keeps white readable under the pointer, and visibly moves`, () => {
     const below: string[] = [];
     const flat: string[] = [];

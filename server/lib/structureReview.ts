@@ -110,6 +110,24 @@ export async function liveChart(
       active: r.active,
       isExample: r.isExample,
       holders: held.get(r.id) ?? 0,
+      // The live words, for the review's before and after (0268 adds the
+      // handover three, 0274 the seven CCOS words).
+      words: {
+        aim: r.aim,
+        domain: r.domain,
+        whyItMatters: r.whyItMatters,
+        accountabilities: r.accountabilities,
+        bringMe: r.bringMe ?? null,
+        notMine: r.notMine ?? null,
+        runbook: r.runbook ?? null,
+        existsWhile: r.existsWhile ?? null,
+        authorities: r.authorities ?? null,
+        responsibilities: r.responsibilities ?? null,
+        signsStretched: r.signsStretched ?? null,
+        flowsBack: r.flowsBack ?? null,
+        stepBack: r.stepBack ?? null,
+        timeCommitment: r.timeCommitment ?? null,
+      },
     })),
   };
 }
@@ -382,9 +400,9 @@ export async function acceptStructure(
   void recordEvent(pool, {
     kind: "org",
     text:
-      `a structure change was accepted into draft ${made.id}: ${n.newCircles} new circle(s), ${n.newSeats} new seat(s), ` +
-      `${n.updates} live seat(s) updated` +
-      (n.retiringCircles || n.retiringSeats ? `, ${n.retiringCircles} circle(s) and ${n.retiringSeats} seat(s) retiring` : "") +
+      `a structure change was accepted into draft ${made.id}: ${n.newCircles} new circle(s), ${n.newSeats} new role(s), ` +
+      `${n.updates} live role(s) updated` +
+      (n.retiringCircles || n.retiringSeats ? `, ${n.retiringCircles} circle(s) and ${n.retiringSeats} role(s) retiring` : "") +
       (remainders.length ? `, ${remainders.length} structure(s) split with the rest left in the queue` : "") +
       (preview.blocked ? `, ${preview.blocked} blocked` : ""),
     actorUserId: input.actor,

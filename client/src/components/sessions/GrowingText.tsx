@@ -40,6 +40,12 @@ export interface GrowingTextProps {
   onCancel?(): void;
   /** Shown as placeholder AND aria-label, so tests still find boxes by placeholder. */
   label: string;
+  /**
+   * A placeholder of its own, for a box whose visible <label> already names it:
+   * then `label` is the box's name and this is only the hint inside it, so a
+   * screen reader reads the question and never the word "Optional".
+   */
+  placeholder?: string;
   /** maxLength and the counter */
   max: number;
   /** default 2 */
@@ -62,6 +68,7 @@ export default function GrowingText({
   onSubmit,
   onCancel,
   label,
+  placeholder,
   max,
   minRows = 2,
   singleLine = false,
@@ -127,7 +134,7 @@ export default function GrowingText({
         rows={minRows}
         value={value}
         maxLength={max}
-        placeholder={label}
+        placeholder={placeholder ?? label}
         aria-label={label}
         aria-describedby={describedBy}
         disabled={disabled}

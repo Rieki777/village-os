@@ -430,6 +430,13 @@ The routes are `server/routes/commsMembers.ts`, gated by the module one route at
 - **Erasure** clears a person's words at once, ahead of the dial: it deletes the person's contact, permissions, journeys, path enrollments, guest
   requests, votes, attendance and feedback, and blanks their message rows' address, subject and
   words. It keeps no suppression, because a suppression is the address under another name.
+- **A link outlives an erasure**: a time vote link works for 120 days and a recap answer link for
+  30. So every action that writes for the person a link names asks first whether that person still
+  stands (`server/lib/comms/linkPerson.ts`): a member whose account is a tombstone, or a guest
+  whose contact is gone, reads "Sign in to answer this gathering." and nothing is written. That
+  covers the time vote, its vote route, the recap answer and the RSVP to the next gathering.
+  Giving a seat back stays open to anyone holding the link. The time vote's own emails and
+  notices pass over a tombstone too.
 - **Sensitive notices** (restorative intake, conflict) never carry content into an email. They
   link to the app.
 - Opens and clicks are not tracked; both dials ship off.

@@ -14,6 +14,7 @@
  * invitation" would be the page contradicting itself. `signInMethods` is
  * mocked so each case says which village it is in.
  */
+import { ACCOUNT_WORDS } from "@shared/accountRules";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -69,7 +70,7 @@ describe("Register", () => {
 
     await user.type(await screen.findByLabelText(/^name$/i), "Rye");
     await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
-    await user.type(screen.getByLabelText(/^password$/i), "hunter2");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
     await user.type(screen.getByLabelText(/confirm password/i), "different");
     await user.click(screen.getByRole("button", { name: /investor/i }));
     await user.click(screen.getByRole("button", { name: /create account/i }));
@@ -84,7 +85,7 @@ describe("Register", () => {
     expect(registerMock).not.toHaveBeenCalled();
   });
 
-  it("refuses to submit with no path chosen, without calling register", async () => {
+  it("refuses a password shorter than the server takes, saying the rule, without calling register (R117)", async () => {
     const user = userEvent.setup();
     renderRegister();
 
@@ -92,6 +93,23 @@ describe("Register", () => {
     await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
     await user.type(screen.getByLabelText(/^password$/i), "hunter2");
     await user.type(screen.getByLabelText(/confirm password/i), "hunter2");
+    await user.click(screen.getByRole("button", { name: /investor/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(ACCOUNT_WORDS.passwordShort);
+    expect(registerMock).not.toHaveBeenCalled();
+    // The rule is on the page before anybody types, tied to the field.
+    expect(screen.getByLabelText(/^password$/i).getAttribute("aria-describedby")).toBe("register-password-rule");
+  });
+
+  it("refuses to submit with no path chosen, without calling register", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    await user.type(await screen.findByLabelText(/^name$/i), "Rye");
+    await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
+    await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     // Same role="alert" guarantee as above.
@@ -108,8 +126,8 @@ describe("Register", () => {
 
     await user.type(await screen.findByLabelText(/^name$/i), "Rye");
     await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
-    await user.type(screen.getByLabelText(/^password$/i), "hunter2");
-    await user.type(screen.getByLabelText(/confirm password/i), "hunter2");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
+    await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
     await user.click(screen.getByRole("button", { name: /investor/i }));
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
@@ -123,13 +141,13 @@ describe("Register", () => {
 
     await user.type(await screen.findByLabelText(/^name$/i), "Rye");
     await user.type(screen.getByLabelText(/^email$/i), "rye@example.com");
-    await user.type(screen.getByLabelText(/^password$/i), "hunter2");
-    await user.type(screen.getByLabelText(/confirm password/i), "hunter2");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
+    await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
     await user.click(screen.getByRole("button", { name: /investor/i }));
     await user.click(screen.getByRole("button", { name: /village steward/i }));
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(registerMock).toHaveBeenCalledWith("Rye", "rye@example.com", "hunter2", ["investor", "steward"]);
+    expect(registerMock).toHaveBeenCalledWith("Rye", "rye@example.com", "hunter2-long", ["investor", "steward"]);
   });
 
   it("keeps the Sign In link off the failing text-amber token (contrast regression guard)", () => {
@@ -198,12 +216,12 @@ describe("Register, in a village that joins by invitation", () => {
 
     await user.type(screen.getByLabelText(/^name$/i), "Juno");
     await user.type(screen.getByLabelText(/^email$/i), "juno@example.com");
-    await user.type(screen.getByLabelText(/^password$/i), "hunter2");
-    await user.type(screen.getByLabelText(/confirm password/i), "hunter2");
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
+    await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
     await user.click(screen.getByRole("button", { name: /resident/i }));
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(registerMock).toHaveBeenCalledWith("Juno", "juno@example.com", "hunter2", ["resident"], "TOKEN-FROM-WREN");
+    expect(registerMock).toHaveBeenCalledWith("Juno", "juno@example.com", "hunter2-long", ["resident"], "TOKEN-FROM-WREN");
   });
 
   it("counts the days down only when the invitation is about to end (R47)", async () => {

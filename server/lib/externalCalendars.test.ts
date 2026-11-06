@@ -5,7 +5,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { listCalendarItems } from "./calendar";
 import {
   addExternalCalendar,
@@ -142,7 +142,7 @@ describe.skipIf(!configured)("subscriptions against a real schema", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     // A calendar address is stored through the secrets store, which seals at
     // rest since 2026-08-30 and REFUSES to write without a key. This suite
     // asserts the round trip, so it needs one; without it every write here

@@ -26,7 +26,7 @@ import {
 import * as repo from "./repos/characterPortraits";
 import { seedEconomy } from "./lib/economySeed";
 import { loadTokenRegistry, memberAccount } from "./lib/ledger";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -65,7 +65,7 @@ async function givePortrait(userId: string, key: string, fileName: string) {
 describe.skipIf(!configured)("character portraits", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    pool = testPool(db, { connectionLimit: 10 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
   });

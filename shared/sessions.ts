@@ -37,7 +37,10 @@
  * COPY RULES. Platform code carries no village's name. No em-dashes, and every
  * string a member reads lives in this file so the voice gate reads it.
  */
+import type { FilledIn } from "./sessionOnBehalf";
+import type { ItemVotes } from "./sessionVotes";
 import type { TaskCard } from "./sessionTasks";
+import type { CheckView } from "./sessionCheck";
 
 // ── Stages ───────────────────────────────────────────────────────────────────
 
@@ -103,7 +106,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
     lede: "One item at a time, each with its own clock and its own page. Notes, ideas and actions land on the item they belong to.",
     cues: [
       "Start the item's clock and say its aim out loud.",
-      "Catch every action as it comes, with a name or a seat on it.",
+      "Catch every action as it comes, with a name or a role on it.",
       "Close each item with what we learned, in one sentence for the record.",
     ],
     glyph: "sprout",
@@ -111,7 +114,7 @@ export const STAGE_DEFS: Record<SessionStage, StageDef> = {
   actions: {
     title: "Who does what",
     short: "Actions",
-    lede: "Every action leaves with a person or a seat on it, claimed here and now. Anything nobody can hold goes to the backlog.",
+    lede: "Every action leaves with a person or a role on it, claimed here and now. Anything nobody can hold goes to the backlog.",
     cues: [
       "Read each action out, then wait for a claim.",
       "No action leaves without an owner. Park it if nobody can hold it.",
@@ -161,8 +164,11 @@ export type ItemStatus = (typeof ITEM_STATUSES)[number];
  * decision  a proposal text that a consent round runs on
  * action    something to do, which must leave with an owner
  * tension   something sensed that wants its own time; it goes to the backlog
+ * win       a win or a celebration somebody shares (Rye, 2026-10-30: "add a
+ *           section for 'wins and celebrations' to share about things
+ *           they've won at!"); it goes into the record under its item
  */
-export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension"] as const;
+export const ENTRY_KINDS = ["note", "idea", "seed", "decision", "action", "tension", "win"] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export function isEntryKind(v: unknown): v is EntryKind {
@@ -176,7 +182,26 @@ export const ENTRY_LABELS: Record<EntryKind, string> = {
   decision: "Proposal",
   action: "Action",
   tension: "Tension",
+  win: "Win",
 };
+
+/**
+ * The sections an item's page shows, by name, so a meeting template can
+ * switch each on or off (a Friday session that recounts the week leads with
+ * `wins`). A view that names none shows them all.
+ */
+export const ITEM_SECTIONS = ["notes", "ideas", "wins", "proposal", "learned", "actions"] as const;
+export type ItemSection = (typeof ITEM_SECTIONS)[number];
+
+export function isItemSection(v: unknown): v is ItemSection {
+  return typeof v === "string" && (ITEM_SECTIONS as readonly string[]).includes(v);
+}
+
+/** The sections on, from whatever a template named: unknown names drop, and none named means every one. */
+export function itemSectionsOn(named: readonly unknown[] | null | undefined): Set<ItemSection> {
+  const known = (named ?? []).filter(isItemSection);
+  return new Set(named == null ? ITEM_SECTIONS : known);
+}
 
 /** open: live. done: an action finished or a decision consented. parked: moved to the backlog. */
 export const ENTRY_STATUSES = ["open", "done", "parked"] as const;
@@ -184,7 +209,15 @@ export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 
 // ── Consent rounds ───────────────────────────────────────────────────────────
 
-export const CONSENT_VALUES = ["consent", "concern", "object"] as const;
+/**
+ * Four answers. `sleep` (Rye, 2026-10-22) is for someone who decides best
+ * after a night: it is never an objection and it needs no sentence. Since
+ * Rye's ruling on 2026-10-23 it names a time to answer by (`answerBy`): the
+ * round waits for them until then, and a night still unanswered at that time
+ * counts as no objection, by default. A night asked for before the ruling has
+ * no time, and keeps the round waiting until they answer, as it did.
+ */
+export const CONSENT_VALUES = ["consent", "concern", "object", "sleep"] as const;
 export type ConsentValue = (typeof CONSENT_VALUES)[number];
 
 export function isConsentValue(v: unknown): v is ConsentValue {
@@ -195,11 +228,32 @@ export const CONSENT_LABELS: Record<ConsentValue, string> = {
   consent: "I consent",
   concern: "I consent, with a concern",
   object: "I object",
+  sleep: "I'll sleep on it",
 };
 
-/** A concern or an objection is said in one sentence, so the room can hear it whole. */
+/** A concern or an objection is said in one sentence, so the room can hear it whole. Sleeping on it needs none. */
 export function consentNeedsWords(value: ConsentValue): boolean {
-  return value !== "consent";
+  return value === "concern" || value === "object";
+}
+
+/**
+ * How far ahead a night's answer-by time may be. At most a week, so a round is
+ * never held for longer (a choice the ruling left open, made small); at least
+ * a quarter of an hour, so a night is never over before the room has heard it
+ * was asked for.
+ */
+export const SLEEP_LIMITS = {
+  maxAheadMs: 7 * 86_400_000,
+  minAheadMs: 15 * 60_000,
+} as const;
+
+/** A night's answer-by time from a body (an ISO instant), inside the window from `now`. */
+export function cleanAnswerBy(raw: unknown, now: number): { ok: true; value: number } | { ok: false; error: string } {
+  const at = typeof raw === "string" && raw.trim() ? Date.parse(raw) : typeof raw === "number" ? raw : Number.NaN;
+  if (!Number.isFinite(at)) return { ok: false, error: SESSION_REFUSALS.answerByNeeded };
+  if (at < now + SLEEP_LIMITS.minAheadMs) return { ok: false, error: SESSION_REFUSALS.answerBySoon };
+  if (at > now + SLEEP_LIMITS.maxAheadMs) return { ok: false, error: SESSION_REFUSALS.answerByFar };
+  return { ok: true, value: at };
 }
 
 /**
@@ -354,6 +408,36 @@ export function breathAt(b: { pattern: BreathKey; rounds: number; startedAt: num
   return { state: "done" };
 }
 
+// ── The sit ──────────────────────────────────────────────────────────────────
+
+/**
+ * A meditation drop in: a quiet the whole room keeps for a few minutes, read
+ * against the room's clock like the breath, so every screen ends together and
+ * every bowl rings at the same moment.
+ */
+export const SIT_MINUTES = [1, 3, 5, 10] as const;
+
+/**
+ * How long the light keeps moving after the bowl rings: one slow climb from
+ * the root to the crown and one slow fall back.
+ */
+export const SIT_SETTLE_SECS = 8;
+
+export type SitMoment =
+  | { state: "idle" }
+  | { state: "sitting"; progress: number; secondsLeft: number; elapsed: number }
+  | { state: "done"; sinceEnd: number };
+
+/** Where a shared sit is at `now`. */
+export function sitAt(s: { minutes: number; startedAt: number | null }, now: number): SitMoment {
+  if (s.startedAt == null) return { state: "idle" };
+  const total = s.minutes * 60;
+  const t = (now - s.startedAt) / 1000;
+  if (t < 0) return { state: "idle" };
+  if (t >= total) return { state: "done", sinceEnd: t - total };
+  return { state: "sitting", progress: t / total, secondsLeft: Math.ceil(total - t), elapsed: t };
+}
+
 // ── The room's state, which the facilitator moves ────────────────────────────
 
 export interface SessionState {
@@ -367,8 +451,16 @@ export interface SessionState {
   /** Grace minutes the room consented to add to the active item. */
   itemExtraMin: number;
   breath: { pattern: BreathKey; rounds: number; startedAt: number | null };
+  /** A meditation drop in the whole room sits together. */
+  sit: { minutes: number; startedAt: number | null };
   /** A speaking round: the order people speak in and who is speaking now. */
   round: { label: string | null; order: number[]; at: number };
+  /**
+   * The facilitator set the agenda's order (0290, shared/sessionVotes.ts):
+   * the room's vote is closed. False while the room votes and the agenda
+   * sorts itself by the score.
+   */
+  orderSet: boolean;
 }
 
 export function defaultSessionState(): SessionState {
@@ -380,7 +472,9 @@ export function defaultSessionState(): SessionState {
     itemStartedAt: null,
     itemExtraMin: 0,
     breath: { pattern: "settle", rounds: 6, startedAt: null },
+    sit: { minutes: 3, startedAt: null },
     round: { label: null, order: [], at: 0 },
+    orderSet: false,
   };
 }
 
@@ -397,6 +491,7 @@ export function normalizeSessionState(raw: unknown): SessionState {
     src = raw as Record<string, any>;
   }
   const breathIn = src.breath && typeof src.breath === "object" ? src.breath : {};
+  const sitIn = src.sit && typeof src.sit === "object" ? src.sit : {};
   const roundIn = src.round && typeof src.round === "object" ? src.round : {};
   const order = Array.isArray(roundIn.order)
     ? (roundIn.order as unknown[]).filter((x): x is number => intOrNull(x, 1, 2 ** 31) != null).slice(0, SESSION_LIMITS.maxPeople)
@@ -413,11 +508,16 @@ export function normalizeSessionState(raw: unknown): SessionState {
       rounds: (BREATH_ROUNDS as readonly number[]).includes(breathIn.rounds) ? breathIn.rounds : base.breath.rounds,
       startedAt: intOrNull(breathIn.startedAt, 0, 2 ** 53),
     },
+    sit: {
+      minutes: (SIT_MINUTES as readonly number[]).includes(sitIn.minutes) ? sitIn.minutes : base.sit.minutes,
+      startedAt: intOrNull(sitIn.startedAt, 0, 2 ** 53),
+    },
     round: {
       label: typeof roundIn.label === "string" ? cleanLine(roundIn.label, 60) : null,
       order,
       at: intOrNull(roundIn.at, 0, Math.max(0, order.length)) ?? 0,
     },
+    orderSet: src.orderSet === true,
   };
 }
 
@@ -430,6 +530,7 @@ export type SessionAction =
   | { type: "go"; stage: SessionStage }
   | { type: "start" }
   | { type: "breath"; pattern?: BreathKey; rounds?: number; run: boolean }
+  | { type: "sit"; minutes?: number; run: boolean }
   | { type: "item"; itemId: number | null }
   | { type: "extend"; minutes: number }
   | { type: "round"; label: string | null; order: number[] }
@@ -456,6 +557,12 @@ export function parseSessionAction(raw: unknown): SessionAction | null {
         out.rounds = a.rounds;
       }
       return out;
+    }
+    case "sit": {
+      if (typeof a.run !== "boolean") return null;
+      if (a.minutes === undefined) return { type: "sit", run: a.run };
+      if (!(SIT_MINUTES as readonly number[]).includes(a.minutes)) return null;
+      return { type: "sit", minutes: a.minutes, run: a.run };
     }
     case "item":
       return a.itemId === null || intOrNull(a.itemId, 1, 2 ** 31) != null ? { type: "item", itemId: a.itemId } : null;
@@ -495,6 +602,8 @@ export function applySessionAction(state: SessionState, action: SessionAction, n
           startedAt: action.run ? now : null,
         },
       };
+    case "sit":
+      return { ...state, sit: { minutes: action.minutes ?? state.sit.minutes, startedAt: action.run ? now : null } };
     case "item":
       if (action.itemId === state.activeItemId) return state;
       return { ...state, activeItemId: action.itemId, itemStartedAt: action.itemId == null ? null : now, itemExtraMin: 0 };
@@ -551,9 +660,17 @@ export interface ConsentTally {
   consent: number;
   concern: number;
   object: number;
+  /** People sleeping on it: answered for now, never an objection, and the round waits for them. */
+  sleeping: number;
+  /**
+   * Nights whose answer-by time passed with no other answer: each counts as no
+   * objection, by default (Rye, 2026-10-23), and never keeps the round waiting.
+   * Absent from a record written before the ruling, which reads as none.
+   */
+  byDefault?: number;
   /** People here who have not answered yet. */
   waiting: number;
-  /** Everyone here has answered and nobody objects. */
+  /** Everyone here has answered, nobody is sleeping on it, and nobody objects. */
   consented: boolean;
 }
 
@@ -561,20 +678,73 @@ export interface ConsentTally {
 export interface ConsentAnswer {
   who: number;
   value: ConsentValue;
+  /** On a night: when it ends, in ms. Null on a night asked for before answer-by times, which never ends by itself. */
+  answerBy?: number | null;
+}
+
+/** A night whose answer-by time has come counts as no objection. */
+export function nightIsOver(a: Pick<ConsentAnswer, "value" | "answerBy">, now: number): boolean {
+  return a.value === "sleep" && a.answerBy != null && a.answerBy <= now;
+}
+
+/** A night that still lasts: its answer-by time is still ahead. */
+export function nightLasts(a: Pick<ConsentAnswer, "value" | "answerBy">, now: number): boolean {
+  return a.value === "sleep" && a.answerBy != null && a.answerBy > now;
+}
+
+/**
+ * A round that outlives its call (Rye, 2026-10-23: "Round outlives the call").
+ * A proposal still open at the close with somebody sleeping on it keeps its
+ * round after the session closes: whoever asked for a night answers it from
+ * the record until their time, and once no night lasts, the round consents
+ * when nobody objects and nobody in the room at the close went unheard
+ * (`waitingAtClose`, since nobody else can answer after the call). Marking it
+ * decided stays the facilitator's act. Pure, so the record, the job and the
+ * doors read one rule.
+ */
+export function nightRoundState(
+  atClose: { waiting: number } | undefined,
+  answers: readonly ConsentAnswer[],
+  now: number,
+): { outlives: boolean; open: boolean; consented: boolean; tally: ConsentTally } {
+  const t = consentTally(answers, [], now);
+  const outlives = atClose != null;
+  const open = t.sleeping > 0;
+  const consented = outlives && !open && atClose.waiting === 0 && t.object === 0 && answers.length > 0;
+  return { outlives, open, consented, tally: { ...t, waiting: atClose?.waiting ?? 0, consented } };
+}
+
+/** When a night ends, in the village's own clock: "9:00 on Saturday 24 October". */
+export function nightAtWords(at: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "numeric", minute: "2-digit", weekday: "long", day: "numeric", month: "long", hourCycle: "h23" }).formatToParts(new Date(at));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${Number(part("hour"))}:${part("minute")} on ${part("weekday")} ${part("day")} ${part("month")}`;
 }
 
 /**
  * A consent round, counted person by person. `waiting` is the people here now
  * who have not answered, so an answer from someone who has left never stands in
  * for someone present who has not been heard. Every answer counts toward the
- * totals, and an objection blocks whoever gave it, present or not.
+ * totals, and an objection blocks whoever gave it, present or not. A night
+ * whose answer-by time has come (by `now`) counts as no objection, by default.
  */
-export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[]): ConsentTally {
-  const t = { consent: 0, concern: 0, object: 0 };
-  for (const a of answers) t[a.value] += 1;
+export function consentTally(answers: readonly ConsentAnswer[], presentIds: readonly number[], now: number = Date.now()): ConsentTally {
+  const t = { consent: 0, concern: 0, object: 0, sleep: 0, byDefault: 0 };
+  for (const a of answers) {
+    if (nightIsOver(a, now)) t.byDefault += 1;
+    else t[a.value] += 1;
+  }
   const waitingIds = consentWaitingIds(answers, presentIds);
   const heardHere = presentIds.some((id) => answers.some((a) => a.who === id));
-  return { ...t, waiting: waitingIds.length, consented: heardHere && waitingIds.length === 0 && t.object === 0 };
+  return {
+    consent: t.consent,
+    concern: t.concern,
+    object: t.object,
+    sleeping: t.sleep,
+    byDefault: t.byDefault,
+    waiting: waitingIds.length,
+    consented: heardHere && waitingIds.length === 0 && t.object === 0 && t.sleep === 0,
+  };
 }
 
 /**
@@ -701,6 +871,8 @@ export interface SessionPerson {
    * village's own art, and nothing they uploaded leaves their profile this way.
    */
   avatar?: string | null;
+  /** While open: the facilitator gave this arrival for them (0288, shared/sessionOnBehalf.ts). */
+  arrivalFilledIn?: FilledIn | null;
 }
 
 export interface SessionItem {
@@ -717,9 +889,23 @@ export interface SessionItem {
   usedSeconds: number;
   /** When it came over from an earlier session's backlog. */
   fromSessionId: number | null;
+  /**
+   * When it was taken from the agenda library (shared/sessionLibrary.ts): the
+   * library item's id, and the name of whoever brought it, who may not be in
+   * the room. Optional so older fixtures still type; the room's view always
+   * sends both, null for an item added in the room.
+   */
+  libraryId?: number | null;
+  broughtBy?: string | null;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
+  /** The room's vote on it (0290, shared/sessionVotes.ts). Optional so older fixtures still type. */
+  votes?: ItemVotes;
 }
 
 export interface SessionEntry {
+  /** A win only: the id of the season priority it serves, or null (0298, shared/sessionTemplates.ts). */
+  servesGoalId?: string | null;
   id: number;
   itemId: number | null;
   kind: EntryKind;
@@ -730,8 +916,33 @@ export interface SessionEntry {
   ownerName: string | null;
   ownerSeatId: string | null;
   ownerSeatName: string | null;
+  /**
+   * First names of the people who sit in the owning seat now, read from the roster when the
+   * room is read, so a line can say "Treasurer (Rick)" (Rye, 2026-10-30). Only the signed-in
+   * room view fills it; the minutes and anything that leaves the village never carry it.
+   */
+  ownerSeatHolders?: string[];
   dueOn: string | null;
   createdAt: string;
+  /** The latest fill-in on it that still stands (0288, shared/sessionOnBehalf.ts). */
+  filledIn?: FilledIn | null;
+}
+
+/**
+ * Where an open proposal of a closed session stands, when its round outlived
+ * the call (`nightRoundState`). Only on a closed record, and only for the
+ * people who read its answers.
+ */
+export interface NightRound {
+  entryId: number;
+  /** A night on it still lasts. */
+  open: boolean;
+  /** No night lasts, nobody objects, and nobody at the close went unheard. */
+  consented: boolean;
+  /** The viewer asked for a night on it that still lasts, so they answer it here. */
+  canAnswer: boolean;
+  /** The viewer may mark it decided: the session's facilitator or an admin, once it consented. */
+  canDecide: boolean;
 }
 
 export interface SessionResponse {
@@ -739,15 +950,28 @@ export interface SessionResponse {
   userId: number;
   value: string;
   text: string | null;
+  /** On a night (`sleep`): when it ends, an ISO instant. Null otherwise, and on a night asked for before answer-by times. */
+  answerBy?: string | null;
 }
 
 export interface SeatOption {
   id: string;
   name: string;
   circleId: string | null;
+  /**
+   * First names of who sits here now, for a signed-in room's role picker
+   * ("Visionary Lead (Rye)"). Absent on an older payload, and never filled
+   * for a public page. An empty list is a role nobody holds.
+   */
+  holders?: string[];
 }
 
 export interface SessionView {
+  /**
+   * The sections each item's page shows, when a meeting template named them
+   * (`ITEM_SECTIONS`). Absent or null shows every one.
+   */
+  itemSections?: ItemSection[] | null;
   id: number;
   title: string;
   circleId: string | null;
@@ -782,8 +1006,20 @@ export interface SessionView {
   seats: SeatOption[];
   /** After close: the arrival round as numbers only. */
   arrival: ArrivalSummary | null;
-  /** From the last closed session in the same circle: its open actions and its backlog. */
+  /**
+   * From the circle's last close, passing over a session one person was in
+   * that left nothing behind: its open actions and its backlog.
+   */
   carried: { sessionId: number; title: string; actions: SessionEntry[]; backlog: SessionEntry[]; parkedItems: { title: string; aim: ItemAim; minutes: number }[] } | null;
+  /** On a closed record: the proposals whose round outlived the call (Rye, 2026-10-23). Absent or empty otherwise. */
+  nights?: NightRound[];
+  /**
+   * This room's tensions already sent to a circle's agenda items, by entry id:
+   * the circle's name, or null for no circle in particular (shared/sessionLibrary.ts).
+   */
+  sentTensions: Record<string, { circleName: string | null }>;
+  /** The village's live circles, for choosing which circle's agenda items a tension goes to. Empty for somebody not in the room. */
+  circleOptions: { id: string; name: string }[];
   /**
    * Every task from this circle's earlier sessions that is still open, or that
    * was answered since the circle last met, with its latest answer, as this
@@ -792,11 +1028,17 @@ export interface SessionView {
    */
   circleTasks: TaskCard[];
   /**
-   * When the circle last met: the close of its last closed session, which the
-   * action check groups by. Null when there are no `circleTasks`, or the circle
-   * has never closed a session.
+   * When the circle last met: the close of the session `carried` comes from,
+   * which the action check groups by. Null when there are no `circleTasks`, or
+   * the circle has never closed a session.
    */
   circleLastMetAt: string | null;
+  /**
+   * Each checked proposal's read (0297, shared/sessionCheck.ts), for everybody
+   * who sees the room. Null, or absent in an older fixture, when the module
+   * that offers checks is not open to members.
+   */
+  check?: CheckView | null;
   me: { userId: number; joined: boolean; facilitates: boolean; secretary: boolean; admin: boolean };
 }
 
@@ -824,10 +1066,13 @@ export interface SessionListRow {
  * Every door, so the page and the routes agree. A refusal is `{ error: <a
  * sentence> }` with a 4xx status.
  *
- *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[] }
- *   POST   /api/sessions                          { title, circleId?, durationMin? } -> { id }
+ *   GET    /api/sessions                          { open: SessionListRow[], recent: SessionListRow[], circles: {id,name}[], library }
+ *   POST   /api/sessions                          { title, circleId?, durationMin?, libraryIds? } -> { id }
+ *     (`templateId?` opens it from a meeting template and links it to that series: shared/sessionTemplates.ts)
+ *          (the agenda library's own doors are listed in shared/sessionLibrary.ts)
  *   GET    /api/sessions/:id                      SessionView, with an ETag; 304 when nothing moved
  *   PATCH  /api/sessions/:id                      SessionPatch { title } -> { ok }
+ *   DELETE /api/sessions/:id                      { ok } (discard an open session, or delete a closed record)
  *   POST   /api/sessions/:id/join                 { ok }
  *   POST   /api/sessions/:id/here                 { ok } (presence, every HERE_EVERY_MS)
  *   POST   /api/sessions/:id/arrival              { score, wish? } -> { ok }
@@ -836,7 +1081,9 @@ export interface SessionListRow {
  *   POST   /api/sessions/:id/entries              { kind, text, itemId?, ownerSeatId?, dueOn? } -> { id }
  *   PATCH  /api/sessions/:id/entries/:entryId     { claim?, release?, ownerSeatId?, text?, dueOn?, status? } -> { ok }
  *   DELETE /api/sessions/:id/entries/:entryId     { ok }
- *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok }
+ *   POST   /api/sessions/:id/entries/:entryId/check   {} -> { ok } (a proposal's read, 0297: shared/sessionCheck.ts)
+ *   POST   /api/sessions/:id/respond              { target, value, text? } -> { ok } (never for someone else)
+ *   POST   /api/sessions/:id/on-behalf/:fillId/undo   {} -> { ok } (shared/sessionOnBehalf.ts)
  *   POST   /api/sessions/:id/act                  { action: SessionAction } -> { ok, state }
  *   POST   /api/sessions/:id/hosts                { facilitatorUserId?, secretaryUserId? } -> { ok }
  *   POST   /api/sessions/:id/close                {} -> { ok } or 409 { error, unowned: number[] }
@@ -859,7 +1106,7 @@ export function unownedActions(entries: Pick<SessionEntry, "id" | "kind" | "stat
     .map((e) => e.id);
 }
 
-export const CLOSE_REFUSAL = "Every action needs a person or a seat before the session closes. Claim it, name a seat, or park it.";
+export const CLOSE_REFUSAL = "Every action needs a person or a role before the session closes. Claim it, name a role, or park it.";
 
 // ── Minutes ──────────────────────────────────────────────────────────────────
 
@@ -936,10 +1183,11 @@ export function buildMinutes(input: MinutesInput, audience: MinutesAudience): st
     for (const d of decisions) {
       const t = input.tallies[d.id];
       const how = d.status === "done" ? "Decided by consent" : "Proposal, not decided";
-      const counts = t ? ` (${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting)` : "";
+      const counts = t ? ` (${ROOM_COPY.talliedLine(t)})` : "";
       lines.push(`- **${how}:** ${text(d.text)}${counts}`);
     }
     for (const s of list.filter((e) => e.kind === "seed")) lines.push(`- **What we learned:** ${text(s.text)}`);
+    for (const w of list.filter((e) => e.kind === "win")) lines.push(`- **Win:** ${text(w.text)}`);
     for (const a of list.filter((e) => e.kind === "action" && e.status !== "parked")) {
       lines.push(`- **Action:** ${text(a.text)}, held by ${owner(a)}${a.dueOn ? `, by ${a.dueOn}` : ""}.`);
     }
@@ -993,14 +1241,14 @@ export const SESSION_COPY = {
   durationLabel: "How long, in minutes",
   openNow: "Happening now",
   recent: "Recent sessions",
-  nothingOpen: "No session is open right now.",
+  nothingOpen: "All quiet for now. Open the room when your circle is ready.",
   joinButton: "Join the room",
   joinedLabel: "You're in",
   placeLineFallback: "Take a moment to feel where you are.",
   arrivalPrompt: "How are you arriving, from 1 to 11?",
   wishPrompt: "What would make it an 11+?",
   wishPlaceholder: "Optional, in a few words",
-  arrivalSaved: "Thank you. Your number is in the room.",
+  arrivalSaved: "Thanks. You're checked in.",
   arrivalLow: "The room is arriving low. The facilitator may offer a lighter agenda.",
   agendaAdd: "Add an item",
   agendaAimLabel: "Aim",
@@ -1015,23 +1263,24 @@ export const SESSION_COPY = {
   overChoices: "Time is up for this item. Add five minutes with the room's consent, park it, or wrap it up.",
   addNote: "Add a note",
   addIdea: "Add an idea",
+  addWin: "Share a win",
   addAction: "Add an action",
   addTension: "Name a tension",
   addDecision: "Write the proposal",
   claim: "I'll take it",
   release: "Hand it back",
-  nameSeat: "Name a seat",
+  nameSeat: "Name a role",
   park: "Park it",
   unownedLeft: "still need someone",
   everyoneHolds: "Every action has someone holding it.",
   closeButton: "Close the session",
-  closeDone: "The session is closed. The record went to the admins.",
+  closeDone: "Beautiful work, circle. The session is closed, and the notes are saved for everyone who was here.",
   wordPrompt: "One word as you leave",
   facilitationPrompt: "How did the facilitation feel?",
   facilitationMore: "What would you keep, or try next time? The facilitator reads this unsigned.",
   toolPrompt: "How could this tool flow better?",
   toolPlaceholder: "Your idea goes to the village's feedback inbox.",
-  toolSent: "Thank you. Your idea is in the feedback inbox.",
+  toolSent: "Thanks. Your idea was sent.",
   gratitudeTitle: "Gratitude",
   gratitudeLede: "Thank someone for what they brought today.",
   recordTitle: "The record",
@@ -1074,9 +1323,9 @@ export const SESSION_REFUSALS = {
   entryUnknown: "That entry is not in this session.",
   entriesFull: `This session holds ${SESSION_LIMITS.maxEntries} entries, and that is all it can hold.`,
   yoursFull: `One person can add ${SESSION_LIMITS.maxEntriesPerPerson} entries to a session, and you have.`,
-  seatUnknown: "That seat is not an active seat in this village.",
+  seatUnknown: "That role is not an active role in this village.",
   dueOn: "A due date reads like 2026-10-31.",
-  notAction: "Only an action can be claimed or handed back.",
+  notAction: "Only an action can be taken or handed back.",
   heldAlready: "Someone already holds this action.",
   notHeld: "Nobody holds this action yet.",
   releaseNotYours: "Only the person holding it, or the facilitator, can hand it back.",
@@ -1087,6 +1336,14 @@ export const SESSION_REFUSALS = {
   targetUnknown: "That is not something to answer here.",
   consentValue: "Answer with consent, concern or object.",
   consentWords: "Say your concern or objection in one sentence.",
+  answerByNeeded: "Say when you will answer by.",
+  nightInRoom: "This session is still open. Answer in the room.",
+  noNight: "Nobody asked for a night on this proposal.",
+  nightNotYours: "Only somebody who asked for a night on this proposal answers it after the call.",
+  nightOver: "Your night has ended, so your answer counts as no objection.",
+  nightValue: "Answer with I consent, I consent with a concern, or I object.",
+  answerBySoon: "Give yourself at least a quarter of an hour.",
+  answerByFar: "Choose a time within the next week.",
   wordNeeded: "Give one word as you leave.",
   facilitationValue: "Answer with flowed, mixed or stuck.",
   arrivalScore: `Give a whole number from ${ARRIVAL_MIN} to ${ARRIVAL_MAX}.`,
@@ -1097,6 +1354,10 @@ export const SESSION_REFUSALS = {
   membersOnly: "Live sessions are for the village's members. Sign the commitment to join one.",
   alreadyOnAgenda: "That one is already on today's agenda.",
   decisionFinal: "That proposal was decided by consent, and its words stay as they were.",
+  /** DELETE on an open session, from somebody who neither facilitates it nor is an admin. */
+  discardNotYours: "Only the person facilitating or an admin can discard this session.",
+  /** DELETE on a closed session, from anybody who is not an admin, the facilitator included. */
+  recordAdminOnly: "Only an admin can delete the record of a closed session.",
 } as const;
 
 /** What a person is called when the village no longer holds their name. */
@@ -1122,6 +1383,13 @@ export const SESSION_NOTICES = {
    * words ("Thursday 22 October", from taskDateWords), never machine digits.
    */
   actionBody: (text: string, dueWords: string | null): string => (dueWords ? `${text.replace(/[.!?]+$/, "")}, by ${dueWords}.` : text),
+  /** To somebody whose night outlives the call: where and by when to answer. */
+  nightOpen: (title: string): string => `You asked for a night on a proposal in "${title}"`,
+  nightOpenBody: (text: string, when: string): string =>
+    `${text.replace(/[.!?]+$/, "")}. Answer from the session's record by ${when}, or your answer counts as no objection.`,
+  /** To the facilitator, once no night lasts on a round that outlived the call. */
+  nightSettled: (title: string, consented: boolean): string =>
+    consented ? `The round on a proposal in "${title}" consented after the call. You can mark it decided.` : `The night is over on a proposal in "${title}".`,
 } as const;
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1183,7 +1451,7 @@ export const ROOM_COPY = {
   takeOverHint: "If the facilitator has stepped away, an admin can hold the room from here.",
 
   whoIsHere: "Who is here",
-  nobodyHere: "Nobody has arrived yet.",
+  nobodyHere: "The room is quiet. Nobody has arrived yet.",
   breathTitle: "Breathe together",
   breathIdle: "When the facilitator starts it, every screen breathes at the same pace.",
   breathDone: "Let the quiet sit for a moment.",
@@ -1197,6 +1465,28 @@ export const ROOM_COPY = {
     `${secondsLeft === 1 ? "1 second" : `${secondsLeft} seconds`} · Round ${round} of ${of}`,
   breathCounts: (secs: readonly number[]) => secs.join(" · "),
   breathStartedSay: (rounds: number) => `The shared breath has started, ${rounds} rounds.`,
+
+  sitTitle: "Sit together",
+  sitIdle: "A few minutes of quiet for the whole room. A singing bowl rings on every screen when it ends.",
+  sitMinutes: "Minutes",
+  sitStart: "Start the sit",
+  sitStop: "End the sit early",
+  sitAgain: "Sit again",
+  sitMinutesWord: (n: number) => (n === 1 ? "1 minute" : `${n} minutes`),
+  sitLeft: (secondsLeft: number) => {
+    const m = Math.floor(secondsLeft / 60);
+    const s = secondsLeft % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  },
+  sitLeftHint: "left in the quiet",
+  sitSitting: "Rest your eyes. The bowl will call you back.",
+  sitDone: "The bowl has rung. Come back slowly.",
+  sitStartedSay: (minutes: number) => `The sit has started, ${minutes === 1 ? "1 minute" : `${minutes} minutes`}.`,
+  sitEndedSay: "The sit has ended.",
+  bellOn: "Bell on this screen",
+  bellOff: "Turn the bell on",
+  bellHint: "Browsers stay silent until you tap once. Tap here so the bowl can ring for you.",
+  bellMuted: "Sound is muted on this device, so the bowl will not ring.",
 
   giveNumber: "Give my number",
   changeNumber: "Change my number",
@@ -1213,7 +1503,7 @@ export const ROOM_COPY = {
   roundEnd: "End the round",
   speakingNow: "Speaking now",
   readyNext: "Ready next",
-  roundDone: "Everyone has spoken.",
+  roundDone: "Everyone has spoken. Thank you all.",
   joinFirst: "Join the room to take part here.",
 
   parkedItems: "Parked last time",
@@ -1223,7 +1513,7 @@ export const ROOM_COPY = {
   itemTitleLabel: "Item title",
   itemTitlePlaceholder: "What needs the circle's time?",
   addItemButton: "Add it",
-  agendaEmpty: "No items yet. Anyone in the room can add one.",
+  agendaEmpty: "The agenda is still blank. Anyone in the room can add the first item.",
   moveUp: "Move up",
   moveDown: "Move down",
   edit: "Edit",
@@ -1238,10 +1528,30 @@ export const ROOM_COPY = {
   consentNeedsSentence: "A concern or an objection needs one sentence, so the room can hear it whole.",
   consentSend: "Give my answer",
   consentChange: "Change my answer",
-  tallyLine: (t: { consent: number; concern: number; object: number; waiting: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting, ${t.waiting} still to answer`,
-  talliedLine: (t: { consent: number; concern: number; object: number }) =>
-    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting`,
+  tallyLine: (t: { consent: number; concern: number; object: number; sleeping?: number; byDefault?: number; waiting: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}${t.byDefault ? `, ${t.byDefault} no objection by default` : ""}, ${t.waiting} still to answer`,
+  /** A record written before anyone could sleep on it carries no `sleeping`, and reads the same as it did. */
+  talliedLine: (t: { consent: number; concern: number; object: number; sleeping?: number; byDefault?: number }) =>
+    `${t.consent} consent, ${t.concern} with a concern, ${t.object} objecting${t.sleeping ? `, ${t.sleeping} sleeping on it` : ""}${t.byDefault ? `, ${t.byDefault} no objection by default` : ""}`,
+  /** Under a round while somebody is sleeping on it. */
+  sleepingOpen: "Somebody asked for a night. The round stays open until they answer.",
+  /** Choosing "I'll sleep on it": the time they will answer by (Rye, 2026-10-23). */
+  nightAsk: "When will you answer by?",
+  nightTomorrow: "Tomorrow, 9:00",
+  nightTwoDays: "In two days, 9:00",
+  nightTimeLabel: "Or choose a time",
+  nightHint: "If you have not answered by then, your answer counts as no objection.",
+  nightNeeded: "Say when you will answer by.",
+  nightOpen: (name: string, when: string): string => `${name} asked for a night. The round stays open until ${when}.`,
+  nightOver: (name: string, when: string): string => `${name}'s night ended at ${when}, so it counts as no objection.`,
+  /** On a closed record, for a round that outlived the call. */
+  recordNightYours: (when: string): string => `You asked for a night. Answer by ${when}, or your answer counts as no objection.`,
+  recordConsented: "The round consented after the call: nobody objects.",
+  recordNotConsented: "The night is over, and the round did not consent.",
+  markDecided: "Mark it decided",
+  nightAnswerAsk: "Your answer after a night",
+  nightAnswered: "Your answer is in the record.",
+  decidedAfterNight: "Marked decided.",
   consented: "Everyone here consents.",
   waitingFor: (names: readonly string[]) => `Waiting for ${names.join(", ")}`,
   proposalConsentAsk: "Do you consent to this proposal?",
@@ -1251,6 +1561,19 @@ export const ROOM_COPY = {
   extendFive: "Add five minutes",
   wrapNext: "Wrap up and start the next",
   wrapUp: "Wrap it up",
+  /** The facilitator's next-step bar: the one next thing to do, named, on the agenda, the items and the close. */
+  nextStepLabel: "Next step",
+  upNext: (title: string) => `Up next: ${title}`,
+  nowOn: (title: string) => `Now: ${title}`,
+  lastItem: "This is the last item on the agenda.",
+  timeUpFor: (title: string) => `Time is up for ${title}.`,
+  startFirst: "Start the first item",
+  startNext: "Start the next item",
+  itemsDone: "Every item on the agenda is done.",
+  agendaReady: "When the agenda is ready, start the first item.",
+  agendaNone: "Add an item to the agenda, or move on.",
+  closeLast: "Last step: one word each, then close the session.",
+  goToClose: "Go to Close the session",
   timeLeft: (seconds: number) => `${roomClock(seconds)} left`,
   timeOver: (seconds: number) => `${roomClock(seconds)} over`,
   leftWord: "left",
@@ -1260,6 +1583,8 @@ export const ROOM_COPY = {
   proposal: "Proposal",
   seed: "What we learned",
   seedHelp: "One sentence the circle wants to remember from this item. It goes into the record.",
+  wins: "Wins and celebrations",
+  winsHelp: "Something you won at, finished, or want the circle to celebrate. It goes into the record.",
   actionsHere: "Actions",
   nothingYet: "Nothing here yet.",
   writeHere: "Write it here",
@@ -1268,8 +1593,8 @@ export const ROOM_COPY = {
   decidedBadge: "Decided",
   seedSave: "Add to the record",
   dueLabel: "Due by",
-  seatLabel: "A seat holds it",
-  noSeat: "No seat",
+  seatLabel: "A role holds it",
+  noSeat: "No role",
   remove: "Remove",
   heldBy: "Held by",
   nobodyHolds: "Nobody holds this yet",
@@ -1279,7 +1604,7 @@ export const ROOM_COPY = {
   doneLabel: "Done",
 
   tensionPlaceholder: "What are you sensing? It goes to the backlog.",
-  tensionSaved: "Thank you. It is in the backlog.",
+  tensionSaved: "Thanks. It's in the backlog.",
   send: "Send",
 
   amountLabel: "Amount",
@@ -1292,11 +1617,11 @@ export const ROOM_COPY = {
   wordSave: "Leave my word",
   roomWords: "The room's words",
   facilitationSend: "Send it unsigned",
-  facilitationSent: "Thank you. The facilitator reads it unsigned.",
+  facilitationSent: "Thanks. The facilitator reads it unsigned.",
   facilitationHeading: "What the room said about the facilitation",
   facilitationNone: "No feedback yet.",
   toolSend: "Send the idea",
-  closeConfirm: "Close the session now? The arrival words are erased and the record goes to the admins.",
+  closeConfirm: "Close the session now? The arrival words are erased, and the notes are saved for everyone who was here.",
   closeYes: "Yes, close it",
   closeNo: "Not yet",
 
@@ -1372,4 +1697,36 @@ export const SESSION_LIST_COPY = {
   circle: (name: string) => `Circle: ${name}`,
   openedAt: (time: string) => `Opened ${time}`,
   closedOn: (date: string) => `Closed ${date}`,
+  /** An open room's card, for a member already in it: the way back in. */
+  enterRoom: "Enter the room",
+} as const;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DISCARDING A SESSION, AND DELETING A RECORD. One door, DELETE /api/sessions/:id.
+// While a session is open its facilitator or an admin may discard it; once it
+// has closed, only an admin may delete its record. Either way it is a real
+// delete: every row the session holds goes, and no record is kept.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const SESSION_DISCARD_COPY = {
+  /** The quiet control inside an open room. */
+  discardButton: "Discard this session",
+  discardTitle: "Discard this session?",
+  discardBody: "Everything in it is removed for everyone, and no record is kept. Use this for a session opened by mistake or as a test.",
+  keep: "Keep it",
+  discard: "Discard",
+  discarding: "Discarding...",
+  /** What the sessions list says to whoever was in the room when it went. */
+  discarded: "This session was discarded.",
+  /** The quiet control on a closed record, for admins. */
+  deleteButton: "Delete this record",
+  deleteTitle: "Delete this record?",
+  deleteBody: "Its minutes, decisions and the tasks it left are removed for everyone. This cannot be undone.",
+  keepRecord: "Keep it",
+  delete: "Delete",
+  deleting: "Deleting...",
+  /** What the sessions list says once a record is gone. */
+  deleted: "This record was deleted.",
+  /** A refusal with no sentence of its own, or a network that did not answer. */
+  failed: "That did not go through. Try again in a moment.",
 } as const;

@@ -54,7 +54,7 @@ import {
 } from "../../shared/mapFromMasterplan";
 import { MAX_SCENE_BYTES, sceneSizeProblem, sceneSummary } from "../../shared/mapScene";
 import type { AppDeps } from "../lib/appDeps";
-import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
+import { type AgentScope, type AgentTokenRow, CONFIRM_REASON_SENTENCE, createConfirmSpendBook, echoHash, mintConfirmToken, verifyConfirmToken } from "../lib/agentTokens";
 import { recordEvent } from "../lib/events";
 import { getDraft, pendingDraft, publishedScene, publishedVersion, saveDraft } from "../lib/mapScene";
 import { currentMasterplan } from "../lib/mapMasterplan";
@@ -128,7 +128,7 @@ export function exampleDraft(): Record<string, unknown> {
 export const DRAFT_RULES: readonly string[] = [
   "Draw only what the masterplan shows. Every building, road, water line, zone and the property line comes from the plan; nothing is added because a village of this kind usually has one.",
   "Names come from the plan's own labels. A thing the plan does not name gets a plain descriptive name (\"Building 4\"), never an invented one.",
-  "Leave every village record empty: quests, seats, threads, journeys, gatherings and vitals belong to the people who keep them.",
+  "Leave every village record empty: quests, roles, threads, journeys, gatherings and vitals belong to the people who keep them.",
   "Leave origin stories, funding and gatherings empty on every building. They are things that happened to a place.",
   "Never draw a coast, a river, a road or a landmark off the plan. Ground past the plan is the village's own picture, never yours.",
   "Positions are world units: 0 to 2400 across, 0 to 1600 down, north up. The frame is the village's land record: `ground.spanM` metres across, centred on its centre.",
@@ -139,6 +139,8 @@ export const DRAFT_RULES: readonly string[] = [
 export function register(app: Express, deps: Deps): void {
   const { resolveAgent, capabilityCtx, getPool, confirmSecret } = deps;
   const V1 = "/api/agent/v1";
+  // A confirm token keeps one draft. Spent only after every other check passes (see the RSVP route's note).
+  const draftConfirmBook = createConfirmSpendBook();
 
   /** The holder, when they may draft the land; otherwise the refusal is sent and null comes back. */
   async function mapMakerAgent(req: express.Request, res: express.Response, kind: "read" | "write") {
@@ -276,6 +278,9 @@ export function register(app: Express, deps: Deps): void {
     // THIS request would write, or a token for one scene could carry another.
     if (echoHash(req.body?.echo) !== echoHash(echo)) {
       return res.status(409).json({ error: "echo_mismatch", message: CONFIRM_REASON_SENTENCE.echo_mismatch });
+    }
+    if (!draftConfirmBook.spend(String(req.body.confirmToken))) {
+      return res.status(409).json({ error: "spent", message: CONFIRM_REASON_SENTENCE.spent });
     }
 
     await saveDraft(getPool(), user.id, text, liveVersion);

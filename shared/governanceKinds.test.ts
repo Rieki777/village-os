@@ -221,7 +221,7 @@ describe("when a carried decision lands", () => {
     expect(l.executesAtClose).toBe(true);
     expect(l.landsAt).toBeNull();
     // Each says the sentence true of it: the Birthing's is about a seat.
-    expect(l.because).toContain("A seat is not something");
+    expect(l.because).toContain("A role is not something");
     const reorg = landingFor({ closesAt: CLOSE, kind: "game_change", timing: "next_moon", vetoHours: 72, nextBoundaryAfter: farMoon, noWindow: true, subjectType: "org_draft" });
     expect(reorg.because).toContain("a holder of the power publishes");
   });

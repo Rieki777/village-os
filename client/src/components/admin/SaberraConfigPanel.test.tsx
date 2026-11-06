@@ -27,7 +27,7 @@
  * `fetch` is stubbed. The routes behind it have their own server tests.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -77,6 +77,7 @@ const run = (over: Record<string, unknown>) => ({
   refused: 0,
   superseded: 1,
   rebatched: 18,
+  gone: 0,
   held: 0,
   addresses: 0,
   skipped: ["tension", "risk"],
@@ -249,7 +250,11 @@ describe("the connection", () => {
     lifecycle = "preview";
     renderPanel();
     expect(await screen.findByRole("button", { name: "Sync now" })).toBeInTheDocument();
-    expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0);
+    // The button renders from the lifecycle alone, so it can be on screen before
+    // the status fetch is recorded: this assertion read 0 on one CI shard while
+    // the identical tree passed on another. The outbox line below always waited;
+    // this one did not, and that was the whole difference.
+    await waitFor(() => expect(callsTo("/api/saberra/status").length).toBeGreaterThan(0));
     // The outbox listing sits behind the same gate and is asked for the same way.
     expect(await screen.findByText("What Saberra would receive")).toBeInTheDocument();
     await waitFor(() => expect(callsTo("/api/saberra/outbox").length).toBeGreaterThan(0));
@@ -297,7 +302,7 @@ describe("Sync now", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sync now" }));
     expect(await screen.findByText(/2 suggestions reached the review queue/)).toBeInTheDocument();
     expect(screen.getByText("This sync stored 5 facts from the service.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open the review queue" })).toHaveAttribute("href", "/review");
+    expect(screen.getByRole("link", { name: "Open the review queue (2 suggestions)" })).toHaveAttribute("href", "/review");
     expect(screen.getByText("tension: not offered by the service yet")).toBeInTheDocument();
     expect(callsTo("/api/saberra/sync", "POST")[0]![1].headers.Authorization).toBe("Bearer secret");
   });
@@ -465,7 +470,7 @@ describe("the report of each run", () => {
         schedule: "every-6-hours",
         nextAt,
         runs: [
-          run({ trigger: "by-hand" }),
+          run({ trigger: "by-hand", gone: 13 }),
           run({ at: "2026-10-15T12:00:00.000Z", outcome: "no-change", landed: 0, rebatched: 0, superseded: 0, facts: 0, circles: null }),
           run({
             at: "2026-10-15T06:00:00.000Z",
@@ -488,6 +493,9 @@ describe("the report of each run", () => {
     const text = log.textContent ?? "";
     expect(text).toContain("Sent to the review queue · By hand · ");
     expect(text).toContain("58 records read. 19 suggestions reached the review queue: 18 carried forward unchanged, 1 replaced by a changed claim, 0 refused. 58 facts stored.");
+    // A record the service stopped sending is said apart from a changed claim, and only when there is one.
+    expect(text).toContain("13 waiting suggestions withdrawn: the service stopped sending their records.");
+    expect(text.match(/withdrawn: the service stopped sending/g)).toHaveLength(1);
     expect(text).toContain("Not offered by the service, so not asked for: tension, risk.");
     expect(text).toContain(
       "Circles: 56 placed, 0 unresolved, 0 with none, 0 naming several, 3 in an archived circle. The circle field arrived as: list of 1 id.",
@@ -498,6 +506,11 @@ describe("the report of each run", () => {
     expect(text).toContain("Not run: no key is set for the service.");
     expect(text).toContain("Not offered by the service, so not asked for: tension, risk. Kinds chosen from the service's own schema.");
     expect(text).toContain(villageTime("2026-10-15T18:00:00.000Z", "America/Costa_Rica"));
+    // Only the run that put suggestions in the queue offers the way to them.
+    const toQueue = within(log).getAllByRole("link", { name: /^Open the review queue/ });
+    expect(toQueue).toHaveLength(1);
+    expect(toQueue[0]).toHaveAccessibleName("Open the review queue (19 suggestions)");
+    expect(toQueue[0]).toHaveAttribute("href", "/review");
   });
 
   it("SAYS SO WHEN THE SCHEDULE IS BACKING OFF, and how far", async () => {

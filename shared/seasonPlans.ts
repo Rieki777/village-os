@@ -52,6 +52,7 @@ import {
   type QuestSettings,
   type ScoreboardSettings,
 } from "./seatSettings";
+import { parseCardWords, parseSeasonalGoals, parseServesGoals, type CardWords, type SeasonalGoal, type ServedGoal } from "./seasonPlanWords";
 
 /** The member's own season page. Every notice about planning links here. */
 export { SEASON_PLAN_MINE } from "./seasonPlanLinks";
@@ -265,7 +266,7 @@ export function planOpenCopy(seasonName: string, closesOn: string): { title: str
   const name = seasonName.trim() || "the next season";
   return {
     title: `Plan your season: ${name}`,
-    body: `Choose your seats and what you will do. Open until ${civilDayWords(closesOn)}.`,
+    body: `Choose your roles and what you will do. Open until ${civilDayWords(closesOn)}.`,
   };
 }
 
@@ -292,6 +293,15 @@ export interface PlanInput {
   commitments: PlanCommitments;
   /** Seats the member hands back at the season's turn. */
   handingBack: string[];
+  /**
+   * Every village goal served, each with how it helps (player role card PR 6).
+   * `servesGoal` is always its first goal, so the previous release reads it.
+   */
+  servesGoals: ServedGoal[] | null;
+  /** Zero to three bigger goals of the member's own. `undefined`: keep what the newest version holds. */
+  seasonalGoals?: SeasonalGoal[] | null;
+  /** The answers under "How I hold my roles". `undefined`: keep what the newest version holds. */
+  cardWords?: CardWords | null;
 }
 
 export type ParsedPlan = { ok: true; plan: PlanInput } | { ok: false; field: string; error: string };
@@ -314,20 +324,35 @@ export function parsePlanInput(body: unknown, ctx: { goals: readonly string[] })
   if (aim && aim.length > AIM_MAX) return { ok: false, field: "aim", error: `Keep your aim to ${AIM_MAX} characters.` };
   if (aim && looksLikePaymentDetails(aim)) return { ok: false, field: "aim", error: PAYMENT_DETAIL_MESSAGE };
 
-  const goalRaw = typeof b.servesGoal === "string" ? b.servesGoal.trim() : "";
-  if (b.servesGoal !== undefined && b.servesGoal !== null && typeof b.servesGoal !== "string") {
-    return { ok: false, field: "servesGoal", error: "Pick a goal from the season's list." };
+  // A list of goals served wins. A body with only `servesGoal` (the previous page) serves that one goal.
+  let servesGoals: ServedGoal[] | null;
+  if (b.servesGoals !== undefined) {
+    const served = parseServesGoals(b.servesGoals, ctx.goals);
+    if (!served.ok) return served;
+    servesGoals = served.value ?? null;
+  } else {
+    const goalRaw = typeof b.servesGoal === "string" ? b.servesGoal.trim() : "";
+    if (b.servesGoal !== undefined && b.servesGoal !== null && typeof b.servesGoal !== "string") {
+      return { ok: false, field: "servesGoal", error: "Pick a goal from the season's list." };
+    }
+    const one = goalRaw || null;
+    if (one && (one.length > GOAL_MAX || !ctx.goals.map((g) => g.trim()).includes(one))) {
+      return { ok: false, field: "servesGoal", error: "That is not one of this season's goals. Pick one from the list." };
+    }
+    servesGoals = one ? [{ goal: one, howItHelps: null }] : null;
   }
-  const servesGoal = goalRaw || null;
-  if (servesGoal && (servesGoal.length > GOAL_MAX || !ctx.goals.map((g) => g.trim()).includes(servesGoal))) {
-    return { ok: false, field: "servesGoal", error: "That is not one of this season's goals. Pick one from the list." };
-  }
+  const servesGoal = servesGoals?.[0]?.goal ?? null;
+
+  const seasonal = parseSeasonalGoals(b.seasonalGoals);
+  if (!seasonal.ok) return seasonal;
+  const words = parseCardWords(b.cardWords);
+  if (!words.ok) return words;
 
   const c = b.commitments === undefined || b.commitments === null ? {} : b.commitments;
   if (typeof c !== "object" || Array.isArray(c)) return { ok: false, field: "commitments", error: "Your commitments arrive as a set of groups." };
   for (const key of Object.keys(c as object)) {
     if (!(COMMITMENT_GROUPS as readonly string[]).includes(key)) {
-      return { ok: false, field: `commitments.${key}`, error: "Your season holds quests and measures. Terms belong on a seat application." };
+      return { ok: false, field: `commitments.${key}`, error: "Your season holds quests and measures. Terms belong in a role application." };
     }
   }
   const raw = c as Record<string, unknown>;
@@ -345,13 +370,24 @@ export function parsePlanInput(body: unknown, ctx: { goals: readonly string[] })
   if (parsed.settings.scoreboard && parsed.settings.scoreboard.measures.length > 0) commitments.scoreboard = parsed.settings.scoreboard;
 
   const back = b.handingBack === undefined || b.handingBack === null ? [] : b.handingBack;
-  if (!Array.isArray(back)) return { ok: false, field: "handingBack", error: "Seats handed back arrive as a list." };
+  if (!Array.isArray(back)) return { ok: false, field: "handingBack", error: "Roles handed back arrive as a list." };
   const handingBack = Array.from(new Set(back.map((s) => String(s ?? "").trim()).filter((s) => s !== "")));
   if (handingBack.length > HANDING_BACK_MAX || handingBack.some((s) => s.length > 64)) {
-    return { ok: false, field: "handingBack", error: "That list names seats this village does not have." };
+    return { ok: false, field: "handingBack", error: "That list names roles this village does not have." };
   }
 
-  return { ok: true, plan: { aim, servesGoal, commitments, handingBack } };
+  return {
+    ok: true,
+    plan: {
+      aim,
+      servesGoal,
+      commitments,
+      handingBack,
+      servesGoals,
+      ...(seasonal.value !== undefined ? { seasonalGoals: seasonal.value } : {}),
+      ...(words.value !== undefined ? { cardWords: words.value } : {}),
+    },
+  };
 }
 
 /** What a plan must carry before it can be filed, or null when it is ready. */

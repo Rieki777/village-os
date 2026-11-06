@@ -48,6 +48,13 @@ import { routes } from "./qa/routes.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT = path.join(ROOT, "client", "src");
+/**
+ * The page specs (Rye, 2026-10-22: every village's pages are its own). A
+ * page's buttons and links are fields there now, and their defaults are what
+ * the page links to until a village says otherwise, so a route-shaped default
+ * is a door exactly as `<Link href>` was before the words moved.
+ */
+const PAGE_SPECS_DIR = path.join(ROOT, "shared", "pageContent");
 
 /** How many independent doors a route needs. */
 const REQUIRED = 2;
@@ -66,11 +73,31 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // Open role proposals (sheet 19i): both arrive by a link somebody was sent,
+  // never by a link on the site. The confirm page is the link in the
+  // confirmation email, and a token page is a link an admin made for one person.
+  "/propose-a-role/confirm": "the link in the confirmation email, never linked from the site",
+  "/propose-a-role/:token": "a link an admin makes for one person and sends them, never linked from the site",
+
+  // A connector's OAuth sign-in (addendum v6, B4): the connector sends the
+  // member here with its own query string; a link from the site would carry no
+  // client and could only show an error.
+  "/oauth/authorize": "a connector's sign-in page, reached only from the connector that sends the member there",
+
+  // The treasurer's payout list outside /admin (Rye, 2026-10-30), for a finance
+  // role holding cash.pay without being an admin. Its one door is the books half
+  // of the profile cash card, which renders only for a key holder; a nav entry
+  // would show every member a page that refuses them. Admins keep their own tab.
+  "/cash-payouts": "entered from the profile cash card, shown only to a holder of cash.pay",
+
   // Password flows arrive from an EMAIL, not from the site. The set-password
   // link carries a one-time token and is useless without it, so a nav entry
   // would be a link to an error message. /forgot-password keeps its one door
   // on the sign-in page, which is the only place a person wants it.
   "/set-password": "entered from a one-time email link; a site link has no token",
+  // The address-proof letter sign-up sends (R104). Same shape: a signed link
+  // that only the mailbox holds, and a page with nothing to do without it.
+  "/verify-email": "entered from the address-proof link sign-up mails; a site link has no token",
   // The three pages Village Comms emails link to (the comms build spec
   // 5.4). Each reads a signed `?t=` link that only an email carries, so a site
   // link would open a page with nothing to act on. A member changes the same
@@ -100,6 +127,10 @@ const ALLOWLIST = {
   // notifications already carry it (server/index.ts). A second door would be
   // advertising the spelling that is being retired.
   "/wallet": "a compatibility alias for /tokens; kept for URLs already issued",
+  // The same shape. Members say role, never seat (Rye, 2026-10-21), so the page
+  // moved to /role-applications/:id and every link points there. The old
+  // spelling redirects, and stays only for emails and notices already sent.
+  "/seat-applications/:id": "the old spelling of /role-applications/:id, which redirects; kept for links already sent",
 
   // Admin-only surfaces, reached from inside Village Settings by an admin who
   // is already there. The account menu carries /admin behind a role check;
@@ -247,6 +278,23 @@ function isRouteShaped(v) {
  * Everything a file offers as a door, plus everything route-shaped that it
  * could not classify as one.
  */
+/** Every route-shaped string in a page spec is one of that page's default doors. */
+function scanSpecFile(abs) {
+  const src = fs.readFileSync(abs, "utf8");
+  const sf = ts.createSourceFile(abs, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const doors = [];
+  const visit = (node) => {
+    // A spec's own `path` is its address for the editor's "Open this page", never a link a visitor sees.
+    const ownAddress = !!node.parent && ts.isPropertyAssignment(node.parent) && node.parent.name.getText().replace(/['"]/g, "") === "path";
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && !ownAddress && isRouteShaped(node.text)) {
+      doors.push({ target: node.text, kind: "literal", line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, why: "page spec" });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return { doors, unclassified: [] };
+}
+
 function scanFile(abs) {
   const src = fs.readFileSync(abs, "utf8");
   const sf = ts.createSourceFile(abs, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -393,15 +441,19 @@ function lands(target, route) {
 
 function audit() {
   const { concrete, parameterised } = routes();
-  const all = [...concrete, ...parameterised].sort();
+  // Fixed names first, so a door to `/profile/gene-keys` lands on that page and
+  // not on `/profile/:handle`, which sorts ahead of it and matches it too. The
+  // router itself places fixed routes first for the same reason (App.tsx).
+  const all = [...[...concrete].sort(), ...[...parameterised].sort()];
 
   const files = walkFiles(CLIENT).filter((f) => !isTest(rel(f)) && rel(f) !== ROUTER_REL);
+  const specFiles = fs.existsSync(PAGE_SPECS_DIR) ? walkFiles(PAGE_SPECS_DIR).filter((f) => !isTest(rel(f))) : [];
   const inbound = new Map(all.map((r) => [r, []]));
   let notClassified = 0;
   const notClassifiedSamples = [];
 
-  for (const abs of files) {
-    const { doors, unclassified } = scanFile(abs);
+  for (const abs of [...files, ...specFiles]) {
+    const { doors, unclassified } = specFiles.includes(abs) ? scanSpecFile(abs) : scanFile(abs);
     for (const d of doors) {
       let landed = false;
       for (const r of all) {

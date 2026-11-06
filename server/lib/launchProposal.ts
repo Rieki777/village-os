@@ -47,7 +47,8 @@
  * be PUT ON a slate, which is a different question asked at a different
  * moment, and the close asks its own because `users.role` can move in between.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
+import type { PowerInPlainWords } from "./launchHandover";
 import { HANDOVER_SET } from "../../shared/capabilities";
 import { catalystRoster } from "../repos/users";
 
@@ -136,8 +137,8 @@ export async function launchSlateProblem(
     return {
       ok: false,
       error:
-        `Only founding members can carry the steward's seat for this first season, and ${notFounding.length === 1 ? "one of the people named is not one" : `${notFounding.length} of the people named are not`}. ` +
-        `After this season anybody can raise their hand for the seat and the village votes them in.`,
+        `Only founding members can carry the steward role for this first season, and ${notFounding.length === 1 ? "one of the people named is not one" : `${notFounding.length} of the people named are not`}. ` +
+        `After this season anybody can raise their hand for the role and the village votes them in.`,
     };
   }
   const offTheRoll = ids.filter((id) => !onTheRoll.has(id));
@@ -145,7 +146,7 @@ export async function launchSlateProblem(
     return {
       ok: false,
       error:
-        `Everybody named as a founding steward has to be on this vote's roll, because accepting the seat is part of answering this vote, and ${offTheRoll.length === 1 ? "one of them is not" : `${offTheRoll.length} of them are not`}.`,
+        `Everybody named as a founding steward has to be on this vote's roll, because accepting the role is part of answering this vote, and ${offTheRoll.length === 1 ? "one of them is not" : `${offTheRoll.length} of them are not`}.`,
     };
   }
   /*
@@ -169,6 +170,14 @@ export interface LaunchProposalDocInput {
   /** The civil date the journey read done, `YYYY-MM-DD`. */
   openedOn: string;
   slate: readonly SlateMember[];
+  /**
+   * The powers the launch hands to the village, in plain words: the stewards'
+   * selection as it stood when the vote opened (`readLaunchSelection`). Empty
+   * is a real answer and the document says so. The hand-over control refuses
+   * to change the selection while this vote is open, so what members read here
+   * is what crosses.
+   */
+  handover: readonly PowerInPlainWords[];
 }
 
 /**
@@ -191,6 +200,7 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
     "Token issuance turns on. Until then this village can be set up in every other way, and nothing can be issued to anybody.",
     "",
     ...stewardSection(input),
+    ...handoverSection(input),
     "## What this vote asks",
     "",
     `Everyone on the roll votes yes: ${input.quorumPct}% participation and ${input.unityPct}% agreement. ${input.onTheRoll} people hold a voice today, and this vote is frozen to those ${input.onTheRoll}.`,
@@ -209,6 +219,31 @@ export function launchProposalDoc(input: LaunchProposalDocInput): string {
 }
 
 /**
+ * WHAT THE LAUNCH HANDS TO THE VILLAGE, written into the frozen document so a
+ * member votes on the exact list (coordinator ruling on #769, 2026-11-01, on
+ * Rye's "at launch the stewards select WHAT powers are being passed over").
+ */
+function handoverSection(input: LaunchProposalDocInput): string[] {
+  const heading = ["## What the launch hands to the village", ""];
+  if (input.handover.length === 0) {
+    return [
+      ...heading,
+      "None of its powers. The stewards hold every one of them after launch, and hand each to the village when they judge it ready. Handing one back takes a village vote.",
+      "",
+    ];
+  }
+  return [
+    ...heading,
+    `When this carries, the village holds these ${input.handover.length} powers, and only a village vote hands one back:`,
+    "",
+    ...input.handover.map((p) => `- ${p.title}: whoever holds it can ${p.consequence}.`),
+    "",
+    "The stewards hold every other power, and hand each to the village when they judge it ready.",
+    "",
+  ];
+}
+
+/**
  * The part of the document that names the stewards, or says nobody was named.
  *
  * BOTH BRANCHES SAY SOMETHING. A launch that names nobody is a real outcome
@@ -220,23 +255,24 @@ function stewardSection(input: LaunchProposalDocInput): string[] {
   const powers = HANDOVER_SET.length;
   if (input.slate.length === 0) {
     return [
-      "## The steward's seat",
+      "## The steward role",
       "",
-      `${input.openedBy} named nobody for the steward's seat, so the village starts with it empty. ` +
-        "That stops nothing: decisions land at their landing time either way, and the village can vote anybody into the seat whenever it likes.",
+      `${input.openedBy} named nobody for the steward role, so the village starts with it empty. ` +
+        "That stops nothing: decisions land at their landing time either way, and the village can vote anybody into the role whenever it likes.",
       "",
     ];
   }
   return [
-    "## Who carries the steward's seat",
+    "## Who carries the steward role",
     "",
     `${input.openedBy} opened this vote and chose who it puts forward. Voting yes is voting for this list as well as for starting the Game.`,
     "",
     ...input.slate.map((m) => `- ${m.name}`),
     "",
-    `Each of them answers for themselves. Carrying the seat for this first season means holding all ${powers} of the powers this village has to give, and being able to stop a decision the village has already carried inside the window before it lands. Anybody named can decline, and a decline is shown here beside the vote.`,
+    `Each of them answers for themselves. Carrying the role for this first season means holding all ${powers} of the powers this village has to give, and being able to stop a decision the village has already carried inside the window before it lands. Anybody named can decline, and a decline is shown here beside the vote.`,
     "",
-    "Whoever accepts is seated when this vote carries. If nobody accepts, the seat starts empty and the village votes somebody into it whenever it likes.",
+    "Whoever accepts is seated when this vote carries. If nobody accepts, the role starts empty and the village votes somebody into it whenever it likes.",
+
     "",
   ];
 }

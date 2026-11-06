@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { checkSpan, isTest, SCAN_ROOTS } from "./check-voice.mjs";
+import { checkSpan, isTest, SCAN_ROOTS, seatNounHits, SEAT_GATHERING_FILES, SEAT_EXEMPT_DIRS, SEAT_HTML_FILES, htmlSeatHits, SEAT_DOC_ROOTS, SEAT_DOC_FILES, SEAT_DOC_EXEMPT, mdSeatHits, jsonSeatHits } from "./check-voice.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./check-voice.mjs", import.meta.url));
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -77,6 +77,163 @@ check("leaves plain prose alone", () => {
 
 check("hyphens are fine, only em/en dashes trip rule 1", () => {
   assert.deepStrictEqual(checkSpan("a well-being check and decision-making time"), []);
+});
+
+// ── Rule 6: a role is a role (Rye, 2026-10-21) ──────────────────────────────
+// Literals arrive here as the voice guard reads them: quotes and all.
+
+const seatFlags = (s) => seatNounHits(s).length > 0;
+
+check("seat rule: flags the noun for a role", () => {
+  for (const s of [
+    '"Apply for a seat"',
+    '"Decline the steward\'s seat"',
+    '"Who has held this seat"',
+    '"Choose the seats you keep, hand back or apply for"',
+    '"a seat you would hold this season"',
+    '"A power entrusted to a seat nobody sits in"',
+    "} seat${",
+    "Nobody holds a seat here yet.",
+  ]) assert.ok(seatFlags(s), `should flag: ${s}`);
+});
+
+check("seat rule: the verb stays (Rye: \"You can use 'seat someone' for that verb\")", () => {
+  for (const s of [
+    '"Seat someone in a role"',
+    '"Ask the village to seat a member in one of its roles"',
+    '"You hold the power that seats people."',
+    '"Could not seat them"',
+    '"The people who seat roles read your offer"',
+    '"seat software agents in the village\'s roles, and take them out again"',
+    '"Seat and unseat the holders of the village\'s roles"',
+    '"Everybody named has declined, so this vote seats nobody and the role starts empty."',
+    '"nobody was seated"',
+    "Seat",
+  ]) assert.ok(!seatFlags(s), `should pass: ${s} -> ${JSON.stringify(seatNounHits(s))}`);
+});
+
+check("seat rule: a chair at a gathering is a seat", () => {
+  for (const s of [
+    '"Save me a seat"',
+    '"Your seat at {{gathering.title}} is saved."',
+    '"A seat fee is a whole number, or zero for free"',
+    '"We\'ll write the moment a seat opens."',
+    '"A seat opened at {{gathering.title}}"',
+    '"Fees, donations, deposits, waitlist seats"',
+  ]) assert.ok(!seatFlags(s), `should pass: ${s}`);
+  // A sentence that names a gathering does not excuse a role seat beside it.
+  assert.ok(seatFlags('"Say hello at the gathering, and ask the people who hold seats now"'));
+  assert.ok(SEAT_GATHERING_FILES.some((re) => re.test("client/src/components/calendar/CommunityCalendarCard.tsx")));
+  assert.ok(SEAT_GATHERING_FILES.some((re) => re.test("server/lib/comms/cantMakeIt.ts")));
+  assert.ok(!SEAT_GATHERING_FILES.some((re) => re.test("client/src/pages/Roles.tsx")));
+});
+
+check("seat rule: ids, keys, class names and SQL are machinery", () => {
+  for (const s of [
+    '"org.seat"',
+    '"seats"',
+    "`/seat-applications/${",
+    "`sheet-night seat-card-foil relative w-full rounded-[20px] ${",
+    '"SELECT seat_price, seat_token FROM events WHERE id = ?"',
+    '"id, circle_id, name, aim, domain, seats, criticality, active"',
+    "`seats: [${",
+    '"re-seats it each season"',
+    '"seats - holderCount"',
+  ]) assert.ok(!seatFlags(s), `should pass: ${s}`);
+  assert.ok(SEAT_EXEMPT_DIRS.some((re) => re.test("shared/__fixtures__/regen-village-riverbend.json")));
+});
+
+// ── Rule 6 on the living map (an HTML page with inline scripts) ─────────────
+
+const MAP_PAGE = [
+  "<html><head><style>.seat { color: red }</style></head><body>",
+  '<span class="hint">open roles pulse as open calls</span>',
+  '<button title="Tap an opening">ok</button>',
+  "<script>",
+  "const tabs = ['Overview', 'Quests here', 'Roles here'];",
+  "const wall = `<div class=\"wallhead\">open seats</div>`;",
+  "const chip = `<section data-sec=\"seat\"><span data-conn=\"seat:${id}\">x</span></section>`;",
+  "if (x.kind === 'seat') go();",
+  "maiaSay(`This one has a price on its seat, so a single tap will not spend your credits.`);",
+  "const intent = { re: /seat|role|job/i };",
+  "</script>",
+  "<p>Every seat in the village is drawn here.</p>",
+  "</body></html>",
+].join("\n");
+
+check("seat rule on the map: flags the noun in a script's literals and in the page's text", () => {
+  const hits = htmlSeatHits(MAP_PAGE);
+  assert.deepStrictEqual(hits.map((h) => h.line), [6, 12], JSON.stringify(hits));
+  assert.match(hits[0].text, /open seats/);
+});
+
+check("seat rule on the map: leaves attributes, kinds, the intent regex, CSS and a gathering's price alone", () => {
+  const clean = MAP_PAGE.split("\n").filter((l) => !/open seats|Every seat/.test(l)).join("\n");
+  assert.deepStrictEqual(htmlSeatHits(clean), []);
+  assert.deepStrictEqual(SEAT_HTML_FILES, ["docs/prototypes/grounds-v0.html"]);
+});
+
+check("seat rule on the map: the real map says role today", () => {
+  const abs = path.join(ROOT, SEAT_HTML_FILES[0]);
+  if (!fs.existsSync(abs)) {
+    console.log("    (skipped: the map file is not in this tree)");
+    return;
+  }
+  assert.deepStrictEqual(htmlSeatHits(fs.readFileSync(abs, "utf8")), []);
+});
+
+// ── Rule 6 on the docs an AI reads (markdown, and the openapi document) ─────
+
+const DOC_PAGE = [
+  "# A module",
+  "A steward takes the seat back by a vote.",
+  "Every role has a term, and the `seats` column counts its holders.",
+  'The hovercard then read "0 seats open" with no seal.',
+  "```sql",
+  "SELECT seats FROM org_roles WHERE id = ?; -- one seat per row",
+  "```",
+  "A seat opening sends `gathering.promoted` and enrolls.",
+  "The power that seats people in a role is `org.seat`.",
+  "| Vacant | proposed as an open seat |",
+].join("\n");
+
+check("seat rule in the docs an AI reads: flags the noun in prose and in a table", () => {
+  const hits = mdSeatHits(DOC_PAGE);
+  assert.deepStrictEqual(hits.map((h) => h.line), [2, 10], JSON.stringify(hits));
+});
+
+check("seat rule in the docs an AI reads: leaves code, a quotation, a gathering and the verb alone", () => {
+  const clean = DOC_PAGE.split("\n").filter((l) => !/takes the seat|open seat \|/.test(l)).join("\n");
+  assert.deepStrictEqual(mdSeatHits(clean), []);
+  const summary = (s) => JSON.stringify({ paths: { "/x": { get: { summary: s, operationId: "seats" } } } });
+  assert.strictEqual(jsonSeatHits(summary("Circles and seats, and who holds them")).length, 1);
+  assert.deepStrictEqual(jsonSeatHits(summary("Circles and roles, and who holds them")), []);
+});
+
+check("seat rule in the docs an AI reads: the scope, with a gathering's own doc left out", () => {
+  assert.deepStrictEqual(SEAT_DOC_ROOTS, ["docs/modules", "docs/skills"]);
+  assert.deepStrictEqual(SEAT_DOC_FILES, ["docs/VILLAGE_OVERVIEW.md", "docs/FOUNDER_AGENT_GUIDE.md"]);
+  assert.ok(SEAT_DOC_EXEMPT.some((re) => re.test("docs/modules/events.md")));
+  assert.ok(!SEAT_DOC_EXEMPT.some((re) => re.test("docs/modules/live-sessions.md")));
+});
+
+check("seat rule in the docs an AI reads: the real docs say role today", () => {
+  const rels = [...SEAT_DOC_FILES];
+  const walk = (rel) => {
+    for (const e of fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+      const child = `${rel}/${e.name}`;
+      if (e.isDirectory()) walk(child);
+      else if (/\.(md|json)$/.test(e.name)) rels.push(child);
+    }
+  };
+  for (const r of SEAT_DOC_ROOTS) if (fs.existsSync(path.join(ROOT, r))) walk(r);
+  const found = [];
+  for (const rel of rels) {
+    if (SEAT_DOC_EXEMPT.some((re) => re.test(rel)) || !fs.existsSync(path.join(ROOT, rel))) continue;
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    for (const h of rel.endsWith(".md") ? mdSeatHits(text) : jsonSeatHits(text)) found.push(`${rel}:${h.line} ${h.text}`);
+  }
+  assert.deepStrictEqual(found, []);
 });
 
 // ── The two carve-outs, as tested facts rather than prose ───────────────────

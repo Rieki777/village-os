@@ -125,6 +125,34 @@ export async function publishedPortraitsOf(
   return rows.map(rowToPortrait);
 }
 
+/**
+ * The portraits each of these members shows THIS viewer, for the player card's
+ * hero (server/lib/playerCardData.ts), one statement for any number of people.
+ *
+ * The same rule as `portraitsByArchetype` (server/lib/characterPortraits.ts),
+ * stated in SQL so it holds for a batch: a member's own picture while it is
+ * private reaches only that member (`user_id = viewer`), and everybody else
+ * reads a row only once it is published. `file_name IS NOT NULL` keeps a row
+ * holding only a forge candidate out, as `publishedPortraitsOf` does. A
+ * stranger passes `null` and the owner branch matches nobody, so a private
+ * filename never leaves the database on anybody else's request.
+ */
+export async function portraitsVisibleTo(
+  pool: Pool,
+  villageId: string,
+  ownerIds: readonly string[],
+  viewerId: string | null,
+): Promise<Array<{ userId: string; archetypeKey: string; fileName: string }>> {
+  if (!ownerIds.length) return [];
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT `user_id`, `archetype_key`, `file_name` FROM `character_portraits` " +
+      `WHERE \`village_id\` = ? AND \`user_id\` IN (${ownerIds.map(() => "?").join(",")}) AND \`file_name\` IS NOT NULL ` +
+      "AND (`published_at` IS NOT NULL OR `user_id` = ?) ORDER BY `user_id`, `archetype_key`",
+    [villageId, ...ownerIds, viewerId ?? ""],
+  );
+  return rows.map((r) => ({ userId: String(r.user_id), archetypeKey: String(r.archetype_key), fileName: String(r.file_name) }));
+}
+
 /** One member's portrait for one class, in any state. Null when there is none. */
 export async function portraitFor(
   pool: Pool,

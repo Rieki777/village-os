@@ -379,7 +379,7 @@ export function stalemateWarning(pct: number): string | null {
     `Above ${RECOMMENDED_CEILING_PCT} the risk is a stalemate. ` +
     "The closer a threshold gets to 100, the more likely it is that one player who dies, leaves or simply stops playing " +
     "freezes a Game the rest of the village wants to continue, because the roll freezes when a vote opens and a member " +
-    `who has gone still counts as a seat that has not answered. ${RECOMMENDED_CEILING_PCT} is the highest number this platform recommends.`
+    `who has gone still counts on the roll as one who has not answered. ${RECOMMENDED_CEILING_PCT} is the highest number this platform recommends.`
   );
 }
 
@@ -634,10 +634,10 @@ export function excludedWeightClause(base: QuorumBase): string {
   const share = base.totalWeight > 0 ? pct((base.excludedWeight / base.totalWeight) * 100) : "0";
   const seats =
     base.speaksForABeing > 0 && base.cannotVote === 0
-      ? `${base.excludedPeople === 1 ? "One seat speaks" : `${base.excludedPeople} seats speak`} for a being that is not a person`
+      ? `${base.excludedPeople === 1 ? "One vote speaks" : `${base.excludedPeople} votes speak`} for a being that is not a person`
       : base.speaksForABeing === 0
-        ? `${base.excludedPeople === 1 ? "One seat holds" : `${base.excludedPeople} seats hold`} weight that cannot answer`
-        : `${base.excludedPeople} seats speak for beings that are not people or hold weight that cannot answer`;
+        ? `${base.excludedPeople === 1 ? "One vote holds" : `${base.excludedPeople} votes hold`} weight that cannot answer`
+        : `${base.excludedPeople} votes speak for beings that are not people or hold weight that cannot answer`;
   return ` ${seats}, holding ${share}% of the weight, and that weight is outside this count.`;
 }
 
@@ -656,7 +656,7 @@ export function thresholdSentence(
     return `${bar}. Nobody on the roll of ${r.people} carries weight this count can reach today, so the Game cannot say how many people that is.${aside}`;
   }
   if (r.equalWeights) {
-    return `${bar}. Today that is at least ${r.fewestForQuorum} of ${r.people} people, because every seat weighs the same.${aside}`;
+    return `${bar}. Today that is at least ${r.fewestForQuorum} of ${r.people} people, because every vote weighs the same.${aside}`;
   }
   return (
     `${bar}. Today that is at least ${r.fewestForQuorum} of ${r.people} people, because ` +
@@ -755,7 +755,7 @@ export function reachableQuorumWarning(
   if (reachable >= bar) return null;
   return (
     `The most this bar can ever reach today is ${pct(reachable)}% of the weight, and it asks for ${pct(bar)}%. ` +
-    `${base.excludedPeople === 1 ? "One seat holds" : `${base.excludedPeople} seats hold`} ` +
+    `${base.excludedPeople === 1 ? "One vote holds" : `${base.excludedPeople} votes hold`} ` +
     `${pct(100 - reachable)}% of the Voice outside this count, so no turnout carries a decision at this bar. ` +
     "Lower the bar, seat somebody for the weight that is silent, or bring the change back as a new proposal once the roll has moved."
   );

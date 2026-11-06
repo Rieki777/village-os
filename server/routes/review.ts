@@ -106,6 +106,9 @@ import {
   type HumanReward,
 } from "../lib/questProposals";
 import { withdrawDraftBallot } from "../lib/orgDraftDecide";
+import { payLineProblem, questPayRules } from "../lib/workPay";
+import { defaultDisplayCurrency } from "../../shared/money";
+import { readWorkValueInput } from "../../shared/workValue";
 import { register as registerStructureReview } from "./structureReview";
 import { circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
 
@@ -124,6 +127,7 @@ type Deps = Pick<
   | "seasonState"
   | "notify"
   | "firstName"
+  | "projectCurrency"
 > & {
   /** Who holds a power live, for the carry list's "who can do it". `liveHoldersOf` in server/index.ts. */
   liveHoldersOf(capability: string): Promise<string[]>;
@@ -215,7 +219,7 @@ export function register(app: Express, deps: Deps): void {
   // The structure change review reads and accepts a batch whole, with a
   // steward's decisions. Same key as this queue, so it registers from here.
   registerStructureReview(app, deps);
-  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify } = deps;
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify, projectCurrency } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -559,7 +563,7 @@ export function register(app: Express, deps: Deps): void {
     void recordEvent(getPool(), {
       kind: "org",
       text:
-        `${org.length} proposal(s) accepted into draft ${made.id}: ${seats} seat(s)` +
+        `${org.length} proposal(s) accepted into draft ${made.id}: ${seats} role(s)` +
         (preview.blocked ? `, ${preview.blocked} blocked` : "") +
         (ignored.length
           ? `, ${ignored.reduce((n, i) => n + i.keys.length, 0)} key(s) not read in ${ignored.length} proposal(s)`
@@ -747,13 +751,25 @@ export function register(app: Express, deps: Deps): void {
    * `quest.approve` and not `intake.moderate`, because this is the write that
    * creates a payout obligation. The reward comes from the request body, which
    * means a person typed it, and `acceptQuestProposal` refuses without one.
+   *
+   * THE REWARD IS A VALUE AND WHAT IT PAYS (0265, Rye 2026-10-21): the worth in
+   * the village's currency, which every quest carries from the moment it is
+   * created, and the token amounts beside it, each checked against the
+   * village's rules before anything is written. Gratitude is never one of them.
    */
   app.post("/api/review/quests/:id/accept", async (req, res) => {
     if (!(await guardCapability(req, res, "quest.approve"))) return;
     const actor = await actorId(req);
     if (!actor) return res.status(401).json({ error: "auth_required", message: "Putting a quest on the board needs a named person" });
+    const rules = await questPayRules(getPool());
+    const typed = readWorkValueInput(req.body?.reward ?? {}, (slug) => payLineProblem(rules, slug));
+    if (!typed.ok) return res.status(400).json({ error: typed.error });
     const reward: HumanReward = {
-      gratitude: String(req.body?.reward?.gratitude ?? ""),
+      valueMinor: typed.valueMinor ?? null,
+      valueCurrency: defaultDisplayCurrency({ fiatCurrency: projectCurrency() }),
+      valueTokens: typed.tokens ?? null,
+      // 0285: the cash it pays at consent, in the same currency. Null pays none.
+      cashMinor: typed.cashMinor ?? null,
       stayCreditReward: req.body?.reward?.stayCreditReward ?? null,
       minStage: req.body?.reward?.minStage ?? null,
       requiresRole: req.body?.reward?.requiresRole ?? null,

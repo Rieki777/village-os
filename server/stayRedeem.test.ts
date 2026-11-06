@@ -35,7 +35,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import {
   MINT_FAUCET,
   balanceOf,
@@ -151,7 +151,7 @@ describe.skipIf(!configured)("a stay credit redeemed, and a stay credit spent", 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
+    pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the ballots.test.ts shape
     await loadTokenRegistry(pool);
     // `stay-credit` is registered at BOOT by the stays module and not by a
     // migration, so a scratch schema has to do what boot does. Without this

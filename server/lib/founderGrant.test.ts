@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { decideFounderGrant, parseFounderEmails } from "./founderGrant";
 
 const LIST = parseFounderEmails("founder@example.com, second@example.com");
+/** An account whose address its owner proved, so its password is theirs. */
+const PROVED = { passwordHash: "bcrypt-hash", emailVerifiedAt: "2026-10-31T09:00:00.000Z" };
 
 function decide(over: Partial<Parameters<typeof decideFounderGrant>[0]> = {}) {
   return decideFounderGrant({
@@ -15,6 +17,7 @@ function decide(over: Partial<Parameters<typeof decideFounderGrant>[0]> = {}) {
     emailVerified: true,
     currentRole: "member",
     founderEmails: LIST,
+    account: PROVED,
     ...over,
   });
 }
@@ -94,8 +97,26 @@ describe("granting the founder role", () => {
       emailVerified: true,
       currentRole: "founder",
       founderEmails: parseFounderEmails(""),
+      account: PROVED,
     });
     expect(d.grant).toBe(false);
+  });
+
+  it("REFUSES an account holding a password nobody proved belongs to the address (R104)", () => {
+    // Somebody may have signed up with the founder's address before the
+    // founder arrived. Granting that row the role hands the village to
+    // whoever typed the password, however verified the Google sign-in was.
+    const d = decide({ account: { passwordHash: "set-by-somebody", emailVerifiedAt: null } });
+    expect(d.grant).toBe(false);
+    expect(d.reason).toMatch(/never proved/);
+    // The field missing is the same fact as the field empty.
+    expect(decide({ account: { passwordHash: "set-by-somebody" } }).grant).toBe(false);
+  });
+
+  it("still grants an account with no password at all, which no stranger can hold the key to", () => {
+    // Bootstrap's founder before the claim link is used, and an account made
+    // by Google: there is no credential here for anybody else to keep.
+    expect(decide({ account: { passwordHash: "", emailVerifiedAt: null } }).grant).toBe(true);
   });
 
   it("matches case-insensitively, because Google returns what the user typed", () => {
@@ -111,7 +132,8 @@ describe("granting the founder role", () => {
       decide({ isExample: true }).reason,
       decide({ email: "stranger@example.com" }).reason,
       decide({ currentRole: "founder" }).reason,
+      decide({ account: { passwordHash: "set-by-somebody", emailVerifiedAt: null } }).reason,
     ]);
-    expect(reasons.size).toBe(5);
+    expect(reasons.size).toBe(6);
   });
 });

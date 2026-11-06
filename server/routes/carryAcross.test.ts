@@ -227,7 +227,7 @@ describe.skipIf(!configured)("carrying people across to a new chart", () => {
   it("refuses a seat that is not on the new chart", async () => {
     const r = await call("POST", MOVE, { seatingId: seatings.ana, toSeatId: "entity-steward" });
     expect(r.status).toBe(409);
-    expect(r.json.error).toBe("That seat is not part of the new chart.");
+    expect(r.json.error).toBe("That role is not part of the new chart.");
     expect(await liveIn("entity-steward")).toEqual([]);
   });
 

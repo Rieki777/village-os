@@ -258,7 +258,7 @@ export async function mirrorCalendarSources(pool: Pool, ctx: MirrorContext): Pro
         if (Number.isNaN(at.getTime())) continue;
         await write({
           kind: "seat-term", sourceId: `seat:${r.id}`,
-          title: `${r.role_name ?? "A seat"}: term ends`, startsAt: at, link: "/roles", colour: "#7c3aed",
+          title: `${r.role_name ?? "A role"}: term ends`, startsAt: at, link: "/roles", colour: "#7c3aed",
           isExample: Boolean(r.is_example),
         });
       }

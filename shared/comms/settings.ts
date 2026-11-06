@@ -97,6 +97,30 @@ export interface CommsSettings {
   webhookConnectedBy: string | null;
   /** The provider's id for the webhook when the button made it; null when the secret was pasted by hand. */
   webhookId: string | null;
+  /**
+   * What Resend said the key may do, the last time somebody asked: `full`
+   * (manage domains and webhooks) or `sending` (send, and nothing else).
+   */
+  keyRights: "full" | "sending" | null;
+  /** Which key that answer is about (`keyRightsFingerprint`). Another key means nobody has asked yet. */
+  keyRightsFor: string | null;
+}
+
+/**
+ * The key an answer about rights belongs to: where it lives, its last four
+ * characters and when it was saved. Never the key. A new key, from any door,
+ * reads as not yet asked, so an old answer cannot speak for it.
+ */
+export function keyRightsFingerprint(key: { source: string; last4: string | null; setAt: string | null }): string {
+  return `${key.source}:${key.last4 ?? ""}:${key.setAt ?? ""}`;
+}
+
+/** True only when Resend said THIS key may only send. */
+export function keyIsSendOnly(
+  settings: Pick<CommsSettings, "keyRights" | "keyRightsFor">,
+  key: { configured: boolean; source: string; last4: string | null; setAt: string | null },
+): boolean {
+  return key.configured && settings.keyRights === "sending" && settings.keyRightsFor === keyRightsFingerprint(key);
 }
 
 export const DEFAULT_COMMS_SETTINGS: Readonly<CommsSettings> = Object.freeze({
@@ -116,6 +140,8 @@ export const DEFAULT_COMMS_SETTINGS: Readonly<CommsSettings> = Object.freeze({
   webhookConnectedAt: null,
   webhookConnectedBy: null,
   webhookId: null,
+  keyRights: null,
+  keyRightsFor: null,
 });
 
 export const SENDER_NAME_MAX = 100;
@@ -208,6 +234,8 @@ export function backfillCommsSettings(stored: unknown): CommsSettings {
     webhookConnectedAt: instant(s.webhookConnectedAt),
     webhookConnectedBy: text(s.webhookConnectedBy, 255)?.trim() || null,
     webhookId: text(s.webhookId, 128)?.trim() || null,
+    keyRights: s.keyRights === "full" || s.keyRights === "sending" ? s.keyRights : null,
+    keyRightsFor: text(s.keyRightsFor, 200)?.trim() || null,
   };
 }
 

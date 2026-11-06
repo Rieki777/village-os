@@ -1,0 +1,98 @@
+{
+  "cta": {
+    "body": "The Steward journey starts with a single step, showing up to a Community Call and saying yes to what's calling you.",
+    "heading": "Ready to Begin?",
+    "primaryLabel": "Return to Steward Journey",
+    "secondaryLabel": "Explore Quests"
+  },
+  "hero": {
+    "intro": "This is a covenant between co-owners, not a legal document. Every Village Steward holds both, the rights that come from real ownership of this place, and the responsibilities that make those rights worth something.",
+    "eyebrow": "Village Steward Space",
+    "headline": "Your Rights and Responsibilities"
+  },
+  "rights": {
+    "intro": "These are not privileges granted from above. They are yours because you showed up, committed, and earned them through the journey.",
+    "items": [
+      {
+        "title": "Voice in Governance",
+        "description": "As a Village Steward you hold a genuine voice in how this community is shaped. You have the right to participate in Circle consent rounds, vote on decisions within your domain, and elect representatives to the Leadership Council. Your perspective matters at every level."
+      },
+      {
+        "title": "Apply for Seasonal Roles",
+        "description": "Once you complete your Co-Creator Right of Passage, you have the right to propose yourself for any seasonal role that fits your gifts, whether that's a Circle facilitation role, a land stewardship position, or a new role you help design. Roles are renewed by consent each season."
+      },
+      {
+        "title": "Advance Along the Path",
+        "description": "After multiple seasons serving in a role, you earn the right to be recognized as a Guide, a mentor and anchor for those coming after you. After seasons as a Guide, you may become a Sage, holding the highest governance voice and long-term vision for the village."
+      },
+      {
+        "title": "Access to Shared Land and Commons",
+        "description": "The land is yours to steward. You have the right to access all common areas, food forests, trails, gathering spaces, and natural features of the land. You can participate in every seasonal festival, community event, and village gathering."
+      },
+      {
+        "title": "Retreat and Wellness Access",
+        "description": "As a contributing steward, you have access to {village}'s wellness offerings at community rates. Retreat facilities, healing arts programs, and wellness services are part of what this community builds together, and you are part of what makes them possible."
+      }
+    ],
+    "eyebrow": "What You Hold",
+    "heading": "Your Rights as a Steward"
+  },
+  "ownership": {
+    "body": "Not in a passive sense. Not in a \"you paid for something\" sense. In the deepest sense, the land, the buildings, the culture, the economy, the future of this place are in your hands as much as anyone else's. Act from that space. Steward it as if you built it, because you are building it, right now.",
+    "heading": "You Are a Co-Owner of This Village"
+  },
+  "progression": {
+    "intro": "Your rights and voice grow with your commitment, in recognition that those who have poured the most into this place hold the most wisdom for its future.",
+    "stages": [
+      {
+        "level": "Co-Creator",
+        "years": "",
+        "description": "Full governance voice, seasonal role eligibility"
+      },
+      {
+        "level": "Guide",
+        "years": "",
+        "description": "Mentorship responsibilities, voice in cross-circle decisions"
+      },
+      {
+        "level": "Sage",
+        "years": "",
+        "description": "Highest governance voice, wisdom keeper, long-term strategic guidance for the village"
+      }
+    ],
+    "eyebrow": "Your Path Forward",
+    "heading": "Rights Deepen as You Grow",
+    "footnote": ""
+  },
+  "responsibilities": {
+    "intro": "Rights and responsibilities are two sides of the same belonging. One without the other isn't community, it's just a transaction.",
+    "items": [
+      {
+        "title": "Show Up for Your Circle",
+        "description": "Your Circle is counting on you. Attend meetings consistently, participate in consent rounds, and bring your whole self to the governance of your domain. If you can't make it, communicate early and often."
+      },
+      {
+        "title": "Act as a Co-Owner",
+        "description": "Every steward is a co-owner of this village. Not in a legal technicality, in a lived reality. Approach every decision, every piece of land, every shared resource as if it belongs to you and to everyone here, because it does. Pick up what needs picking up. Fix what needs fixing. Notice what others might miss."
+      },
+      {
+        "title": "Take On Quests",
+        "description": "Quests are how the village grows. As a steward you commit to actively taking on quests that stretch your contribution, building, tending, hosting, documenting, organizing. Your engagement keeps the community alive."
+      },
+      {
+        "title": "Practice the Community Ways",
+        "description": "{village} runs on Nonviolent Communication, authentic relating, and consent-based decision-making. As a steward, you commit to practicing these tools, not just knowing them. When conflict arises, you bring it to the appropriate process before it festers."
+      },
+      {
+        "title": "Contribute to the Seasonal Rhythm",
+        "description": "Every three months the community shapes its next season. Your presence in that vote matters. Attend seasonal transitions, participate in harvest circles and planting celebrations, and help decide collectively what {village} focuses on next."
+      },
+      {
+        "title": "Lift Others as You Rise",
+        "description": "Your path from Visitor to Co-Creator to Guide to Sage is a relay. As you advance, you carry responsibility for welcoming newcomers, mentoring Initiates, and making it easier for the next person to find their place here."
+      }
+    ],
+    "eyebrow": "What You Carry",
+    "heading": "Your Responsibilities as a Steward"
+  }
+}

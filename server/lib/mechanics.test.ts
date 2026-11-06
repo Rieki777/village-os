@@ -17,6 +17,7 @@ import {
   validateChangeSet,
   proposalMarkdown,
   displayChangeValue,
+  moduleChangeLabel,
   CHANGE_SET_CAP,
   EXECUTABLE_ITEM_KINDS,
   type ChangeItem,
@@ -68,25 +69,34 @@ describe("proposer standing", () => {
 
 describe("change-set validation", () => {
   const effective = (key: string) =>
-    ({ "gratitude.base_budget": "100", "gratitude.pool_per_cycle": "1000", "quest.consent_cap_mode": "posted" })[key] ?? "";
+    ({ "gratitude.base_budget": "100", "gratitude.pool_per_cycle": "1000", "governance.voice_weighting": "equal" })[key] ?? "";
 
   it("accepts a clean set and captures the live baseline", async () => {
     const { problems, normalized } = await validateChangeSet(
       noPool,
-      [{ key: "gratitude.base_budget", to: "150" }, { key: "quest.consent_cap_mode", to: "capped" }],
+      [{ key: "gratitude.base_budget", to: "150" }, { key: "governance.voice_weighting", to: "hypha-mirror" }],
       effective,
       0,
     );
     expect(problems).toEqual([]);
     expect(normalized).toEqual([
       { key: "gratitude.base_budget", from: "100", to: "150" },
-      { key: "quest.consent_cap_mode", from: "posted", to: "capped" },
+      { key: "governance.voice_weighting", from: "equal", to: "hypha-mirror" },
     ]);
   });
 
-  it("refuses founder-held dials — Ring 1 is not proposable", async () => {
-    const { problems } = await validateChangeSet(noPool, [{ key: "abuse.register_per_ip_hourly", to: "50" }], effective, 0);
-    expect(problems[0].problem).toContain("founder-held");
+  it("takes a proposal on a founder-held dial (Rye, 2026-09-25: anyone may propose any dial)", async () => {
+    const { problems, normalized } = await validateChangeSet(noPool, [{ key: "abuse.register_per_ip_hourly", to: "50" }], effective, 0);
+    expect(problems).toEqual([]);
+    expect(normalized.map((n) => n.key)).toEqual(["abuse.register_per_ip_hourly"]);
+  });
+
+  it("before the start, keeps founder-held dials apart from the rest, because a founder adopts them", async () => {
+    const mixed = [{ key: "abuse.register_per_ip_hourly", to: "50" }, { key: "gratitude.base_budget", to: "150" }];
+    const before = await validateChangeSet(noPool, mixed, effective, 0, undefined, { foundersHold: async () => true });
+    expect(before.problems.map((p) => p.problem).join(" ")).toContain("propose them separately");
+    const after = await validateChangeSet(noPool, mixed, effective, 0, undefined, { foundersHold: async () => false });
+    expect(after.problems).toEqual([]);
   });
 
   it("refuses out-of-bounds values — bounds are constitutional", async () => {
@@ -173,7 +183,7 @@ describe("the proposal document", () => {
 
   it("display values read like the game, not like storage", () => {
     expect(displayChangeValue("gratitude.require_message", "true")).toBe("On");
-    expect(displayChangeValue("quest.consent_cap_mode", "posted")).toBe("Exactly the posted amount");
+    expect(displayChangeValue("governance.voice_weighting", "equal")).toBe("One person, one voice");
     expect(displayChangeValue("gratitude.base_budget", "100")).toBe("100 Gratitude");
   });
 });
@@ -209,11 +219,14 @@ describe("parseHyphaProposalId", () => {
 describe("a change set that names a minting rule", () => {
   const SEAT_GRATITUDE = "rule-role.cycle-gratitude";
   const QUEST_VOICE = "rule-quest.completed-village-voice";
+  // A rule on a trigger that is not work, where a ceiling still binds (`ceilingBinds`).
+  const LIBRARY = "rule-library.contributed-credits";
 
   const rules = (): Map<string, MintRuleValues> =>
     new Map([
       [SEAT_GRATITUDE, { trigger: "role.cycle", tokenSlug: "gratitude", amount: 20, ceiling: 100, enabled: true }],
       [QUEST_VOICE, { trigger: "quest.completed", tokenSlug: "village-voice", amount: 10, ceiling: 100, enabled: true }],
+      [LIBRARY, { trigger: "library.contributed", tokenSlug: "credits", amount: 20, ceiling: 100, enabled: true }],
     ]);
   const readRules = async (ids: string[]) => {
     const all = rules();
@@ -293,16 +306,28 @@ describe("a change set that names a minting rule", () => {
     expect(same.problems[0].problem).toContain("would not change anything");
   });
 
-  it("refuses a set that builds a rule paying above its own ceiling", async () => {
+  it("refuses a set that builds a rule paying above its own ceiling, on a rule that is not work", async () => {
     const built = await validateChangeSet(
       noPool,
-      [{ key: key(SEAT_GRATITUDE, "amount"), to: "60" }, { key: key(SEAT_GRATITUDE, "ceiling"), to: "50" }],
+      [{ key: key(LIBRARY, "amount"), to: "60" }, { key: key(LIBRARY, "ceiling"), to: "50" }],
       effective,
       0,
       readRules,
     );
     expect(built.problems.length).toBe(1);
     expect(built.problems[0].problem).toContain("is above the");
+  });
+
+  it("lets a quest or role rule pay above its ceiling, because no ceiling binds work", async () => {
+    // Rye, 2026-10-22: "we definitely can't have caps on what things pay".
+    const built = await validateChangeSet(
+      noPool,
+      [{ key: key(QUEST_VOICE, "amount"), to: "600" }, { key: key(QUEST_VOICE, "ceiling"), to: "50" }],
+      effective,
+      0,
+      readRules,
+    );
+    expect(built.problems).toEqual([]);
   });
 
   it("accepts the amount and the ceiling moving together", async () => {
@@ -578,7 +603,7 @@ describe("the door governance.weight_mode travels through", () => {
     expect(problems[0].problem).toContain("constitutional");
   });
 
-  it("still refuses every other founder-held dial with the plain sentence", async () => {
+  it("sends the weighing token to the same door as the mode, since moving it alone reweighs every vote", async () => {
     const { problems } = await validateChangeSet(
       noPool,
       [{ key: "governance.weight_token", to: "village-voice" }],
@@ -586,7 +611,7 @@ describe("the door governance.weight_mode travels through", () => {
       0,
     );
     expect(problems.length).toBe(1);
-    expect(problems[0].problem).toContain("founder-held");
+    expect(problems[0].problem).toContain("mode switch");
   });
 });
 
@@ -740,5 +765,45 @@ describe("trials and the natural tier", () => {
   it("allows a trial of a dial that prices nothing", () => {
     expect(trialProblem([{ kind: "dial", key: "governance.vote_days", to: "9" }])).toBeNull();
     expect(trialProblem([])).toBeNull();
+  });
+});
+
+describe("a module switch inside a change set (Rye, 2026-10-09)", () => {
+  const lifecycleOf = (id: string) => (id === "forum" ? ("members" as const) : ("off" as const));
+  const opts = { moduleLifecycleOf: lifecycleOf, openModuleProposal: async () => null };
+  const sw = (moduleId: string, to: string) => ({ kind: "module_lifecycle", moduleId, to }) as ChangeItem;
+
+  it("keeps its kind on the stored change, so the executor reads a switch and not a dial", async () => {
+    const { problems, normalized } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0, undefined, opts);
+    expect(problems).toEqual([]);
+    expect(normalized).toEqual([{ key: "module:tools", from: "off", to: "members", kind: "module_lifecycle", moduleId: "tools" }]);
+    expect(asChangeItem(normalized[0] as any).kind).toBe("module_lifecycle");
+  });
+
+  it("refuses a core module, the vote's own module, an unknown one and a no-op", async () => {
+    const run = async (item: ChangeItem) =>
+      (await validateChangeSet(noPool, [item], () => "", 0, undefined, opts)).problems.map((p) => p.problem).join(" ");
+    expect(await run(sw("quests", "members"))).toContain("always on");
+    expect(await run(sw("governance", "off"))).toContain("cannot switch it");
+    expect(await run(sw("nothing-here", "members"))).toContain("no module by that name");
+    expect(await run(sw("forum", "members"))).toContain("already");
+  });
+
+  it("refuses a second proposal while one is still asking about the same module", async () => {
+    const { problems } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0, undefined, {
+      ...opts,
+      openModuleProposal: async () => "gmp-1",
+    });
+    expect(problems[0].problem).toContain("already open");
+  });
+
+  it("refuses without a reader for where the module stands, and never guesses", async () => {
+    const { problems } = await validateChangeSet(noPool, [sw("tools", "members")], () => "", 0);
+    expect(problems[0].problem).toContain("cannot read where a module stands");
+  });
+
+  it("labels the switch by the module's name, in lifecycle words", () => {
+    expect(moduleChangeLabel("module:tools")).not.toBe("module:tools");
+    expect(displayChangeValue("module:tools", "members")).toBe("On for members");
   });
 });

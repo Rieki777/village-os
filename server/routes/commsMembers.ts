@@ -112,7 +112,7 @@ export function register(app: Express, deps: MemberDeps): void {
     };
     await submissionsRepo.insert(entry);
     const who = firstNameOf(user.name) || "A member";
-    await notifyAdmins("submission", `${who} proposed a change to the village's email: ${about}`, `${COMMS_CHANGE}:${entry.id}`, "/admin?tab=submissions");
+    await notifyAdmins("submission", `${who} proposed a change to the village's email: ${about}`, `${COMMS_CHANGE}:${entry.id}`, "/admin?tab=submissions", [], { actorUserId: String(user.id) });
     res.json({ filed: true, id: entry.id, submittedAt });
   });
 }

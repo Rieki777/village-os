@@ -27,6 +27,34 @@ because nothing knows where to send it.
 
 ---
 
+## Two tokens cross now: voice and earned equity (0266)
+
+`earned-equity` is the accruing twin of the `equity` mirror, the way
+`village-voice` is the twin of `voice`. It is claimed through the SAME code:
+`server/lib/voiceClaim.ts` is a set of claim lanes, one per token, each naming
+its bridge (`sys:voice-bridge`, `sys:equity-bridge`), its settled account
+(`sys:voice-settled`, `sys:equity-settled`), its threshold dial
+(`economy.voice_claim_threshold`, `economy.equity_claim_threshold`) and its key
+prefix (`voice-claim`, `equity-claim`). One `voice_claims` table holds both,
+told apart by `token_slug`, and every read of it filters on that column.
+
+What this means for whoever builds the steps below:
+
+- **The dispatch must raise an intent for either lane.** The row's
+  `token_slug` says which mirror the proposal is about (`laneForToken` gives the
+  lane, and the lane's `mirror` the slug on Base). The same `intent_key`
+  uniqueness covers both, because the two lanes write different prefixes.
+- **The poller reconciles per lane.** `bridgeReconciliation(pool, lane)` takes the
+  lane and defaults to voice; call it once for each entry in `CLAIM_LANES`.
+- **`BRIDGE_DISPATCH_BUILT` gates both.** Flipping it opens equity claims too,
+  and `server/earnedEquity.test.ts` has its own case that throws the day it
+  turns true, beside the one in `server/voiceClaim.test.ts`.
+- **Settlement already handles both.** `settleVoiceClaim` (now an alias of
+  `settleClaim`) reads the lane off the stored row, so the receiver below needs
+  no change.
+
+---
+
 ## The DHO slug, and why setting it does NOT open claims
 
 The slug goes in **Admin → The Mint**, in the card at the top of the page. No
@@ -163,10 +191,13 @@ confiscated for losing a vote; the voice re-accrues and can be claimed again.
 - **No admin surface over `voice_claims`.** Nothing lists open claims, shows the
   reconciliation drift, or offers a repair button. `bridgeReconciliation` and
   `retryRefund` are the two calls such a page needs; the page is not built.
-- **No member surface.** `GET /api/me/profile` carries a `voice` block and three
-  `/api/me/voice-claim*` routes exist, and nothing in `client/src` reads any of
-  them. The chip a member would see is unbuilt, which is honest while claims are
-  gated shut, and is the first thing to build when they open.
+- **The member surface is the wallet, and it is read-only while claims are shut.**
+  `GET /api/me/wallet` (server/routes/wallet.ts) gives every token a row with the
+  claim chip's sentence and when claims open, and the profile's wallet card
+  renders it. Its claim button appears only when `claimable` is true, so none
+  renders in this build. `POST /api/me/wallet/claim` is the claim door for any
+  lane and answers 503 until the dispatch ships. The older
+  `/api/me/voice-claim*` routes still exist; cancel there settles any lane.
 - **The rates correction only reaches rows nobody edited.** `0076` repairs the
   seeded 0.1/0.5 to 10/50, scoped to rows still holding the old defaults. A
   village that deliberately set its own number keeps it, which is correct, and
@@ -202,10 +233,10 @@ shown that date as the next opening.
 ## Verifying it
 
 ```bash
-npx vitest run server/voiceClaim.test.ts
+npx vitest run server/voiceClaim.test.ts server/earnedEquity.test.ts
 ```
 
-22 tests. They cover the window arithmetic including the December rollover, the
+33 tests, plus 16 in `server/earnedEquity.test.ts` for the equity lane. They cover the window arithmetic including the December rollover, the
 chip's wording in every refusal state, the debit, both refunding endings, the
 confirmation, a cancel racing a confirm, two cancels racing each other, and the
 four ways the boot assertion refuses a secret. Each ledger case re-proves

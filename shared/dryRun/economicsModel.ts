@@ -85,6 +85,7 @@
 import { clockFor } from "../cycleClock";
 import { VARIABLES_BY_KEY, parseVariable } from "../gameVariables";
 import { shareOfTotal, topShares } from "../governanceShare";
+import { GRATITUDE_NEVER_PAYS } from "../workValue";
 import type {
   DomainModel,
   Flag,
@@ -932,9 +933,10 @@ function stepCycle(
   // ── 1. Confirmed quests fire the quest.completed rules ────────────────────
   //
   // the claim pricing in server/lib/economy.ts, guard for guard and
-  // in its order. It skips recognition (the consent route already minted it),
-  // it refuses a from_source rule outright because a quest posts no amount in
-  // any token but recognition, it stays quiet about a rule set to zero, it
+  // in its order. It skips recognition (a consent mints none since 41512d9, and
+  // Gratitude is only ever sent member to member, Rye 2026-10-23), it refuses
+  // a from_source rule outright because this model carries no quest's own
+  // list, it stays quiet about a rule set to zero, it
   // reports a rule the engine cannot honour, and it pays the CLAIMANT whatever
   // the rule's `recipient` column says.
   //
@@ -944,16 +946,11 @@ function stepCycle(
   // distribution there is and is said here rather than buried.
   const questRules = rulesForTrigger(state.mintRules ?? [], QUEST_TRIGGER);
   const questsConfirmed = confirmationsThisCycle(state.quests, assumptions.questRateMultiplier, rng);
-  const perQuestRecognition = state.quests ? state.quests.gratitudePerConfirmation : BigInt(0);
+  // NO RECOGNITION PER QUEST. This posted the average Gratitude a confirmed
+  // quest used to mint, read off the tables; no consent mints any now, and a
+  // forecast that paid it would show Gratitude arriving by a door that is shut.
   for (let q = 0; q < questsConfirmed && members.length > 0; q += 1) {
     const member = members[q % members.length];
-    // The recognition a confirmed quest pays, observed as an average off the
-    // tables. `server/index.ts:20616` posts it as a bare `postTransfer` with
-    // no `gratitude_log` row, which is why it never reaches the pool split
-    // below.
-    if (perQuestRecognition > BigInt(0) && recognition && recognition.faucet) {
-      post(book, recognition.faucet, member.accountId, RECOGNITION_SLUG, perQuestRecognition, "quest_consent");
-    }
     for (let r = 0; r < questRules.length; r += 1) {
       const rule = questRules[r];
       if (rule.tokenSlug === RECOGNITION_SLUG) continue;
@@ -972,31 +969,13 @@ function stepCycle(
         noteUnpayable(unpayable, rule, problem);
         continue;
       }
-      // THE CEILING BINDS HERE, per occurrence, exactly where
-      // the claim pricing binds it (server/lib/economy.ts). A
-      // ceiling of zero refuses into the same `unpayable` list, and every
-      // other ceiling clamps.
-      const ruleDecimals = decimalsOf(tokens, rule.tokenSlug);
-      const capped = ceilingOutcomeMinor(rule, rule.amount, ruleDecimals);
-      if (capped.refusal) {
-        noteUnpayable(unpayable, rule, capped.refusal);
-        continue;
-      }
-      if (capped.paid < rule.amount) activity.clampedAway += rule.amount - capped.paid;
-      if (capped.paid <= BigInt(0)) {
-        // The cap was written above zero and still clamps to nothing, which is
-        // a cap below the token's own resolution. The engine reports exactly
-        // this, in these words (server/lib/economy.ts:1377).
-        noteUnpayable(
-          unpayable,
-          rule,
-          `${writtenCeiling(rule, ruleDecimals).raw} is smaller than the smallest amount this token can hold`,
-        );
-        continue;
-      }
+      // NO CEILING BINDS WORK (Rye, 2026-10-22; `ceilingBinds` in
+      // shared/workValue.ts), so a quest posts the rule's own amount in full,
+      // exactly as `quoteWorkPay` prices it (server/lib/economy.ts).
+      const paid = rule.amount;
       const faucet = tokenBySlug(tokens, rule.tokenSlug)!.faucet!;
-      if (post(book, faucet, member.accountId, rule.tokenSlug, capped.paid, "quest_consent")) {
-        activity.minted += capped.paid;
+      if (post(book, faucet, member.accountId, rule.tokenSlug, paid, "quest_consent")) {
+        activity.minted += paid;
         activity.fired += 1;
       }
     }
@@ -1083,19 +1062,18 @@ function stepCycle(
   for (let r = 0; r < roleRules.length; r += 1) {
     const rule = roleRules[r];
     activityFor(ruleActivity, rule);
+    // Gratitude pays no role, as in `runSettlement` (server/lib/economy.ts).
+    if (rule.tokenSlug === RECOGNITION_SLUG) {
+      noteUnpayable(unpayable, rule, GRATITUDE_NEVER_PAYS);
+      continue;
+    }
     const problem = ruleCannotPay(tokens, rule.tokenSlug);
     if (problem) {
       noteUnpayable(unpayable, rule, problem);
       continue;
     }
-    // A ceiling of zero is reported ONCE for the whole rule and never once per
-    // seat, exactly as `runSettlement` reports it (server/lib/economy.ts:1515),
-    // and only when the rule claims to pay something.
-    const capped = ceilingOutcomeMinor(rule, rule.amount ?? BigInt(0), decimalsOf(tokens, rule.tokenSlug));
-    if ((rule.amount ?? BigInt(0)) > BigInt(0) && capped.refusal) {
-      noteUnpayable(unpayable, rule, capped.refusal);
-      continue;
-    }
+    // No ceiling takes a role rule out of the run: none binds work (Rye,
+    // 2026-10-22), exactly as in `runSettlement` (server/lib/economy.ts).
     payableRoleRules.push(rule);
   }
   for (let m = 0; m < members.length; m += 1) {
@@ -1107,12 +1085,8 @@ function stepCycle(
         const rule = payableRoleRules[r];
         if (rule.amount === null || rule.amount <= BigInt(0)) continue;
         const activity = activityFor(ruleActivity, rule);
-        // Clamped per seat, like the quest path and for the same reason: the
-        // ceiling is what the village voted on and the amount is what it typed
-        // first (server/lib/economy.ts:1560).
-        const paid = ceilingOutcomeMinor(rule, rule.amount, decimalsOf(tokens, rule.tokenSlug)).paid;
-        if (paid < rule.amount) activity.clampedAway += rule.amount - paid;
-        if (paid <= BigInt(0)) continue;
+        // In full per seat, like the quest path: no ceiling binds work.
+        const paid = rule.amount;
         const faucet = tokenBySlug(tokens, rule.tokenSlug)!.faucet!;
         if (post(book, faucet, member.accountId, rule.tokenSlug, paid, "role_cycle")) {
           activity.minted += paid;
@@ -1416,7 +1390,7 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
       severity: "warning",
       cycle,
       sentence: "This village has not started its Game, so every posting out of a faucet is refused and no token is issued at all.",
-      actionable: "Carry the launch vote. Until it does, quest rewards, seat payouts and the value pool all pay nothing.",
+      actionable: "Carry the launch vote. Until it does, quest rewards, role payouts and the value pool all pay nothing.",
     });
   }
 
@@ -1512,6 +1486,8 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
     const rule = rules[i];
     if (!rule.enabled) continue;
     if (ruleCannotPay(tokens, rule.tokenSlug)) continue;
+    // A rule that pays work has no ceiling to contradict (Rye, 2026-10-22).
+    if (rule.trigger === QUEST_TRIGGER || rule.trigger === ROLE_TRIGGER) continue;
     const decimals = decimalsOf(tokens, rule.tokenSlug);
     /*
      * TWO DIFFERENT VILLAGES ARRIVE HERE HOLDING `ceiling: BigInt(0)`, and
@@ -1594,8 +1570,8 @@ function flagsOf(state: SimState, cycle: number, fallback: EconomicsAssumptions)
         cycle,
         sentence: `${top[0].id} holds ${percent(top[0].share)} of this village's ${VOICE_SLUG} after cycle ${cycle}, which is above the third of the whole this preview calls out. The three largest holders are ${named}, out of ${humanUnits(memo.voiceTotal, decimals)} held across the roll.`,
         actionable: alsoVotes
-          ? `The weight mode is token and the weight token is ${VOICE_SLUG}, so this share is also voting power. Spread the seats, lower the seat payout, or move governance.weight_mode off token.`
-          : `Nothing here blocks, and nothing here is wrong on its own. Watch it: spread the seats the role.cycle rules pay, or lower what a seat pays, if the village wants Voice spread wider.`,
+          ? `The weight mode is token and the weight token is ${VOICE_SLUG}, so this share is also voting power. Spread the roles, lower the role payout, or move governance.weight_mode off token.`
+          : `Nothing here blocks, and nothing here is wrong on its own. Watch it: spread the roles the role.cycle rules pay, or lower what a role pays, if the village wants Voice spread wider.`,
       });
     }
   }

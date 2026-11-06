@@ -1,5 +1,6 @@
 // Platform game API client. All project-specific naming comes from /api/game/config.
 import { useEffect, useState } from "react";
+import { writeStored } from "./safeStorage";
 // Both type-only, so neither module reaches the bundle. The server serves
 // these two unions verbatim, and re-typing their members here would be the
 // hand-kept mirror the house rules warn about: a branch added in `shared/`
@@ -8,14 +9,24 @@ import type { StageRule } from "@shared/gameConfig";
 import type { Capability } from "@shared/capabilities";
 import type { PlanWindowPayload } from "@shared/seasonPlans";
 import { removeStored, storedText } from "./safeStorage";
+import { villageWord, type CatalystLabel } from "@shared/villageWord";
 
 /**
  * The ONE localStorage key for the session token. Exported so nothing else
  * re-types the literal: eight hand-written copies is eight chances for a
  * fork's rename to miss one and split the session in half (a page reading a
  * key nothing writes reads as permanently signed out).
+ *
+ * "village-auth-token" since readiness R066: the key named the first village,
+ * in every village's browser. Nobody is signed out by the rename, because
+ * `authToken()` below moves a session still held under the old key the first
+ * time it reads, and `clearAuthToken()` drops both, so a sign-out can never
+ * be undone by the old key being moved back.
  */
-export const TOKEN_KEY = "amora-auth-token";
+export const TOKEN_KEY = "village-auth-token";
+
+/** Where the session lived until R066. Read only to move it; never written. */
+export const LEGACY_TOKEN_KEY = "amora-auth-token"; // brand-ok: the old session key, read once to move a member's session to TOKEN_KEY (R066)
 
 export interface BrandImages {
   hero?: string;
@@ -91,19 +102,38 @@ export interface PublicGameConfig {
   currency: {
     name: string;
     nameLower: string;
+    /** What the village calls all its tokens together (Admin then Tokens). Older servers omit it. */
+    collectiveName?: string;
     /** The VALUE token the cycle pool distributes across recognition — named
      *  in the token registry (Admin → Tokens), so a fork's rename reaches
      *  every page that mentions it. Recognition itself carries no financial
      *  value; this is the tracked value it steers each cycle. */
     value?: { slug: string; name: string };
+    /** Every registry token's name, by slug (readiness R084). Read through
+     *  `useTokenNameFor` (client/src/hooks/useTokenNameFor.ts). Older servers omit it. */
+    names?: Record<string, string>;
   };
   images: BrandImages;
-  paths: { id: string; label: string; role: string; route: string }[];
+  /** In the village's own words (Admin, Paths & Stages). `description` is absent on an older server. */
+  paths: { id: string; label: string; role: string; route: string; description?: string }[];
   stages: GameStagePublic[];
+  /** The stage ladder's name, in the village's words. Absent on an older server: read it through `useLadderTitle`. */
+  ladder?: { title: string };
   season: SeasonState;
   /** Whether this village serves the brochure pages (shared/brochure.ts).
    *  Absent on a server older than 1.2.0, which reads as off. */
   brochurePages?: boolean;
+  /** The story pages this village switched off one by one, while the rest
+   *  are served. Absent on an older server, which reads as none. */
+  brochureHidden?: string[];
+  /** Site-wide words from Admin, Pages, Whole site. Absent on an older server. */
+  site?: {
+    footerSignoff: string;
+    /** Every story page's name and second line, resolved (Admin, Pages, Whole site). */
+    menu?: Record<string, { label: string; subtitle: string }>;
+    /** The story pages whose names the village changed; the footer keeps its own wording otherwise. */
+    menuChanged?: string[];
+  };
 }
 
 export interface SeasonEntry {
@@ -140,13 +170,45 @@ export interface SeasonState {
 
 // One shared, cached fetch of the public config so many components don't each hit it.
 let _configCache: Promise<PublicGameConfig | null> | null = null;
+// The resolved config, so a component mounting after it arrived starts with it
+// instead of rendering empty, painting, and rendering again in an effect.
+let _configNow: PublicGameConfig | null = null;
+/** The cached config as it stands, for code that is not a component (null before the first read). */
+export function configNow(): PublicGameConfig | null {
+  return _configNow;
+}
 export function fetchConfigCached(): Promise<PublicGameConfig | null> {
   if (!_configCache) {
     _configCache = fetch("/api/game/config")
       .then((r) => (r.ok ? r.json() : null))
+      .then((c) => { _configNow = c; return c; })
       .catch(() => null);
   }
   return _configCache;
+}
+
+/** Every mounted reader of the config, so a fresh one reaches them all at once. */
+const _configReaders = new Set<(c: PublicGameConfig) => void>();
+
+/**
+ * READ THE CONFIG AGAIN AND HAND IT TO EVERY READER ON THE PAGE.
+ *
+ * The cache above is filled once per page load, so a founder who saved a new
+ * name or new pictures in Admin went on seeing the old ones in their own tab,
+ * header and all, until a full reload, under a note saying the change shows
+ * instantly (audit item 24). A save that changes identity calls this after
+ * the server answers: the shell, every page hook and the brand images then
+ * repaint with what the server now serves. A failed read changes nothing.
+ */
+export async function refreshGameConfig(): Promise<PublicGameConfig | null> {
+  const fresh = await fetch("/api/game/config")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (!fresh) return null;
+  _configNow = fresh;
+  _configCache = Promise.resolve(fresh);
+  _configReaders.forEach((read) => read(fresh));
+  return fresh;
 }
 
 /**
@@ -157,11 +219,15 @@ export function fetchConfigCached(): Promise<PublicGameConfig | null> {
  * never as "this village has no identity".
  */
 export function useGameConfig(): PublicGameConfig | null {
-  const [config, setConfig] = useState<PublicGameConfig | null>(null);
+  const [config, setConfig] = useState<PublicGameConfig | null>(() => _configNow);
   useEffect(() => {
     let alive = true;
     fetchConfigCached().then((c) => { if (alive && c) setConfig(c); });
-    return () => { alive = false; };
+    _configReaders.add(setConfig);
+    return () => {
+      alive = false;
+      _configReaders.delete(setConfig);
+    };
   }, []);
   return config;
 }
@@ -235,65 +301,8 @@ export const CATALYST_FALLBACK = "Catalyst";
 export const ROLE_FALLBACK = "Role";
 export const SEAT_FALLBACK = "Seat";
 
-/**
- * "a" or "an" for a word a founder typed, by its first letter.
- *
- * A HEURISTIC, and a knowingly imperfect one: it reads "Elder" correctly and
- * would read a hypothetical "Union" wrongly. The alternative was to write
- * every sentence around the article, which makes every render site read
- * stiffly to avoid a case no village has asked for. Exported and pinned by
- * `client/src/lib/catalystLabel.test.ts` rather than left to be inferred.
- */
-export function articleFor(word: string): string {
-  return /^[aeiou]/i.test(String(word ?? "").trim()) ? "an" : "a";
-}
-
-/**
- * The plural of a word a founder typed.
- *
- * English regular plurals only, which covers every word a village has plausibly
- * chosen for this: Catalysts, Founders, Stewards, Elders, Keepers, Weavers,
- * Guardians. The two irregular endings that do come up in practice are handled
- * (a trailing consonant plus y takes "ies", a sibilant takes "es"); a genuinely
- * irregular word would read wrongly, and rewriting every plural sentence to
- * dodge it made them all read worse than the one case that might be wrong.
- * Pinned by `client/src/lib/catalystLabel.test.ts`.
- */
-export function pluralFor(word: string): string {
-  const w = String(word ?? "").trim();
-  if (!w) return w;
-  if (/[^aeiou]y$/i.test(w)) return `${w.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/i.test(w)) return `${w}es`;
-  return `${w}s`;
-}
-
-export interface CatalystLabel {
-  /** The word itself, capitalised as the village typed it. */
-  name: string;
-  /** "a" or "an", whichever this word takes. */
-  a: string;
-  /** The two together, because nearly every site needs both. */
-  aName: string;
-  /** The same, capitalised, for the start of a sentence. */
-  aNameCap: string;
-  /** More than one of them. */
-  plural: string;
-}
-
-/**
- * One renameable word, with its article and its plural worked out once.
- *
- * `CatalystLabel` was always this shape and only ever had one caller. Three
- * villages' worth of words now ride it (whoever runs the place, the position
- * somebody holds, one person's occupancy of that position), so the derivation
- * lives here and the hooks below are three lines each. Copying the article and
- * plural logic per word is how two of them end up disagreeing about "an".
- */
-export function villageWord(typed: unknown, fallback: string): CatalystLabel {
-  const name = String(typed ?? "").trim() || fallback;
-  const a = articleFor(name);
-  return { name, a, aName: `${a} ${name}`, aNameCap: a === "an" ? `An ${name}` : `A ${name}`, plural: pluralFor(name) };
-}
+/** The article, the plural and the word together: shared/villageWord.ts, kept importable from here. */
+export { articleFor, pluralFor, villageWord, type CatalystLabel } from "@shared/villageWord";
 
 /** The label, live. Reads the platform default until the config arrives. */
 export function useCatalyst(): CatalystLabel {
@@ -312,7 +321,11 @@ export function useRoleWord(): CatalystLabel {
   return villageWord(useGameConfig()?.project?.roleName, ROLE_FALLBACK);
 }
 
-/** What this village calls one person's OCCUPANCY of a role. Default "Seat". */
+/**
+ * The village's verb for putting someone into a role. Default "Seat" ("Seat someone").
+ * The NOUN is always the role word: Rye ruled on 2026-10-21 that members say role,
+ * never "a seat", so this word labels the act and never the thing held.
+ */
 export function useSeatWord(): CatalystLabel {
   return villageWord(useGameConfig()?.project?.seatName, SEAT_FALLBACK);
 }
@@ -320,9 +333,12 @@ export function useSeatWord(): CatalystLabel {
 /** Live (brand-overlaid) hero image URLs, empty until loaded — callers fall back
  * to their own default so the page never renders imageless. */
 export function useBrandImages(): BrandImages {
-  const [images, setImages] = useState<BrandImages>({});
+  const [images, setImages] = useState<BrandImages>(() => _configNow?.images ?? {});
   useEffect(() => {
     fetchConfigCached().then((c) => { if (c?.images) setImages(c.images); });
+    const read = (c: PublicGameConfig) => { if (c.images) setImages(c.images); };
+    _configReaders.add(read);
+    return () => { _configReaders.delete(read); };
   }, []);
   return images;
 }
@@ -418,7 +434,22 @@ export function authToken(): string | null {
   // throw on any page that fetched anything. A blocked store reads as no
   // session, which is true: it never held one. The member is told why when
   // they sign in (client/src/lib/signInStorage.ts).
-  return storedText("local", TOKEN_KEY);
+  return storedText("local", TOKEN_KEY) ?? movedLegacyToken();
+}
+
+/**
+ * A session still under the old key, moved to the new one (R066).
+ *
+ * Asked only when the new key holds nothing, so it runs once per browser and
+ * costs a single read after that. The token is returned whether or not the
+ * move lands: a store that refuses the write keeps the old key, and the member
+ * stays signed in on it rather than being signed out by a full disk.
+ */
+function movedLegacyToken(): string | null {
+  const old = storedText("local", LEGACY_TOKEN_KEY);
+  if (!old) return null;
+  if (writeStored("local", TOKEN_KEY, old).status === "saved") removeStored("local", LEGACY_TOKEN_KEY);
+  return old;
 }
 
 /**
@@ -427,8 +458,11 @@ export function authToken(): string | null {
  * left the notification bell and the module manifest permanently anonymous.
  */
 export function clearAuthToken(): void {
-  // Dropping a session never refuses. See AuthContext.logout.
+  // Dropping a session never refuses. See AuthContext.logout. BOTH keys: a
+  // session left under the old one would be moved straight back on the next
+  // read, which would undo the sign-out (R066).
   removeStored("local", TOKEN_KEY);
+  removeStored("local", LEGACY_TOKEN_KEY);
 }
 
 export async function gameFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -571,6 +605,11 @@ export interface QuestClaim {
    * that difference is what the reward moment names.
    */
   credited?: number;
+  /**
+   * The reward moment names this consent's pay (server/lib/rewardMoment.ts,
+   * `claimsAnnouncedHere`), so the quest page does not celebrate it again.
+   */
+  announcedByRewardMoment?: boolean;
 }
 
 export async function fetchGameMe(): Promise<GameMe | null> {

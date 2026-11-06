@@ -63,6 +63,8 @@ export interface FakeResend {
   failNext(status: 429 | 500 | 422, times?: number): void;
   /** How the next domain created or checked answers. */
   setDomainStatus(status: "verified" | "pending"): void;
+  /** Treat this key as Sending access: it may send, and every other call is refused as Resend refuses it. */
+  sendOnly(apiKey: string): void;
   /** The signing secret the last `POST /webhooks` handed out, or the one set here. */
   webhookSecret(): string;
   /** Deliver one signed delivery report to `url`, as the real provider would. */
@@ -119,13 +121,14 @@ export async function startFakeResend(opts: { apiKey?: string; port?: number } =
   const domains = new Map<string, FakeDomain>();
   const failures: Array<429 | 500 | 422> = [];
   let domainStatus: "verified" | "pending" = "verified";
+  const sendOnlyKeys = new Set<string>();
   let secret = makeWebhookSecret();
   let sequence = 0;
 
   const authorised = (req: http.IncomingMessage): boolean => {
     const header = String(req.headers.authorization ?? "");
     if (!header.startsWith("Bearer ") || header.length <= "Bearer ".length) return false;
-    return opts.apiKey ? header === `Bearer ${opts.apiKey}` : true;
+    return opts.apiKey ? header === `Bearer ${opts.apiKey}` || sendOnlyKeys.has(header.slice("Bearer ".length)) : true;
   };
 
   const acceptOne = (body: any, idempotencyKey: string | null): string => {
@@ -151,6 +154,10 @@ export async function startFakeResend(opts: { apiKey?: string; port?: number } =
       requests.push({ method, path, headers: req.headers, body, at: Date.now() });
 
       if (!authorised(req)) return refusal(res, 401, "missing_api_key", "Missing or wrong API key.");
+      const bearer = String(req.headers.authorization ?? "").slice("Bearer ".length);
+      if (sendOnlyKeys.has(bearer) && !(method === "POST" && (path === "/emails" || path === "/emails/batch"))) {
+        return refusal(res, 401, "restricted_api_key", "This API key is restricted to only send emails");
+      }
 
       if (method === "POST" && (path === "/emails" || path === "/emails/batch")) {
         const injected = failures.shift();
@@ -230,6 +237,9 @@ export async function startFakeResend(opts: { apiKey?: string; port?: number } =
     },
     setDomainStatus(status) {
       domainStatus = status;
+    },
+    sendOnly(apiKey) {
+      sendOnlyKeys.add(apiKey);
     },
     webhookSecret: () => secret,
     async deliverWebhook(url, report, input) {

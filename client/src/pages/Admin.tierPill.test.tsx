@@ -6,9 +6,10 @@
  * Integrations card that pill sat one span away from the key's own status,
  * "Not connected", so a founder read two answers to one question: is it
  * connected or not? The pill now reads "Outside service" on every surface
- * that draws one: the Integrations card, the admin Module Library card, the
- * tier filter on that library, the listing line under an enabled card, and
- * the public library card.
+ * that draws one: the Integrations card, the tier line on a module's page,
+ * the tier filter on the library shelf, the listing line under an enabled
+ * module, and the public library card. (The admin Module Library card and its
+ * filter moved into the library on 2026-10-09.)
  *
  * Each negative here ("no element reads connected") is paired with a known
  * positive of the same shape: the managed pill, found by the same exact-text
@@ -20,7 +21,10 @@ import { render, screen, within } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { IntegrationsTab, ModulesTab } from "./Admin";
+import { IntegrationsTab } from "./Admin";
+import ModuleStewardPanel from "@/components/admin/ModuleStewardPanel";
+import { ShelfToolbar } from "./Modules";
+import { NO_FILTERS } from "@/components/modules/shelfFilter";
 import ModuleCard, { type CatalogModule } from "@/components/modules/ModuleCard";
 
 /** Exactly the old pill's word, any case, as the whole text of one element. */
@@ -81,7 +85,7 @@ describe("the Integrations card", () => {
   });
 });
 
-describe("the admin Module Library", () => {
+describe("the Module Library, where the admin tab's cards and filters went (2026-10-09)", () => {
   const row = (over: Record<string, unknown>) => ({
     description: "A module",
     core: false,
@@ -93,54 +97,45 @@ describe("the admin Module Library", () => {
     ready: { ready: true },
     requires: [],
     recommends: [],
+    capabilities: [],
     maxLifecycle: "public",
     examplesAvailable: false,
     showingExamples: false,
     config: {},
+    health: [],
     ...over,
   });
-  const MODULES = [
-    row({
+  const steward = { mode: "steward" as const, launched: false, canSwitch: true, canPause: true };
+
+  it("names the tier the village accepted in the same words, on the module's page", async () => {
+    const m = row({
       id: "outside-records",
       name: "Outside Records",
       tier: "connected",
       lifecycle: "members",
       served: "members",
       listing: { tier: "connected", contractVersion: "1.2", acceptedAt: null, acceptedBy: null },
-    }),
-    row({ id: "lent-thing", name: "Lent Thing", tier: "managed" }),
-    row({ id: "village-calendar", name: "Village Calendar", tier: "included" }),
-  ];
-
-  it("puts Outside service on the card, and never connected as a pill", async () => {
-    stub({ "/admin/modules": { modules: MODULES, orphans: [], hypha: {} }, "/admin/variables": { categories: [] } });
-    render(<ModulesTab password="secret" />);
-
-    const heading = await screen.findByRole("heading", { name: /Outside Records/ });
-    expect(within(heading).getByText("Outside service").tagName).toBe("SPAN");
-    // Known positive, same query on the same markup.
-    const managed = screen.getByRole("heading", { name: /Lent Thing/ });
-    expect(within(managed).getByText(/^managed$/i).tagName).toBe("SPAN");
-    // An included module wears no tier pill at all.
-    const included = screen.getByRole("heading", { name: /Village Calendar/ });
-    expect(within(included).queryByText("Outside service")).toBeNull();
-
-    expect(screen.queryByText(OLD_PILL)).toBeNull();
+    });
+    render(<ModuleStewardPanel m={m} all={[m]} extra={null} viewer={steward} onChanged={() => {}} />);
+    screen.getByRole("button", { name: "Details" }).click();
+    expect(await screen.findByText(/Turned on as "Outside service" under library contract 1\.2/)).toBeInTheDocument();
+    expect(screen.queryByText(/as "?connected/)).toBeNull();
+    // Known positive for the tier line in the same drawer.
+    expect(screen.getByText("Outside service", { selector: "span" })).toBeInTheDocument();
   });
 
-  it("names the tier the village accepted in the same words", async () => {
-    stub({ "/admin/modules": { modules: MODULES, orphans: [], hypha: {} }, "/admin/variables": { categories: [] } });
-    render(<ModulesTab password="secret" />);
-
-    expect(await screen.findByText(/enabled as "Outside service" under library contract 1\.2/)).toBeInTheDocument();
-    expect(screen.queryByText(/enabled as "?connected/)).toBeNull();
-  });
-
-  it("filters on the tier id and shows the pill's words", async () => {
-    stub({ "/admin/modules": { modules: MODULES, orphans: [], hypha: {} }, "/admin/variables": { categories: [] } });
-    render(<ModulesTab password="secret" />);
-
-    const filter = (await screen.findByLabelText("Filter by tier")) as HTMLSelectElement;
+  it("filters the shelf on the tier id and shows the pill's words", () => {
+    render(
+      <ShelfToolbar
+        f={NO_FILTERS}
+        set={() => {}}
+        choices={{ tiers: ["connected", "included", "managed"], domains: [], prices: ["free"] }}
+        showState
+        count={3}
+        total={3}
+      />,
+    );
+    const filter = screen.getByLabelText("Filter by tier") as HTMLSelectElement;
     const byValue = (v: string) => Array.from(filter.options).find((o) => o.value === v);
     // The data keeps the id; only the visible label changed.
     expect(byValue("connected")?.textContent).toBe("Outside service");
@@ -148,6 +143,9 @@ describe("the admin Module Library", () => {
     expect(byValue("included")?.textContent).toBe("included");
     expect(byValue("managed")?.textContent).toBe("managed");
     expect(Array.from(filter.options).some((o) => OLD_PILL.test(o.textContent ?? ""))).toBe(false);
+    // The state filter the admin tab never had, for signed-in readers.
+    const show = screen.getByLabelText("Show") as HTMLSelectElement;
+    expect(Array.from(show.options).map((o) => o.textContent)).toEqual(["Every module", "On here", "Not on yet"]);
   });
 });
 

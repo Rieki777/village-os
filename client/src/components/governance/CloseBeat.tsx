@@ -162,7 +162,7 @@ export default function CloseBeat({
 
       {fixedWords ? (
         <p className="mt-4 text-sm text-stone-700 leading-relaxed">
-          The record keeps fixed words for a seat application, so it never names the member who applied. Members read the
+          The record keeps fixed words for a role application, so it never names the member who applied. Members read the
           application on its own page.
         </p>
       ) : (

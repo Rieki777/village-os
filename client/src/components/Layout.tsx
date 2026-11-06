@@ -1,18 +1,23 @@
 import { Link, useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import NotificationBell from "@/components/NotificationBell";
 import NotificationToasts from "@/components/NotificationToasts";
+import RewardMoment from "@/components/RewardMoment";
+import SeasonSummaryOffer from "@/components/seasonSummary/SeasonSummaryOffer";
 import TaskCountBadge from "@/components/tasks/TaskCountBadge";
+import MessageCountBadge from "@/components/messages/MessageCountBadge";
 import { altOr, useGameConfig } from "@/lib/gameApi";
 import { NAV, ACCOUNT_MENU, isGroup, type NavLink, type NavGroup } from "@/config/nav";
 import { useTokenName } from "@/hooks/useTokenNames";
 import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
 import NextStepTrail from "./NextStepTrail";
+import { SITE_FOOTER_SIGNOFF } from "@shared/pageContent/site";
+import { storyPageShown } from "@/lib/brochure";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -33,6 +38,9 @@ export default function Layout({ children }: LayoutProps) {
   // the logo boxes reserve their height (64px header / 90px footer) so the
   // page never shifts on first paint, and outside links simply don't render.
   const cfg = useGameConfig();
+  // The footer's sign-off is the village's own words (Admin, Pages, Whole site),
+  // served inside the config. Unknown until the config answers.
+  const signoff = cfg ? (cfg.site?.footerSignoff ?? SITE_FOOTER_SIGNOFF) : undefined;
   const siteUrl = String(cfg?.project?.siteUrl ?? "").trim();
   const eventsUrl = String(cfg?.project?.eventsUrl ?? "").trim();
   const villageName = String(cfg?.project?.name ?? "").trim();
@@ -50,18 +58,30 @@ export default function Layout({ children }: LayoutProps) {
   const role = user?.role;
   // The brochure pages are the first village's own story (shared/brochure.ts).
   // A village that does not serve them gets none of their menu entries or
-  // footer links; while the config loads they stay out rather than flash in.
-  const brochureOn = cfg?.brochurePages === true;
+  // footer links, and a page it switched off on its own (Admin, Pages, "Show
+  // this page") loses its entry and its link the same way. While the config
+  // loads they stay out rather than flash in.
+  const storyShown = (href: string) => storyPageShown(cfg, href);
   const visible = (item: NavLink) =>
     moduleOn(item.module) &&
     (!item.unlessModule || !moduleOn(item.unlessModule)) &&
-    (!item.brochure || brochureOn) &&
+    (!item.brochure || storyShown(item.href)) &&
     (!item.roles || (!!role && item.roles.includes(role)));
 
   // An entry named after a token carries the village's word for it, and its
   // href stays put. Substituted HERE, once, because both the desktop dropdown
   // and the mobile drawer render their items through groupItems.
-  const withTokenLabel = (link: NavLink): NavLink => (link.token ? { ...link, label: tokenName } : link);
+  const withTokenLabel = (link: NavLink): NavLink => {
+    if (link.token) return { ...link, label: tokenName };
+    // A story page carries the village's own name for it (Admin, Pages, Whole site).
+    const named = link.brochure ? cfg?.site?.menu?.[link.href] : undefined;
+    return named ? { ...link, label: named.label || link.label, subtitle: named.subtitle || undefined } : link;
+  };
+  // The footer keeps its own wording for a story page until the village
+  // renames that page; the commitment page always follows the village's word.
+  const storyName = (href: string) => cfg?.site?.menu?.[href]?.label ?? "";
+  const footerName = (href: string, fallback: string) =>
+    cfg?.site?.menuChanged?.includes(href) ? storyName(href) || fallback : fallback;
 
   // Groups collapse to nothing when every child is filtered out, so a fork with
   // its optional modules off never renders an empty dropdown.
@@ -98,11 +118,44 @@ export default function Layout({ children }: LayoutProps) {
   // the drawer is already in view wherever the person is on the page. An earlier
   // version scrolled to the top first and the smooth scroll fought the drawer's
   // height animation, jumping the page a few hundred pixels down instead.
+  //
+  // More sits at the far end of the page and the drawer opens at the top, so a
+  // keyboard user who pressed it was left on More and the next Tab left the
+  // page (measured on all 69 routes with the bar). Opening from More now hands
+  // focus to the drawer's first item. Escape closes the drawer from anywhere
+  // and gives focus to the menu button, the control that owns it.
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const focusDrawer = useRef(false);
+  const focusDrawerIfAsked = () => {
+    if (!focusDrawer.current) return;
+    const first = document.getElementById("mobile-menu")?.querySelector<HTMLElement>("a[href], button");
+    if (!first) return;
+    focusDrawer.current = false;
+    first.focus();
+  };
   useEffect(() => {
-    const openMenu = () => setMobileMenuOpen(true);
+    const openMenu = () => {
+      focusDrawer.current = true;
+      setMobileMenuOpen(true);
+      // Covers More pressed while the drawer is already open, when the state
+      // does not change and the effect below does not run again.
+      requestAnimationFrame(focusDrawerIfAsked);
+    };
     window.addEventListener("open-mobile-menu", openMenu);
     return () => window.removeEventListener("open-mobile-menu", openMenu);
   }, []);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    focusDrawerIfAsked();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMobileMenuOpen(false);
+      setOpenMobileGroup(null);
+      menuButton.current?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -123,8 +176,13 @@ export default function Layout({ children }: LayoutProps) {
         Skip to content
       </a>
 
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-teal-deep text-white shadow-lg">
+      {/* Navigation, inside the page's banner landmark: there was no <header>
+          on any route, so a screen reader's landmark list had no banner. The
+          header carries the sticky positioning now (a sticky child of a
+          header only as tall as itself would scroll away with it). The
+          contents keep their indentation so this stays a four-line change. */}
+      <header className="sticky top-0 z-50">
+      <nav className="bg-teal-deep text-white shadow-lg">
         <div className="container py-4 flex items-center justify-between">
           {/* One anchor, not two. wouter's Link renders the <a> itself, so a
               nested <a> is invalid markup: the browser closes the outer one
@@ -248,7 +306,7 @@ export default function Layout({ children }: LayoutProps) {
                   </button>
                   <AnimatePresence>
                     {accountOpen && (
-                      <motion.div
+                      <m.div
                         id="account-menu"
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -265,6 +323,7 @@ export default function Layout({ children }: LayoutProps) {
                           >
                             {item.label}
                             {item.count === "tasks" && <TaskCountBadge who={user.id} />}
+                            {item.count === "messages" && <MessageCountBadge who={user.id} />}
                           </Link>
                         ))}
                         <button
@@ -279,7 +338,7 @@ export default function Layout({ children }: LayoutProps) {
                           <LogOut className="w-4 h-4" />
                           Sign out everywhere
                         </button>
-                      </motion.div>
+                      </m.div>
                     )}
                   </AnimatePresence>
                 </div>
@@ -309,6 +368,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Icon-only, so it needs a spoken name and a state a screen
                 reader can hear — otherwise it announces as bare "button". */}
             <button
+              ref={menuButton}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
@@ -323,7 +383,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Mobile Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
-            <motion.div
+            <m.div
               id="mobile-menu"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -356,7 +416,7 @@ export default function Layout({ children }: LayoutProps) {
                       </button>
                       <AnimatePresence>
                         {openMobileGroup === entry.label && (
-                          <motion.div
+                          <m.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
@@ -373,7 +433,7 @@ export default function Layout({ children }: LayoutProps) {
                                 {lifecycleOf(item.module) === "preview" ? " (preview)" : ""}
                               </Link>
                             ))}
-                          </motion.div>
+                          </m.div>
                         )}
                       </AnimatePresence>
                     </div>
@@ -406,6 +466,7 @@ export default function Layout({ children }: LayoutProps) {
                         >
                           {item.label === "My Profile" ? `My Profile (${user.name.split(" ")[0]})` : item.label}
                           {item.count === "tasks" && <TaskCountBadge who={user.id} />}
+                          {item.count === "messages" && <MessageCountBadge who={user.id} />}
                         </Link>
                       ))}
                       <button
@@ -437,15 +498,16 @@ export default function Layout({ children }: LayoutProps) {
                   </a>
                 )}
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </nav>
+      </header>
 
       {/* Main Content */}
       {/* R47: the Trail, a member's one next step, on every page. */}
       <NextStepTrail />
-      <main id="main" tabIndex={-1} className="flex-1">
+      <main id="main" tabIndex={-1} className="flex-1 min-h-svh">
         {children}
       </main>
 
@@ -484,45 +546,45 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Your Journey</h2>
               <ul className="space-y-2">
-                {brochureOn && (
+                {storyShown("/investor") && (
                   <li>
                     <Link href="/investor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Investor
+                      {footerName("/investor", "Investor")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/steward") && (
                   <li>
                     <Link href="/steward" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Village Steward
+                      {footerName("/steward", "Village Steward")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/resident") && (
                   <li>
                     <Link href="/resident" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Resident
+                      {footerName("/resident", "Resident")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/prosperity") && (
                   <li>
                     <Link href="/prosperity" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Prosperity Creator
+                      {footerName("/prosperity", "Prosperity Creator")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/love-letter") && (
                   <li>
                     <Link href="/love-letter" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Sign the Love Letter
+                      {storyName("/love-letter")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/visit") && (
                   <li>
                     <Link href="/visit" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Plan a Visit
+                      {footerName("/visit", "Plan a Visit")}
                     </Link>
                   </li>
                 )}
@@ -531,10 +593,10 @@ export default function Layout({ children }: LayoutProps) {
                     {tokenName} Wall
                   </Link>
                 </li>
-                {brochureOn && (
+                {storyShown("/work-with-us") && (
                   <li>
                     <Link href="/work-with-us" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Work With Us
+                      {footerName("/work-with-us", "Work With Us")}
                     </Link>
                   </li>
                 )}
@@ -560,24 +622,24 @@ export default function Layout({ children }: LayoutProps) {
                     Roles & Leadership
                   </Link>
                 </li>
-                {brochureOn && (
+                {storyShown("/how-we-create") && (
                   <li>
                     <Link href="/how-we-create" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      How We Create
+                      {footerName("/how-we-create", "How We Create")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/good-neighbor") && (
                   <li>
                     <Link href="/good-neighbor" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Good Neighbor Criteria
+                      {footerName("/good-neighbor", "Good Neighbor Criteria")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/team") && (
                   <li>
                     <Link href="/team" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Our Team
+                      {footerName("/team", "Our Team")}
                     </Link>
                   </li>
                 )}
@@ -634,10 +696,10 @@ export default function Layout({ children }: LayoutProps) {
             <div>
               <h2 className="font-display text-lg font-semibold mb-4">Resources</h2>
               <ul className="space-y-2">
-                {brochureOn && (
+                {storyShown("/co-creators-guide") && (
                   <li>
                     <Link href="/co-creators-guide" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Co-Creators Guide
+                      {footerName("/co-creators-guide", "Co-Creators Guide")}
                     </Link>
                   </li>
                 )}
@@ -690,24 +752,24 @@ export default function Layout({ children }: LayoutProps) {
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/housing") && (
                   <li>
                     <Link href="/housing" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Housing
+                      {footerName("/housing", "Housing")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/opportunities") && (
                   <li>
                     <Link href="/opportunities" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Business Opportunities
+                      {footerName("/opportunities", "Business Opportunities")}
                     </Link>
                   </li>
                 )}
-                {brochureOn && (
+                {storyShown("/master-plan") && (
                   <li>
                     <Link href="/master-plan" className="text-white hover:underline transition-colors text-sm block py-1.5">
-                      Master Plan
+                      {footerName("/master-plan", "Master Plan")}
                     </Link>
                   </li>
                 )}
@@ -761,7 +823,7 @@ export default function Layout({ children }: LayoutProps) {
             </p>
             <div className="flex items-center gap-2 text-white text-sm">
               <TreePine className="w-4 h-4" />
-              <span>Built with Pura Vida by ReGenCivics.Earth</span>
+              <span>{signoff === undefined ? "\u00a0" : `${signoff ? `${signoff} ` : ""}ReGenCivics.Earth`}</span>
             </div>
           </div>
         </div>
@@ -782,6 +844,8 @@ export default function Layout({ children }: LayoutProps) {
           surface and the page's single polite live region live here so a
           member never sees the same moment twice. */}
       {user && <NotificationToasts />}
+      {user && <RewardMoment />}
+      {user && <SeasonSummaryOffer /> /* idea 4: once, after a season turns */}
     </div>
   );
 }
@@ -835,7 +899,7 @@ function NavDropdown({
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             id={menuId}
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -868,7 +932,7 @@ function NavDropdown({
                 </span>
               </Link>
             ))}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

@@ -142,8 +142,8 @@ describe.skipIf(!configured)("a person's comms rows, exported, erased and swept"
         "VALUES ('msg-relay', 'key-relay', ?, ?, 'essential', 'map.contact_relay', 'A note', ?, 'sent')",
       [OTHER, OTHER, "Wren.Halloway@Example.test"],
     );
-    // Wren's own yes to a gathering is a member's row, kept like every other
-    // member trace (the tombstone covers it), and Wren hosts a gathering.
+    // Wren's own yes to a gathering, which erasure takes by its own step
+    // (`event-places-after-tombstone`, asserted below), and Wren hosts a gathering.
     await q("INSERT INTO event_rsvps (id, event_id, user_id, status, idempotency_key) VALUES ('rsvp-member', 'ev-9', ?, 'going', 'rsvp-key-member')", [MEMBER]);
     await q("INSERT INTO event_comms (event_id, host_user_id) VALUES ('ev-9', ?)", [MEMBER]);
   });
@@ -229,8 +229,9 @@ describe.skipIf(!configured)("a person's comms rows, exported, erased and swept"
     const relay = (await q("SELECT to_email, reply_to FROM comms_messages WHERE id = 'msg-relay'"))[0];
     expect(relay).toEqual({ to_email: OTHER, reply_to: null });
 
-    // A member's own yes is a member's row and stays with the tombstone; hosting ends.
-    expect(await q("SELECT id FROM event_rsvps WHERE user_id = ?", [MEMBER])).toHaveLength(1);
+    // A member's own yes leaves too, by its own step (`event-places-after-tombstone`,
+    // server/lib/erasure.ownedRows.test.ts): it held a seat for somebody gone. Hosting ends.
+    expect(await q("SELECT id FROM event_rsvps WHERE user_id = ?", [MEMBER])).toHaveLength(0);
     expect((await q("SELECT host_user_id FROM event_comms WHERE event_id = 'ev-9'"))[0].host_user_id).toBeNull();
 
     // The other person, untouched.

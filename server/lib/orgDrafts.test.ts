@@ -154,12 +154,12 @@ describe("the words on a draft, and who gets them", () => {
     // fallback is the METRIC, which the platform owns; the village never
     // typed it, so it can carry no name.
     const w = tierDraftWords(false, draft, objectives);
-    expect(w.objectives[0].text).toBe("Seats filled in a circle");
+    expect(w.objectives[0].text).toBe("Roles filled in a circle");
     expect(w.objectives[1].text).toBe("An objective the village has set");
   });
 
   it("names every metric family it knows, and degrades for one it does not", () => {
-    expect(neutralObjectiveText("seats_filled")).toBe("Seats filled");
+    expect(neutralObjectiveText("seats_filled")).toBe("Roles filled");
     expect(neutralObjectiveText("seasons_completed")).toBe("Seasons completed");
     expect(neutralObjectiveText("members_at_stage:steward")).toBe("Members at a stage");
     // A metric added later must not fall through to a village's own words.

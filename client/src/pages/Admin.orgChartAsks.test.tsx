@@ -24,7 +24,7 @@
  * page says nothing about whether their ask is.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -65,7 +65,8 @@ const declineFor = (who: string, where: string) =>
 
 describe("the steward can answer every ask a member was able to make", () => {
   beforeEach(() => vi.clearAllMocks());
-  afterEach(() => vi.unstubAllGlobals());
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("draws an ask on the seat it belongs to when that seat sits in a drawn circle", async () => {
     // The floor under the cases below, and it passed before the fix too. If

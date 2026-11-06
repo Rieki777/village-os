@@ -36,7 +36,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
   allowanceFor,
   cycleWindow,
@@ -126,7 +126,7 @@ async function deliveryKeyOf(noteId: string): Promise<string> {
 describe.skipIf(!configured)("the allowance's refund term", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 6 });
+    pool = testPool(db, { connectionLimit: 6 });
     await loadTokenRegistry(pool);
     await loadVariables(pool);
     await ensureVoiceToken(pool, "Village Voice");

@@ -53,7 +53,7 @@
  * feature is one ordered read with a limit. That is why `getPool` is in the
  * slice.
  */
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { hasCapability } from "../../shared/capabilities";
 import { recordEvent } from "../lib/events";
@@ -90,8 +90,17 @@ import {
 } from "../lib/orgRelations";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { submissionStatusNotice } from "../lib/submissionNotices";
+import { isTombstone } from "../lib/oauthAccounts";
+import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
+import { payLineProblem, rolePayRules } from "../lib/workPay";
+import { defaultDisplayCurrency } from "../../shared/money";
+import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
+import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
+
+/** A role's checked value edit. `undefined` leaves a field alone. */
+type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
 
 type Deps = Pick<
   AppDeps,
@@ -109,10 +118,43 @@ type Deps = Pick<
   | "circlesRepo"
   | "notifyAdmins"
   | "submissionsRepo"
+  | "projectCurrency"
 > & {
   /** Who holds a power live, the gate's own count (`liveHoldersOf` in server/index.ts). */
   liveHoldersOf(capability: string): Promise<string[]>;
 };
+
+/**
+ * The role's handover words (0268, #534) change by consent, through an org
+ * chart draft (`update_seat`), never through the admin edit. These routes
+ * used to answer 200 and drop them, and a field accepted and dropped is worse
+ * than one refused, so they are refused by name.
+ */
+export const HANDOVER_WORD_KEYS = ["bringMe", "notMine", "runbook", "bring_me", "not_mine"] as const;
+export const HANDOVER_WORDS_REFUSAL =
+  "Bring me, Not mine to hold and the runbook change by consent: propose them through an org chart draft.";
+
+/** Whether this admin body carries any of the role's handover words. */
+export function carriesHandoverWords(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  return HANDOVER_WORD_KEYS.some((k) => Object.prototype.hasOwnProperty.call(body, k));
+}
+
+/**
+ * The role's CCOS words (0274) change the same way, by consent through a
+ * draft, so the admin edit refuses them by name too, in either spelling.
+ * The recruitment pack's own `authority` note is a different, admin-only
+ * field and stays writable here.
+ */
+export const CCOS_WORD_KEYS: readonly string[] = [...ROLE_CCOS_FIELDS, ...ROLE_CCOS_FIELDS.map((f) => ROLE_CCOS_COLUMNS[f])];
+export const CCOS_WORDS_REFUSAL =
+  "These role words change by consent: this role exists while, what it can decide on its own, what it does regularly, holding it well, and its time. Propose them through an org chart draft.";
+
+/** Whether this admin body carries any of the role's CCOS words. */
+export function carriesCcosWords(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  return CCOS_WORD_KEYS.some((k) => Object.prototype.hasOwnProperty.call(body, k));
+}
 
 export function register(app: Express, deps: Deps): void {
   const {
@@ -131,6 +173,7 @@ export function register(app: Express, deps: Deps): void {
     notifyAdmins,
     submissionsRepo,
     liveHoldersOf,
+    projectCurrency,
   } = deps;
 
   /*
@@ -153,6 +196,21 @@ export function register(app: Express, deps: Deps): void {
     (submissionsRepo.all() as any[]).filter(
       (s) => s.type === SEAT_CLAIM_TYPE && !CLOSED_STATUSES.has(String(s.status ?? "")),
     );
+
+  /**
+   * A MEMBER WHO HAS LEFT IS NEVER SEATED. An erasure keeps the user row as a
+   * tombstone, so "is there a member by that id" answers yes for somebody who
+   * has gone, and a seating made for them is paid by the moon settlement and
+   * never released, because the erasure's seating steps have already run.
+   * `claimSeating` refuses one as well, in the statement that writes; this is
+   * the sentence for it. A member with no row at all is left to the checks
+   * each door already had.
+   */
+  const LEFT_THE_VILLAGE = "That member has left the village, so the role stays as it was recorded.";
+  const hasLeft = async (userId: string): Promise<boolean> => {
+    const who = await members.byId(userId);
+    return !!who && isTombstone({ email: String(who.email ?? "") });
+  };
 
   /**
    * Close one ask, through the one repository the admin inbox reads.
@@ -247,16 +305,29 @@ export function register(app: Express, deps: Deps): void {
 
   app.post("/api/admin/org/drafts/:id/changes", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle"];
+    /*
+     * `create_circle` and `rest_circle` joined this list for the import that
+     * starts a village from its ReGen Civics profile (shared/regenImport.ts):
+     * a village built from a file starts with ITS circles, so the draft makes
+     * them and rests the councils a new village is born with, and the founder
+     * reads, publishes or reverts all of it at once. orgDrafts.ts already
+     * previewed and applied both for the structure review, so nothing new can
+     * publish here: a circle that cannot be made, or a circle somebody's seat
+     * still sits in, blocks its line and the whole publish with it.
+     */
+    const ops = ["create_seat", "update_seat", "rest_seat", "seat_holder", "end_holding", "move_circle", "create_circle", "rest_circle", "update_circle"];
     const op = String(req.body?.op ?? "");
     if (!ops.includes(op)) return res.status(400).json({ error: `op must be one of: ${ops.join(", ")}` });
-    // A circle move names its CIRCLE in the seat column, as circle:<id>, so an
+    // A circle change names its CIRCLE in the seat column, as circle:<id>, so an
     // older release reading the row finds no seat to apply it to (0208).
-    if (op === "move_circle") {
+    if (op === "move_circle" || op === "create_circle" || op === "rest_circle" || op === "update_circle") {
       const target = String(req.body?.orgRoleId ?? "");
       const parent = req.body?.payload?.parentCircleId;
       if (!target.startsWith("circle:") || target.length <= "circle:".length) {
-        return res.status(400).json({ error: "A circle move names its circle as circle:<id>" });
+        return res.status(400).json({ error: `A circle ${op === "move_circle" ? "move" : op === "create_circle" ? "to make" : op === "update_circle" ? "given new words" : "to rest"} names its circle as circle:<id>` });
+      }
+      if (target.length > "circle:".length + 64) {
+        return res.status(400).json({ error: "A circle's id is at most 64 characters" });
       }
       if (parent !== null && parent !== undefined && typeof parent !== "string") {
         return res.status(400).json({ error: "parentCircleId must be a circle id or null" });
@@ -479,7 +550,7 @@ export function register(app: Express, deps: Deps): void {
     const maySeePeople =
       (await isAdmin(req)) ||
       (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
-    if (!maySeePeople) return res.status(401).json({ error: "auth_required", message: "Sign in to see who held this seat" });
+    if (!maySeePeople) return res.status(401).json({ error: "auth_required", message: "Sign in to see who held this role" });
     const allMembers = await members.all();
     const rows = await orgRoleHistory(getPool(), req.params.id);
     res.json(
@@ -526,7 +597,7 @@ export function register(app: Express, deps: Deps): void {
    */
   app.get("/api/org/roles/:id/needs", async (req, res) => {
     if (!(await authedUser(req))) {
-      return res.status(401).json({ error: "auth_required", message: "Sign in to see what this seat is held for" });
+      return res.status(401).json({ error: "auth_required", message: "Sign in to see what this role is held for" });
     }
     const needs = await linksForSubject(getPool(), "role", String(req.params.id));
     res.json({ needs });
@@ -614,13 +685,13 @@ export function register(app: Express, deps: Deps): void {
     const mine = await unclaimedSeatingsFor(getPool(), user.name);
     const wanted = mine.find((a) => a.id === req.params.id);
     if (!wanted) {
-      return res.status(403).json({ error: "That seat is not recorded under your name" });
+      return res.status(403).json({ error: "That role is not recorded under your name" });
     }
     const roles = await listOrgRoles(getPool());
     const seatName = roles.find((r) => r.id === wanted.orgRoleId)?.name ?? wanted.orgRoleId;
     if (openSeatClaims().some((s) => s.data?.assignmentId === req.params.id && s.userId === user.id)) {
       return res.status(409).json({
-        error: "You have already asked for this seat, and a steward has it in front of them",
+        error: "You have already asked for this role, and a steward has it in front of them",
       });
     }
     const entry = {
@@ -641,9 +712,12 @@ export function register(app: Express, deps: Deps): void {
       submittedAt: new Date().toISOString(),
     };
     await submissionsRepo.insert(entry as any);
+    // No name in the words: the journal's own `by` says who asked, read live,
+    // and the recorded name is on the seating at its own tier. A name written
+    // into a line outlives the person (server/repos/orgSeatErasure.ts).
     await recordEvent(getPool(), {
       kind: "role",
-      text: `${firstName(user.name)} asks to be confirmed as the holder recorded "${wanted.displayName ?? ""}"`,
+      text: SEAT_JOURNAL_LINE.ask,
       actorUserId: user.id,
       entityType: "org_role",
       entityRef: wanted.orgRoleId,
@@ -657,11 +731,13 @@ export function register(app: Express, deps: Deps): void {
       `${firstName(user.name)} asks to be confirmed as ${seatName}`,
       `seat-claim:${req.params.id}:${user.id}`,
       "/admin?tab=org-chart",
+      [],
+      { actorUserId: user.id },
     );
     res.json({
       success: true,
       pending: true,
-      message: "Asked. A steward confirms it, and the seat keeps everything it already knew.",
+      message: "Asked. A steward confirms it, and the role keeps everything it already knew.",
     });
   });
 
@@ -712,19 +788,20 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
     const userId = String(req.body?.userId ?? "").trim();
-    if (!userId) return res.status(400).json({ error: "Name the member this seat is being confirmed for" });
+    if (!userId) return res.status(400).json({ error: "Name the member this role is being confirmed for" });
+    if (await hasLeft(userId)) return res.status(409).json({ error: LEFT_THE_VILLAGE });
     // Read for the seat's NAME, before the flip, and never to decide the
     // outcome: `claimSeating`'s own WHERE clause is what refuses a seating
     // that has ended, is an example, belongs to an agent or is already held.
     const before = (await listOrgAssignments(getPool(), lapseContext())).find((a) => a.id === req.params.id);
     const roles = await listOrgRoles(getPool());
-    const seatName = roles.find((r) => r.id === before?.orgRoleId)?.name ?? "a seat";
+    const seatName = roles.find((r) => r.id === before?.orgRoleId)?.name ?? "a role";
     const ok = await claimSeating(getPool(), req.params.id, userId);
     if (!ok) return res.status(409).json({ error: "That seating has already been claimed or ended" });
     const actor = await authedUser(req);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `confirmed: the holder recorded "${before?.displayName ?? ""}" is a member here`,
+      text: SEAT_JOURNAL_LINE.confirm,
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: before?.orgRoleId ?? req.params.id,
@@ -760,7 +837,7 @@ export function register(app: Express, deps: Deps): void {
     const actor = await authedUser(req);
     await recordEvent(getPool(), {
       kind: "role",
-      text: `declined: the seat stays recorded under "${String(closed.data?.recordedName ?? "")}"`,
+      text: SEAT_JOURNAL_LINE.decline,
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: String(closed.data?.roleId ?? ""),
@@ -781,16 +858,51 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
+  /**
+   * A role's value and list (0265), checked against the village's `role.cycle`
+   * rules before anything is written. Answers the request itself with a
+   * sentence when something is wrong, and returns null then.
+   */
+  const checkedRoleValue = async (
+    body: Record<string, unknown>,
+    res: Response,
+  ): Promise<RoleValueEdit | null> => {
+    const rules = await rolePayRules(getPool());
+    const input = readWorkValueInput(body, (slug) => payLineProblem(rules, slug));
+    if (!input.ok) {
+      res.status(400).json({ error: input.error });
+      return null;
+    }
+    const out: RoleValueEdit = {};
+    if (input.valueMinor !== undefined) {
+      out.valueMinor = input.valueMinor;
+      // Stamped here, never read from the body (0265 says why it rides the row).
+      out.valueCurrency = input.valueMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    if (input.tokens !== undefined) out.valueTokens = input.tokens;
+    // 0285: the cash it pays each cycle, stamped the same way.
+    if (input.cashMinor !== undefined) {
+      out.cashMinor = input.cashMinor;
+      out.cashCurrency = input.cashMinor === null ? null : defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+    }
+    return out;
+  };
+
   // ── Admin: the org chart is edited here, and the edits are live ──────────
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
+    if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    const valued = await checkedRoleValue(req.body ?? {}, res);
+    if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined || valued.cashMinor !== undefined) await updateOrgRole(getPool(), id, {}, valued);
     // Anything made while a season runs joins that season's pattern, so a
     // village never sits down to author one. Nothing happens when the season
     // names no pattern, which is every village that has not opted in.
     await captureIntoCurrentPattern(getPool(), currentPatternId(), "org_role", id);
     await recordEvent(getPool(), {
-      kind: "org", text: `seat created: ${String(req.body?.name ?? id)}`,
+      kind: "org", text: `role created: ${String(req.body?.name ?? id)}`,
       actorUserId: (await authedUser(req))?.id ?? null,
       entityType: "org_role", entityRef: id, audience: "admin",
     });
@@ -799,8 +911,10 @@ export function register(app: Express, deps: Deps): void {
 
   app.put("/api/admin/org/roles/:id", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
+    if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
-    if (!role) return res.status(404).json({ error: "Seat not found" });
+    if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     // Refused with a sentence, not a truncation error. `expired` is a SeatState
     // in TypeScript but is DERIVED, so it is not one of the states the 0049
@@ -810,8 +924,11 @@ export function register(app: Express, deps: Deps): void {
     // Described BEFORE the write, while the old values still exist. The
     // generic admin audit records "PUT /api/admin/org/roles/x", which cannot
     // answer "what has already been tried with this seat".
+    const valued = await checkedRoleValue(req.body ?? {}, res);
+    if (!valued) return;
     const changes = describeOrgChange(role, req.body ?? {});
-    const ok = await updateOrgRole(getPool(), req.params.id, req.body ?? {});
+    if (valued.valueMinor !== undefined || valued.valueTokens !== undefined || valued.cashMinor !== undefined) changes.push("what the role is worth and pays updated");
+    const ok = await updateOrgRole(getPool(), req.params.id, req.body ?? {}, valued);
     if (ok && changes.length) {
       await recordEvent(getPool(), {
         kind: "org", text: `${role.name}: ${changes.join("; ")}`,
@@ -843,8 +960,11 @@ export function register(app: Express, deps: Deps): void {
     const wantsAgent = !!req.body?.isAgent;
     if (wantsAgent && !(await guardCapability(req, res, "org.seatAgent"))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
-    if (!role) return res.status(404).json({ error: "Seat not found" });
+    if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (req.body?.userId && (await hasLeft(String(req.body.userId)))) {
+      return res.status(409).json({ error: LEFT_THE_VILLAGE });
+    }
     const actor = await authedUser(req);
     /*
      * THE TERM, WHICH EVERY SEATING NOW CARRIES (0199).
@@ -892,10 +1012,12 @@ export function register(app: Express, deps: Deps): void {
     // only edits to the seat's card were. Names are not written into the line;
     // the journal is admin-audience and the seat's holders are already
     // readable at their own tier, so the event says that the seat changed
-    // hands and lets the reader look.
+    // hands and lets the reader look. A documented holder's line once carried
+    // the name, and the journal serves every line to the guest rung, so a
+    // forgotten person stayed in it (adversarial round 3, finding 12).
     void recordEvent(getPool(), {
       kind: "org",
-      text: req.body?.userId ? "seated a member" : `seated ${String(req.body?.displayName ?? "someone")}`,
+      text: req.body?.userId ? "seated a member" : SEAT_JOURNAL_LINE.seated,
       actorUserId: actor?.id ?? null,
       entityType: "org_role", entityRef: req.params.id, audience: "admin",
     });

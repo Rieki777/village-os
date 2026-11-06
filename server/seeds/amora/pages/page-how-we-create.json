@@ -1,0 +1,116 @@
+{
+  "cta": {
+    "body": "Dive deeper into our governance and economic systems in the Co-Creators Guide, or join a community call to ask questions.",
+    "heading": "Learn More",
+    "guideLabel": "Read the Co-Creators Guide",
+    "eventsLabel": "Join Community Call"
+  },
+  "hero": {
+    "intro": "Our governance, economic, and organizational systems are designed to ensure all beings belong and thrive.",
+    "headline": "How We Create Together"
+  },
+  "hypha": {
+    "intro": "Inspired by Teal and sociocracy, we use **Hypha.earth** tools to let each circle design its own governance strategy. No one-size-fits-all-each space can tailor decision-making to its unique culture, values, and mission.",
+    "boxBody": "Hypha provides tools to formalize agreements, track roles, and manage proposals. Each circle can configure voting thresholds, quorum requirements, and decision timeframes. This creates transparency while honoring each group's autonomy. All agreements and role assignments are recorded on-chain for accountability.",
+    "heading": "Flexible Governance with Hypha",
+    "methods": [
+      {
+        "best": "Operational decisions, role assignments",
+        "name": "Consent",
+        "description": "No objections means the proposal passes. Fast and efficient for most decisions."
+      },
+      {
+        "best": "Major community decisions, values alignment",
+        "name": "Consensus",
+        "description": "Everyone actively agrees. Builds deep alignment but takes more time."
+      },
+      {
+        "best": "Individual initiatives, quick actions",
+        "name": "Advice Process",
+        "description": "Anyone can make a decision after seeking advice from affected parties."
+      },
+      {
+        "best": "Circles with diverse needs",
+        "name": "Custom Blend",
+        "description": "Mix and match methods based on decision type and urgency."
+      }
+    ],
+    "boxHeading": "How Hypha Enables This"
+  },
+  "tokens": {
+    "cards": [],
+    "intro": "{village} keeps its own tokens, {token} among them. Their rules are the community's to design.",
+    "heading": "Our Tokens",
+    "linkLabel": "See how they work here"
+  },
+  "seasons": {
+    "note": "**No fixed cycle.** At the end of each season, the community comes together to vote on what's needed next. A village that just built all summer might choose Winter to design what comes next. A village deep in planning might choose Spring to break ground. The seasons follow {village}'s needs, not a calendar.",
+    "intro": "Every 3 months, the community votes on what kind of season comes next, a collective response to what {village} needs most. Each season is its own chapter.",
+    "heading": "Seasonal Rhythm",
+    "seasons": [
+      {
+        "name": "Spring",
+        "title": "Spring Season",
+        "description": "Breaking ground. Starting new buildings, projects, and initiatives. The season for bold beginnings and planting what we want to grow."
+      },
+      {
+        "name": "Summer",
+        "title": "Summer Season",
+        "description": "Full momentum. Festivals, events, gatherings, and high community activity. The season to show up, celebrate, and build together at full energy."
+      },
+      {
+        "name": "Fall",
+        "title": "Fall Season",
+        "description": "Harvest time. Reflection, lessons learned, and appreciating the abundance we've created. The season to gather what we've grown and give thanks."
+      },
+      {
+        "name": "Winter",
+        "title": "Winter Season",
+        "description": "Deep design. Systems redesign, governance evolution, economic modelling, financial preparation, and investor relations. The season to think long."
+      }
+    ]
+  },
+  "governance": {
+    "intro": "Multi-tiered governance balancing development expertise with community wisdom.",
+    "phases": [
+      {
+        "item1": "Development Board provides expert oversight",
+        "item2": "Community Advisory Council shapes culture",
+        "item3": "Core Team manages execution",
+        "item4": "",
+        "item5": "",
+        "title": "Development Phase"
+      },
+      {
+        "item1": "8 Sociocratic Circles take active role",
+        "item2": "Leadership Council coordinates",
+        "item3": "Community self-governance emerges",
+        "item4": "",
+        "item5": "",
+        "title": "Operations Phase"
+      }
+    ],
+    "heading": "Our Governance Structure",
+    "buttonLabel": "Explore Governance Roles"
+  },
+  "principles": {
+    "items": [
+      {
+        "title": "Sociocracy & Teal",
+        "description": "We blend sociocratic governance with Teal organization principles. Self-management, wholeness, and evolutionary purpose guide our structure."
+      },
+      {
+        "title": "Adaptive Governance",
+        "description": "Using Hypha tools, each circle designs its own governance strategy, from consent to consensus, tailored to its unique culture, values, and mission."
+      },
+      {
+        "title": "{token}",
+        "description": "Recognition from the community. {village} sets its own rules for it and for its other tokens, and changes them by agreement."
+      },
+      {
+        "title": "Seasonal Rhythm",
+        "description": "Every 3 months, the community decides together what kind of season comes next, a living response to what {village} needs most right now."
+      }
+    ]
+  }
+}

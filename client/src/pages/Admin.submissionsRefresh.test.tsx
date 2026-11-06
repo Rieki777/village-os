@@ -18,7 +18,7 @@
  * wrong, and asserting on it would pass for exactly the button this replaces.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -28,7 +28,8 @@ describe("the submissions header can be operated by somebody who cannot see the 
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
   });
-  afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
   it("names the refresh button in words the rest of the admin already uses", async () => {
     render(<SubmissionsTab password="secret" />);

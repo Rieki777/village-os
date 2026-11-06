@@ -114,9 +114,9 @@ describe.skipIf(!configured)("rendering against a village's words", () => {
         [key, JSON.stringify(value)],
       );
     const blank = await loadEmailVillage(pool, "https://village.example/");
-    expect(blank).toEqual({ name: GAME_CONFIG.project.name, url: "https://village.example", logoUrl: null, seed: null, character: null, postalAddress: "" });
+    expect(blank).toEqual({ name: GAME_CONFIG.project.name, url: "https://village.example", logoUrl: null, seed: null, character: null, postalAddress: "", tokenName: GAME_CONFIG.currency.name });
 
-    await write("brand", { project: { name: "Riverbend" }, images: { logo: "/api/uploads/brand-1.webp" }, theme: { seed: "#2d6a4f", character: "field" } });
+    await write("brand", { project: { name: "Riverbend" }, images: { logo: "/api/uploads/brand-1.webp" }, theme: { seed: "#2d6a4f", character: "field" }, currency: { name: "Thanks" } });
     await write("comms-settings", { postalAddress: "  1 Mill Lane, Riverbend  " });
     expect(await loadEmailVillage(pool, "https://village.example")).toEqual({
       name: "Riverbend",
@@ -125,6 +125,8 @@ describe.skipIf(!configured)("rendering against a village's words", () => {
       seed: "#2d6a4f",
       character: "field",
       postalAddress: "1 Mill Lane, Riverbend",
+      // The token's own name, for the emails that send people to its wall.
+      tokenName: "Thanks",
     });
 
     // A blank name inherits the platform's, the same rule as the site's merged config.

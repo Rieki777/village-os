@@ -22,9 +22,32 @@ const BASE = {
   openedBy: "Wren",
   openedOn: "2026-09-24",
   slate: [] as Array<{ id: string; name: string }>,
+  handover: [] as Array<{ title: string; consequence: string }>,
 };
 
 describe("the launch proposal's frozen document", () => {
+  it("lists EXACTLY the powers the launch hands to the village, in plain words, so a member votes on the list", () => {
+    // Coordinator ruling on #769 (2026-11-01), on Rye's "at launch the stewards select WHAT powers are being passed over".
+    const doc = launchProposalDoc({
+      ...BASE,
+      handover: [
+        { title: "Who sits in which role", consequence: "seat people in the village's roles, and take them out again" },
+        { title: "The village's story", consequence: "say what this village is, in public, in its own words" },
+      ],
+    });
+    expect(doc).toContain("## What the launch hands to the village");
+    expect(doc).toContain("the village holds these 2 powers, and only a village vote hands one back");
+    expect(doc).toContain("- Who sits in which role: whoever holds it can seat people in the village's roles, and take them out again.");
+    expect(doc).toContain("- The village's story: whoever holds it can say what this village is, in public, in its own words.");
+    expect(doc).toContain("The stewards hold every other power");
+  });
+
+  it("says out loud when the launch hands the village none of its powers", () => {
+    const doc = launchProposalDoc(BASE);
+    expect(doc).toContain("## What the launch hands to the village");
+    expect(doc).toContain("None of its powers. The stewards hold every one of them after launch");
+  });
+
   it("NAMES the founding stewards it puts forward, and says whose list it is", () => {
     const doc = launchProposalDoc({
       ...BASE,
@@ -33,7 +56,7 @@ describe("the launch proposal's frozen document", () => {
         { id: "cat-2", name: "Iris" },
       ],
     });
-    expect(doc).toContain("## Who carries the steward's seat");
+    expect(doc).toContain("## Who carries the steward role");
     // The slate is IN the document, by name, as a list a member can read.
     expect(doc).toContain("- Wren");
     expect(doc).toContain("- Iris");
@@ -61,11 +84,11 @@ describe("the launch proposal's frozen document", () => {
 
   it("says out loud when the proposal names NOBODY, and what that means", () => {
     const doc = launchProposalDoc(BASE);
-    expect(doc).toContain("## The steward's seat");
-    expect(doc).toContain("named nobody for the steward's seat");
+    expect(doc).toContain("## The steward role");
+    expect(doc).toContain("named nobody for the steward role");
     expect(doc, "and that nothing is broken by it").toContain("That stops nothing");
     expect(doc, "so no reader can mistake it for the other branch").not.toContain(
-      "Who carries the steward's seat",
+      "Who carries the steward role",
     );
   });
 

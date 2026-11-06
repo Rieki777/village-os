@@ -171,6 +171,21 @@ const AA_LARGE = 3.0;
 export const HOVER_STEP = 1.4;
 
 /**
+ * What the MUTED ink must clear on the darkest light tone this file emits,
+ * `--tone-mist-light` (the `bg-aqua-light` band). It used to be derived
+ * against `--muted` alone, and pages put it on darker grounds than that:
+ * measured on the live site 2026-10-20, 12 public routes at 4.08 to 4.49:1,
+ * on the aqua-light band (4.33) and on the 5 to 20% sage, amber, coral and
+ * brand washes pages lay over the background.
+ * 4.5 on mist-light alone fixed only the band; 5.0 leaves the room those
+ * washes take: the 4.08 to 4.49 grounds measure 4.76 to 5.24 after it. On
+ * Amora the ink moves from #436f61 to #3d6457, the same grey-green a shade
+ * deeper. The one wash it cannot carry is a 20% sage gradient (/good-neighbor,
+ * 4.10), which is that page's to fix, not the palette's.
+ */
+export const MUTED_ON_TINT = 5.0;
+
+/**
  * Derive everything from (seed, card). Returns null when seed is absent or
  * invalid — the neutral case, which MUST emit nothing.
  *
@@ -313,8 +328,12 @@ export function deriveTheme(
   const cream = card.surface === "warm" ? hslToHex({ h: 45, s: 0.4, l: 0.9 }) : hslToHex({ h: seed.h, s: sat(0.2), l: 0.91 });
   const border = hslToHex({ h: seed.h, s: sat(0.3), l: 0.82 });
   const mutedBg = hslToHex({ h: seed.h, s: sat(0.25), l: 0.92 });
-  const mutedFg = atContrast({ h: seed.h, s: sat(0.6), l: 0.35 }, mutedBg, AA_BODY, true);
+  // Derived against the DARKER of the two light tones muted text lands on, at
+  // MUTED_ON_TINT, so it holds on the band and on a page's light wash too.
+  const mutedGround = contrastRatio("#000000", mistLight) < contrastRatio("#000000", mutedBg) ? mistLight : mutedBg;
+  const mutedFg = atContrast({ h: seed.h, s: sat(0.6), l: 0.35 }, mutedGround, MUTED_ON_TINT, true);
   measured("muted text on muted", hslToHex(mutedFg), mutedBg, AA_BODY, false);
+  measured("muted text on mist-light", hslToHex(mutedFg), mistLight, AA_BODY, false);
   measured("white on brand-mid (large only)", "#ffffff", brandMid, AA_LARGE, false);
 
   // Each pair now CARRIES the floor it was judged against. This used to sniff the

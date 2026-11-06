@@ -79,7 +79,7 @@ describe("reading a proposed seating", () => {
     expect(refusalSentence({ why: "named-a-person", key: "displayName" })).toContain("displayName");
     expect(refusalSentence({ why: "named-a-person", key: "displayName" })).toContain("never names one");
     expect(refusalSentence({ why: "no-subject-ref" })).toContain("by whom");
-    expect(refusalSentence({ why: "no-seat" })).toContain("which seat");
+    expect(refusalSentence({ why: "no-seat" })).toContain("which role");
     expect(refusalSentence({ why: "malformed-subject-ref" })).toContain("does not issue");
   });
 });

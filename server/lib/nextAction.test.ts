@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { GAME_CONFIG, withCommitmentName } from "../../shared/gameConfig";
 import { SIGNING_TYPE } from "../../shared/membershipSigning";
-import { joiningOf, pickNextAction, type NextActionFacts } from "./nextAction";
+import { FOUNDER_SETUP_STEP, founderStepFor, joiningOf, pickNextAction, type NextActionFacts } from "./nextAction";
 
 const RULES = GAME_CONFIG.nextActions;
 
@@ -87,5 +87,43 @@ describe("the next step a guest is shown", () => {
   it("falls back to the last rule when nothing applies", () => {
     const busy = guest({ joining: null, claims: [{ status: "consented" }] });
     expect(pickNextAction(RULES, busy).id).toBe(RULES[RULES.length - 1].id);
+  });
+});
+
+describe("Find your lines (gene-keys), only where the catch-all would stand", () => {
+  /** A member with nothing left to do: trained, joined, one Quest turned in, nothing to send. */
+  const settled = (over: Partial<NextActionFacts> = {}) => guest({ joining: null, claims: [{ status: "approved" }], ...over });
+
+  it("is the step for a settled member with no lines while the module is on", () => {
+    expect(pickNextAction(RULES, settled({ geneKeysMissing: true })).id).toBe("gene-keys");
+  });
+
+  it("never shows while the fact is false or was not asked, so a village with the module off never sees it", () => {
+    expect(pickNextAction(RULES, settled({ geneKeysMissing: false })).id).toBe("explore");
+    expect(pickNextAction(RULES, settled()).id).toBe("explore");
+  });
+
+  // A member may skip Gene Keys and nothing records the skip, so a step ranked any higher would stand
+  // between them and the rest of the game for good.
+  it("never stands in front of training, the letter, a first Quest, a Quest to turn in or a thank-you", () => {
+    const missing = { geneKeysMissing: true };
+    expect(pickNextAction(RULES, settled({ trained: false, ...missing })).id).toBe("training");
+    expect(pickNextAction(RULES, guest(missing)).id).toBe("membership");
+    expect(pickNextAction(RULES, settled({ claims: [], ...missing })).id).toBe("first-quest");
+    expect(pickNextAction(RULES, settled({ claims: [{ status: "claimed" }], ...missing })).id).toBe("finish-quest");
+    expect(pickNextAction(RULES, settled({ budget: { remaining: 40, total: 100 }, ...missing })).id).toBe("send-gratitude");
+  });
+});
+
+describe("a founder's next step before launch", () => {
+  it("sends a founder or an admin to the setup game while founder power stands", () => {
+    expect(founderStepFor("founder", true)).toEqual(FOUNDER_SETUP_STEP);
+    expect(founderStepFor("admin", true)?.href).toBe("/setup-game");
+  });
+
+  it("gives everyone the member rules once the village has started, and members always", () => {
+    expect(founderStepFor("founder", false)).toBeNull();
+    expect(founderStepFor("member", true)).toBeNull();
+    expect(founderStepFor(undefined, true)).toBeNull();
   });
 });

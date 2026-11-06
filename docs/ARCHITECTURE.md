@@ -689,6 +689,16 @@ The retention sweep never deletes an unstamped row, at any age.
   driven entirely by variables — `retention.submissions_days`,
   `map.contact_retention_days` (contact bodies), and
   `retention.notifications_days` (read rows only). 0 disables a sweep.
+- **Open role proposals** (0305, `server/routes/openProposals.ts`): the
+  names and addresses of people with no account, who proposed for a role
+  at `/propose-a-role`. Fixed, not dialled (sheet 19i): a proposal never
+  confirmed is DELETED 48 hours after it was sent, and a declined or
+  withdrawn one loses its name and address 90 days after it was decided,
+  as does an adopted one whose invitation nobody used in those 90 days,
+  keeping only the roles and the words the circle's record needs. The
+  hourly `open-proposals-tidy` job does both, and the form says so in one
+  line. Nothing unconfirmed reaches a person: until its address answers,
+  a proposal notifies nobody and no queue lists it.
 - **Export** (`GET /api/profile/export`): everything the village
   holds on the member — profile minus secrets, stage, claims, gratitude
   both directions, full signed ledger, balances, stage events, submissions,
@@ -702,9 +712,14 @@ The retention sweep never deletes an unstamped row, at any age.
   becomes a tombstone (name/email/handle scrubbed, password removed,
   `tokenVersion` bumped so every session dies) and every denormalised trace
   is scrubbed: gratitude names, claim names, ledger descriptions (keyed by
-  structured refs, never string matching), submission PII keys, tool
-  clicks, role seats. PUBLIC pulse lines naming them are deleted; ADMIN
-  audit rows are kept as the legal record.
+  structured refs, never string matching), the words and name in every
+  submission they sent, signed in or signed out under their address
+  (`KEPT_BY_TYPE` in `server/lib/submissionWords.ts` lists what stays and
+  why), with the team alerts those set off, tool clicks, role seats. PUBLIC
+  pulse lines they wrote are deleted; a line somebody else wrote that names
+  them ("Ann appreciated Wren", "Wren joined the Stewards") stays with its
+  living actor and loses the name (`server/repos/pulseLines.ts`), so no
+  activity count moves. ADMIN audit rows are kept as the legal record.
   **ORG SEATINGS TOO** (`releaseSeatingsForUser`), which they did not for
   as long as 0049 has existed: "role seats" above means `role_holders`, the
   permission plane, and the org chart is the other thing called role
@@ -727,6 +742,81 @@ The retention sweep never deletes an unstamped row, at any age.
   short of deleting the account revokes its address the gentler way, by
   copying the bytes to a fresh stamped name and unlinking the old one, so
   the member keeps the picture and the old URL stops resolving.
+  **THEIR OPEN INVITATION LINKS TOO** (0209). A link is its maker's vouch,
+  and using one records an `arrival` vouch from them that can admit somebody
+  at a bar of one, so a departed member's links kept letting people in for
+  up to fourteen days. The `invites-after-tombstone` step withdraws every
+  link they made that nobody used, and a used link stays as the record of
+  the account it made. The invitation door (`server/lib/inviteDoor.ts`)
+  refuses a link whose maker is a tombstone or has no row, as withdrawn and
+  without naming them, and records no vouch from one, so a sweep that stops
+  between the tombstone and the links still admits nobody.
+  **AND THE ROWS THEY OWNED THAT NOTHING SWEPT** (reviews of 2026-10-22
+  and 2026-10-23). Ten named steps after the tombstone, between the role
+  tensions and the role proposals, and one more before comms. Their answers,
+  queue places and slots at gatherings go, and so do the seats and queue
+  places they held as a guest before joining (`guest-places-after-tombstone`,
+  before comms deletes the contacts that say whose those keys are). A seat
+  they held on an evening still ahead serves the queue, a fee held for a
+  place ahead comes back, judged before any seat is given up and finished
+  once if a refund died half way, and the waitlist passes over a tombstone
+  and over a guest key whose contact is a tombstone's. A recurring evening is
+  ahead through its village date and no later, at any offset. Their housing
+  requests are scrubbed in place, because a reserved row is a home held, with
+  the admin audit line each one wrote; a request another member made at
+  their address stays that member's and loses only the address; a second
+  address they typed into their own request leaves the address book first
+  (`housing-contacts-after-tombstone`); and the status route writes to nobody
+  at the tombstone's address. Vouches written about them go, and so do the
+  vouches they gave somebody still waiting; a vouch that admitted somebody
+  keeps its row without the words; no vouch, ordinary or super, can be given
+  to a tombstone; and the two doors that admit on a count leave a tombstone's
+  vouch out of it. They walk out of every conversation in one transaction per
+  thread, so a group they owned passes to a living member, and every group
+  they were in is checked for a living owner; their messages stay, read as a
+  departed member's through the join. Every delegation they gave or carried
+  ends, each living delegator is told through the notification spine, and
+  open ballots are derived again, so no vote copied from them stays cast.
+  Ventures go. Investor path facts, stays and orders stay as records and lose
+  their words and the payer's address. A ballot about them (a vote to seat
+  them, or to take a role back) keeps its subject, votes and outcome and stops
+  naming them in its title, document and notices, and its public pulse lines
+  go (`ballot-words-after-tombstone`); the day-21 path hand-off that names
+  them to a path's contact person loses its words; and a living person's own
+  housing alert, or guest contact, at an address they also typed stays that
+  person's. The header of `server/lib/erasure.ts`
+  says why each kept thing is kept, and
+  `server/lib/erasure.ownedRows.resume.test.ts` stops each of these steps
+  part way and resumes it.
+  **AND THEIR RECURRING PAYMENTS STOP** (round 3, finding 5). A recurring
+  product is a Stripe subscription, nothing in the app lets a member cancel
+  one, and a member who left kept being charged every period while each
+  renewal paid the product's tokens into the tombstone.
+  `product-subscriptions-after-tombstone`, after the audit line and before
+  the outside stores, cancels each subscription their purchases hold
+  (`cancelSubscription`, `server/lib/payments.ts`: it reads first, so a
+  second run cancels nothing, and it never refunds). Stripe failing with the
+  key present stops the sweep there, loudly, for the retry. With no Stripe
+  key the step cannot cancel, so it asks every admin to cancel each one by
+  hand in the Stripe dashboard (a `payments_alert` naming the count and the
+  ids), writes `member:subscriptions-cancel-by-hand:<n>:<ids>` to the audit
+  trail, and counts itself done; it used to hold such a sweep open at this
+  step for good, with the outside stores never asked. A charge that lands
+  after the account is gone, a first period included, is banked and
+  delivers nothing: `settleProductPurchase` refuses a buyer who has left,
+  sends no receipt, and tells the admins. It also cancels the subscription
+  itself, on every such charge (`settleLeaversSubscription`,
+  `server/lib/owedCancels.ts`, round 4): a recurring checkout opened before
+  the delete and paid after it makes a subscription the erasure never saw.
+  **WHAT IS STILL OWED IS DERIVED, NOT STORED.** The by-hand audit row IS
+  the obligation; a later `member:subscriptions-cancelled:<n>:<ids>` row
+  settles it, and an id is owed while the newest row naming it is by-hand.
+  `steps_done` is untouched. `/review` counts the owed members, naming
+  nobody; Finish and the hourly failed-actions job cancel them once Stripe
+  is connected, and "I cancelled these by hand" records a person's
+  confirmation with their id. The row survives a re-erasure only because it
+  is audience `admin`: the erasure's public-row DELETE needs audience
+  `public`. The shape holds only for an id-only step.
   **AND IT RESUMES** (`member_erasures`, 0195). The sweep is a sequence of
   about twenty writes that cannot be one transaction: three participants
   are repositories on their own connections with their own caches, one
@@ -738,11 +828,23 @@ The retention sweep never deletes an unstamped row, at any age.
   while looking closed.
 - **Member exit** (`server/lib/exit.ts`, S52/F12): `openStateCheck`
   semantics applied to a person. ENUMERATE every domain's open state
-  (loans, stays, orders, debts block; balances, roles, warnings inform);
+  (loans, stays, orders, debts block; balances, roles, warnings and
+  recurring payments inform, the last because the erasure cancels them and
+  no door lets a member do it first; on the exit desk and the departure page
+  a member who holds tokens is told instead that they stay on as a former
+  member, and that resolving the departure cancels the payments all the same,
+  Rye's ruling 8 of 2026-10-31);
   SETTLE through each domain's own terminals — exit adds exactly ONE move
-  of its own, sweeping positive balances to `sys:exit-settlement`,
-  idempotent per `(exit, token)`; RESOLVE refuses until clean, then the
-  anonymise tombstone runs. Restorative content flows only to its
+  of its own, splitting each positive balance by the village's
+  `exit.keep_pct.*` shares and sending the rest to
+  `exit.remainder_account`, idempotent per `(exit, token)`; RESOLVE refuses
+  until clean. Then (Rye, 2026-10-23: members keep their tokens, "a if b
+  hasn't already happened") a leaver whose account still holds a positive
+  platform-governed, non-recognition balance stays on as a FORMER MEMBER,
+  account and balances intact, with membership ended and roles vacated
+  (`resolveExit`, `server/lib/exitResolve.ts`); anybody else meets the
+  anonymise tombstone. On the shipped dials a leaver keeps every credit,
+  Voice and equity balance. Restorative content flows only to its
   recipients; the `exits` row carries a pointer and a status, never the
   content.
 
@@ -890,7 +992,16 @@ editing an org chart.
 | Answers | may this account press this button | what work exists, who holds it |
 | Payload | `capabilities[]` feeding the ONE gate | aim, domain, accountabilities, seats |
 | Rows a fork is born with | `founders-circle`, `steward-circle`, `treasury`, `practitioners` | the village's own seats |
-| Edited at | Admin, Game Roles | Admin, Org Chart |
+| Edited at | Admin, Power groups (the tab key is still `game-roles`) | Admin, Org Chart |
+| Members read it as | a role (an admin reads "power group") | a role |
+
+**In code, "seat" is the org-chart role; in copy it never is.** Rye ruled on
+2026-10-21 that members say role, never "a seat", and that the verb stays
+("seat someone", "seated", "unseat"). So `seatApplications.ts`, `OrgRole.seats`,
+`org.seat` and `role_seat` keep their names, because they are stored or
+because renaming them would touch every lane, while every string a member reads
+says role. `scripts/check-voice.mjs` holds that line (its SEAT_RULE). A seat in
+copy is a place at a gathering, nothing else.
 
 Nothing in `orgChart.ts` reads or writes `roles`, and no seat grants anyone a
 capability. The bridge that would let holding a seat grant a permission group
@@ -1231,6 +1342,18 @@ after committing, so a circle write cannot join anybody else's transaction and
 cannot be rolled back once it returns. A draft claiming atomicity across both
 planes would be lying about the half it cannot undo. Moving a seat BETWEEN
 circles is `org_roles.circle_id` and is fully covered.
+
+**Corrected since: circles are draftable now, through raw SQL inside the
+publish transaction.** `create_circle` (made for the structure review) and
+`rest_circle` (0243) write `circles` on the publish connection and bump the
+`circles` row of `collection_versions` in the same transaction, and the
+publish and revert routes reload `circlesRepo` after the commit, which is the
+answer to the dbCollection problem above. A revert leaves a circle the draft
+made DORMANT and puts a rested one back. The admin route
+`POST /api/admin/org/drafts/:id/changes` takes both ops, for
+"Start from your ReGen Civics profile" (`shared/regenImport.ts`), which loads a
+project's circles, seats and holders, and rests the councils a new village is
+born with, as one draft the founder reads and publishes whole.
 
 It follows the shape `applyMechanicsProposal` already set: revalidate against
 current reality rather than trusting the captured proposal, idempotent by

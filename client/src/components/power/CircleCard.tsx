@@ -19,10 +19,12 @@
  * somewhere.
  */
 import { useMemo } from "react";
+import { Link } from "wouter";
 import { ArrowLeft, Hand } from "lucide-react";
 import CircleScene from "@/components/CircleScene";
 import { ExampleChip } from "@/components/ExamplesBanner";
 import SeatGlyph from "./SeatGlyph";
+import { openingsOf } from "./villageCounts";
 import type { PowerCircle, PowerData, PowerSeat } from "./types";
 
 export default function CircleCard({
@@ -44,7 +46,8 @@ export default function CircleCard({
 
   const held = seats.reduce((n, s) => n + s.holderCount, 0);
   const places = seats.reduce((n, s) => n + s.seats, 0);
-  const open = Math.max(0, places - held);
+  // The page's one rule for an opening: a forming role's place is not one.
+  const open = openingsOf(seats);
 
   /*
    * THE DOMAIN, SUMMARISED, BECAUSE THE RAW FIELD IS AN ESSAY.
@@ -106,8 +109,15 @@ export default function CircleCard({
         {circle.isExample && <ExampleChip className="ml-2 align-middle" />}
       </h3>
       {circle.status === "forming" && (
-        <p className="text-xs text-muted-foreground mb-2">Still forming. Be one of the first to hold a seat here.</p>
+        <p className="text-xs text-muted-foreground mb-2">Still forming. Be one of the first to hold a role here.</p>
       )}
+      {/* The circle's own card: its words, its roles and who agreed to them. */}
+      <Link
+        href={`/circles/${encodeURIComponent(circle.id)}`}
+        className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+      >
+        Open this circle's card
+      </Link>
 
       <dl className="space-y-2.5 my-3">
         {circle.purpose && (
@@ -129,7 +139,7 @@ export default function CircleCard({
               </ul>
               {domains.length > DOMAIN_CAP && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  and {domains.length - DOMAIN_CAP} more, on the seats below.
+                  and {domains.length - DOMAIN_CAP} more, on the roles below.
                 </p>
               )}
             </dd>
@@ -147,14 +157,13 @@ export default function CircleCard({
       </dl>
 
       <p className="text-xs text-muted-foreground mb-1">
-        {seats.length} role{seats.length === 1 ? "" : "s"}, {held} of {places} seat
-        {places === 1 ? "" : "s"} held
+        {seats.length} role{seats.length === 1 ? "" : "s"}, {held} of {places} held
         {children.length > 0 && `, ${children.length} circle${children.length === 1 ? "" : "s"} inside`}
       </p>
       {open > 0 && (
         <p className="text-xs text-amber-700 mb-3 flex items-center gap-1.5">
           <Hand className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          {open} open call{open === 1 ? "" : "s"}. Tap a dashed seat to raise your hand.
+          {open} opening{open === 1 ? "" : "s"}. Tap a dashed one to raise your hand.
         </p>
       )}
 

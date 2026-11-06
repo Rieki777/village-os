@@ -59,7 +59,9 @@ function makeRes() {
  * Two `mint_rules` rows, chosen so that BOTH halves of the narrowing are
  * visible in a sentence.
  *
- * The Gratitude rule is on and carries a queued amount change. The Credits
+ * The Village Voice rule is on and carries a queued amount change (Voice,
+ * because Gratitude pays no role and the run says so, as the engine does).
+ * The Credits
  * rule is switched OFF and carries a queued change that switches it on. That
  * second row is the one that took a rewrite to get right: a rule that is
  * merely disabled is invisible to an admin's report as well, because
@@ -75,9 +77,9 @@ function makeRes() {
  */
 const ruleRows = (pendingFrom: number) => [
   {
-    id: "rule-role.cycle-gratitude",
+    id: "rule-role.cycle-village-voice",
     trigger: "role.cycle",
-    token_slug: "gratitude",
+    token_slug: "village-voice",
     amount: 20,
     ceiling: 100,
     enabled: 1,
@@ -268,7 +270,7 @@ describe("what a member's report leaves out", () => {
     // of promoting the queued 45 partway through.
     for (const t of out.body.turns) {
       const paid = t.findings.find((f: any) => f.area === "settlement" && f.outcome === "issued");
-      expect(paid?.sentence, `moon ${t.cycleNumber} settles at the live amount`).toContain("20 Gratitude");
+      expect(paid?.sentence, `moon ${t.cycleNumber} settles at the live amount`).toContain("20 Village Voice");
     }
   });
 
@@ -286,8 +288,8 @@ describe("what a member's report leaves out", () => {
       out.body.turns[i].findings.find(
         (f: any) => f.area === "settlement" && f.outcome === "issued" && String(f.sentence).includes(token),
       )?.sentence ?? "";
-    expect(amountIn(0, "Gratitude")).toContain("20 Gratitude");
-    expect(amountIn(1, "Gratitude")).toContain("45 Gratitude");
+    expect(amountIn(0, "Village Voice")).toContain("20 Village Voice");
+    expect(amountIn(1, "Village Voice")).toContain("45 Village Voice");
     expect(amountIn(0, "Village Credits"), "off in the first moon").toBe("");
     expect(amountIn(1, "Village Credits"), "on from the moon its change landed").toContain("25 Village Credits");
   });

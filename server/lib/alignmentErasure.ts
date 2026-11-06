@@ -54,8 +54,13 @@
  *
  * It runs AFTER the tombstone, as the journal step does, and is handed the
  * name and handle the member had before it: by then the user row holds the
- * tombstone's. A resumed erasure that only has the tombstone's name scrubs
- * nothing new, which is the honest outcome of a step that already ran.
+ * tombstone's. On a first run that is the record read before the sweep; on a
+ * resume it is the identity `member_erasures` held from before the tombstone
+ * (0282, `asTheyWere` in server/lib/erasure.ts), because a resume never
+ * re-runs a step it already finished and this step had not run. The step is
+ * skipped when only the tombstone's strings are left, a record from before
+ * 0282: those name nobody, and scrubbing them would rewrite every departed
+ * member in other people's words.
  */
 import type { Pool } from "mysql2/promise";
 import { SEAT_PRESETS_DOC } from "../../shared/seatTermsOffer";
@@ -195,9 +200,11 @@ export async function eraseFromAlignments(
   for (const n of names.others) for (const pl of await plansMentioning(pool, n)) if (pl.userId !== who.id) plans.set(pl.id, pl);
   for (const pl of Array.from(plans.values())) {
     const aim = pl.aim === null ? null : scrubText(pl.aim, names.others);
-    const commitments = pl.commitments === null ? null : scrubDeep(pl.commitments, names.others);
-    if (aim === pl.aim && JSON.stringify(commitments) === JSON.stringify(pl.commitments)) continue;
-    await rewritePlanWords(pool, pl.id, aim, commitments);
+    // The plan's JSON groups (0258, 0267): commitments, goals served, seasonal goals and card words.
+    const before = { commitments: pl.commitments, servesGoals: pl.servesGoals, seasonalGoals: pl.seasonalGoals, cardWords: pl.cardWords };
+    const after = scrubDeep(before, names.others);
+    if (aim === pl.aim && JSON.stringify(after) === JSON.stringify(before)) continue;
+    await rewritePlanWords(pool, pl.id, aim, after);
     report.othersWordsScrubbed += 1;
   }
 

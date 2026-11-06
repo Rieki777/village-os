@@ -25,6 +25,9 @@ const SPEC_TEMPLATE_KEYS = [
   "letters.confirm", "letter.layout",
   // 5.11, rung emails: "you reached X, here is the next step".
   "path.rung",
+  // The investor packet receipt, moved into the Words on 2026-10-23 from
+  // server/index.ts: the packet itself, and the thank-you when it is empty.
+  "investor.packet", "investor.thanks",
 ];
 
 /**
@@ -42,14 +45,23 @@ const R47_REWRITTEN = [
   "joining.meet_us", "letters.confirm",
 ];
 
+/**
+ * The emails that send people to the token's wall, which named it "Gratitude"
+ * whatever a village called it until 2026-10-23. Each moved to version 3, so a
+ * village holding its own copy is offered the token's own name.
+ */
+const TOKEN_NAMED = ["path.resident.stories", "path.steward.stories", "path.prosperity-creator.stories"];
+
 const DAY = 1440;
 
 describe("the default templates", () => {
-  it("hold exactly the keys the spec names, each once, at version 2 where the R47 copy pass rewrote them and 1 elsewhere", () => {
+  it("hold exactly the keys the spec names, each once, at version 2 where the R47 copy pass rewrote them, 3 where the token got its own name, and 1 elsewhere", () => {
     const keys = DEFAULT_TEMPLATES.map((t) => t.key);
     expect(new Set(keys).size, "a key appears twice").toBe(keys.length);
     expect([...keys].sort()).toEqual([...SPEC_TEMPLATE_KEYS].sort());
-    for (const t of DEFAULT_TEMPLATES) expect(t.version, t.key).toBe(R47_REWRITTEN.includes(t.key) ? 2 : 1);
+    for (const t of DEFAULT_TEMPLATES) {
+      expect(t.version, t.key).toBe(TOKEN_NAMED.includes(t.key) ? 3 : R47_REWRITTEN.includes(t.key) ? 2 : 1);
+    }
   });
 
   it("keep the investor path's words as they were, so nothing moves under the review they wait on", () => {

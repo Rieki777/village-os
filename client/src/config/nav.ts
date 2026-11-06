@@ -64,11 +64,12 @@ export type NavLink = {
    */
   unlessModule?: string;
   /**
-   * Draw a count beside the label. Only "tasks" exists: the member's own tasks
-   * waiting on them, read for them alone and hidden at zero
-   * (components/tasks/TaskCountBadge.tsx). Never anyone else's number.
+   * Draw a count beside the label: "tasks" is the member's own tasks waiting
+   * on them (components/tasks/TaskCountBadge.tsx), "messages" their own unread
+   * messages (components/messages/MessageCountBadge.tsx). Each is read for
+   * them alone and hidden at zero. Never anyone else's number.
    */
-  count?: "tasks";
+  count?: "tasks" | "messages";
 };
 
 export type NavGroup = {
@@ -306,6 +307,9 @@ export const ACCOUNT_MENU: readonly NavLink[] = [
   // button carries the other door (config/mobileNav.ts); both hide while the
   // journal module is off for this viewer.
   { href: "/journal", label: "Journal", module: "journal" },
+  // Direct messages and the shared work chats, with the member's own unread
+  // count. The shortcuts button carries the other door (config/mobileNav.ts).
+  { href: "/messages", label: "Messages", module: "messaging", count: "messages" },
   { href: "/profile#wallet", label: "Wallet", module: "exchange" },
   // The live-session task board on the profile, with the member's own count
   // of what waits on them beside it. The shortcuts button carries the other

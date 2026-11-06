@@ -375,7 +375,7 @@ export async function updateIntent(
 
 /** The consent sentence, verbatim, one place. The client renders this string. */
 export const CONSENT_SENTENCE =
-  "Use what the village already knows about me (seats, badges, skills, quests, when I arrived) to suggest offers and introductions.";
+  "Use what the village already knows about me (roles, badges, skills, quests, when I arrived) to suggest offers and introductions.";
 
 export async function getPolicy(pool: Pool, userId: string): Promise<IntentPolicyRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
@@ -721,7 +721,7 @@ async function ownerFactsFor(pool: Pool, deps: Pick<IntentsDeps, "orgSeats">, us
     facts.fragments.push({
       source: `seat:${seat.roleId}`,
       label: seat.roleName,
-      text: `Holds the ${seat.roleName} seat${seat.aim ? `: ${seat.aim}` : ""}`,
+      text: `Holds the ${seat.roleName} role${seat.aim ? `: ${seat.aim}` : ""}`,
     });
   }
   const [skills] = await pool.query<RowDataPacket[]>(

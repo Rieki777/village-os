@@ -104,7 +104,7 @@ function readModuleDocs() {
     );
   }
   const out = {};
-  for (const m of block[1].matchAll(/([A-Za-z0-9_-]+)\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
+  for (const m of block[1].matchAll(/["']?([A-Za-z0-9_-]+)["']?\s*:\s*"([^"]+)"/g)) out[m[1]] = m[2];
   return out;
 }
 

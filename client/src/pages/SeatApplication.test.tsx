@@ -11,6 +11,10 @@
  *     village" and "Put it to the village";
  *   - a holder who is the candidate gets "Your own terms go to the village to
  *     adopt." and no adopt button.
+ *
+ * The card route answers nothing drawable here, so every case below reads the
+ * stacked role cards the page falls back to. The player card in proposal mode
+ * is `SeatApplication.card.test.tsx`.
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +32,8 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "governance", lifecycle: "members" }] }),
   useModule: () => ({ id: "governance", lifecycle: "members" }),
+  // The Gene Keys strip above the card asks this; off here, so it draws nothing.
+  useModuleOn: () => false,
 }));
 vi.mock("@/components/modules/ModuleGate", () => ({
   default: () => <p>Module gate</p>,
@@ -48,7 +54,7 @@ const SERVED = {
   id: ID,
   href: `/seat-applications/${ID}`,
   status: "awaiting-holder",
-  statusWords: "Waiting for a seat holder",
+  statusWords: "Waiting for a role holder",
   candidate: { id: "u-ana", name: "Ana Quillfeather" },
   seats: [
     { id: "seat-lead", name: "Lead steward", aim: "Hold the whole picture." },
@@ -108,16 +114,16 @@ describe("who reads an application", () => {
   it("a visitor gets the sign-in doors, and nothing is fetched", () => {
     signedIn = null;
     render(<SeatApplication />);
-    expect(screen.getByText("Members read seat applications.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toContain(`/seat-applications/${ID}`);
+    expect(screen.getByText("Members read role applications.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toContain(`/role-applications/${ID}`);
     expect(asked.filter((a) => a.includes("role-applications"))).toEqual([]);
   });
 
   it("a guest answered 401 reads the members line and no terms", async () => {
     signedIn = { id: "u-guest" };
-    answer = () => json({ error: "auth_required", message: "Members read seat applications." }, 401);
+    answer = () => json({ error: "auth_required", message: "Members read role applications." }, 401);
     render(<SeatApplication />);
-    expect(await screen.findByText("Members read seat applications.")).toBeTruthy();
+    expect(await screen.findByText("Members read role applications.")).toBeTruthy();
     expect(screen.queryByText(/Recorded here/)).toBeNull();
     expect(screen.queryByText(/orchard ledger/)).toBeNull();
   });
@@ -127,7 +133,7 @@ describe("a member reading one", () => {
   it("shows every seat, the terms with the money line, and the member's words", async () => {
     render(<SeatApplication />);
     expect(await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" })).toBeTruthy();
-    expect(screen.getByText("Waiting for a seat holder")).toBeTruthy();
+    expect(screen.getByText("Waiting for a role holder")).toBeTruthy();
     expect(await screen.findAllByText("Recorded here. Paid outside the platform.")).not.toHaveLength(0);
     expect(screen.getByText("I kept the orchard ledger last season.")).toBeTruthy();
     // The civil day in words, never raw ISO (red team U6).
@@ -141,7 +147,7 @@ describe("a member reading one", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(2));
     expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
     expect(document.querySelector("[data-package-terms]")).not.toBeNull();
-    expect(screen.getByText("One set of terms covers every seat above.")).toBeTruthy();
+    expect(screen.getByText("One set of terms covers every role above.")).toBeTruthy();
     expect(screen.queryByText("Proposed")).toBeNull();
   });
 
@@ -295,7 +301,8 @@ describe("the words every party aligns with (PR5)", () => {
     render(<SeatApplication />);
     await screen.findByText("You aligned on 9 Oct 2026");
     // One stamp in the package's one drawer tray and one on the card (red team U11: one drawer, not one per seat).
-    expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(2);
+    // The drawer draws once the player card has answered (PR 3), so it is waited for.
+    await waitFor(() => expect(document.querySelectorAll("[data-aligned-stamp]").length).toBe(2));
     expect(screen.getAllByText("Ana Quillfeather, aligned").length).toBe(2);
     expect(screen.queryByRole("button", { name: "Align" })).toBeNull();
   });

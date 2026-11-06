@@ -30,6 +30,7 @@ import {
   type FacilitationValue,
 } from "@shared/sessions";
 import GratitudeRound from "./GratitudeRound";
+import { CLOSE_TARGET } from "./NextStepBar";
 import { OpenProposals } from "./Proposal";
 import GrowingText from "./GrowingText";
 import {
@@ -319,7 +320,7 @@ function CloseButton({ actions, onRefused }: Pick<StageProps, "actions"> & { onR
   };
 
   return (
-    <section className="rounded-2xl border border-notice/40 bg-card p-5 text-card-foreground shadow-sm">
+    <section id={CLOSE_TARGET} className="rounded-2xl border border-notice/40 bg-card p-5 text-card-foreground shadow-sm">
       {asking ? (
         <div role="group" aria-label={SESSION_COPY.closeButton}>
           <p className="font-medium text-foreground">{ROOM_COPY.closeConfirm}</p>

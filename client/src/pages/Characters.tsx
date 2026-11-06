@@ -34,13 +34,15 @@
  */
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { announceProfileChange } from "@/lib/profileRefresh";
 import { radioArrows } from "@/lib/radioArrows";
 import { Star, X } from "lucide-react";
 import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
+import RolesThatFit from "@/components/characters/RolesThatFit";
+import GeneKeysPrompt from "@/components/geneKeys/GeneKeysPrompt";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -99,6 +101,8 @@ export default function Characters() {
   const [paths, setPaths] = useState<Paths | null>(null);
   const [broken, setBroken] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  // Each new character joining the party raises this, which is what opens the Gene Keys popup (once).
+  const [joined, setJoined] = useState<{ count: number; name: string | null }>({ count: 0, name: null });
   const [error, setError] = useState("");
   /**
    * THREE READS, THREE STATES EACH.
@@ -119,6 +123,15 @@ export default function Characters() {
   /** The character whose Leave is armed, if any. An unconfirmed DELETE. */
   const [leaving, setLeaving] = useState<string | null>(null);
   const [studio, setStudio] = useState<StudioPayload | null>(null);
+  /**
+   * Whether the stage has its opening class yet. The first party read puts the
+   * member's own lead character there (the first in their party when none is
+   * marked), unless they already picked a class by hand; only a member with no
+   * party starts on the first class in the cast. It opened on the cast's first
+   * class for everyone, so "see roles that fit you" showed a stranger's class.
+   * Later party reads (after a join or a leave) never move the stage.
+   */
+  const stageSettled = useRef(false);
 
   const firstRun = useMemo(
     () => new URLSearchParams(window.location.search).get("first") === "1",
@@ -151,7 +164,11 @@ export default function Characters() {
         return r.json();
       })
       .then((d) => {
-        setParty(d?.party ?? []);
+        const own: Character[] = d?.party ?? [];
+        setParty(own);
+        const lead = own.find((c) => c.isPrimary) ?? own[0];
+        if (lead && !stageSettled.current) setActiveKey(lead.archetypeKey);
+        stageSettled.current = true;
         setPartyStatus("ready");
       })
       .catch(() => setPartyStatus("failed"));
@@ -238,6 +255,7 @@ export default function Characters() {
         return;
       }
       loadParty();
+      if (!playing) setJoined((j) => ({ count: j.count + 1, name: label }));
       setSaid(playing ? `${label} saved.` : `${label} joined your party.`);
       announceProfileChange();
     } catch {
@@ -525,6 +543,7 @@ export default function Characters() {
                       <button
                         type="button"
                         onClick={() => {
+                          stageSettled.current = true;
                           setActiveKey(a.key);
                           setSaid(`${a.name} is on the stage.`);
                         }}
@@ -669,6 +688,17 @@ export default function Characters() {
               ) : null}
             </aside>
           </div>
+
+          {/* Get your Gene Keys: a card while the member has none, and a popup once after a pick. */}
+          <div className="mt-6 empty:hidden">
+            <GeneKeysPrompt picked={joined.count} characterName={joined.name} />
+          </div>
+
+          {/* Roles that fit this character: the seats "Open paths" names, as cards to pick and propose.
+              A failed paths read draws nothing here: the class card already says so and offers Retry. */}
+          {active && pathsStatus !== "failed" ? (
+            <RolesThatFit archetypeName={active.name} fits={pathsStatus === "ready" ? (paths?.roles ?? []).map((r) => r.id) : null} />
+          ) : null}
 
           {/* Your own face for this class. Below the stage, because the class
               is what you came here to choose and the portrait is what you do

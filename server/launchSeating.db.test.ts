@@ -380,17 +380,17 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(log.audits.some((a) => a.includes("cat-3")), "and nothing is recorded about them").toBe(false);
   });
 
-  it("entrusts ALL NINETEEN powers to the seat, and the seat carries all nineteen", async () => {
+  it("gives the seat EVERY handover power, and with nothing selected hands NONE of them to the village", async () => {
     /*
      * Rye, 2026-09-24: the founding stewards "hold all powers at launch", and
      * asked whether that named a subset, all nineteen entrustable powers.
+     * Since then the comms power (2026-10-02) and the module switch
+     * (2026-10-09) joined them; the count is read off HANDOVER_SET.
      *
-     * TWO FACTS AND NOT ONE. The role has to CARRY each power, or nobody in it
-     * could act; the village has to HOLD each power, or an administrator walks
-     * through the gate with nothing anywhere saying they reached past anybody.
-     * `moveCapabilityToVillage` refuses the second without the first, so a
-     * suite asserting only the holdings would pass on a village where the role
-     * carried nothing and nothing had crossed.
+     * TWO FACTS AND NOT ONE. The role CARRIES each power, so the stewards can
+     * act on all of them. The village HOLDS only what the stewards selected for
+     * the launch (Rye, 2026-11-01), and this village selected nothing; the rest
+     * cross later, when the stewards hand them over by their own recorded act.
      *
      * Compared as whole sets. `toContain` on a key would be green on a seat
      * carrying eighteen, which is the shape this lane exists to fix.
@@ -399,15 +399,7 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     const carried = typeof roles[0].capabilities === "string" ? JSON.parse(roles[0].capabilities) : roles[0].capabilities;
     expect([...carried].sort(), "the role carries every one of them").toEqual([...HANDOVER_SET].sort());
 
-    const rows = await entrusted(pool);
-    expect(rows.map((r) => r.capability), "and every one of them is the village's").toEqual(
-      [...HANDOVER_SET].sort(),
-    );
-    for (const r of rows) {
-      expect(r.holder).toBe(STEWARD_ROLE_ID);
-      expect(r.ballot, "the vote that started the Game moved it, not an administrator").toBe(LAUNCH_BALLOT);
-    }
-    expect(rows).toHaveLength(HANDOVER_SET.length);
+    expect(await entrusted(pool), "and the launch handed not one of them to the village").toEqual([]);
   });
 
   it("tells each seated founder, once, and says when the seat ends", async () => {
@@ -415,7 +407,7 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
     expect(seatNotices.map((r) => r.userId).sort()).toEqual(["cat-1", "cat-2"]);
     expect(seatNotices[0].dedupeKey).toBe(`role:${stewardHoldingId(seatNotices[0].userId)}`);
     expect(String(seatNotices[0].body)).toContain(SEASON_ENDS_ON);
-    expect(String(seatNotices[0].body), "and how they came to hold it").toContain("named you for this seat");
+    expect(String(seatNotices[0].body), "and how they came to hold it").toContain("named you for this role");
     expect(String(seatNotices[0].body), "and that they said yes to it").toContain("you accepted");
     expect(String(seatNotices[0].title)).toContain("Steward");
   });
@@ -467,9 +459,10 @@ describe.skipIf(!configured)("the launch seats the village's founders as steward
      * left alone is a different answer from one that did nothing.
      */
     const movedAfter = await entrusted(pool);
-    expect(movedAfter, "the same nineteen rows, held by the same seat").toEqual(movedBefore);
-    expect(again.report?.capabilitiesGranted, "the role already carried all nineteen").toEqual([]);
-    expect(again.report?.holdingMoved, "and they are still the village's").toBe(true);
+    expect(movedAfter, "the same rows, held by the same seat").toEqual(movedBefore);
+    expect(movedAfter, "and a retry hands nothing to the village either").toEqual([]);
+    expect(again.report?.capabilitiesGranted, "the role already carried all of them").toEqual([]);
+    expect(again.report?.holdingMoved, "nothing selected, so nothing failed to cross").toBe(true);
   });
 });
 
@@ -566,7 +559,7 @@ describe.skipIf(!configured)("a launch nobody stood for", () => {
     expect(Number(holders[0].n)).toBe(0);
   });
 
-  it("still leaves the role carrying all nineteen, ready for the first vote that fills it", async () => {
+  it("still leaves the role carrying every handover power, ready for the first vote that fills it", async () => {
     /*
      * The grant is harmless and it is what makes the way back cheap: a
      * `role_seat` ballot seats somebody, and the powers can cross the moment

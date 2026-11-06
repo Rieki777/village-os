@@ -78,7 +78,7 @@ interface CoveragePayload {
  */
 const SUBJECT_WORDS: Record<string, [string, string]> = {
   quest: ["quest", "quests"],
-  role: ["seat", "seats"],
+  role: ["role", "roles"],
   sink: ["place to spend", "places to spend"],
   stay: ["stay", "stays"],
   event: ["gathering", "gatherings"],

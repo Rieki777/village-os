@@ -36,7 +36,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import mysql from "mysql2/promise";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { castVote, closeBallot, openBallot, withdrawBallot, type BallotRow, type OpenBallotInput } from "./ballots";
 import {
   applyDueGovernance,
@@ -258,7 +258,7 @@ beforeAll(async () => {
   db = await provisionTestDb();
   // The app pool's timezone discipline: without it a DATETIME comes back parsed
   // in the machine's own zone and every landing instant is hours out.
-  pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the applyDue.test.ts shape
+  pool = testPool(db, { connectionLimit: 8 }); // module-review-ok: the S5 scratch-schema harness pool, the applyDue.test.ts shape
   await loadVariables(pool);
   await setVariable(pool, STEWARD_SUBJECTS_KEY, "all");
 }, 300000);

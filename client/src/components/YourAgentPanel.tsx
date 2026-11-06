@@ -50,6 +50,12 @@ const SCOPE_WORDS: Record<string, string> = {
   "rsvp.write": "answer a gathering, after your yes",
   "intents.write": "post what you seek or offer, after your yes",
   "map.draft": "read the masterplan and draft the village map for you to review and publish",
+  "moon.read": "read your moon, your roles, the season and your task board",
+  "tasks.write": "mark your own board tasks Done, Let go or Undo, after your yes",
+  admin: "call the admin paths the village has opened to agents, as you, with your own admin checks (admins only)",
+  "sera.undoable": "for Sera's agent account only: link people, suggest tasks and moon items, draft agenda items and switch boards, each one undoable for 30 days",
+  "moon.write": "draft your own moon: import a moon pack, change an item, set next moon's goals, each after your yes",
+  "moon.review": "for a reviewer: read the review queue and the role signals, never with amounts",
 };
 
 const TIER_WORDS: Record<Profile["aboutTier"], string> = {
@@ -344,7 +350,7 @@ export default function YourAgentPanel() {
         {/* ── Bring your agent ── */}
         <Card title="Bring your agent" icon={<KeyRound className="w-4 h-4 text-notice" />}>
           <p className="text-xs text-muted-foreground mb-3">
-            A personal access token lets your agent read what you already see here and make two writes, each one shown to you first. Tokens expire in 90 days and you can revoke one any time.
+            A personal access token lets your agent read what you already see here and make two writes, each one shown to you first. Tokens expire in 90 days and you can revoke one any time. Changing or resetting your password, or an admin signing you out everywhere, ends every token you made, your agent inbox, your own model key and your private calendar address. Set up again the ones you still use.
           </p>
 
           {tokens.length > 0 && (

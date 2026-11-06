@@ -19,7 +19,11 @@ import {
   ROLE_APPLICATION,
   seatList,
   STATUS_WORDS,
+  VOTE_CANNOT_WORDS,
+  VOTE_DECIDES_WORDS,
+  whoAdoptsWords,
 } from "./seatApplications";
+import { whoApprovesWords } from "./roleProposalConsent";
 
 const body = (over: Record<string, unknown> = {}) => ({
   seatIds: ["seat-a"],
@@ -99,6 +103,56 @@ describe("who adopts", () => {
   });
 });
 
+describe("the words naming who adopts in this village (E8, Rye 2026-10-31)", () => {
+  const group = (name: string, holders: string[]) => ({ name, holders });
+  const CIRCLE = "The circle consents within 2 business days, or";
+
+  it("the role carrying the power, as Role (FirstName), while a role holds it", () => {
+    const f = { villageHolds: false, heldLive: true, groups: [group("Steward Circle", ["Rye Cordon", "Rick Moss"])] };
+    expect(whoAdoptsWords(f)).toBe("Steward Circle (Rye, Rick) adopts it.");
+    expect(whoApprovesWords(f)).toBe(`${CIRCLE} Steward Circle (Rye, Rick) adopts it.`);
+    // Several roles read as a choice, and a role nobody holds is left out of it.
+    expect(whoAdoptsWords({ villageHolds: false, heldLive: true, groups: [group("Steward Circle", ["Rye"]), group("Founders", ["Jess"]), group("Empty", [])] })).toBe(
+      "Steward Circle (Rye) or Founders (Jess) adopts it.",
+    );
+    // Names cap at three, as every role label does.
+    expect(whoAdoptsWords({ villageHolds: false, heldLive: true, groups: [group("Stewards", ["A a", "B b", "C c", "D d", "E e"])] })).toBe("Stewards (A, B, C +2) adopts it.");
+  });
+
+  it("what has to happen first, when a role carries the power and nobody else holds it", () => {
+    expect(whoAdoptsWords({ villageHolds: false, heldLive: false, groups: [group("Steward Circle", [])] })).toBe(
+      "Whoever holds Steward Circle adopts it. Nobody holds it yet, so an admin places someone in it first.",
+    );
+    // The candidate is the only holder: they cannot adopt their own, and are never named.
+    expect(whoAdoptsWords({ villageHolds: false, heldLive: true, groups: [group("Steward Circle", [])] })).toBe(
+      "Whoever holds Steward Circle adopts it. Nobody else holds it yet, so an admin places someone in it first.",
+    );
+  });
+
+  it("a fresh fork where no role carries the power: never an admin, never a promise", () => {
+    const f = { villageHolds: false, heldLive: false, groups: [] };
+    expect(whoAdoptsWords(f)).toBe("A founder or steward role adopts it. No role here carries the power to place people in roles yet, so an admin gives it to one first.");
+    expect(whoApprovesWords(f)).not.toContain("organisation power");
+  });
+
+  it("once the village holds the power, the vote, with no circle line, and a proposal that changes roles waits", () => {
+    const f = { villageHolds: true, heldLive: true, groups: [group("Steward Circle", ["Rye"])] };
+    expect(whoAdoptsWords(f)).toBe(VOTE_DECIDES_WORDS);
+    expect(whoApprovesWords(f)).toBe(VOTE_DECIDES_WORDS);
+    expect(whoAdoptsWords({ ...f, changesRoles: true })).toBe(VOTE_CANNOT_WORDS);
+    expect(whoApprovesWords({ ...f, changesRoles: true })).toBe(VOTE_CANNOT_WORDS);
+    // A proposal that changes roles reads the same as any other while a role holds the power.
+    expect(whoAdoptsWords({ ...f, villageHolds: false, changesRoles: true })).toBe("Steward Circle (Rye) adopts it.");
+  });
+
+  it("matches the door: an admin holding no role is refused while a role holds it, and everyone at the door once the village does", () => {
+    const before = whoMayPutHandToVillage(false, ["u-hal"]);
+    expect(adoptRefusal(before, "u-admin", "u-ana")).toMatchObject({ status: 403, error: "not_a_holder" });
+    expect(adoptRefusal(before, "u-hal", "u-ana")).toBeNull();
+    expect(adoptRefusal(whoMayPutHandToVillage(true, ["u-hal"]), "u-hal", "u-ana")).toMatchObject({ error: "not_a_holder" });
+  });
+});
+
 describe("the ballot's words", () => {
   const seats = [
     { name: "Lead steward", aim: "Hold the village's whole picture." },
@@ -111,7 +165,7 @@ describe("the ballot's words", () => {
     const doc = applicationBallotDoc(seats, "sa-00112233445566aa");
     expect(doc).toContain("  Lead steward\n    Hold the village's whole picture.");
     expect(doc).toContain("  Platform steward\n");
-    expect(doc).toContain("/seat-applications/sa-00112233445566aa");
+    expect(doc).toContain("/role-applications/sa-00112233445566aa");
     expect(doc).not.toMatch(/^#|\*\*/m);
   });
 
@@ -125,7 +179,7 @@ describe("the ballot's words", () => {
   it("lists names the way a sentence does", () => {
     expect(seatList(["A"])).toBe("A");
     expect(seatList(["A", "B"])).toBe("A and B");
-    expect(seatList([])).toBe("a seat");
+    expect(seatList([])).toBe("a role");
   });
 });
 

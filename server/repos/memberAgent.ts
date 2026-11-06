@@ -2,16 +2,19 @@
  * A member's own agent: its inbox, its queued deliveries, its drafts, and the
  * third-party key it speaks with.
  *
- * ── WHY FOUR TABLES IN ONE MODULE ────────────────────────────────────────────
+ * ── WHY THESE TABLES ARE IN ONE MODULE ──────────────────────────────────────
  *
  * The house rule is one table per repo, and this breaks it on purpose. These
- * four are one member's agent, and the reason they travel together is that
+ * are one member's agent, and the reason they travel together is that
  * deleting any one without the others leaves a live thing behind:
  *
  *   agent_inboxes      the webhook the village DELIVERS TO. Left standing, a
- *                      24-hour job (`agent-week-ahead`, server/index.ts) selects
+ *                      24-hour job (`agent-week-ahead`) selected
  *                      `WHERE enabled = 1` with NO JOIN to users, so a departed
- *                      member's endpoint keeps receiving the village's payloads.
+ *                      member's endpoint kept receiving the village's payloads.
+ *                      The delivery chain now asks who holds an inbox
+ *                      (`holderListens`, server/lib/agentInbox.ts), and the
+ *                      row still goes: it is the departed member's own URL.
  *   agent_deliveries   what is queued for that inbox. Keyed on `inbox_id` and
  *                      NOT on the member, and carrying no foreign key, so
  *                      removing the inbox alone ORPHANS them rather than
@@ -20,6 +23,20 @@
  *                      credential belonging to somebody who asked to be
  *                      forgotten is the sharpest row in this set.
  *   member_drafts      what their agent wrote for them and they never sent.
+ *   agent_tokens       the `vat_` tokens they minted. A token is not a session,
+ *                      so the tombstone's tokenVersion bump never reached it:
+ *                      the resolver mints a fresh session from the row, and an
+ *                      erased member's agent went on reading the calendar and
+ *                      the directory as them until the token expired.
+ *   agent_profiles     the member's own note to their agent, and what they said
+ *                      the assistant got wrong.
+ *   assistant_statements  sentences the assistant wrote ABOUT the member, built
+ *                      from that note.
+ *   agent_oauth_codes  sign-in codes a connector client was given for the
+ *                      member (0319), used or not.
+ *   agent_actions      what an agent did through the connector's admin and Sera
+ *                      scopes (0319), where the member is the agent account or
+ *                      the member the action was about.
  *
  * A module per table would put the ORDER these have to come out in nowhere, and
  * the order is the load-bearing part: deliveries before the inbox they point at.
@@ -38,7 +55,7 @@
  * this village hold about me", and a table missing from it is invisible to
  * every other check in the repository.
  */
-import type { Pool } from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /** How many rows a sweep step removed, for the record it writes. */
 export interface AgentSweepCounts {
@@ -46,9 +63,91 @@ export interface AgentSweepCounts {
   inboxes: number;
   keys: number;
   drafts: number;
+  tokens: number;
+  profiles: number;
+  statements: number;
+  oauthCodes: number;
+  actions: number;
 }
 
 const affected = (res: unknown): number => Number((res as { affectedRows?: number })?.affectedRows ?? 0);
+
+/**
+ * Remove one member's inbox and everything queued for it, deliveries first.
+ *
+ * The erasure sweep calls this through `forgetAgentForMember`. The inbox code
+ * in server/lib/agentInbox.ts calls it on its own when it finds an inbox whose
+ * holder no longer stands: a request that passed its session check before the
+ * tombstone can land its write after the sweep's last delete, and the
+ * delivery chain is where that row is caught.
+ */
+export async function forgetInboxOf(pool: Pool, userId: string): Promise<{ deliveries: number; inboxes: number }> {
+  const [deliveries] = await pool.query(
+    "DELETE FROM `agent_deliveries` WHERE `inbox_id` IN (SELECT `id` FROM `agent_inboxes` WHERE `user_id` = ?)",
+    [userId],
+  );
+  const [inboxes] = await pool.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
+  return { deliveries: affected(deliveries), inboxes: affected(inboxes) };
+}
+
+/**
+ * Set a member's inbox, retiring `priorId` whole first: everything queued for
+ * it, then the row. A fresh id means a fresh derived secret.
+ *
+ * ON THE CALLER'S CONNECTION, and never a pool: `setInbox`
+ * (server/lib/agentInbox.ts) runs this inside the transaction that holds the
+ * member's row and has just asked whether the session still holds it
+ * (`whileSessionHolds`, server/lib/sessionHold.ts). On a pool these would run
+ * on other connections, outside that lock, and the check would cover nothing.
+ */
+export async function replaceInboxOn(
+  conn: PoolConnection,
+  userId: string,
+  priorId: string | null,
+  inbox: { id: string; url: string },
+): Promise<void> {
+  if (priorId) {
+    await conn.query("DELETE FROM `agent_deliveries` WHERE `inbox_id` = ?", [priorId]);
+    await conn.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
+  }
+  await conn.query(
+    "INSERT INTO `agent_inboxes` (`id`, `user_id`, `url`, `enabled`, `consecutive_failures`) VALUES (?,?,?,1,0)",
+    [inbox.id, userId, inbox.url],
+  );
+}
+
+/** A member's key as it is stored: sealed, with the parts the panel shows beside it. */
+export interface SealedMemberKeyRow {
+  userId: string;
+  provider: string;
+  baseUrl: string | null;
+  model: string | null;
+  ciphertext: string;
+  iv: string;
+  tag: string;
+  last4: string;
+}
+
+/**
+ * Store or replace a member's sealed key, ON THE CALLER'S CONNECTION, for the
+ * reason `replaceInboxOn` gives: `storeMemberKey` (server/lib/memberSecrets.ts)
+ * runs it under the member's row lock.
+ */
+export async function upsertMemberKeyOn(conn: PoolConnection, row: SealedMemberKeyRow): Promise<void> {
+  await conn.query(
+    "INSERT INTO `member_llm_keys` (`user_id`, `provider`, `base_url`, `model`, `ciphertext`, `iv`, `tag`, `last4`, `set_at`) " +
+      "VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) " +
+      "ON DUPLICATE KEY UPDATE `provider` = VALUES(`provider`), `base_url` = VALUES(`base_url`), `model` = VALUES(`model`), " +
+      "`ciphertext` = VALUES(`ciphertext`), `iv` = VALUES(`iv`), `tag` = VALUES(`tag`), `last4` = VALUES(`last4`), `set_at` = CURRENT_TIMESTAMP",
+    [row.userId, row.provider, row.baseUrl, row.model, row.ciphertext, row.iv, row.tag, row.last4],
+  );
+}
+
+/** The holder of every enabled inbox, for the daily week-ahead job. */
+export async function enabledInboxUserIds(pool: Pool): Promise<string[]> {
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT `user_id` FROM `agent_inboxes` WHERE `enabled` = 1");
+  return rows.map((r) => String(r.user_id));
+}
 
 /**
  * Remove one member's agent entirely.
@@ -63,19 +162,37 @@ const affected = (res: unknown): number => Number((res as { affectedRows?: numbe
  * sweep this belongs to is resumable and a step may be re-entered after a
  * failure part way through.
  */
+/** A value matched literally inside LIKE: its own % and _ are not wildcards. */
+const likeEscape = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 export async function forgetAgentForMember(pool: Pool, userId: string): Promise<AgentSweepCounts> {
-  const [deliveries] = await pool.query(
-    "DELETE FROM `agent_deliveries` WHERE `inbox_id` IN (SELECT `id` FROM `agent_inboxes` WHERE `user_id` = ?)",
-    [userId],
-  );
-  const [inboxes] = await pool.query("DELETE FROM `agent_inboxes` WHERE `user_id` = ?", [userId]);
+  const inbox = await forgetInboxOf(pool, userId);
   const [keys] = await pool.query("DELETE FROM `member_llm_keys` WHERE `user_id` = ?", [userId]);
   const [drafts] = await pool.query("DELETE FROM `member_drafts` WHERE `user_id` = ?", [userId]);
+  // Deleted rather than revoked: the row carries the member's own label for
+  // the token, and nothing joins back to it once its holder is gone.
+  const [tokens] = await pool.query("DELETE FROM `agent_tokens` WHERE `user_id` = ?", [userId]);
+  const [profiles] = await pool.query("DELETE FROM `agent_profiles` WHERE `user_id` = ?", [userId]);
+  const [statements] = await pool.query("DELETE FROM `assistant_statements` WHERE `subject_user_id` = ?", [userId]);
+  const [oauthCodes] = await pool.query("DELETE FROM `agent_oauth_codes` WHERE `user_id` = ?", [userId]);
+  // An admin path names the member it touched as a segment (`/api/admin/.../:userId`), so those rows go too.
+  const seg = likeEscape(userId);
+  const [actions] = await pool.query(
+    "DELETE FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ? OR `path` LIKE ? OR `path` LIKE ?",
+    [userId, userId, `%/${seg}`, `%/${seg}/%`],
+  );
+  // Who pressed an undo is the erased member's trace on somebody else's row: the row stays, the name goes.
+  await pool.query("UPDATE `agent_actions` SET `undone_by_user_id` = NULL WHERE `undone_by_user_id` = ?", [userId]);
   return {
-    deliveries: affected(deliveries),
-    inboxes: affected(inboxes),
+    deliveries: inbox.deliveries,
+    inboxes: inbox.inboxes,
     keys: affected(keys),
     drafts: affected(drafts),
+    tokens: affected(tokens),
+    profiles: affected(profiles),
+    statements: affected(statements),
+    oauthCodes: affected(oauthCodes),
+    actions: affected(actions),
   };
 }
 
@@ -83,12 +200,12 @@ export async function forgetAgentForMember(pool: Pool, userId: string): Promise<
  * Whether anything of this member's agent is still on record.
  *
  * Exists so a test can assert the erasure is COMPLETE rather than that it ran.
- * "The step did not throw" is what the sweep already told us before these four
+ * "The step did not throw" is what the sweep already told us before these
  * tables were in it.
  */
 export async function agentRowsRemaining(pool: Pool, userId: string): Promise<AgentSweepCounts> {
-  const one = async (sql: string): Promise<number> => {
-    const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(sql, [userId]);
+  const one = async (sql: string, times = 1): Promise<number> => {
+    const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(sql, Array(times).fill(userId));
     return Number(rows[0]?.n ?? 0);
   };
   return {
@@ -98,5 +215,17 @@ export async function agentRowsRemaining(pool: Pool, userId: string): Promise<Ag
     inboxes: await one("SELECT COUNT(*) AS n FROM `agent_inboxes` WHERE `user_id` = ?"),
     keys: await one("SELECT COUNT(*) AS n FROM `member_llm_keys` WHERE `user_id` = ?"),
     drafts: await one("SELECT COUNT(*) AS n FROM `member_drafts` WHERE `user_id` = ?"),
+    tokens: await one("SELECT COUNT(*) AS n FROM `agent_tokens` WHERE `user_id` = ?"),
+    profiles: await one("SELECT COUNT(*) AS n FROM `agent_profiles` WHERE `user_id` = ?"),
+    statements: await one("SELECT COUNT(*) AS n FROM `assistant_statements` WHERE `subject_user_id` = ?"),
+    oauthCodes: await one("SELECT COUNT(*) AS n FROM `agent_oauth_codes` WHERE `user_id` = ?"),
+    actions: await (async () => {
+      const seg = likeEscape(userId);
+      const [rows] = await pool.query<Array<{ n: number }> & import("mysql2/promise").RowDataPacket[]>(
+        "SELECT COUNT(*) AS n FROM `agent_actions` WHERE `actor_user_id` = ? OR `subject_user_id` = ? OR `undone_by_user_id` = ? OR `path` LIKE ? OR `path` LIKE ?",
+        [userId, userId, userId, `%/${seg}`, `%/${seg}/%`],
+      );
+      return Number(rows[0]?.n ?? 0);
+    })(),
   };
 }

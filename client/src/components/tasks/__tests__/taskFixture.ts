@@ -34,7 +34,7 @@ export function makeTask(over: Partial<TaskCard> = {}): TaskCard {
 }
 
 export function makeBoard(over: Partial<TaskBoardPayload> = {}): TaskBoardPayload {
-  return { holding: [], seatsHold: [], finished: [], earlierCount: 0, today: TODAY, ...over };
+  return { holding: [], seatsHold: [], circleBack: [], finished: [], earlierCount: 0, today: TODAY, ...over };
 }
 
 /** A fetch Response with a JSON body. */

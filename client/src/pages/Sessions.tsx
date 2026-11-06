@@ -1,12 +1,25 @@
 /**
  * LIVE SESSIONS, at /sessions: the front door to a circle's working calls.
  *
- * Three things on one page. The rooms open right now, to join. The closed
- * sessions this member can read (the ones they were in; an admin reads every
- * one). And a short form to open a new room: a title, which circle is
- * meeting, and how long. Opening a room or joining one moves straight into it
- * at /sessions/:id (pages/SessionRoom.tsx), and only once the server has said
- * yes.
+ * Four things on one page. The rooms open right now, to join. What members
+ * brought for a circle's next session (components/sessions/WaitingForCircle,
+ * the agenda library in shared/sessionLibrary.ts). The closed sessions this
+ * member can read (the ones they were in; an admin reads every one). And a
+ * short form to open a new room: a title, which circle is meeting, how long,
+ * and which of the brought items this session takes up (StartChecklist).
+ * Opening a room or joining one moves straight into it at /sessions/:id
+ * (pages/SessionRoom.tsx), and only once the server has said yes.
+ *
+ * COMING UP. Each circle's next meeting from its rhythm (components/sessions/
+ * ComingUp, shared/sessionRhythm.ts). "Get the room ready" on a row fills the
+ * start card for that meeting: its title, its circle, its length, and the
+ * circle's waiting agenda items ticked. A person still opens the room.
+ *
+ * THE TICKS FOLLOW THE CIRCLE. A tick on an item that no longer fits (the
+ * circle changed, or the list was read again and the item went elsewhere) is
+ * dropped, never kept out of sight. An item that went elsewhere between the
+ * read and the press refuses the open with one sentence, and the page reads
+ * the list again so what it shows is what can be taken.
  *
  * Behind the `sessions` module and a session token. Members only, no guests:
  * a signed-out visitor gets the sign-in card and nothing is fetched for them.
@@ -18,8 +31,18 @@
  * without a reload. The room itself polls far faster (ROOM_POLL_MS); a list
  * of who is meeting does not need that.
  *
+ * A ROOM THAT WENT. Somebody who was in a room when it was discarded, or on a
+ * record when it was deleted, lands here, and the page says so once, above
+ * the lists (components/sessions/roomGone.ts carries the sentence over).
+ *
  * Shapes, limits and words all come from shared/sessions.ts, the contract the
  * server reads too.
+ *
+ * MEETING TYPE. The start card offers the village's meeting templates
+ * (components/sessions/MeetingTypePicker, shared/sessionTemplates.ts), grouped
+ * by category. Picking one fills the title, circle and length and shows the
+ * flow; the room opens linked to that template, so its meetings form a series.
+ * The templates themselves are kept in components/sessions/MeetingTemplates.
  *
  * The page stays on the light linen, a document beside the room's night: the
  * title in the village's display face set large and light, each session its
@@ -37,11 +60,23 @@ import {
   cleanLine,
   type SessionListRow,
 } from "@shared/sessions";
+import { LIBRARY_COPY, LIBRARY_REFUSALS, offeredFor, type LibraryCard, type LibraryPayload } from "@shared/sessionLibrary";
+import { RHYTHM_COPY, type ComingUpPayload, type ComingUpRow } from "@shared/sessionRhythm";
+import { TEMPLATES_API, type SessionTemplate, type TemplatesPayload } from "@shared/sessionTemplates";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
 import GrowingText from "@/components/sessions/GrowingText";
 import { LIST_UI, OpenSessions, RecentSessions, type JoinState } from "@/components/sessions/SessionList";
+import ComingUp from "@/components/sessions/ComingUp";
+import StartChecklist from "@/components/sessions/StartChecklist";
+import MeetingTypePicker from "@/components/sessions/MeetingTypePicker";
+import MeetingTemplates from "@/components/sessions/MeetingTemplates";
+import WaitingForCircle from "@/components/sessions/WaitingForCircle";
+import CircleDecisions from "@/components/sessions/CircleDecisions";
+import AdviceProcess from "@/components/sessions/AdviceProcess";
+import CirclePulse from "@/components/sessions/CirclePulse";
+import { clearRoomGone, peekRoomGone } from "@/components/sessions/roomGone";
 import { STAGE_LEDE, STAGE_TITLE } from "@/components/sessions/roomUi";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
@@ -70,6 +105,10 @@ interface ListPayload {
   recent: SessionListRow[];
   circles: CircleOption[];
   defaultMinutes: number | null;
+  /** What members brought for a circle's next session. Empty from a server before the library. */
+  library: LibraryPayload;
+  /** Each circle's next meeting. Empty from a server before the rhythm. */
+  comingUp: ComingUpPayload;
 }
 
 type LoadState =
@@ -90,7 +129,20 @@ function readPayload(body: unknown): ListPayload {
     ? (b.circles as CircleOption[]).filter((c) => c && typeof c.id === "string" && typeof c.name === "string")
     : [];
   const dm = typeof b.defaultMinutes === "number" && inRange(b.defaultMinutes) ? b.defaultMinutes : null;
-  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm };
+  const lib = (b.library && typeof b.library === "object" ? b.library : {}) as Record<string, unknown>;
+  const library: LibraryPayload = {
+    items: Array.isArray(lib.items) ? (lib.items as LibraryCard[]).filter((c) => c && typeof c.id === "number" && typeof c.title === "string") : [],
+    myCircleIds: Array.isArray(lib.myCircleIds) ? (lib.myCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+  };
+  const cu = (b.comingUp && typeof b.comingUp === "object" ? b.comingUp : {}) as Record<string, unknown>;
+  const comingUp: ComingUpPayload = {
+    rows: Array.isArray(cu.rows) ? (cu.rows as ComingUpRow[]).filter((r) => r && typeof r.circleId === "string" && r.next && typeof r.next.at === "string") : [],
+    zone: typeof cu.zone === "string" ? cu.zone : "UTC",
+    keepCircleIds: Array.isArray(cu.keepCircleIds) ? (cu.keepCircleIds as unknown[]).filter((id): id is string => typeof id === "string") : [],
+    ownCalendars: cu.ownCalendars && typeof cu.ownCalendars === "object" ? (cu.ownCalendars as ComingUpPayload["ownCalendars"]) : {},
+    ownCalendarsAvailable: cu.ownCalendarsAvailable === true,
+  };
+  return { open: rows(b.open), recent: rows(b.recent), circles, defaultMinutes: dm, library, comingUp };
 }
 
 /** The server's own sentence when it sent one (`{ error: <a sentence> }`), or the fallback. */
@@ -114,6 +166,11 @@ export default function Sessions() {
 
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [join, setJoin] = useState<JoinState>({ joiningId: null, error: null });
+  // A room that went while this member had it open: said once, on this visit.
+  const [gone] = useState(peekRoomGone);
+  useEffect(() => {
+    clearRoomGone();
+  }, []);
 
   const [title, setTitle] = useState("");
   const [circleId, setCircleId] = useState("");
@@ -121,6 +178,11 @@ export default function Sessions() {
   const [durationTouched, setDurationTouched] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // The brought items this session will take up, in the order the checklist shows them.
+  const [picked, setPicked] = useState<number[]>([]);
+  // The village's meeting templates, and the one this session opens from.
+  const [templates, setTemplates] = useState<TemplatesPayload>({ templates: [], mayKeep: false });
+  const [templateId, setTemplateId] = useState<number | null>(null);
 
   // A poll that answers after the page has gone must not set state on it.
   const alive = useRef(true);
@@ -160,6 +222,38 @@ export default function Sessions() {
     if (alive.current) setLoad({ kind: "ready", data: readPayload(body) });
   }, []);
 
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await gameFetch(TEMPLATES_API);
+      if (!res.ok) return;
+      const body = (await res.json()) as Partial<TemplatesPayload>;
+      if (!alive.current) return;
+      setTemplates({
+        templates: Array.isArray(body?.templates) ? body.templates.filter((t) => t && typeof t.id === "number" && typeof t.name === "string" && Array.isArray(t.flow)) : [],
+        mayKeep: body?.mayKeep === true,
+      });
+    } catch {
+      // Offline, or a server before templates: the start card works without them.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (on && signedIn) void fetchTemplates();
+  }, [on, signedIn, fetchTemplates]);
+
+  /** A meeting type fills the card: its name as the title, its circle, its length. Nothing is sent yet. */
+  const pickTemplate = (t: SessionTemplate | null) => {
+    setTemplateId(t?.id ?? null);
+    setStartError(null);
+    if (!t) return;
+    setTitle(t.name);
+    setCircleId(t.circleId && (load.kind !== "ready" || load.data.circles.some((c) => c.id === t.circleId)) ? t.circleId : "");
+    if (t.durationMin != null) {
+      setDuration(String(t.durationMin));
+      setDurationTouched(true);
+    }
+  };
+
   // Ask on open, every half minute while visible, and once on coming back.
   useEffect(() => {
     if (!on || !signedIn) return;
@@ -180,6 +274,14 @@ export default function Sessions() {
   useEffect(() => {
     if (villageMinutes != null && !durationTouched) setDuration(String(villageMinutes));
   }, [villageMinutes, durationTouched]);
+
+  // A tick that no longer fits the circle chosen, or an item that went elsewhere, is dropped.
+  const brought = load.kind === "ready" ? load.data.library.items : null;
+  useEffect(() => {
+    if (!brought) return;
+    const fits = new Set(offeredFor(brought, circleId || null).map((c) => c.id));
+    setPicked((prev) => (prev.every((id) => fits.has(id)) ? prev : prev.filter((id) => fits.has(id))));
+  }, [brought, circleId]);
 
   const onJoin = useCallback(
     async (id: number) => {
@@ -203,6 +305,25 @@ export default function Sessions() {
     [navigate],
   );
 
+  /**
+   * "Get the room ready" from a meeting coming up: the start card takes that
+   * meeting's title, circle and length, and the circle's own waiting agenda
+   * items ticked in the checklist's order; then the card is brought into view
+   * with its title box focused. Nothing is sent until the person opens it.
+   */
+  const getReady = (row: ComingUpRow) => {
+    const day = new Date(row.next.at).toLocaleDateString(undefined, { day: "numeric", month: "long", timeZone: load.kind === "ready" ? load.data.comingUp.zone : undefined });
+    setTitle(RHYTHM_COPY.roomTitle(row.circleName, day));
+    setCircleId(row.circleId);
+    setDuration(String(row.durationMin));
+    setDurationTouched(true);
+    const items = load.kind === "ready" ? load.data.library.items : [];
+    setPicked(offeredFor(items, row.circleId).filter((c) => c.circleId === row.circleId).map((c) => c.id));
+    setStartError(null);
+    startForm.current?.closest("section")?.scrollIntoView?.({ block: "start" });
+    window.requestAnimationFrame(() => document.getElementById("sessions-start-title")?.focus({ preventScroll: true }));
+  };
+
   const onStart = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (starting) return;
@@ -224,7 +345,13 @@ export default function Sessions() {
     try {
       res = await gameFetch(SESSIONS_API, {
         method: "POST",
-        body: JSON.stringify({ title: clean, circleId: circleId || undefined, durationMin: minutes ?? undefined }),
+        body: JSON.stringify({
+          title: clean,
+          circleId: circleId || undefined,
+          durationMin: minutes ?? undefined,
+          libraryIds: picked.length ? picked : undefined,
+          templateId: templateId ?? undefined,
+        }),
       });
     } catch {
       if (alive.current) {
@@ -239,6 +366,8 @@ export default function Sessions() {
         setStarting(false);
         setStartError(text);
       }
+      // A ticked item went elsewhere a moment ago: read the list again, so the ticks left are ones that can be taken.
+      if (text === LIBRARY_REFUSALS.moved) void fetchList();
       return;
     }
     let id: unknown = null;
@@ -270,6 +399,9 @@ export default function Sessions() {
   if (!user) return <SignInToSee moduleId="sessions" name={SESSION_LIST_COPY.moduleName} />;
 
   const circles = load.kind === "ready" ? load.data.circles : [];
+  // The length the checklist weighs its minutes against: what the field shows, or the village's usual one.
+  const typed = duration.trim() === "" ? null : Number(duration);
+  const plannedLength = typed != null && inRange(typed) ? typed : villageMinutes;
 
   return (
     <Layout>
@@ -283,6 +415,11 @@ export default function Sessions() {
       <div className="container max-w-5xl pb-16">
         <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_20rem] md:items-start">
           <div className="space-y-6">
+            {gone && (
+              <p role="status" className={`${LIST_UI.card} text-foreground`}>
+                {gone}
+              </p>
+            )}
             {load.kind === "loading" && (
               <div className={`${LIST_UI.card} flex justify-center py-10`}>
                 <BreathingLoader label={SESSION_LIST_COPY.loading} showLabel />
@@ -311,16 +448,33 @@ export default function Sessions() {
             {load.kind === "ready" && (
               <>
                 <OpenSessions rows={load.data.open} join={join} onJoin={(id) => void onJoin(id)} />
+                <ComingUp
+                  comingUp={load.data.comingUp}
+                  circles={load.data.circles}
+                  defaultMinutes={load.data.defaultMinutes}
+                  onGetReady={getReady}
+                  onChanged={fetchList}
+                />
+                <WaitingForCircle library={load.data.library} circles={load.data.circles} onChanged={fetchList} />
+                <CircleDecisions circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
+                <AdviceProcess />
+                <CirclePulse circles={load.data.circles} keepCircleIds={load.data.comingUp.keepCircleIds} myCircleIds={load.data.library.myCircleIds} />
+                <MeetingTemplates payload={templates} circles={load.data.circles} onChanged={fetchTemplates} />
                 <RecentSessions rows={load.data.recent} />
               </>
             )}
           </div>
 
-          <section aria-labelledby="sessions-start-heading" className={`${LIST_UI.card} md:sticky md:top-24`}>
+          <section
+            aria-labelledby="sessions-start-heading"
+            /* Sticky, and never taller than the window, so "Open the room" is always one scroll inside the card away. */
+            className={`${LIST_UI.card} md:sticky md:top-24 md:max-h-[calc(100dvh-7rem)] md:overflow-y-auto`}
+          >
             <h2 id="sessions-start-heading" className={LIST_UI.heading}>
               {SESSION_COPY.startTitle}
             </h2>
             <form ref={startForm} className="mt-4 space-y-4" onSubmit={(e) => void onStart(e)} noValidate>
+              <MeetingTypePicker templates={templates.templates} value={templateId} onPick={pickTemplate} />
               <div>
                 <label htmlFor="sessions-start-title" className={LIST_UI.label}>
                   {SESSION_LIST_COPY.titleLabel}
@@ -375,13 +529,23 @@ export default function Sessions() {
                   }}
                 />
               </div>
+              {brought && (
+                <StartChecklist
+                  items={brought}
+                  circleId={circleId || null}
+                  circleName={circles.find((c) => c.id === circleId)?.name ?? null}
+                  picked={picked}
+                  onPicked={setPicked}
+                  durationMin={plannedLength}
+                />
+              )}
               {startError && (
                 <p role="alert" className="text-sm font-medium text-destructive">
                   {startError}
                 </p>
               )}
               <button type="submit" className={`w-full ${LIST_UI.primary}`} disabled={starting}>
-                {starting ? SESSION_LIST_COPY.opening : SESSION_COPY.startButton}
+                {starting ? SESSION_LIST_COPY.opening : picked.length ? LIBRARY_COPY.startWith(picked.length) : SESSION_COPY.startButton}
               </button>
             </form>
           </section>

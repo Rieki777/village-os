@@ -4,6 +4,7 @@
  *   GET  /api/profile               the signed-in member's own record
  *   PUT  /api/profile               name, bio, avatar, handle, paths
  *   POST /api/profile/contribution  a journal entry the member writes
+ *   GET  /api/profile/leaving-notices  what deleting their account will cancel
  *
  * Lifted out of server/index.ts with the handlers unchanged apart from the
  * path validation named below. `HANDLE_RE` came with them: server/index.ts
@@ -29,20 +30,39 @@
  * 400 for anything the village does not offer. That route is the only door a
  * member can open onto their own paths, and until the profile grew a claim
  * control nothing in the client had ever sent the field.
+ *
+ * THE SESSION IS ASKED AGAIN UNDER THE LOCK. Both writes check the session
+ * once, then wait for the row lock, and the handle check reads every member in
+ * between. A save already past its check when the member was erased, or when
+ * their password was reset or their sessions revoked, took the lock after
+ * that and wrote anyway: onto a tombstone, the real name and handle came back
+ * and every surface that de-attributes through the join printed them again.
+ * So the mutator refuses a row that is a tombstone or whose session version
+ * moved, and the route answers 401, the way set-password already rechecks.
+ * `server/repos/users.ts` pins a tombstone's identity for every other writer.
  */
 import type { Express } from "express";
 import { claimPaths } from "../../shared/gameConfig";
 import type { AppDeps } from "../lib/appDeps";
+import { isTombstone } from "../lib/oauthAccounts";
+import { subscriptionsState } from "../lib/exit";
+import { DEPARTED_HANDLE_REFUSAL, isDepartedHandle } from "../lib/profile";
+import { FORMER_MEMBER_HOLD } from "../lib/exitResolve";
 // Village Comms: the one door to the email system (server/lib/commsSink.ts).
 import { commsSink } from "../lib/commsSink";
 
-type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser">;
+type Deps = Pick<AppDeps, "authedUser" | "members" | "publicUser" | "getPool">;
 
 /** A handle is 3 to 30 characters: letters, numbers, dashes, underscores. */
 const HANDLE_RE = /^[a-z0-9][a-z0-9-_]{2,29}$/;
 
+/** The row under the lock is no longer the session's: erased, or its sessions ended since the check. */
+function sessionGone(row: any, authed: any): boolean {
+  return isTombstone({ email: String(row.email ?? "") }) || Number(row.tokenVersion ?? 0) !== Number(authed.tokenVersion ?? 0);
+}
+
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, members, publicUser } = deps;
+  const { authedUser, members, publicUser, getPool } = deps;
 
   // Auth: Get Profile
   app.get("/api/profile", async (req, res) => {
@@ -64,6 +84,11 @@ export function register(app: Express, deps: Deps): void {
       if (!HANDLE_RE.test(wanted)) {
         return res.status(400).json({ error: "Handles are 3-30 characters: letters, numbers, dashes" });
       }
+      // A member who already wears one, from before this rule, keeps saving
+      // their profile with it; nobody moves onto one (server/lib/profile.ts).
+      if (isDepartedHandle(wanted) && wanted !== String(authed.handle ?? "").toLowerCase()) {
+        return res.status(400).json({ error: DEPARTED_HANDLE_REFUSAL });
+      }
       const clash = (await members.all()).some(
         (u: any) => u.id !== authed.id && String(u.handle ?? "").toLowerCase() === wanted,
       );
@@ -73,13 +98,16 @@ export function register(app: Express, deps: Deps): void {
     if (!claimed.ok) return res.status(400).json({ error: claimed.error });
     // Copied BEFORE the update: the cached record can be the very object it mutates.
     const pathsBefore = new Set<string>(Array.isArray(authed.paths) ? authed.paths : []);
+    let gone = false;
     const updated = await members.update(authed.id, (u: any) => {
+      if ((gone = sessionGone(u, authed))) return;
       if (name) u.name = name;
       if (bio !== undefined) u.bio = bio;
       if (avatar !== undefined) u.avatar = avatar;
       if (claimed.paths !== undefined) u.paths = claimed.paths;
       if (wanted !== undefined) u.handle = wanted;
     });
+    if (gone) return res.status(401).json({ error: "auth_required" });
     if (!updated) return res.status(404).json({ error: "User not found" });
     const pathsAfter = new Set<string>(Array.isArray(updated.paths) ? updated.paths : []);
     for (const pathId of Array.from(pathsAfter)) if (!pathsBefore.has(pathId)) commsSink.fire({ type: "path_joined", personKey: authed.id, userId: authed.id, pathId, source: "profile" });
@@ -107,11 +135,37 @@ export function register(app: Express, deps: Deps): void {
       description: String(description).slice(0, 2000),
       date: new Date().toISOString(),
     };
+    let gone = false;
     const updated = await members.update(authed.id, (u: any) => {
+      if ((gone = sessionGone(u, authed))) return;
       u.contributions = u.contributions ?? [];
       u.contributions.push(contribution);
     });
+    if (gone) return res.status(401).json({ error: "auth_required" });
     if (!updated) return res.status(404).json({ error: "User not found" });
     res.json({ success: true, contribution });
+  });
+
+  /*
+   * What deleting the account will cancel, read before the member confirms
+   * (round 3, finding 5). Today that is their recurring payments: the erasure
+   * cancels each one in Stripe, nothing in the app lets a member cancel one
+   * themselves, and they should hear it before the delete and not on their
+   * next card statement. The sentence is the exit desk's own
+   * (`subscriptionsState`, server/lib/exit.ts), so the admin and the member
+   * read the same words. Only the member's own, and only notices that say
+   * something: a member with nothing to cancel gets an empty list.
+   *
+   * `?for=exit` is the departure page (ExitPolicy): a departure keeps a
+   * member who holds tokens as a former member, and their payments keep
+   * renewing, so that page reads the exit desk's sentence. Anything else is
+   * the delete panel, where a delete always erases and cancels.
+   */
+  app.get("/api/profile/leaving-notices", async (req, res) => {
+    const authed = await authedUser(req);
+    if (!authed) return res.status(401).json({ error: "auth_required" });
+    const path = req.query?.for === "exit" ? "exit" : "delete";
+    const subscriptions = await subscriptionsState(getPool(), String(authed.id), path, FORMER_MEMBER_HOLD);
+    res.json({ notices: subscriptions.count > 0 ? [subscriptions] : [] });
   });
 }

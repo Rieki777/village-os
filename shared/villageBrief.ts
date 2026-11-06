@@ -48,7 +48,7 @@ export const BRIEF_SECTIONS: BriefSection[] = [
     id: "people",
     title: "Who is already carrying this",
     audience: "admin",
-    feeds: "Seat sizing and assignment proposals. Without it every role is a guess.",
+    feeds: "Role sizing and assignment proposals. Without it every role is a guess.",
     ask: "Who is already carrying this project, and what does each of them hold? Three names is a real answer. We size the game to the people you have.",
     minimum: true,
   },
@@ -64,7 +64,7 @@ export const BRIEF_SECTIONS: BriefSection[] = [
     id: "aims",
     title: "What this project is for",
     audience: "member",
-    feeds: "Which seats earn their place, and which aims nothing currently covers.",
+    feeds: "Which roles earn their place, and which aims nothing currently covers.",
     ask: "What is this project actually trying to achieve? Three or four aims, in your own words.",
   },
   {

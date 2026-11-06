@@ -1,0 +1,170 @@
+// @vitest-environment jsdom
+/**
+ * The profile's "Propose my roles for next season" button, and the owner's
+ * proposals under My applications (role proposals PR C).
+ *
+ *   - with no draft it starts one at /role-proposals/new;
+ *   - with a draft open it reads "Continue my proposal for next season" and
+ *     opens that draft;
+ *   - a guest (403) or a village with governance off (404) gets no button;
+ *   - signed out, nothing is asked;
+ *   - My applications on the owner's live card lists each proposal with where
+ *     it stands, linked to its page; nobody else's card asks.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Router } from "wouter";
+import { fixturePayload } from "@/test/playerCardFixture";
+import { consentOf, proposalWith } from "@/test/roleProposalFixture";
+
+const session = vi.hoisted(() => ({ token: "t" as string | null }));
+vi.mock("@/lib/gameApi", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/gameApi")>()), authToken: () => session.token }));
+
+import ProposeRolesEntry from "./ProposeRolesEntry";
+import { PlayerRoleCardView } from "@/components/playerCard/PlayerRoleCard";
+import { RP_WORDS } from "./proposalWords";
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const mine = (draftId: string | null, proposals: unknown[] = []) => ({ nextSeason: null, nextSeasonWords: null, draftId, proposals });
+
+let answer: () => Response;
+const fetchMock = vi.fn(async (_url: string) => answer());
+
+beforeEach(() => {
+  session.token = "t";
+  fetchMock.mockClear();
+  vi.stubGlobal("fetch", fetchMock);
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+const draw = () =>
+  render(
+    <Router>
+      <ProposeRolesEntry />
+    </Router>,
+  );
+
+describe("the profile button", () => {
+  it("starts a proposal when there is no draft", async () => {
+    answer = () => json(mine(null));
+    draw();
+    const link = await screen.findByRole("link", { name: RP_WORDS.profilePropose });
+    expect(link.getAttribute("href")).toBe("/role-proposals/new");
+    expect(screen.getByText(RP_WORDS.profileProposeLine)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("/api/governance/role-proposals/mine", expect.anything());
+  });
+
+  it("reads Continue and opens the draft when one exists, with how far it has got", async () => {
+    const draft = proposalWith(
+      { roles: [{ roleId: "r1" }], season: { aim: null, seasonalGoals: [], servesGoals: [], ownWords: { love: "Baking", offer: "", why: "" } } },
+      { id: "rp-00000000000000a1", status: "draft" },
+    );
+    answer = () => json(mine(draft.id, [draft]));
+    draw();
+    const link = await screen.findByRole("link", { name: RP_WORDS.profileContinue });
+    expect(link.getAttribute("href")).toBe("/role-proposals/rp-00000000000000a1");
+    expect(screen.getByText("2 of 3 parts written")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "2 of 3 parts written" })).toHaveAttribute("aria-valuenow", "2");
+    expect(screen.queryByRole("link", { name: RP_WORDS.profilePropose })).toBeNull();
+  });
+
+  it("says where a submitted proposal stands", async () => {
+    const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000b2", status: "submitted", consent: consentOf("open") });
+    answer = () => json(mine(null, [submitted]));
+    draw();
+    expect(await screen.findByText("Waiting on the circle")).toBeTruthy();
+    const link = screen.getByRole("link", { name: RP_WORDS.profileSee });
+    expect(link.getAttribute("href")).toBe("/role-proposals/rp-00000000000000b2");
+  });
+
+  it("tries again when the proposal did not load", async () => {
+    fetchMock.mockImplementationOnce(async () => json({ message: "down" }, 500));
+    fetchMock.mockImplementationOnce(async () => json(mine(null)));
+    draw();
+    expect(await screen.findByText(RP_WORDS.profileFailed)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: RP_WORDS.tryAgain }));
+    expect(await screen.findByRole("link", { name: RP_WORDS.profilePropose })).toBeTruthy();
+  });
+
+  it("offers a new proposal when the submitted one is for an earlier season", async () => {
+    const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-old", status: "submitted", consent: consentOf("open") });
+    answer = () =>
+      json({
+        ...mine(null, [submitted]),
+        nextSeason: { seasonId: "s-new", name: "Season of Leaves", startsOn: "2027-04-01", endsOn: null, goals: [] },
+      });
+    draw();
+    const link = await screen.findByRole("link", { name: RP_WORDS.profilePropose });
+    expect(link.getAttribute("href")).toBe("/role-proposals/new");
+    expect(screen.getByRole("link", { name: RP_WORDS.profileSee }).getAttribute("href")).toBe("/role-proposals/rp-old");
+  });
+
+  it("says when next season has no dates yet", async () => {
+    answer = () => json({ ...mine(null), nextSeasonWords: "Next season's dates aren't set yet" });
+    draw();
+    expect(await screen.findByText("Next season's dates aren't set yet")).toBeTruthy();
+  });
+
+  it.each([[403], [404]])("draws nothing on a %s", async (status) => {
+    answer = () => json({ error: "x", message: "Proposing roles opens at the member rung." }, status);
+    const { container } = draw();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(container.textContent).toBe("");
+  });
+
+  it("asks nothing while nobody is signed in", async () => {
+    session.token = null;
+    const { container } = draw();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.textContent).toBe("");
+  });
+});
+
+describe("my proposals under My applications", () => {
+  const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000b2", status: "submitted", consent: consentOf("open") });
+  const draft = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000a1", target: null });
+
+  it("lists each of the owner's proposals with where it stands, linked to its page", async () => {
+    answer = () => json(mine(draft.id, [draft, submitted]));
+    render(
+      <Router>
+        <PlayerRoleCardView data={fixturePayload(1, "self")} />
+      </Router>,
+    );
+    const open = await screen.findByRole("link", { name: /Role proposal for Season of Roots/ });
+    expect(open.getAttribute("href")).toBe("/role-proposals/rp-00000000000000b2");
+    expect(open.textContent).toContain("Waiting on the circle");
+    const d = screen.getByRole("link", { name: /Role proposal for next season/ });
+    expect(d.getAttribute("href")).toBe("/role-proposals/rp-00000000000000a1");
+    expect(d.textContent).toContain(RP_WORDS.draftWords);
+  });
+
+  it("with no draft open, offers to start one from the card too", async () => {
+    answer = () => json(mine(null, [submitted]));
+    render(
+      <Router>
+        <PlayerRoleCardView data={fixturePayload(1, "self")} />
+      </Router>,
+    );
+    const links = await screen.findByText(RP_WORDS.myProposals);
+    const box = links.closest("[data-proposal-links]") as HTMLElement;
+    const start = Array.from(box.querySelectorAll("a")).find((a) => a.textContent === RP_WORDS.propose);
+    expect(start?.getAttribute("href")).toBe("/role-proposals/new");
+  });
+
+  it("is not asked on somebody else's card, or on a proposal card", async () => {
+    answer = () => json(mine(null, [submitted]));
+    render(
+      <Router>
+        <PlayerRoleCardView data={fixturePayload(1, "member")} />
+        <PlayerRoleCardView data={fixturePayload(1, "self", { mode: "proposal" })} mode="proposal" />
+      </Router>,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

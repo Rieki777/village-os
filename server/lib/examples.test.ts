@@ -11,7 +11,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { dbCollection } from "../repos/store-db";
 import {
   EXAMPLE_TABLES,
@@ -80,7 +80,7 @@ describe.skipIf(!configured)("standing examples", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     seed = loadExampleSeed(new URL("../seeds", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
     expect(seed, "examples-seed.json must be readable").toBeTruthy();
   }, 180_000);

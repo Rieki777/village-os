@@ -490,6 +490,30 @@ export async function setAvailability(
   );
 }
 
+/**
+ * The words between the village's name and the requester's in the subject of
+ * the team alert a request sends (server/routes/housing.ts).
+ */
+const TEAM_ALERT_LEAD = " Home reservation request from ";
+
+/**
+ * The subject of the team alert one housing request sends, spelled once. The
+ * request's name goes in as it was stored, trimmed and cut at 190.
+ */
+export function teamAlertSubject(projectName: string, name: string): string {
+  return `[${projectName}]${TEAM_ALERT_LEAD}${name}`;
+}
+
+/**
+ * True when a team alert's subject was written for a request made under this
+ * name. The erasure reads it to tell the leaver's own alert from a living
+ * person's own alert at an address both of them typed
+ * (`forgetHousingAlertsOf`, server/repos/commsPeople.ts).
+ */
+export function teamAlertNames(subject: string, name: string): boolean {
+  return !!name && String(subject ?? "").endsWith(`${TEAM_ALERT_LEAD}${name}`);
+}
+
 /** Record an intent. No money moves here; the deposit is a later step. */
 export async function createReservation(
   pool: Pool,

@@ -47,6 +47,7 @@ export const GATE_LINES: Record<string, string> = {
   exchange: "Buying this village's own tokens.",
   feed: "The everyday stream: posts, gatherings, and the village's own milestones.",
   forum: "Village conversations by topic, and the proposals that come out of them.",
+  "gene-keys": "Your Gene Keys lines and how you work best, and the six lines your circle holds.",
   governance:
     "Proposals on their way to a vote, the ballots running today, and the outcome of every one that has closed.",
   health: "This village's vital signs, cycle by cycle.",
@@ -54,12 +55,12 @@ export const GATE_LINES: Record<string, string> = {
   journal:
     "Your own morning and evening pages, a weekly pulse, call debriefs, and a kind road for feedback. Only you read what you write.",
   library: "The village's shared tools and goods, and what is on the shelf today.",
-  map: "The living org chart: the circles, the roles that orbit them, and who holds each seat.",
+  map: "The living org chart: the circles, the roles that orbit them, and who holds each role.",
   messaging: "Private conversations between members, one to one or in a named group.",
   network: "The needs and offers this village shares with the villages it listens to.",
   sessions:
     "A circle's calls, held live: who is arriving, the agenda, decisions by consent, and who holds each action, kept for those who were there.",
-  stays: "Rooms on this land, what a night costs in stay credits, and how to book one.",
+  stays: "Rooms on this land, what a night costs, and how to book one.",
   tools: "One place to find the chat, the documents, and the governance space this village runs on.",
 };
 
@@ -70,7 +71,7 @@ export const GATE_LINES: Record<string, string> = {
 export const PAGE_GATE_LINES = {
   places: "Every place on this land somebody has photographed, and the pictures they took of it.",
   propose: "The walk that takes a proposal from its first sentence to a ballot the village can vote on.",
-  seasonPlans: "Each member's plan for the season: the seats they keep, hand back or ask for, and what they will do.",
+  seasonPlans: "Each member's plan for the season: the roles they keep, hand back or ask for, and what they will do.",
 } as const;
 
 /** The line for a module, or null when there is nothing true to say. */

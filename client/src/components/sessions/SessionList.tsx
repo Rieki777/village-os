@@ -4,8 +4,10 @@
  * (`SessionListRow`, shared/sessions.ts).
  *
  * Every row's title opens its room at /sessions/:id. An open room a member
- * has not joined also offers "Join the room", which the page answers: it asks
- * the server first and only moves into the room once the join has landed.
+ * has already joined offers "Enter the room", a real button that goes straight
+ * in. One they have not joined offers "Join the room", which the page answers:
+ * it asks the server first and only moves into the room once the join has
+ * landed.
  *
  * EACH ROW IS A SEAT-CARD ROW. The page stays on the light linen, and each
  * session is its own panel: the circle as a small gold eyebrow, the title in
@@ -118,9 +120,9 @@ function SessionRow({
           )}
           {row.status === "open" &&
             (row.joined ? (
-              <span className="inline-flex min-h-8 items-center rounded-full border border-border bg-muted px-3 text-sm font-semibold text-foreground">
-                {SESSION_COPY.joinedLabel}
-              </span>
+              <Link href={`/sessions/${row.id}`} className={`${LIST_UI.primary} no-underline`}>
+                {SESSION_LIST_COPY.enterRoom}
+              </Link>
             ) : (
               <button type="button" className={LIST_UI.secondary} onClick={() => onJoin(row.id)} disabled={join.joiningId != null}>
                 {busy ? SESSION_LIST_COPY.joining : SESSION_COPY.joinButton}

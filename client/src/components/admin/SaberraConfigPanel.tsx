@@ -36,7 +36,7 @@
  * the same zone as every other panel in this directory
  * (scripts/check-tailwind-gray.mjs LIGHT_SURFACES).
  */
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { MODULES_BY_ID } from "@shared/modules";
@@ -44,9 +44,14 @@ import type { SyncFailureWhy } from "@shared/saberraSyncLog";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useModuleConfig } from "./ModuleConfigPanels";
 import SaberraOutboxPanel from "./SaberraOutboxPanel";
-import { ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
+import { QuestLevel } from "./SaberraBridgeQuests";
+import { ReviewQueueButton, ScheduleControl, SyncRunLog, WHY_WORDS } from "./SaberraSyncSchedule";
 
 const MODULE_ID = "saberra";
+
+/** The bridge board, its own chunk so the main bundle does not grow. */
+const SaberraBridgeBoard = lazy(() => import("./SaberraBridgeBoard"));
+const SeraLinkPanel = lazy(() => import("./SeraLinkPanel"));
 
 const inputCls =
   "border border-gray-200 rounded-lg px-2 py-1.5 text-sm min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep";
@@ -243,9 +248,14 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
   const keyState = status?.connection.state;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-5 space-y-5">
-      <div>
-        <h3 className="font-semibold text-gray-900 mb-1">This village's address at the service</h3>
+    <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-5 space-y-4">
+      <Suspense fallback={<p className="text-xs text-gray-500">Reading Organisational Memory…</p>}>
+        <SaberraBridgeBoard password={password} />
+      </Suspense>
+      <Suspense fallback={<p className="text-xs text-gray-500">Reading the Sera links…</p>}>
+        <SeraLinkPanel password={password} />
+      </Suspense>
+      <QuestLevel level={1} title="This village's address at the service" state={status?.addressSet ? "done" : undefined}>
         <p className="text-xs text-gray-500 mb-3">
           The service gives each village its own address. The key that goes with it is entered
           in Integrations, never here.
@@ -288,10 +298,9 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
         <button type="button" className={`${saveCls} mt-3`} disabled={saving} onClick={onSave}>
           {saving ? "Saving…" : "Save addresses"}
         </button>
-      </div>
+      </QuestLevel>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="font-semibold text-gray-900 mb-1">The connection</h3>
+      <QuestLevel level={2} title="The connection" state={keyState === "ready" && status?.addressSet ? "done" : undefined}>
         {loading ? (
           <p className="text-sm text-gray-500">Loading…</p>
         ) : !on ? (
@@ -371,13 +380,22 @@ export default function SaberraConfigPanel({ password }: { password: string }) {
               </p>
             )}
             {result && <SyncAnswer result={result} />}
-            <SyncRunLog password={password} version={runsVersion} />
           </>
         )}
-      </div>
+      </QuestLevel>
+
+      {!loading && on && (
+        <QuestLevel level={3} title="Sync history">
+          <SyncRunLog password={password} version={runsVersion} />
+        </QuestLevel>
+      )}
 
       {/* Behind the module's own gate like the status read, so it is asked only while the module is on. */}
-      {on && <SaberraOutboxPanel password={password} />}
+      {on && (
+        <QuestLevel level={4} title="Journal outbox" headingId="saberra-outbox-heading">
+          <SaberraOutboxPanel password={password} />
+        </QuestLevel>
+      )}
     </div>
   );
 }
@@ -398,10 +416,8 @@ function SyncAnswer({ result }: { result: SyncResult }) {
 
   return (
     <div className="mt-3 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700 space-y-2" role="status">
-      <p>
-        {count(result.landed, "suggestion")} reached the review queue.{" "}
-        <a href="/review" className="text-teal-deep underline">Open the review queue</a>
-      </p>
+      <p>{count(result.landed, "suggestion")} reached the review queue.</p>
+      {result.landed > 0 && <ReviewQueueButton waiting={result.landed} />}
       <p>This sync stored {count(result.facts, "fact")} from the service.</p>
       {nothing && <p>The service answered with nothing to suggest.</p>}
 

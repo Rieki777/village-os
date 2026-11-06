@@ -16,7 +16,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { ballotById, ballotsFor, openBallot, outcomeStatusOf, rowToBallot } from "./ballots";
 
 const configured = testDbConfigured();
@@ -64,7 +64,7 @@ describe.skipIf(!configured)("a vetoed decision reads as failed, through a real 
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: fixture pool against the S5 scratch schema, never a production table
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: fixture pool against the S5 scratch schema, never a production table
   }, 180_000);
 
   afterAll(async () => {

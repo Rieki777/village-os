@@ -92,6 +92,13 @@ export type StageRule =
    * anybody thanks anybody, and this rung opens `member.vouch`.
    */
   | { type: "tokens" }
+  /*
+   * HOLDS A ROLE ON THE ORG CHART RIGHT NOW (Rye, 2026-10-31). Was granted by
+   * hand, so a grant outlived the role it stood for. Read live from seatings by
+   * the steward ladder's "Mandate current" test (`holdsRoleNow`). A grant still
+   * works as a floor on top of it.
+   */
+  | { type: "role" }
   | { type: "granted" };                      // manually granted by the team
 
 export interface GameStage {
@@ -113,6 +120,8 @@ export interface NextActionRule {
     | "membership-waiting"
     | "no-membership"
     | "no-quest-claimed"
+    /** The gene-keys module is on and this member has no lines saved (server/lib/geneKeys.ts). */
+    | "no-gene-keys"
     | "quest-in-progress"
     | "gratitude-unspent"
     | "always";
@@ -234,6 +243,10 @@ export interface GameConfig {
     name: string;
     /** Sentence-position variant, e.g. "gratitude" in "send gratitude". */
     nameLower: string;
+    /** What the village calls ALL its tokens together, the umbrella word. Rye,
+     *  2026-10-23: "Village Tokens is the umbrella word, which should be able
+     *  to be set in admin". Set in Admin then Tokens; pages say it as `{tokens}`. */
+    collectiveName: string;
     /** The project's EQUITY token, on Base, governed by Hypha. The platform
      *  never mints, moves, or prices it: it reads balances and displays them. */
     equity: TokenRef;
@@ -500,6 +513,8 @@ export const GAME_CONFIG: GameConfig = {
      *  and reaches this stored value only when the name is empty. Held in
      *  agreement with name by shared/currencyDefaults.test.ts. */
     nameLower: "gratitude",
+    /** The umbrella word's platform default, Rye's own (2026-10-23). A village renames it in Admin then Tokens. */
+    collectiveName: "Village Tokens",
     // Platform-neutral defaults. A project's real token names and symbols are
     // its own identity (Amora calls its equity token "Amora" per the
     // project's wish); that belongs in the project's own fork of this file,
@@ -561,6 +576,9 @@ export const GAME_CONFIG: GameConfig = {
     favicon: "",
   },
 
+  // The platform's words for the four paths. A village's own name, second line
+  // and sentence for each come from Admin, Paths & Stages (shared/villagePaths.ts),
+  // back-filled from these. The ids and routes are fixed.
   paths: [
     { id: "investor", label: "Investor", role: "Capital Contributor", route: "/investor" },
     { id: "steward", label: "Village Steward", role: "Co-Creator", route: "/steward" },
@@ -568,8 +586,17 @@ export const GAME_CONFIG: GameConfig = {
     { id: "prosperity-creator", label: "Prosperity Creator", role: "Business Builder", route: "/prosperity" },
   ],
 
-  // Amora's Path of Growth (from the Game Guide). Stages are earned by real
+  // The ladder, in order; its default name, "Path of Growth", is in
+  // shared/villagePaths.ts. A village renames and re-describes each stage in
+  // Admin, Paths & Stages; the ids, the order and the rules stay here, because
+  // quests, roles and the game variables key on them. Stages are earned by real
   // acts, never abstract points. "granted" stages are recognized by the team.
+  //
+  // The sentences are true of any village (readiness R061, 2026-11-01). Four of
+  // them named the first village's rite, its circle and its year counts; a
+  // village that already held its own page words keeps those at boot, from
+  // server/seeds/village-paths-before-neutral.json (server/lib/pathWordsKept.ts).
+  // Contributor keeps its line: it states the unlock rule (Rye, 2026-09-08).
   stages: [
     { id: "visitor", name: "Visitor", description: "Discovering what this village is.", rule: { type: "default" }, gratitudeMultiplier: 0 },
     { id: "guest", name: "Guest", description: "Created a profile and stepped inside.", rule: { type: "account" }, gratitudeMultiplier: 1 },
@@ -578,11 +605,11 @@ export const GAME_CONFIG: GameConfig = {
     { id: "member", name: "Member", description: "Signed the {commitment} and joined the community.", rule: { type: "membership" }, gratitudeMultiplier: 2 },
     { id: "contributor", name: "Contributor", description: "The village has paid you for what you brought it.", rule: { type: "tokens" }, gratitudeMultiplier: 2 },
     { id: "quest-seeker", name: "Quest Seeker", description: "Contributing steadily through quests.", rule: { type: "quests", min: 3 }, gratitudeMultiplier: 2 },
-    { id: "initiate", name: "Initiate", description: "Walking the Co-Creator Right of Passage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
-    { id: "co-creator", name: "Co-Creator", description: "Consented by the Co-Creators circle.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
-    { id: "role-holder", name: "Role Holder", description: "Holding a seasonal role for the village.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
-    { id: "guide", name: "Guide", description: "Seven or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 4 },
-    { id: "sage", name: "Sage", description: "Twenty-one or more years of stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 5 },
+    { id: "initiate", name: "Initiate", description: "Recognized by the village and preparing for the next stage.", rule: { type: "granted" }, gratitudeMultiplier: 2 },
+    { id: "co-creator", name: "Co-Creator", description: "Welcomed by the village as one who shapes it.", rule: { type: "granted" }, gratitudeMultiplier: 3 },
+    { id: "role-holder", name: "Role Holder", description: "Holding a seasonal role for the village.", rule: { type: "role" }, gratitudeMultiplier: 3 },
+    { id: "guide", name: "Guide", description: "Recognized by the village for years of steady stewardship.", rule: { type: "granted" }, gratitudeMultiplier: 4 },
+    { id: "sage", name: "Sage", description: "Honored by the village as an elder steward.", rule: { type: "granted" }, gratitudeMultiplier: 5 },
   ],
 
   gratitude: {
@@ -598,12 +625,24 @@ export const GAME_CONFIG: GameConfig = {
     { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },
     { id: "send-gratitude", when: "gratitude-unspent", label: "Thank someone this cycle", href: "/gratitude" },
+    // Gene Keys are a choice a member may skip (Rye, 2026-10-22), and nothing remembers a skip, so this step
+    // stands only where the catch-all would: it never hides a letter, a Quest or a thank-you behind it.
+    { id: "gene-keys", when: "no-gene-keys", label: "Find your lines", href: "/profile/gene-keys" },
     { id: "explore", when: "always", label: "Find your next Quest", href: "/quests" },
   ],
 
   season: {
     cadence: "solstice-equinox",
-    timezone: "America/Costa_Rica",
+    /*
+     * UTC, which is nobody's home (readiness R059, 2026-10-31). This was
+     * "America/Costa_Rica", the first village's clock, inherited by every fork
+     * until a founder answered. The live village holds its own zone in its
+     * season document, so moving this default moved nothing there; a village
+     * that never answered moves to UTC, and the Launch Plan's village-timezone
+     * row (shared/launchRequirements.ts) is blocking until somebody does.
+     * scripts/check-identity-keys.mjs holds this slot to "UTC".
+     */
+    timezone: "UTC",
     /*
      * EMPTY, AND DERIVED INSTEAD. See `defaultSeasonsFor` in
      * `server/lib/seasonCalendar.ts`.

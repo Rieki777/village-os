@@ -1,11 +1,7 @@
 {
   "client/src/components/Layout.tsx": 1,
-  "client/src/index.css": 4,
-  "client/src/lib/gameApi.ts": 1,
-  "client/src/pages/Training.tsx": 1,
   "drizzle/0005_ledger_and_recognition_balance.sql": 1,
   "drizzle/0006_token_registry.sql": 1,
   "server/base-reads.test.ts": 2,
-  "server/index.ts": 1,
   "server/loop.e2e.test.ts": 1
 }

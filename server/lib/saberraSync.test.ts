@@ -15,6 +15,10 @@
  *      holding the lock does not hold it for good.
  *   5. Failures stretch the gap and never shrink it below the schedule.
  *   6. The log holds no key and none of the service's words.
+ *   7. A RECORD THE SERVICE STOPS SENDING LEAVES THE QUEUE, and comes back
+ *      if the service sends it again. Only a kind read whole and not empty
+ *      can say a record is gone; the controls are a failed, a cut-short and
+ *      an empty read of the same kind, which withdraw nothing.
  *
  * The service is a stub; the queue, the facts, the lock and the log are real.
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
@@ -33,6 +37,8 @@ const state = vi.hoisted(() => ({
   read: {} as Record<string, unknown[]>,
   /** A failure per wire kind, in the client's own shape. */
   fail: {} as Record<string, { why: string; detail: string }>,
+  /** Wire kinds whose every page says more follows, so the read is cut short. */
+  endless: {} as Record<string, boolean>,
   /** Every call that reached the service: sessions opened and tools called. */
   calls: 0,
   /** When set, opening a session waits on it: a sync held mid-flight. */
@@ -69,7 +75,7 @@ vi.mock("./saberraClient", () => ({
     const wire = String(args.kind);
     const failure = state.fail[wire];
     if (failure) return { ok: false, ...failure };
-    return { ok: true, records: state.read[wire] ?? [], cursor: null };
+    return { ok: true, records: state.read[wire] ?? [], cursor: state.endless[wire] ? "more" : null };
   },
 }));
 
@@ -85,6 +91,7 @@ vi.mock("./identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1
 
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { proposalsInBatch } from "./externalProposals";
+import { proposalRowById } from "../repos/externalProposals";
 import { BUSY_SENTENCE, SYNC_LOCK, pollOnce, syncByHand, syncRunsAnswer } from "./saberraSync";
 import { withNamedLock } from "../repos/namedLock";
 import { readSyncLogDocument, writeSyncLogDocument } from "../repos/saberraSyncLog";
@@ -109,6 +116,24 @@ function serviceHolds(tag: string, waterAim = "Holds the water.") {
     ],
     role_assignment: [],
   };
+}
+
+/** The service's read for one test: these circles and nothing else. */
+function circlesHeld(tag: string, names: readonly string[]) {
+  state.read = {
+    circle: names.map((n) => ({ id: pageId(`${tag}-${n}`), fields: { "Circle Name": `${tag} ${n}`, Status: "Active" } })),
+    role: [],
+    role_assignment: [],
+  };
+}
+
+/** Each waiting proposal in a batch, by the circle it names. */
+async function circlesWaiting(batch: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const p of await proposalsInBatch(pool, batch)) {
+    if (p.kind === "circle.proposed" && p.status === "proposed") out.set(String((p.payload as Record<string, unknown>)["Circle Name"]), p.id);
+  }
+  return out;
 }
 
 async function runs(): Promise<SyncRun[]> {
@@ -141,6 +166,7 @@ describe.skipIf(!configured)("the schedule beside Sync now", () => {
     state.session = "sess-1";
     state.read = {};
     state.fail = {};
+    state.endless = {};
     state.calls = 0;
     state.gate = null;
     state.entered = null;
@@ -351,6 +377,92 @@ describe.skipIf(!configured)("the schedule beside Sync now", () => {
       const calls = state.calls;
       await pollOnce(pool, at(72 * HOUR - 60 * 1000));
       expect(state.calls).toBe(calls);
+    });
+  });
+
+  describe("a record the service stops sending", () => {
+    it("IS WITHDRAWN BY THE NEXT WHOLE READ OF ITS KIND, and the run counts it", async () => {
+      circlesHeld("gone", ["Kept", "Dropped"]);
+      state.session = "gone-1";
+      await syncByHand(pool);
+      const first = await circlesWaiting("sync-gone-1");
+      expect([...first.keys()].sort()).toEqual(["gone Dropped", "gone Kept"]);
+
+      circlesHeld("gone", ["Kept"]);
+      state.session = "gone-2";
+      const pressed = await syncByHand(pool);
+      expect(pressed.body.gone).toBe(1);
+      expect([...(await circlesWaiting("sync-gone-2")).keys()]).toEqual(["gone Kept"]);
+      expect((await circlesWaiting("sync-gone-1")).size).toBe(0);
+      expect((await proposalRowById(pool, first.get("gone Dropped")!))?.status).toBe("superseded");
+      expect((await runs())[0]).toMatchObject({ trigger: "by-hand", outcome: "landed", gone: 1, rebatched: 1 });
+    });
+
+    it("is NOT withdrawn when its kind failed, was cut short, or came back empty", async () => {
+      circlesHeld("kept", ["A", "B"]);
+      state.session = "kept-1";
+      await syncByHand(pool);
+      const b = (await circlesWaiting("sync-kept-1")).get("kept B")!;
+
+      // The kind failed: a press still lands the rest, and B is still waiting.
+      circlesHeld("kept", ["A"]);
+      state.fail = { circle: { why: "vendor-error", detail: "busy" } };
+      state.session = "kept-2";
+      await syncByHand(pool);
+      expect((await proposalRowById(pool, b))?.status).toBe("proposed");
+
+      // Cut short at the page ceiling: what was not reached is not missing.
+      state.fail = {};
+      state.endless = { circle: true };
+      state.session = "kept-3";
+      await syncByHand(pool);
+      expect((await runs())[0]!.truncated).toEqual(["circle"]);
+      expect((await proposalRowById(pool, b))?.status).toBe("proposed");
+
+      // An empty answer for the kind is too thin to withdraw on.
+      state.endless = {};
+      state.read.circle = [];
+      state.session = "kept-4";
+      await syncByHand(pool);
+      expect((await proposalRowById(pool, b))?.status).toBe("proposed");
+      expect((await runs())[0]).toMatchObject({ gone: 0 });
+
+      // The control: the same read, whole and not empty, does withdraw it.
+      circlesHeld("kept", ["A"]);
+      state.session = "kept-5";
+      await syncByHand(pool);
+      expect((await proposalRowById(pool, b))?.status).toBe("superseded");
+    });
+
+    it("COMES BACK when the service sends it again unchanged, into the newest batch", async () => {
+      circlesHeld("back", ["A", "B"]);
+      state.session = "back-1";
+      await syncByHand(pool);
+      const b = (await circlesWaiting("sync-back-1")).get("back B")!;
+      circlesHeld("back", ["A"]);
+      state.session = "back-2";
+      await syncByHand(pool);
+      expect((await proposalRowById(pool, b))?.status).toBe("superseded");
+
+      circlesHeld("back", ["A", "B"]);
+      state.session = "back-3";
+      await syncByHand(pool);
+      const now = await circlesWaiting("sync-back-3");
+      expect([...now.keys()].sort()).toEqual(["back A", "back B"]);
+      expect(now.get("back B")).toBe(b);
+      expect((await runs())[0]).toMatchObject({ gone: 0 });
+    });
+
+    it("never withdraws what a steward already decided", async () => {
+      circlesHeld("decided", ["A", "B"]);
+      state.session = "decided-1";
+      await syncByHand(pool);
+      const b = (await circlesWaiting("sync-decided-1")).get("decided B")!;
+      await pool.query("UPDATE external_proposals SET status = 'rejected' WHERE id = ?", [b]); // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned, standing in for a steward's reject
+      circlesHeld("decided", ["A"]);
+      state.session = "decided-2";
+      await syncByHand(pool);
+      expect((await proposalRowById(pool, b))?.status).toBe("rejected");
     });
   });
 

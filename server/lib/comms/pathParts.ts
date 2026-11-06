@@ -56,7 +56,7 @@ import { guestPersonKey } from "../../../shared/comms/kinds";
 import { gatheringWhen, type MergeValues } from "../../../shared/comms/mergeFields";
 import { windowZone, nextInWindow } from "../../../shared/comms/quietHours";
 import { nextGatheringOrder, type NextCandidate } from "../../../shared/comms/recap";
-import { GAME_CONFIG } from "../../../shared/gameConfig";
+import { villagePathLabel } from "../villagePaths";
 import { AUTHORED_KINDS } from "../../../shared/gatherings";
 import type { ModuleLifecycle } from "../../../shared/modules";
 import { hasLadder, PATH_LADDERS } from "../../../shared/pathLadders";
@@ -81,7 +81,7 @@ import { guestDoorFacts, type GuestDeps } from "./guests";
 import { journeyStatus, villagePathIds } from "./journeyDefinitions";
 import { registerStepPosted, registerVarsBuilder, type StepPostedContext, type VarsContext } from "./journeyRegistry";
 import { escapeHtml } from "./mailer";
-import { noticePathHandoff } from "./notices";
+import { noticePathHandoff, pathHandoffKey } from "./notices";
 import { pathIdOfJourney, PATHWAY_OF_PATH } from "./paths";
 import type { MembersPort } from "./permissions";
 import { post, type PostOfficeDeps } from "./postOffice";
@@ -118,16 +118,16 @@ const firstNameOf = (name: string | null | undefined): string | null => {
   return first ? first : null;
 };
 
-/** A path's name as the village shows it. */
+/** A path's name as the village shows it (Admin, Paths & Stages). */
 export function pathNameOf(pathId: string): string {
-  return GAME_CONFIG.paths.find((p) => p.id === pathId)?.label ?? pathTitle(pathId);
+  return villagePathLabel(pathId) ?? pathTitle(pathId);
 }
 
 /** The next step on each shipped path, in a few words, and where it is taken. A fork's own path falls back to its page. */
 const NEXT_STEPS: Readonly<Record<string, { step: string; route: string }>> = {
   resident: { step: "tell us what you're looking for", route: "/reserve" },
   investor: { step: "ask for the investor packet", route: "/investor" },
-  steward: { step: "see the seats that are open and raise a hand", route: "/steward" },
+  steward: { step: "see the roles that are open and raise a hand", route: "/steward" },
   "prosperity-creator": { step: "tell us what you'd like to build", route: "/work-with-us" },
 };
 
@@ -365,7 +365,7 @@ export async function handOff(deps: PathPartsDeps, ctx: StepPostedContext): Prom
   const sentence = `${firstName} has been on the ${pathName} path for three weeks. Write to them.`;
   const href = `${site}${link}`;
   await post(deps.postOffice, {
-    idempotencyKey: `comms_path_handoff:${ctx.enrollment.id}`,
+    idempotencyKey: pathHandoffKey(ctx.enrollment.id),
     kind: "essential",
     origin: "comms.path_handoff",
     to: { email: contact.email },

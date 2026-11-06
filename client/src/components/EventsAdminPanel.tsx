@@ -403,7 +403,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Calendar</h2>
+      <h2 id="integration-calendar" tabIndex={-1} className="text-xl font-bold text-gray-900 mb-1">Calendar</h2>
       <p className="text-sm text-gray-500 mb-5">
         The village calendar: gatherings you write here, the thirteen moons by name, and calendars you attach
         from elsewhere. Everything starts as a draft, so nothing reaches the calendar until you publish it.
@@ -793,7 +793,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
           </p>
           <ul className="grid md:grid-cols-2 gap-2">
             {monthNames.map((m) => (
-              <li key={m.index} className="flex items-center gap-2">
+              <li key={m.index} className="flex flex-wrap items-center gap-2">
                 <span className="w-28 text-xs text-gray-500 shrink-0">Moon {m.index} of the year</span>
                 <input
                   aria-label={`Name of moon ${m.index} of the lunar year`}
@@ -803,7 +803,7 @@ export default function EventsAdminPanel({ password }: { password: string }) {
                   maxLength={80}
                 />
                 {m.isExample && nameDrafts[m.index] === undefined && (
-                  <span className="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0">example</span>
+                  <span className="text-[10px] uppercase tracking-wide text-amber-800 bg-amber-50 border border-amber-100 rounded px-1.5 py-0.5 shrink-0 max-w-full">example</span>
                 )}
                 {nameDrafts[m.index] !== undefined && (
                   <button onClick={() => saveName(m.index)}

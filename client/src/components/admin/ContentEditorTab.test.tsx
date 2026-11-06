@@ -33,7 +33,7 @@
  * no-PUT expectation failed with one recorded call carrying it.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -88,7 +88,9 @@ const box = () => document.getElementById("content-raw-json") as HTMLTextAreaEle
 describe("the content editor never offers a failed read as content", () => {
   let writes: Write[];
   beforeEach(() => { writes = []; });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });

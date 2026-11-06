@@ -22,6 +22,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "journal", lifecycle: "members" }] }),
+  // The Today tab's Gene Keys moon card asks these; Gene Keys is off in this village.
+  useModule: () => undefined,
+  useModuleOn: (id: string) => id === "journal",
 }));
 vi.mock("@/hooks/useVillageName", () => ({
   useVillageName: () => "Willowbrook",

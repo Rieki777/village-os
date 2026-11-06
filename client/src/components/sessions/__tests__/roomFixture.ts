@@ -43,6 +43,11 @@ export function makeView(over: Partial<SessionView> = {}): SessionView {
     seats: [{ id: "seat1", name: "Water steward", circleId: "water" }],
     arrival: null,
     carried: null,
+    sentTensions: {},
+    circleOptions: [
+      { id: "water", name: "Water" },
+      { id: "garden", name: "Garden" },
+    ],
     circleTasks: [],
     circleLastMetAt: null,
     me: { userId: 2, joined: true, facilitates: false, secretary: false, admin: false },

@@ -171,5 +171,5 @@ marked pending, and the setup card says so. A dropped code-name keeps its row wi
 blanked, so it is never minted again for somebody else.
 
 `GET /api/journal/export.md` gives the member their entries as markdown: frontmatter per entry
-(date, practice, depth, the debrief's call, seats, quests and portability, privacy,
+(date, practice, depth, the debrief's call, roles, quests and portability, privacy,
 `confirmed_by_author`, tags), one section per answered question, and the reflection once confirmed.

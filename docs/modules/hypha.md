@@ -64,7 +64,7 @@ hub for unpaid work or turning off a listener nobody replaced, and both are sile
 | posture | how it is derived | who pays for chain access |
 |---|---|---|
 | `hub` | `governance.hub_url` is set and the `governance_hub_secret` is configured | the hub, as part of hosting |
-| `self` | no hub secret, and `tokens.base_rpc_url` is a dedicated endpoint | the village |
+| `self` | no hub secret, and the Base RPC endpoint (the `base_rpc_url` secret, or `BASE_RPC_URL`) is a dedicated one | the village |
 | `none` | neither | nobody, and outcomes are a human step |
 
 The credential is the relationship. The hub issues its shared secret to villages it carries, so a

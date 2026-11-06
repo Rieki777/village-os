@@ -8,6 +8,7 @@
  * needs one the moment a member starts a conversation, before any response
  * has come back to read a title out of.
  */
+import { TASK_BOARD_PATH } from "@shared/sessionTasks";
 
 export type ConversationKind = "direct" | "group" | "crew";
 export type MemberRole = "owner" | "member";
@@ -35,6 +36,9 @@ export interface InboxConversation {
   lastMessageAt: string | null;
   memberCount: number;
   members: ConversationMemberView[];
+  /** "quest" or "task" on a shared work chat (and "quest" on a crew's thread). */
+  contextType?: string | null;
+  contextId?: string | null;
 }
 
 export interface ThreadMessage {
@@ -213,6 +217,39 @@ export function canRename(conversation: Pick<InboxConversation, "kind" | "role">
 
 export function canManageMembers(conversation: Pick<InboxConversation, "kind" | "role">): boolean {
   return conversation.kind !== "direct" && conversation.role === "owner";
+}
+
+/**
+ * A shared work chat: one quest's or one task's, whose members are the people
+ * on the work (server/lib/sharedWork.ts). A crew's thread is kind "crew" and
+ * keeps its own place in the list.
+ */
+export function isWorkThread(conversation: Pick<InboxConversation, "kind" | "contextType">): boolean {
+  return conversation.kind === "group" && (conversation.contextType === "quest" || conversation.contextType === "task");
+}
+
+/** What a shared work chat is about, for the line under its title. */
+export function workLabel(conversation: Pick<InboxConversation, "contextType">): string {
+  return conversation.contextType === "task" ? "Task" : "Quest";
+}
+
+/**
+ * The inbox in two parts: the shared work chats, and everything else. Each
+ * keeps the order it came in, so a sorted list stays sorted in both.
+ */
+export function splitInbox(list: InboxConversation[]): { work: InboxConversation[]; people: InboxConversation[] } {
+  const work: InboxConversation[] = [];
+  const people: InboxConversation[] = [];
+  for (const c of list ?? []) (isWorkThread(c) ? work : people).push(c);
+  return { work, people };
+}
+
+/** Where a shared work chat's own page lives, for its header link. */
+export function workHref(conversation: Pick<InboxConversation, "contextType" | "contextId">): string | null {
+  if (!conversation.contextId) return null;
+  if (conversation.contextType === "quest") return `/quests/${encodeURIComponent(conversation.contextId)}`;
+  if (conversation.contextType === "task") return TASK_BOARD_PATH;
+  return null;
 }
 
 /** How many messages in a thread the viewer has not read yet. */

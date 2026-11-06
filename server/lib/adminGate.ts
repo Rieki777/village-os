@@ -41,7 +41,7 @@ import type express from "express";
 // Renaming it to drop the word would silently split the two halves apart: the
 // middleware would see "no gate ran" for every request and 403 every admin
 // route. A fork renaming its platform does not rename this.
-const ADMIN_GATE_CONSULTED = Symbol.for("amora.adminGateConsulted"); // brand-ok: registry key, not copy
+const ADMIN_GATE_CONSULTED = Symbol.for("village.adminGateConsulted"); // a registry key named for no village (R066)
 
 /** Called by every gate helper on entry. Idempotent, and never a decision. */
 export function markAdminGate(req: express.Request): void {

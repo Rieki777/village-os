@@ -47,9 +47,11 @@
  * asserted.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import { getCalendarRow, occurrenceOf, type CalendarRow } from "./calendar";
 import { fromLedgerUnits, toLedgerUnits } from "./economy";
 import { TREASURY, memberAccount, postTransfer, tokenDef } from "./ledger";
 import { EVENT_ESCROW } from "./spending";
+import { villageTimezone } from "./villageReaders";
 
 export interface SeatPrice {
   tokenType: string;
@@ -370,6 +372,26 @@ export async function refundAllPlaces(
 }
 
 /**
+ * The evening one fee paid for, or null when the gathering holds no such
+ * evening.
+ *
+ * A one-off has one evening, its own row. So does a fee taken under the empty
+ * key on a row that later became a series: it was taken for the row's own
+ * time, which is the series' first evening. Every other fee on a series is for
+ * the evening its key names, with the host's move or call-off applied.
+ */
+function eveningOf(
+  gathering: CalendarRow,
+  occurrenceKey: string,
+  zone: string,
+): { startsAt: Date; endsAt: Date | null; cancelled: boolean } | null {
+  if (!gathering.recurrence || occurrenceKey === "") {
+    return { startsAt: gathering.startsAt, endsAt: gathering.endsAt, cancelled: false };
+  }
+  return occurrenceOf(gathering, occurrenceKey, zone);
+}
+
+/**
  * The gathering happened, so the village keeps the fees.
  *
  * Without this the escrow only ever grows and a host is never paid, which is a
@@ -381,26 +403,50 @@ export async function refundAllPlaces(
  * The grace hours exist so a host who cancels an hour late still cancels into
  * a refund instead of into a treasury transfer.
  *
+ * ── EACH FEE BY ITS OWN EVENING ──────────────────────────────────────────────
+ *
+ * A series charges each evening on its own, under that evening's village-time
+ * date, and the row's own `starts_at` / `ends_at` are only its FIRST evening.
+ * Reading those columns kept every fee on a weekly gathering once its first
+ * evening was a day old, fees for evenings weeks ahead included, and a member
+ * who then gave their place back was told the fee had already been kept.
+ *
+ * So the SQL only narrows (a one-off whose time is past, and every fee on a
+ * series), and each fee is then read against the evening its key names,
+ * through the calendar's own expansion in the village's zone: a moved evening
+ * counts from where it moved to, and an evening called off or taken out of the
+ * series never happened, so its fee is never kept. It stays held, where giving
+ * the place back still returns it.
+ *
  * UNITS: each leg posts `row.amount` unconverted, for the same reason the
  * refund does. The returned `amount` is therefore a sum of MINOR units across
  * tokens, and its one caller logs it. Group by token before printing it.
  */
 export async function settleFinishedSeats(
   pool: Pool,
-  opts: { now?: Date; graceHours?: number } = {},
+  opts: { now?: Date; graceHours?: number; timezone?: string } = {},
 ): Promise<{ settled: number; amount: number }> {
   const grace = Math.max(0, Math.floor(opts.graceHours ?? 24));
   const now = opts.now ?? new Date();
+  const zone = opts.timezone ?? villageTimezone();
+  const cutoff = now.getTime() - grace * 3_600_000;
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT c.* FROM event_seat_charges c JOIN events e ON e.id = c.event_id " +
       "WHERE c.status = 'held' AND e.removed_at IS NULL AND e.status IN ('scheduled','postponed') " +
-      "AND COALESCE(e.ends_at, e.starts_at) < (? - INTERVAL ? HOUR)",
+      "AND (e.recurrence IS NOT NULL OR COALESCE(e.ends_at, e.starts_at) < (? - INTERVAL ? HOUR))",
     [now, grace],
   );
+  const gatherings = new Map<string, CalendarRow | null>();
   let settled = 0;
   let amount = 0;
   for (const raw of rows) {
     const row = toRow(raw);
+    if (!gatherings.has(row.eventId)) gatherings.set(row.eventId, await getCalendarRow(pool, row.eventId));
+    const gathering = gatherings.get(row.eventId);
+    if (!gathering) continue;
+    const evening = eveningOf(gathering, row.occurrenceKey, zone);
+    if (!evening || evening.cancelled) continue;
+    if ((evening.endsAt ?? evening.startsAt).getTime() >= cutoff) continue;
     const [claim] = await pool.query<any>(
       "UPDATE event_seat_charges SET status = 'kept', settled_at = NOW() WHERE id = ? AND status = 'held'",
       [row.id],

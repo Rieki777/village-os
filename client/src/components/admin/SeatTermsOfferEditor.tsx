@@ -30,7 +30,7 @@ type Call = (path: string, body?: any, method?: string) => Promise<any>;
 
 export const OFFER_EDITOR_WORDS = {
   open: "Terms on offer",
-  sub: "What this seat offers whoever holds it. Every member reads it; visitors and guests do not.",
+  sub: "What this role offers whoever holds it. Every member reads it; visitors and guests do not.",
   save: "Put these terms on offer",
   clear: "Take the terms off offer",
   saved: "Terms on offer saved",

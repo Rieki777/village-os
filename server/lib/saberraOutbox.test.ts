@@ -502,7 +502,12 @@ describe.skipIf(!configured)("the bridge against a real schema", () => {
       expect(item).toMatchObject({ kind: "journal_entry", period: "2026-10-13", status: "queued" });
       expect(looksLikeCodeName(item.codeName)).toBe(true);
       expect(item.chars).toBeGreaterThan(50);
-      const wire = JSON.stringify(view);
+      // THE CODE-NAME IS LEFT OUT OF THE SEARCH, and only it. It is drawn at
+      // random from two word lists (server/lib/codeNames.ts) and "upland" holds
+      // "plan", so about one run in sixty-four reported a leak that was the
+      // code-name and never the entry. Its shape is held above by
+      // `looksLikeCodeName`; every other field of the view is still searched.
+      const wire = JSON.stringify({ ...view, items: view.items.map((i: typeof item) => ({ ...i, codeName: "" })) });
       for (const word of ["plan", "budget", "agreed", "Sync with", "seat", "What happened"]) {
         expect(wire.includes(word), `the admin view carries "${word}"`).toBe(false);
       }

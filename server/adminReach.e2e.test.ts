@@ -266,10 +266,10 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     });
     expect(again.status).toBe(200);
     const journal = await call("GET", `/api/org/roles/${seatId}/journal`);
-    expect(JSON.stringify(journal.json)).toContain("why this seat matters rewritten");
+    expect(JSON.stringify(journal.json)).toContain("why this role matters rewritten");
   });
 
-  it("a circle's name, purpose and status reach /api/org, with the map module OFF", async () => {
+  it("a circle's name and status reach /api/org, with the map module OFF, and its purpose changes only by consent", async () => {
     const made = await call("POST", "/api/admin/circles", { name: "Water Circle", purpose: "Springs and greywater" });
     const id = String(made.json.id);
 
@@ -292,17 +292,25 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     expect(off.status, JSON.stringify(off.json)).toBe(200);
     expect((await asStranger("/api/circles")).status, "the map's own route is gated").toBe(404);
 
+    // The purpose sent back unchanged with a rename is no change, and goes through.
     const renamed = await call("PUT", `/api/admin/circles/${id}`, {
       name: "Springs and Greywater Circle",
-      purpose: "Everything the water touches on the way through.",
+      purpose: "Springs and greywater",
       status: "forming",
     });
     expect(renamed.status, JSON.stringify(renamed.json)).toBe(200);
 
+    // A CIRCLE'S PURPOSE CHANGES BY CONSENT (Rye, 2026-10-22): the admin door
+    // refuses a new one and points to the circle's card, where it is proposed.
+    const repurposed = await call("PUT", `/api/admin/circles/${id}`, { purpose: "Everything the water touches on the way through." });
+    expect(repurposed.status).toBe(409);
+    expect(repurposed.json?.error).toBe("purpose_by_consent");
+    expect(repurposed.json?.message).toBe(`A circle's purpose changes by consent. Propose new words on the circle's card, at /circles/${id}.`);
+
     const org = await asStranger("/api/org");
     const c = (org.json.circles ?? []).find((x: any) => x.id === id);
     expect(c.name).toBe("Springs and Greywater Circle");
-    expect(c.purpose).toContain("on the way through");
+    expect(c.purpose).toBe("Springs and greywater");
     expect(c.status).toBe("forming");
 
     // A status outside the enum is refused in words. `replaceAll` is a
@@ -427,6 +435,61 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     // survive as one. A truthiness merge turns it back into a sentence a
     // screen reader then reads over a picture that carries no meaning.
     expect(cfg.json.images.logoAlt).toBe("");
+  });
+
+  it("a path's and a stage's own words reach /api/game/config, which the join form and every ladder read", async () => {
+    const before = await asStranger("/api/game/config");
+    expect(before.json.paths.find((p: any) => p.id === "steward").label, "a village that never saved reads today's name").toBe("Village Steward");
+    expect(before.json.ladder).toEqual({ title: "Path of Growth" });
+
+    const saved = await call("PUT", "/api/admin/village-paths", {
+      paths: { steward: { label: "Keeper", description: "Tend {village} with us." } },
+      stages: { member: { name: "Kin" } },
+      ladder: { title: "The Spiral" },
+    });
+    expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+
+    const cfg = await asStranger("/api/game/config");
+    const steward = cfg.json.paths.find((p: any) => p.id === "steward");
+    expect(steward).toMatchObject({ id: "steward", label: "Keeper", route: "/steward", role: "Co-Creator" });
+    expect(steward.description).not.toContain("{village}");
+    // Every word the founder did not touch still reads as it did.
+    expect(cfg.json.paths.find((p: any) => p.id === "investor").label).toBe("Investor");
+    expect(cfg.json.ladder).toEqual({ title: "The Spiral" });
+    expect(cfg.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+    expect(cfg.json.stages.map((s: any) => s.id), "the rungs keep their ids and their order").toEqual(before.json.stages.map((s: any) => s.id));
+
+    const me = await call("GET", "/api/game/me");
+    expect(me.status).toBe(200);
+    expect(me.json.stages.find((s: any) => s.id === "member").name).toBe("Kin");
+
+    // The same name reaches the path's email: the platform's welcome, rendered
+    // the way Comms renders it to send, and the journey's title in Comms.
+    const email = await call("POST", "/api/admin/comms/words/path.steward.welcome/preview", {});
+    expect(email.status, JSON.stringify(email.json)).toBe(200);
+    expect(email.json.subject).toBe("Welcome to the Keeper path");
+    expect(email.json.text).toContain("Keeper path");
+    const words = await call("GET", "/api/admin/comms/words");
+    expect(words.json.groups.find((g: any) => g.id === "path.steward").title).toBe("Keeper path");
+
+    // Refusals change nothing: an unknown id, a word over its limit, and a caller without the power.
+    for (const body of [{ paths: { pirate: { label: "Pirate" } } }, { paths: { steward: { label: "x".repeat(25) } } }]) {
+      const refused = await call("PUT", "/api/admin/village-paths", body);
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+    }
+    const stranger = await call("PUT", "/api/admin/village-paths", { paths: { steward: { label: "Intruder" } } }, "");
+    expect([401, 403]).toContain(stranger.status);
+    expect((await asStranger("/api/game/config")).json.paths.find((p: any) => p.id === "steward").label, "a refused save changes nothing").toBe("Keeper");
+
+    // A blank box goes back to today's word, and so does a reset (a save without it).
+    const blank = await call("PUT", "/api/admin/village-paths", { paths: { steward: { label: "   " } }, stages: { sage: { name: "Elder" } } });
+    expect(blank.status, JSON.stringify(blank.json)).toBe(200);
+    expect(blank.json.stored).toEqual({ stages: { sage: { name: "Elder" } } });
+    const after = await asStranger("/api/game/config");
+    expect(after.json.paths.find((p: any) => p.id === "steward").label).toBe("Village Steward");
+    expect(after.json.ladder).toEqual({ title: "Path of Growth" });
+    expect(after.json.stages.find((s: any) => s.id === "sage").name).toBe("Elder");
+    expect(after.json.stages.find((s: any) => s.id === "member").name).toBe("Member");
   });
 
   it("a linked crowdpool campaign reaches /api/crowdpool/campaigns", async () => {
@@ -562,5 +625,34 @@ describe.skipIf(!DB_CONFIGURED)("an admin write reaches the page that renders it
     const history = await call("GET", `/api/org/roles/${seatId}/history`);
     expect(JSON.stringify(history.json)).not.toContain("Ines Mora");
     expect(JSON.stringify(history.json)).not.toContain("kitchen lead");
+  });
+
+  /*
+   * THE GUIDE SHIPS UNNAMED, and blank stays blank. "Maia" is one village's
+   * guide, kept in that village's own document (Rye, 2026-10-22), so the
+   * platform default is "" and every page reads "the village guide" until a
+   * founder names it. The trap this pins is the empty-string sentinel: a
+   * normaliser that reads "" as "missing" and hands the old default back.
+   */
+  it("the guide's name: a new village's is blank, a typed one reaches the page, and clearing it stays clear", async () => {
+    const fresh = await asStranger("/api/work-with-us-config");
+    expect(fresh.status).toBe(200);
+    expect(fresh.json.assistantName, "a new village's guide has no name").toBe("");
+    expect(fresh.json.assistantGreeting).toContain("{name}");
+
+    // The admin tab sends the whole document back, so do the same with the name left blank.
+    // Less the old recognition field, which the route hands to the variables registry.
+    const { acceptGratitude: _moved, ...doc } = fresh.json;
+    const keptBlank = await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "" });
+    expect(keptBlank.status, JSON.stringify(keptBlank.json)).toBe(200);
+    expect((await asStranger("/api/work-with-us-config")).json.assistantName).toBe("");
+
+    await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "Juniper" });
+    expect((await asStranger("/api/work-with-us-config")).json.assistantName).toBe("Juniper");
+
+    await call("PUT", "/api/admin/work-with-us-config", { ...doc, assistantName: "" });
+    const cleared = await asStranger("/api/work-with-us-config");
+    expect(cleared.json.assistantName, "a cleared name stays cleared").toBe("");
+    expect(JSON.stringify(cleared.json)).not.toContain("Maia");
   });
 });

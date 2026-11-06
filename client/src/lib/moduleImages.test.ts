@@ -69,8 +69,11 @@ describe("module images", () => {
   // case above keeps this list honest: a module named here may not also ship
   // a file, and may not be a module that does not exist. `comms`, `journal` and
   // `sessions` joined on the same terms: a hue and an emblem (Mail, NotebookPen,
-  // Orbit), no file.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions"]);
+  // Orbit), no file, and `gene-keys` (Sparkles) after them.
+  // `session-card` (0296) joined last on those same terms: hue 250 and Orbit,
+  // which the emblem map already carries for `sessions`, and no file of its own.
+  // `moon-review` (0313) joined on the same terms: hue 40 and NotebookPen, no file.
+  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions", "gene-keys", "session-card", "moon-review"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

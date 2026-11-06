@@ -454,7 +454,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               and the member can withdraw it. */}
           {type === "role_application" && published.id && (
             <Link
-              href={`/seat-applications/${encodeURIComponent(published.id)}`}
+              href={`/role-applications/${encodeURIComponent(published.id)}`}
               className="inline-flex min-h-[44px] items-center rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
             >
               Open the application

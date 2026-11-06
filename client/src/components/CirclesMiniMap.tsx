@@ -102,7 +102,7 @@ export default function CirclesMiniMap({
     <Link
       href="/map/circles"
       className="group block rounded-2xl overflow-hidden border border-border no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2"
-      aria-label={`Open the living map of the circles. ${circles.length} circles, ${openSeats} seats open.`}
+      aria-label={`Open the living map of the circles. ${circles.length} circles, ${openSeats} opening${openSeats === 1 ? "" : "s"}.`}
     >
       <div className="relative" style={{ background: GROUND }}>
         <svg
@@ -163,7 +163,7 @@ export default function CirclesMiniMap({
             </div>
             <div className="text-[13px]" style={{ color: INK_DIM }}>
               {circles.length} circle{circles.length === 1 ? "" : "s"}
-              {openSeats > 0 ? `, ${openSeats} seat${openSeats === 1 ? "" : "s"} open` : ""}. Step inside any one of them.
+              {openSeats > 0 ? `, ${openSeats} role${openSeats === 1 ? "" : "s"} open` : ""}. Step inside any one of them.
             </div>
           </div>
           <ArrowRight

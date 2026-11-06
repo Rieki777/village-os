@@ -809,7 +809,7 @@ export const SUBJECT_NOUN: Record<string, string> = {
   mechanics: "Rule change",
   // Seat settings PR4: a member's application for seats, on terms. The noun is
   // what is decided, and it names no person, like the ballot it labels.
-  role_application: "Who holds a seat, and on what terms",
+  role_application: "Who holds a role, and on what terms",
   agreement: "Agreement",
   badge_grant: "Badge grant",
   quest_payout: "Quest payout",
@@ -891,7 +891,7 @@ export const SUBJECT_NOUN: Record<string, string> = {
    */
   role_declare: "A new role",
   role_seat: "Who sits in a role",
-  role_unseat: "A seat handed back",
+  role_unseat: "A role handed back",
   /*
    * ALSO NOT A WIZARD TYPE. An org chart draft put to the village
    * (server/routes/orgDraftDecide.ts). The thing decided is the shape of the

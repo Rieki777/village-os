@@ -33,6 +33,7 @@
  * for: banners, patterns, the year's shape, and the reopening cadence a
  * village opts into.
  */
+import { assignGoalIds } from "./seasonGoals";
 import { civilDate, seasonInstants, zonedTimeToUtc } from "../../shared/lunar";
 import { LUNAR_CLOCK, clockFor, type ClockMode } from "../../shared/cycleClock";
 import { GAME_CONFIG, type SeasonEntry } from "../../shared/gameConfig";
@@ -268,9 +269,10 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
         // id was silently dropped on every save AND every load, and the whole
         // season-pattern system resolved to "no pattern running".
         patternId: s.patternId ?? "",
-        goals: Array.isArray(s.goals)
-          ? s.goals.map((g: any) => ({ text: String(g?.text ?? ""), done: !!g?.done }))
-          : [],
+        // 0298: every goal keeps an id, so what serves it survives a rewording
+        // (server/lib/seasonGoals.ts). On this FIXED list for the reason
+        // `patternId` is: a field left off here is dropped on every read.
+        goals: Array.isArray(s.goals) ? assignGoalIds(s.goals) : [],
         // Season plans (2026-10-09): the window members plan this season in,
         // when an admin set it by hand. On this FIXED list for the reason
         // `patternId` is: a field left off here is dropped on every read.
@@ -293,7 +295,7 @@ export function normalizeSeasonConfig(raw: any, at: Date = new Date()): SeasonCo
         id: "season-1",
         name: raw.name, theme: raw.theme ?? "", focus: raw.focus ?? "",
         startsOn: raw.startsOn ?? "", endsOn: raw.endsOn ?? "",
-        goals: Array.isArray(raw.goals) ? raw.goals : [],
+        goals: Array.isArray(raw.goals) ? assignGoalIds(raw.goals) : [],
       }],
       cadence: def.cadence,
       timezone: def.timezone,
@@ -419,19 +421,19 @@ export function seasonRunningProblem(state: SeasonRunningState): string | null {
   if (state.currentId) return null;
   if (state.configuredCount === 0) {
     return (
-      "No season is running and none is configured. Seat terms that expire each season " +
-      "cannot come due, so every seat holds indefinitely. Add a season in the Game Mechanics " +
-      "section, or move the seats to terms counted in cycles."
+      "No season is running and none is configured. Role terms that expire each season " +
+      "cannot come due, so every role holds indefinitely. Add a season in the Game Mechanics " +
+      "section, or move the roles to terms counted in cycles."
     );
   }
   if (state.allEnded) {
     return (
       `All ${state.configuredCount} configured season(s) have ended and no new one has started. ` +
-      "Seat terms that expire each season cannot come due until one does."
+      "Role terms that expire each season cannot come due until one does."
     );
   }
   return (
     `No season covers today, though ${state.configuredCount} are configured. ` +
-    "There is a gap in the season dates. Seat terms that expire each season cannot come due inside it."
+    "There is a gap in the season dates. Role terms that expire each season cannot come due inside it."
   );
 }

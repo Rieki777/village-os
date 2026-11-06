@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Tests are not shipped, so a class only a test names is not generated. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "./**/*.e2e.test.ts";
 
 /*
  * No @font-face here, deliberately. A village's brand font is DEPLOYMENT
@@ -227,6 +231,39 @@
      raised panel. Both clear AA on every surface either one lands on. */
   --color-notice: var(--sheet-notice, #8d5e19);
   --color-open: var(--sheet-open, #3d6e4a);
+
+  /* THE PROFILE DASHBOARD'S PURSES AND PANELS (approved design, 2026-10-30).
+     Only the dashboard under `.sheet-night` paints with these, so the
+     defaults are the night values. Each one rides a --sheet-* knob, so a
+     village re-tints the dashboard the way it re-tints the rest of the sheet.
+
+       dash-gold      the earned gold: buttons, the XP ring, the stage pill
+       dash-gold-lit  gold text and the bright end of a bar
+       dash-cash      cash owed, a real-money green
+       dash-voice     Voice
+       dash-thanks    Gratitude
+       dash-session   a live session
+       dash-raised    a card inside a panel
+       dash-warm      the stage-reached panel and its gold edge
+       dash-next      the next-step card
+       dash-track     an empty bar */
+  --color-dash-gold: var(--sheet-dash-gold, #d9b45a);
+  --color-dash-gold-lit: var(--sheet-dash-gold-lit, #f3d891);
+  --color-dash-gold-edge: var(--sheet-dash-gold-edge, #8a7334);
+  --color-dash-gold-ink: var(--sheet-dash-gold-ink, #1a1408);
+  --color-dash-cash: var(--sheet-dash-cash, #bfe3c9);
+  --color-dash-cash-ink: var(--sheet-dash-cash-ink, #10261a);
+  --color-dash-voice: var(--sheet-dash-voice, #8fc9a5);
+  --color-dash-thanks: var(--sheet-dash-thanks, #e79bb0);
+  --color-dash-thanks-ink: var(--sheet-dash-thanks-ink, #2a0f18);
+  --color-dash-session: var(--sheet-dash-session, #cfc8f2);
+  --color-dash-raised: var(--sheet-dash-raised, #1b2a23);
+  --color-dash-warm: var(--sheet-dash-warm, #1b2a20);
+  --color-dash-warm-edge: var(--sheet-dash-warm-edge, #6b5a2c);
+  --color-dash-next: var(--sheet-dash-next, #2a2614);
+  --color-dash-track: var(--sheet-dash-track, #24352d);
+  --color-dash-chip: var(--sheet-dash-chip, #20322a);
+  --color-dash-edge: var(--sheet-dash-edge, #2f4238);
 }
 
 :root {
@@ -506,8 +543,24 @@
 }
 
 @layer base {
+  /* The focus outline at FULL ring strength. It was ring/50, which drew the
+     browser's focus ring at about 2.9:1 on a light ground: measured on the
+     deployed build (2026-10-20), 827 Tab stops across 80 routes changed no
+     pixel by 3:1 when focused (WCAG 1.4.11). */
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+  }
+  /* The four dark surfaces of the shell take a white outline. --ring is the
+     brand colour, which is the header's and footer's own ground, so a full
+     ring there is invisible (measured: weak focus rose 63 -> 660 without
+     this rule). */
+  :is(nav.bg-teal-deep, footer.bg-teal-deep, #mobile-menu, nav[aria-label="Bottom navigation"]) * {
+    outline-color: #fff;
+  }
+  /* <main> takes focus programmatically (the skip link, a route change). It is
+     a landing point, not a control, so it draws no ring round the whole page. */
+  main[tabindex="-1"]:focus {
+    outline: none;
   }
   body {
     @apply bg-background text-foreground;
@@ -715,14 +768,12 @@
   }
   
   /* Platform button style, styled off the neutral --color-teal-deep tone
-     token above (or a village's own brand colour once one is set). Class
-     name kept as-is for now: 12 call sites across
-     client/src/pages/{Investor,Steward,Resident,Prosperity}Journey.tsx
-     (tokens lane's files, not this lane's to edit) reference `btn-amora` by
-     name. Renaming here without updating those call sites would silently
-     drop the button styling on every shopfront journey page. Flagged for a
-     coordinated rename; not done in this pass. */
-  .btn-amora {
+     token above (or a village's own brand colour once one is set). Named
+     `btn-village` since readiness R066; it carried the first village's name.
+     The call sites are client/src/pages/{Investor,Steward,Resident,
+     Prosperity}Journey.tsx, renamed in the same commit, and
+     client/src/lib/brandGroundContrast.test.ts measures it. */
+  .btn-village {
     @apply px-6 py-3 rounded-full font-medium uppercase tracking-wider text-sm;
     background-color: var(--color-teal-deep);
     color: white;
@@ -731,22 +782,22 @@
 
   /* Hover to the derived hover partner, never to --color-teal: that is the
      soft tone, and white on it measured 1.67 to 3.00:1 for every seed. */
-  .btn-amora:hover {
+  .btn-village:hover {
     background-color: var(--color-teal-deep-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(38, 38, 38, 0.25);
   }
 
-  /* Secondary button, off the neutral --color-amber tone token. Same
-     btn-amora-secondary naming caveat as above. */
-  .btn-amora-secondary {
+  /* Secondary button, off the neutral --color-amber tone token. Renamed
+     with the one above. */
+  .btn-village-secondary {
     @apply px-6 py-3 rounded-full font-medium uppercase tracking-wider text-sm;
     background-color: var(--color-amber);
     color: var(--color-teal-deep);
     transition: all 0.3s ease;
   }
   
-  .btn-amora-secondary:hover {
+  .btn-village-secondary:hover {
     background-color: oklch(0.72 0 0);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(212, 212, 212, 0.35);
@@ -876,6 +927,48 @@ html {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
+/* The homepage hero's entrance, in CSS so the first thing a visitor reads
+   never waits on a script. It was framer-motion, and framer renders an
+   `initial` of opacity 0 inline until its engine runs; the engine now loads
+   lazily (LazyMotion in App.tsx), which would have held the headline back
+   for one more request. `backwards` keeps the element at the first frame
+   during its delay, which is what `initial` did, and lets go when it ends:
+   `both` held the finished transform, which kept the text on a compositor
+   layer and swapped its subpixel antialiasing for greyscale. Asking the system for less motion
+   keeps the fade and drops the travel, the same split framer's
+   reducedMotion="user" made. */
+@keyframes hero-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes hero-cue-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(12px); }
+}
+
+.hero-rise {
+  animation: fadeInUp 0.6s ease-out backwards;
+}
+
+.hero-cue {
+  animation: hero-fade 0.3s ease-out 1s backwards;
+}
+
+.hero-cue-dot {
+  animation: hero-cue-bob 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise {
+    animation-name: hero-fade;
+  }
+
+  .hero-cue-dot {
+    animation: none;
+  }
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 2s infinite;
 }
@@ -934,6 +1027,14 @@ button, a, [role="button"], input, textarea, select, summary {
    screen surfaces that render outside it. */
 .pb-tabbar {
   padding-bottom: var(--tabbar-h);
+}
+
+/* Keyboard focus scrolls into view clear of the fixed bottom bar. Without
+   this the browser stops the focused control at the viewport's edge, under
+   the bar: 321 Tab stops at 390px were wholly covered (WCAG 2.4.11). The
+   variable is 0 from md up, so desks are unaffected. */
+html {
+  scroll-padding-bottom: calc(var(--tabbar-h) + 8px);
 }
 
 /*
@@ -998,6 +1099,16 @@ button, a, [role="button"], input, textarea, select, summary {
   :root:has(.md\:hidden [aria-modal="true"], [data-hides-fab-phone]) [data-mobile-fab] {
     visibility: hidden;
   }
+  /* A focused flow with its own Back/Next bar (a role proposal) keeps one bar,
+     not two: the tab bar steps out; the header menu still reaches every page. */
+  :root:has([data-hides-tabbar-phone]) [data-mobile-tabbar] {
+    display: none;
+  }
+}
+/* A role proposal's sticky Back/Next bar owns the bottom edge: at any width
+   the shortcuts button rides above it, so it never covers Back or Next. */
+:root:has([data-step-bar]) [data-mobile-fab] {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 8.5rem) !important;
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-mobile-fab] {
@@ -1467,6 +1578,10 @@ button, a, [role="button"], input, textarea, select, summary {
   --sheet-earned-lit: var(--sheet-earned-highlight, #f2ce85);
   --destructive: var(--sheet-warn, #e0805e);
   --destructive-foreground: var(--sheet-ground, #0d1411);
+  /* Platform coral (#9b4030) is a dark ink measured on white. On this ground
+     it falls under 3:1, so an error line disappears. .text-coral reads
+     --color-coral, and the sheet's warn already clears 5.80:1 on the panel. */
+  --color-coral: var(--sheet-warn, #e0805e);
 
   /* The two accents this world is built on. --sheet-earned is live: it is the
      focus ring, the ring on the fronted character, and (through --sheet-notice
@@ -1552,6 +1667,14 @@ button, a, [role="button"], input, textarea, select, summary {
   box-shadow: var(--sheet-shadow, 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -22px rgb(0 0 0 / 0.9));
 }
 
+/* Pay chips and other `text-primary` labels. --primary stays the village's
+   brand (a button fill), and on an unbranded fork that fill is #404040.
+   As text on this ground that is about 1.7:1. Text only: a filled primary
+   button keeps its own foreground. */
+.sheet-night .text-primary {
+  color: var(--foreground);
+}
+
 /* The foil around a seat card. Read off the night tokens on the same element,
    so it only means anything on a `.sheet-night` root, and a village that
    re-tints its earned gold re-tints the foil with it. The shadow lives here
@@ -1626,4 +1749,43 @@ button, a, [role="button"], input, textarea, select, summary {
 }
 .room-world {
   --room-display: var(--font-display);
+}
+
+/*
+ * ADMIN FITS A PHONE (E10, 2026-10-31). Ten admin tabs scrolled the whole page
+ * sideways at 390px, and nearly every one for the same two reasons: a form
+ * field in a flex row keeps its intrinsic width (min-width: auto) and will not
+ * shrink, and a <select> is as wide as its longest option. Both are fixed here
+ * once, for every admin tab, instead of tab by tab.
+ *
+ * `:where` keeps the specificity at zero, so a Tailwind width on the element
+ * still wins: this only removes the floor that made `flex-1` and `w-full`
+ * unable to do their job. Long unbroken strings (a webhook URL in a <code>)
+ * wrap instead of pushing the page. A wide table that should scroll belongs in
+ * an `overflow-x-auto` wrapper, which this leaves alone.
+ *
+ * Held by client/src/lib/adminFit.test.ts; measured by scripts/qa/admin-overflow.mjs.
+ */
+/* Not button: a button is short and must keep its label, and letting it shrink
+ * spilled "Save Changes" out of its own box. */
+/* A label wrapping a select sizes to the select, and the select to its longest option;
+ * letting the label shrink is what lets the select's own max-width resolve. */
+/* And a plain div, which as a flex or grid item otherwise keeps its content's width:
+ * with text free to wrap, removing that floor hides nothing. An explicit width or
+ * shrink-0 on the element still holds. */
+.admin-fit :where(input, select, textarea, label, div) {
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-fit :where(code, pre, a, p, li, label, h1, h2, h3, h4, div, span, button, td, th, dt, dd, legend, summary) {
+  overflow-wrap: anywhere;
+}
+/* A grid item's floor is its content's min-content width, so one wide field
+ * widened a whole card column; a <fieldset> defaults to min-inline-size:
+ * min-content and did the same to the departure-steps list. */
+.admin-fit :where(.grid > *) {
+  min-width: 0;
+}
+.admin-fit :where(fieldset) {
+  min-inline-size: 0;
 }

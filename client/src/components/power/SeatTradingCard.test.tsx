@@ -234,7 +234,7 @@ describe("the empty seat, the way every fork starts", () => {
     expect(screen.getByText("The Architect")).toBeTruthy();
     expect(screen.getByText("Suggested")).toBeTruthy();
     const img = document.querySelector("img")!;
-    expect(img.getAttribute("alt")).toBe("Stock art for The Architect, a class suggested for this seat");
+    expect(img.getAttribute("alt")).toBe("Stock art for The Architect, a class suggested for this role");
     expect(img.getAttribute("src")).toMatch(/^\/images\/avatars\/researching-[fm]-(olive|deep|light)\.webp$/);
   });
 
@@ -276,7 +276,7 @@ describe("a seat says what it is for", () => {
 
   it("SAYS SO when nothing has been written, instead of showing blank space", () => {
     show({ ...SAMPLE, description: "", domain: null, accountabilities: [], whyItMatters: null });
-    expect(screen.getByText(/^Nobody has written down what this seat is for yet\./)).toBeTruthy();
+    expect(screen.getByText(/^Nobody has written down what this role is for yet\./)).toBeTruthy();
     expect(screen.getByText("The aim is still to be written down.")).toBeTruthy();
   });
 
@@ -420,7 +420,7 @@ describe("ids, chips and ladders", () => {
 
   it("opens one gloss at a time, on a tap, and says so to a screen reader", () => {
     show(SAMPLE);
-    const key = screen.getByRole("button", { name: "Key seat" });
+    const key = screen.getByRole("button", { name: "Key role" });
     const speaks = screen.getByRole("button", { name: "Speaks for Land & Water" });
     const keyGloss = document.getElementById(key.getAttribute("aria-controls")!)!;
     const speaksGloss = document.getElementById(speaks.getAttribute("aria-controls")!)!;
@@ -430,11 +430,11 @@ describe("ids, chips and ladders", () => {
     fireEvent.click(key);
     expect(key.getAttribute("aria-expanded")).toBe("true");
     expect(keyGloss.hidden).toBe(false);
-    expect(keyGloss.textContent).toBe("The village marked this seat as key.");
+    expect(keyGloss.textContent).toBe("The village marked this role as key.");
 
     fireEvent.click(speaks);
     expect(speaks.getAttribute("aria-expanded")).toBe("true");
-    expect(speaksGloss.textContent).toBe("This seat speaks for Land & Water on how it decides.");
+    expect(speaksGloss.textContent).toBe("This role speaks for Land & Water on how it decides.");
     expect(key.getAttribute("aria-expanded")).toBe("false");
     expect(keyGloss.hidden).toBe(true);
 

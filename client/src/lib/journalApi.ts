@@ -98,9 +98,10 @@ function listOf<T>(raw: unknown, key: string): T[] {
 
 // ── Entries ──────────────────────────────────────────────────────────────────
 
-export async function listEntries(opts: { limit?: number; before?: string } = {}): Promise<JournalEntry[]> {
+export async function listEntries(opts: { limit?: number; before?: string; practice?: JournalPractice } = {}): Promise<JournalEntry[]> {
   const q = new URLSearchParams();
   if (opts.limit) q.set("limit", String(opts.limit));
+  if (opts.practice) q.set("practice", opts.practice);
   if (opts.before) q.set("before", opts.before);
   const qs = q.toString();
   return listOf<JournalEntry>(await call<unknown>(`/api/journal/entries${qs ? `?${qs}` : ""}`), "entries");

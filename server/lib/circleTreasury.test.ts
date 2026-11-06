@@ -24,7 +24,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { MINT_FAUCET, TREASURY, loadTokenRegistry, memberAccount, postTransfer } from "./ledger";
 import { REDEEMED } from "./redemption";
 import {
@@ -136,7 +136,7 @@ const deps = (over: Partial<BurnDeps> = {}): BurnDeps => ({
 describe.skipIf(!configured)("a circle's treasury", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
     await loadTokenRegistry(pool);
   }, 180_000);
 

@@ -196,7 +196,7 @@ export default function FailuresTab({ password }: { password: string }) {
         report.open.length === 0 &&
         (checkedCleanly(report.job) ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Nothing is failing that this report can see. What it cannot see yet is listed at the bottom of this page.
+            Nothing is failing that this report can see. Failed emails are listed under Sent mail. What else it cannot see is at the bottom of this page.
           </p>
         ) : (
           <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">

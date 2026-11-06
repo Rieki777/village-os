@@ -122,7 +122,7 @@ function termAtSeating(app: StoredApplication, calendar: SeatCalendar, now: Date
     if (seasonEnd && seasonEnd.getTime() <= RECORD_LIMIT.getTime()) endsAt = seasonEnd;
   }
   if (endsAt.getTime() <= now.getTime()) {
-    return { ok: false, why: "The term this application set ended before its seats could be taken up, so nobody was seated. Apply again with a later end." };
+    return { ok: false, why: "The term this application set ended before its roles could be taken up, so nobody was seated. Apply again with a later end." };
   }
   return { ok: true, endsAt };
 }
@@ -145,7 +145,7 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
   for (const seatId of app.seatIds) {
     const seat = seats.find((s) => s.id === seatId);
     if (!seat || !seat.active || seat.isExample) {
-      return { kind: "cannot", why: `A seat this application names (${seat?.name ?? seatId}) is no longer one the village seats people in, so nobody was seated.` };
+      return { kind: "cannot", why: `A role this application names (${seat?.name ?? seatId}) is no longer one the village seats people in, so nobody was seated.` };
     }
     const here = live.filter((l) => l.orgRoleId === seatId);
     const mine = here.find((l) => l.userId === app.candidateUserId);
@@ -307,7 +307,7 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
     for (const s of outcome.seated) {
       const name = names[app.seatIds.indexOf(s.seatId)] ?? s.seatId;
       // The same type and key grammar every seating door uses, keyed on this seating.
-      const title = s.renewed ? `Your seat as ${name} was renewed on your new terms` : `You were seated as ${name}`;
+      const title = s.renewed ? `Your role as ${name} was renewed on your new terms` : `You were seated as ${name}`;
       await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
     }
   }
@@ -389,7 +389,7 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
       if (outcome.kind === "held-full") {
         return {
           applied: [],
-          held: "A seat this application names had no free place when the vote landed, so nobody was seated and the application is held.",
+          held: "A role this application names had no free place when the vote landed, so nobody was seated and the application is held.",
           proposerTold: app.candidateUserId,
         };
       }

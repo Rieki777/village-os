@@ -28,6 +28,7 @@
  */
 import { guardedFetchJson } from "../toolcheck";
 import { secretConfigured, secretValue } from "../secrets";
+import { rpcErrorText } from "../credentialRedaction";
 
 export interface TokenCandidate {
   contractAddress: string;
@@ -73,8 +74,8 @@ export function discoverySourceProblem(baseRpcUrl: string, basescanConfigured: b
   if (alchemyEndpoint(baseRpcUrl)) return null;
   if (basescanConfigured) return null;
   return (
-    "No lookup source is configured. Either set an Alchemy endpoint as the Base RPC URL " +
-    "(Tokens, Base RPC URL: its Token API does the lookup and needs no extra key), or save a free " +
+    "No lookup source is configured. Either save an Alchemy endpoint as the Base RPC endpoint " +
+    "(Admin, Integrations: its Token API does the lookup and needs no extra key), or save a free " +
     "etherscan.io API key under Admin, Integrations as the Basescan key. You can also paste the " +
     "contract address by hand from basescan.org."
   );
@@ -164,8 +165,13 @@ export async function discoverCandidates(input: {
 
   const alchemy = alchemyEndpoint(input.baseRpcUrl);
   const source = alchemy ? "alchemy" : "basescan";
+  // The Alchemy endpoint IS the key, and the route answers a failed lookup
+  // with its error's message, so the endpoint is cut out of it first. Nothing
+  // this file throws today names the URL; this keeps it so for the next one.
   const all = alchemy
-    ? await alchemyCandidates(alchemy, input.founderAddress)
+    ? await alchemyCandidates(alchemy, input.founderAddress).catch((e) => {
+        throw new Error(rpcErrorText(e, alchemy));
+      })
     : await basescanCandidates(input.founderAddress);
 
   const hint = String(input.nameHint ?? "").trim().toLowerCase();

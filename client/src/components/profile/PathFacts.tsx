@@ -173,7 +173,7 @@ function Reservations({ reservations }: { reservations: NonNullable<PathParticul
 }
 
 function Seats({ seats }: { seats: NonNullable<PathParticulars["steward"]>["seats"] }) {
-  if (seats.length === 0) return <Empty>No seats held yet. A seat the village gives you appears here.</Empty>;
+  if (seats.length === 0) return <Empty>No roles held yet. A role the village gives you appears here.</Empty>;
   return (
     <ul className="space-y-2">
       {seats.map((s) => (

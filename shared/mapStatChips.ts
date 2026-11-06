@@ -173,8 +173,8 @@ export interface StatSourceDef {
  * THE TREASURY, which was on that list, and what changed. Rye, 2026-10-05:
  * "Treasury balance shown to members only." It was left out because nothing
  * published a single-token figure: the health snapshot's `treasury_balance`
- * adds tokens of different kinds together, which is not a number a chip can
- * put a unit on, and it is NOT what this reads. This reads ONE account in ONE
+ * added tokens of different kinds together until 2026-10-31, when it moved
+ * onto this same reading (server/lib/treasuryReading.ts). This reads ONE account in ONE
  * token: `sys:treasury` (`TREASURY`, server/lib/ledger.ts), in the village's
  * value token, which is whatever token `gratitude.pool_token` names (`credits`
  * by default, drizzle/0007). That is the rule the economics code already
@@ -256,9 +256,9 @@ export const STAT_SOURCES: Record<StatSourceKey, StatSourceDef> = {
   },
   seats_open: {
     group: "Roles and circles",
-    label: "Open seats",
-    sub: "seats waiting for someone",
-    how: "Places on the village's live roles that nobody holds. A seat whose holder's term ran out counts as open.",
+    label: "Openings",
+    sub: "openings waiting for someone",
+    how: "Places on the village's live roles that nobody holds. A place whose holder's term ran out counts as open.",
     unit: "",
     icon: "seats",
     link: "/roles",

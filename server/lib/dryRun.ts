@@ -53,14 +53,15 @@
  * moons, a different argument.
  */
 import { GAME_CONFIG } from "../../shared/gameConfig";
+import { villageStageReader } from "./villagePaths";
 import { activeClock, boundsForNumber, formatCycleId } from "./gratitude-cycles";
 import type { VillageMoon } from "../../shared/villageMoon";
 import { villageMoonForCycle } from "./villageMoon";
 import { cyclePoolProblem } from "./cyclePool";
 // `toLedgerUnits` is gone from this list on purpose: the conversion happens
-// inside `ceilingOutcome` now, so this module converts nothing of its own and
+// inside `quoteWorkPay`, so this module converts nothing of its own and
 // cannot come to disagree with the engine about the scale it converted at.
-import { ceilingOutcome, decimalsFor, faucetFor, humanAtScale, VILLAGE_VOICE } from "./economy";
+import { faucetFor, HEARTS, humanAtScale, quoteWorkPay, VILLAGE_VOICE } from "./economy";
 import { shareCapFor } from "./gratitude";
 import { tokenDef } from "./ledger";
 import { numberVar, stringVar } from "./variables";
@@ -292,6 +293,15 @@ function claimsOpenInside(startsAt: Date, endsAt: Date): { open: boolean; opensA
 }
 
 /**
+ * What this village calls its recognition token: the registry's name, the
+ * one `mergedConfig()` serves as `currency.name`, and the platform's own word
+ * only for a registry with no row (which a running village never has).
+ */
+function recognitionWord(): string {
+  return tokenDef(HEARTS)?.name?.trim() || GAME_CONFIG.currency.name;
+}
+
+/**
  * The allowance table, one row per stage of the ladder.
  *
  * R73 made a member's per-cycle budget `gratitude.base_budget` times their
@@ -307,21 +317,30 @@ function claimsOpenInside(startsAt: Date, endsAt: Date): { open: boolean; opensA
  *   a multiplier of 0, or a base budget of 0, so members at that stage cannot
  *   give anything and the page never says why;
  *
- *   a heart worth more than the whole per-person share, so every tap on the
+ *   a feed tap worth more than the whole per-person share, so every tap on the
  *   feed is refused while the acknowledgment page still works;
  *
- *   a share that rounds below one Gratitude, where `shareCapFor` floors at 1
+ *   a share that rounds below one whole token, where `shareCapFor` floors at 1
  *   and the dial then means something other than what it reads;
  *
- *   a heart tap cap that allows more taps than the share leaves room for, so
+ *   a feed tap cap that allows more taps than the share leaves room for, so
  *   the number on the feed dial is never the number that bites.
+ *
+ * THE TOKEN IS NAMED BY THE VILLAGE (readiness R064). These sentences said
+ * "heart" and "Gratitude", the first village's words, whatever the village
+ * calls its recognition token. They read the registry name now, the one the
+ * feed's own button and every other page say (see `recognitionWord`).
  */
 function allowanceTable(feedOff: boolean): DryRunAllowance[] {
+  const token = recognitionWord();
   const base = numberVar("gratitude.base_budget");
   const heart = numberVar("feed.heart_amount");
   const fullSends = Math.max(1, Math.floor(numberVar("gratitude.full_sends_per_cycle")));
   const tapCap = numberVar("feed.max_hearts_per_recipient_per_cycle");
-  return GAME_CONFIG.stages.map((s) => {
+  // Each rung named the way this village names it (Admin, Paths & Stages).
+  const words = villageStageReader();
+  return GAME_CONFIG.stages.map((config) => {
+    const s = { ...config, name: words(config.id).name };
     const multiplier = Math.max(0, numberVar(`progression.multiplier.${s.id}`));
     const allowance = Math.round(base * multiplier);
     const cap = shareCapFor(allowance);
@@ -337,16 +356,16 @@ function allowanceTable(feedOff: boolean): DryRunAllowance[] {
       note = `Members at ${s.name} can give nothing. Their sending budget is ${base} times ${multiplier}, which comes to zero.`;
     } else if (!heartsSendable && !feedOff) {
       note =
-        `A heart is worth ${heart} and one person may receive ${cap} from a member at ${s.name}, ` +
-        `so every tap on the feed would be refused. Allow fewer full sends, or lower what a heart is worth.`;
+        `A tap on the feed sends ${heart} ${token} and one person may receive ${cap} from a member at ${s.name}, ` +
+        `so every tap on the feed would be refused. Allow fewer full sends, or lower what a tap sends.`;
     } else if (asked < 1) {
       note =
-        `A member at ${s.name} gives ${allowance} a moon. Split ${fullSends} ways that is under one Gratitude, ` +
+        `A member at ${s.name} gives ${allowance} a moon. Split ${fullSends} ways that is under one ${token}, ` +
         `so the ceiling holds at 1 and the full sends dial is doing nothing here.`;
     } else if (tapsTheShareAllows < tapCap && !feedOff) {
       note =
         `A member at ${s.name} gives ${allowance} a moon and up to ${cap} of it to any one person. ` +
-        `That is ${tapsTheShareAllows} hearts to one person, and the feed dial says ${tapCap}, ` +
+        `That is ${tapsTheShareAllows} feed taps to one person, and the feed dial says ${tapCap}, ` +
         `so the ceiling is the one they meet.`;
     } else {
       note =
@@ -419,7 +438,7 @@ function settlementFindings(
     out.push({
       area: "settlement",
       outcome: "refused",
-      sentence: "No rule is set for holding a seat through a moon, so the settlement has nothing to pay.",
+      sentence: "No rule is set for holding a role through a moon, so the settlement has nothing to pay.",
     });
     return out;
   }
@@ -427,7 +446,7 @@ function settlementFindings(
     out.push({
       area: "settlement",
       outcome: "idle",
-      sentence: "Nobody holds a seat this moon, so the settlement thanks nobody. It has a rule ready when somebody does.",
+      sentence: "Nobody holds a role this moon, so the settlement thanks nobody. It has a rule ready when somebody does.",
     });
     return out;
   }
@@ -439,7 +458,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat reads its amount from the work, and a seat has no amount to read, so it pays nothing.`,
+        sentence: `The ${tokenName} rule for holding a role reads its amount from the work, and a role has no amount to read, so it pays nothing.`,
       });
       continue;
     }
@@ -447,7 +466,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat is set to ${r.amount}, so it pays nothing.`,
+        sentence: `The ${tokenName} rule for holding a role is set to ${r.amount}, so it pays nothing.`,
       });
       continue;
     }
@@ -456,7 +475,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `${tokenName} has no faucet, so the seat rule can never issue it. A token the ledger cannot mint needs a different rule.`,
+        sentence: `${tokenName} has no faucet, so the role rule can never issue it. A token the ledger cannot mint needs a different rule.`,
       });
       continue;
     }
@@ -464,7 +483,7 @@ function settlementFindings(
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The seat rule pays "${r.tokenSlug}", which is not a registered token here.`,
+        sentence: `The role rule pays "${r.tokenSlug}", which is not a registered token here.`,
       });
       continue;
     }
@@ -477,47 +496,37 @@ function settlementFindings(
       continue;
     }
     /*
-     * THE CEILING, THROUGH THE ENGINE'S OWN FUNCTION.
+     * WHAT A SEAT IS PAID, THROUGH THE ENGINE'S OWN FUNCTION.
      *
-     * `DryRunRule` has carried `ceiling` since it was written and used it for
-     * exactly one thing: narrating a queued change to it. So a founder running
-     * the test run over `amount 25, ceiling 5` was told "each thanked 25", the
-     * one surface built to catch a setting that cannot work agreed with the
-     * two that were already wrong, and at a ceiling of 0 all three promised a
-     * payout of 25 that the engine would refuse outright.
-     *
-     * `ceilingOutcome` decides it, the same call `runSettlement` makes, so a
-     * disagreement between the run and the moon is now a compile-time
-     * impossibility instead of a habit.
+     * `quoteWorkPay` is what `runSettlement` pays each seat from, so a
+     * disagreement between this run and the moon is a compile-time
+     * impossibility instead of a habit. It used to ask `ceilingOutcome`, which
+     * was the engine's answer while a ceiling bound role pay; none does now
+     * (Rye, 2026-10-22), and the rule's own amount is posted in full.
      */
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, r.amount, decimals, tokenName);
-    if (capped.refusal) {
+    const quote = quoteWorkPay([r], null, "seat");
+    const line = quote.lines[0];
+    if (!line) {
+      const why = quote.unpayable[0]?.reason;
       out.push({
         area: "settlement",
         outcome: "refused",
-        sentence: `The ${tokenName} rule for holding a seat cannot pay, because ${capped.refusal}.`,
-      });
-      continue;
-    }
-    if (capped.units <= 0) {
-      out.push({
-        area: "settlement",
-        outcome: "refused",
-        sentence: `The ${tokenName} seat rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
+        sentence:
+          why && !why.includes("smallest amount")
+            ? `The ${tokenName} rule for holding a role cannot pay: ${why.replace(/\.$/, "")}.`
+            : `The ${tokenName} role rule is set to ${r.amount}, which rounds to nothing at this token's precision, so it pays nothing.`,
       });
       continue;
     }
     // What the engine would actually post, converted back once for the
-    // sentence. The moon total is the per-seat integer times the seats, so it
-    // carries the clamp rather than restating the rule's own number.
-    const each = humanAtScale(capped.units, decimals);
-    const moon = humanAtScale(capped.units * snapshot.seatCount, decimals);
+    // sentence. The moon total is the per-seat integer times the seats.
+    const each = humanAtScale(line.units, line.decimals);
+    const moon = humanAtScale(line.units * snapshot.seatCount, line.decimals);
     out.push({
       area: "settlement",
       outcome: "issued",
       sentence:
-        `${plural(snapshot.seatCount, "seat holder", "seat holders")} each thanked ` +
+        `${plural(snapshot.seatCount, "role holder", "role holders")} each thanked ` +
         `${each} ${tokenName}, which comes to ${moon} for the moon.`,
     });
   }
@@ -727,14 +736,14 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
       outcome: moonsToClaim <= moons ? "issued" : "refused",
       sentence:
         moonsToClaim <= moons
-          ? `A seat holder gathers ${voicePerMoon} voice a moon and reaches the claim threshold of ${threshold} after ${moonsToClaim} moons, inside this run.`
-          : `A seat holder gathers ${voicePerMoon} voice a moon, so reaching the claim threshold of ${threshold} takes ${moonsToClaim} moons. This run covers ${moons}.`,
+          ? `A role holder gathers ${voicePerMoon} voice a moon and reaches the claim threshold of ${threshold} after ${moonsToClaim} moons, inside this run.`
+          : `A role holder gathers ${voicePerMoon} voice a moon, so reaching the claim threshold of ${threshold} takes ${moonsToClaim} moons. This run covers ${moons}.`,
     });
   } else {
     runFindings.push({
       area: "claims",
       outcome: "refused",
-      sentence: `No rule issues voice for holding a seat, so a seat holder never reaches the claim threshold of ${threshold}.`,
+      sentence: `No rule issues voice for holding a role, so a role holder never reaches the claim threshold of ${threshold}.`,
     });
   }
 
@@ -754,7 +763,7 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
       area: "gratitude",
       outcome: "idle",
       sentence:
-        "The feed is off, so nobody is tapping hearts. The allowance below is what a member can " +
+        `The feed is off, so nobody is sending ${recognitionWord()} from it. The allowance below is what a member can ` +
         "give through written acknowledgments alone.",
     });
   }
@@ -818,7 +827,7 @@ export function dryRun(input: DryRunSnapshot, options: DryRunOptions): DryRunRep
     jobs,
     refusals,
     covered: [
-      "The moon settlement: which rules pay, to how many seat holders, and how much.",
+      "The moon settlement: which rules pay, to how many role holders, and how much.",
       "Queued dial changes, and the moon each one lands in.",
       "Claims Week, and whether one opens inside the span you ran.",
       "The giving allowance and the per-person share, at every stage of the path.",

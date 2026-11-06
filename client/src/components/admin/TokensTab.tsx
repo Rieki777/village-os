@@ -25,13 +25,17 @@
  * naming boxes from the Setup Wizard that could never win against this
  * registry. Keeping the winner buried mid-monolith is how the losers survived.
  */
+import TokenJobsPanel from "./TokenJobsPanel";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { ModuleLifecycle } from "@shared/modules";
 import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
-import { describeToken, tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
+import { tokenModule, tokenModuleIsOff, visibleTokens } from "@/components/admin/tokenCatalog";
+import TokenMeaningField from "./TokenMeaningField";
+import VillageTokensWordField from "./VillageTokensWordField";
 import { formatTokenAmount, smallestUnit } from "@/lib/tokenAmount";
+import { takePrefill } from "@/lib/profilePrefill";
 
 /**
  * THE ONE PAGE WHERE A TOKEN IS NAMED.
@@ -53,6 +57,12 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
   const [form, setForm] = useState({ slug: "", name: "", kind: "credit", transferable: false });
   const [mint, setMint] = useState({ slug: "", toUserId: "", amount: "", reason: "" });
   const [renaming, setRenaming] = useState<{ slug: string; name: string } | null>(null);
+  /**
+   * The recognition token's name from a ReGen Civics file (ProfileImport.tsx),
+   * put in its rename box unsaved. `found: false` says no recognition token
+   * here can take a new name, so the words are shown for a founder to place.
+   */
+  const [handed, setHanded] = useState<{ name: string; found: boolean } | null>(null);
   /** 0106: grants waiting for a second steward, and the ones already decided. */
   const [grants, setGrants] = useState<any[]>([]);
   const [cosignOver, setCosignOver] = useState<number>(0);
@@ -85,6 +95,14 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
       const p = await pRes.json();
       const g = await gRes.json();
       setTokens(Array.isArray(t.tokens) ? t.tokens : []);
+      const name = takePrefill("tokenName");
+      if (name) {
+        const recognition = (Array.isArray(t.tokens) ? t.tokens : []).find(
+          (x: any) => x?.kind === "recognition" && x?.governance === "platform" && !x?.isExample,
+        );
+        if (recognition) setRenaming({ slug: recognition.slug, name });
+        setHanded({ name, found: !!recognition });
+      }
       setMintCap(Number(t.mintCapPerCycle) || 0);
       setPlayers(Array.isArray(p) ? p : []);
       setGrants(Array.isArray(g.requests) ? g.requests : []);
@@ -124,6 +142,7 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
       if (!res.ok) throw new Error(refusal(data, "failed"));
       toast.success(`Renamed to "${data.token?.name}". Every page follows`);
       setRenaming(null);
+      setHanded(null);
       load();
     } catch (e: any) { toast.error(e?.message || "Rename failed"); }
   };
@@ -258,10 +277,19 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
   // just left a token off its own list must not then offer to mint into it,
   // and a picker with more tokens in it than the table above is the kind of
   // disagreement that makes a founder distrust both.
-  const platformTokens = shown.filter((t) => t.governance === "platform" && !t.isExample);
+  // Gratitude is never minted by hand: it is only sent member to member (Rye,
+  // 2026-10-23), and the route refuses it.
+  const platformTokens = shown.filter((t) => t.governance === "platform" && !t.isExample && t.slug !== "gratitude");
 
   return (
     <div>
+      {handed && (
+        <p className="mb-4 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+          {handed.found
+            ? `The rename box on your recognition token now holds "${handed.name}", from your ReGen Civics profile. Nothing is saved until you press Save beside it.`
+            : `Your ReGen Civics profile names your recognition token "${handed.name}". No recognition token here can take a new name yet, so nothing was put in a box.`}
+        </p>
+      )}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Tokens</h2>
         <p className="text-sm text-gray-500 mt-1">
@@ -285,6 +313,8 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
           </span>
         </p>
       </div>
+      <VillageTokensWordField password={password} />
+      <TokenJobsPanel password={password} />
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
         <div className="space-y-6">
           <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -328,12 +358,11 @@ export default function TokensTab({ password, lifecycles }: { password: string; 
                             <button onClick={() => setRenaming({ slug: t.slug, name: t.name })}
                               className="ml-2 text-xs text-teal-deep underline">rename</button>
                           )}
-                          {/* THE SENTENCE THAT USED TO BE MISSING. A registry
-                              that prints a slug and a kind tells a founder what
-                              a token is CALLED and never what it is FOR, which
-                              is how a second naming box survived on another
-                              screen for months. */}
-                          <p className="text-xs text-muted-foreground mt-0.5 max-w-md">{describeToken(t)}</p>
+                          {/* WHAT IT MEANS, in the village's own words (0283).
+                              The platform used to write this sentence, and the
+                              2026-10-22 ruling says platform copy never says
+                              what a token does. Members read it on their wallet. */}
+                          <TokenMeaningField token={t} password={password} onSaved={load} />
                           {/* The row SAYS the slug is fixed. Every
                               repeat-protection key in the ledger carries it,
                               so it is the one field here that can never move,

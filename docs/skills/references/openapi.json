@@ -94,7 +94,7 @@
     },
     "/api/agent/v1/directory": {
       "get": {
-        "summary": "Circles and seats, and who holds them at the tier the member may see. Scope directory.read.",
+        "summary": "Circles and roles, and who holds them at the tier the member may see. Scope directory.read.",
         "security": [{ "agentToken": [] }],
         "responses": { "200": { "description": "{circles, roles}. roles[].holders is empty when the member may not see people: that is a hidden field." } }
       }
@@ -185,6 +185,33 @@
           "413": { "description": "scene_too_big: over the 3 MB ceiling" },
           "429": { "description": "20 writes an hour" }
         }
+      }
+    },
+    "/api/agent/v1/mcp": {
+      "post": {
+        "summary": "The village connector: a remote MCP server (Streamable HTTP, stateless, JSON answers). Send one JSON-RPC 2.0 message per request: initialize, tools/list, tools/call, ping. tools/list shows only the tools your token's scopes open: moon.read gives get_my_moon, get_my_seats and get_season; tasks.write gives mark_my_task, which answers an echo and a confirmToken first and writes only when called again with the same arguments and the token. admin, for an admin's token only, gives admin_request: one allow-listed admin path as the holder, writes confirmed the same way. No tool sends, approves, issues or pays anything, and no result carries an amount, a pay route, a legal name or an address. Skill: village-moon.",
+        "security": [{ "agentToken": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["jsonrpc", "method"], "properties": { "jsonrpc": { "const": "2.0" }, "id": { "type": ["string", "integer"] }, "method": { "type": "string" }, "params": { "type": "object" } } } } } },
+        "responses": {
+          "200": { "description": "The JSON-RPC answer. A tool that could not do what was asked answers result.isError true, with the reason in words." },
+          "202": { "description": "A notification was taken. There is no answer to it." },
+          "401": { "description": "No live vat_ token" },
+          "403": { "description": "agent_scope_missing: the token opens no connector tool" },
+          "429": { "description": "120 reads or 20 writes an hour" }
+        }
+      },
+      "get": { "summary": "405: the connector opens no stream.", "responses": { "405": { "description": "Send each message with POST" } } }
+    },
+    "/api/agent/v1/oauth/register": {
+      "post": {
+        "summary": "Dynamic client registration (RFC 7591) for the connector's OAuth sign-in. Public clients only (token_endpoint_auth_method none); redirect_uris are https, or http on localhost. Metadata: /.well-known/oauth-authorization-server and /.well-known/oauth-protected-resource.",
+        "responses": { "201": { "description": "{client_id, client_name, redirect_uris, ...}" }, "400": { "description": "invalid_redirect_uri or invalid_client_metadata" }, "429": { "description": "20 registrations an hour from one address" } }
+      }
+    },
+    "/api/agent/v1/oauth/token": {
+      "post": {
+        "summary": "Exchange a single-use, ten-minute code for a vat_ token: grant_type authorization_code, code, client_id, redirect_uri and code_verifier (PKCE S256 required). Form-encoded or JSON. The token is minted like one from the Your agent panel and counts against the day's mints.",
+        "responses": { "200": { "description": "{access_token, token_type: Bearer, expires_in, scope}" }, "400": { "description": "invalid_grant, invalid_request or unsupported_grant_type" }, "429": { "description": "60 requests an hour from one address" } }
       }
     }
   }

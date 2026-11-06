@@ -179,7 +179,7 @@ export default function HousingTiersPanel({ password }: { password: string }) {
         <div className="space-y-3">
           {rows.map((r) => (
             <div key={r.homeType} className="p-4 border border-stone-200 rounded-xl">
-              <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
                 <div>
                   <span className="font-medium text-stone-800">{heading(r)}</span>
                   <span className="ml-2 text-xs text-stone-400">{r.homeType}</span>
@@ -190,7 +190,7 @@ export default function HousingTiersPanel({ password }: { password: string }) {
                     re-deriving cost: a founder was shown a green badge on a
                     row every visitor was being told was an example. */}
                 <span
-                  className={`text-xs px-2 py-1 rounded shrink-0 ${r.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                  className={`text-xs px-2 py-1 rounded shrink-0 max-w-full ${r.isPublished ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
                 >
                   {r.isPublished ? "On the housing page" : "Not shown yet"}
                 </span>

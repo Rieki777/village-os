@@ -66,7 +66,7 @@ Use the wizard first; drop to the files below only for deeper structural changes
 | **Setup Wizard (live)** | the `brand` row of `app_config`, edited in `/admin` → Make This Yours | Project name, tagline, member name, location, the images, wizard progress. Live-editable, no deploy. Merged over gameConfig by `/api/game/config`. Token names are the token registry's, never this overlay's. |
 | **Game config (defaults)** | `shared/gameConfig.ts` | The default identity + images the overlay falls back to, plus the structural bits the wizard doesn't touch: personas/paths, the stage ladder + earning rules, gratitude budget rules, next-best-action rules, default season. |
 | Theme | `client/src/index.css` | Color tokens, fonts |
-| Content seeds | `server/seeds/content-seed.json`, `server/seeds/quests-seed.json`, `DEFAULT_*` constants in `server/index.ts` | Page copy, starter quests, FAQs, milestones, training modules, visit config, village dues, brand defaults. (All also editable at runtime in admin.) |
+| Content seeds | `server/seeds/content-seed.json`, the `quests` section of `server/seeds/examples-seed.json` (starter quests, kept or cleared by a founder), `DEFAULT_*` constants in `server/index.ts` | Page copy, starter quests, FAQs, milestones, training modules, visit config, village dues, brand defaults. (All also editable at runtime in admin.) |
 | Pages | `client/src/pages/*` | Persona journey pages and marketing content are project-specific by nature; the game components they embed are platform. Hero images already read the brand overlay. |
 
 Platform code (server game engine, `client/src/lib/gameApi.ts`, the game components
@@ -87,7 +87,7 @@ which is ratcheted and may not grow.
 | `GET /api/game/config` | Public config: project, currency, paths, stages, current season |
 | `GET /api/game/me` (auth) | Player state: stage, ladder position, gratitude balance + budget, quest claims, next-best-action |
 | `POST /api/game/journey/sync` (auth) | Mirrors journey/training step completion into the player record |
-| `GET /api/quests` + admin CRUD | Quest library (seeded from `server/seeds/quests-seed.json`) |
+| `GET /api/quests` + admin CRUD | Quest library (a fresh village's starters are standing examples from `server/seeds/examples-seed.json`; `POST /api/admin/quests/:id/keep` keeps one) |
 | `POST /api/game/quests/:id/claim` / `submit` (auth) | Claim a quest, submit evidence (artifact link + note) |
 | `GET /api/admin/quest-claims` + `POST .../consent` | Team consent queue; consent credits the reward and emits a pulse event |
 | `POST /api/game/gratitude/send` (auth) | Monthly budget (stage-multiplied), message required, once per recipient per cycle |

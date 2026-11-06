@@ -1,26 +1,9 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  Home,
-  Building,
-  Leaf,
-  Zap,
-  ChevronDown,
-  Stethoscope,
-  BookOpen,
-  Palette,
-  DollarSign,
-  Users2,
-  Lightbulb,
-  Building2,
-  Briefcase,
-  Handshake,
-  CircleDot,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { m, AnimatePresence } from "framer-motion";
+import { Users, ArrowRight, ChevronDown } from "lucide-react";
+import { iconFor } from "@/lib/circleIcons";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import CircleScene from "@/components/CircleScene";
 import CirclesMiniMap from "@/components/CirclesMiniMap";
 import { cssColourForCircle } from "@shared/circleView";
@@ -35,6 +18,61 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
+import CircleLines, { type CircleHolder } from "@/components/geneKeys/CircleLines";
+import { coordinatingCircle } from "@shared/coordinatingCircle";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { fillVars } from "@shared/pageContent/resolve";
+import { CIRCLES_PAGE, COORDINATOR_WORD } from "@shared/pageContent/circles";
+
+/** The link from a circle's panel to its own card (`/circles/:id`). */
+const OPEN_CARD = "Open this circle's card";
+
+/** Sentences a village left blank are not drawn. */
+const filled = (...texts: string[]) => texts.filter((t) => t.trim() !== "");
+
+/**
+ * A paragraph with up to two of its words given an explanation. Each word is
+ * found as typed, its first time in the paragraph, and becomes an InfoTip
+ * trigger; a word the paragraph does not contain, or one with no explanation,
+ * is simply not given one.
+ */
+function Tipped({ text, tips }: { text: string; tips: Array<{ term: string; tip: string }> }) {
+  const live = tips.filter((t) => t.term.trim() !== "" && t.tip.trim() !== "");
+  const out: ReactNode[] = [];
+  const used = new Set<number>();
+  let rest = text;
+  while (rest) {
+    let best = -1;
+    let at = -1;
+    live.forEach((t, i) => {
+      const found = used.has(i) ? -1 : rest.indexOf(t.term);
+      if (found >= 0 && (at < 0 || found < at)) [best, at] = [i, found];
+    });
+    if (best < 0) {
+      out.push(<Fragment key={out.length}>{rest}</Fragment>);
+      break;
+    }
+    used.add(best);
+    out.push(<Fragment key={out.length}>{rest.slice(0, at)}</Fragment>);
+    out.push(
+      <InfoTip key={out.length} tip={live[best].tip}>
+        {live[best].term}
+      </InfoTip>,
+    );
+    rest = rest.slice(at + live[best].term.length);
+  }
+  return <>{out}</>;
+}
+
+/** The line at the foot of an opened circle's panel, or null when the village hid it. */
+interface CardWords {
+  label: string;
+  /** For a circle under the top circle, its name already filled in. */
+  linked: string;
+  /** For the top circle itself, and every circle in a village with none. */
+  flat: string;
+}
 
 interface CircleEntry {
   id: string;
@@ -50,23 +88,25 @@ interface CircleEntry {
   color?: string;
   /** Optional scene override (motif id or /api/uploads/…); keywords otherwise. */
   scene?: string;
+  /** Holders with an id, which only a signed-in member's read carries: the circle's Gene Keys view reads these. */
+  holders: CircleHolder[];
 }
 
-/** Icon names a card may reference; anything unknown falls back to CircleDot. */
-const ICONS: Record<string, React.ElementType> = {
-  Users, Home, Building, Leaf, Zap, Stethoscope, BookOpen, Palette,
-  DollarSign, Users2, Lightbulb, Building2, Briefcase, Handshake, CircleDot,
-};
-
-function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
+function CircleCard({ circle, expanded, onToggle, index, onOpenSeat, coordinator, words }: {
   circle: CircleEntry;
   expanded: boolean;
   onToggle: () => void;
   index: number;
   /** A seat chip was pressed: open that seat's card. */
   onOpenSeat: (seatId: string) => void;
+  /** The circle the others link back to, from the village's own rows, or null. */
+  coordinator: { id: string; name: string } | null;
+  /** The village's words for the foot of the panel (Admin, Pages, Circles), or null when hidden. */
+  words: CardWords | null;
 }) {
-  const Icon = ICONS[circle.icon ?? ""] ?? CircleDot;
+  const Icon = iconFor(circle.icon);
+  // A circle under the top circle reads the linked line; the top circle itself never reads that it links to itself.
+  const footLine = words ? (coordinator && coordinator.id !== circle.id ? words.linked : words.flat) : "";
   /*
    * THE CARD WEARS THE SAME COLOUR THE MAP DRAWS.
    *
@@ -89,7 +129,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
    */
   const hue = cssColourForCircle({ id: circle.id, color: circle.color ?? null });
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -132,7 +172,7 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
 
       <AnimatePresence>
         {expanded && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -140,6 +180,14 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
           >
             <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-4">
               {circle.description && <p className="text-foreground">{circle.description}</p>}
+              {/* The circle's own card: its words, its roles and who agreed to them. */}
+              <Link
+                href={`/circles/${encodeURIComponent(circle.id)}`}
+                className="inline-flex min-h-11 items-center gap-1.5 font-medium text-foreground underline underline-offset-2"
+              >
+                {OPEN_CARD}
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
 
               <div className="grid md:grid-cols-2 gap-6">
                 {circle.domain && (
@@ -155,6 +203,8 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
                   </div>
                 )}
               </div>
+
+              {circle.holders.length > 0 ? <CircleLines holders={circle.holders} /> : null}
 
               {circle.seats.length > 0 && (
                 <div>
@@ -178,16 +228,18 @@ function CircleCard({ circle, expanded, onToggle, index, onOpenSeat }: {
                 </div>
               )}
 
-              <div className="pt-4 border-t border-border">
-                <p className="text-xs text-muted-foreground">
-                  <strong>How it works:</strong> Each circle has autonomy within its domain and budget, uses consent-based decision-making, and is double-linked to the General Coordinating Circle so information flows both ways.
-                </p>
-              </div>
+              {words && footLine.trim() !== "" && (
+                <div className="pt-4 border-t border-border">
+                  <p className="text-xs text-muted-foreground break-words">
+                    <strong>{words.label}</strong> {footLine}
+                  </p>
+                </div>
+              )}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -211,6 +263,11 @@ export default function Circles() {
   // The contact relay is the map's alone and is never offered here.
   const map = useModule("map");
   const raiseHand = !!map && map.lifecycle !== "off";
+  // Every word around the circles is the village's own, from Admin, Pages,
+  // Circles (shared/pageContent/circles.ts). Null until the saved words have
+  // arrived, so the defaults never flash first. The circles are not words:
+  // they are the village's rows, read below.
+  const page = usePageContent(CIRCLES_PAGE);
 
   // Circles are rows now (0049). What a circle IS and who is in it are read
   // from its seats rather than from hand-typed prose, so the page cannot go
@@ -260,6 +317,15 @@ export default function Circles() {
              * have them, the true count when we do not, and "none held yet"
              * only when that is a fact.
              */
+            // One entry per person with an id, whichever roles they hold here.
+            const holders: CircleHolder[] = Array.from(
+              new Map(
+                seats
+                  .flatMap((s: any) => s.holders ?? [])
+                  .filter((h: any) => h?.userId && !h?.lapsed)
+                  .map((h: any) => [String(h.userId), { id: String(h.userId), name: orgHolderName(h) || "A member" }] as const),
+              ).values(),
+            );
             const heldSeats = seats.reduce(
               (n: number, s: any) => n + Number(s.holderCount ?? 0),
               0,
@@ -288,11 +354,12 @@ export default function Circles() {
                */
               icon: c.icon ?? undefined,
               color: c.color ?? undefined,
+              holders,
               members: heldBy.length
                 ? Array.from(new Set(heldBy)).join(", ")
                 : seats.length
                   ? heldSeats
-                    ? `${seats.length} role${seats.length === 1 ? "" : "s"}, ${heldSeats} seat${heldSeats === 1 ? "" : "s"} held`
+                    ? `${seats.length} role${seats.length === 1 ? "" : "s"}, ${heldSeats} role${heldSeats === 1 ? "" : "s"} held`
                     : `${seats.length} role${seats.length === 1 ? "" : "s"}, none held yet`
                   : "",
             } as CircleEntry;
@@ -308,12 +375,44 @@ export default function Circles() {
   const today = (circles ?? []).filter((c) => c.stage === "today");
   const future = (circles ?? []).filter((c) => c.stage === "future");
   const openRow = openSeat ? (raw.seats.find((r) => String(r?.id) === openSeat) ?? null) : null;
+  /*
+   * THE CIRCLE THE OTHERS LINK BACK TO IS THE VILLAGE'S OWN.
+   *
+   * This page named "the General Coordinating Circle" in three sentences,
+   * typed in, so every village read one village's top circle. It is now the
+   * village's own top circle when its circles nest under one, and no circle
+   * is named when they do not (shared/coordinatingCircle.ts).
+   */
+  const top = coordinatingCircle(raw.circles);
+  const coordinator = top ? { id: String(top.id), name: String(top.name) } : null;
+
+  if (!page) {
+    return (
+      <Layout>
+        <section className="min-h-[70vh]" aria-busy="true" />
+      </Layout>
+    );
+  }
+  const { hero, card, together, closing } = page;
+  const groupToday = page.today;
+  const groupFuture = page.future;
+  // `{coordinator}` is the village's own top circle, filled here and never
+  // typed. Only the linked words use it, and they only draw when there is one.
+  const linked = (text: string) => (coordinator ? fillVars(text, { [COORDINATOR_WORD]: coordinator.name }) : text);
+  const cardWords: CardWords | null = card.hidden
+    ? null
+    : { label: card.fields.label, linked: linked(card.fields.linked), flat: card.fields.flat };
+  const togetherParagraphs = filled(
+    filled(together.fields.first, coordinator ? linked(together.fields.acrossLinked) : together.fields.acrossFlat, together.fields.after).join(" "),
+    together.fields.second,
+    coordinator ? linked(together.fields.thirdLinked) : together.fields.thirdFlat,
+  );
 
   return (
     <Layout>
       <section className="py-24 bg-background">
         <div className="container">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
@@ -321,23 +420,25 @@ export default function Circles() {
             <div className="w-16 h-16 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-6">
               <Users className="w-8 h-8 text-sage" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Our Sociocratic Circles
+            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4 break-words">
+              {hero.fields.headline}
             </h1>
-            {/* R46 enchant-first: the canopy image carries the surface; the
-                sociocracy mechanics live in the tooltips. */}
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-6">
-              Circles are how the village thinks: each one tends its own{" "}
-              <InfoTip tip="A domain is the ground a circle decides on without asking anyone above it. Real authority lives inside it.">domain</InfoTip>{" "}
-              the way a tree tends its own ground, and{" "}
-              <InfoTip tip="Two people belong to both a circle and the circle above it, one chosen by each. News travels both ways, so no circle drifts alone.">double links</InfoTip>{" "}
-              weave them into one canopy.
+            {/* R46 enchant-first: the surface line stays short and the
+                mechanics live in the tooltips, which the village writes too. */}
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-6 break-words">
+              <Tipped
+                text={hero.fields.intro}
+                tips={[
+                  { term: hero.fields.firstTerm, tip: hero.fields.firstTip },
+                  { term: hero.fields.secondTerm, tip: hero.fields.secondTip },
+                ]}
+              />
             </p>
             <Link href="/roles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
-              View Open Roles
+              {hero.fields.rolesLabel}
               <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
 
           <div className="max-w-4xl mx-auto">
             {/* Members-only people: the cards below still carry every circle
@@ -355,8 +456,14 @@ export default function Circles() {
                 role="status" and not "alert": a list that did not load is
                 news, not an interruption of something the member was doing. */}
             <div role="status">
+              {/* The loading line holds 60vh. It was 150px tall, so the
+                  box on how circles work together sat on screen until the
+                  list landed (5,000px of circles on this village) and then got
+                  pushed off it: a 0.16 layout shift at 1280 wide, cold. At 60vh
+                  the box starts below the fold, so the list arrives out of
+                  sight of anything a visitor is reading. */}
               {circles === null && !failed && (
-                <div className="text-center text-muted-foreground py-16">Loading circles…</div>
+                <div className="text-center text-muted-foreground py-16 min-h-[60vh]">Loading circles…</div>
               )}
               {failed && (
                 <div className="text-center text-muted-foreground py-16">
@@ -377,12 +484,15 @@ export default function Circles() {
 
             {today.length > 0 && (
               <div className="mb-16">
-                <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">The Circles Today</h2>
-                  <p className="text-muted-foreground text-sm">
-                    How the team actually organizes right now, while the village is being built.
-                  </p>
-                </div>
+                {/* A hidden heading hides only the words: the circles are the village's own and always show. */}
+                {!groupToday.hidden && (
+                  <div className="mb-6">
+                    <h2 className="font-display text-2xl font-bold text-foreground mb-1 break-words">{groupToday.fields.heading}</h2>
+                    {groupToday.fields.intro && (
+                      <p className="text-muted-foreground text-sm break-words">{groupToday.fields.intro}</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {today.map((circle, index) => (
                     <CircleCard
@@ -392,6 +502,8 @@ export default function Circles() {
                       onToggle={() => toggle(circle.id)}
                       index={index}
                       onOpenSeat={setOpenSeat}
+                      coordinator={coordinator}
+                      words={cardWords}
                     />
                   ))}
                 </div>
@@ -400,12 +512,14 @@ export default function Circles() {
 
             {future.length > 0 && (
               <div className="mb-4">
-                <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">As the Village Matures</h2>
-                  <p className="text-muted-foreground text-sm">
-                    As residents arrive, today's team circles grow into resident-led councils like these: domain-specific circles connected through elected representatives.
-                  </p>
-                </div>
+                {!groupFuture.hidden && (
+                  <div className="mb-6">
+                    <h2 className="font-display text-2xl font-bold text-foreground mb-1 break-words">{groupFuture.fields.heading}</h2>
+                    {groupFuture.fields.intro && (
+                      <p className="text-muted-foreground text-sm break-words">{groupFuture.fields.intro}</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4">
                   {future.map((circle, index) => (
                     <CircleCard
@@ -415,6 +529,8 @@ export default function Circles() {
                       onToggle={() => toggle(circle.id)}
                       index={index}
                       onOpenSeat={setOpenSeat}
+                      coordinator={coordinator}
+                      words={cardWords}
                     />
                   ))}
                 </div>
@@ -447,29 +563,28 @@ export default function Circles() {
             )}
           </div>
 
-          <motion.div
+          {!together.hidden && (
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="mt-16 bg-sage/5 p-8 rounded-2xl border border-sage/20"
           >
-            <h2 className="font-display text-2xl font-bold text-foreground mb-4">
-              How Circles Work Together
+            <h2 className="font-display text-2xl font-bold text-foreground mb-4 break-words">
+              {together.fields.heading}
             </h2>
             <div className="space-y-4 text-muted-foreground">
-              <p>
-                Each circle has <strong>a domain, a budget, and the authority</strong> to make decisions within that domain. When decisions affect multiple circles, the <strong>General Coordinating Circle</strong>, the four leads and circle representatives, coordinates. The Finance & Business Circle provides budget stewardship, oversight, and alignment across all circles.
-              </p>
-              <p>
-                Circles use <strong>consent-based decision-making</strong>: a proposal moves forward unless someone has a reasoned objection that it would cause harm or prevent the circle from achieving its aim. This creates space for wisdom and prevents tyranny of the majority.
-              </p>
-              <p>
-                Every circle is <strong>double-linked</strong> to the General Coordinating Circle by two people, so information flows both ways. Regular reporting, check-ins, and feedback keep the whole aligned and adaptable.
-              </p>
+              {togetherParagraphs.map((text, i) => (
+                <p key={i} className="break-words">
+                  <Emphasized text={text} />
+                </p>
+              ))}
             </div>
-          </motion.div>
+          </m.div>
+          )}
 
-          <motion.div
+          {!closing.hidden && (
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -477,11 +592,12 @@ export default function Circles() {
           >
             <Link href="/roles">
               <a className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
-                Learn About Roles & Leadership
+                {closing.fields.label}
                 <ArrowRight className="w-4 h-4" />
               </a>
             </Link>
-          </motion.div>
+          </m.div>
+          )}
         </div>
       </section>
     </Layout>

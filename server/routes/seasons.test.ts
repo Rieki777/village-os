@@ -18,7 +18,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { dbDocument } from "../repos/store-db";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 import { civilDateInstant } from "../../shared/seatTerms";
@@ -105,7 +105,7 @@ describe.skipIf(!configured)("PUT /api/admin/seasons", () => {
 
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool
+    pool = testPool(db, { connectionLimit: 2 }); // module-review-ok: the S5 scratch-schema harness pool
     repo = dbDocument(pool, "season", GAME_CONFIG.season as any);
     await repo.load();
     const { app, handlers: h } = collect();

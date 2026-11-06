@@ -86,7 +86,7 @@ export type MergeValues = Record<string, MergeValue>;
 export type MergeFieldType = "text" | "url" | "markdown" | "links";
 
 /** The groups the picker shows, each a family of facts one kind of email knows. */
-export const MERGE_GROUPS = ["common", "action", "lettersConfirm", "gathering", "poll", "recap", "nextGathering", "path", "letter"] as const;
+export const MERGE_GROUPS = ["common", "action", "lettersConfirm", "gathering", "poll", "recap", "nextGathering", "path", "letter", "packet"] as const;
 export type MergeGroup = (typeof MERGE_GROUPS)[number];
 
 export const MERGE_GROUP_LABELS: Record<MergeGroup, string> = {
@@ -99,6 +99,7 @@ export const MERGE_GROUP_LABELS: Record<MergeGroup, string> = {
   nextGathering: "The next gathering",
   path: "The path",
   letter: "The letter",
+  packet: "The investor packet",
 };
 
 export interface MergeField {
@@ -144,6 +145,11 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   // Every email.
   f("village.name", "common", "text", "Village name", "Your village's name, as your site shows it.", "our village"),
   f("village.url", "common", "url", "Village site", "Your site's address. Put a page after it inside a link: [See the calendar]({{village.url}}/events).", ""),
+  // The recognition token's name, as Admin, Tokens sets it. The emails that
+  // send people to its wall said "Gratitude wall" whatever a village called
+  // it (audit, 2026-10-22). "Gratitude" is the platform's own default name
+  // (GAME_CONFIG.currency.name), shown only when a village's name is unknown.
+  f("village.tokenName", "common", "text", "Token name", "Your village's name for its recognition token, as Admin, Tokens sets it. The wall on your site carries the same name.", "Gratitude"),
   f("person.firstName", "common", "text", "First name", "The reader's first name.", "there"),
   f("person.name", "common", "text", "Full name", "The reader's full name.", "friend"),
   f("links.preferences", "common", "url", "Email choices link", "The reader's own page for choosing which emails they get. Every footer carries it already.", "", true),
@@ -197,6 +203,9 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   f("letter.body", "letter", "markdown", "The letter", "The letter itself. Put it on a line of its own.", ""),
   f("letter.subject", "letter", "text", "Letter subject", "The letter's own subject line.", "News from {{village.name}}"),
   f("letter.preheader", "letter", "text", "Letter preview line", "The letter's own preview line.", "", true),
+
+  // The investor packet a visitor asked for on the investor page.
+  f("packet.documents", "packet", "links", "The documents", "One link per document in the packet, with each one's page on your site where it has one. Put it on a line of its own.", "", true),
 ];
 
 export const MERGE_FIELDS_BY_KEY: Readonly<Record<string, MergeField>> = Object.fromEntries(
@@ -221,6 +230,7 @@ export function groupsForTemplate(templateKey: string): MergeGroup[] {
   if (key.startsWith("member.") || key.startsWith("joining.")) return ["common", "nextGathering"];
   if (key === "letters.confirm") return ["common", "lettersConfirm"];
   if (key.startsWith("letter.")) return ["common", "letter"];
+  if (key.startsWith("investor.")) return ["common", "packet"];
   return ["common"];
 }
 
@@ -598,6 +608,9 @@ export function sampleValues(input: {
         "The well is finished, and the water tested clean.\n\nThank you to everyone who carried pipe in the rain. We'll show it off at the next supper.",
     },
     "letter.subject": "The well is finished",
+    "packet.documents": site
+      ? { links: [{ label: "Investor summary", href: at("/api/uploads/sample.pdf") }, { label: "Investor summary, on the site", href: at("/investor") }] }
+      : null,
     "letter.preheader": "And the water tested clean.",
   };
 }

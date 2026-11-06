@@ -9,8 +9,10 @@
  *
  *   the source   `letterSourceFrom` reads the village's own inputs: its name,
  *                its recognition token's name, what it calls the letter
- *                (`project.commitmentName`), and the two content sections a
- *                founder writes in Admin (`covenant`, `legal`). The server
+ *                (`project.commitmentName`), and the three content sections a
+ *                founder writes in Admin (`covenant`, `legal`, and since
+ *                2026-10-22 `page-love-letter`, the letter's own words from
+ *                Admin, Pages, read here so the page and the server agree). The server
  *                passes `mergedConfig()` and the content document; the page,
  *                while the server's copy is on its way, passes the same values
  *                as `/api/game/config` and `/api/content` serve them.
@@ -35,6 +37,11 @@
  */
 
 import type { AlignmentSubject } from "./alignments";
+import { LOVE_LETTER_PAGE } from "./pageContent/loveLetter";
+import { resolvePage } from "./pageContent/resolve";
+import { pageSectionKey, type PageVars } from "./pageContent/types";
+import { pageVarsFrom } from "./pageContent/vars";
+import { articleFor } from "./villageWord";
 
 /**
  * The subject type a membership letter's text is stored under. Typed against
@@ -68,13 +75,18 @@ export function readMembershipRef(ref: string): { letterVersion: string; signing
   return LETTER_VERSION.test(letterVersion) && signingId ? { letterVersion, signingId } : null;
 }
 
-/** The opening, for a village that has not written its own (LoveLetter.tsx carried it until PR9). */
+/**
+ * The opening, for a village that has not written its own (LoveLetter.tsx
+ * carried it until PR9). Neutral starter words since 2026-10-23: the first
+ * village's slogan came out, and that village keeps its own opening in its
+ * `covenant` section (record: server/seeds/amora/pages-covenant-seed.json).
+ */
 export const DEFAULT_OPENING =
-  "Something in you called you here. Maybe it was the land itself, alive with possibility. Maybe it was the vision of a village where all beings belong and thrive. Maybe it was simply the feeling that the world you want to live in needs to be built.";
+  "Something in you called you here. Maybe it was the land, or the people you met. Maybe it was simply the feeling that the world you want to live in needs to be built, and that you could help build it.";
 
 /** How the village will govern itself, for a village that has not written its own. */
 export const DEFAULT_GOVERNANCE =
-  "How residents govern themselves, and how we steward this land together, will be co-created by the first residents. Nothing here is handed down. You are not joining a finished system; you are helping write it.";
+  "How we govern ourselves, and how we care for this place together, is decided by the people who live and work here. Nothing here is handed down, and you will help shape what comes next.";
 
 export interface LetterSource {
   /** The village's name. Never blank: the caller passes its own fallback. */
@@ -87,6 +99,14 @@ export interface LetterSource {
   covenant?: { opening?: unknown; governance?: unknown } | null;
   /** The `legal` content section: the entity a member joins and the contribution paragraph. */
   legal?: { membership?: { entityLabel?: unknown; contributionParagraph?: unknown } | null } | null;
+  /**
+   * The `page-love-letter` content section, as stored: the village's own words
+   * for the rest of the letter (greeting, commitments, closing...). Absent or
+   * null is the platform's words, which are the letter as it always read.
+   */
+  page?: unknown;
+  /** The village's other `{words}` (tagline, location, member...), as the page fills them. */
+  words?: PageVars | null;
 }
 
 export interface LetterParts {
@@ -122,61 +142,82 @@ const text = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
  * either way. `config` is `mergedConfig()` or `/api/game/config`; `content`
  * maps a section name to what that section holds.
  */
-export function letterSourceFrom(config: any, content: { covenant?: unknown; legal?: unknown } | null | undefined): LetterSource {
+export function letterSourceFrom(
+  config: any,
+  content: { covenant?: unknown; legal?: unknown; [section: string]: unknown } | null | undefined,
+): LetterSource {
   return {
     villageName: text(config?.project?.name) || "the village",
     tokenName: text(config?.currency?.name) || "recognition",
     commitmentName: text(config?.project?.commitmentName) || DEFAULT_COMMITMENT_NAME,
     covenant: (content?.covenant as LetterSource["covenant"]) ?? null,
     legal: (content?.legal as LetterSource["legal"]) ?? null,
+    page: content?.[LETTER_PAGE_SECTION] ?? null,
+    words: pageVarsFrom(config),
   };
 }
 
-/** The eight commitments. The covenant names the village in one of them. */
-export function letterCommitments(villageName: string): string[] {
-  return [
-    "Treat all beings with respect, compassion, and authentic communication",
-    "Participate in community governance through our sociocratic circles",
-    "Contribute to the regeneration of the land and ecosystem",
-    "Support fellow community members in their growth and wellbeing",
-    `Honor the values and agreements of the ${villageName} community`,
-    "Practice Nonviolent Communication and authentic relating",
-    "Meet financial obligations as agreed with the community",
-    "Show up for community life, circles, celebrations, and shared care",
-  ];
-}
+/** The content section the letter's own words are stored under: `page-love-letter`. */
+export const LETTER_PAGE_SECTION = pageSectionKey(LOVE_LETTER_PAGE);
 
 /** The entity a member joins: the village's published one, else the village's own name. A name, never a legal claim. */
 export function letterEntity(src: LetterSource): string {
   return text(src.legal?.membership?.entityLabel) || src.villageName;
 }
 
-/** The letter, paragraph by paragraph, in the order the page draws it. */
-export function letterParts(src: LetterSource): LetterParts {
-  const village = src.villageName;
-  const entity = letterEntity(src);
+/**
+ * The `{words}` the letter's fields are filled with. The village's name, its
+ * token, its name for the letter and the entity a member joins come from the
+ * source itself, so they are the same words the title and the rest of the
+ * letter use; every other word is the page's own (`pageVarsFrom`).
+ */
+export function letterVars(src: LetterSource): PageVars {
   return {
-    greeting: `Dear Future ${village} Family Member,`,
-    opening: text(src.covenant?.opening) || DEFAULT_OPENING,
-    joining:
-      "By signing this Love Letter, you are not just joining a community. You are becoming a co-creator of the most beautiful village we can imagine together. You are saying yes to regeneration, of the land, of community, of yourself.",
-    commitLead: `As a member of ${entity}, you commit to:`,
-    commitments: letterCommitments(village),
-    inReturn: `In return, you become a full member of ${entity}, gaining access to community spaces, governance participation, ${src.tokenName} economy, and the opportunity to deepen your involvement through roles, residency, or business creation.`,
-    governance: text(src.covenant?.governance) || DEFAULT_GOVERNANCE,
-    contribution: text(src.legal?.membership?.contributionParagraph) || null,
-    closing: "With love and anticipation,",
-    signature: `The ${village} Community`,
+    ...(src.words ?? {}),
+    village: src.villageName,
+    token: src.tokenName,
+    commitment: src.commitmentName,
+    entity: letterEntity(src),
   };
 }
 
-/** The plain words the store keeps: every part, in order, one paragraph a block, the commitments one a line. */
+/**
+ * The letter, paragraph by paragraph, in the order the page draws it.
+ *
+ * Every part except the covenant's two paragraphs and the contribution
+ * paragraph is a field of the page (shared/pageContent/loveLetter.ts), read
+ * from what the village stored or its default. The defaults are the letter's
+ * words as they were, so a village that calls its letter "Love Letter" and has
+ * written none of these reads, and aligns with, exactly the letter it had.
+ */
+export function letterParts(src: LetterSource): LetterParts {
+  const own = resolvePage(LOVE_LETTER_PAGE, src.page, letterVars(src)).letter;
+  return {
+    greeting: own.fields.greeting,
+    opening: text(src.covenant?.opening) || DEFAULT_OPENING,
+    joining: own.fields.joining,
+    commitLead: own.fields.commitLead,
+    // A row left blank in the editor is not a commitment.
+    commitments: own.lists.commitments.map((row) => row.text ?? "").filter((c) => c.trim() !== ""),
+    inReturn: own.fields.inReturn,
+    governance: text(src.covenant?.governance) || DEFAULT_GOVERNANCE,
+    contribution: text(src.legal?.membership?.contributionParagraph) || null,
+    closing: own.fields.closing,
+    signature: own.fields.signature,
+  };
+}
+
+/**
+ * The plain words the store keeps: every part, in order, one paragraph a
+ * block, the commitments one a line. With no commitments the line that leads
+ * into them goes too, as it does on the page.
+ */
 export function letterBody(p: LetterParts): string {
   const blocks = [
     p.greeting,
     p.opening,
     p.joining,
-    [p.commitLead, ...p.commitments.map((c) => `  ${c}`)].join("\n"),
+    ...(p.commitments.length ? [[p.commitLead, ...p.commitments.map((c) => `  ${c}`)].join("\n")] : []),
     p.inReturn,
     p.governance,
     ...(p.contribution ? [p.contribution] : []),
@@ -203,13 +244,21 @@ export function renderMembershipLetter(src: LetterSource): Omit<ServedLetter, "v
   return { title, body: letterBody(parts), parts, intent: letterIntent(title) };
 }
 
-/** What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own. */
+/**
+ * What the page says to a member about aligning with the letter. Never "sign": that word is the letter's own.
+ *
+ * `member` is the village's word for a member (Admin, Make This Yours, "What
+ * a member is called"). These said "join the {village} Family", one village's
+ * own word for its members, under every village's name, while the setting
+ * that names them was read nowhere (audit, 2026-10-22).
+ */
 export const LETTER_WORDS = {
   readReflect: "Read. Reflect. Align.",
   heading: (title: string) => `Align with the ${title}`,
-  lede: (village: string) => `Read the letter above, add a few words about yourself, and align from your account to join the ${village} Family.`,
+  lede: (village: string, member: string) =>
+    `Read the letter above, add a few words about yourself, and align from your account to join ${village} as ${articleFor(member)} ${member}.`,
   asYou: (name: string) => `Aligning as ${name}, from your account. No typed name.`,
-  button: (village: string) => `Align and join the ${village} Family`,
+  button: (village: string) => `Align and join ${village}`,
   busy: "Aligning…",
   kept: "Your alignment is kept under What you have aligned with, on your profile.",
   changed: "The letter changed while you were reading it. Read it again, then align.",

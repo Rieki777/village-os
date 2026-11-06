@@ -28,6 +28,8 @@ import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { MIGRATIONS_DIR, splitStatements } from "./db/migrate";
 import { closeStaleRooms } from "./lib/liveSessions";
+import { lastTimeIn } from "./lib/circleStanding";
+import { lastMeetingInCircle, lastMeetingPerCircle } from "./repos/liveSessions";
 import { exportMemberSessions, register as registerRoom } from "./routes/liveSessions";
 import { register as registerTasks } from "./routes/sessionTasks";
 import { TASK_REFUSALS, type TaskCard, type TaskCountPayload } from "../shared/sessionTasks";
@@ -75,6 +77,9 @@ const PEOPLE: Record<string, any> = {
   "m-cai": { id: "m-cai", name: "Cai Moreno", handle: "cai", email: "cai@village.example.test" },
   "m-dee": { id: "m-dee", name: "Dee Lund", handle: "dee", email: "dee@village.example.test" },
   "m-eve": { id: "m-eve", name: "Eve Strand", handle: "eve", email: "eve@village.example.test" },
+  "m-fay": { id: "m-fay", name: "Fay Holm", handle: "fay", email: "fay@village.example.test" },
+  "m-gil": { id: "m-gil", name: "Gil Varga", handle: "gil", email: "gil@village.example.test" },
+  "m-hal": { id: "m-hal", name: "Hal Brook", handle: "hal", email: "hal@village.example.test" },
   "m-founder": { id: "m-founder", name: "Founding Admin", role: "admin", email: "founder@village.example.test" },
 };
 
@@ -169,6 +174,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
   let tools = 0;
   let hens = 0;
   let soup = 0;
+  let pots = 0;
 
   beforeAll(async () => {
     db = await provisionTestDb();
@@ -262,7 +268,9 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     const cai = await board("m-cai");
     expect(ids(cai.body.holding)).toEqual([]);
     expect(ids(cai.body.seatsHold)).toEqual([tank]);
-    expect(cai.body.seatsHold[0]).toMatchObject({ heldAs: "seat", seat: { id: "seat-water", name: "Water keeper", holders: ["Cai Moreno"] }, canAnswer: true, recordLink: false });
+    // First names only, for "Held by Water keeper (Cai)" (Rye, 2026-10-30): the surname is never sent.
+    expect(cai.body.seatsHold[0]).toMatchObject({ heldAs: "seat", seat: { id: "seat-water", name: "Water keeper", holders: ["Cai"] }, canAnswer: true, recordLink: false });
+    expect(JSON.stringify(cai.body)).not.toContain("Moreno");
     // Dee's term ran out: the bee seat's task is not on her board.
     const dee = await board("m-dee");
     expect(dee.body).toMatchObject({ holding: [], seatsHold: [], finished: [], earlierCount: 0 });
@@ -387,7 +395,7 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     // A kitchen call closed before the task layer, and the person who took its
     // one action has since left the village: the backfill finds it unheld.
     const k1 = await open("m-ana", "Kitchen circle, week 2", "c-kitchen");
-    const pots = await add("m-ana", k1, { text: "Scrub the big pots" });
+    pots = await add("m-ana", k1, { text: "Scrub the big pots" });
     await claim("m-ana", k1, pots);
     expect((await close("m-ana", k1)).status).toBe(200);
     await q("DELETE FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
@@ -413,7 +421,8 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     expect((await record("m-ben", s1)).body.mail.canSend).toBe(false);
     expect((await record("m-founder", s1)).body.mail.canSend).toBe(true);
     expect((await record("m-eve", s1)).status).toBe(403);
-    expect((await record("m-cai", s1)).status).toBe(403);
+    // Cai sits in the circle's water seat: he reads the circle's cards, and nothing of the record around them.
+    expect(await record("m-cai", s1)).toMatchObject({ status: 200, body: { mail: { canSend: false, lastSend: null } } });
     // An open session has no tasks yet and nothing to send.
     expect((await record("m-ana", s3)).body).toEqual({ tasks: [], mail: { canSend: false, lastSend: null } });
     // The last send says how many emails it put on their way: none, when the village's email is not set up.
@@ -424,6 +433,184 @@ describe.skipIf(!configured)("the task board against a real schema", () => {
     await q("UPDATE `live_session_task_sends` SET `counts` = '{}' WHERE `session_id` = ?", [s1]);
     expect((await record("m-ana", s1)).body.mail.lastSend).toMatchObject({ sendNo: 1, queued: null });
     await q("DELETE FROM `live_session_task_sends` WHERE `session_id` = ?", [s1]);
+  });
+
+  it("lets the whole circle read its task cards and take what came back, and nothing more (Rye, 2026-10-21)", async () => {
+    const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
+    const minutesAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id/minutes.md", { params: { id: String(id) } });
+    const garden = [seed, tank, bees, tools];
+
+    // FAY sits in the garden circle's compost seat, which holds nothing, and
+    // has never joined a session: standing through her seat, and nothing else.
+    await q("INSERT INTO `org_roles` (`id`, `circle_id`, `name`, `active`, `is_example`) VALUES ('seat-compost', 'c-garden', 'Compost keeper', 1, 0)");
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `term_ends_at`) VALUES " +
+        "('ora-fay', 'seat-compost', 'member', 'm-fay', 'm-fay', NULL)",
+    );
+    const fay = await record("m-fay", s1);
+    expect(fay.status, JSON.stringify(fay.body)).toBe(200);
+    expect(ids(fay.body.tasks)).toEqual(garden);
+    expect(fay.body.mail).toEqual({ canSend: false, lastSend: null });
+    for (const c of fay.body.tasks as TaskCard[]) expect(c, String(c.entryId)).toMatchObject({ recordLink: false, canAnswer: false, canReopen: false, canTake: false });
+    // The cards are the circle's. The record and its minutes stay with the people who were in the room.
+    expect((await roomAs("m-fay", s1)).status).toBe(403);
+    expect((await minutesAs("m-fay", s1)).status).toBe(403);
+    // Reading a card is not answering it: not yet, it's done, open it again.
+    const seedNow = await taskState(seed);
+    expect(await answer("m-fay", seed, { op: "not_yet", version: Number(seedNow.version), dueOn: "2099-08-01" })).toMatchObject({
+      status: 403,
+      body: { error: TASK_REFUSALS.notYours },
+    });
+    expect(await markDone("m-fay", tools)).toMatchObject({ status: 403, body: { error: TASK_REFUSALS.notYours } });
+    const tankNow = await taskState(tank);
+    expect(await answer("m-fay", tank, { op: "reopened", version: Number(tankNow.version) })).toMatchObject({ status: 403 });
+    expect(await taskState(seed)).toEqual(seedNow);
+    expect(await taskState(tank)).toEqual(tankNow);
+    // Her own board and her own count hold nothing of the circle's: nothing of it is hers.
+    expect((await board("m-fay")).body).toMatchObject({ holding: [], seatsHold: [], circleBack: [], finished: [] });
+    expect((await count("m-fay")).body).toEqual({ waiting: 0, nextDue: null });
+
+    // GIL was in the kitchen circle's last call, which took on nothing. He was
+    // never in the rooms the soup and the pots came from, and hosts nothing.
+    const kx = await open("m-ana", "Kitchen circle, week 4", "c-kitchen");
+    await join("m-gil", kx);
+    expect((await close("m-ana", kx)).status).toBe(200);
+    const kOpen = await open("m-ana", "Kitchen circle, week 5", "c-kitchen");
+    const gilRoom = await roomAs("m-gil", kOpen);
+    expect(gilRoom.status, JSON.stringify(gilRoom.body)).toBe(200);
+    const gilCards = gilRoom.body.circleTasks as TaskCard[];
+    expect(ids(gilCards).sort((a, b) => a - b)).toEqual([soup, pots].sort((a, b) => a - b));
+    expect(gilCards.find((c) => c.entryId === pots)).toMatchObject({ heldAs: "circle", canTake: true, canAnswer: false, recordLink: false });
+    expect(gilCards.find((c) => c.entryId === soup)).toMatchObject({ heldAs: "person", holderName: "Ana Reyes", canTake: false, canAnswer: false, recordLink: false });
+    // The kitchen call the pots came from, which Gil was never in.
+    const [{ session_id: k1 }] = await q("SELECT `session_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
+    expect((await roomAs("m-gil", Number(k1))).status).toBe(403);
+    expect(await record("m-gil", Number(k1))).toMatchObject({
+      status: 200,
+      body: { tasks: [{ entryId: pots, heldAs: "circle", canTake: true, recordLink: false }], mail: { canSend: false, lastSend: null } },
+    });
+    // His board puts the pots in front of him before the kitchen meets again, and never counts them as his.
+    const gilBoard = (await board("m-gil")).body;
+    expect(ids(gilBoard.circleBack)).toEqual([pots]);
+    expect(gilBoard.holding).toEqual([]);
+    expect((await count("m-gil")).body).toEqual({ waiting: 0, nextDue: null });
+
+    // HAL sits in the kitchen's pantry seat and has never joined a session, so
+    // he has no number yet. Fay holds a kitchen seat too, but the kitchen
+    // rested it: a seat the circle no longer keeps gives no standing.
+    await q("INSERT INTO `org_roles` (`id`, `circle_id`, `name`, `active`, `is_example`) VALUES ('seat-pantry', 'c-kitchen', 'Pantry keeper', 1, 0), ('seat-oven', 'c-kitchen', 'Oven keeper', 0, 0)");
+    await q(
+      "INSERT INTO `org_role_assignments` (`id`, `org_role_id`, `holder_kind`, `user_id`, `holder_key`, `term_ends_at`) VALUES " +
+        "('ora-hal', 'seat-pantry', 'member', 'm-hal', 'm-hal', NULL), ('ora-fay-oven', 'seat-oven', 'member', 'm-fay', 'm-fay', NULL)",
+    );
+    // Before he has joined anything, the open kitchen room already reads him the circle's cards.
+    const halRoom = await roomAs("m-hal", kOpen);
+    expect(halRoom.body.me.joined).toBe(false);
+    expect(ids(halRoom.body.circleTasks).sort((a, b) => a - b)).toEqual([soup, pots].sort((a, b) => a - b));
+    expect(ids((await board("m-hal")).body.circleBack)).toEqual([pots]);
+    expect((await board("m-hal")).body.circleBack[0]).toMatchObject({ canTake: true, canAnswer: false, recordLink: false });
+
+    // OUTSIDERS read none of it: Eve is in neither circle, Dee's garden term
+    // ran out, and Fay's standing is in the garden, never the kitchen.
+    for (const [who, sessionId] of [["m-eve", s1], ["m-dee", s1], ["m-eve", k1], ["m-fay", k1]] as const) {
+      expect((await record(who, Number(sessionId))).status, `${who} on ${sessionId}`).toBe(403);
+    }
+    for (const who of ["m-eve", "m-fay"]) {
+      expect((await roomAs(who, kOpen)).body.circleTasks, who).toEqual([]);
+      expect((await board(who)).body.circleBack, who).toEqual([]);
+      expect(await answer(who, pots, { op: "taken", version: Number((await taskState(pots)).version) }), who).toMatchObject({ status: 404 });
+    }
+
+    // Hal takes the pots, and is given his number for it. Nobody in the
+    // circle hears about it from a notice, and it becomes his: on his board,
+    // in his count, and gone from Gil's.
+    notices.length = 0;
+    const taken = await answer("m-hal", pots, { op: "taken", version: Number((await taskState(pots)).version) });
+    expect(taken.status, JSON.stringify(taken.body)).toBe(200);
+    expect(taken.body.task).toMatchObject({ entryId: pots, heldAs: "you", holderName: "Hal Brook", canAnswer: true, recordLink: false });
+    expect(notices).toEqual([]);
+    expect(await q("SELECT COUNT(*) AS `n` FROM `live_session_members` WHERE `user_id` = 'm-hal'")).toEqual([{ n: 1 }]);
+    const after = (await board("m-hal")).body;
+    expect(ids(after.holding)).toEqual([pots]);
+    expect(after.circleBack).toEqual([]);
+    expect((await count("m-hal")).body).toEqual({ waiting: 1, nextDue: null });
+    expect((await board("m-gil")).body.circleBack).toEqual([]);
+    await forget([kOpen]);
+  });
+
+  it("counts only a meeting two or more people were in: a close made alone gives no standing and takes none (Rye, 2026-10-21)", async () => {
+    const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
+    const addItem = async (who: string, id: number, title: string) => {
+      const out = await as(who, "POST /api/sessions/:id/items", { params: { id: String(id) }, body: { title, aim: "explore", minutes: 10 } });
+      expect(out.status, JSON.stringify(out.body)).toBe(200);
+    };
+    const [{ session_id: k1 }] = await q("SELECT `session_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
+
+    // A real kitchen meeting: Ana and Gil, with an agenda item it never reached.
+    const km = await open("m-ana", "Kitchen circle, week 6", "c-kitchen");
+    await join("m-gil", km);
+    await addItem("m-ana", km, "Sharpen the knives");
+    expect((await close("m-ana", km)).status).toBe(200);
+    // Then Eve opens a kitchen room alone and closes it with nothing in it, the way a test room goes. It is the plain last close.
+    const solo = await open("m-eve", "Eve, alone in the kitchen", "c-kitchen");
+    expect((await close("m-eve", solo)).status).toBe(200);
+    await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` + INTERVAL 1 MINUTE WHERE `id` = ?", [solo]);
+
+    // Her close gives her nothing in the kitchen.
+    expect((await record("m-eve", Number(k1))).status).toBe(403);
+    // It takes nothing from Gil, who was at the meeting, or from Hal, whose seat keeps him in without either.
+    expect((await record("m-gil", Number(k1))).status).toBe(200);
+    expect((await record("m-hal", Number(k1))).status).toBe(200);
+    // Ben was in no kitchen meeting and sits in no kitchen seat.
+    expect((await record("m-ben", Number(k1))).status).toBe(403);
+
+    // The next kitchen room carries from the meeting: an empty room one person was in never stands in front of it.
+    const kNext = await open("m-ana", "Kitchen circle, week 7", "c-kitchen");
+    const ana = (await roomAs("m-ana", kNext)).body;
+    const [{ closed_at: metAt }] = await q("SELECT `closed_at` FROM `live_sessions` WHERE `id` = ?", [km]);
+    expect(ana.circleLastMetAt).toBe(new Date(metAt).toISOString());
+    expect(ana.carried).toMatchObject({ sessionId: km });
+    expect(ana.carried.parkedItems.map((i: { title: string }) => i.title)).toEqual(["Sharpen the knives"]);
+    expect(ids((await roomAs("m-gil", kNext)).body.circleTasks)).toContain(pots);
+    // Eve reads no card of the kitchen there, and nothing carried.
+    const eve = (await roomAs("m-eve", kNext)).body;
+    expect(eve.circleTasks).toEqual([]);
+    expect(eve.carried).toBeNull();
+
+    // A meeting stays a meeting when one of its people later leaves the village
+    // and their row goes: the close kept its own count. Gil's row, gone a moment.
+    const gilNo = Number((await q("SELECT `no` FROM `live_session_members` WHERE `user_id` = 'm-gil'"))[0].no);
+    const [gilRow] = await q("SELECT * FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [km, gilNo]);
+    await q("DELETE FROM `live_session_people` WHERE `session_id` = ? AND `member_no` = ?", [km, gilNo]);
+    expect(Number((await lastMeetingInCircle(pool, "c-kitchen", 0))[0].id)).toBe(km);
+    expect((await lastMeetingPerCircle(pool, { circleIds: ["c-kitchen"] })).map((r: any) => Number(r.id))).toEqual([km]);
+    expect(Number((await lastTimeIn(pool, "c-kitchen", kNext))?.id)).toBe(km);
+    await q("INSERT INTO `live_session_people` SET ?", [gilRow]);
+    await forget([kNext]);
+  });
+
+  it("keeps a one-person session that left something behind as last time, so nothing it parked is lost, and still gives it no standing", async () => {
+    const roomAs = async (who: string, id: number) => as(who, "GET /api/sessions/:id", { params: { id: String(id) } });
+    const [{ session_id: k1 }] = await q("SELECT `session_id` FROM `live_session_task_state` WHERE `entry_id` = ?", [pots]);
+    // Ana works alone in the kitchen and parks one thing for next time.
+    const alone = await open("m-ana", "Kitchen, Ana alone", "c-kitchen");
+    const hinges = await as("m-ana", "POST /api/sessions/:id/items", { params: { id: String(alone) }, body: { title: "Oil the hinges", aim: "report", minutes: 5 } });
+    expect(hinges.status, JSON.stringify(hinges.body)).toBe(200);
+    expect((await close("m-ana", alone)).status).toBe(200);
+    await q("UPDATE `live_sessions` SET `closed_at` = `closed_at` + INTERVAL 2 MINUTE WHERE `id` = ?", [alone]);
+
+    // Her next room carries from it: what she parked is offered, and the check groups from its close.
+    const next = await open("m-ana", "Kitchen circle, week 8", "c-kitchen");
+    const ana = (await roomAs("m-ana", next)).body;
+    const [{ closed_at: aloneAt }] = await q("SELECT `closed_at` FROM `live_sessions` WHERE `id` = ?", [alone]);
+    expect(ana.carried).toMatchObject({ sessionId: alone });
+    expect(ana.carried.parkedItems.map((i: { title: string }) => i.title)).toEqual(["Oil the hinges"]);
+    expect(ana.circleLastMetAt).toBe(new Date(aloneAt).toISOString());
+    // It is still no meeting: Gil keeps his standing from the last one, and Eve gains none.
+    expect(Number((await lastMeetingInCircle(pool, "c-kitchen", next))[0].id)).not.toBe(alone);
+    expect((await record("m-gil", Number(k1))).status).toBe(200);
+    expect((await record("m-eve", Number(k1))).status).toBe(403);
+    await forget([next]);
   });
 
   it("carries no member id, no email, and no count about a person, on any board, record or room", async () => {

@@ -175,8 +175,9 @@ describe("the menu entries", () => {
     // Beside the member's other own pages, after the wallet.
     const hrefs = ACCOUNT_MENU.map((l) => l.href);
     expect(hrefs.indexOf(TASK_BOARD_PATH)).toBeGreaterThan(hrefs.indexOf("/profile"));
-    // No other entry carries a count.
-    expect(ACCOUNT_MENU.filter((l) => l.count)).toHaveLength(1);
+    // One entry carries this count; the only other count is Messages' own.
+    expect(ACCOUNT_MENU.filter((l) => l.count === "tasks")).toHaveLength(1);
+    expect(ACCOUNT_MENU.filter((l) => l.count).map((l) => l.count).sort()).toEqual(["messages", "tasks"]);
   });
 
   it("puts My tasks in the shortcuts, for a signed-in member with the module on, beside Profile", () => {

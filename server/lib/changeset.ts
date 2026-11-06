@@ -84,9 +84,9 @@ import { allocatedWeight } from "../repos/governanceWeightRows";
 import { elementRowsForBallot, upsertElementRow } from "../repos/governanceElementLedger";
 import { insertMechanicsChange } from "../repos/mechanicsChanges";
 import { markProposalApplied } from "../repos/mechanicsProposals";
-import { VARIABLES_BY_KEY, applyTimingOf, ringOf, validateVariable } from "../../shared/gameVariables";
+import { VARIABLES_BY_KEY, applyTimingOf, validateVariable } from "../../shared/gameVariables";
 import { isMintRuleKey } from "../../shared/mintRuleKeys";
-import { asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
+import { WEIGHING_KEYS, asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
 import { kindOfItem, kindOfSet, type GovernanceKind } from "../../shared/governanceKinds";
 import { keyIsVetoLocked } from "./stewardship";
 import { setVariable, variableSetRefusal, type SetResult } from "./variables";
@@ -94,12 +94,15 @@ import { applyMintRuleChanges } from "./economy";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
+import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
- * One entry, and it is the module the vote itself runs on.
+ * One entry, and it is the module the vote itself runs on. Held in
+ * `shared/moduleSwitch.ts` now, so the validator that refuses a proposal and
+ * this executor read one set.
  */
-export const NEVER_BY_CHANGESET: ReadonlySet<string> = new Set(["governance"]);
+export { NEVER_BY_CHANGESET };
 
 /**
  * The kinds this build can actually carry out, in the order they are applied.
@@ -201,7 +204,8 @@ export async function validateElements(
     if (item.kind === "dial") {
       const def = VARIABLES_BY_KEY[item.key];
       if (!def) return refuse(index, item.kind, "this dial no longer exists in the registry");
-      if (ringOf(def) !== "open") return refuse(index, item.kind, "this dial is no longer community-governable");
+      // Who adopts a founder-held dial is decided at the doors (./founderDials.ts); the weighing lands only as a mode switch.
+      if (WEIGHING_KEYS.has(item.key)) return refuse(index, item.kind, "how votes are counted lands only as a mode switch");
       // The registry's own bounds, here and not first in phase 2, where a
       // refusal lands after the elements before it were already written.
       const invalid = validateVariable(def, String(item.to).trim());
@@ -837,6 +841,12 @@ export async function recordMechanicsChangeRow(
     console.error("[mechanics] amendment ledger write failed (change stands)", { key }, e);
   }
 }
+
+/**
+ * The ledger's one PUBLIC reader. It stores values raw because the trail is the
+ * record; what a stranger may read of a row is decided in mechanicsHistory.ts.
+ */
+export { publicAmendment, publicChangeSet, publicProposal } from "./mechanicsHistory";
 
 /**
  * A SET HOLDING ANY CYCLE-TIMED DIAL WAITS FOR THE BOUNDARY AS A WHOLE.

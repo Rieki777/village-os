@@ -4,11 +4,16 @@
  * export everything, or leave and be anonymized.
  */
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { Bell, Download, ShieldOff } from "lucide-react";
+import { formatMoney } from "@shared/money";
 import { authToken, clearAuthToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { IdentityConfirmField, identityBody, identityReady, useIdentityConfirm } from "@/components/auth/ConfirmWithGoogle";
 import LeavingEnds, { leftEndedWords, useTermsLeavingEnds } from "@/components/alignment/LeavingEnds";
+import { CashOwedNotice, VotesCastNotice, useUnpaidCash } from "@/components/LeavingKeeps";
+import { CASH_GIVE_UP_FIELD } from "@shared/cashOwed";
+import LeavingNotices, { useLeavingNotices } from "@/components/LeavingNotices";
 import EmailFromVillage from "@/components/EmailFromVillage";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { TASK_COPY, TASK_EMAIL_PREFS, isTaskEmailPref } from "@shared/sessionTasks";
@@ -50,6 +55,17 @@ const CADENCES: Record<string, Array<{ v: string; label: string }>> = {
   ],
 };
 
+/**
+ * What a member would leave behind by deleting (`GET /api/me/holdings`): the
+ * balances that keep an account at resolve and the cash still owed to them.
+ * The same two reads a departure makes, so everything listed here is exactly
+ * what leaving would keep.
+ */
+export interface OwnHoldings {
+  held: Array<{ token: string; name: string; amount: number }>;
+  cash: Array<{ currency: string; amountMinor: number }>;
+}
+
 const LABELS: Record<string, string> = {
   questsEmail: "Quest decisions",
   rolesEmail: "Role appointments",
@@ -85,6 +101,14 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   /** Set only when an outside store did not confirm. Holds the redirect open. */
   const [farewell, setFarewell] = useState("");
   /**
+   * Rye, 2026-10-30: the delete screen lists what the member holds, says it
+   * cannot be recovered, and offers leaving the village instead, which keeps
+   * their tokens. Read when the panel opens, so the list is the one standing
+   * at the moment they are deciding. Null until it lands, and on a failed
+   * read, which leaves the screen exactly as it was before this list existed.
+   */
+  const [holdings, setHoldings] = useState<OwnHoldings | null>(null);
+  /**
    * A member with no password confirms with Google. Google sends them back to
    * this page, so a confirmation, or its refusal, reopens the delete panel
    * where they left it and brings it into view.
@@ -92,6 +116,11 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   const identity = useIdentityConfirm("delete-account");
   // The aligned terms leaving ends (seat settings PR8): named before the member confirms, and again after.
   const endingTerms = useTermsLeavingEnds(confirming);
+  // Cash the village still owes (round 4, R4-4): named before they confirm, and given up only with the tick.
+  const cashOwed = useUnpaidCash(confirming);
+  const [giveUpCash, setGiveUpCash] = useState(false);
+  // What deleting cancels (round 3, finding 5): their recurring payments, named before they confirm.
+  const leavingNotices = useLeavingNotices(confirming);
   /** Task emails belong to Live Sessions, so the choice is offered only where the village runs it. */
   const sessionsOn = useModuleOn("sessions");
   const deletePanel = useRef<HTMLDivElement | null>(null);
@@ -104,6 +133,19 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
   }, [confirming, identity.confirmed, prefs]);
 
   const headers = () => ({ Authorization: `Bearer ${authToken()}`, "Content-Type": "application/json" });
+
+  useEffect(() => {
+    if (!confirming) return;
+    let live = true;
+    fetch("/api/me/holdings", { headers: headers() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live || !d) return;
+        setHoldings({ held: Array.isArray(d.held) ? d.held : [], cash: Array.isArray(d.cash) ? d.cash : [] });
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [confirming]);
 
   useEffect(() => {
     fetch("/api/profile/prefs", { headers: headers() })
@@ -165,7 +207,7 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
     fetch("/api/profile/delete-account", {
       method: "POST",
       headers: headers(),
-      body: JSON.stringify(identityBody(identity, password)),
+      body: JSON.stringify({ ...identityBody(identity, password), [CASH_GIVE_UP_FIELD]: giveUpCash }),
     })
       .then(async (r) => {
         const d = await r.json();
@@ -287,6 +329,26 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         </span>
       </label>
 
+      {/* The gratitude nudge (server/lib/gratitudeNudge.ts). Off means no bell
+          row and no email: it is the one notice that only invites. */}
+      <label className="flex items-start gap-2 text-sm text-card-foreground mb-4">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0"
+          checked={prefs.gratitudeNudge !== "off"}
+          disabled={saving}
+          aria-label="Remind me before the cycle closes"
+          aria-describedby="gratitude-nudge-hint"
+          onChange={(e) => save({ gratitudeNudge: e.target.checked ? "on" : "off" })}
+        />
+        <span>
+          Remind me before the cycle closes
+          <span id="gratitude-nudge-hint" className="block text-xs text-muted-foreground">
+            One note a few days before, if you still have some left to send, with the people you worked with a tap away.
+          </span>
+        </span>
+      </label>
+
       {notifyNote && <p role="alert" className="text-xs text-destructive mb-4">{notifyNote}</p>}
 
       {/* Village Comms: gathering reminders, path emails and letters, with a
@@ -371,7 +433,33 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
               scrubbed everywhere. The village's shared history (settlements, quest
               records) keeps its numbers, without your name on them. This cannot be undone.
             </p>
+            {holdings && (holdings.held.length > 0 || holdings.cash.length > 0) && (
+              <div className="mb-3 rounded-lg border border-destructive/40 bg-card p-3" aria-label="What you still hold here" role="group">
+                <p className="text-xs font-semibold text-card-foreground mb-1">What you still hold here</p>
+                <ul className="text-xs text-card-foreground list-disc pl-5 space-y-0.5">
+                  {holdings.held.map((h) => (
+                    <li key={h.token}>{h.amount} {h.name}</li>
+                  ))}
+                  {holdings.cash.map((c) => (
+                    <li key={c.currency}>{formatMoney(c.amountMinor, c.currency)} in cash the village still owes you</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-destructive mt-2">
+                  Deleting your account leaves all of this behind, and none of it can be recovered.
+                  Nobody can sign in to this account again.
+                </p>
+                <p className="text-xs text-card-foreground mt-2">
+                  <Link href="/exit-policy?focus=begin-departure" className="font-medium underline">
+                    Leave the village instead
+                  </Link>
+                  . Leaving keeps your account, your tokens and any cash owed to you, and you stay on as a former member.
+                </p>
+              </div>
+            )}
             <LeavingEnds titles={endingTerms} />
+            <CashOwedNotice count={cashOwed} door="deletion" givenUp={giveUpCash} onGiveUp={setGiveUpCash} />
+            <VotesCastNotice />
+            <LeavingNotices notices={leavingNotices} />
             <div className="flex flex-wrap items-center gap-2">
               <IdentityConfirmField
                 state={identity}
@@ -381,11 +469,11 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
                 placeholder="Confirm your password"
                 inputClassName="text-sm border border-destructive/70 rounded-lg px-3 py-1.5"
               />
-              <button onClick={deleteAccount} disabled={!identityReady(identity, password)}
+              <button onClick={deleteAccount} disabled={!identityReady(identity, password) || (!!cashOwed && !giveUpCash)}
                 className="text-sm bg-destructive text-destructive-foreground rounded-lg px-3 py-1.5 font-medium disabled:opacity-40">
                 Delete forever
               </button>
-              <button onClick={() => { setConfirming(false); setPassword(""); setError(""); }}
+              <button onClick={() => { setConfirming(false); setPassword(""); setError(""); setGiveUpCash(false); }}
                 className="text-sm text-muted-foreground">
                 Cancel
               </button>

@@ -89,9 +89,11 @@ export async function backfillContacts(deps: BackfillDeps): Promise<BackfillCoun
       family: "forms",
     });
   }
+  // The repo leaves out every request of an erased member's (server/repos/commsPeople.ts);
+  // the tombstone test stays here too, the same rule as the members loop above.
   for (const h of await housingAddresses(deps.getPool())) {
     const email = text(h.email);
-    if (!email) continue;
+    if (!email || isTombstone({ email })) continue;
     candidates.push({ at: h.createdAt * 1000, email, name: h.name, userId: null, source: "housing", family: "housing" });
   }
   // Oldest first, so the first source written is the first meeting.

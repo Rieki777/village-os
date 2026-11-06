@@ -17,7 +17,7 @@
 > exactly: fourteen quests, same titles, same order, same nine circles.
 >
 > **One number moved.** It says the total `dist/public` budget is 6000 KB. CI
-> now sets `MAX_TOTAL_DIST_KB: 6600`. The argument is unaffected, since
+> now sets `MAX_TOTAL_DIST_KB: 7000` (6600 until 2026-11-02). The argument is unaffected, since
 > fourteen posters at 150 KB is still about a third of it, and posters belong
 > in the uploads volume either way.
 >

@@ -73,6 +73,7 @@ const viewer = (over: Partial<TaskViewer> = {}): TaskViewer => ({
   inSourceSession: false,
   hostsSource: false,
   hostsOpenRoomInCircle: false,
+  standsInCircle: false,
   ...over,
 });
 
@@ -94,15 +95,17 @@ const ROLES = {
   admin: viewer({ no: 40, admin: true }),
   wasThere: viewer({ no: 50, inSourceSession: true }),
   stranger: viewer({ no: 60 }),
+  /** Standing in the circle and nothing else: holds nothing, was not in the room, hosts nothing. */
+  circleMember: viewer({ no: 70, standsInCircle: true }),
 } as const;
 type Role = keyof typeof ROLES;
 
 const TASKS: Record<string, TaskSubject> = {
-  personOpen: { status: "open", ownerNo: HOLDER, ownerSeatId: null },
-  seatOpen: { status: "open", ownerNo: null, ownerSeatId: SEAT },
-  done: { status: "done", ownerNo: HOLDER, ownerSeatId: null },
-  letGo: { status: "let_go", ownerNo: HOLDER, ownerSeatId: null },
-  circle: { status: "open", ownerNo: null, ownerSeatId: null },
+  personOpen: { status: "open", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  seatOpen: { status: "open", ownerNo: null, ownerSeatId: SEAT, circleId: "c-garden" },
+  done: { status: "done", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  letGo: { status: "let_go", ownerNo: HOLDER, ownerSeatId: null, circleId: "c-garden" },
+  circle: { status: "open", ownerNo: null, ownerSeatId: null, circleId: "c-garden" },
 };
 
 // ── Seats ───────────────────────────────────────────────────────────────────
@@ -131,6 +134,7 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     seatOpen: {
       holder: [false, false, false],
@@ -141,6 +145,7 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     done: {
       holder: [false, true, false],
@@ -151,6 +156,7 @@ describe("taskRights: every role against every op", () => {
       admin: [false, true, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     letGo: {
       holder: [false, false, false],
@@ -161,6 +167,7 @@ describe("taskRights: every role against every op", () => {
       admin: [false, true, false],
       wasThere: [false, false, false],
       stranger: [false, false, false],
+      circleMember: [false, false, false],
     },
     circle: {
       holder: [false, false, false],
@@ -171,13 +178,14 @@ describe("taskRights: every role against every op", () => {
       admin: [true, false, true],
       wasThere: [false, false, true],
       stranger: [false, false, false],
+      circleMember: [false, false, true],
     },
   };
 
   for (const [taskName, byRole] of Object.entries(EXPECT)) {
     for (const [role, [answer, reopen, take]] of Object.entries(byRole) as [Role, [boolean, boolean, boolean]][]) {
       it(`${role} on a ${taskName} task`, () => {
-        expect(taskRights(TASKS[taskName], ROLES[role])).toEqual({ answer, reopen, take });
+        expect(taskRights(TASKS[taskName], ROLES[role])).toEqual({ answer, reopen, take, accept: false });
       });
     }
   }
@@ -185,7 +193,7 @@ describe("taskRights: every role against every op", () => {
   it("refuses a lapsed seat holder, allows the open-room facilitator of the same circle, and refuses a stranger", () => {
     expect(taskRights(TASKS.seatOpen, ROLES.lapsedSeatHolder).answer).toBe(false);
     expect(taskRights(TASKS.personOpen, ROLES.openRoomHost).answer).toBe(true);
-    expect(taskRights(TASKS.personOpen, ROLES.stranger)).toEqual({ answer: false, reopen: false, take: false });
+    expect(taskRights(TASKS.personOpen, ROLES.stranger)).toEqual({ answer: false, reopen: false, take: false, accept: false });
   });
 
   it("lets the holder open a done task again, and never a let go one", () => {
@@ -193,22 +201,28 @@ describe("taskRights: every role against every op", () => {
     expect(taskRights(TASKS.letGo, ROLES.holder).reopen).toBe(false);
   });
 
-  it("gives nothing to somebody with no number, even when they can see the task", () => {
-    expect(taskRights(TASKS.circle, viewer({ no: null, inSourceSession: true })).take).toBe(false);
+  it("lets somebody with no number yet take what they can see, and gives them nothing else", () => {
+    // A seat in the circle and never a session joined: the server numbers them when they take it.
+    const seatedOnly = viewer({ no: null, liveSeatIds: ["seat-other"], standsInCircle: true });
+    expect(taskRights(TASKS.circle, seatedOnly)).toEqual({ answer: false, reopen: false, take: true, accept: false });
+    expect(taskRights(TASKS.personOpen, seatedOnly)).toEqual({ answer: false, reopen: false, take: false, accept: false });
+    // With no number and no way to see it, nothing.
+    expect(taskRights(TASKS.circle, viewer({ no: null }))).toEqual({ answer: false, reopen: false, take: false, accept: false });
   });
 
   it("maps every op to the right it needs", () => {
-    const only = (k: "answer" | "reopen" | "take") => ({ answer: k === "answer", reopen: k === "reopen", take: k === "take" });
-    const need: Record<TaskOp, "answer" | "reopen" | "take"> = {
+    const only = (k: "answer" | "reopen" | "take" | "accept") => ({ answer: k === "answer", reopen: k === "reopen", take: k === "take", accept: k === "accept" });
+    const need: Record<TaskOp, "answer" | "reopen" | "take" | "accept"> = {
       done: "answer",
       not_yet: "answer",
       let_go: "answer",
       handed_back: "answer",
       taken: "take",
       reopened: "reopen",
+      accepted: "accept",
     };
     for (const op of TASK_EVENT_KINDS) {
-      for (const k of ["answer", "reopen", "take"] as const) expect(mayGive(op, only(k)), `${op} with ${k}`).toBe(need[op] === k);
+      for (const k of ["answer", "reopen", "take", "accept"] as const) expect(mayGive(op, only(k)), `${op} with ${k}`).toBe(need[op] === k);
     }
   });
 });
@@ -223,6 +237,7 @@ describe("canSeeTask", () => {
     admin: true,
     wasThere: true,
     stranger: false,
+    circleMember: true,
   };
   for (const [role, sees] of Object.entries(SEES) as [Role, boolean][]) {
     it(`${role} ${sees ? "sees" : "does not see"} a task held in person`, () => {
@@ -238,7 +253,64 @@ describe("canSeeTask", () => {
   it("shows a task back with the circle only to the people the rule names", () => {
     expect(canSeeTask(TASKS.circle, ROLES.holder)).toBe(false);
     expect(canSeeTask(TASKS.circle, ROLES.wasThere)).toBe(true);
+    expect(canSeeTask(TASKS.circle, ROLES.circleMember)).toBe(true);
     expect(canSeeTask(TASKS.circle, ROLES.stranger)).toBe(false);
+  });
+});
+
+describe("the whole circle reads its task cards (Rye, 2026-10-21)", () => {
+  const member = ROLES.circleMember;
+  // Somebody with no standing in this circle: a seat elsewhere, a number, nothing here.
+  const outsider = viewer({ no: 80, liveSeatIds: ["seat-elsewhere"] });
+
+  it("shows a member with standing every card of the circle, whatever its status or holder", () => {
+    for (const [name, t] of Object.entries(TASKS)) expect(canSeeTask(t, member), name).toBe(true);
+  });
+
+  it("lets that member take a task back with the circle, and answer or reopen nothing", () => {
+    expect(taskRights(TASKS.circle, member)).toEqual({ answer: false, reopen: false, take: true, accept: false });
+    for (const name of ["personOpen", "seatOpen", "done", "letGo"]) {
+      expect(taskRights(TASKS[name], member), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
+    }
+    // The ops their rights allow: the take, and nothing else.
+    const rights = taskRights(TASKS.circle, member);
+    expect(TASK_EVENT_KINDS.filter((op) => mayGive(op, rights))).toEqual(["taken"]);
+  });
+
+  it("shows a member of another circle nothing, and gives them nothing", () => {
+    for (const [name, t] of Object.entries(TASKS)) {
+      expect(canSeeTask(t, outsider), name).toBe(false);
+      expect(taskRights(t, outsider), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
+    }
+  });
+
+  it("changes nothing for a task with no circle, whatever the flag says", () => {
+    const noCircle = (t: TaskSubject): TaskSubject => ({ ...t, circleId: null });
+    for (const [name, t] of Object.entries(TASKS)) {
+      expect(canSeeTask(noCircle(t), member), name).toBe(false);
+      expect(taskRights(noCircle(t), member), name).toEqual({ answer: false, reopen: false, take: false, accept: false });
+    }
+    // The narrower rule still holds there: the room it came from, and whoever holds it.
+    expect(canSeeTask(noCircle(TASKS.circle), ROLES.wasThere)).toBe(true);
+    expect(canSeeTask(noCircle(TASKS.personOpen), ROLES.holder)).toBe(true);
+    expect(canSeeTask(noCircle(TASKS.personOpen), ROLES.stranger)).toBe(false);
+  });
+
+  it("draws the member a card with the take and no record link, the way a seat holder who was not there gets none", () => {
+    const parts = {
+      text: "Fix the tank",
+      sessionTitle: "Garden, week 2",
+      circleName: "Garden circle",
+      saidOn: "2026-10-09",
+      holderName: null,
+      seat: null,
+      latestByName: "Ben Ortiz",
+      latestByFacilitator: false,
+    };
+    const back = taskCardFor({ ...parts, state: state({ ownerNo: null, latestKind: "handed_back" }) }, member);
+    expect(back).toMatchObject({ heldAs: "circle", canTake: true, canAnswer: false, canReopen: false, recordLink: false });
+    const held = taskCardFor({ ...parts, holderName: "Ana Reyes", state: state() }, member);
+    expect(held).toMatchObject({ heldAs: "person", canTake: false, canAnswer: false, canReopen: false, recordLink: false });
   });
 });
 
@@ -543,14 +615,14 @@ describe("the task emails", () => {
 
   it("says one more and n more for a seat beside their own tasks, and No date for an undated one", () => {
     const one = buildTaskEmail({ ...base, seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }] }] });
-    expect(one.text).toContain("Your seat, Water keeper, holds one more:");
+    expect(one.text).toContain("Your role, Water keeper, holds one more:");
     expect(one.text).toContain("- Order seed. No date.");
     expect(one.text).toContain("Thank you for carrying these.");
     const two = buildTaskEmail({
       ...base,
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }, { text: "Mend the hose", dueOn: "2026-10-30" }] }],
     });
-    expect(two.text).toContain("Your seat, Water keeper, holds 2 more:");
+    expect(two.text).toContain("Your role, Water keeper, holds 2 more:");
   });
 
   it("opens with the seat for a seat holder who was not in the room, with no record link", () => {
@@ -561,7 +633,7 @@ describe("the task emails", () => {
       own: [],
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }] }],
     });
-    expect(one.text).toContain("The Garden circle met on Wednesday 14 October and a task landed with your seat, Water keeper. Here it is:");
+    expect(one.text).toContain("The Garden circle met on Wednesday 14 October and a task landed with your role, Water keeper. Here it is:");
     expect(one.text).not.toContain("sessions/3");
     expect(one.blocks.some((b) => b.kind === "button" && b.label === TASK_EMAIL_COPY.openRecord)).toBe(false);
     const two = buildTaskEmail({
@@ -570,7 +642,7 @@ describe("the task emails", () => {
       own: [],
       seats: [{ seatName: "Water keeper", tasks: [{ text: "Order seed", dueOn: null }, { text: "Mend the hose", dueOn: null }] }],
     });
-    expect(two.text).toContain("and 2 tasks landed with your seat, Water keeper. Here they are:");
+    expect(two.text).toContain("and 2 tasks landed with your role, Water keeper. Here they are:");
   });
 
   it("names the session when there is no circle, and says who asked on a send again", () => {
@@ -647,7 +719,7 @@ describe("the copy", () => {
   it("writes the in-app notices", () => {
     expect(TASK_NOTICES.back("Fix the tank")).toBe("Fix the tank is back with the circle. It will be in the next action check.");
     expect(TASK_NOTICES.unheld("Garden, week 2", "Water keeper")).toBe(
-      'A task from "Garden, week 2" sits with Water keeper, and nobody holds that seat now. Give it to someone at the next call.',
+      'A task from "Garden, week 2" sits with Water keeper, and nobody holds that role now. Give it to someone at the next call.',
     );
   });
 
@@ -718,7 +790,7 @@ describe("the words for the menu, the profile card and the bell", () => {
   it("names each bell button with the task it acts on", () => {
     expect(TASK_COPY.bell.done).toBe("It's done");
     expect(TASK_COPY.bell.open).toBe("Open");
-    expect(TASK_COPY.bell.marked).toBe("Done. The circle sees it at the next action check.");
+    expect(TASK_COPY.bell.marked).toBe("Beautiful work. The circle sees it at the next action check.");
     expect(TASK_COPY.bell.undo).toBe("Open it again");
     expect(TASK_COPY.bell.doneLabel("Fix the tank")).toBe("It's done: Fix the tank");
     // Label in Name (WCAG 2.5.3): a voice user says the visible words, so each name starts with them.

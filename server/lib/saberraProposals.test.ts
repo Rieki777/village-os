@@ -79,6 +79,39 @@ describe("suggesting a structure", () => {
     expect(r.unmapped).toEqual(["Assignment Method", "Next Audit Date", "Role Type"]);
   });
 
+  it("CARRIES WHAT THE SOURCE HOLDS A ROLE TO PAY beside the seat, and never into it", () => {
+    const r = proposeStructure(
+      [
+        role("r-1", {
+          "Role Name": "Finance Steward",
+          "Compensation Model": { name: "Part-Time Salaried" },
+          "Compensation Status": { name: "Active" },
+          "Compensation Terms": [{ plain_text: "Twenty hours a week." }],
+          "Compensation Target (Monthly)": { number: 1500 },
+        }),
+      ],
+      { sourceName: SOURCE },
+    );
+    expect(r.payload.seats[0]).toEqual({
+      name: "Finance Steward",
+      sourcePay: { model: "Part-Time Salaried", status: "Active", terms: "Twenty hours a week.", monthlyUsd: 1500 },
+      id: "r-1",
+    });
+    // Read, so never reported as a field this chart has no home for.
+    expect(r.unmapped).toEqual([]);
+    // Nothing a seat is paid with is set from it.
+    for (const k of ["valueMinor", "valueTokens", "cashMinor", "termsOffer"]) {
+      expect(r.payload.seats[0]).not.toHaveProperty(k);
+    }
+  });
+
+  it("carries no pay at all when the source holds none", () => {
+    const r = proposeStructure([role("r-1", { "Role Name": "Greeter", "Compensation Target (Monthly)": null })], {
+      sourceName: SOURCE,
+    });
+    expect(r.payload.seats[0]).not.toHaveProperty("sourcePay");
+  });
+
   it("skips a seat with no name rather than proposing a blank one", () => {
     const r = proposeStructure([role("r-1", { Status: "Active", Body: "Someone should do this." })], {
       sourceName: SOURCE,
@@ -120,9 +153,9 @@ describe("suggesting a structure", () => {
   it("leads with what it is and what it is not, because that is read before anything is accepted", () => {
     const r = proposeStructure([role("r-1", { "Role Name": "Water Steward" })], { sourceName: SOURCE });
     expect(r.payload.title).toBe("Structure suggested by Saberra");
-    expect(r.payload.rationale).toContain("one seat");
+    expect(r.payload.rationale).toContain("one role");
     expect(r.payload.rationale).toContain("Nothing here is part of this village's chart until you accept it.");
-    expect(r.payload.rationale).toContain("Who holds each seat is not included");
+    expect(r.payload.rationale).toContain("Who holds each role is not included");
   });
 
   it("does not quietly drop a record kind it was not built for", () => {
@@ -195,7 +228,7 @@ describe("the shape the service actually sends", () => {
     expect(r.payload.seats[0]).not.toHaveProperty("circleName");
     expect(r.payload.seats[0].sourceCircleUnresolved).toBe(true);
     expect(r.circles.unresolved).toBe(1);
-    expect(r.payload.rationale).toContain("One seat arrived with no circle this village could read.");
+    expect(r.payload.rationale).toContain("One role arrived with no circle this village could read.");
   });
 
   it("carries the aim from a rich-text Body, and leaves it out when Body is absent", () => {

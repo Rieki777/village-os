@@ -22,7 +22,7 @@
  * enforcement behind the route has its own server tests.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -109,7 +109,9 @@ describe("ModuleSettingsSection", () => {
     putAnswer = { status: 200, body: { ok: true } };
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => answer(String(url), init)));
   });
+  // Unmount first: a describe's own afterEach runs before setup.ts's cleanup.
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -339,6 +341,7 @@ describe("ModuleSettingsSection, arriving from a setup link", () => {
     );
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
@@ -405,5 +408,52 @@ describe("ModuleSettingsSection, arriving from a setup link", () => {
     renderCalendar();
     await screen.findByLabelText("Shows this far ahead");
     expect(screen.getAllByText(/Needs your answer/)).toHaveLength(1);
+  });
+});
+
+/*
+ * A DIAL WHOSE VALUE MOVED INTO THE SEALED SECRETS (`movedToSecret`) has no
+ * field on the card: the server refuses every value but the default and never
+ * sends what is stored, so a field would only invite a refused save. The row
+ * keeps its label and says where the setting lives now.
+ */
+describe("a dial whose value moved into the sealed secrets", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/admin/variables")) {
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              categories: [{
+                name: "Tokens",
+                variables: [{
+                  key: "example.endpoint", label: "An endpoint", description: "Where it reads from",
+                  category: "Tokens", type: "text", value: "https://mainnet.example.test", default: "https://mainnet.example.test",
+                  isDefault: true, ring: "founder", applyTiming: "instant", modules: ["stays"], movedToSecret: "example_slot",
+                }],
+              }],
+            }),
+          };
+        }
+        return { status: 404, ok: false, json: async () => ({}) };
+      }),
+    );
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it("shows where it is set, with no field and no save", async () => {
+    renderSection({ lifecycle: "public" });
+    expect(await screen.findByText("An endpoint")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Open Integrations" });
+    expect(link).toHaveAttribute("href", "/admin?tab=integrations");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });

@@ -29,7 +29,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -97,7 +97,7 @@ beforeAll(async () => {
   testDb = await provisionTestDb();
   // Only to WRITE the legacy rows the old route produced. There is no other
   // way to make one now, which is the point of the fix.
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 2 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
+  pool = testPool(testDb, { connectionLimit: 2 }); // module-review-ok: the e2e harness against the scratch schema, as every e2e suite holds
 
   await waitForPortFree(PORT);
   child = spawn(process.execPath, [DIST], {

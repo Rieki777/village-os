@@ -75,7 +75,9 @@
  * blank is a legitimate final answer belongs in the self-reported group above,
  * not in `fields`.
  */
+import { isCleared } from "@shared/brandCleared";
 import { HUMAN_NEEDS } from "@shared/needs";
+import type { ContentEditor } from "./wizardFacts";
 
 /** How many needs the platform offers. The denominator of the needs row. */
 const PLATFORM_NEED_COUNT = HUMAN_NEEDS.length;
@@ -127,7 +129,7 @@ export const IDENTITY_WIZARD_FIELDS = [
   // Both singular, because gameApi.ts derives the plural and the article. A
   // village types "Hat" and reads "Hats", "a Hat", "A Hat" everywhere.
   ["roleName", "What a position somebody can hold is called"],
-  ["seatName", "What one person's turn holding it is called"],
+  ["seatName", "What putting someone into a role is called"],
   // What a member signs (Rye, 2026-09-08). Amora says "Love Letter"; the
   // platform says "membership agreement". Defaulted like the three above,
   // so it is a rename rather than a blank and stays out of `fields`. The
@@ -199,6 +201,40 @@ export const SETUP_STEPS: readonly SetupStep[] = [
   { key: "content", label: "Content", fields: [] },
   { key: "map", label: "Map & styling", fields: [] },
   { key: "technical", label: "Go live", fields: [] },
+];
+
+/*
+ * THE CONTENT STEP'S EDITORS, in the order the wizard lists them. Moved here
+ * from `SetupWizard` in client/src/pages/Admin.tsx, beside the steps it belongs
+ * to, so that file stays under the monolith ratchet while it gains a door.
+ *
+ * The "Journey page copy" row came out with the four tabs it pointed at.
+ * It sent a founder to an editor whose saves the journey pages never read,
+ * and a wizard that hands somebody a door to a room that was demolished is
+ * worse than one that stays quiet about it.
+ */
+export { PAGE_OFF_HINT, contentEditorHint, useWizardFacts } from "./wizardFacts";
+
+export const SETUP_CONTENT_EDITORS: readonly ContentEditor[] = [
+  /*
+   * ORG CHART AND TEAM PAGE WERE MISSING FROM THIS LIST, and they are the two
+   * surfaces a fresh village publishes people on. A founder walked the whole
+   * wizard and was never shown the screen where the seats and the team cards
+   * are edited, so whatever was already on /team and /roles stayed there and
+   * read as the village's own. That is how a fork published four strangers.
+   *
+   * First in the list on purpose: people are the thing a visitor looks for
+   * first and the thing a village is most answerable for.
+   */
+  { tab: "org-chart", label: "Org Chart", hint: "Your circles, your roles, and who holds them. This is what /roles and /team show." },
+  { tab: "team", label: "Team Page", hint: "The portraits and short bios on /team, for the people you want a card for.", brochure: true },
+  { tab: "faqs", label: "FAQs", hint: "The Common Questions on each journey page.", brochure: true },
+  { tab: "milestones", label: "Build Progress", hint: "Your real build milestones shown on the homepage.", brochure: true },
+  { tab: "training-modules", label: "Training modules", hint: "Your community's onboarding/learning modules." },
+  { tab: "visit-config", label: "Visit program", hint: "Visit types, logistics, and booking copy.", brochure: true },
+  { tab: "investor-summary", label: "Investor summary", hint: "The plain-language money facts on the investor page.", brochure: true },
+  { tab: "season", label: "Season", hint: "The current season banner (name, theme, dates)." },
+  { tab: "quests-admin", label: "Quests", hint: "Keep the starter quests that fit, clear the rest, and post your own." },
 ];
 
 /** The brand document as `GET /api/admin/brand` returns it, loosely typed
@@ -303,6 +339,9 @@ export type SetupObservations = Partial<Record<SetupStepKey, SetupObservation>>;
  *  string. Whitespace does not count: a space bar is not a village name. */
 function hasValue(brand: BrandLike | null | undefined, field: SetupField): boolean {
   const group = brand?.[field.group];
+  // A line the village chose to leave empty (R088, shared/brandCleared.ts) is
+  // an answer: Identity is not unfinished because a village wants no tagline.
+  if (field.group === "project" && isCleared(group, field.key)) return true;
   return String(group?.[field.key] ?? "").trim().length > 0;
 }
 

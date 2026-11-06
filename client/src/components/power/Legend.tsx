@@ -8,6 +8,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import type { PowerBlock, PowerSeat, SeatStateWord } from "./types";
+import { seatWord } from "./villageCounts";
 
 /**
  * THE BUCKETS THE SEAT TALLY COUNTS INTO.
@@ -105,7 +106,7 @@ export default function Legend({
     // value came off the wire, and this whole class of defect is the gap
     // between those two sentences. A server that literally sends "other"
     // lands in the same bucket, which is where it belongs anyway.
-    const word = String(s.state ?? (s.holderCount > 0 ? "filled" : "open"));
+    const word = seatWord(s);
     counts[word !== "other" && word in counts ? word : "other"] += 1;
     // Representation is a property OF a seat, not one of its states, so it
     // tallies alongside rather than inside the state buckets. A seat that

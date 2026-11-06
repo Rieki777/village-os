@@ -160,7 +160,7 @@ export default function NeedTagPicker({
         <h3 className="font-semibold text-foreground mb-1">What need does this meet?</h3>
         <p className="text-sm text-muted-foreground">
           This village has not said which needs it is taking on. Say that first in Setup, and
-          every quest and seat can then name which of them it meets.
+          every quest and role can then name which of them it meets.
         </p>
       </div>
     );

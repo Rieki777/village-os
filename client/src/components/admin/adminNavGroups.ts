@@ -51,6 +51,10 @@ export type NavGroup = { title: string; items: NavItem[] };
 
 export function navGroups(setupComplete: boolean): NavGroup[] {
   return [
+    {
+      title: "Today",
+      items: [{ key: "home", label: "Home", icon: Home }],
+    },
     ...(setupComplete ? [] : [{
       title: "Start here",
       items: [{ key: "setup", label: "Make This Yours", icon: Sparkles }],
@@ -64,7 +68,7 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       title: "Who runs this village",
       items: [
         { key: "players", label: "Players", icon: Users },
-        { key: "game-roles", label: "Game Roles", icon: Users2 },
+        { key: "game-roles", label: "Power groups", icon: Users2 },
         { key: "org-chart", label: "Org Chart", icon: Users2 },
         { key: "handover", label: "The Handover", icon: KeyRound },
         { key: "governance-weights", label: "Voting Weights", icon: Scale },
@@ -105,6 +109,9 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       // to tune it in the same visit.
       title: MODULES_GROUP_TITLE,
       items: [
+        // A door, not a tab, since 2026-10-09: the admin Module Library is one
+        // page with the public library, and choosing this row lands on
+        // /modules (Admin.tsx redirects `?tab=modules`, deep links included).
         { key: "modules", label: "Module Library", icon: ToggleLeft },
         // Second in the group, and directly under the master switch, because
         // it is the answer the rest of the group is FOR (R1, lane N2): which
@@ -146,6 +153,10 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
       items: [
         { key: "tokens", label: "Tokens", icon: Coins },
         { key: "ledger", label: "Ledger", icon: BarChart3 },
+        // The cash the village owes, and the record of each bank transfer
+        // that paid it (0285, 2026-10-30). Beside the Ledger because it is the
+        // other book a treasurer keeps, and it never touches the ledger.
+        { key: "cash-payouts", label: "Cash To Pay Out", icon: Coins },
         { key: "cycles", label: "Cycle Close", icon: Moon },
         { key: "products", label: "Payments", icon: Handshake },
         { key: "resources-admin", label: "How Resources Flow", icon: Coins },

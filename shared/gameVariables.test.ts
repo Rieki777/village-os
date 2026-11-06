@@ -69,7 +69,7 @@ describe("generated progression defs", () => {
 describe("ring resolution", () => {
   it("game rules are open, infrastructure and guards are founder-held", () => {
     expect(ringOf(VARIABLES_BY_KEY["gratitude.base_budget"])).toBe("open");
-    expect(ringOf(VARIABLES_BY_KEY["quest.consent_cap_mode"])).toBe("open");
+    expect(ringOf(VARIABLES_BY_KEY["governance.voice_weighting"])).toBe("open");
     expect(ringOf(VARIABLES_BY_KEY["progression.multiplier.guest"])).toBe("open");
     expect(ringOf(VARIABLES_BY_KEY["abuse.register_per_ip_hourly"])).toBe("founder");
     expect(ringOf(VARIABLES_BY_KEY["tokens.base_rpc_url"])).toBe("founder");
@@ -80,7 +80,7 @@ describe("ring resolution", () => {
   it("settlement-basis variables apply at cycle close; the rest instantly", () => {
     expect(applyTimingOf(VARIABLES_BY_KEY["gratitude.pool_per_cycle"])).toBe("cycle-close");
     expect(applyTimingOf(VARIABLES_BY_KEY["progression.multiplier.member"])).toBe("cycle-close");
-    expect(applyTimingOf(VARIABLES_BY_KEY["quest.consent_cap_mode"])).toBe("instant");
+    expect(applyTimingOf(VARIABLES_BY_KEY["governance.voice_weighting"])).toBe("instant");
     // The waning dials carry their timing on the DEF rather than in
     // CYCLE_APPLY_KEYS, which two sessions edit at once, and a def-level
     // override cannot be lost in a merge.
@@ -294,25 +294,42 @@ describe("governance.hub_url: https-only, no loopback exemption (bridges lane)",
   it("the generic _url rule DOES exempt loopback for an ordinary infrastructure URL (control case)", () => {
     // Proves the two rules are genuinely different, not that the test
     // regex is loose: this is the same assertion shape as the refusal
-    // above, run against a key the stricter branch does not touch.
+    // above, run against a key the stricter branch does not touch. This used
+    // to be `tokens.base_rpc_url`, which now takes no value at all (its value
+    // moved into the sealed secrets, see the test below), so the control is
+    // the other ordinary `_url` dial.
+    const urlDef = VARIABLES_BY_KEY["hypha.org_url"];
+    expect(urlDef).toBeTruthy();
+    expect(urlDef.movedToSecret).toBeUndefined();
+    expect(validateVariable(urlDef, "http://127.0.0.1:8545")).toBeNull();
+    expect(validateVariable(urlDef, "http://some-other-host:8545")).toMatch(/https URL/);
+  });
+
+  it("the RPC endpoint dial takes only its default now, loopback included", () => {
     const rpcDef = VARIABLES_BY_KEY["tokens.base_rpc_url"];
-    expect(rpcDef).toBeTruthy();
-    expect(validateVariable(rpcDef, "http://127.0.0.1:8545")).toBeNull();
-    expect(validateVariable(rpcDef, "http://some-other-host:8545")).toMatch(/https URL/);
+    expect(rpcDef.movedToSecret).toBe("base_rpc_url");
+    expect(validateVariable(rpcDef, "http://127.0.0.1:8545")).toMatch(/Integrations/);
+    expect(validateVariable(rpcDef, rpcDef.default)).toBeNull();
   });
 });
 
-describe("the Exit levers (R4), whose whole job is to change nothing on the day they land", () => {
+describe("the Exit levers (R4), whose defaults are the founder's ruling of 2026-10-23", () => {
   /*
    * THE ONE PROPERTY THIS BLOCK EXISTS FOR.
    *
-   * `sweepBalances` (`server/lib/exit.ts`) READS these dials now, and on the
-   * values below it does what it always did: every positive balance goes, in
-   * full, to `sys:exit-settlement`, with nothing kept and no date gating the
-   * settle. So the defaults are not a taste question: each one has to be the
-   * value that reproduces that sentence exactly, and each is asserted here BY
-   * NAME against the behaviour it reproduces, so a later lane cannot quietly
-   * change what an untouched village does by editing a default.
+   * `sweepBalances` (`server/lib/exit.ts`) READS these dials, so the defaults
+   * are not a taste question: each one is the value that says what an
+   * untouched village's departure does, and each is asserted here BY NAME, so
+   * a later lane cannot quietly change that by editing a default.
+   *
+   * WHAT THEY SAY CHANGED ON 2026-10-23. Until then they reproduced the
+   * departure the platform always had, every positive balance moving in full
+   * to `sys:exit-settlement`. Rye ruled that members keep their tokens ("a if
+   * b hasn't already happened"), so a leaver now keeps every credit, Voice and
+   * equity balance, and resolve keeps a holder's account as a former member.
+   * Recognition is the one kind still settled at 0. A test that pinned the old
+   * defaults proved they were intended; the ruling changed the intention, and
+   * these assertions changed with it.
    *
    * `server/lib/exitDefaults.test.ts` is the other half of this claim: it
    * runs a real exit against a scratch schema on these defaults and compares
@@ -327,17 +344,19 @@ describe("the Exit levers (R4), whose whole job is to change nothing on the day 
     return d;
   };
 
-  it("the four keep shares all start at nothing, which is what a departure does today", () => {
-    for (const kind of ["credit", "voice", "recognition", "equity"]) {
+  it("a leaver keeps every credit, Voice and equity balance, and no share of recognition", () => {
+    const kept: Record<string, string> = { credit: "100", voice: "100", recognition: "0", equity: "100" };
+    for (const [kind, expected] of Object.entries(kept)) {
       const d = def(`exit.keep_pct.${kind}`);
-      expect(d.default, `exit.keep_pct.${kind} default`).toBe("0");
+      expect(d.default, `exit.keep_pct.${kind} default`).toBe(expected);
       expect(d.type).toBe("percentage");
       expect(d.min).toBe(0);
       expect(d.max).toBe(100);
-      // A share is parsed as the NUMBER zero from an unset village, and the
-      // same zero when a village types it. An empty state and a real zero are
-      // different facts about the row and the same fact about the sweep.
-      expect(parseVariable(d, undefined)).toBe(0);
+      // A share is parsed as the default NUMBER from an unset village, and the
+      // same number when a village types it. An empty state and a typed value
+      // are different facts about the row and the same fact about the sweep.
+      expect(parseVariable(d, undefined)).toBe(Number(expected));
+      expect(parseVariable(d, expected)).toBe(Number(expected));
       expect(parseVariable(d, "0")).toBe(0);
       expect(validateVariable(d, "101")).toMatch(/at most 100/);
       expect(validateVariable(d, "-1")).toMatch(/at least 0/);
@@ -379,9 +398,11 @@ describe("the Exit levers (R4), whose whole job is to change nothing on the day 
     expect(validateVariable(d, "366")).toMatch(/at most 365/);
   });
 
-  it("Voice is forfeit by default, and the rate under it is zero", () => {
+  it("Voice is kept by default, and the rate under it is zero", () => {
     const voice = def("exit.voice_on_exit");
-    expect(voice.default).toBe("forfeit");
+    expect(voice.default).toBe("keep");
+    // The choice a village starts on is described as available, never refused.
+    expect(voice.choices?.find((c) => c.value === "keep")?.hint ?? "").not.toMatch(/[Rr]efused/);
     expect(voice.choices?.map((c) => c.value)).toEqual(["forfeit", "keep", "convert"]);
     const rate = def("exit.voice_convert_rate");
     expect(rate.default).toBe("0");

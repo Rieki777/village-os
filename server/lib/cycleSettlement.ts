@@ -54,6 +54,7 @@ import { latestSettlementRefusals } from "../repos/settlementBallots";
 import { CYCLE_POOL_FAUCET, memberAccount, postTransfer, tokenDef } from "./ledger";
 import { effectiveLifecycle } from "./modules";
 import { cyclePoolProblem } from "./cyclePool";
+import { GRATITUDE_ONLY_SENT } from "../../shared/workValue";
 import { numberVar, stringVar } from "./variables";
 
 /** What the settlement needs that only server/index.ts can hand it. */
@@ -182,6 +183,15 @@ export async function payFrozenCycle(
   eligible: ReadonlySet<string>,
   actorUserId: string | null,
 ): Promise<{ ok: true; paid: PaidCycle } | { ok: false; error: string }> {
+  // A frozen row beats the current setting, and `cyclePoolProblem` only asks
+  // the setting. A row frozen in Gratitude (imported, or written by older code)
+  // would pay it out of the pool, so it is refused before anything posts (Rye,
+  // 2026-10-23: Gratitude is only sent member to member).
+  for (const d of persisted) {
+    if (((d as any).poolToken ?? pool.token) === "gratitude" && Number(d.credited ?? 0) > 0) {
+      return { ok: false, error: `This moon's split was frozen in Gratitude. ${GRATITUDE_ONLY_SENT}` };
+    }
+  }
   let credited = 0;
   for (const d of persisted) {
     const share = Number(d.credited ?? 0);

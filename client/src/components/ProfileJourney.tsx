@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { TrendingUp, Heart, ScrollText, ShieldCheck, Users } from "lucide-react";
-import { authToken, useRoleWord } from "@/lib/gameApi";
+import { authToken, useGameConfig } from "@/lib/gameApi";
+import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenNameLower } from "@/hooks/useTokenNames";
 import Celebration from "@/components/natural/Celebration";
 import BreathingLoader from "@/components/natural/BreathingLoader";
@@ -163,6 +164,8 @@ function dayOf(at: unknown): string {
  * show it on.
  */
 function TheSigning({ signing }: { signing?: MembershipSigning | null }) {
+  // What this village calls the letter (Admin, Make This Yours), as typed.
+  const commitment = pageVarsFrom(useGameConfig() ?? {}).commitment;
   if (!signing) return null;
   const day = dayOf(signing.at);
   return (
@@ -171,7 +174,7 @@ function TheSigning({ signing }: { signing?: MembershipSigning | null }) {
       <div className="flex items-start gap-3 text-sm">
         <ScrollText className="mt-0.5 w-4 h-4 text-notice shrink-0" aria-hidden="true" />
         <span>
-          <span className="text-card-foreground">You signed the Love Letter</span>
+          <span className="text-card-foreground">You signed the {commitment}</span>
           <span className="block text-muted-foreground mt-0.5">{SIGNING_WORDS[signing.answer]}</span>
           {day && <span className="block text-xs text-muted-foreground mt-0.5">{day}</span>}
         </span>
@@ -184,7 +187,7 @@ function FirstTimes({ firsts }: { firsts?: { vote?: string | null; objection?: s
   const rows = [
     { key: "vote", label: "The first time you voted", at: firsts?.vote },
     { key: "objection", label: "The first objection you named", at: firsts?.objection },
-    { key: "seat", label: "The first seat you held", at: firsts?.seat },
+    { key: "seat", label: "The first role you held", at: firsts?.seat },
   ].filter((r) => !!r.at);
   if (rows.length === 0) return null;
   return (
@@ -215,8 +218,6 @@ const SECTIONS = [
 ] as const;
 
 export default function ProfileJourney() {
-  /* The village's own word for a position somebody holds. Default "Role". */
-  const roleWord = useRoleWord();
   const [prog, setProg] = useState<any | null>(null);
   const [flows, setFlows] = useState<any | null>(null);
   const [ledger, setLedger] = useState<any | null>(null);
@@ -309,7 +310,7 @@ export default function ProfileJourney() {
       )}
       {/* Progression: capabilities, roles, and the history of stage turns */}
       {prog && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-card rounded-2xl shadow-lg p-8"
@@ -321,16 +322,14 @@ export default function ProfileJourney() {
 
           {(prog.roles ?? []).length > 0 && (
             /*
-              THE ROLES A MEMBER HOLDS, NAMED WITH THE VILLAGE'S OWN WORD.
-              The chips were unlabelled: gold pills with a person icon and no
-              heading, which reads as decoration rather than as standing. The
-              design asked for a "Seats you hold" panel; a role is the position
-              and a seat is one person's turn at it, so what a member HOLDS is
-              the role. `roleWord.plural` is derived, so a village calling them
-              Hats reads "Hats you hold" with no second string to set.
+              GROUPS, NOT THE WORK ROLES.
+
+              These chips are the standing groups. "Your roles" on the same
+              page is the work a member is doing for the village. Calling both
+              "roles you hold" made an empty work list contradict a full group list.
             */
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {roleWord.plural} you hold
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-dash-gold-lit">
+              Groups you are in
             </p>
           )}
           {/*
@@ -413,12 +412,12 @@ export default function ProfileJourney() {
               ))}
             </ol>
           )}
-        </motion.div>
+        </m.div>
       )}
 
       {/* Recognition flows: breadth over volume, and per-cycle settlements */}
       {flows && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -484,12 +483,12 @@ export default function ProfileJourney() {
               </div>
             </div>
           )}
-        </motion.div>
+        </m.div>
       )}
 
       {/* Ledger: where every point of value came from */}
       {ledger && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -546,7 +545,7 @@ export default function ProfileJourney() {
               ))}
             </div>
           )}
-        </motion.div>
+        </m.div>
       )}
     </div>
   );

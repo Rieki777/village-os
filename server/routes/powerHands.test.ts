@@ -424,7 +424,7 @@ describe("deferredSeatVote", () => {
   it("refuses BY NAME before registerSeatVote has run", async () => {
     const seatVote = deferredSeatVote();
     await expect(seatVote.opener({ userId: "u", roleId: "r", reason: "", openedBy: { id: "u", name: "U" } })).rejects.toThrow(
-      "A seat vote was asked for before registerSeatVote ran.",
+      "A role vote was asked for before registerSeatVote ran.",
     );
   });
 

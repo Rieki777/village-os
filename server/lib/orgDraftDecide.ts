@@ -58,6 +58,7 @@
  * record.
  */
 import type { Pool } from "mysql2/promise";
+import { placementOf } from "./circlePlacement";
 import { dialsForSubject, ORG_DRAFT, thresholdSettingsFrom } from "../../shared/ballotSubjects";
 import { isVillageHeld, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import type { BallotMethod } from "../../shared/governanceEngine";
@@ -66,6 +67,7 @@ import type { CloseRouting, SubjectCloser } from "./applyDue";
 import { decisionLink } from "./ballotNotices";
 import { ballotsFor, openBallot, openBallotFor, withdrawBallot, type BallotRow } from "./ballots";
 import { applyCircleStatusChanges } from "./circleTreasury";
+import { circleWordsLine } from "./circleWordsDraft";
 import { recordEvent } from "./events";
 import { launchedByBallotIdOf } from "./launch";
 import type { WeightModeSnapshot } from "./governanceWeights";
@@ -184,6 +186,34 @@ export async function launchedByVote(pool: Pool): Promise<boolean> {
   return (await launchedByBallotIdOf(pool)) !== null;
 }
 
+/** The door a person publishes an open draft through: the holder's, or the admin panel's. */
+export type PublishDoor = "power" | "admin";
+
+/**
+ * WHICH DOOR THIS PERSON MAY PUBLISH A DRAFT THROUGH, or null for neither.
+ * The question both publish routes ask, read without answering a request, for
+ * the reads that offer the button (the structure review page, and the drafts
+ * on the task board's "Waiting on you").
+ *
+ *   power  a live holder of `org.decide`, which is `publish-by-power`'s door;
+ *   admin  an admin, until a launch vote has carried, which is the admin
+ *          panel's door as it stands before launch (`launchedByVote`).
+ *
+ * The break-glass where the village holds the power is left out on purpose.
+ * It is a door through the gate for an emergency, written into the public
+ * record, and nobody should find it offered as a chore. Whether the draft is
+ * frozen under a vote is the caller's to ask, per draft.
+ */
+export async function publishDoorFor(
+  pool: Pool,
+  viewer: { userId: string | null; isAdmin: boolean },
+  liveDeciders: readonly string[],
+): Promise<PublishDoor | null> {
+  if (viewer.userId && liveDeciders.includes(viewer.userId)) return "power";
+  if (viewer.isAdmin && !(await launchedByVote(pool))) return "admin";
+  return null;
+}
+
 // ── The ballot a draft is put to ────────────────────────────────────────────
 
 /** The open vote on this draft, if one is running. */
@@ -220,7 +250,7 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
     if (c.op === "create_circle") circles.set(bare(c.orgRoleId), text(c.payload?.name));
     if (c.op === "create_seat") seats.set(c.orgRoleId, text(c.payload?.name));
   }
-  const seat = (id: string) => `"${seats.get(id) ?? "a seat"}"`;
+  const seat = (id: string) => `"${seats.get(id) ?? "a role"}"`;
   const circle = (id: string | null) => `"${(id && circles.get(id)) ?? "a circle"}"`;
   return draft.changes.map((c) => {
     const circleId = text(Array.isArray(c.payload?.circleId) ? c.payload.circleId[0] : c.payload?.circleId);
@@ -230,30 +260,42 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
         return `Create the circle ${circle(bare(c.orgRoleId))}${parent ? ` inside ${circle(parent)}` : ""}`;
       }
       case "create_seat":
-        return `Create the seat ${seat(c.orgRoleId)}${circleId ? ` in ${circle(circleId)}` : ""}`;
+        return `Create the role ${seat(c.orgRoleId)}${circleId ? ` in ${circle(circleId)}` : ""}`;
       case "update_seat": {
         const renamed = text(c.payload?.name);
         const was = seats.get(c.orgRoleId);
         return (
-          `Change the seat ${seat(c.orgRoleId)}` +
+          `Change the role ${seat(c.orgRoleId)}` +
           (renamed && renamed !== was ? `, renaming it "${renamed}"` : "") +
           (circleId ? `, in ${circle(circleId)}` : "")
         );
       }
       case "rest_seat":
-        return `Retire the seat ${seat(c.orgRoleId)}`;
+        return `Retire the role ${seat(c.orgRoleId)}`;
       case "seat_holder":
         return `Seat somebody in ${seat(c.orgRoleId)}`;
       case "end_holding":
         return `End a holding on ${seat(c.orgRoleId)}`;
       case "move_circle": {
         const parent = text(c.payload?.parentCircleId);
-        return parent
+        const where = parent
           ? `Move the circle ${circle(bare(c.orgRoleId))} inside ${circle(parent)}`
           : `Move the circle ${circle(bare(c.orgRoleId))} to the top of the village`;
+        // 0286: the order and layer it sets, when it sets them.
+        const placed = placementOf(c.payload);
+        if (!placed.ok) return where;
+        const { order, layer } = placed.placement;
+        return (
+          where +
+          (order !== undefined ? `, at place ${order + 1} among the circles beside it` : "") +
+          (layer !== undefined ? (layer ? `, as ${/^[aeiou]/.test(layer) ? "an" : "a"} ${layer} circle` : ", with no governance layer") : "")
+        );
       }
       case "rest_circle":
         return `Retire the circle ${circle(bare(c.orgRoleId))}, so it rests as dormant`;
+      case "update_circle":
+        // The fields it changes, by their plain headings, never the words themselves.
+        return circleWordsLine(circles.get(bare(c.orgRoleId)) ?? "a circle", c.payload);
       default:
         return "A change to the structure";
     }
@@ -269,7 +311,7 @@ export function orgDraftBallotText(
 ): { title: string; doc: string } {
   const lines = publicDraftLines(draft, context);
   const n = lines.length;
-  const title = `A change to the village's structure: ${n} change${n === 1 ? "" : "s"} to its circles and seats`;
+  const title = `A change to the village's structure: ${n} change${n === 1 ? "" : "s"} to its circles and roles`;
   const because =
     why === "a-role-holds-it"
       ? "A holder of the power to adopt a change to the structure chose to put this one to the village."
@@ -279,7 +321,7 @@ export function orgDraftBallotText(
   const doc = [
     "WHAT THE VILLAGE IS ASKED",
     "",
-    "Whether to publish this change to the village's circles and seats. If it carries, it is on the chart the moment the vote closes.",
+    "Whether to publish this change to the village's circles and roles. If it carries, it is on the chart the moment the vote closes.",
     "",
     "THE CHANGES",
     "",
@@ -291,7 +333,7 @@ export function orgDraftBallotText(
     "",
     "TAKING IT BACK",
     "",
-    "A published change can be reverted, and the circles and seats go back to how they stood before it.",
+    "A published change can be reverted, and the circles and roles go back to how they stood before it.",
     "",
     `Opened on ${on.toISOString().slice(0, 10)}.`,
     "",
@@ -479,7 +521,7 @@ export async function publishOrgDraft(
         dedupeKey: `org-seat:${st.assignmentId}`,
       });
     } catch (e) {
-      console.error("[org] a published draft could not tell a member about their seat:", draftId, st.userId, st.seatName, e);
+      console.error("[org] a published draft could not tell a member about their role:", draftId, st.userId, st.seatName, e);
     }
   }
   // One journal line per seat the draft touched, so a reorganisation shows up

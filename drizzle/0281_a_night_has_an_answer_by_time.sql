@@ -1,0 +1,24 @@
+-- 0281: a night has an answer-by time.
+--
+-- One new nullable column, so this file is expand-only: the previous release
+-- neither reads nor writes it, and rolling an image back over a migrated
+-- database leaves a column nobody asks about. Its INSERT names its own columns,
+-- so the new one is simply NULL in every row it writes.
+--
+-- THE CONTRACT IS shared/sessions.ts (CONSENT_VALUES, consentTally, the
+-- answer-by window). Rye ruled on 2026-10-23 that someone who sleeps on a
+-- proposal names a time to answer by, and that a night left unanswered by then
+-- counts as no objection.
+--
+-- WHAT IT HOLDS. `answer_by` is that time, on a `sleep` answer in a consent
+-- round (`target` decision:<entry id>), written from Node's clock when the
+-- member chooses it. Every other answer leaves it NULL, and answering again
+-- with anything but `sleep` sets it back to NULL. A `sleep` row written before
+-- this file has no time, and keeps the round waiting as it always did.
+--
+-- ERASURE is unchanged: a member who leaves takes every answer row of theirs
+-- with them, this column included.
+--
+-- NO FOREIGN KEYS, the same as every table in this schema.
+
+ALTER TABLE `live_session_responses` ADD COLUMN `answer_by` timestamp(3) NULL DEFAULT NULL;

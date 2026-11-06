@@ -30,12 +30,16 @@ interface TrainingModule {
   mandatory?: boolean;
 }
 
+// Each chip is 12px text, so each pair needs 4.5:1. Computed on the card ground:
+// sage on sage/20 4.28, gold on gold/20 3.39, amber-700 on amber/20 4.39.
+// Now the light tints index.css documents with their inks (sage-light + sage
+// 4.82, amber-light + amber-ink 5.02) and amber-800 (6.23), as Forum uses.
 const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
   Video: { icon: Video, color: "bg-coral/15 text-coral" },
   Article: { icon: FileText, color: "bg-teal-deep/10 text-teal-deep" },
-  Practice: { icon: Hand, color: "bg-sage/20 text-sage" },
-  Workshop: { icon: Users, color: "bg-amber/20 text-amber-700" },
-  "Live Session": { icon: Radio, color: "bg-gold/20 text-gold" },
+  Practice: { icon: Hand, color: "bg-sage-light text-sage" },
+  Workshop: { icon: Users, color: "bg-amber/20 text-amber-800" },
+  "Live Session": { icon: Radio, color: "bg-amber-light text-amber-ink" },
 };
 
 /*
@@ -255,7 +259,7 @@ export default function Training() {
                                 Optional
                               </span>
                             ) : (
-                              <span className="inline-flex items-center rounded-full bg-amber/20 px-2 py-0.5 text-xs font-medium text-amber-700">
+                              <span className="inline-flex items-center rounded-full bg-amber/20 px-2 py-0.5 text-xs font-medium text-amber-800">
                                 Required
                               </span>
                             )}

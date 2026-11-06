@@ -29,10 +29,12 @@ import { dryRun, MAX_MOONS, type DryRunRule, type DryRunSnapshot } from "./lib/d
 const FROM = new Date("2026-08-29T12:00:00.000Z");
 const C0 = cycleBoundsFor(FROM).cycleNumber;
 
+// Village Credits, a token roles are paid in. Gratitude pays no work (Rye,
+// 2026-10-21), and the run says so through the engine's own function.
 const seatRule = (over: Partial<DryRunRule> = {}): DryRunRule => ({
-  id: "rule-role.cycle-gratitude",
+  id: "rule-role.cycle-credits",
   trigger: "role.cycle",
-  tokenSlug: "gratitude",
+  tokenSlug: "credits",
   amount: 20,
   ceiling: 100,
   enabled: true,
@@ -112,8 +114,8 @@ describe("what a settlement would pay", () => {
     const r = dryRun(snapshot({ seatCount: 3 }), { moons: 2, from: FROM });
     const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
     expect(paid).toHaveLength(1);
-    expect(paid[0].sentence).toContain("3 seat holders");
-    expect(paid[0].sentence).toContain("20 Gratitude");
+    expect(paid[0].sentence).toContain("3 role holders");
+    expect(paid[0].sentence).toContain("20 Village Credits");
     expect(paid[0].sentence).toContain("60 for the moon");
   });
 
@@ -145,29 +147,30 @@ describe("what a settlement would pay", () => {
    * on it printed the rule's amount where the engine prints the clamp, and it
    * agreed with the two surfaces that were already wrong.
    */
-  it("thanks every seat holder at the CLAMP, which is what the engine will pay", () => {
-    const r = dryRun(
-      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 5 })] }),
-      { moons: 2, from: FROM },
-    );
-    const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
-    expect(paid).toHaveLength(1);
-    // The engine pays 5 a seat. This said 20, and 60 for the moon.
-    expect(paid[0].sentence).toContain("5 Gratitude");
-    expect(paid[0].sentence).toContain("15 for the moon");
-    expect(paid[0].sentence).not.toContain("20 Gratitude");
+  it("thanks every seat holder at the rule's own amount, above its ceiling, which is what the engine will pay", () => {
+    // No ceiling binds role pay (Rye, 2026-10-22). This printed the clamp, 5,
+    // while a ceiling bound it.
+    for (const ceiling of [5, 0]) {
+      const r = dryRun(
+        snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling })] }),
+        { moons: 2, from: FROM },
+      );
+      const paid = r.turns[0].findings.filter((f) => f.area === "settlement" && f.outcome === "issued");
+      expect(paid, `ceiling ${ceiling}`).toHaveLength(1);
+      expect(paid[0].sentence).toContain("20 Village Credits");
+      expect(paid[0].sentence).toContain("60 for the moon");
+    }
   });
 
-  it("refuses a seat rule the ceiling stops outright, and names the ceiling", () => {
+  it("says a Gratitude role rule pays nobody, as the engine does", () => {
+    // It used to print "3 role holders each thanked 20 Gratitude", for a rule
+    // the settlement has refused since roles stopped paying Gratitude.
     const r = dryRun(
-      snapshot({ seatCount: 3, rules: [seatRule({ amount: 20, ceiling: 0 })] }),
+      snapshot({ seatCount: 3, rules: [seatRule({ tokenSlug: "gratitude" })] }),
       { moons: 2, from: FROM },
     );
-    // It used to print "3 seat holders each thanked 20 Gratitude" for a rule
-    // the engine refuses before it reaches a single seat.
     expect(sentences(r)).not.toMatch(/each thanked/i);
-    expect(sentences(r)).toMatch(/ceiling is 0, so it can pay no Gratitude at all/i);
-    expect(r.refusals.filter((f) => f.area === "settlement").length).toBeGreaterThan(0);
+    expect(sentences(r)).toMatch(/Gratitude rule for holding a role cannot pay: Quests and roles are not paid in Gratitude\.(?!\.)/);
   });
 
   it("names a token the ledger has no faucet for", () => {
@@ -180,7 +183,7 @@ describe("what a settlement would pay", () => {
       snapshot({ rules: [seatRule({ trigger: "quest.completed" })] }),
       { moons: 2, from: FROM },
     );
-    expect(sentences(r)).toMatch(/No rule is set for holding a seat/i);
+    expect(sentences(r)).toMatch(/No rule is set for holding a role/i);
   });
 
   it("names a village with no enabled rule at all", () => {
@@ -225,8 +228,8 @@ describe("queued dial changes", () => {
     // change lands in settles under the new number.
     const amountIn = (i: number) =>
       r.turns[i].findings.find((f) => f.area === "settlement" && f.outcome === "issued")!.sentence;
-    expect(amountIn(1)).toContain("20 Gratitude");
-    expect(amountIn(2)).toContain("45 Gratitude");
+    expect(amountIn(1)).toContain("20 Village Credits");
+    expect(amountIn(2)).toContain("45 Village Credits");
   });
 });
 
@@ -383,12 +386,85 @@ describe("dials that each read as a sane number and disagree with each other", (
       // Allowance 105 across 7 full sends, so 15 to one person: three hearts
       // of 5, and the feed dial claims twenty.
       expect(guest.shareCap).toBe(15);
-      expect(guest.note).toMatch(/3 hearts to one person, and the feed dial says 20/i);
+      expect(guest.note).toMatch(/3 feed taps to one person, and the feed dial says 20/i);
       expect(guest.note).toMatch(/the ceiling is the one they meet/i);
     } finally {
       await setDial("feed.heart_amount", "1");
       await setDial("feed.max_hearts_per_recipient_per_cycle", "3");
     }
+  });
+});
+
+/**
+ * THE VILLAGE'S OWN WORD FOR ITS RECOGNITION TOKEN (readiness R064).
+ *
+ * These notes said "a heart" and "one Gratitude", the first village's words,
+ * whatever the registry called the token. A village that renamed it read
+ * another village's vocabulary on its own launch report. Each case renames the
+ * token in the registry, drives the note it is about, and puts the row back.
+ */
+describe("the allowance notes name the village's own recognition token", () => {
+  const ROWS = [
+    { slug: "gratitude", name: "Gratitude", kind: "recognition", governance: "platform", transferable: 0, decimals: 0, active: 1, is_example: 0 },
+    { slug: "village-voice", name: "Village Voice", kind: "voice", governance: "platform", transferable: 0, decimals: 3, active: 1, is_example: 0 },
+    { slug: "voice", name: "Voice", kind: "voice", governance: "hypha", transferable: 0, decimals: 3, active: 1, is_example: 0 },
+    { slug: "credits", name: "Village Credits", kind: "credit", governance: "platform", transferable: 0, decimals: 4, active: 1, is_example: 0 },
+  ];
+  const registry = (recognition: string) =>
+    loadTokenRegistry({ query: async () => [ROWS.map((r) => (r.slug === "gratitude" ? { ...r, name: recognition } : r)), []] } as any);
+  const NOT_OURS = /\bhearts?\b|Gratitude/;
+
+  async function withSeeds(dials: Array<[string, string, string]>, read: (r: ReturnType<typeof dryRun>) => void) {
+    await registry("Seeds");
+    for (const [key, value] of dials) await setDial(key, value);
+    try {
+      read(dryRun(snapshot(), { moons: 1, from: FROM }));
+    } finally {
+      for (const [key, , back] of dials) await setDial(key, back);
+      await registry("Gratitude");
+    }
+  }
+
+  it("when a feed tap is worth more than the whole share", async () => {
+    await withSeeds([["gratitude.base_budget", "8", "105"], ["feed.heart_amount", "5", "1"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/A tap on the feed sends 5 Seeds/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the share rounds below one whole token", async () => {
+    await withSeeds([["gratitude.base_budget", "3", "105"], ["gratitude.full_sends_per_cycle", "10", "7"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/under one Seeds/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the share, and not the feed dial, is the ceiling a member meets", async () => {
+    await withSeeds([["feed.heart_amount", "5", "1"], ["feed.max_hearts_per_recipient_per_cycle", "20", "3"]], (r) => {
+      const note = r.allowances.find((a) => a.stageId === "guest")!.note;
+      expect(note).toMatch(/3 feed taps to one person/);
+      expect(note).not.toMatch(NOT_OURS);
+    });
+  });
+
+  it("when the feed is off", async () => {
+    await registry("Seeds");
+    try {
+      const r = dryRun(snapshot({ modulesOff: [{ id: "feed", name: "Feed" }] }), { moons: 1, from: FROM });
+      const off = r.runFindings.find((f) => f.area === "gratitude")!;
+      expect(off.sentence).toMatch(/nobody is sending Seeds from it/);
+      expect(off.sentence).not.toMatch(NOT_OURS);
+    } finally {
+      await registry("Gratitude");
+    }
+  });
+
+  it("and no allowance note on the default dials carries the first village's words", async () => {
+    await withSeeds([], (r) => {
+      for (const a of r.allowances) expect(a.note, a.stageId).not.toMatch(NOT_OURS);
+    });
   });
 });
 
@@ -472,7 +548,7 @@ describe("a queued change is four columns, never one", () => {
     expect(f.sentence).toMatch(/already due/i);
     expect(f.sentence).toContain("20 becomes 45");
     expect(r.turns[0].findings.find((x) => x.area === "settlement" && x.outcome === "issued")!.sentence)
-      .toContain("45 Gratitude");
+      .toContain("45 Village Credits");
     // Said once, on the first moon, and never again.
     expect(r.turns.filter((t) => t.findings.some((x) => x.area === "rules"))).toHaveLength(1);
   });

@@ -28,6 +28,7 @@
 import { UserPlus } from "lucide-react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { MAX_SEATS } from "@shared/seatApplications";
+import { seatsFromSearch } from "@shared/seatApplyLinks";
 import { ALIGN_WORDS } from "@shared/alignments";
 import type { WizardTypeConfig } from "./wizardConfig";
 import { atLeast } from "./wizardValidators";
@@ -49,8 +50,8 @@ export const settingsProblem = (v: unknown): string | null => {
 /** The seats field's verdict: one to five. */
 export const seatsProblem = (v: unknown): string | null => {
   const n = pickedSeats(v).length;
-  if (n === 0) return "Pick the seat you are applying for.";
-  if (n > MAX_SEATS) return `One application holds at most ${MAX_SEATS} seats.`;
+  if (n === 0) return "Pick the role you are applying for.";
+  if (n > MAX_SEATS) return `One application holds at most ${MAX_SEATS} roles.`;
   return null;
 };
 
@@ -58,11 +59,11 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   id: "role_application",
   group: "Recurring",
   icon: UserPlus,
-  title: "Apply for a seat",
+  title: "Apply for a role",
   description:
-    "Apply to hold one seat or up to five, with what you will have done by the end of the season and the terms you hold them on.",
+    "Apply to hold one role or up to five, with what you will have done by the end of the season and the terms you hold them on.",
   consequence:
-    "Publishing puts your application and its terms in front of whoever adopts seats: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the seats and never you or the money.",
+    "Publishing puts your application and its terms in front of whoever adopts roles: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the roles and never you or the money.",
   opensVote: true,
   // The candidate aligns as they propose, with the words Review shows: they never click twice.
   aligns: true,
@@ -84,17 +85,17 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   },
   steps: {
     subject: {
-      label: "The seats",
-      intro: "Which seats you are applying to hold. Pick every seat you would hold this season, up to five, and your terms cover them all.",
+      label: "The roles",
+      intro: "Which roles you are applying to hold. Pick every role you would hold this season, up to five, and your terms cover them all.",
       fields: [
         {
           key: "seatIds",
           kind: "seatPicks",
-          label: "Seats",
+          label: "Roles",
           max: MAX_SEATS,
           required: true,
           problem: seatsProblem,
-          tip: "Seats come from the village's org chart. One application for several seats records your terms once.",
+          tip: "Roles come from the village's org chart. One application for several roles records your terms once.",
         },
       ],
     },
@@ -129,7 +130,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
     },
     terms: {
       label: "Your terms",
-      intro: "The terms you would hold these seats on. Start from a preset, or from the seat's own terms on offer, and change what does not fit.",
+      intro: "The terms you would hold these roles on. Start from a preset, or from the role's own terms on offer, and change what does not fit.",
       fields: [
         {
           key: "seatSettings",
@@ -143,7 +144,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           key: "startsNoEarlierThan",
           kind: "date",
           label: "First day",
-          help: "Leave it empty to start as soon as the application is adopted. Pick the first day of next season to apply for next season's seats now.",
+          help: "Leave it empty to start as soon as the application is adopted. Pick the first day of next season to apply for next season's roles now.",
         },
       ],
     },
@@ -160,16 +161,25 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
  * Season plans (RC1) add two: `renew=<id>` picks a seat the member already
  * holds ("Carry on"), and `season=<id>` names the season they plan, which the
  * publish sends so a season still to come sets the first day.
+ *
+ * SEVERAL SEATS FROM ONE ADDRESS (the character page's "Propose these"):
+ * `seat` repeated, or `seats=a,b,c`, read by `seatsFromSearch`. The list is
+ * handed over as it came. The seats step judges it: more than five is refused
+ * by `seatsProblem`, and a full seat is taken off by `SeatPicksField`, which
+ * names it.
  */
 export function roleApplicationStart(search: string): { type: "role_application"; answers: Record<string, unknown> } | null {
   const q = new URLSearchParams(search);
   if (q.get("type") !== "role_application") return null;
-  const seat = String(q.get("seat") ?? q.get("renew") ?? "").trim();
+  // Several seats at once (`seat` repeated, or `seats=a,b`) from the character page's "Propose these".
+  const listed = seatsFromSearch(q);
+  const renew = String(q.get("renew") ?? "").trim();
+  const seats = listed.length > 0 ? listed : renew ? [renew] : [];
   const season = String(q.get("season") ?? "").trim();
   const supersedes = String(q.get("supersedes") ?? "").trim();
   return {
     type: "role_application",
-    answers: { ...(seat ? { seatIds: [seat] } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
+    answers: { ...(seats.length ? { seatIds: seats } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
   };
 }
 

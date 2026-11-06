@@ -128,5 +128,27 @@ console.log("validate-module: guild manifests");
   check("a broken seed in another module's guild is not charged here", r.status === 0);
 }
 
+console.log("validate-module: setup needs");
+
+{
+  const r = run(brokenShared(null), "events");
+  check("a clean copy passes for events", r.status === 0);
+  check("the setup needs section ran", r.out.includes("setup needs problems for the selected module(s): 0  OK"));
+}
+
+{
+  // Events has setup to do and no seeds, so its needs are all it declares.
+  const dir = brokenShared("modules.ts", (s) => s.replace(/(\n    id: "events",\r?\n    guild: \[\],\r?\n)    setupNeeds: \[[\s\S]*?\n    \],\r?\n/, "$1"));
+  const r = run(dir, "events");
+  check("a module with setup to do and no needs or seeds fails", r.status === 1);
+  check("and says which", r.out.includes('module "events" says its setup is required but declares no required need and no seed'));
+}
+
+{
+  const dir = brokenShared("modules.ts", (s) => s.replace('fixAt: "/modules/events#setting-calendar.hemisphere"', 'fixAt: "https://elsewhere.example"'));
+  const r = run(dir, "events");
+  check("a need whose link leaves the village fails", r.status === 1);
+}
+
 console.log(failures === 0 ? `validate-module guild checks: ${assertions} passed` : `validate-module guild checks: ${failures} failure(s) of ${assertions}`);
 process.exit(failures === 0 ? 0 : 1);

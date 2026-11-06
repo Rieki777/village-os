@@ -134,7 +134,7 @@ export default function CarryAcross({
     try {
       const refused = await moveOne(r, to);
       if (refused) return setFailure(refused);
-      onChanged(`${r.person} now sits in ${seatName.get(to) ?? "the new seat"}. Their old seat is ended, and its history is kept.`);
+      onChanged(`${r.person} now sits in ${seatName.get(to) ?? "the new role"}. Their old role is ended, and its history is kept.`);
     } catch {
       setFailure("The server could not be reached. Nobody was moved.");
     } finally {
@@ -161,7 +161,7 @@ export default function CarryAcross({
       setConfirmAll(false);
     }
     if (refused.length) setFailure(refused.join(" "));
-    onChanged(`${plural(moved, "person moved", "people moved")} to their new seat.${refused.length ? ` ${plural(refused.length, "move", "moves")} did not go through.` : ""}`);
+    onChanged(`${plural(moved, "person moved", "people moved")} to their new role.${refused.length ? ` ${plural(refused.length, "move", "moves")} did not go through.` : ""}`);
   };
 
   const previewRetire = async () => {
@@ -234,13 +234,13 @@ export default function CarryAcross({
       <p className="text-base font-semibold" role="status" data-testid="carry-state">{carrySummary(carry)}</p>
       {carry.rows.length > 0 && carry.mayCarry && (
         <p className="text-sm text-muted-foreground max-w-[68ch]">
-          Pick each person&apos;s seat on the new chart and confirm it. They get the new seat until the season ends, and their old
-          seat ends with its history kept.
+          Pick each person&apos;s role on the new chart and confirm it. They get the new role until the season ends, and their old
+          role ends with its history kept.
         </p>
       )}
       {carry.kept.length > 0 && (
         <p className="text-sm text-muted-foreground" data-testid="carry-kept">
-          {plural(carry.kept.length, "person kept their seat", "people kept their seat")} when it moved into the new chart, so they need nothing.
+          {plural(carry.kept.length, "person kept their role", "people kept their role")} when it moved into the new chart, so they need nothing.
         </p>
       )}
       {!carry.mayCarry && carry.rows.length > 0 && (
@@ -257,7 +257,7 @@ export default function CarryAcross({
       {confirmAll && (
         <div className={`${card} p-3.5 grid gap-2.5 border-notice/60`} role="group" aria-labelledby="h-carry-all" data-testid="carry-confirm-all">
           <p id="h-carry-all" className="font-semibold">
-            Move {plural(suggestedRows.length, "person", "people")} to their suggested seat?
+            Move {plural(suggestedRows.length, "person", "people")} to their suggested role?
           </p>
           <ul className="text-sm grid gap-1">
             {suggestedRows.map((r) => (
@@ -300,25 +300,25 @@ export default function CarryAcross({
                     {!suggested && pick && pick !== KEEP && <span className={`${pillBase} text-open border-current`}>Your pick</span>}
                   </p>
                   <p className="text-[13px] text-muted-foreground">
-                    Old seat: {r.oldSeatName}
+                    Old role: {r.oldSeatName}
                     {r.oldCircleName ? ` · ${r.oldCircleName}` : ""}
                   </p>
                   {!r.suggestion && (
                     <p className="text-[13px] text-muted-foreground">
-                      {carry.mayCarry ? "No seat on the new chart has a name like it. Pick one." : "No seat on the new chart has a name like it."}
+                      {carry.mayCarry ? "No role on the new chart has a name like it. Pick one." : "No role on the new chart has a name like it."}
                     </p>
                   )}
                 </div>
                 {carry.mayCarry ? (
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] items-center min-w-0">
                     <select
-                      aria-label={`New seat for ${r.person}`}
+                      aria-label={`New role for ${r.person}`}
                       value={pick}
                       disabled={busy !== null}
                       onChange={(e) => setPicks((p) => ({ ...p, [r.seatingId]: e.target.value }))}
                       className="min-h-[44px] w-full min-w-0 rounded-xl border border-border bg-background px-3 text-sm"
                     >
-                      <option value="">Choose a seat</option>
+                      <option value="">Choose a role</option>
                       {groups.map(([circle, seats]) => (
                         <optgroup key={circle} label={circle}>
                           {seats.map((s) => (
@@ -328,7 +328,7 @@ export default function CarryAcross({
                           ))}
                         </optgroup>
                       ))}
-                      <option value={KEEP}>Keep this seat for now</option>
+                      <option value={KEEP}>Keep this role for now</option>
                     </select>
                     <button
                       type="button"
@@ -340,7 +340,7 @@ export default function CarryAcross({
                     </button>
                     {pick === KEEP && (
                       <p className="text-[13px] text-muted-foreground sm:col-span-2">
-                        {r.person} stays in {r.oldSeatName} for now. A seat somebody holds is never retired.
+                        {r.person} stays in {r.oldSeatName} for now. A role somebody holds is never retired.
                       </p>
                     )}
                   </div>
@@ -356,7 +356,7 @@ export default function CarryAcross({
       {carry.retire.stillHeld.length > 0 && toRetire > 0 && (
         <div className="grid gap-1.5" data-testid="carry-still-held">
           <h3 className="font-display text-[17px]">Still held</h3>
-          <p className="text-[13px] text-muted-foreground">These old seats stay until their people have a seat on the new chart.</p>
+          <p className="text-[13px] text-muted-foreground">These old roles stay until their people have a role on the new chart.</p>
           <ul className="text-sm grid gap-0.5">
             {carry.retire.stillHeld.map((s) => (
               <li key={s.id}>
@@ -371,7 +371,7 @@ export default function CarryAcross({
         <div className={`${card} p-4 grid gap-2.5`} data-testid="carry-retire">
           <h3 className="font-display text-[17px]">Retire the empty old chart</h3>
           <p className="text-sm text-muted-foreground">
-            {plural(carry.retire.seats.length, "old seat has nobody in it", "old seats have nobody in them")}
+            {plural(carry.retire.seats.length, "old role has nobody in it", "old roles have nobody in them")}
             {carry.retire.circles.length ? `, and ${plural(carry.retire.circles.length, "old circle is", "old circles are")} left empty` : ""}.
             Retiring rests them, keeps their history, and never unseats anybody.
           </p>
@@ -427,7 +427,7 @@ export default function CarryAcross({
             <div className={`${card} p-3.5 grid gap-2.5 border-notice/60`} role="group" aria-labelledby="h-retire-confirm" data-testid="carry-publish-confirm">
               <p id="h-retire-confirm" className="font-semibold">Publish the retire draft?</p>
               <p className="text-sm text-muted-foreground">
-                This rests {plural(carry.retireDraft.reads.length, "seat or circle", "seats and circles")} at once, as one change. Nobody is unseated.
+                This rests {plural(carry.retireDraft.reads.length, "role or circle", "roles and circles")} at once, as one change. Nobody is unseated.
               </p>
               <div className="flex flex-wrap gap-2.5">
                 <button type="button" className={primary} disabled={busy !== null} onClick={() => void publishRetire()}>

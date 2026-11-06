@@ -489,7 +489,7 @@ export function landingFor(input: LandingInput): Landing {
       vetoClosesAt: null,
       executesAtClose: true,
       vetoable: false,
-      because: NO_WINDOW_BECAUSE[String(input.subjectType ?? "").toLowerCase()] ?? "This one takes effect the moment it carries. A seat is not something the seat can hold on to.",
+      because: NO_WINDOW_BECAUSE[String(input.subjectType ?? "").toLowerCase()] ?? "This one takes effect the moment it carries. A role is not something the role can hold on to.",
     };
   }
 
@@ -516,8 +516,8 @@ export function landingFor(input: LandingInput): Landing {
     : consented
       ? CONSENT_STOPPER
       : input.notVetoableReason === "out_of_tier_reach"
-      ? "No steward can stop this one: the village has not put decisions of this size in the seat's reach."
-      : "Nobody can stop this one: the village decided it about the seat itself, so the seat has no say in it.";
+      ? "No steward can stop this one: the village has not put decisions of this size in the role's reach."
+      : "Nobody can stop this one: the village decided it about the role itself, so the role has no say in it.";
 
   /*
    * A PAYOUT GOES AT THE CLOSE, UNLESS IT IS BIG ENOUGH TO WAIT.

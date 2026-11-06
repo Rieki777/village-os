@@ -93,6 +93,7 @@ import {
   proposalsByStatus,
   rebatchWaiting,
   reopenAcceptedFor,
+  reopenSuperseded,
 } from "../repos/externalProposals";
 import { deleteSubjectRowsForMember, proposalIdsNaming } from "../repos/externalProposalSubjects";
 
@@ -450,6 +451,8 @@ export type LandResult =
       outcome: "stored" | "duplicate";
       /** A waiting duplicate moved into this delivery (`rebatchWaiting`). */
       rebatched?: boolean;
+      /** A retired duplicate brought back into this delivery (`reopenSuperseded`). */
+      reopened?: boolean;
       /** How many open rows about the same thing this one retired. */
       superseded: number;
       /** Reference fields this village could not resolve, now null on the row. */
@@ -595,7 +598,21 @@ export async function landProposal(pool: Pool, input: LandInput): Promise<LandRe
       const rebatched = input.rebatchWaiting === true && existingId !== ""
         ? await rebatchWaiting(pool, existingId, input.batchId)
         : false;
-      return { ok: true, id: existingId, outcome: "duplicate", superseded: 0, nulled, ...(rebatched ? { rebatched } : {}) };
+      // The same claim, retired by an earlier read and sent again: it comes
+      // back into this delivery (`reopenSuperseded` says why). Only for a
+      // sender that re-reads, the same callers `rebatchWaiting` serves.
+      const reopened = input.rebatchWaiting === true && existingId !== "" && !rebatched
+        ? await reopenSuperseded(pool, { id: existingId, batchId: input.batchId, identityKey })
+        : null;
+      return {
+        ok: true,
+        id: existingId,
+        outcome: "duplicate",
+        superseded: reopened ?? 0,
+        nulled,
+        ...(rebatched ? { rebatched } : {}),
+        ...(reopened !== null ? { reopened: true } : {}),
+      };
     }
     // EVERY SUBJECT, RESOLVED ONCE, THROUGH THE ONE RESOLVER.
     //

@@ -84,6 +84,13 @@ describe("circleView carries the fields the old projection dropped", () => {
     expect(out.map((c) => c.id)).toEqual(["a", "b"]);
     expect(circleViews(null as any)).toEqual([]);
   });
+
+  it("carries the governance layer the map ranks by, and reads an unknown one as none (0286)", () => {
+    expect(circleView(row({ layer: "lead" })).layer).toBe("lead");
+    expect(circleView(row()).layer).toBeNull();
+    expect(circleView(row({ layer: "chief" })).layer).toBeNull();
+    expect(circleView(row({ layer: "" })).layer).toBeNull();
+  });
 });
 
 describe("toneForCircle resolves what villages actually stored", () => {

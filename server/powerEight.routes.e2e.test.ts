@@ -62,7 +62,7 @@ import path from "path";
 import mysql from "mysql2/promise";
 import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -296,7 +296,7 @@ beforeAll(async () => {
   }
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-power-eight-"));
   testDb = await provisionTestDb();
-  pool = mysql.createPool({ uri: testDb.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+  pool = testPool(testDb, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
 
   // Refuse a port a stranger is already holding, and wait out the previous
   // suite's server if it has not let go yet. The boot poll below breaks on ANY
@@ -337,6 +337,12 @@ beforeAll(async () => {
     expect(r.status, `${id} reaches ${stage}`).toBe(200);
   }
 
+  // Sheet 19 (0307): Steward Circle ships with admin access ON, so its holders can open the admin
+  // panel. This suite tests what a MEMBER standing under held powers may do, so it pins the default
+  // and then switches it off. The group's admin access is pinned in server/authzRound.routes.e2e.test.ts.
+  expect(((await call("GET", "/api/roles", undefined, "")).json ?? []).find((r: any) => r.id === ROLE)?.grantsAdmin).toBe(true);
+  const off = await call("PUT", `/api/admin/roles/${ROLE}/admin-access`, { on: false });
+  expect(off.status, off.text).toBe(200);
   const seated = await call("POST", `/api/admin/roles/${ROLE}/holders`, { userId: kiraId, action: "add" });
   expect(seated.status, seated.text).toBe(200);
 

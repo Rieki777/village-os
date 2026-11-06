@@ -43,6 +43,7 @@
  * caller would inherit it without knowing.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { ledgerSafeNote, ledgerSafeValue } from "../lib/credentialRedaction";
 
 /** The column list, in the order the statement binds them. */
 const COLUMNS = "id, config_key, old_value, new_value, actor_user_id, source, proposal_ref, note";
@@ -70,6 +71,12 @@ export interface MechanicsChangeRow {
  * `at` is not a parameter: the column defaults to CURRENT_TIMESTAMP and the
  * readers order on it, so the row is dated by the database that accepted it
  * rather than by a clock in whichever process happened to make the change.
+ *
+ * NO KEY IS EVER STORED. Both values and the note pass through the one rule in
+ * server/lib/credentialRedaction.ts on the way in, here and not at a caller,
+ * because this is the only INSERT the table has and a rule kept at a caller is
+ * a rule the next caller skips. The row still says which dial moved, when and
+ * by whom; where a value carried a key it keeps the host and loses the key.
  */
 export async function insertMechanicsChange(pool: Pool, row: MechanicsChangeRow): Promise<void> {
   await pool.query(
@@ -77,14 +84,66 @@ export async function insertMechanicsChange(pool: Pool, row: MechanicsChangeRow)
     [
       row.id,
       row.configKey,
-      row.oldValue,
-      row.newValue,
+      ledgerSafeValue(row.configKey, row.oldValue),
+      ledgerSafeValue(row.configKey, row.newValue),
       row.actorUserId,
       row.source,
       row.proposalRef,
-      row.note,
+      ledgerSafeNote(row.note),
     ],
   );
+}
+
+/** One stored amendment, the three columns a key can sit in. */
+export interface LedgerValueRow {
+  id: string;
+  configKey: string;
+  oldValue: string | null;
+  newValue: string | null;
+  note: string | null;
+}
+
+/**
+ * Every row that COULD carry a key, for the boot scrub (server/lib/credentialScrub.ts).
+ *
+ * A superset by construction, and cheap. `looksLikeCredential` matches only a
+ * value holding `/v2/` or `/v3/`, an `=`, or an `@`, so a row with none of
+ * those in any of its three columns cannot match it; a declared dial is listed
+ * by key because its rule needs no shape at all. The exact decision is made per
+ * row in TypeScript by the same function the writer uses, never by a second
+ * copy of the rule in SQL.
+ */
+export async function ledgerRowsThatMayCarryKeys(pool: Pool, declaredKeys: readonly string[]): Promise<LedgerValueRow[]> {
+  const shaped = ["old_value", "new_value", "note"]
+    .map((c) => `${c} LIKE '%/v2/%' OR ${c} LIKE '%/v3/%' OR ${c} LIKE '%=%' OR ${c} LIKE '%@%'`)
+    .join(" OR ");
+  const byKey = declaredKeys.length > 0 ? ` OR config_key IN (${declaredKeys.map(() => "?").join(",")})` : "";
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, config_key, old_value, new_value, note FROM mechanics_changes WHERE ${shaped}${byKey}`,
+    [...declaredKeys],
+  );
+  return rows.map((r) => ({
+    id: String(r.id),
+    configKey: String(r.config_key),
+    oldValue: r.old_value ?? null,
+    newValue: r.new_value ?? null,
+    note: r.note ?? null,
+  }));
+}
+
+/**
+ * Rewrite one row's three value columns, by primary key, and ONLY if the row
+ * still holds exactly what the scrub read (`<=>` is the NULL-safe equality).
+ * A row that moved in between is left for the next boot rather than written
+ * with a decision made about bytes it no longer holds. True when it was rewritten.
+ */
+export async function rewriteLedgerValues(pool: Pool, before: LedgerValueRow, after: LedgerValueRow): Promise<boolean> {
+  const [res] = await pool.query<any>(
+    "UPDATE mechanics_changes SET old_value = ?, new_value = ?, note = ? " +
+      "WHERE id = ? AND old_value <=> ? AND new_value <=> ? AND note <=> ?",
+    [after.oldValue, after.newValue, after.note, before.id, before.oldValue, before.newValue, before.note],
+  );
+  return Number(res?.affectedRows ?? 0) > 0;
 }
 
 /**

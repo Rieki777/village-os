@@ -27,7 +27,8 @@
  * NOT TO BE CONFUSED WITH `server/liveHolders.test.ts`, which is the suite for
  * `liveHoldersOfCapability` in ./roleGrants, the rule this file feeds.
  */
-import { liveHoldersOfCapability } from "./roleGrants";
+import { STAGE_UNLOCKS } from "../../shared/capabilities";
+import { leftEmptyByRemoval, liveHoldersOfCapability } from "./roleGrants";
 
 /** What the caller knows and this file does not: the caches, and the badge rows. */
 export interface HolderReads {
@@ -54,8 +55,8 @@ function asList(v: unknown): string[] {
   }
 }
 
-/** Every member who holds `capability` today, counted the way the gate counts. */
-export async function liveHoldersNow(reads: HolderReads, capability: string): Promise<string[]> {
+/** Every member's badge grants and denies, read once, with sleeping grants left out. */
+async function badgePlanes(reads: HolderReads): Promise<Record<string, { grants: string[]; denies: string[] }>> {
   const badges: Record<string, { grants: string[]; denies: string[] }> = {};
   if (reads.badgesLive()) {
     const asleep = new Set(await reads.dormantBadgeIds());
@@ -66,5 +67,31 @@ export async function liveHoldersNow(reads: HolderReads, capability: string): Pr
       plane.denies.push(...asList(row.denies));
     }
   }
-  return liveHoldersOfCapability(reads.roleHolders(), reads.roles(), capability, new Date(), badges);
+  return badges;
+}
+
+/** Every member who holds `capability` today, counted the way the gate counts. */
+export async function liveHoldersNow(reads: HolderReads, capability: string): Promise<string[]> {
+  return liveHoldersOfCapability(reads.roleHolders(), reads.roles(), capability, new Date(), await badgePlanes(reads));
+}
+
+/**
+ * The powers the village holds that one removal would leave with nobody, for
+ * every person in every group (`leftEmptyByRemoval` in ./roleGrants says how).
+ *
+ * `stageUnlocks` is the village's own rung for each key a stage can open, as
+ * the gate reads it. A key with a rung is left out, since every member at that
+ * stage still holds it and this count cannot see them.
+ */
+export async function leftEmptyByRemovalNow(
+  reads: HolderReads,
+  villageHeld: readonly string[],
+  stageUnlocks: Readonly<Record<string, string | undefined>>,
+): Promise<Record<string, Record<string, string[]>>> {
+  const roleOnly = villageHeld.filter((cap) => {
+    const rung = stageUnlocks[cap] || (STAGE_UNLOCKS as Record<string, string | undefined>)[cap];
+    return !rung || rung === "none";
+  });
+  if (!roleOnly.length) return {};
+  return leftEmptyByRemoval(reads.roleHolders(), reads.roles(), roleOnly, new Date(), await badgePlanes(reads));
 }

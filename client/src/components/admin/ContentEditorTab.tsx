@@ -14,7 +14,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, RefreshCw, Save } from "lucide-react";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
-import { emptyContentFor } from "./contentSections";
+import { emptyContentFor, PAGES_TAB_KEY, PATHS_STAGES_TAB_KEY } from "./contentSections";
+import PagesEditor from "./pages/PagesEditor";
+import PathsStagesEditor from "./PathsStagesEditor";
+import { takePrefill } from "@/lib/profilePrefill";
 import {
   SECTION_FIELDS,
   readGroup,
@@ -24,7 +27,14 @@ import {
   type DocField,
 } from "./contentFields";
 
-export default function ContentEditorTab({ password, sectionKey, sectionLabel }: {
+/** Pages and Paths & Stages have their own editors; every other content tab is one stored section. */
+export default function ContentEditorTab(props: { password: string; sectionKey: string; sectionLabel: string }) {
+  if (props.sectionKey === PAGES_TAB_KEY) return <PagesEditor password={props.password} />;
+  if (props.sectionKey === PATHS_STAGES_TAB_KEY) return <PathsStagesEditor password={props.password} />;
+  return <SectionEditorTab {...props} />;
+}
+
+function SectionEditorTab({ password, sectionKey, sectionLabel }: {
   password: string;
   sectionKey: string;
   sectionLabel: string;
@@ -50,9 +60,25 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
    */
   const [loadError, setLoadError] = useState("");
 
+  /*
+   * WHAT A MEMBER SIGNS, HANDED OVER FROM A REGEN CIVICS FILE (ProfileImport.tsx).
+   * It becomes the covenant's opening paragraph in this box after the read,
+   * unsaved, and the note above the box says so until Save is pressed. Taken
+   * once, so a refresh shows the section as it is saved.
+   */
+  const [handed, setHanded] = useState(false);
+  const withHanded = (doc: any): any => {
+    if (sectionKey !== "covenant") return doc;
+    const text = takePrefill("covenant");
+    if (!text) return doc;
+    setHanded(true);
+    return { ...(doc && typeof doc === "object" && !Array.isArray(doc) ? doc : {}), opening: text };
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError("");
+    setHanded(false);
     try {
       const res = await fetch(`${API_BASE}/content/${sectionKey}`);
       /*
@@ -81,7 +107,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
        * this editor now agrees with it.
        */
       if (res.status === 404) {
-        setRaw(JSON.stringify(emptyContentFor(sectionKey), null, 2));
+        setRaw(JSON.stringify(withHanded(emptyContentFor(sectionKey)), null, 2));
         setLoading(false);
         return;
       }
@@ -97,7 +123,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
         return;
       }
       const data = await res.json();
-      setRaw(JSON.stringify(data, null, 2));
+      setRaw(JSON.stringify(withHanded(data), null, 2));
     } catch {
       setLoadError(
         "This section could not be read: the request did not reach the server. " +
@@ -181,6 +207,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
       });
       if (res.ok) {
         setSaved(true);
+        setHanded(false);
         setTimeout(() => setSaved(false), 3000);
       } else {
         const body = await res.json().catch(() => null);
@@ -278,7 +305,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Edit: {sectionLabel}</h2>
           <p className="text-sm text-gray-500 mt-1">
@@ -302,6 +329,13 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
           </button>
         </div>
       </div>
+
+      {handed && !saved && (
+        <p className="mb-4 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+          The opening paragraph now holds what a member signs, from your ReGen Civics profile. Nothing is saved
+          until you press Save Changes. Refresh to see the section as it is saved.
+        </p>
+      )}
 
       {loadError && (
         <p role="alert" className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -476,7 +510,7 @@ export default function ContentEditorTab({ password, sectionKey, sectionLabel }:
                           >
                             {(options ?? []).map((o) => (
                               <option key={o} value={o}>
-                                {o === "open" ? "Open Seat" : o === "filled" ? "Filled" : o === "partial" ? "Partially Filled" : o === "forming" ? "Forming" : o}
+                                {o === "open" ? "Open Role" : o === "filled" ? "Filled" : o === "partial" ? "Partially Filled" : o === "forming" ? "Forming" : o}
                               </option>
                             ))}
                           </select>

@@ -2,17 +2,20 @@
   {
     "id": "founders-circle",
     "name": "Founders Circle",
-    "description": "Holds the founding vision and final say while the village grows into governing itself. Can open and decide proposals, consent to quests, moderate the forum, and declare how the village and its circles hold power.",
+    "description": "Holds the founding vision and final say while the village grows into governing itself. Can open and decide proposals, consent to quests, moderate the forum, declare how the village and its circles hold power, seat people in the village's roles, and decide changes to the org chart.",
     "capabilities": [
       "proposal.open",
       "proposal.decide",
       "quest.consent",
       "forum.moderate",
       "forum.post",
-      "org.declare"
+      "org.declare",
+      "org.seat",
+      "org.decide"
     ],
     "minStage": null,
-    "order": 1
+    "order": 1,
+    "grantsAdmin": true
   },
   {
     "id": "steward-circle",
@@ -27,16 +30,18 @@
       "member.superVouch"
     ],
     "minStage": "member",
-    "order": 2
+    "order": 2,
+    "grantsAdmin": true
   },
   {
     "id": "treasury",
     "name": "Treasury",
-    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
+    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, marks the cash the village owes as paid, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
     "capabilities": [
       "proposal.open",
       "forum.post",
-      "exchange.manage"
+      "exchange.manage",
+      "cash.pay"
     ],
     "minStage": "member",
     "order": 3

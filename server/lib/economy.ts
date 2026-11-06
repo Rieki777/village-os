@@ -55,13 +55,20 @@ import {
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import type { VillageMoon } from "../../shared/villageMoon";
+import { GRATITUDE_NEVER_PAYS, GRATITUDE_ONLY_SENT, ceilingBinds, readValueTokens, type TokenAmount } from "../../shared/workValue";
 import { issuanceRefusal, readGameStart } from "./gameStart";
+import { oweRoleCycleCash } from "./cashOwed";
 import { currentCycle, currentCycleNumber, cycleIdFor, parseCycleId } from "./gratitude-cycles";
 // The import runs both ways, the same shape `./exit` above already has: both
 // modules only reach each other from inside functions, so nothing is read at
 // module-init time and the cycle resolves.
 import { applyPendingModes } from "./circleTreasury";
 import { openExitFor } from "./exit";
+import { isTombstone } from "./oauthAccounts";
+import { withoutFormerMembers } from "./formerMember";
+import { cardDuesPayersBetween, retiringFlatRoleRuleIds } from "../repos/duesPaid";
+import { DEPARTED_RECIPIENT, departedById } from "./departed";
+import { attendeeEmail, clearCheckinNotes } from "../repos/eventCheckins";
 import { moonOneCycle, villageMoonFor } from "./villageMoon";
 import { numberVar, stringVar } from "./variables";
 import {
@@ -100,6 +107,21 @@ export const HEARTS = "gratitude";
 /** The village's own voice token. Accrues here, settles on Hypha. */
 export const VILLAGE_VOICE = "village-voice";
 /**
+ * Equity a member earns here and claims across to Hypha. Seeded by 0266.
+ *
+ * THE TWIN OF THE `equity` MIRROR, the way `village-voice` is the twin of the
+ * `voice` mirror. The mirror is governed on Hypha and `validateLeg` refuses to
+ * move it, which is what makes the on-chain figure trustworthy, so equity has
+ * to accrue in a platform token before it can be claimed. This is that token.
+ * Its kind is `equity`, so the exchange refuses to list it and the exit sweep
+ * reads `exit.keep_pct.equity` for it. The founder ruled on 2026-10-23 that
+ * members keep their tokens, so that share defaults to 100: a leaver keeps
+ * their earned equity, and an account still holding it stays on as a former
+ * member (server/lib/exitResolve.ts). Its display name is the village's to
+ * change; the slug never moves.
+ */
+export const EARNED_EQUITY = "earned-equity";
+/**
  * The village's spendable value token, seeded by 0007 and the default the
  * cycle pool pays out. Named here for the same reason HEARTS is: a slug typed
  * as a bare string in four files is a slug that gets misspelled in a fifth,
@@ -130,6 +152,10 @@ export function recognitionName(): string {
 export const VOICE_MINT = "sys:voice-mint";
 /** Not a faucet: voice held against an open claim came from a member. */
 export const VOICE_BRIDGE = "sys:voice-bridge";
+/** The earned equity faucet, seeded by 0266. Its negative balance is the equity issued here. */
+export const EQUITY_MINT = "sys:equity-mint";
+/** Not a faucet, seeded by 0266: equity held against an open claim came from a member. */
+export const EQUITY_BRIDGE = "sys:equity-bridge";
 /**
  * Where Voice goes when it wanes. Seeded by 0203, and NOT a faucet.
  *
@@ -359,6 +385,9 @@ export const keys = {
    */
   roleCycle: (v: string, cycleKey: string, seatId: string, userId: string, tokenSlug: string) =>
     `role.cycle:${esc(v)}:${esc(cycleKey)}:${esc(seatId)}:${esc(userId)}:${esc(tokenSlug)}`,
+  /** One member's dues dividend for one cycle, in one token: once, whatever they hold. */
+  duesDividend: (v: string, cycleKey: string, userId: string, tokenSlug: string) =>
+    `dues.dividend:${esc(v)}:${esc(cycleKey)}:${esc(userId)}:${esc(tokenSlug)}`,
   journeyStage: (v: string, journeyId: string, stage: string, userId: string) =>
     `journey.stage_reached:${esc(v)}:${esc(journeyId)}:${esc(stage)}:${esc(userId)}`,
   welcomeAboard: (v: string, questNo: number | string, userId: string) =>
@@ -392,6 +421,8 @@ export const keys = {
    */
   reversal: (v: string, eventKey: string) => `reversal:${esc(v)}:${eventKey}`,
   voiceClaim: (v: string, claimRowId: string) => `voice-claim:${esc(v)}:${esc(claimRowId)}`,
+  /** The intent an earned equity claim is dispatched under. Same row, same rule, its own prefix. */
+  equityClaim: (v: string, claimRowId: string) => `equity-claim:${esc(v)}:${esc(claimRowId)}`,
   /**
    * The two postings one redemption can make, and they are built HERE.
    *
@@ -468,7 +499,7 @@ export interface MintRule {
   id: string;
   trigger: string;
   tokenSlug: string;
-  /** null means "read it from the source", clamped to `ceiling`. */
+  /** null means "read it from the source", clamped to `ceiling` on every trigger but work (`ceilingBinds`). */
   amount: number | null;
   ceiling: number;
   recipient: string;
@@ -2134,6 +2165,8 @@ export function faucetFor(tokenSlug: string): string | null {
       return RECOGNITION_FAUCET;
     case VILLAGE_VOICE:
       return VOICE_MINT;
+    case EARNED_EQUITY:
+      return EQUITY_MINT;
     case CREDITS:
       return CYCLE_POOL_FAUCET;
     case "stay-credit":
@@ -2233,32 +2266,171 @@ export interface OwedClaim {
   id: string;
   questId: string;
   userId: string;
-  /**
-   * What the witness granted, in whole recognition, before any badge lifted it.
-   *
-   * A GRANT OF 0 PRICES NO RULE (economics and governance, 2026-09-14). A zero
-   * is the witness saying the work earned no recognition, and the
-   * `quest.completed` rules are recognition paid in other tokens. Carving out
-   * voice alone was not enough: a village can weight its ballots by any token
-   * (`governance.weight_token`), so any rule token priced at 0 would be voting
-   * weight farmed through `quest.allow_zero_consent`. The stay below is the
-   * quest's own payment, typed onto it by a person, and is owed at any grant.
+  /*
+   * NO GRANT ANY MORE (Rye, 2026-10-21). The witness used to type a Gratitude
+   * amount, and a grant of 0 priced no rule (economics and governance,
+   * 2026-09-14), because a zero could farm voting weight through
+   * `quest.allow_zero_consent`. No quest pays Gratitude now, a consent is a
+   * yes, and that dial is gone, so every consent prices what the quest pays.
    */
-  granted: number;
   /**
    * The quest's stay-credit reward in WHOLE credits, and the title its posting
    * is described by. Absent, or a reward of zero, owes no stay credits.
    */
   stay?: { reward: number; questTitle: string };
+  /**
+   * The quest's own list of what it pays (0265), read off the quest at consent.
+   * NULL or absent means the quest has none, and the village's standard rules
+   * price it the way they always did. See `quoteWorkPay`.
+   */
+  valueTokens?: TokenAmount[] | null;
+  /**
+   * The claimant's badge multipliers, token by token (Rye, 2026-10-23). The
+   * caller reads them, because which badges are awake depends on the season
+   * (`seasonallyDormantBadgeIds`). Absent multiplies nothing.
+   */
+  boost?: PayBoost;
+}
+
+/** One line a piece of work will be paid, in the ledger's own integer. */
+export interface WorkPayLine {
+  token: string;
+  /** Minor units, in full. Nothing downstream converts again. */
+  units: number;
+  decimals: number;
+}
+
+export interface WorkPayQuote {
+  /** `own` when the work carries its own list, `standard` when the rules' fixed amounts pay it. */
+  source: "own" | "standard";
+  lines: WorkPayLine[];
+  unpayable: Array<{ token: string; reason: string }>;
+}
+
+/**
+ * WHAT ONE PIECE OF WORK PAYS, UNDER THE VILLAGE'S RULES. NOTHING POSTS.
+ *
+ * The one answer to "what does this quest pay" and "what does this seat pay
+ * each cycle". The consent prices from it, the cycle settlement pays from it,
+ * and the cards render from it, so a card can never promise a figure the
+ * engine would not post. (Rye, 2026-10-21: every quest and role shows every
+ * token assigned to it.)
+ *
+ * TWO WAYS A PIECE OF WORK IS PRICED, AND NEVER BOTH.
+ *
+ *   own list   the work names its tokens and amounts (0265). Each line pays
+ *              the work's own figure in full, whatever amount the village's
+ *              rule on that token carries. A token the work does not name pays
+ *              nothing, so a quest with its own list is never also paid the
+ *              flat amounts. That is what stops a valued quest paying twice
+ *              for one piece of work.
+ *   no list    the work is priced exactly as it was before 0265: every
+ *              enabled rule with a fixed amount pays that amount. A rule that
+ *              reads its amount from the work has nothing to read, and pays
+ *              nothing for this work, quietly: it pays the work that names it.
+ *
+ * NO CEILING BINDS WORK (Rye, 2026-10-22: "we definitely can't have caps on
+ * what things pay"; `WORK_PAY_TRIGGERS` in shared/workValue.ts). A ceiling
+ * used to clamp every line here, so a quest worth thousands in a currency
+ * pegged near one token each was held to 250. The rule still decides WHICH
+ * tokens may pay this kind of work: a line the work names with no enabled rule
+ * behind it cannot pay. It is reported, never posted, and the editor refuses
+ * it before it is ever stored. Somebody holding the power to set a quest's
+ * value names each figure, and a circle consents before a quest pays.
+ *
+ * GRATITUDE NEVER PAYS FOR WORK (Rye, 2026-10-21). A rule on it is reported and
+ * skipped, and a list naming it is refused at the save and reported here.
+ */
+/** What `quoteWorkPay` reads off a rule, and nothing more: the dry run hands it its own shape. */
+export type WorkPayRule = Pick<MintRule, "tokenSlug" | "amount">;
+
+/**
+ * A member's badge multipliers, token by token (`rewardMultipliersFor`,
+ * server/lib/seasonPatterns.ts). Applied where a member is PAID, never on a
+ * card: a card says what the work pays anybody.
+ */
+export type PayBoost = Readonly<Record<string, number>>;
+
+export function quoteWorkPay(
+  rules: readonly WorkPayRule[],
+  own: readonly TokenAmount[] | null | undefined,
+  work: "quest" | "seat" | "proposal",
+  boost?: PayBoost,
+): WorkPayQuote {
+  const source: WorkPayQuote["source"] = own ? "own" : "standard";
+  const lines: WorkPayLine[] = [];
+  const unpayable: Array<{ token: string; reason: string }> = [];
+  const quoted = new Set<string>();
+  for (const r of rules) {
+    if (r.tokenSlug === HEARTS) {
+      unpayable.push({ token: HEARTS, reason: GRATITUDE_NEVER_PAYS });
+      continue;
+    }
+    // One line per token. Two rules on one token would collide on the ledger's
+    // occurrence key anyway, so the second could never pay; saying so here
+    // keeps a card from showing a line the ledger would refuse.
+    if (quoted.has(r.tokenSlug)) continue;
+    let asked: number;
+    if (own) {
+      const mine = own.find((t) => t.token === r.tokenSlug);
+      if (!mine) continue;
+      // The work's own figure: a fixed rule's own amount is ignored here,
+      // because the work has said what it pays.
+      asked = Number(mine.amount);
+    } else {
+      if (r.amount === null) continue;
+      asked = r.amount;
+    }
+    // Zero is a decision and stays quiet.
+    if (!(asked > 0)) continue;
+    quoted.add(r.tokenSlug);
+    const problem = ruleCannotPay(r.tokenSlug);
+    if (problem) {
+      unpayable.push({ token: r.tokenSlug, reason: problem });
+      continue;
+    }
+    const decimals = decimalsFor(r.tokenSlug);
+    // In full, at the token's own scale. No ceiling is consulted: see above.
+    const units = unitsAtScale(asked, decimals);
+    if (units <= 0) {
+      unpayable.push({ token: r.tokenSlug, reason: `${asked} is smaller than the smallest amount this token can hold` });
+      continue;
+    }
+    // A holder's badge multiplier on this token (Rye, 2026-10-23), after the
+    // work's own figure is known, rounded the way a payment rounds.
+    const factor = Number(boost?.[r.tokenSlug] ?? 1);
+    const paid = Number.isFinite(factor) && factor > 0 && factor !== 1 ? Math.round(units * factor) : units;
+    lines.push({ token: r.tokenSlug, units: paid, decimals });
+  }
+  if (own) {
+    for (const t of own) {
+      if (quoted.has(t.token) || !(Number(t.amount) > 0)) continue;
+      if (t.token === HEARTS) {
+        unpayable.push({ token: HEARTS, reason: GRATITUDE_NEVER_PAYS });
+        continue;
+      }
+      const name = tokenDef(t.token)?.name ?? t.token;
+      unpayable.push({
+        token: t.token,
+        reason:
+          `this ${work} names ${name}, and the village has no enabled ${work === "seat" ? "role" : work} rule on ` +
+          `${name}, so it cannot pay. Add a rule on the Mint panel or take ${name} off the ${work}`,
+      });
+    }
+  }
+  return { source, lines, unpayable };
 }
 
 export interface OwedForClaim {
   owed: OwedPosting[];
   /**
-   * Rules that are enabled and can NEVER pay: a from_source rule, a token with
-   * no faucet, a ceiling that rounds to nothing, an amount below the token's
-   * resolution. Not owed, because a retry cannot succeed. Logged here, from the
-   * engine, so a caller that ignores the field still cannot make it silent.
+   * Rules that are enabled and can NEVER pay: a token with no faucet, a
+   * ceiling that rounds to nothing, an amount below the token's resolution, a
+   * token the quest names with no rule to cap it, a rule on Gratitude. Not
+   * owed, because a retry cannot succeed. Logged here, from the engine, so a
+   * caller that ignores the field still cannot make it silent. A rule that
+   * reads its amount from the work pays the quests that name an amount for it
+   * (0265) and is quiet on a quest that names none.
    */
   unpayable: Array<{ token: string; reason: string }>;
   /**
@@ -2322,104 +2494,34 @@ export async function owedForClaim(db: Pool | PoolConnection, claim: OwedClaim):
   return ready.ready ? priced : { ...priced, skipped: ready.reason };
 }
 
-/**
- * The pricing both entry points share. Reports nothing; each caller reports once.
- *
- * `granted` is required on `owedForClaim` and optional here. A consent's own
- * pricing must say what the witness granted; the removed direct path
- * stated no grant and priced every rule. Nothing reaches that branch today,
- * because `owedForClaim` is the only caller and a grant is required on it.
- */
+/** The pricing `owedForClaim` does. Reports nothing; the caller reports once. */
 async function priceClaim(
   db: Pool | PoolConnection,
-  claim: Omit<OwedClaim, "granted"> & { granted?: number },
+  claim: OwedClaim,
   opts: { rules: boolean } = { rules: true },
 ): Promise<{ owed: OwedPosting[]; unpayable: Array<{ token: string; reason: string }> }> {
-  // No rule prices for a grant of 0 (`OwedClaim.granted` says why), nor while the
-  // rules are not ready (`owedForClaim` says why). The stay below prices either way.
-  const noRules = !opts.rules || (claim.granted !== undefined && !(claim.granted > 0));
-  const rules = noRules ? [] : await rulesFor(db, "quest.completed");
+  // No rule prices while the rules are not ready (`owedForClaim` says why).
+  // The stay below prices either way.
+  const rules = opts.rules ? await rulesFor(db, "quest.completed") : [];
   const owed: OwedPosting[] = [];
   const unpayable: Array<{ token: string; reason: string }> = [];
-  for (const r of rules) {
-    // Recognition is the consent route's job. See above.
-    if (r.tokenSlug === HEARTS) continue;
-    if (r.amount === null) {
-      // "Read the amount from whatever posted the work" has nothing to read
-      // here. The only amount a quest posts is its Gratitude range, which the
-      // consent route already spends, and reading it for a second token would
-      // pay a credit figure somebody wrote meaning recognition. So a
-      // from_source rule on any other token can never pay, on any quest, ever.
-      // An admin can set one (`queueRuleChange` accepts a null amount), so it
-      // has to be answerable rather than merely impossible.
-      unpayable.push({
-        token: r.tokenSlug,
-        reason: "this rule reads its amount from the work, and a quest posts no amount in this token",
-      });
-      continue;
-    }
-    const asked = r.amount;
-    // Zero is a decision and stays quiet. A village that sets a rule to 0 has
-    // said "not this one, not now", and shouting about it every consent would
-    // bury the rules that are genuinely broken.
-    if (asked <= 0) continue;
-    // A rule the engine cannot honour is REPORTED, not skipped. This used to
-    // be `if (!faucet) continue`, which is how a village could enable a
-    // credits rule, watch the Mint panel say it pays, and find out a moon
-    // later that nobody had ever been paid by it.
-    const problem = ruleCannotPay(r.tokenSlug);
-    if (problem) {
-      unpayable.push({ token: r.tokenSlug, reason: problem });
-      continue;
-    }
-    // THE CEILING BINDS HERE, and until this line it bound nowhere at all:
-    // `clampToCeiling` had no caller in the shipped server, so a rule left at
-    // `amount 25, ceiling 5` by a ballot that lowered only the ceiling went on
-    // paying 25 for ever.
-    //
-    // IT BINDS IN MINOR UNITS, and this line used to hand a human number to
-    // `toLedgerUnits` on the next one. `mint_rules.ceiling` is `decimal(18,4)`
-    // and this token may carry 0 decimals, so the comparison was exact and the
-    // rounding after it was not bounded by anything: a ceiling of 0.5 paid one
-    // whole unit. The scale is passed in rather than looked up inside, per R31.
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, asked, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
-    if (capped.refusal) {
-      unpayable.push({ token: r.tokenSlug, reason: capped.refusal });
-      continue;
-    }
-    // Already the ledger's own integer. Nothing below this line converts.
-    const amount = capped.units;
-    // KEPT, NOT DELETED, and the sweep asked the question explicitly.
-    // `mint_rules.amount` is `decimal(18,4)`, so the smallest non-zero human
-    // figure a rule can carry is 0.0001, which at four decimals converts to 1
-    // and never to 0. On a token at 4 or more decimals this branch is
-    // therefore unreachable, and it goes quiet rather than red, which is the
-    // dangerous way for a guard to die. It stays because it is a function of
-    // the TOKEN's decimals and not of the ruling: `tokens.decimals` is an int
-    // a village writes, `registerToken` takes whatever it is given, and any
-    // token registered below four decimals re-arms this immediately. Deleting
-    // a guard because today's data cannot reach it is how the `faucetFor`
-    // credits defect shipped. It costs one comparison. (sweep lane F)
-    //
-    // IT NOW MEANS ONLY THE AMOUNT. A ceiling that falls to nothing at this
-    // scale is refused above, by name, so reaching here with a zero means the
-    // rule's own amount rounded away and `asked` is the number to quote.
-    if (amount <= 0) {
-      // Below the token's own resolution. Also a promise that cannot be kept,
-      // and the founder can only fix it if somebody says so.
-      unpayable.push({
-        token: r.tokenSlug,
-        reason: `${asked} is smaller than the smallest amount this token can hold`,
-      });
-      continue;
-    }
+  // Every rule the work answers to, priced by the one function the cards read
+  // (`quoteWorkPay`). It holds what this loop used to hold inline: zero stays
+  // quiet, a rule the engine cannot honour is REPORTED and never skipped, and
+  // an amount below the token's resolution is a promise that cannot be kept
+  // and says so. A quest with its own list (0265) is paid that list in full
+  // and is never also paid the fixed amounts. The claimant's badge
+  // multipliers apply here, at payment, and never on the card.
+  const quote = quoteWorkPay(rules, claim.valueTokens ?? null, "quest", claim.boost);
+  unpayable.push(...quote.unpayable);
+  for (const line of quote.lines) {
     owed.push({
       toUserId: claim.userId,
-      tokenSlug: r.tokenSlug,
-      units: amount,
-      decimals,
-      from: faucetFor(r.tokenSlug)!,
+      tokenSlug: line.token,
+      // Already the ledger's own integer. Nothing below this line converts.
+      units: line.units,
+      decimals: line.decimals,
+      from: faucetFor(line.token)!,
       source: "quest_consent",
       sourceRef: claim.id,
       description: `Confirmed contribution: ${claim.questId}`,
@@ -2427,7 +2529,7 @@ async function priceClaim(
       // token, and each is its own ledger row: without this segment the second
       // rule collides with the first, reads as a duplicate, and the member is
       // quietly paid in one token instead of two.
-      idempotencyKey: keys.questCompleted(villageId(), claim.questId, claim.id, claim.userId, r.tokenSlug),
+      idempotencyKey: keys.questCompleted(villageId(), claim.questId, claim.id, claim.userId, line.token),
     });
   }
 
@@ -2446,10 +2548,13 @@ async function priceClaim(
   const stayProblem = claim.stay && reward > 0 ? ruleCannotPay(QUEST_STAY_TOKEN) : null;
   if (stayProblem) unpayable.push({ token: QUEST_STAY_TOKEN, reason: stayProblem });
   if (claim.stay && reward > 0 && !stayProblem) {
+    // A badge that multiplies stay credits multiplies these too.
+    const stayFactor = Number(claim.boost?.[QUEST_STAY_TOKEN] ?? 1);
+    const stayUnits = toLedgerUnits(QUEST_STAY_TOKEN, reward);
     owed.push({
       toUserId: claim.userId,
       tokenSlug: QUEST_STAY_TOKEN,
-      units: toLedgerUnits(QUEST_STAY_TOKEN, reward),
+      units: Number.isFinite(stayFactor) && stayFactor > 1 ? Math.round(stayUnits * stayFactor) : stayUnits,
       decimals: decimalsFor(QUEST_STAY_TOKEN),
       from: faucetFor(QUEST_STAY_TOKEN)!,
       source: "quest_stay_reward",
@@ -2499,9 +2604,16 @@ async function owedPreflight(db: Pool | PoolConnection, row: OwedPosting): Promi
   if (def.governance !== "platform") {
     return refuse(`${row.tokenSlug} is governed on Hypha and is only mirrored here`);
   }
+  // No pricing writes an owed row in Gratitude. One that exists anyway is refused (Rye, 2026-10-23).
+  if (row.tokenSlug === HEARTS) return refuse(GRATITUDE_ONLY_SENT);
   if (!row.idempotencyKey) return refuse("an occurrence key is required");
   const tooLong = keyTooLong(row.idempotencyKey);
   if (tooLong) return refuse(tooLong);
+  // Nothing posts to a member who has left (round 4, finding 3): a row
+  // recorded while they were here, settled after, or pressed on /review. Asked
+  // before the launch question, so a tombstone's row is refused for good, and
+  // never left owed until launch to be paid then. See server/lib/departed.ts.
+  if (await departedById(db, row.toUserId)) return refuse(DEPARTED_RECIPIENT);
   const closed = await issuanceRefusal(db);
   if (closed) return { outcome: "refused", reason: "not_launched", message: closed };
   return null;
@@ -2577,6 +2689,13 @@ export async function checkIn(
   if (!witness.ok) {
     return { ok: false, error: "Someone else checks you in. Ask a steward." };
   }
+  // A departed member is checked in to nothing: the erasure clears the notes on
+  // their check-ins once, after the tombstone, and a row written later would
+  // keep a steward's words about them for good.
+  const attendee = await attendeeEmail(pool, input.userId);
+  if (attendee != null && isTombstone({ email: attendee })) {
+    return { ok: false, error: "That member has left the village." };
+  }
   const key = `event.checkin:${villageId()}:${input.eventId}:${input.userId}`;
   const id = `chk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try {
@@ -2592,6 +2711,19 @@ export async function checkIn(
   } catch (err: any) {
     return { ok: false, error: String(err?.message ?? err) };
   }
+}
+
+/**
+ * The erasure's check-in step (server/lib/erasure.ts, "checkin-notes-after-tombstone"):
+ * the note a steward wrote on a departed member's check-in goes, and the
+ * check-in stays as the village's record of who was there. A note the member
+ * wrote as the steward, on somebody else's check-in, is about that person and
+ * stays. One UPDATE writing NULL keyed on the member, so a second run matches
+ * nothing.
+ */
+export async function forgetCheckinNotesOf(pool: Pool, userId: string): Promise<number> {
+  if (!userId) return 0;
+  return clearCheckinNotes(pool, villageId(), userId);
 }
 
 /** How many confirmed check-ins this member has, which is what badges count. */
@@ -2642,6 +2774,10 @@ export interface SettlementResult {
    * did not (no enabled rules). It is not a substitute for reading the dial.
    */
   decay: VoiceDecaySummary;
+  /** New rows of cash owed to role holders this run (0285). Zero on a rerun. */
+  cashOwed?: number;
+  /** Members newly paid a dues dividend this run (`payDuesDividend`). Zero on a rerun. */
+  duesMembersPaid?: number;
 }
 
 /** What one cycle's waning did, in the token's own minor units. */
@@ -2995,7 +3131,16 @@ export async function decayVoice(
  * number is in that number's unit. NO BEHAVIOUR CHANGED HERE in the decimals
  * sweep; this paragraph records why nothing had to.
  */
-export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<SettlementResult> {
+export async function runSettlement(
+  pool: Pool,
+  at: Date = new Date(),
+  /**
+   * Each holder's badge multipliers (Rye, 2026-10-23). The caller supplies
+   * them because which badges are awake depends on the season. Absent pays
+   * every seat its role's own figure.
+   */
+  opts: { boostFor?: (userId: string) => Promise<PayBoost> } = {},
+): Promise<SettlementResult> {
   const { key: cycleKey } = cycleWindow(at);
   const out: SettlementResult = {
     cycleKey,
@@ -3013,6 +3158,16 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
       cycleKey,
     },
   };
+
+  /*
+   * THE CASH ROLES PAY (0285), owed before anything below can return early.
+   * A village with no `role.cycle` rule, or none enabled, can still pay its
+   * roles in cash, so this asks only whether the Game has started: a seat
+   * held while a village is still setting up owes nothing, the same wait the
+   * ledger holds every token to. Keyed on the cycle, the seat and the member,
+   * so the hourly reruns write nothing new.
+   */
+  if (!(await issuanceRefusal(pool))) out.cashOwed = await oweRoleCycleCash(pool, cycleKey);
 
   const ready = await economyReady(pool);
   if (!ready.ready) return out;
@@ -3084,63 +3239,35 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
   // rule on X paid nobody", and a missing sink account is not a rule.
   const ruleProblems: Array<{ token: string; reason: string }> = [];
   const payable = rules.filter((r) => {
+    // GRATITUDE NEVER PAYS FOR WORK (Rye, 2026-10-21): its only job is sharing
+    // out the cycle pool. The seed has shipped this rule switched off since
+    // roles stopped paying it; a village that switched it back on is told why
+    // it pays nobody, once.
+    if (r.tokenSlug === HEARTS) {
+      ruleProblems.push({ token: HEARTS, reason: GRATITUDE_NEVER_PAYS });
+      return false;
+    }
     const problem = ruleCannotPay(r.tokenSlug);
     if (problem) {
       ruleProblems.push({ token: r.tokenSlug, reason: problem });
       return false;
     }
-    // A SEAT POSTS NO AMOUNT, so a rule that reads its amount from the work
-    // can never pay one, on any moon, ever. This was silent: `r.amount ?? 0`
-    // read null as zero, the ceiling check below was guarded on that zero
-    // being positive, the rule sailed through this filter into `payable`, the
-    // seat loop paid nothing, and `alreadyRun` then went true because
-    // `payable.length > 0`. A misconfiguration was reported as a completed
-    // moon, which is the reading that stops anybody looking. Named here, in
-    // the same words the claim pricing uses for the same shape.
-    if (r.amount === null) {
-      ruleProblems.push({
-        token: r.tokenSlug,
-        reason: "this rule reads its amount from the work, and a seat posts no amount in this token",
-      });
-      return false;
-    }
-    // A ceiling of zero is the third way, and the same class again: the row
-    // says the rule pays 25 and says the most it may pay is nothing. Asked
-    // ONCE here rather than once per seat, like every other reason in this
-    // filter. See `clampToCeiling` for what the column bounds, and
-    // `ceilingAtScale` for why the answer is in minor units.
-    const decimals = decimalsFor(r.tokenSlug);
-    const capped = ceilingOutcome(r, r.amount, decimals, tokenDef(r.tokenSlug)?.name ?? r.tokenSlug);
-    if (r.amount > 0 && capped.refusal) {
-      // Into `ruleProblems` like the two reasons above, and not straight onto
-      // `out.unpayable`: only `ruleProblems` reaches `reportUnpayable`, so a
-      // seat rule its own ceiling refused used to pay nobody every moon with
-      // no line in any log. It still lands on `out.unpayable` once, below.
-      ruleProblems.push({ token: r.tokenSlug, reason: capped.refusal });
-      return false;
-    }
-    // An amount that rounds to nothing in this token's minor units is the
-    // other way a rule pays nobody while looking alive. Same class, same
-    // report: a rule of 0.1 on a whole-unit token posts zero.
-    const human = r.amount;
-    // KEPT for the reason written at its twin in `priceClaim`: on a
-    // token at four decimals this cannot fire, because `mint_rules.amount` is
-    // `decimal(18,4)`, and it stays because the next token a village registers
-    // may carry fewer. (sweep lane F)
-    if (human > 0 && capped.units <= 0) {
-      ruleProblems.push({
-        token: r.tokenSlug,
-        reason: `${human} is smaller than the smallest amount this token can hold`,
-      });
-      return false;
-    }
+    // A RULE THAT READS ITS AMOUNT FROM THE WORK PAYS THE ROLES THAT NAME ONE
+    // (0265), and a rule is reported below, once, when no seated role does.
+    //
+    // NOTHING ABOUT THE RULE'S OWN FIGURE TAKES IT OUT OF THE RUN HERE. A
+    // ceiling used to (a ceiling of zero dropped the rule), and so did an own
+    // amount too small for the token to hold, and either one silently stopped
+    // the roles that name their OWN amount of that token from being paid. No
+    // ceiling binds role pay now (Rye, 2026-10-22, `ceilingBinds`), and a rule
+    // amount that cannot post is reported by `quoteWorkPay` for the seats it
+    // would have paid, once per token and reason, below.
     return true;
   });
-  out.unpayable.push(...ruleProblems);
-  reportUnpayable(`settlement ${cycleKey}`, ruleProblems);
 
   // Live seatings held by real accounts. `active_holder_key` is NULL once a
-  // seating ends, and examples are not people.
+  // seating ends, and examples are not people. The role's own list rides along
+  // (0265): it is what that role pays each seat, under the rules above.
   //
   // AGENTS ARE ALREADY EXCLUDED HERE (0142) and no clause was added for them.
   // An agent is `holder_kind = 'documented'` with no `user_id`, so it fails
@@ -3150,43 +3277,86 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
   // If this filter is ever loosened, that is the moment an agent starts being
   // paid, and it is the only such moment in the codebase.
   const [seats] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `org_role_id`, `user_id` FROM `org_role_assignments` " +
-      "WHERE `active_holder_key` IS NOT NULL AND `holder_kind` = 'member' " +
-      "AND `user_id` IS NOT NULL AND `is_example` = 0",
+    "SELECT a.`id`, a.`org_role_id`, a.`user_id`, r.`value_tokens` FROM `org_role_assignments` a " +
+      "LEFT JOIN `org_roles` r ON r.`id` = a.`org_role_id` " +
+      "WHERE a.`active_holder_key` IS NOT NULL AND a.`holder_kind` = 'member' " +
+      "AND a.`user_id` IS NOT NULL AND a.`is_example` = 0",
   );
 
-  const paid = new Set<string>();
+  /*
+   * A SEAT IS PAID ITS ROLE'S OWN LIST, AND NEVER A FLAT AMOUNT (Rye,
+   * 2026-11-01). A flat amount on a role rule is the automatic mint he turned
+   * off, and turned back on it pays dues-paying members once a cycle
+   * (`payDuesDividend`, below), whatever role they hold. So each seat is
+   * priced with the flat amounts read as blank. One kind of flat amount still
+   * pays seats: one already queued to go blank, which keeps its old meaning
+   * until it lands, so the cycle the change arrives in pays what it promised.
+   */
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = payable.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+
+  // Each seat priced once, by the function the role cards read, so a card can
+  // never promise a figure this loop would not post.
+  const quoted: Array<{ seat: RowDataPacket; quote: WorkPayQuote }> = [];
   for (const seat of seats) {
+    const boost = opts.boostFor ? await opts.boostFor(String(seat.user_id)) : undefined;
+    quoted.push({ seat, quote: quoteWorkPay(seatRules, readValueTokens(seat.value_tokens), "seat", boost) });
+  }
+  if (seats.length > 0) {
+    for (const r of payable) {
+      if (r.amount !== null) continue;
+      if (quoted.some((q) => q.quote.lines.some((l) => l.token === r.tokenSlug))) continue;
+      // A role DID name it, and could not pay it: that seat's own reason is
+      // said below, and "no role names an amount" would be false.
+      if (quoted.some((q) => q.quote.unpayable.some((u) => u.token === r.tokenSlug))) continue;
+      ruleProblems.push({
+        token: r.tokenSlug,
+        reason: "this rule reads its amount from the role, and no role anybody holds names an amount in this token",
+      });
+    }
+  }
+  // What a role's own list cannot pay, said once per token and reason, never
+  // once per seat.
+  const said = new Set<string>();
+  for (const { quote } of quoted) {
+    for (const u of quote.unpayable) {
+      const key = `${u.token}\u0000${u.reason}`;
+      if (said.has(key)) continue;
+      said.add(key);
+      ruleProblems.push(u);
+    }
+  }
+  out.unpayable.push(...ruleProblems);
+  reportUnpayable(`settlement ${cycleKey}`, ruleProblems);
+
+  const paid = new Set<string>();
+  for (const { seat, quote } of quoted) {
     const userId = String(seat.user_id);
     const seatId = String(seat.id);
-    for (const r of payable) {
-      // Clamped, like the quest path, and for the same reason: the ceiling is
-      // what the village voted on and the amount is what it typed first. The
-      // filter above has already reported a ceiling of zero once for the whole
-      // rule, so this loop only has to stop paying. The answer is already the
-      // ledger's own integer, so nothing here converts it a second time.
-      const decimals = decimalsFor(r.tokenSlug);
-      const units = ceilingOutcome(r, r.amount ?? 0, decimals).units;
-      if (units <= 0) continue;
-      const faucet = faucetFor(r.tokenSlug)!;
+    for (const line of quote.lines) {
+      // Already the ledger's own integer, so nothing here converts it a second time.
+      const faucet = faucetFor(line.token)!;
       const res = await mint(pool, {
         toUserId: userId,
-        tokenSlug: r.tokenSlug,
-        amount: units,
+        tokenSlug: line.token,
+        amount: line.units,
         from: faucet,
         source: "role_cycle",
         sourceRef: seatId,
-        description: `Thanks for holding a seat through ${cycleKey}`,
+        description: `Thanks for holding a role through ${cycleKey}`,
         // Two seats are two thanks, and the same seat next moon is another.
-        idempotencyKey: keys.roleCycle(villageId(), cycleKey, seatId, userId, r.tokenSlug),
+        // A role whose list changed mid-cycle cannot pay twice: the key is the
+        // cycle, the seat, the member and the token, and none of them moved.
+        idempotencyKey: keys.roleCycle(villageId(), cycleKey, seatId, userId, line.token),
       });
       if (res.ok && !res.duplicate) {
         paid.add(userId);
-        out.minted.push({ token: r.tokenSlug, units, decimals });
+        out.minted.push({ token: line.token, units: line.units, decimals: line.decimals });
       }
     }
   }
   out.stewardsThanked = paid.size;
+  out.duesMembersPaid = await payDuesDividend(pool, at, retiring, out);
   /*
    * Nothing new to pay means this cycle was already settled, which is the only
    * honest way to know: the ledger is the record, not a flag beside it.
@@ -3208,18 +3378,67 @@ export async function runSettlement(pool: Pool, at: Date = new Date()): Promise<
    *   never anything to settle and no run could have paid it.
    *
    * So the condition asks what it means: was there a payment this run could
-   * have made. `WOULD PAY` re-asks the clamp because a rule can be payable and
-   * still answer zero, and the seat count because a payment needs somebody to
-   * receive it. Both directions of the mistake are one-sided and this is the
-   * safe side: reporting "not settled" when it was costs a log line the caller
-   * already guards on `stewardsThanked`, and reporting "settled" when nothing
-   * ever could be costs the village its only signal.
+   * have made. The quotes answer it seat by seat: a line exists only where a
+   * rule pays more than zero to somebody holding a seat. Both directions of
+   * the mistake are one-sided and this is the safe side: reporting "not
+   * settled" when it was costs a log line the caller already guards on
+   * `stewardsThanked`, and reporting "settled" when nothing ever could be
+   * costs the village its only signal.
    */
-  const wouldPay = payable.filter(
-    (r) => ceilingOutcome(r, r.amount ?? 0, decimalsFor(r.tokenSlug)).units > 0,
-  );
-  out.alreadyRun = out.minted.length === 0 && wouldPay.length > 0 && seats.length > 0;
+  const wouldPay = quoted.some((q) => q.quote.lines.length > 0);
+  out.alreadyRun = out.minted.length === 0 && wouldPay;
   return out;
+}
+
+/**
+ * THE DUES DIVIDEND (Rye, 2026-11-01): "if this is turned on again it would be
+ * attached to those who are paying members, so that each cycle they're paying
+ * membership dues they're getting these tokens minted to them."
+ *
+ * A flat amount on a `role.cycle` rule, once a village sets one again after
+ * the automatic mint went blank, is paid ONCE A CYCLE TO EACH MEMBER WHOSE
+ * MEMBERSHIP DUES WERE PAID BY CARD IN THAT CYCLE: per member and never per
+ * seat, role or no role (decided by the coordinator from his words). Card
+ * only, by his ruling: `cardDuesPayersBetween` says why the rest cannot be
+ * seen. A reversed charge, a donation, a former member and an erased account
+ * are paid nothing. No badge multiplies it, because dues are not work.
+ *
+ * THE CYCLE JUST CLOSED IS ASKED TOO. Settlement runs hourly, so dues paid in
+ * a cycle's last hour are first seen by a run in the next one; asking both
+ * windows, each under its own cycle's key and its own cycle's rules, pays them
+ * for the cycle they were paid in. The key makes a second asking a no-op.
+ */
+async function payDuesDividend(pool: Pool, at: Date, retiring: Set<string>, out: SettlementResult): Promise<number> {
+  const here = cycleWindow(at);
+  const before = cycleWindow(new Date(here.startsAt.getTime() - 1));
+  const paid = new Set<string>();
+  for (const w of [before, here]) {
+    const flat = (await rulesFor(pool, "role.cycle", currentCycleNumber(w.startsAt)))
+      .filter((r) => r.amount !== null && !retiring.has(r.id) && r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+    if (!flat.length) continue;
+    const { lines } = quoteWorkPay(flat, null, "seat");
+    if (!lines.length) continue;
+    const payers = (await cardDuesPayersBetween(pool, w.startsAt, w.endsAt)).filter((p) => !isTombstone({ email: p.email }));
+    for (const p of await withoutFormerMembers(pool, payers)) {
+      for (const line of lines) {
+        const res = await mint(pool, {
+          toUserId: p.id,
+          tokenSlug: line.token,
+          amount: line.units,
+          from: faucetFor(line.token)!,
+          source: "dues_dividend",
+          sourceRef: p.id,
+          description: `For your membership dues, paid in ${w.key}`,
+          idempotencyKey: keys.duesDividend(villageId(), w.key, p.id, line.token),
+        });
+        if (res.ok && !res.duplicate) {
+          paid.add(p.id);
+          out.minted.push({ token: line.token, units: line.units, decimals: line.decimals });
+        }
+      }
+    }
+  }
+  return paid.size;
 }
 
 // ── Two-party consent ───────────────────────────────────────────────────────
@@ -3343,8 +3562,25 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     // Plain sentences, not a table dump. Somebody reading this is asking what
     // the village does, and "quest.completed / 0.1 / 1 / claimant" answers a
     // different question than they asked.
-    const what =
-      amount === null
+    const trigger = String(r.trigger);
+    // Gratitude never pays for work (Rye, 2026-10-21), and `quoteWorkPay`
+    // refuses a rule on it. The feed says what the engine does.
+    const forWork = !ceilingBinds(trigger);
+    if (forWork && String(r.token_slug) === HEARTS) {
+      return { trigger, token: name, says: `no ${name} for work` };
+    }
+    // Work is paid in full, with no ceiling (Rye, 2026-10-22): the rule's own
+    // amount when the work names none, and the work's own amount when it does.
+    const work = trigger === "quest.completed" ? "quest" : trigger === "proposal.accepted" ? "proposal" : "role";
+    const ownUnits = amount === null ? 0 : unitsAtScale(amount, decimals);
+    const own = forWork && amount !== null ? `; a ${work} that names its own amount is paid that` : "";
+    const what = forWork
+      ? amount === null
+        ? `as much ${name} as each ${work} names`
+        : ownUnits > 0
+          ? `${humanAtScale(ownUnits, decimals)} ${name}`
+          : `no ${name} at present`
+      : amount === null
         ? capUnits > 0
           ? `up to ${humanAtScale(capUnits, decimals)} ${name}, as much as the work was posted for`
           : `no ${name}, because this rule's ceiling stops every payment`
@@ -3354,16 +3590,17 @@ export async function publicRules(pool: Pool): Promise<Array<{ trigger: string; 
     const when: Record<string, string> = {
       "quest.completed": "when a steward confirms finished work",
       "gratitude.given": "when a member thanks another",
-      "role.cycle": "each moon, to everyone holding a seat",
+      "role.cycle": "each moon, to everyone holding a role",
+      "proposal.accepted": "when the village accepts a member's proposal to work with it",
       "journey.stage_reached": "on reaching a stage of the journey",
       "welcome_aboard.quest": "on a welcome quest",
       "library.contributed": "on lending something to the library",
       "stay.work_exchange": "on a work exchange for a stay",
     };
     return {
-      trigger: String(r.trigger),
+      trigger,
       token: name,
-      says: `${what} ${when[String(r.trigger)] ?? "when the village says so"}`,
+      says: `${what} ${when[trigger] ?? "when the village says so"}${own}`,
     };
   });
 }
@@ -3553,9 +3790,10 @@ export async function queueRuleChange(
     }
     const bad = mintRuleNumberProblem("amount", change.amount);
     if (bad) return { ok: false, error: bad };
-    // A fixed amount above its own ceiling is a rule that contradicts itself.
+    // A fixed amount above its own ceiling is a rule that contradicts itself,
+    // except on a rule that pays work, where no ceiling binds (`ceilingBinds`).
     const ceiling = change.ceiling ?? Number(rule.ceiling ?? 0);
-    if (ceiling > 0 && change.amount > ceiling) {
+    if (ceilingBinds(String(rule.trigger)) && ceiling > 0 && change.amount > ceiling) {
       return { ok: false, error: `${change.amount} is above this rule's ceiling of ${ceiling}` };
     }
     /*
@@ -3826,10 +4064,39 @@ export interface MintView {
    * decimals and 250000 at 4, for the same 25 the village promised. A client
    * could not have converted it if it had tried.
    */
-  settlementPreview: { seats: number; mints: Array<{ token: string; units: number; decimals: number }> };
+  settlementPreview: {
+    seats: number;
+    /** Members whose card dues for this cycle are paid so far: who a flat role amount pays (`payDuesDividend`). */
+    duesPayers: number;
+    mints: Array<{ token: string; units: number; decimals: number }>;
+  };
 }
 
 /** Everything the Mint panel shows, in one read. */
+/** What one settlement would mint, per token, from each seat's own quote. */
+function previewSeatMints(
+  rules: readonly MintRule[],
+  lists: Array<TokenAmount[] | null>,
+  dividendRules: readonly MintRule[] = [],
+  duesPayers = 0,
+): Array<{ token: string; units: number; decimals: number }> {
+  const payable = rules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const dividend = dividendRules.filter((r) => r.tokenSlug !== HEARTS && !ruleCannotPay(r.tokenSlug));
+  const quotes = [
+    ...lists.map((list) => quoteWorkPay(payable, list, "seat")),
+    ...Array.from({ length: duesPayers }, () => quoteWorkPay(dividend, null, "seat")),
+  ];
+  const out: Array<{ token: string; units: number; decimals: number }> = [];
+  for (const quote of quotes) {
+    for (const line of quote.lines) {
+      const row = out.find((m) => m.token === line.token);
+      if (row) row.units += line.units;
+      else out.push({ token: line.token, units: line.units, decimals: line.decimals });
+    }
+  }
+  return out.filter((m) => m.units > 0);
+}
+
 export async function mintView(pool: Pool): Promise<MintView> {
   // ONE instant for both. Two `new Date()` calls either side of a new moon
   // would put the id and the label on different lunations, and this panel's
@@ -3862,12 +4129,25 @@ export async function mintView(pool: Pool): Promise<MintView> {
   // The mint PREVIEW, and it must agree exactly with the settlement filter
   // above or the preview promises a payout the run will not make. Agents are
   // excluded by the same inherited clauses and for the same reason (0142).
+  // The same seats the settlement pays, each with its role's own list (0265),
+  // so the preview prices every seat the way `runSettlement` will.
   const [seats] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM `org_role_assignments` " +
-      "WHERE `active_holder_key` IS NOT NULL AND `holder_kind` = 'member' AND `user_id` IS NOT NULL AND `is_example` = 0",
+    "SELECT r.`value_tokens` FROM `org_role_assignments` a " +
+      "LEFT JOIN `org_roles` r ON r.`id` = a.`org_role_id` " +
+      "WHERE a.`active_holder_key` IS NOT NULL AND a.`holder_kind` = 'member' AND a.`user_id` IS NOT NULL AND a.`is_example` = 0",
   );
-  const seatCount = Number(seats[0]?.n ?? 0);
+  const seatCount = seats.length;
   const cycleRules = await rulesFor(pool, "role.cycle");
+  // The same split `runSettlement` makes (Rye, 2026-11-01): a seat is priced
+  // with the flat amounts blank unless one is retiring, and a flat amount is
+  // previewed once for each member whose card dues for this cycle are paid.
+  const retiring = await retiringFlatRoleRuleIds(pool, villageId());
+  const seatRules = cycleRules.map((r) => (r.amount === null || retiring.has(r.id) ? r : { ...r, amount: null }));
+  const dividendRules = cycleRules.filter((r) => r.amount !== null && !retiring.has(r.id));
+  const window = cycleWindow(at);
+  const duesPayers = dividendRules.length
+    ? (await withoutFormerMembers(pool, (await cardDuesPayersBetween(pool, window.startsAt, window.endsAt)).filter((p) => !isTombstone({ email: p.email })))).length
+    : 0;
 
   return {
     cycleKey: key,
@@ -3878,10 +4158,14 @@ export async function mintView(pool: Pool): Promise<MintView> {
       const ceiling = Number(r.ceiling ?? 0);
       const decimals = decimalsFor(slug);
       const name = String(r.token_name ?? slug);
-      const decided = ceilingOutcome({ tokenSlug: slug, amount, ceiling }, 0, decimals, name);
+      const trigger = String(r.trigger);
+      // Work pays its rule's own amount in full: no ceiling binds it (`ceilingBinds`).
+      const decided = ceilingBinds(trigger)
+        ? ceilingOutcome({ tokenSlug: slug, amount, ceiling }, 0, decimals, name)
+        : { units: amount === null ? 0 : unitsAtScale(amount, decimals), refusal: null };
       return {
       id: String(r.id),
-      trigger: String(r.trigger),
+      trigger,
       token: slug,
       tokenName: name,
       amount,
@@ -3934,17 +4218,12 @@ export async function mintView(pool: Pool): Promise<MintView> {
     // seats is three postings of 1 at 0 decimals and never `round(1.5)`.
     settlementPreview: {
       seats: seatCount,
-      mints: cycleRules
-        .filter((r) => r.amount !== null && r.amount > 0 && !ruleCannotPay(r.tokenSlug))
-        .map((r) => {
-          const decimals = decimalsFor(r.tokenSlug);
-          return {
-            token: r.tokenSlug,
-            units: ceilingOutcome(r, 0, decimals).units * seatCount,
-            decimals,
-          };
-        })
-        .filter((m) => m.units > 0),
+      duesPayers,
+      // Seat by seat through `quoteWorkPay`, the function the settlement pays
+      // from, so a role with its own list is previewed at its own amounts and
+      // never also at the flat ones. Summed per token in minor units, which is
+      // what the engine posts: one whole number of units per seat.
+      mints: previewSeatMints(seatRules, seats.map((s) => readValueTokens(s.value_tokens)), dividendRules, duesPayers),
     },
   };
 }

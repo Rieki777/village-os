@@ -21,6 +21,7 @@ import { parseSeatSettings } from "@shared/seatSettings";
 import { proposeTermsHref } from "@shared/seatTermsOffer";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import SeatTermsDrawer from "./SeatTermsDrawer";
+import WorkPayBlock from "@/components/WorkPayBlock";
 
 function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
   const presets = useVillagePresets();
@@ -83,8 +84,20 @@ export function applyHrefFor(seat: Record<string, any> | null | undefined): stri
   return id ? proposeTermsHref(id) : null;
 }
 
-/** The `settings` slot for a live seat card, or undefined when this reader may not read terms. */
+/**
+ * The `settings` slot for a live seat card, or undefined when this reader may not read terms.
+ *
+ * WHAT THE ROLE PAYS LEADS IT (0265, Rye 2026-10-21): the value, every token the
+ * role pays each seat every cycle, and the cash its terms state, or "Inquire for
+ * payment details". `pay` rides the same tier as `termsOffer`
+ * (server/lib/seatProjection.ts), so a reader who may not read terms sees neither.
+ */
 export function termsSlotFor(seat: Record<string, any> | null | undefined): ReactNode | undefined {
   if (!seat || typeof seat !== "object" || !("termsOffer" in seat)) return undefined;
-  return <SeatTermsSlot seat={seat} />;
+  return (
+    <div className="space-y-2">
+      {"pay" in seat && <WorkPayBlock pay={seat.pay} variant="full" />}
+      <SeatTermsSlot seat={seat} />
+    </div>
+  );
 }

@@ -18,7 +18,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import mysql from "mysql2/promise";
 import { claimsRepo, questsRepo, type ClaimsRepo, type QuestRecord, type QuestsRepo } from "./quests";
 import { usersRepo, type UsersRepo } from "./users";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 
 const configured = testDbConfigured();
 
@@ -66,7 +66,7 @@ const storied = (id: string): QuestRecord =>
 describe.skipIf(!configured)("questsRepo story layer (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     quests = questsRepo(pool);
     claims = claimsRepo(pool);
     users = usersRepo(pool);
@@ -238,7 +238,7 @@ describe.skipIf(!configured)("questsRepo story layer (MySQL)", () => {
 describe.skipIf(!configured)("life signs aggregates (MySQL)", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 });
+    pool = testPool(db, { connectionLimit: 4 });
     quests = questsRepo(pool);
     claims = claimsRepo(pool);
     users = usersRepo(pool);

@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { formatTokenAmount } from "@/lib/tokenAmount";
+import { useTokenNameMap } from "@/hooks/useTokenNameFor";
 
 /** One row of `GET /api/admin/quest-claims/owed`. */
 export interface OwedPostingView {
@@ -51,19 +52,22 @@ function reasonWords(reason: string | null): string {
   }
 }
 
-function amountWords(row: OwedPostingView): string {
+/** The amount in the village's own word for the token (R084); the old words only while the config is loading. */
+function amountWords(row: OwedPostingView, names: Record<string, string>): string {
   const amount = formatTokenAmount(row.units, row.decimals);
+  const named = String(names[row.tokenSlug] ?? "").trim();
+  if (named) return `${amount} ${named}`;
   if (row.tokenSlug === "stay-credit") return `${amount} ${amount === "1" ? "stay credit" : "stay credits"}`;
   return `${amount} ${row.tokenSlug.replace(/-/g, " ")}`;
 }
 
-function rowWords(row: OwedPostingView): string {
+function rowWords(row: OwedPostingView, names: Record<string, string>): string {
   if (row.state === "refused") {
-    return `${amountWords(row)}: refused for good, because ${reasonWords(row.refusalReason)}${row.lastError ? ` (${row.lastError})` : ""}.`;
+    return `${amountWords(row, names)}: refused for good, because ${reasonWords(row.refusalReason)}${row.lastError ? ` (${row.lastError})` : ""}.`;
   }
   return row.refusalReason
-    ? `${amountWords(row)}: still owed, because ${reasonWords(row.refusalReason)}.`
-    : `${amountWords(row)}: still owed.`;
+    ? `${amountWords(row, names)}: still owed, because ${reasonWords(row.refusalReason)}.`
+    : `${amountWords(row, names)}: still owed.`;
 }
 
 const STATES: ReadonlyArray<OwedPostingView["state"]> = ["owed", "posted", "refused"];
@@ -125,6 +129,7 @@ export function useOwedPostings(headers: () => Record<string, string>) {
 export default function OwedPostings({ headers }: { headers: () => Record<string, string> }) {
   const { rows, refused, error, load } = useOwedPostings(headers);
   const [busy, setBusy] = useState<string | null>(null);
+  const names = useTokenNameMap();
   const card = "bg-card border border-border rounded-xl p-5";
 
   useEffect(() => {
@@ -200,7 +205,7 @@ export default function OwedPostings({ headers }: { headers: () => Record<string
           {g.holder && <p className="text-sm text-foreground mt-1">{g.holder}</p>}
           <ul className="text-sm text-muted-foreground mt-2 space-y-1">
             {g.items.map((row) => (
-              <li key={row.key}>{rowWords(row)}</li>
+              <li key={row.key}>{rowWords(row, names)}</li>
             ))}
           </ul>
           {g.items.some((row) => row.state === "owed") && (

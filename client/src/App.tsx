@@ -1,17 +1,19 @@
+import { documentTitle } from "@shared/pageTitles";
 import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { MotionConfig } from "framer-motion";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { LazyMotion, MotionConfig } from "framer-motion";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
-import { brochurePage, useBrochurePages } from "./lib/brochure";
+import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
+import { useGameConfig } from "./lib/gameApi";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -57,132 +59,54 @@ function LandingRoute() {
   return brochure ? <Home /> : <VillageWelcome />;
 }
 
+
 /**
- * The page's name, in the browser and to a screen reader.
- *
- * Every one of the twenty-six routes served the single <title> baked into
- * index.html, so this whole application announced itself as one page. Three
- * separate costs: a screen reader reads the title on navigation, so every
- * move sounded identical and gave no confirmation anything had happened; a
- * member with several tabs open could not tell them apart; and the title was
- * a hardcoded village name in a platform that is supposed to be forkable.
- *
- * The village's own name comes from the live config, so a fork's title is
- * the fork's name with no code change. The page part is a plain map — a
- * route that gains a page adds a line, and one that does not falls back to
- * the village name alone rather than to a lie.
+ * The old spelling of /role-applications/:id (Rye, 2026-10-21: members say role,
+ * never seat). Emails and notices already sent carry it, so it stays mounted and
+ * moves the visitor to the new address, keeping the query and the hash.
  */
-const PAGE_TITLES: Record<string, string> = {
-  "/": "", // the home page is the village itself; no prefix
-  "/journey-to-launch": "Journey to launch",
-  "/project-history": "Command Centre",
-  "/feedback": "Feedback",
-  "/network": "Village network",
-  "/contribute": "Contribute",
-  "/seasonal-festivals": "Seasonal festivals",
-  "/investor": "Investor journey",
-  "/steward": "Steward journey",
-  "/resident": "Resident journey",
-  "/prosperity": "Prosperity journey",
-  "/love-letter": "Love letter",
-  "/request-membership": "Ask to join",
-  "/circles": "Circles",
-  "/quests": "Quests",
-  "/propose-quest": "Propose a quest",
-  "/roles": "Roles",
-  "/forum": "Forum",
-  "/messages": "Messages",
-  "/introductions": "Introductions",
-  "/feed": "Village feed",
-  "/map": "Village map",
-  "/map/circles": "Circles and roles",
-  "/events": "Village Calendar",
-  "/first-walk": "Your First Walk",
-  "/stay": "Stays",
-  "/library": "Material library",
-  "/badges": "Badges & skills",
-  "/powers": "What this village looks after",
-  "/review": "Review",
-  // Keys here are matched by longest PREFIX against the live location, so a
-  // key with no route behind it can never match and is dead weight that
-  // reads like a promise. /health, /exchange and /profiles were all three:
-  // the health dashboard is /village-health, the exchange lives inside the
-  // wallet, and the member directory is /profile.
-  "/village-health": "Village health",
-  // Both spellings resolve to the same page. /tokens is what the nav links to
-  // and what a member sees; /wallet stays mounted because Stripe return URLs
-  // and order notifications already carry it (server/index.ts), and a member's
-  // own balances now also live in a Wallet section on their profile.
-  "/tokens": "The Exchange",
-  "/wallet": "The Exchange",
-  "/profile": "My profile",
-  "/login": "Sign in",
-  "/set-password": "Choose a password",
-  "/forgot-password": "Set a new password",
-  "/game-mechanics": "Game Mechanics",
-  "/exit-policy": "Leaving well",
-  "/tools": "Tools",
-  // One line covers the shelf and every detail page: keys match by longest
-  // prefix, so /modules/stays reads as the library too.
-  "/modules": "Module Library",
-  // Longest-prefix matching makes /campaigns win over /campaign for the list
-  // page, so the pair costs two lines and no route can fall through them.
-  "/campaigns": "Our raisings",
-  "/campaign": "Crowdpool",
-  // One line covers the shelf and every place, by the same longest-prefix
-  // rule the module library uses above.
-  "/places": "Places, photographed",
-  // Its own address rather than /places/photos, because a place key called
-  // "photos" would shadow it and because this is a different object from a
-  // place: the whole village's record on one page.
-  "/photographs": "Every photograph",
-  "/admin": "Village settings",
-  "/journal": "Journal",
-  // One line covers the list and every room, by the longest-prefix rule.
-  "/sessions": "Live sessions",
-};
+function SeatApplicationsAlias() {
+  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    const to = location.replace(/^\/seat-applications\//, "/role-applications/");
+    setLocation(to + window.location.search + window.location.hash, { replace: true });
+  }, [location, setLocation]);
+  return null;
+}
 
 function PageTitle() {
   const [location] = useLocation();
-  const [village, setVillage] = useState<string>("");
+  // The one cached config every page reads, so a save in Admin that calls
+  // refreshGameConfig() renames the tab too, with no reload (audit item 24).
+  const config = useGameConfig();
+  const village = config?.project?.name ?? "";
+  const commitment = config?.project?.commitmentName ?? "";
+  const favicon = String(config?.images?.favicon ?? "").trim();
+  // Each story page's own switch rides the same config (Admin, Pages).
+  const switches = useMemo(() => (config ? { brochurePages: config.brochurePages, brochureHidden: config.brochureHidden } : null), [config]);
 
+  // The tab ICON is identity too. index.html ships a neutral platform favicon
+  // (a static file cannot know which village it serves); this swaps in the
+  // village's own the moment config arrives, same pattern as the title below.
   useEffect(() => {
-    let alive = true;
-    fetch("/api/game/config")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!alive) return;
-        setVillage(d?.project?.name ?? "");
-        // The tab ICON is identity too. index.html ships a neutral platform
-        // favicon (a static file cannot know which village it serves); this
-        // swaps in the village's own the moment config arrives, same
-        // pattern as the title below.
-        const favicon = String(d?.images?.favicon ?? "").trim();
-        if (favicon) {
-          for (const rel of ["icon", "apple-touch-icon"]) {
-            let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
-            if (!link) {
-              link = document.createElement("link");
-              link.rel = rel;
-              document.head.appendChild(link);
-            }
-            link.href = favicon;
-          }
-        }
-      })
-      .catch(() => { /* keep whatever index.html shipped */ });
-    return () => { alive = false; };
-  }, []);
+    if (!favicon) return;
+    for (const rel of ["icon", "apple-touch-icon"]) {
+      let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.href = favicon;
+    }
+  }, [favicon]);
 
   useEffect(() => {
     if (!village) return;
-    // Longest matching prefix, so /forum/123 still reads as the forum.
-    const match = Object.keys(PAGE_TITLES)
-      .filter((p) => p === "/" ? location === "/" : location.startsWith(p))
-      .sort((a, b) => b.length - a.length)[0];
-    const page = match ? PAGE_TITLES[match] : "";
-    document.title = page ? `${page} · ${village}` : village;
-  }, [location, village]);
+    // A story page this village does not serve answers not found, so its tab
+    // names the village alone, the same as its share card (server/lib/pageMeta.ts).
+    document.title = documentTitle(storyPageShown(switches, location) ? location : "/", village, { commitment });
+  }, [location, village, commitment, switches]);
 
   return null;
 }
@@ -208,8 +132,19 @@ function PageTitle() {
  * New page? Add it to the lazy list. Only add to the eager set if it renders
  * on first paint for a signed-out visitor.
  */
-import Home from "./pages/Home";
+/*
+ * Home is the brochure landing page, and it only renders once the brochure
+ * switch has loaded (LandingRoute above), so it never paints before an async
+ * step anyway. It is lazy to keep its ~17 KB out of the main chunk, and the
+ * fetch starts at boot on "/" so it runs in parallel with that config request.
+ */
+const loadHome = () => import("./pages/Home");
+if (typeof window !== "undefined" && window.location.pathname === "/") void loadHome();
+const Home = lazy(loadHome);
 import Login from "./pages/Login";
+
+// The animation engine, after the first page: see lib/motionFeatures.ts.
+const loadMotionFeatures = () => import("./lib/motionFeatures").then((mod) => mod.default);
 
 const lazyPage = (loader: () => Promise<{ default: React.ComponentType<any> }>) => lazy(loader);
 const VillageWelcome = lazyPage(() => import("./pages/VillageWelcome"));
@@ -220,6 +155,8 @@ const ResidentJourney = brochurePage(() => import("./pages/ResidentJourney"));
 const ProsperityJourney = brochurePage(() => import("./pages/ProsperityJourney"));
 const LoveLetter = brochurePage(() => import("./pages/LoveLetter"));
 const Circles = lazyPage(() => import("./pages/Circles"));
+const OAuthAuthorize = lazyPage(() => import("./pages/OAuthAuthorize"));
+const CircleCardPage = lazyPage(() => import("./pages/CircleCardPage"));
 const Places = lazyPage(() => import("./pages/Places"));
 const PlacePhotos = lazyPage(() => import("./pages/PlacePhotos"));
 const Photographs = lazyPage(() => import("./pages/Photographs"));
@@ -237,10 +174,12 @@ const Team = brochurePage(() => import("./pages/Team"));
 const Admin = lazyPage(() => import("./pages/Admin"));
 const Profile = lazyPage(() => import("./pages/Profile"));
 const Characters = lazyPage(() => import("./pages/Characters"));
+const GeneKeys = lazyPage(() => import("./pages/GeneKeys"));
 const Mint = lazyPage(() => import("./pages/Mint"));
 const PublicProfile = lazyPage(() => import("./pages/PublicProfile"));
 const Register = lazyPage(() => import("./pages/Register"));
 const SetPassword = lazyPage(() => import("./pages/SetPassword"));
+const VerifyEmail = lazyPage(() => import("./pages/VerifyEmail"));
 // Three pages an email links to, from ONE module: the bundler keeps one chunk.
 const EmailPreferences = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailPreferences })));
 const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailUnsubscribe })));
@@ -250,6 +189,7 @@ const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
+const SetupGame = lazyPage(() => import("./pages/SetupGame"));
 const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -264,6 +204,10 @@ const Decisions = lazyPage(() => import("./pages/Decisions"));
 const Decision = lazyPage(() => import("./pages/Decision"));
 const Propose = lazyPage(() => import("./pages/Propose"));
 const SeatApplication = lazyPage(() => import("./pages/SeatApplication"));
+// One chunk for the three role proposal routes (role proposals PR C).
+const RoleProposal = lazyPage(() => import("./pages/RoleProposal"));
+const NewRoleProposal = lazyPage(() => import("./pages/RoleProposal").then((m) => ({ default: m.NewRoleProposal })));
+const SharedRoleProposal = lazyPage(() => import("./pages/RoleProposal").then((m) => ({ default: m.SharedRoleProposal })));
 const SeasonPlans = lazyPage(() => import("./pages/SeasonPlans"));
 const Aligned = lazyPage(() => import("./pages/Aligned"));
 const MySeason = lazyPage(() => import("./pages/MySeason"));
@@ -279,12 +223,16 @@ const Forum = lazyPage(() => import("./pages/Forum"));
 const Messages = lazyPage(() => import("./pages/Messages"));
 const Introductions = lazyPage(() => import("./pages/Introductions"));
 const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
+const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
+const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
+const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
 const Review = lazyPage(() => import("./pages/Review"));
+const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
 const VillageHealth = lazyPage(() => import("./pages/VillageHealth"));
@@ -296,6 +244,7 @@ const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
 const Sessions = lazyPage(() => import("./pages/Sessions"));
 const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
+const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
 
 /**
  * Shown while a page chunk arrives. Deliberately quiet: on a slow link this
@@ -326,6 +275,7 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
+      <Route path="/setup-game" component={SetupGame} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />
@@ -338,6 +288,8 @@ function Router() {
       <Route path="/prosperity" component={ProsperityJourney} />
       <Route path="/love-letter" component={LoveLetter} />
       <Route path="/circles" component={Circles} />
+      {/* One circle's card, its home page (server/routes/circleCard.ts). */}
+      <Route path="/circles/:id" component={CircleCardPage} />
       <Route path="/quests" component={Quests} />
       <Route path="/quests/:id" component={QuestDetail} />
       <Route path="/tools" component={ToolsHub} />
@@ -377,6 +329,8 @@ function Router() {
       <Route path="/powers" component={Powers} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
+      {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
+      <Route path="/cash-payouts" component={CashPayouts} />
       <Route path="/library" component={Library} />
       {/* /village-health, not /health: the server owns /health as the ops probe */}
       <Route path="/village-health" component={VillageHealth} />
@@ -403,14 +357,22 @@ function Router() {
       {/* The class select. Under /profile because a party is part of who you
           are here, not a separate account setting. */}
       <Route path="/profile/characters" component={Characters} />
+      <Route path="/profile/gene-keys" component={GeneKeys} />
       {/* AFTER /profile/characters, and that order is the whole point: wouter
           takes the first match, so a :handle route above it would turn the
           class select into a lookup for a member called "characters". */}
       <Route path="/profile/:handle" component={PublicProfile} />
       <Route path="/login" component={Login} />
+      {/* A connector's sign-in (addendum v6, B4): the member allows or refuses. */}
+      <Route path="/oauth/authorize" component={OAuthAuthorize} />
       <Route path="/register" component={Register} />
       <Route path="/request-membership" component={RequestMembership} />
+      {/* Confirm before :token, so the email's link is never read as a link made for one person. */}
+      <Route path="/propose-a-role/confirm" component={ConfirmProposal} />
+      <Route path="/propose-a-role/:token" component={ProposeARole} />
+      <Route path="/propose-a-role" component={ProposeARole} />
       <Route path="/set-password" component={SetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/email/preferences" component={EmailPreferences} />
       <Route path="/email/unsubscribe" component={EmailUnsubscribe} />
       <Route path="/email/a" component={EmailAction} />
@@ -430,8 +392,14 @@ function Router() {
       <Route path="/decisions" component={Decisions} />
       <Route path="/decisions/:id" component={Decision} />
       <Route path="/propose" component={Propose} />
-      {/* One application to hold seats, on terms. Members only, behind terms.read. */}
-      <Route path="/seat-applications/:id" component={SeatApplication} />
+      {/* One application to hold roles, on terms. Members only, behind terms.read. */}
+      <Route path="/role-applications/:id" component={SeatApplication} />
+      <Route path="/open-proposals/:id" component={OpenProposal} />
+      <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
+      {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
+      <Route path="/role-proposals/new" component={NewRoleProposal} />
+      <Route path="/role-proposals/shared/:token" component={SharedRoleProposal} />
+      <Route path="/role-proposals/:id" component={RoleProposal} />
       {/* Your season: your own plan, then the village's page of everyone's, by name. */}
       <Route path="/season-plans/mine" component={MySeason} />
       <Route path="/season-plans" component={SeasonPlans} />
@@ -444,6 +412,7 @@ function Router() {
           ModuleGate("sessions") and sign-in; members only, no guests. The
           list is declared before the room for the reason /decisions gives. */}
       <Route path="/sessions" component={Sessions} />
+      <Route path="/sessions/season" component={SessionSeason} />
       <Route path="/sessions/:id" component={SessionRoom} />
       <Route path="/work-with-us" component={WorkWithUs} />
       <Route path="/404" component={NotFound} />
@@ -476,6 +445,7 @@ function App() {
        * run `repeat: Infinity` and never stopped for anyone.
        */}
       <MotionConfig reducedMotion="user">
+      <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
         <ModuleProvider>
           <TooltipProvider>
@@ -491,6 +461,7 @@ function App() {
 
         </ModuleProvider>
         </AuthProvider>
+      </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
   );

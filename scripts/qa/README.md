@@ -24,6 +24,7 @@ report, and you would believe it.
 | script | what it finds | needs a browser |
 |---|---|---|
 | `sweep.mjs` | horizontal overflow, broken images, page errors, failing API calls | yes |
+| `admin-overflow.mjs` | any admin tab whose page scrolls sideways at 393 and 320px; `--long-words` retries with German-length labels. Needs an admin `QA_TOKEN`; works against a local build | yes |
 | `contrast.mjs` | WCAG contrast from rendered pixels | yes |
 | `selftint.mjs` | an element that sets a tint and writes coloured text on itself | no |
 | `routes.mjs` | the route list, derived from `client/src/App.tsx` | no |

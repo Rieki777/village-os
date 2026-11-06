@@ -17,6 +17,7 @@ import {
   cleanScopes,
   echoHash,
   hashToken,
+  holderStands,
   isAgentBearer,
   mintConfirmToken,
   mintToken,
@@ -115,12 +116,19 @@ describe("the token value", () => {
 
 describe("scopes", () => {
   it("is a closed list", () => {
-    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft"]);
+    expect([...AGENT_SCOPES]).toEqual(["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable", "moon.write", "moon.review"]);
   });
   it("refuses unknown scopes and dedupes", () => {
     expect(cleanScopes(["calendar.read", "calendar.read"], { intentsAllowed: false })).toEqual({ ok: true, scopes: ["calendar.read"] });
     expect(cleanScopes(["admin.everything"], { intentsAllowed: false }).ok).toBe(false);
     expect(cleanScopes([], { intentsAllowed: false }).ok).toBe(false);
+    // The admin scope is an admin's to give (addendum v6, B6).
+    expect(cleanScopes(["admin"], { intentsAllowed: false }).ok).toBe(false);
+    expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: false }).ok).toBe(false);
+    expect(cleanScopes(["admin"], { intentsAllowed: false, adminAllowed: true })).toEqual({ ok: true, scopes: ["admin"] });
+    // sera.undoable is Sera's agent account's alone (addendum v6, B7).
+    expect(cleanScopes(["sera.undoable"], { intentsAllowed: false, adminAllowed: true }).ok).toBe(false);
+    expect(cleanScopes(["sera.undoable"], { intentsAllowed: false, seraAllowed: true })).toEqual({ ok: true, scopes: ["sera.undoable"] });
   });
   it("holds intents.write behind the flag", () => {
     expect(cleanScopes(["intents.write"], { intentsAllowed: false }).ok).toBe(false);
@@ -179,5 +187,21 @@ describe("the confirm token (harm metric 2, pure half)", () => {
     decoded.exp = Date.now() + 10 * 60 * 60 * 1000;
     const forged = `${Buffer.from(JSON.stringify(decoded)).toString("base64url")}.${sig}`;
     expect(verifyConfirmToken(secret, forged, claims)).toEqual({ ok: false, reason: "bad_signature" });
+  });
+});
+
+describe("the holder: an erased member's token is dead", () => {
+  // The erasure keeps the member row as a tombstone (server/lib/erasure.ts),
+  // so "the row exists" is not the test. The resolver mints a fresh session
+  // from whatever row it finds, which is how a token outlived its holder.
+  it("stands for a member the village still holds", () => {
+    expect(holderStands({ email: "ana@example.test" })).toBe(true);
+  });
+
+  it("falls when the row is gone or the member was erased", () => {
+    expect(holderStands(null)).toBe(false);
+    expect(holderStands(undefined)).toBe(false);
+    expect(holderStands({ email: "deleted-u-1@anonymized.invalid" })).toBe(false);
+    expect(holderStands({ email: "Deleted-U-1@Anonymized.Invalid" }), "case must not reopen it").toBe(false);
   });
 });

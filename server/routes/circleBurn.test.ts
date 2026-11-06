@@ -23,7 +23,7 @@
  */
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { loadTokenRegistry } from "../lib/ledger";
 import { loadVariables } from "../lib/variables";
 import { upsertBudget } from "../lib/resources";
@@ -65,7 +65,7 @@ async function call(query: Record<string, string>) {
 describe.skipIf(!configured)("GET /api/resources/burn", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 scratch-schema harness pool, the ledger.test.ts shape
     await loadVariables(pool);
     await loadTokenRegistry(pool);
     const handlers = new Map<string, Handler>();

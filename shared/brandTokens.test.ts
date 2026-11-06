@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atContrast, CHARACTER_CARDS, contrastRatio, deriveTheme, hexToHsl, hslToHex, HOVER_STEP, luminance } from "./brandTokens";
+import { atContrast, CHARACTER_CARDS, contrastRatio, deriveTheme, hexToHsl, hslToHex, HOVER_STEP, luminance, MUTED_ON_TINT } from "./brandTokens";
 
 describe("the token layer", () => {
   it("emits NOTHING without a seed — the neutral fork", () => {
@@ -100,6 +100,33 @@ describe("the token layer", () => {
           const r = hexToHsl(rest)!, h = hexToHsl(hover)!;
           if (r.s > 0.3) expect(Math.abs(r.h - h.h), `hue drifted at ${where}`).toBeLessThan(3);
           expect(t.contrast.pairs.find((p) => p.name === "white on brand hover")?.verdict, where).toBe("pass");
+        }
+      }
+    });
+
+    it("muted text holds on every light tone the palette emits, with room for a page's wash", () => {
+      /*
+       * Muted ink was derived against `--muted` alone. The live site put it on
+       * the mist-light band and on light washes of the background, and 12 public
+       * routes measured 4.08 to 4.49:1 (2026-10-20). Now it is derived against the
+       * darker ground at MUTED_ON_TINT, so mist-light gets that headroom and the
+       * lighter tones get more. The last line is a wash a page lays over the
+       * background: 10% of the soft brand tone, the shade of the failures seen.
+       */
+      const seeds = ["#3f4a44", "#39ff14", "#ffe4ec", "#0a0a0a", "#fdfdfd", "#157f7d", "#1e3a8a", "#ff6b00", "#7b2d8b", "#1d4e3e"];
+      const mix = (a: string, b: string, t: number) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * t + parseInt(b.slice(i, i + 2), 16) * (1 - t)).toString(16).padStart(2, "0")).join("");
+      for (const card of CHARACTER_CARDS) {
+        for (const seed of seeds) {
+          const t = deriveTheme(seed, card.id)!;
+          const ink = t.vars["--muted-foreground"];
+          const where = `${card.id}/${seed}`;
+          expect(contrastRatio(ink, t.vars["--tone-mist-light"]), `on mist-light, ${where}`).toBeGreaterThanOrEqual(MUTED_ON_TINT);
+          for (const ground of ["--muted", "--background", "--card", "--tone-cream"]) {
+            expect(contrastRatio(ink, t.vars[ground]), `on ${ground}, ${where}`).toBeGreaterThanOrEqual(4.5);
+          }
+          const wash = mix(t.vars["--tone-brand-soft"], t.vars["--background"], 0.1);
+          expect(contrastRatio(ink, wash), `on a 10% soft-brand wash ${wash}, ${where}`).toBeGreaterThanOrEqual(4.5);
+          expect(t.contrast.pairs.find((p) => p.name === "muted text on mist-light")?.verdict, where).toBe("pass");
         }
       }
     });

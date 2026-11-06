@@ -23,20 +23,31 @@ const DOORS = [
   "POST /api/sessions",
   "GET /api/sessions/:id",
   "PATCH /api/sessions/:id",
+  "DELETE /api/sessions/:id",
   "POST /api/sessions/:id/join",
   "POST /api/sessions/:id/here",
   "POST /api/sessions/:id/arrival",
   "POST /api/sessions/:id/items",
   "PATCH /api/sessions/:id/items/:itemId",
+  // The room votes its agenda (0290): one vote per person per item, and whoever runs the room sets the order.
+  "POST /api/sessions/:id/items/:itemId/vote",
+  "POST /api/sessions/:id/agenda/order",
   "POST /api/sessions/:id/entries",
   "PATCH /api/sessions/:id/entries/:entryId",
   "DELETE /api/sessions/:id/entries/:entryId",
+  // A proposal's check (0297, shared/sessionCheck.ts): its facilitator or its proposer.
+  "POST /api/sessions/:id/entries/:entryId/check",
   "POST /api/sessions/:id/respond",
   "POST /api/sessions/:id/act",
   "POST /api/sessions/:id/hosts",
   "POST /api/sessions/:id/close",
+  // A round that outlived its call (0281): the sleeper's answer, and the facilitator's decision, from the record.
+  "POST /api/sessions/:id/night",
+  "POST /api/sessions/:id/entries/:entryId/decide",
   "POST /api/sessions/:id/tool-feedback",
   "GET /api/sessions/:id/minutes.md",
+  // A facilitator fills in for a member (0288): the person, or the facilitator, takes it back.
+  "POST /api/sessions/:id/on-behalf/:fillId/undo",
 ];
 
 function collect(): { app: any; handlers: Map<string, Handler>; mounts: string[]; gates: ((req: any, res: any, next: () => void) => unknown)[] } {
@@ -299,7 +310,7 @@ describe("who may reach a live session", () => {
     const { app, handlers } = collect();
     const { pool, queries } = stubPool();
     register(app, deps(pool, () => null));
-    const out = await call(handlers, key, { params: { id: "12", itemId: "3", entryId: "4" }, body: { title: "x", text: "y" } });
+    const out = await call(handlers, key, { params: { id: "12", itemId: "3", entryId: "4", fillId: "5" }, body: { title: "x", text: "y" } });
     expect(out.status).toBe(401);
     expect(out.body).toEqual({ error: "auth_required" });
     expect(queries, "a refused request must not reach the pool").toEqual([]);
@@ -308,6 +319,7 @@ describe("who may reach a live session", () => {
   it.each([
     ["POST /api/sessions", {}],
     ["POST /api/sessions/:id/join", { params: { id: "12" } }],
+    ["DELETE /api/sessions/:id", { params: { id: "12" } }],
     ["POST /api/sessions/:id/here", { params: { id: "12" } }],
     ["POST /api/sessions/:id/items", { params: { id: "12" } }],
     ["POST /api/sessions/:id/entries", { params: { id: "12" } }],
@@ -474,7 +486,7 @@ describe("the room's view", () => {
       [1, 8, "more sleep", true],
       [2, 4, "a quiet morning", true],
     ]);
-    expect(heard.body.responses).toEqual([{ target: "word", userId: 2, value: "grateful", text: null }]);
+    expect(heard.body.responses).toEqual([{ target: "word", userId: 2, value: "grateful", text: null, answerBy: null }]);
 
     // The founder is an admin and is not in this room.
     const outside = collect();

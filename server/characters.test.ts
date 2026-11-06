@@ -20,7 +20,7 @@ import {
 } from "./lib/characters";
 import { seedEconomy } from "./lib/economySeed";
 import { loadTokenRegistry, memberAccount } from "./lib/ledger";
-import { provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
+import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -51,7 +51,7 @@ async function primaryOf(userId: string): Promise<string | null> {
 describe.skipIf(!configured)("the party", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
-    pool = mysql.createPool({ uri: db.url, timezone: "Z", connectionLimit: 10 });
+    pool = testPool(db, { connectionLimit: 10 });
     await loadTokenRegistry(pool);
     await seedEconomy(pool, VILLAGE);
   });

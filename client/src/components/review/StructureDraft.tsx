@@ -11,11 +11,15 @@
  * view says what the draft holds, runs its preview ("Nothing is live yet. 36
  * changes, none blocked."), and puts the next step on the page as buttons:
  *
- *   Publish to the live chart   only for a viewer the publish route admits
- *                               (`mayPublish`, the same `isAdmin` it asks),
+ *   Publish to the live chart   only for a viewer a publish route admits
+ *                               (`mayPublish`), through the door the read
+ *                               names (`publishDoor`: a holder of
+ *                               `org.decide` publishes by power, an admin
+ *                               before launch through the admin panel's),
  *                               behind a confirm that names what goes live;
  *   Withdraw the draft          the review queue's withdraw, which sends the
- *                               proposals back to the queue.
+ *                               proposals back to the queue, for whoever
+ *                               keeps the queue (`mayModerate`).
  *
  * A viewer who may not publish is told who can. Once published it says so,
  * with the way to the living map and the seats, and moves on to step four:
@@ -26,6 +30,7 @@ import { Link } from "wouter";
 import StructureMap, { StructureMapList } from "@/components/review/StructureMap";
 import StructureSteps from "@/components/review/StructureSteps";
 import CarryAcross, { carryDone, carrySummary, type CarryAnswer } from "@/components/review/CarryAcross";
+import { RoleFieldChanges } from "@/components/review/RoleFieldChanges";
 import { structureMapModel, type MapView } from "@/lib/structureMapModel";
 import { decideStructure, type PlanSeat, type StructureDecisions, type StructurePlan } from "@shared/structurePlan";
 import { stayedBehind, type DraftCounts } from "@shared/structureDraft";
@@ -54,8 +59,8 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` :
 export function draftPhrase(c: DraftCounts): string {
   const parts = [
     c.circles ? plural(c.circles, "new circle", "new circles") : null,
-    c.seats ? plural(c.seats, "new seat", "new seats") : null,
-    c.moves ? plural(c.moves, "moved seat", "moved seats") : null,
+    c.seats ? plural(c.seats, "new role", "new roles") : null,
+    c.moves ? plural(c.moves, "moved role", "moved roles") : null,
     c.retiring ? plural(c.retiring, "retirement", "retirements") : null,
   ].filter((p): p is string => !!p);
   if (!parts.length) return plural(c.changes, "change", "changes");
@@ -74,6 +79,8 @@ export default function StructureDraft({
   waiting,
   source,
   mayPublish,
+  publishDoor = "admin",
+  mayModerate = true,
   headers,
   onChanged,
   onReviewRest,
@@ -90,6 +97,10 @@ export default function StructureDraft({
   waiting: number;
   source: string;
   mayPublish: boolean;
+  /** Which publish route admits this viewer. An older server sends none, and its only door was the admin panel's. */
+  publishDoor?: "power" | "admin";
+  /** Whether this viewer keeps the review queue, which is what withdrawing asks. An older server sends none. */
+  mayModerate?: boolean;
   headers: () => Record<string, string>;
   /** Read the batch again after a publish or a withdraw, with a sentence to show. */
   onChanged: (notice: string) => void;
@@ -125,9 +136,10 @@ export default function StructureDraft({
     setBusy("publish");
     setFailure(null);
     try {
-      const r = await send(`/api/admin/org/drafts/${encodeURIComponent(draft.id)}/publish`);
+      const id = encodeURIComponent(draft.id);
+      const r = await send(publishDoor === "power" ? `/api/org/drafts/${id}/publish-by-power` : `/api/admin/org/drafts/${id}/publish`);
       if (!r.ok) {
-        setFailure(String(r.body?.error ?? "The draft did not publish. Nothing changed."));
+        setFailure(String(r.body?.message ?? r.body?.error ?? "The draft did not publish. Nothing changed."));
         return;
       }
       setConfirming(false);
@@ -175,14 +187,14 @@ export default function StructureDraft({
       )}
       <div className="flex flex-wrap gap-2.5">
         <Link href="/map" className={primary + " inline-flex items-center"}>See the living map</Link>
-        <Link href="/roles" className={secondary + " inline-flex items-center"}>See every seat</Link>
+        <Link href="/roles" className={secondary + " inline-flex items-center"}>See every role</Link>
       </div>
     </>
   ) : confirming ? (
     <div className={`${card} p-3.5 grid gap-2.5 border-notice/60`} role="group" aria-labelledby="h-confirm" data-testid="publish-confirm">
       <p id="h-confirm" className="font-semibold">Publish this draft to the live chart?</p>
       <p className="text-sm text-muted-foreground">
-        This puts {what} on the live chart at once, as one change. People keep their seats, and nobody is unseated.
+        This puts {what} on the live chart at once, as one change. People keep their roles, and nobody is unseated.
       </p>
       <div className="flex flex-wrap gap-2.5">
         <button type="button" className={primary} disabled={busy !== null} onClick={() => void publish()}>
@@ -201,16 +213,18 @@ export default function StructureDraft({
             Publish to the live chart
           </button>
         )}
-        <button type="button" className={secondary} disabled={busy !== null} onClick={() => void withdraw()}>
-          {busy === "withdraw" ? "Withdrawing" : "Withdraw the draft"}
-        </button>
+        {mayModerate && (
+          <button type="button" className={secondary} disabled={busy !== null} onClick={() => void withdraw()}>
+            {busy === "withdraw" ? "Withdrawing" : "Withdraw the draft"}
+          </button>
+        )}
       </div>
       {mayPublish && blocked > 0 && (
         <p className="text-[13px] text-muted-foreground">Publishing waits until no line is blocked. Withdraw it to change what it holds.</p>
       )}
       {!mayPublish && (
         <p className="text-[13px] text-muted-foreground" data-testid="who-publishes">
-          Publishing changes the live chart, so an admin of this village does it. Ask an admin to open this page and publish it.
+          Publishing changes the live chart, so whoever holds the power to change the village's structure does it. Ask one of them to open this page and publish it.
         </p>
       )}
     </>
@@ -279,8 +293,8 @@ export default function StructureDraft({
       <div className={`${card} flex flex-wrap`} role="list" aria-label="What this draft holds">
         {[
           { n: counts.circles, label: "New circles", tone: "text-open" },
-          { n: counts.seats, label: "New seats", tone: "text-open" },
-          { n: counts.moves, label: "Moved seats", tone: "text-notice" },
+          { n: counts.seats, label: "New roles", tone: "text-open" },
+          { n: counts.moves, label: "Moved roles", tone: "text-notice" },
           ...(counts.retiring ? [{ n: counts.retiring, label: "Retiring", tone: "text-muted-foreground" }] : []),
         ].map((s, i) => (
           <div key={s.label} role="listitem" className={`flex-[1_1_130px] px-4 py-3.5 grid gap-0.5 ${i ? "border-l border-border" : ""}`}>
@@ -345,7 +359,7 @@ export default function StructureDraft({
                     ? "The chart once this draft publishes."
                     : view === "before"
                       ? "The chart today."
-                      : "Green is new, gold is a live seat that moves, dashed is where it leaves or what retires."
+                      : "Green is new, gold is a live role that moves, dashed is where it leaves or what retires."
                 }
                 highlight={highlight}
                 onSeat={jump}
@@ -363,7 +377,7 @@ export default function StructureDraft({
                 <div key={g.key} className="pt-1.5">
                   <div className="px-4 py-3 border-b border-border">
                     <h3 className="font-display text-[17px]">{g.name}</h3>
-                    <p className="text-xs text-muted-foreground">{[g.meta, plural(g.seats.length, "seat", "seats")].filter(Boolean).join(" · ")}</p>
+                    <p className="text-xs text-muted-foreground">{[g.meta, plural(g.seats.length, "role", "roles")].filter(Boolean).join(" · ")}</p>
                   </div>
                   {g.seats.map((s) => (
                     <div
@@ -375,19 +389,20 @@ export default function StructureDraft({
                       }`}
                     >
                       <div className="min-w-0">
-                        <p className="font-semibold">{s.name || "A seat with no name"}</p>
+                        <p className="font-semibold">{s.name || "A role with no name"}</p>
                         {s.aim && <p className="text-[13px] text-muted-foreground">{s.aim}</p>}
                         {s.match && (
                           <p className="text-[13px] text-muted-foreground">
-                            Our existing seat moves here from {circleName(s.match.circleId)}.{" "}
+                            Our existing role moves here from {circleName(s.match.circleId)}.{" "}
                             {s.match.holders ? `${plural(s.match.holders, "person keeps it", "people keep it")}.` : "Nobody holds it yet."}
                           </p>
                         )}
+                        <RoleFieldChanges payload={s.payload} match={s.match} liveSeats={draft.plan.live.seats} />
                       </div>
                       {s.match ? (
                         <span className={`${pillBase} text-notice border-current`}>Moves here</span>
                       ) : (
-                        <span className={`${pillBase} text-open border-current`}>New seat</span>
+                        <span className={`${pillBase} text-open border-current`}>New role</span>
                       )}
                     </div>
                   ))}
@@ -406,10 +421,10 @@ export default function StructureDraft({
           <ul className="grid gap-2 mt-2">
             {plan!.archived.map((a) => (
               <li key={a.key} className="text-[13px]">
-                <span className="font-semibold">{a.name || (a.kind === "circle" ? "A circle with no name" : "A seat with no name")}</span>
+                <span className="font-semibold">{a.name || (a.kind === "circle" ? "A circle with no name" : "A role with no name")}</span>
                 <span className="text-muted-foreground">
-                  {" "}· {a.kind === "circle" ? "Circle" : "Seat"}
-                  {a.liveMatch ? ` · This village still has ${a.kind === "circle" ? "a circle" : "a seat"} called ${a.liveMatch}, and it stays as it is.` : ""}
+                  {" "}· {a.kind === "circle" ? "Circle" : "Role"}
+                  {a.liveMatch ? ` · This village still has ${a.kind === "circle" ? "a circle" : "a role"} called ${a.liveMatch}, and it stays as it is.` : ""}
                 </span>
               </li>
             ))}

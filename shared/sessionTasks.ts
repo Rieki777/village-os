@@ -32,7 +32,9 @@
  * string a member reads lives in this file so the voice gate reads it. Dates
  * a member reads are written in words, never as YYYY-MM-DD.
  */
+import { looksLikePaymentDetails } from "./seatSettings";
 import { cleanDueOn, cleanLine } from "./sessions";
+import { roleWithHolders } from "./roleHolderLabel";
 
 // ── Doors ────────────────────────────────────────────────────────────────────
 
@@ -45,7 +47,13 @@ import { cleanDueOn, cleanLine } from "./sessions";
  *   PATCH /api/sessions/tasks/:entryId        TaskAnswer -> { task: TaskCard }, or 409 { error, task }
  *   POST  /api/sessions/tasks/:entryId/done   {} -> { task: TaskCard }; already done answers 200 and changes
  *                                             nothing; 403 { error } without the right; 409 { error, task } once let go
- *   GET   /api/sessions/:id/task-record       TaskRecordPayload
+ *   POST  /api/sessions/tasks/:entryId/accept { note? } -> { task: TaskCard }: the done task accepted as
+ *                                             accomplished. The server reads the version itself. 403 { error }
+ *                                             for one's own work or without the power; 409 { error, task } when
+ *                                             it is not done, or already accepted
+ *   GET   /api/sessions/:id/task-record       TaskRecordPayload: every task for whoever may read the record, and
+ *                                             for anybody else the cards they may see and no mail line; 403
+ *                                             when that is none
  *   POST  /api/sessions/:id/task-emails       {} -> TaskMailResult, or 409 { error } while the session is open
  */
 export const TASKS_API = "/api/sessions/tasks";
@@ -74,6 +82,11 @@ export const TASKS_COUNT_URL = `${TASKS_API}/count`;
 /** One task marked done from a notice: the server reads the version itself. */
 export function taskDoneUrl(entryId: number): string {
   return `${TASKS_API}/${entryId}/done`;
+}
+
+/** One done task accepted as accomplished: the server reads the version itself. */
+export function taskAcceptUrl(entryId: number): string {
+  return `${TASKS_API}/${entryId}/accept`;
 }
 
 /** The board's anchor on the profile, so an email and a notice can land on it. */
@@ -115,8 +128,15 @@ export function isTaskStatus(v: unknown): v is TaskStatus {
   return typeof v === "string" && (TASK_STATUSES as readonly string[]).includes(v);
 }
 
-/** Every answer a task can be given. Each one is also the kind of the event it writes. */
-export const TASK_EVENT_KINDS = ["done", "not_yet", "let_go", "handed_back", "taken", "reopened"] as const;
+/**
+ * Every answer a task can be given. Each one is also the kind of the event it writes.
+ *
+ * `accepted` follows a `done`: somebody who holds the power that seats people,
+ * and who neither holds the task nor sits in its role, accepts the work as
+ * accomplished (`acceptRefusal`). The task stays done. A later `reopened`
+ * takes it out of the Accomplished list, and the events keep both.
+ */
+export const TASK_EVENT_KINDS = ["done", "not_yet", "let_go", "handed_back", "taken", "reopened", "accepted"] as const;
 export type TaskEventKind = (typeof TASK_EVENT_KINDS)[number];
 
 export function isTaskEventKind(v: unknown): v is TaskEventKind {
@@ -180,7 +200,20 @@ export interface TaskCard {
   canAnswer: boolean;
   canReopen: boolean;
   canTake: boolean;
-  /** True only for people who were in the room, and admins. */
+  /** This reader may accept the done task as accomplished (`acceptRefusal`). Absent from an older server. */
+  canAccept?: boolean;
+  /**
+   * Done, not accepted yet, and nobody in the village may accept it now: every
+   * holder of the power that seats people holds the task or sits in its role.
+   * The card reads "Waiting to be accepted". Absent from an older server.
+   */
+  waitingToBeAccepted?: boolean;
+  /** YYYY-MM-DD in the village's zone, the day it was accepted as accomplished; null or absent otherwise. */
+  acceptedOn?: string | null;
+  /**
+   * True only for people who were in the room, and admins: the closed record's
+   * own reading rule. A seat holder or a circle member who was not there gets none.
+   */
   recordLink: boolean;
   version: number;
 }
@@ -190,6 +223,11 @@ export interface TaskBoardPayload {
   holding: TaskCard[];
   /** Held by a seat you sit in now. */
   seatsHold: TaskCard[];
+  /**
+   * Back with a circle you have standing in: open, nobody holds it, and you
+   * may take it. By date, undated last. Never counted into what waits on you.
+   */
+  circleBack: TaskCard[];
   /** Done or let go within the last TASK_FINISHED_DAYS days (three moons). */
   finished: TaskCard[];
   /** Finished before that. The rows load on demand (?earlier=1). */
@@ -222,6 +260,7 @@ export interface TaskAnswer {
 
 export interface TaskRecordPayload {
   tasks: TaskCard[];
+  /** The record's own line. Somebody who reads only the circle's cards gets `{ canSend: false, lastSend: null }`. */
   mail: {
     canSend: boolean;
     /** `queued` is how many emails that send put on their way; null while it is still going out. */
@@ -304,12 +343,18 @@ export interface TaskEventRow {
 }
 
 /** What the rights functions need to know about a task. */
-export type TaskSubject = Pick<TaskState, "status" | "ownerNo" | "ownerSeatId">;
+export type TaskSubject = Pick<TaskState, "status" | "ownerNo" | "ownerSeatId" | "circleId">;
 
 /**
  * Who is asking, as the server measured it. Every flag is about THIS task:
  * the source session is the one the task came from, and the open room is any
  * open session of the task's circle.
+ *
+ * STANDING in a circle is one measure on the server (`standingIn`,
+ * server/lib/circleStanding.ts, which the agenda library reads too): they were
+ * in the circle's last meeting, a closed session two or more people were in,
+ * or they sit in one of its seats now. A session somebody closed alone is never
+ * a meeting. Both flags below that name a circle read it.
  */
 export interface TaskViewer {
   /** Their number in `live_session_members`, or null when they have never touched a session. */
@@ -323,10 +368,21 @@ export interface TaskViewer {
   hostsSource: boolean;
   /**
    * They facilitate or keep notes for an open session of the same circle, and
-   * have standing there: they were in the circle's last closed session, or
-   * they sit in one of its seats now. The server measures both.
+   * have standing there: they were in the circle's last meeting, or they sit
+   * in one of its seats now. The server measures both.
    */
   hostsOpenRoomInCircle: boolean;
+  /**
+   * They have standing in the task's circle, hosting or not. False for a task
+   * with no circle, and `canSeeTask` reads it only when the task has one.
+   */
+  standsInCircle: boolean;
+  /**
+   * They hold the power that seats people (`org.seat`, `ACCEPTING_POWER`)
+   * live, counted the way the capability gate counts. Absent reads as false:
+   * a door that never measured it offers nobody the accept control.
+   */
+  acceptPower?: boolean;
 }
 
 /**
@@ -383,15 +439,23 @@ export function holdsTask(t: TaskSubject, viewer: TaskViewer): boolean {
 
 /**
  * Who may read a task card at all. The people who were in the session it came
- * from, whoever holds it now (person or seat), the facilitator or secretary
- * of an open session in the same circle, and admins.
+ * from, whoever holds it now (person or seat), every member with standing in
+ * the task's circle, the facilitator or secretary of an open session in the
+ * same circle, and admins.
  *
- * A seat holder who was not in the room reads the text, title, circle, date
- * and status, and gets no record link (`recordLink` on the card). Whether a
- * whole circle may read its task cards waits on a ruling; it changes here.
+ * THE WHOLE CIRCLE READS ITS TASK CARDS (Rye, 2026-10-21). A sociocratic
+ * circle works in the open, and a task that comes back to the circle should be
+ * visible to everyone who might take it. A task with no circle has no circle
+ * to read it, so it keeps the narrower rule.
+ *
+ * Reading a card is not reading the record. A seat holder or a circle member
+ * who was not in the room reads the text, title, circle, date, status and the
+ * latest answer, and gets no record link (`recordLink` on the card), because
+ * the closed record opens only to the people who were in it and admins.
  */
 export function canSeeTask(t: TaskSubject, viewer: TaskViewer): boolean {
-  return viewer.inSourceSession || holdsTask(t, viewer) || viewer.hostsOpenRoomInCircle || viewer.admin;
+  const circle = t.circleId != null && viewer.standsInCircle;
+  return viewer.inSourceSession || holdsTask(t, viewer) || circle || viewer.hostsOpenRoomInCircle || viewer.admin;
 }
 
 export interface TaskRights {
@@ -401,6 +465,58 @@ export interface TaskRights {
   reopen: boolean;
   /** Take a task that is back with the circle. */
   take: boolean;
+  /** Accept a done task as accomplished (`acceptRefusal`). */
+  accept: boolean;
+}
+
+// ── Accepting the work ───────────────────────────────────────────────────────
+
+/** The power whose live holders accept work as accomplished: the one that seats people. */
+export const ACCEPTING_POWER = "org.seat";
+
+/** What the accept rule reads about a task: its holders, and who marked it done. */
+export type TaskAcceptSubject = TaskSubject & Partial<Pick<TaskState, "latestKind" | "changedByNo">>;
+
+/** Done, and accepted as accomplished since. A later `reopened` makes this false again. */
+export function isAccepted(t: Pick<TaskState, "status"> & Partial<Pick<TaskState, "latestKind">>): boolean {
+  return t.status === "done" && t.latestKind === "accepted";
+}
+
+/**
+ * Why this viewer may not accept this task as accomplished, or null. The
+ * pattern `adoptRefusal` (shared/seatApplications.ts) set for applications:
+ * nobody ever accepts their own work.
+ *
+ *   notDoneYet       only a task marked done can be accepted
+ *   alreadyAccepted  it is accepted already
+ *   ownWork          they hold it in person, sit in the role that holds it,
+ *                    or marked it done themselves
+ *   notAnAcceptor    they do not hold the power that seats people live
+ *
+ * The own-work refusal comes before the power, so a holder of the power is
+ * told the real reason when the work is theirs.
+ */
+export function acceptRefusal(t: TaskAcceptSubject, viewer: TaskViewer): TaskRefusalKey | null {
+  if (t.status !== "done") return "notDoneYet";
+  if (isAccepted(t)) return "alreadyAccepted";
+  const markedIt = t.changedByNo != null && t.changedByNo > 0 && viewer.no != null && viewer.no > 0 && t.changedByNo === viewer.no;
+  if (holdsTask(t, viewer) || markedIt) return "ownWork";
+  if (viewer.acceptPower !== true) return "notAnAcceptor";
+  return null;
+}
+
+/**
+ * Whether anybody may accept this task now, from the people who hold the power
+ * that seats people (user ids, the server's own use only). `ownerUserId` is
+ * the person holding it, `markedByUserId` who marked it done, and
+ * `seatHolders` the people who sit in its role now. Each of them is left out.
+ * False reads "Waiting to be accepted" on the card.
+ */
+export function anyoneMayAccept(
+  acceptors: readonly string[],
+  task: { ownerUserId: string | null; markedByUserId: string | null; seatHolders: readonly string[] },
+): boolean {
+  return acceptors.some((u) => u !== task.ownerUserId && u !== task.markedByUserId && !task.seatHolders.includes(u));
 }
 
 /**
@@ -415,15 +531,28 @@ export interface TaskRights {
  *            mistaken tap. A let go task: the hosts and admins only, because
  *            letting go was the holder's answer to the circle.
  *   take     anyone who can see the task, once it is back with the circle.
+ *            Since the whole circle reads its cards, that is every member
+ *            with standing there: the task came back so somebody would take it.
+ *            That includes somebody who sits in one of the circle's seats and
+ *            has never joined a session: the server gives them their number
+ *            when they take it, the way it does for an answer through a seat.
+ *
+ *   accept   a done task, not accepted yet: a live holder of the power that
+ *            seats people who neither holds it nor sits in its role, and did
+ *            not mark it done (`acceptRefusal`).
+ *
+ * Standing in the circle widens seeing and taking, and nothing else. A circle
+ * member who holds nothing and hosts nothing may not answer a task somebody
+ * else holds, and may not open a finished one again.
  */
-export function taskRights(t: TaskSubject, viewer: TaskViewer): TaskRights {
+export function taskRights(t: TaskAcceptSubject, viewer: TaskViewer): TaskRights {
   const hosts = viewer.hostsSource || viewer.hostsOpenRoomInCircle;
   const any = holdsTask(t, viewer) || hosts || viewer.admin;
-  const someone = viewer.no != null && viewer.no > 0;
   return {
     answer: t.status === "open" && any,
     reopen: t.status === "done" ? any : t.status === "let_go" ? hosts || viewer.admin : false,
-    take: isBackWithCircle(t) && someone && canSeeTask(t, viewer),
+    take: isBackWithCircle(t) && canSeeTask(t, viewer),
+    accept: acceptRefusal(t, viewer) === null,
   };
 }
 
@@ -431,6 +560,7 @@ export function taskRights(t: TaskSubject, viewer: TaskViewer): TaskRights {
 export function mayGive(op: TaskOp, rights: TaskRights): boolean {
   if (op === "taken") return rights.take;
   if (op === "reopened") return rights.reopen;
+  if (op === "accepted") return rights.accept;
   return rights.answer;
 }
 
@@ -458,7 +588,7 @@ export type TaskRefusalKey = keyof typeof TASK_REFUSALS;
  * the refusal in `TASK_REFUSALS`. `today` is the village-local YYYY-MM-DD.
  * Rights are a separate question (`taskRights`); this reads only the task.
  */
-export function validateAnswer(answer: TaskAnswer, current: TaskSubject, today: string): TaskRefusalKey | null {
+export function validateAnswer(answer: TaskAnswer, current: TaskAcceptSubject, today: string): TaskRefusalKey | null {
   if (!isTaskEventKind(answer.op)) return "answerShape";
   const note = typeof answer.note === "string" ? answer.note.trim() : "";
   if (note.length > TASK_NOTE_MAX) return "noteLong";
@@ -480,6 +610,10 @@ export function validateAnswer(answer: TaskAnswer, current: TaskSubject, today: 
       return isBackWithCircle(current) ? null : "notWithCircle";
     case "reopened":
       return open ? "alreadyOpen" : null;
+    case "accepted":
+      if (current.status !== "done") return "notDoneYet";
+      if (isAccepted(current)) return "alreadyAccepted";
+      return note && looksLikePaymentDetails(note) ? "paymentDetails" : null;
   }
 }
 
@@ -494,6 +628,7 @@ export function validateAnswer(answer: TaskAnswer, current: TaskSubject, today: 
  *   handed_back  nobody holds it: back with the circle, still open.
  *   taken        the person who took it holds it.
  *   reopened     open again, and no longer done.
+ *   accepted     still done, from the same moment: the work is accepted as accomplished.
  */
 export function applyAnswer(current: TaskState, answer: TaskAnswer, actorNo: number, now: Date = new Date()): TaskState {
   const at = now.toISOString();
@@ -519,6 +654,8 @@ export function applyAnswer(current: TaskState, answer: TaskAnswer, actorNo: num
       return { ...next, status: "open", ownerNo: actorNo, ownerSeatId: null };
     case "reopened":
       return { ...next, status: "open", doneAt: null };
+    case "accepted":
+      return { ...next, status: "done" };
   }
 }
 
@@ -553,17 +690,25 @@ export interface TaskCardParts {
   seat: { id: string; name: string; holders: string[] } | null;
   latestByName: string | null;
   latestByFacilitator: boolean;
+  /** Done, not accepted, and nobody in the village may accept it now (`anyoneMayAccept`). */
+  noAcceptor?: boolean;
 }
 
 /**
  * One card for one viewer. The viewer's rights become three flags, and the
- * record link is set only for people who were in the room, and admins. A card
- * still in an open session carries no rights: it is answered in the room.
+ * record link is set only for people who were in the room, and admins, the
+ * closed record's own rule. A card still in an open session carries no
+ * rights: it is answered in the room.
  */
 export function taskCardFor(parts: TaskCardParts, viewer: TaskViewer): TaskCard {
   const s = parts.state;
-  const subject: TaskSubject = s ?? { status: "open", ownerNo: parts.live?.ownerNo ?? null, ownerSeatId: parts.live?.ownerSeatId ?? null };
-  const rights = s ? taskRights(s, viewer) : { answer: false, reopen: false, take: false };
+  const subject: TaskSubject = s ?? {
+    status: "open",
+    ownerNo: parts.live?.ownerNo ?? null,
+    ownerSeatId: parts.live?.ownerSeatId ?? null,
+    circleId: parts.live?.circleId ?? null,
+  };
+  const rights = s ? taskRights(s, viewer) : { answer: false, reopen: false, take: false, accept: false };
   const mine = subject.ownerNo != null && viewer.no != null && viewer.no > 0 && subject.ownerNo === viewer.no;
   const heldAs: TaskCard["heldAs"] = mine ? "you" : subject.ownerNo != null ? "person" : subject.ownerSeatId ? "seat" : "circle";
   return {
@@ -586,6 +731,8 @@ export function taskCardFor(parts: TaskCardParts, viewer: TaskViewer): TaskCard 
     canAnswer: rights.answer,
     canReopen: rights.reopen,
     canTake: rights.take,
+    canAccept: rights.accept,
+    waitingToBeAccepted: !!s && s.status === "done" && !isAccepted(s) && parts.noAcceptor === true,
     recordLink: viewer.inSourceSession || viewer.admin,
     version: s?.version ?? 0,
   };
@@ -864,8 +1011,10 @@ export function buildAfterNote(input: TaskNoteInput): TaskEmail {
 /** The board, the card, the sheets, the mail button and the preference. */
 export const TASK_COPY = {
   heading: "Your task board",
-  lede: "What you took on in your circles' calls, and what your seats hold.",
-  groups: { holding: "Holding", seatsHold: "Your seats hold", finished: "Finished", earlier: "Earlier" },
+  lede: "What you took on in your circles' calls, and what your roles hold.",
+  groups: { holding: "Holding", seatsHold: "Your roles hold", circleBack: "Back with your circles", finished: "Finished", earlier: "Earlier" },
+  /** Under the circles' group: nobody holds these, and anyone in the circle may take one. */
+  circleBackHint: "Nobody holds these yet. Anyone in the circle can take one.",
   empty: "Nothing in your hands right now. Tasks you take on in a live session land here.",
   loadFailed: "The task board did not load.",
   retry: "Try again",
@@ -873,11 +1022,12 @@ export const TASK_COPY = {
   fromNoCircle: (sessionTitle: string, date: string): string => `From ${sessionTitle} · ${date}`,
   heldYou: "Held by you",
   heldPerson: (name: string): string => `Held by ${name}`,
-  heldSeat: (seat: string, names: readonly string[]): string => `${seat} holds it · ${names.join(", ")}`,
-  heldSeatVacant: (seat: string): string => `${seat} holds it · nobody sits there yet`,
+  /** The role first, who sits there now by first name after it (Rye, 2026-10-30): "Held by Treasurer (Rick)". */
+  heldSeat: (seat: string, names: readonly string[]): string => `Held by ${roleWithHolders(seat, names)}`,
+  heldSeatVacant: (seat: string): string => `Held by ${seat} · nobody sits there yet`,
   heldCircle: "Back with the circle",
   /** A seat the org chart no longer names. */
-  seatUnnamed: "A seat",
+  seatUnnamed: "A role",
   due:(date: string): string => `By ${date}`,
   noDate: "No date",
   /** Normal ink. A date gone by is a question, never a red mark. */
@@ -886,7 +1036,11 @@ export const TASK_COPY = {
   duePast: (date: string): string => `The date was ${date}`,
   latest: (note: string): string => `Latest: "${note}"`,
   latestByFacilitator: (note: string): string => `Latest: "${note}" (noted by the facilitator)`,
-  statusLabels: { open: "Holding", done: "Done", let_go: "Let go", circle: "Back with the circle", newDate: "Holding, new date" },
+  statusLabels: { open: "Holding", done: "Done", let_go: "Let go", circle: "Back with the circle", newDate: "Holding, new date", accepted: "Accomplished" },
+  /** A done task, once it is accepted: the date in words. */
+  acceptedOn: (date: string): string => `Accepted on ${date}`,
+  /** A done task nobody in the village may accept now. */
+  waitingToBeAccepted: "Waiting to be accepted",
   newDate: (date: string): string => `New date: ${date}`,
   inSessionNow: "In a session now. Answer it in the room.",
   buttons: {
@@ -896,6 +1050,7 @@ export const TASK_COPY = {
     handed_back: "Hand it back",
     reopened: "Open it again",
     taken: "I'll take it",
+    accepted: "Accept as accomplished",
     record: "Open the record",
   },
   /** The sheet each answer opens. A null field is not shown. */
@@ -907,7 +1062,7 @@ export const TASK_COPY = {
       hint: null,
       datePrompt: null,
       confirm: "Mark it done",
-      toast: "Marked done. The circle sees it at the next action check.",
+      toast: "Beautiful work. The circle sees it at the next action check.",
     },
     not_yet: {
       lede: null,
@@ -938,6 +1093,15 @@ export const TASK_COPY = {
     },
     taken: { lede: null, notePrompt: null, noteRequired: false, hint: null, datePrompt: null, confirm: "I'll take it", toast: "It's yours now." },
     reopened: { lede: null, notePrompt: null, noteRequired: false, hint: null, datePrompt: null, confirm: "Open it again", toast: "Open again." },
+    accepted: {
+      lede: "It moves to Accomplished on the player card of whoever did it.",
+      notePrompt: "A word about the work, if you like.",
+      noteRequired: false,
+      hint: "Leave out bank and card numbers.",
+      datePrompt: null,
+      confirm: "Accept as accomplished",
+      toast: "Accepted as accomplished.",
+    },
   },
   dateChips: { thisFriday: "This Friday", nextWeek: "Next week", nextNewMoon: "Next new moon", nextFullMoon: "Next full moon" },
   datePick: "Or pick a date",
@@ -993,7 +1157,7 @@ export const TASK_COPY = {
     doneLabel: (what: string): string => `It's done: ${what}`,
     openLabel: (what: string): string => `Open it on your task board: ${what}`,
     working: "Saving",
-    marked: "Done. The circle sees it at the next action check.",
+    marked: "Beautiful work. The circle sees it at the next action check.",
     undo: "Open it again",
     undoLabel: (what: string): string => `Open it again: ${what}`,
     reopened: "Open again. It is back on your task board.",
@@ -1013,12 +1177,12 @@ export const TASK_COPY = {
 export const TASK_REFUSALS = {
   needSentence: "Letting go needs one sentence.",
   needDate: "Pick a date after today.",
-  notYours: "Only the person or seat holding this, the facilitator, or an admin can answer it.",
+  notYours: "Only the person or role holding this, the facilitator, or an admin can answer it.",
   moved: "Someone answered this a moment ago. Here is where it stands now.",
   stillOpen: "The session is still open. Task emails go out when it closes.",
   notFound: "That task isn't here.",
   tooMany: "That's a lot of answers in an hour. Try again soon.",
-  answerShape: "An answer is done, not yet, let go, hand it back, take it, or open it again, with the version you saw.",
+  answerShape: "An answer is done, not yet, let go, hand it back, take it, open it again, or accept it, with the version you saw.",
   noteLong: `Keep it to ${TASK_NOTE_MAX} characters.`,
   alreadyDone: "This one is already marked done.",
   /** "It's done" from a notice, on a task that was let go. */
@@ -1028,6 +1192,11 @@ export const TASK_REFUSALS = {
   notWithCircle: "Someone already holds this one.",
   nobodyHolds: "Nobody holds this one. It is already back with the circle.",
   sendsTooMany: "The task emails went out a few times this hour already. Try again later.",
+  notDoneYet: "Only a task marked done can be accepted.",
+  alreadyAccepted: "This one is already accepted as accomplished.",
+  ownWork: "Your own work goes to someone else to accept.",
+  notAnAcceptor: "Accepting work as accomplished is for a live holder of the power that seats people.",
+  paymentDetails: "This looks like a bank or card number. Leave payment details out of the note.",
 } as const;
 
 /** Every task email's words. The village's name never comes from here. */
@@ -1039,10 +1208,10 @@ export const TASK_EMAIL_COPY = {
   opening: (theCall: string, when: string): string =>
     `${theCall} closed ${when}. Here is what you took on, written down so you don't have to hold it in your head.`,
   seatOpening: (who: string, when: string, n: number, seatNames: readonly string[]): string =>
-    `${who} met ${when} and ${n === 1 ? "a task" : `${n} tasks`} landed with ${seatNames.length === 1 ? "your seat" : "your seats"}, ` +
+    `${who} met ${when} and ${n === 1 ? "a task" : `${n} tasks`} landed with ${seatNames.length === 1 ? "your role" : "your roles"}, ` +
     `${joinNames(seatNames)}. Here ${n === 1 ? "it is" : "they are"}:`,
-  seatHoldsMore: (seatName: string, n: number): string => `Your seat, ${seatName}, holds ${n === 1 ? "one more" : `${n} more`}:`,
-  seatHolds: (seatName: string, n: number): string => `Your seat, ${seatName}, holds ${n === 1 ? "one task" : `${n} tasks`}:`,
+  seatHoldsMore: (seatName: string, n: number): string => `Your role, ${seatName}, holds ${n === 1 ? "one more" : `${n} more`}:`,
+  seatHolds: (seatName: string, n: number): string => `Your role, ${seatName}, holds ${n === 1 ? "one task" : `${n} tasks`}:`,
   lineBy: (text: string, date: string): string => `${text}. By ${date}.`,
   lineNoDate: (text: string): string => `${text}. No date.`,
   resend: (firstName: string | null): string =>
@@ -1077,5 +1246,5 @@ export const TASK_NOTICES = {
   back: (text: string): string => `${cutText(text, 80)} is back with the circle. It will be in the next action check.`,
   /** To admins and the facilitator, when a task sits with a seat nobody holds. */
   unheld: (sessionTitle: string, seatName: string): string =>
-    `A task from "${sessionTitle}" sits with ${seatName}, and nobody holds that seat now. Give it to someone at the next call.`,
+    `A task from "${sessionTitle}" sits with ${seatName}, and nobody holds that role now. Give it to someone at the next call.`,
 } as const;
