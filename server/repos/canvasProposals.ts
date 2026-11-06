@@ -159,6 +159,18 @@ export async function canvasProposalById(pool: Pool, id: number): Promise<Canvas
   return rows[0] ? toRow(rows[0]) : null;
 }
 
+/**
+ * Every suggestion a member made, and every one they decided, oldest first:
+ * what the member data export hands them (W3a-export-erasure-omit).
+ */
+export async function canvasProposalsTouching(pool: Pool, userId: string): Promise<CanvasProposalRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${COLUMNS} ${FROM} WHERE p.proposed_by = ? OR p.decided_by = ? ORDER BY p.created_at, p.id`,
+    [userId, userId],
+  );
+  return rows.map(toRow).filter((r): r is CanvasProposalRow => r !== null);
+}
+
 /** A block's open suggestions, newest first. */
 export async function openProposalsForBlock(pool: Pool, blockId: CanvasBlockId): Promise<CanvasProposalRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(

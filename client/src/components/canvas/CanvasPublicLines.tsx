@@ -157,6 +157,8 @@ function BlockLine({
   const [writing, setWriting] = useState(false);
   const line = shown?.line ?? null;
   const withheld = !!shown?.withheld;
+  // Served only to the pen, on a held-back line (W3a-withheld-line-hidden-from-pen).
+  const forPen = withheld ? shown?.forPen ?? null : null;
 
   return (
     <li
@@ -181,8 +183,9 @@ function BlockLine({
 
       {withheld && mayWrite && (
         <p className="mt-2 text-xs text-stone-700" data-testid={`public-line-withheld-${block.id}`}>
-          The line holds the name of someone in this village, so the public page hides it. Write it again with the role
-          in place of the name.
+          The line holds the name of someone in this village, so the public page hides it.
+          {forPen ? ` The word that matched is "${forPen.matched}". ` : " "}
+          Write it again with the role in place of the name.
         </p>
       )}
 
@@ -206,7 +209,7 @@ function BlockLine({
       {mayWrite && writing && (
         <LineForm
           block={block}
-          current={line ?? ""}
+          current={line ?? forPen?.line ?? ""}
           onCancel={() => setWriting(false)}
           onSaved={(saved) => {
             setWriting(false);
@@ -224,9 +227,12 @@ export default function CanvasPublicLines() {
   const [failed, setFailed] = useState<string | null>(null);
   const [member, setMember] = useState<MemberView | null>(null);
 
+  // Signed in, the read carries the session, so the pen is also sent any
+  // held-back line and the word that matched. A visitor's read carries nothing.
+  const signedIn = !!user;
   const load = useCallback(() => {
     setFailed(null);
-    fetch(CANVAS_PUBLIC_PATH)
+    fetch(CANVAS_PUBLIC_PATH, signedIn ? { headers: headers() } : undefined)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok || !Array.isArray(d?.blocks)) {
@@ -236,7 +242,7 @@ export default function CanvasPublicLines() {
         setLines(byId(d.blocks as CanvasPublicBlock[]));
       })
       .catch(() => setFailed("The canvas's public lines could not be read just now."));
-  }, []);
+  }, [signedIn]);
 
   useEffect(load, [load]);
 

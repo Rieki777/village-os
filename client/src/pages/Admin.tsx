@@ -5397,11 +5397,11 @@ export function ExitsAdminTab({ password }: { password: string }) {
 
   useEffect(() => { loadState(selectedUser); }, [selectedUser, loadState]);
 
-  const call = async (path: string, body?: any, method = "POST") => {
+  const call = async (path: string, body?: any, method = "POST", extra: Record<string, string> = {}) => {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
         method,
-        headers: authHeaders(password, { "Content-Type": "application/json" }),
+        headers: authHeaders(password, { "Content-Type": "application/json", ...extra }),
         body: body ? JSON.stringify(body) : undefined,
       });
       const d = await res.json();
@@ -5671,7 +5671,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
             )}
           </div>
 
-          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT"); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
+          <button onClick={async () => { const d = await call("/admin/exit-policy", policyDraft, "PUT", data?.policyVersion ? { "x-content-was": data.policyVersion } : {}); if (d) { toast.success("Policy published"); setExitFromProfile(false); load(); } }}
             className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep">Publish policy</button>
         </div>
         );

@@ -47,6 +47,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { closingWrite } from "../lib/closingPolicy";
+import { withExitPolicyLock } from "../lib/exitPolicyWrites";
 import { recordEvent } from "../lib/events";
 import { closingForReaders, closingNamed, closingPolicyDef } from "../../shared/closingPolicies";
 
@@ -61,13 +62,21 @@ type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "getPool"> & { exitPolicy: 
 export function register(app: Express, deps: Deps): void {
   app.put("/api/admin/exit-policy/closing", async (req, res) => {
     if (!(await deps.isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const stored = deps.exitPolicy.get() ?? {};
     const actor = deps.adminActor(req);
-    const answer = closingWrite(req.body, stored.closing, actor?.id ?? null, new Date());
+    // Read and written inside the exit policy's one lock, so a terms save that
+    // overlaps this one is never erased by it, nor it by the terms save
+    // (W2-exit-policy-lost-update, server/lib/exitPolicyWrites.ts).
+    const written = await withExitPolicyLock(async () => {
+      const stored = deps.exitPolicy.get() ?? {};
+      const answer = closingWrite(req.body, stored.closing, actor?.id ?? null, new Date());
+      if (!answer.ok) return { answer, stored };
+      // Every other key of the document exactly as stored: this door owns one
+      // section and must not rewrite the terms beside it.
+      await deps.exitPolicy.put({ ...stored, closing: answer.section });
+      return { answer, stored };
+    });
+    const { answer, stored } = written;
     if (!answer.ok) return res.status(answer.status).json({ error: answer.error, message: answer.message });
-    // Every other key of the document exactly as stored: this door owns one
-    // section and must not rewrite the terms beside it.
-    await deps.exitPolicy.put({ ...stored, closing: answer.section });
     const section = answer.section;
     const before = String(stored.closing?.policyId ?? "") || "none";
     const adoptedNow = !!section.adoptedAt && section.adoptedAt !== (stored.closing?.adoptedAt ?? null);

@@ -189,14 +189,22 @@ export function hasGoverningPurpose(doc: GoverningPurposeDoc): boolean {
 /**
  * ── THE SUBJECTS THAT CARRY A JUDGEMENT LINE ───────────────────────────────
  *
- * "On proposals that change how the village works." These five are that set,
+ * "On proposals that change how the village works." These six are that set,
  * and the set is closed:
  *
- *   mechanics        a change to the Game's own rules
- *   power_transfer   a power crossing to the village
- *   power_grant      a role being given a power it did not carry
- *   power_return     a power going back to the admin panel
- *   gps_change       the statement itself
+ *   mechanics           a change to the Game's own rules
+ *   power_transfer      a power crossing to the village
+ *   power_grant         a role being given a power it did not carry
+ *   power_return        a power going back to the admin panel
+ *   gps_change          the statement itself
+ *   conflict_agreement  how the village holds conflict and what a consequence
+ *                       can be. The canvas plan's text-bearing-objects table
+ *                       names the Conflict agreement in GPS ruling 1's scoping,
+ *                       and a Conflict-block suggestion already needs the line,
+ *                       so the vote that actually changes it asks for it too
+ *                       (W3a-agreement-vote-no-purpose-line; constitution I.17).
+ *                       Spelled here because shared/conflictAgreement.ts is
+ *                       the subject's home and importing it would be a cycle.
  *
  * Every other subject is absent, which is the safe direction and also the
  * ruling: a quest payout, a seating, a moon settlement and an advisory vote
@@ -212,6 +220,7 @@ export const PURPOSE_ALIGNMENT_SUBJECTS: readonly string[] = [
   "power_grant",
   "power_return",
   GPS_CHANGE,
+  "conflict_agreement",
 ];
 
 /** Does a ballot on this subject need a judgement line. */

@@ -830,7 +830,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect(numberVar("membership.vouches_required")).toBe(4);
       // Filed by its own author: nobody is told of their own act, and it is listed as filed.
       expect(NOTICES.some((n) => n.dedupeKey.startsWith(`canvas-proposal:${p.id}:`))).toBe(false);
-      expect((await block("teller", "team")).body.decided.find((x: any) => x.id === p.id)).toMatchObject({ status: "adopted", filed: true });
+      expect((await block("teller", "team")).body.decided.find((x: any) => x.id === p.id)).toMatchObject({ status: "filed", filed: true });
     });
 
     it("only the member who wrote a dial suggestion files it, in their own name, and a draft says it is a draft", async () => {
@@ -856,6 +856,10 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         expect(r.body.outcome).toMatchObject({ filed: "mechanics-proposal", status: "draft" });
         expect(r.body.message).toMatch(/^Saved as a draft: /);
         expect((await proposalById(pool, String(r.body.outcome.id)))?.proposerUserId).toBe("cf-member");
+        // Recorded as filed, never as adopted: the village has not voted (W3a-filed-recorded-adopted).
+        const [[row]] = await pool.query<any[]>("SELECT status FROM canvas_proposals WHERE id = ?", [p.id]); // module-review-ok: reading the scratch schema this suite provisioned
+        expect(row.status).toBe("filed");
+        expect((await block("teller", "team")).body.decided.find((x: any) => x.id === p.id)).toMatchObject({ status: "filed", filed: true });
       } finally {
         QUALIFIED = true;
       }

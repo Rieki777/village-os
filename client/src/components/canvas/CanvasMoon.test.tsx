@@ -42,7 +42,8 @@ describe("the canvas moon card", () => {
   it("offers the gathering, says it is a draft, and prints the server's sentence once offered", async () => {
     const onOffer = vi.fn(async () => ({ ok: true as const, message: "The canvas moon is on the calendar's list as a draft." }));
     render(<CanvasMoon payload={payload({ mayOffer: true })} onOffer={onOffer} />);
-    expect(screen.getByText(/Nothing is published until you publish it there/)).toBeTruthy();
+    expect(screen.getByText(/Nothing is published until you publish it\./)).toBeTruthy();
+    expect(screen.queryByText(/publish it there/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /offer a canvas moon gathering/i }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("as a draft"));
     expect(onOffer).toHaveBeenCalledTimes(1);
@@ -62,6 +63,17 @@ describe("the canvas moon card", () => {
     expect(screen.getByTestId("canvas-moon-gathering").textContent).toContain("as a draft");
     rerender(<CanvasMoon payload={payload({ gathering: { id: "ev-1", status: "scheduled" } })} onOffer={vi.fn()} />);
     expect(screen.getByTestId("canvas-moon-gathering").textContent).toBe("The canvas moon is on the village calendar.");
+  });
+
+  it("lets whoever manages events publish the draft from this card, since /admin is closed to them (W4-moon-publish-there)", async () => {
+    const onPublish = vi.fn(async () => ({ ok: true as const, message: "The canvas moon is on the village calendar." }));
+    const draft = { id: "ev-1", status: "draft" };
+    const { rerender } = render(<CanvasMoon payload={payload({ gathering: draft })} onOffer={vi.fn()} onPublish={onPublish} />);
+    expect(screen.queryByRole("button", { name: /publish the canvas moon/i }), "a member who does not manage events").toBeNull();
+    rerender(<CanvasMoon payload={payload({ gathering: draft, mayPublish: true })} onOffer={vi.fn()} onPublish={onPublish} />);
+    fireEvent.click(screen.getByRole("button", { name: /publish the canvas moon/i }));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("on the village calendar"));
+    expect(onPublish).toHaveBeenCalledWith("ev-1");
   });
 
   it("stays off the page with no next moon, or before the read arrives", () => {

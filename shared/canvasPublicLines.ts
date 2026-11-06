@@ -55,6 +55,13 @@ export interface CanvasPublicBlock {
    * server while this is true.
    */
   withheld: boolean;
+  /**
+   * Only for whoever holds the pen, and only on a held-back line: the stored
+   * line and the name in it that matched, so the pen can write it again with
+   * the role in place of that word (W3a-withheld-line-hidden-from-pen).
+   * Absent for every other reader.
+   */
+  forPen?: { line: string; matched: string };
 }
 
 /**

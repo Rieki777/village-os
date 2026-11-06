@@ -148,6 +148,21 @@ describe("ConflictAgreementEditor", () => {
     expect((await screen.findByRole("status")).textContent).toContain("The vote is open");
   });
 
+  it("sends the proposer's line on how the change serves the purpose with the vote (W3a-agreement-vote-no-purpose-line)", async () => {
+    const whole = payload({
+      pen: { how: "ballot", mayWrite: false, mayPropose: true },
+      agreement: { ...payload().agreement, steps: [{ what: "We talk first", whoInRoom: "the two of us" }], replyHours: 48, reviewDate: "2031-01-01" },
+    });
+    serve(whole, { status: 200, body: { success: true, ballot: { id: "b-1", closesAt: "2026-10-05T00:00:00.000Z" } } });
+    render(<ConflictAgreementEditor />);
+    await screen.findByDisplayValue("We talk first");
+    const line = "A quicker reply keeps a hard moment from hardening, which is how this village keeps its promise of care.";
+    fireEvent.change(screen.getByLabelText(/How this change serves the village's governing purpose/), { target: { value: line } });
+    fireEvent.click(screen.getByRole("button", { name: "Put this change to the village" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body.purposeAlignment).toBe(line);
+  });
+
   it("shows a care role retired since as gone, never as 'No role chosen', and choosing none clears it", async () => {
     serve(payload({ agreement: { ...payload().agreement, careRole: "r-old" } }));
     render(<ConflictAgreementEditor />);

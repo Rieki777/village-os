@@ -265,7 +265,8 @@ describe("who reaches the frames", () => {
     expect(card.className).toContain("md:col-span-2");
     fireEvent.click(within(card).getByRole("button", { name: "Close this block: Power" }));
     expect(card.className).not.toContain("md:col-span-2");
-    expect(screen.queryByTestId("canvas-frames-power")).toBeNull();
+    // Closed is hidden, never thrown away, so what was typed is still there on reopening.
+    expect(screen.getByTestId("canvas-frames-power").closest("[hidden]")).not.toBeNull();
   });
 });
 
@@ -795,6 +796,27 @@ describe("what somebody typed stays while they look at another frame", () => {
       "We have a draft of our articles and no lawyer has read it.",
     );
     expect(frames.getByRole("button", { name: /save this reading/i })).toBeTruthy();
+  });
+
+  it("the pen's half-recorded reading survives closing the block, and Record a reading opens it again on Sense (W3b-close-discards-draft)", async () => {
+    answer("GET", "/api/canvas", 200, canvas(true));
+    draw();
+    const legal = within(await screen.findByTestId("canvas-block-legal"));
+    fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
+    const typed = "We have a draft of our articles and no lawyer has read it.";
+    fireEvent.change(await legal.findByLabelText("Why, in one sentence"), { target: { value: typed } });
+    fireEvent.click(legal.getByRole("button", { name: "Close this block: Legal" }));
+    fireEvent.click(legal.getByRole("button", { name: "Open this block: Legal" }));
+    expect((legal.getByLabelText("Why, in one sentence") as HTMLTextAreaElement).value).toBe(typed);
+    expect(screen.getByTestId("canvas-frames-legal").closest("[hidden]")).toBeNull();
+
+    // Closed again, then the card's shortcut: the block opens on Sense with the form, the draft intact.
+    const frames = within(screen.getByTestId("canvas-frames-legal"));
+    fireEvent.click(frames.getByRole("button", { name: "Learn" }));
+    fireEvent.click(legal.getByRole("button", { name: "Close this block: Legal" }));
+    fireEvent.click(legal.getByRole("button", { name: /record a reading/i }));
+    expect(frames.getByRole("button", { name: "Sense" }).getAttribute("aria-pressed")).toBe("true");
+    expect((legal.getByLabelText("Why, in one sentence") as HTMLTextAreaElement).value).toBe(typed);
   });
 
   it("the village's rows are read again after the pen adopts a row under Adopt", async () => {

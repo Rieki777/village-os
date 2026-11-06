@@ -113,6 +113,7 @@ import { mayReadCanvas } from "./canvas";
 import type { DbDocument } from "../repos/store-db";
 import { markExitSettling } from "../repos/exits";
 import { raiseCanvasRevisit } from "../lib/canvasRevisit";
+import { EXIT_POLICY_MOVED, exitPolicyTermsVersion, withExitPolicyLock } from "../lib/exitPolicyWrites";
 
 export type ExitDeps = Pick<
   AppDeps,
@@ -181,9 +182,24 @@ export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "getPool" | "loadRol
 export async function saveExitPolicy(
   deps: ExitPolicySaveDeps,
   req: Parameters<AppDeps["isAdmin"]>[0],
+  rawBody: unknown | (() => unknown),
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  // One write at a time, and a body given as a function is built inside the
+  // lock from the document as it then stands (server/lib/exitPolicyWrites.ts).
+  return withExitPolicyLock(() => saveExitPolicyNow(deps, req, typeof rawBody === "function" ? (rawBody as () => unknown)() : rawBody));
+}
+
+async function saveExitPolicyNow(
+  deps: ExitPolicySaveDeps,
+  req: Parameters<AppDeps["isAdmin"]>[0],
   rawBody: unknown,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   if (!(await deps.isAdmin(req))) return { status: 401, body: { error: "auth_required" } };
+  // A draft that names the terms it was opened on is refused once they moved.
+  const was = typeof (req as any)?.get === "function" ? (req as any).get("x-content-was") : undefined;
+  if (was && was !== exitPolicyTermsVersion(deps.exitPolicyRepo.get())) {
+    return { status: 409, body: { error: "exit_policy_moved", message: EXIT_POLICY_MOVED } };
+  }
   const body: any = rawBody ?? {};
   if (typeof body !== "object" || !body.voluntary || !body.involuntary || !body.restorative) {
     return { status: 400, body: {
@@ -247,7 +263,7 @@ export async function saveExitPolicy(
     }
   }
   await deps.exitPolicyRepo.put(next);
-  return { status: 200, body: { success: true, policy: deps.readExitPolicy() } };
+  return { status: 200, body: { success: true, policy: deps.readExitPolicy(), policyVersion: exitPolicyTermsVersion(deps.exitPolicyRepo.get()) } };
 }
 
 export function register(app: Express, deps: ExitDeps): void {
@@ -341,6 +357,9 @@ export function register(app: Express, deps: ExitDeps): void {
     res.json({
       exits: withNames,
       policy: deps.readExitPolicy(),
+      // What the editor sends back as `x-content-was`, so a draft opened
+      // before another write is refused, never saved over it.
+      policyVersion: exitPolicyTermsVersion(deps.exitPolicyRepo.get()),
       defaults: DEFAULT_EXIT_POLICY,
       terms: EXIT_POLICY_TERMS,
       circles: deps.circlesRepo.all().map((c: any) => ({ id: c.id, name: c.name })),

@@ -47,7 +47,14 @@ export type ProposalTarget = (typeof PROPOSAL_TARGETS)[number];
 export const PROPOSAL_SOURCES = ["member", "derived", "import"] as const;
 export type ProposalSource = (typeof PROPOSAL_SOURCES)[number];
 
-export const PROPOSAL_STATUSES = ["open", "adopted", "declined"] as const;
+/**
+ * `filed` is a dial or module suggestion its author filed as a mechanics
+ * proposal after the Birthing (W3a-filed-recorded-adopted). It is closed on
+ * the canvas, like adopted and declined, but the village has not decided it,
+ * so it is never recorded as adopted. The column is varchar(16) (0325), so a
+ * status needs no ALTER.
+ */
+export const PROPOSAL_STATUSES = ["open", "adopted", "declined", "filed"] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
 /**

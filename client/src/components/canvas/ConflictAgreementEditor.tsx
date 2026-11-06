@@ -130,6 +130,9 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The judgement line a change vote carries (GPS ruling 1). The server asks
+  // for it once the village has a purpose statement, and says so if missing.
+  const [purposeLine, setPurposeLine] = useState("");
 
   const load = useCallback(() => {
     setLoadFailed(null);
@@ -187,7 +190,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
     try {
       const r =
         kind === "propose"
-          ? await fetch("/api/governance/conflict-agreement-changes", { method: "POST", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing) }) })
+          ? await fetch("/api/governance/conflict-agreement-changes", { method: "POST", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing), purposeAlignment: purposeLine }) })
           : await fetch("/api/admin/conflict-agreement", { method: "PUT", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing), adopt: kind === "adopt" }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -573,9 +576,16 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
         </div>
       )}
       {payload.pen.mayPropose && !payload.openBallot && (
-        <button type="button" className={primary} disabled={busy} onClick={() => void send("propose")}>
-          Put this change to the village
-        </button>
+        <div className="space-y-2">
+          <label className={label}>
+            How this change serves the village's governing purpose
+            <textarea className={area} value={purposeLine} disabled={busy} onChange={(e) => setPurposeLine(e.target.value)} />
+          </label>
+          <p className="text-xs text-stone-600">Every member reads this line beside the vote, and it stays on the record.</p>
+          <button type="button" className={primary} disabled={busy} onClick={() => void send("propose")}>
+            Put this change to the village
+          </button>
+        </div>
       )}
       {payload.openBallot && (
         <p className="text-sm text-stone-700">

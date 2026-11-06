@@ -900,7 +900,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       if (!rowId) return { ok: false, status: 500, body: { error: "The row could not be written." } };
       return { ok: true, outcome: { wrote: "matrix-row", rowId }, message: "Adopted. The Decision Matrix carries this row." };
     }
-    const answer = await saveExitPolicy(deps.exitPolicy, req, exitBodyWith(String(p.door), p.change ?? {}));
+    // Built inside the exit policy's lock, from the document as it then
+    // stands, so a Departures save landing first is not written over.
+    const answer = await saveExitPolicy(deps.exitPolicy, req, () => exitBodyWith(String(p.door), p.change ?? {}));
     // The save's own sentence speaks to the Departures editor ("reload this
     // page to edit the rest of the policy"), which is not where this is.
     if (answer.status === 409 && answer.body.error === "restorative_in_agreement") {
@@ -929,7 +931,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       if (effect === "answered") return "answered" as const;
       if (!effect.ok) return { status: effect.status, body: effect.body };
       const moved = await decideCanvasProposal(pool, {
-        id: p.id, status: "adopted", decidedBy: String(user.id), note: note || null, outcome: effect.outcome,
+        // A filing hands the change to the village's vote, so it is recorded as
+        // filed: "adopted" would claim a decision nobody has made yet.
+        id: p.id, status: effect.outcome?.filed ? "filed" : "adopted", decidedBy: String(user.id), note: note || null, outcome: effect.outcome,
       });
       if (!moved) return { status: 409, body: { error: "This suggestion was decided by somebody else at the same moment." } };
       void recordEvent(pool, {

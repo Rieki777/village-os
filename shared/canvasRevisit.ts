@@ -136,17 +136,18 @@ export const ANYONE_MAY_RAISE = "The village holds this power, so anyone may rai
 /**
  * The title, per moment. It is also the whole of what the digest email
  * shows, so it names the block and asks the moment's question, and nothing
- * else.
+ * else. It never presumes the block has an answer (W4-keymoment-no-answer):
+ * the claim moment fires on a brand-new instance, where every block is blank.
  */
 export function revisitTitle(moment: KeyMoment, block: CanvasBlockId): string {
   const name = CANVAS_BLOCKS[block].name;
   switch (moment) {
     case "collaboration":
-      return `Something new is starting. Does our ${name} answer still hold?`;
+      return `Something new is starting. Is our ${name} block ready for it?`;
     case "partners":
-      return `A new partner arrived. Does our ${name} answer still hold?`;
+      return `A new partner arrived. Is our ${name} block ready for them?`;
     case "conflict":
-      return `Is the pathway holding? Look at the ${name} answer again.`;
+      return `Is the pathway holding? Look at the ${name} block.`;
     case "funding":
       return `Before you raise: look at ${name} again.`;
   }
@@ -157,7 +158,7 @@ export function revisitBody(moment: KeyMoment, audience: RevisitAudience): strin
   const lines: string[] = [];
   switch (moment) {
     case "collaboration":
-      lines.push("When a village starts something new, the canvas asks it to look at its answers again.");
+      lines.push("When a village starts something new, the canvas asks it to look at these blocks, written or still blank.");
       break;
     case "partners":
       lines.push(
@@ -207,6 +208,13 @@ export interface CanvasMoonPayload {
   calendarOn: boolean;
   /** This member may offer it now: they manage events, the calendar is on, and none is offered yet. */
   mayOffer: boolean;
+  /**
+   * This member may publish the offered draft from the card: they manage
+   * events, the calendar is on, and the gathering is still a draft. The card
+   * is the door because /admin is closed to a non-admin who holds
+   * `event.manage` (W4-moon-publish-there). Absent on an older server.
+   */
+  mayPublish?: boolean;
 }
 
 /** The title a gathering offered for the canvas moon carries. */

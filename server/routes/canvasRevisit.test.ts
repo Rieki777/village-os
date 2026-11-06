@@ -228,6 +228,12 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     const after = await call("GET", "/api/canvas/moon", "keeper");
     expect(after.body.gathering).toEqual({ id: made.body.gathering.id, status: "draft" });
     expect(after.body.mayOffer).toBe(false);
+    // W4-moon-publish-there: whoever manages events publishes the draft from
+    // the card itself, since /admin is closed to a non-admin holder.
+    expect(made.body.message).not.toMatch(/there/);
+    expect(made.body.publishAt).toBeUndefined();
+    expect(after.body.mayPublish).toBe(true);
+    expect((await call("GET", "/api/canvas/moon", "member")).body.mayPublish).toBe(false);
     const [[doc]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM app_config WHERE config_key = ?", [CANVAS_MOON_KEY]); // module-review-ok: reading the scratch schema this suite provisioned
     expect(Number(doc.n)).toBe(1);
   });
@@ -239,5 +245,17 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     const r = await call("GET", "/api/canvas/moon", "keeper");
     expect(r.body.gathering).toBeNull();
     expect(r.body.mayOffer).toBe(true);
+  });
+
+  it("treats a cancelled gathering as gone: no 'on the calendar' claim, and it can be offered again (W4-moon-cancelled)", async () => {
+    const made = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    await pool.query("UPDATE events SET status = 'cancelled' WHERE id = ?", [made.body.gathering.id]); // module-review-ok: cancelling the gathering in the scratch schema, as the calendar's cancel does
+    const r = await call("GET", "/api/canvas/moon", "keeper");
+    expect(r.body.gathering).toBeNull();
+    expect(r.body.mayOffer).toBe(true);
+    const again = await call("POST", "/api/canvas/moon/gathering", "keeper");
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+    expect(again.body.gathering.id).not.toBe(made.body.gathering.id);
   });
 });

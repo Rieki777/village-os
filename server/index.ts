@@ -901,6 +901,8 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
+import { memberFirstName } from "../shared/memberFirstName";
+import { exportCanvasForMember } from "./lib/canvasExport";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -3720,7 +3722,7 @@ function publicUser(u: any) {
 }
 
 function firstName(name: string): string {
-  return String(name ?? "").trim().split(/\s+/)[0] || "Someone";
+  return memberFirstName(name);
 }
 
 /**
@@ -24123,7 +24125,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
   registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
-  registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
+  registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo, capabilityCtx });
   registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });
   registerVillageDocumentRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, overLimit, clientIp, villageName: () => String(mergedConfig().project.name ?? "") });
 
@@ -24212,6 +24214,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
             // Additive, and always present: a page can show "2 of 3 seats
             // filled · 1 open call" without knowing anybody's name.
             holderCount: seated.length,
+            // The holders the gate and the launch checklist count: lapsed
+            // terms out. Departures' intake picker shows it (plan 6.2 frame 2).
+            liveHolderCount: liveHolderCount(holders, r.id),
             holders: maySeePeople
               ? seated.map((h) => ({ userId: h.userId, name: nameOf(h.userId) }))
               : [],
@@ -25245,6 +25250,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
       memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
       moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
+      canvas: await exportCanvasForMember(pool, user.id), // canvas suggestions, decisions, readings, matrix rows, ombuds asks and agreement proposals (server/lib/canvasExport.ts)
       /*
        * ── Lane C: the domains that are not in this database ────────────────
        *

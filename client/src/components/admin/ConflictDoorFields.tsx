@@ -29,6 +29,13 @@
  * applies only while that module is on. With it off (`door` false) this is
  * the one field Departures always had, the intake role, and nothing else.
  *
+ * THE PICKER SAYS WHO HOLDS EACH ROLE TODAY (plan 6.2 frame 2;
+ * W2-intake-picker-holders). Each option carries its live-holder count, the
+ * one the checklist counts (`liveHolderCount`, lapsed terms out, served by
+ * GET /api/roles). An intake role nobody holds gets a sentence and a link to
+ * Power groups, where a holder is seated, because the launch row's own link
+ * comes back to this page and a holder cannot be seated here.
+ *
  * Out of client/src/pages/Admin.tsx because that file sits at its line
  * ratchet, and an admin surface belongs here. Light-only like the rest of the
  * admin panel, so the grays are numbered on purpose.
@@ -49,7 +56,7 @@ export function ConflictDoorFields({
   door = true,
 }: {
   restorative: ConflictDoorDraft | null | undefined;
-  roles: ReadonlyArray<{ id: string; name?: string | null }>;
+  roles: ReadonlyArray<{ id: string; name?: string | null; liveHolderCount?: number }>;
   onChange: (patch: Partial<ConflictDoorDraft>) => void;
   inputCls: string;
   /** Conflict Evolution is on, so the whole door is asked for. Off: the intake role alone. */
@@ -61,17 +68,31 @@ export function ConflictDoorFields({
   const contact = { name: "", organisation: "", howToReach: "", ...(r.outsideContact ?? {}) };
   const setContact = (patch: Partial<typeof contact>) => onChange({ outsideContact: { ...contact, ...patch } });
   const field = `${inputCls} w-full mt-1 min-h-[44px]`;
+  const optionText = (role: { id: string; name?: string | null; liveHolderCount?: number }) => {
+    const name = role.name ?? role.id;
+    if (typeof role.liveHolderCount !== "number") return name;
+    return role.liveHolderCount > 0 ? `${name} (held by ${role.liveHolderCount} today)` : `${name} (nobody holds it today)`;
+  };
+  const chosen = roles.find((role) => role.id === intake);
+  const unheld = chosen && chosen.liveHolderCount === 0 ? (
+    <span className="block mt-1 text-[11px] text-amber-800">
+      Nobody holds the {chosen.name ?? chosen.id} role today, so a request would reach nobody.{" "}
+      <a href="/admin?tab=game-roles" className="font-medium underline">Give the role a holder under Power groups</a>, or name a contact
+      outside the village.
+    </span>
+  ) : null;
 
   if (!door) {
     return (
       <label className="text-xs text-gray-500 block mb-4">Restorative intake role
         <select value={intake} onChange={(e) => onChange({ intakeContactRole: e.target.value })} className={field}>
           <option value="">none configured</option>
-          {roles.map((role) => <option key={role.id} value={role.id}>{role.name ?? role.id}</option>)}
+          {roles.map((role) => <option key={role.id} value={role.id}>{optionText(role)}</option>)}
         </select>
         <span className="block mt-1 text-[11px] text-gray-500">
           A private intake reaches only the people holding this role, in their notifications here.
         </span>
+        {unheld}
       </label>
     );
   }
@@ -96,8 +117,9 @@ export function ConflictDoorFields({
             }}
             className={field}>
             <option value="">none configured</option>
-            {roles.map((role) => <option key={role.id} value={role.id}>{role.name ?? role.id}</option>)}
+            {roles.map((role) => <option key={role.id} value={role.id}>{optionText(role)}</option>)}
           </select>
+          {unheld}
         </label>
         <label className="text-xs text-gray-500">Cover role, recorded only for now
           <select value={cover} disabled={!intake}

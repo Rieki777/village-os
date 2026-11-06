@@ -65,6 +65,34 @@ describe("ConflictDoorFields", () => {
     expect(onChange).toHaveBeenCalledWith({ replyHours: null });
   });
 
+  it("shows each role's live holders in the picker, and links an unheld intake role to where a holder is seated (W2-intake-picker-holders)", () => {
+    render(
+      <ConflictDoorFields
+        restorative={{ intakeContactRole: "care" }}
+        roles={[
+          { id: "care", name: "Care", liveHolderCount: 0 },
+          { id: "elders", name: "Elders", liveHolderCount: 2 },
+        ]}
+        onChange={vi.fn()}
+        inputCls=""
+      />,
+    );
+    const options = Array.from(intake().options).map((o) => o.textContent);
+    expect(options).toContain("Care (nobody holds it today)");
+    expect(options).toContain("Elders (held by 2 today)");
+    const seat = screen.getByRole("link", { name: /give the role a holder/i });
+    expect(seat.getAttribute("href")).toBe("/admin?tab=game-roles");
+    expect(screen.getByText(/Nobody holds the Care role today/)).toBeTruthy();
+  });
+
+  it("offers no seating link while the intake role has a live holder", () => {
+    render(
+      <ConflictDoorFields restorative={{ intakeContactRole: "elders" }} roles={[{ id: "elders", name: "Elders", liveHolderCount: 1 }]} onChange={vi.fn()} inputCls="" />,
+    );
+    expect(screen.queryByRole("link", { name: /give the role a holder/i })).toBeNull();
+    expect(Array.from(intake().options).map((o) => o.textContent)).toContain("Elders (held by 1 today)");
+  });
+
   it("says the cover role is recorded only, and that a request still reaches the intake role alone", () => {
     draw({ intakeContactRole: "care" });
     const label = cover().closest("label");

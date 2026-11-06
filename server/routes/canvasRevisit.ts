@@ -119,13 +119,19 @@ async function startOf(deps: CanvasRevisitRouteDeps, newMoon: Date): Promise<{ s
   return { startsAt: zonedTimeToUtc(day.year, day.month, day.day, hour, minute, timeZone), timeZone };
 }
 
-/** The offered gathering, if one was offered and is still on the calendar. */
+/**
+ * The offered gathering, if one was offered and is still on the calendar.
+ * A CANCELLED one counts as gone (W4-moon-cancelled): the card would
+ * otherwise tell every member it is on the calendar, and the offer would stay
+ * refused until somebody deleted the event row.
+ */
 async function offered(deps: CanvasRevisitRouteDeps): Promise<{ id: string; status: string } | null> {
   const doc = await readConfigDocument<{ eventId?: unknown }>(deps.getPool(), CANVAS_MOON_KEY);
   const id = typeof doc?.eventId === "string" ? doc.eventId : "";
   if (!id) return null;
   const g = await getGathering(deps.getPool(), id);
-  return g ? { id: g.id, status: String(g.status) } : null;
+  if (!g || String(g.status) === "cancelled") return null;
+  return { id: g.id, status: String(g.status) };
 }
 
 export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
@@ -152,11 +158,13 @@ export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
     ]);
     const calendarOn = effectiveLifecycle("events") !== "off";
     const { startsAt } = await startOf(deps, next);
+    const managesEvents = calendarOn && capabilityDecision("event.manage", ctx).allowed;
     res.json({
       next: { ...question, startsAt: startsAt.toISOString() },
       gathering,
       calendarOn,
-      mayOffer: calendarOn && !gathering && capabilityDecision("event.manage", ctx).allowed,
+      mayOffer: managesEvents && !gathering,
+      mayPublish: managesEvents && gathering?.status === "draft",
     });
   });
 
@@ -193,8 +201,7 @@ export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
     });
     res.status(201).json({
       gathering: { id: created.id, status: String(created.status) },
-      message: "The canvas moon is on the calendar's list as a draft. Set its place and publish it there when it suits the village.",
-      publishAt: "/admin?tab=events-admin",
+      message: "The canvas moon is on the calendar's list as a draft. Publish it from this card when its time suits the village.",
     });
   });
 }

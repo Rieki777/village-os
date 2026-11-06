@@ -58,7 +58,7 @@ describe("the four key moments", () => {
 
 describe("what a notice says", () => {
   it("asks the partners question in the plan's own words", () => {
-    expect(revisitTitle("partners", "stakeholders")).toBe("A new partner arrived. Does our Stakeholders answer still hold?");
+    expect(revisitTitle("partners", "stakeholders")).toBe("A new partner arrived. Is our Stakeholders block ready for them?");
     expect(revisitBody("partners", "live-holders")).toContain("Nothing was sent to them");
     expect(revisitBody("partners", "live-holders")).toContain(PUBLIC_CANVAS_PATH);
   });
@@ -72,7 +72,18 @@ describe("what a notice says", () => {
       }
     }
     expect(revisitTitle("funding", "legal")).toBe("Before you raise: look at Legal again.");
-    expect(revisitTitle("conflict", "conflict")).toBe("Is the pathway holding? Look at the Conflict answer again.");
+    expect(revisitTitle("conflict", "conflict")).toBe("Is the pathway holding? Look at the Conflict block.");
+  });
+
+  it("never presumes the block has an answer, since a claim moment fires on an empty canvas (W4-keymoment-no-answer)", () => {
+    for (const moment of KEY_MOMENTS) {
+      for (const block of MOMENT_BLOCKS[moment]) {
+        expect(revisitTitle(moment, block), `${moment}/${block}`).not.toMatch(/answer/i);
+      }
+      for (const audience of AUDIENCES) {
+        expect(revisitBody(moment, audience), `${moment}/${audience}`).not.toMatch(/answers again/i);
+      }
+    }
   });
 
   it("carries no digit and no dash anywhere, so no count and no date can hide in one", () => {
