@@ -293,9 +293,12 @@ describe.skipIf(!DB_CONFIGURED)("the four key moments, each from its real event"
 
   it("a Love Letter that admits its signer is a partner arriving too", async () => {
     await resetRevisits();
+    // A signing sends back the version of the letter it was drawn from (main,
+    // seat settings PR9): an old version is refused as letter_changed.
+    const drawn = await call("GET", "/api/membership-letter", undefined, people.stranger.token);
     const letter = await call("POST", "/api/forms/submit", {
       type: "membership-508",
-      data: { name: "Rook Talbot", signed: true },
+      data: { name: "Rook Talbot", signed: true, letterVersion: String(drawn.json?.version ?? "") },
     }, people.stranger.token);
     expect(letter.status, letter.text).toBe(200);
     const accepted = await call("PUT", `/api/admin/submissions/${letter.json.id}/status`, { status: "accepted" });

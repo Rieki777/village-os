@@ -250,7 +250,9 @@ describe("where it lives", () => {
     }
     fireEvent.click(within(power).getByRole("button", { name: "Close this block: Power" }));
     expect(power.className).not.toContain("md:col-span-2");
-    expect(screen.queryByTestId("decision-matrix")).toBeNull();
+    // Closed, the frames stay mounted and hidden, so a typed draft survives
+    // (W3b-close-discards-draft): the matrix is out of sight, not destroyed.
+    expect(screen.getByTestId("decision-matrix").closest("[hidden]")).not.toBeNull();
   });
 });
 
