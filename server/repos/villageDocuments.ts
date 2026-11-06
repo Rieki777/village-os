@@ -91,15 +91,33 @@ export async function insertTextDocument(pool: Pool, ownerId: string, doc: TextD
 /**
  * Write a stored document and its bytes, private, in one transaction, so a
  * row never exists without its file or a file without its row. Returns its id.
+ *
+ * With `budget`, what the owner's stored files already weigh is read INSIDE
+ * that transaction, under a lock on the owner's own users row, so two uploads
+ * sent at once cannot both pass a check made before either was written.
+ * Returns null, having written nothing, when this file would go past it.
  */
 export async function insertStoredDocument(
   pool: Pool,
   ownerId: string,
   doc: { title: string; kind: StoredDocumentKind; fileName: string; mime: string; bytes: Buffer },
-): Promise<number> {
+  budget?: { storedBytes: number },
+): Promise<number | null> {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    if (budget) {
+      // One lock per member: the same owner's adds queue here, one at a time.
+      await conn.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [ownerId]);
+      const [held] = await conn.query<RowDataPacket[]>(
+        "SELECT COALESCE(SUM(file_size), 0) AS bytes FROM village_documents WHERE owner_user_id = ?",
+        [ownerId],
+      );
+      if (Number(held[0]?.bytes ?? 0) + doc.bytes.length > budget.storedBytes) {
+        await conn.rollback();
+        return null;
+      }
+    }
     const [result] = await conn.query<ResultSetHeader>(
       "INSERT INTO village_documents (owner_user_id, title, kind, body, file_name, file_size, shared_with_village) VALUES (?,?,?,NULL,?,?,0)",
       [ownerId, doc.title, doc.kind, doc.fileName.slice(0, 255), doc.bytes.length],

@@ -32,7 +32,7 @@ import { brainEtag, briefWrite } from "../lib/villageBrain";
 import { CANVAS_DATABASE_CSV } from "../lib/notebookExport";
 import { recordCanvasReading } from "../repos/canvasReadings";
 import { canvasProposalById } from "../repos/canvasProposals";
-import { markDocumentShared, notebookForExport, resourceFactsFor } from "../repos/villageDocuments";
+import { insertStoredDocument, markDocumentShared, notebookForExport, resourceFactsFor } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 import { DRAFT_AFTER_ADOPTION, MODEL_OWNER_ONLY, NO_MODEL, VILLAGE_PICK_REFUSAL, register } from "./villageDocuments";
 import { CANVAS_ORDER } from "../../shared/governanceCanvas";
@@ -271,6 +271,49 @@ describe.skipIf(!configured)("a member's notebook, the picks and the export", ()
       const md = await upload("other", "fits.md", Buffer.from("# Still fits\n\nText is kept as text."), "Still fits");
       expect(md.status, JSON.stringify(md.body)).toBe(201);
       await q("DELETE FROM village_documents WHERE owner_user_id = ? AND title IN ('Files kept before', 'Still fits')", [PEOPLE.other.id]);
+    });
+
+    it("weighs the budget where the file is written, so uploads sent at once cannot all pass it", async () => {
+      // Room for exactly one more file. Four sent together each pass a check
+      // made before any of them is written, so only the insert can refuse.
+      await q(
+        "INSERT INTO village_documents (owner_user_id, title, kind, file_name, file_size, shared_with_village) VALUES (?,?,?,?,?,0)",
+        [PEOPLE.other.id, "Files kept before", "pdf", "kept.pdf", DOCUMENT_STORED_BYTES_PER_MEMBER - PDF.length],
+      );
+      const sent = await Promise.all([1, 2, 3, 4].map((n) => upload("other", `At once ${n}.pdf`, PDF)));
+      expect(sent.map((r) => r.status).sort()).toEqual([201, 409, 409, 409]);
+      for (const r of sent.filter((r) => r.status === 409)) expect(r.body).toEqual({ error: DOCUMENT_WORDS.storedFull });
+      const held = await q("SELECT COALESCE(SUM(file_size), 0) AS bytes FROM village_documents WHERE owner_user_id = ?", [PEOPLE.other.id]);
+      expect(Number(held[0].bytes)).toBe(DOCUMENT_STORED_BYTES_PER_MEMBER);
+      await q("DELETE FROM village_documents WHERE owner_user_id = ? AND (title = 'Files kept before' OR title LIKE 'At once %')", [PEOPLE.other.id]);
+    });
+
+    it("reads what the owner's files weigh after any add in flight lands, and writes nothing past the budget", async () => {
+      // Deterministic form of the race above: an add still open holds the
+      // owner's row, and the budgeted insert must wait for it and see its bytes.
+      const owner = PEOPLE.teller.id;
+      const open = await pool.getConnection();
+      try {
+        await open.beginTransaction();
+        await open.query("SELECT id FROM users WHERE id = ? FOR UPDATE", [owner]); // module-review-ok: an add in flight, in the scratch schema this suite provisioned
+        await open.query( // module-review-ok: the in-flight add's row, in the scratch schema this suite provisioned
+          "INSERT INTO village_documents (owner_user_id, title, kind, file_name, file_size, shared_with_village) VALUES (?,?,?,?,?,0)",
+          [owner, "In flight", "pdf", "flight.pdf", DOCUMENT_STORED_BYTES_PER_MEMBER],
+        );
+        const second = insertStoredDocument(
+          pool,
+          owner,
+          { title: "Second", kind: "pdf", fileName: "second.pdf", mime: "application/pdf", bytes: PDF },
+          { storedBytes: DOCUMENT_STORED_BYTES_PER_MEMBER },
+        );
+        await new Promise((r) => setTimeout(r, 300));
+        await open.commit();
+        expect(await second).toBeNull();
+      } finally {
+        open.release();
+      }
+      expect(await q("SELECT title FROM village_documents WHERE owner_user_id = ?", [owner])).toEqual([{ title: "In flight" }]);
+      await q("DELETE FROM village_documents WHERE owner_user_id = ?", [owner]);
     });
   });
 

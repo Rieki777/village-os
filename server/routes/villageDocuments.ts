@@ -327,13 +327,14 @@ export function register(app: Express, deps: DocumentRouteDeps): void {
       if (tp) return res.status(400).json({ error: tp });
       const problem = storedFileProblem(kind, file.buffer);
       if (problem) return res.status(400).json({ error: problem });
-      const id = await insertStoredDocument(getPool(), me, {
-        title,
-        kind,
-        fileName: safeDownloadName(file.originalname, `document.${kind}`),
-        mime: STORED_MIME[kind],
-        bytes: file.buffer,
-      });
+      // roomFor answers early; the budget is weighed again where the row is written.
+      const id = await insertStoredDocument(
+        getPool(),
+        me,
+        { title, kind, fileName: safeDownloadName(file.originalname, `document.${kind}`), mime: STORED_MIME[kind], bytes: file.buffer },
+        { storedBytes: DOCUMENT_STORED_BYTES_PER_MEMBER },
+      );
+      if (id === null) return res.status(409).json({ error: DOCUMENT_WORDS.storedFull });
       return created(res, me, id);
     }
   });
