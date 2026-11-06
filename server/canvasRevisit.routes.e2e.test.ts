@@ -54,7 +54,7 @@ if (!DB_CONFIGURED) {
 
 const DIST = path.resolve(process.cwd(), "dist/index.js");
 // Its window is checked by scripts/check-e2e-ports.mjs, never claimed by hand here.
-const PORT = 2000 + (process.pid % 45);
+const PORT = 1704 + (process.pid % 10);
 const BASE = `http://localhost:${PORT}`;
 const ADMIN = "revisit-admin";
 const PASSWORD = "RevisitMoments123!";
