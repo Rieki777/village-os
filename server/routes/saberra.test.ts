@@ -21,6 +21,7 @@
 import http from "node:http";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Snapshot } from "../../shared/seraDifferences";
 
 const state = vi.hoisted(() => ({
   secret: { configured: true, unreadable: false, atRest: "sealed" as string | null },
@@ -117,6 +118,8 @@ vi.mock("../repos/saberraSyncLog", () => ({
 // One live seat, so a fact can be attached to it by name.
 vi.mock("../lib/orgChart", () => ({
   listOrgRoles: async () => [{ id: "role-77", name: "Water Steward" }],
+  // Who holds each role, for the differences list: nobody, here.
+  listOrgAssignments: async () => [],
 }));
 
 vi.mock("../lib/externalProposals", async (importOriginal) => {
@@ -144,17 +147,32 @@ vi.mock("../repos/externalProposals", async (importOriginal) => ({
 
 // The snapshot every read keeps (server/lib/saberraSnapshot.ts) is held against
 // a real schema in server/lib/saberraSnapshot.test.ts; here it is kept in memory,
-// and the roster its name swap reads is empty.
-vi.mock("../repos/saberraSnapshots", () => ({
-  insertSnapshot: async (_p: unknown, _at: Date, s: Record<string, unknown>) => {
-    state.snapshots.unshift(JSON.parse(JSON.stringify(s)));
-    return state.snapshots.length;
-  },
-  recentSnapshots: async (_p: unknown, limit: number) =>
-    state.snapshots.slice(0, limit).map((s, i) => ({ seq: 1000 - i, snapshot: { takenAt: "2026-11-06T09:00:00.000Z", ...s } })),
-  pruneSnapshots: async () => 0,
-}));
+// and the roster its name swap reads is empty. The real module stands behind it,
+// so nothing a sync or a read reaches for is missing; the five it does reach for
+// read and write the rows kept here, newest first.
+vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../repos/saberraSnapshots")>();
+  const rows = () => (state.snapshots as unknown as Snapshot[]).map((snapshot, i) => ({ seq: state.snapshots.length - i, snapshot }));
+  return {
+    ...real,
+    insertSnapshot: async (_p: unknown, at: Date, s: Record<string, unknown>) => {
+      state.snapshots.unshift({ takenAt: at.toISOString(), ...JSON.parse(JSON.stringify(s)) });
+      return state.snapshots.length;
+    },
+    recentSnapshots: async (_p: unknown, limit: number) => rows().slice(0, limit),
+    pruneSnapshots: async () => 0,
+    snapshotIndex: async () =>
+      rows().map((r) => ({ seq: r.seq, taken: Math.floor(Date.parse(r.snapshot.takenAt) / 1000), circlesRead: r.snapshot.circles.read, rolesRead: r.snapshot.roles.read })),
+    snapshotsBySeq: async (_p: unknown, seqs: readonly number[]) => rows().filter((r) => seqs.includes(r.seq)),
+  };
+});
 vi.mock("../repos/peopleRoster", () => ({ rosterRows: async () => [] }));
+// The chart and the history the differences read: an empty chart here, so whatever the service holds is new.
+vi.mock("../lib/seraDifferencesInput", () => ({ liveForDifferences: async () => ({ circles: [], roles: [] }), acceptedForDifferences: async () => [] }));
+vi.mock("../repos/seraDifferences", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../repos/seraDifferences")>()),
+  publishStamp: async () => "0:0",
+}));
 
 vi.mock("../repos/moduleFacts", () => ({
   upsertFacts: async (_p: unknown, _v: unknown, _m: unknown, f: Record<string, unknown>[]) => {
@@ -687,5 +705,27 @@ describe("a press beside the schedule", () => {
     state.value = null;
     const r = await get("/api/saberra/runs");
     expect(r.body).toMatchObject({ schedule: "off", nextAt: null, blocked: "no-key", runs: [] });
+  });
+});
+
+describe("what a sync keeps is what the differences read next", () => {
+  it("A PRESSED READ, AND AN ATTEMPT THE SERVICE NEVER ANSWERED, ARE WHAT THE COUNT READS NEXT", async () => {
+    const land = "1a2b3c4d111122223333444455556666";
+    state.byKind = {
+      circle: [{ id: land, fields: { "Circle Name": "Land", Status: "Active" } }],
+      role: [{ id: "9f8e7d6c111122223333444455556666", fields: { "Role Name": "Seed Keeper", Circle: [land], Status: "Active" } }],
+    };
+    expect((await post("/api/saberra/sync")).status).toBe(200);
+    const first = await get("/api/saberra/differences/count");
+    expect(first.status).toBe(200);
+    // The new circle and the new role in it, from the read just kept.
+    expect(first.body).toMatchObject({ total: 2, lastReadWhole: true });
+
+    // The service does not answer: the attempt is the newest read, and nothing it carried is lost.
+    state.session = null;
+    expect((await post("/api/saberra/sync")).status).toBe(502);
+    const after = await get("/api/saberra/differences/count");
+    expect(after.status).toBe(200);
+    expect(after.body).toMatchObject({ total: 2, lastReadWhole: false });
   });
 });
