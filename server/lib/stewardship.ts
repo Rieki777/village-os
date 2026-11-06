@@ -179,7 +179,7 @@ import {
 } from "../repos/stewardshipBallots";
 import { catalystUserIds } from "../repos/users";
 import { slateFor } from "../repos/stewardSlate";
-import { moveCapabilityToVillage, STEWARD_ROLE_ID } from "./capabilityHolding";
+import { capabilityHoldings, moveCapabilityToVillage, STEWARD_ROLE_ID } from "./capabilityHolding";
 import { readLaunchSelection } from "./launchHandover";
 import { boolVar, stringVar } from "./variables";
 
@@ -1487,6 +1487,12 @@ export interface SeatingReport {
   holdingMoved: boolean;
   /** Which of the selected powers crossed on this call. Empty on a retry, or when none was selected. */
   capabilitiesMoved: string[];
+  /**
+   * Selected powers the village ALREADY holds through another role, left where
+   * they are (R158; Rye, 2026-11-01: the launch moves exactly the stewards'
+   * selection and never re-points a power the village holds). Not a failure.
+   */
+  capabilitiesKeptElsewhere: Array<{ capability: string; holderRoleId: string }>;
   /** Why the crossing did not happen, when it did not. Null when it did. */
   holdingHeld: string | null;
   /** User ids seated by this call. Empty means nothing to do, not a failure. */
@@ -1692,6 +1698,7 @@ export async function seatCatalystsAsStewards(
     capabilitiesGranted: [],
     holdingMoved: false,
     capabilitiesMoved: [],
+    capabilitiesKeptElsewhere: [],
     holdingHeld: null,
     seated: [],
     alreadySeated: [],
@@ -1929,7 +1936,21 @@ export async function seatCatalystsAsStewards(
       "The stewards hand them over by their own act once the village votes somebody into the role.";
   } else {
     const refusals: string[] = [];
+    /*
+     * A POWER THE VILLAGE ALREADY HOLDS IS NOT THE LAUNCH'S TO MOVE (R158).
+     * `moveCapabilityToVillage` upserts, so crossing a key another role holds
+     * would silently re-point it onto the Steward role. Such a key is left with
+     * its holder and reported; one the Steward role already holds is left alone
+     * too, so a retried close rewrites nothing.
+     */
+    const holderOf = new Map((await capabilityHoldings(pool)).map((h) => [h.capability, h.holderRoleId]));
     for (const capability of (await readLaunchSelection(pool)).capabilities) {
+      const holder = holderOf.get(capability);
+      if (holder && holder !== STEWARD_ROLE_ID) {
+        base.capabilitiesKeptElsewhere.push({ capability, holderRoleId: holder });
+        continue;
+      }
+      if (holder === STEWARD_ROLE_ID) continue;
       const moved = await moveCapabilityToVillage(pool, {
         capability,
         holderRoleId: STEWARD_ROLE_ID,
