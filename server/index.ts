@@ -20860,7 +20860,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       Array.isArray(req.body?.changes) ? req.body.changes : [],
       rawValue,
       cooldown,
-      readMintRulesForChangeSet, moduleChangeReaders,
+      readMintRulesForChangeSet, { ...moduleChangeReaders, brandOf: () => getBrand() },
     );
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -21105,6 +21105,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       await Promise.all([rolesRepo.load(), roleHoldersRepo.load(), loadModuleSettings(getPool()), loadVariables(getPool())]);
     },
     sharedPasswordPosture: () => false,
+    // A `brand_field` vote writes through the same document the admin brand route writes (Rye, 2026-11-06).
+    brand: { read: () => getBrand(), write: async (next) => { await brandRepo.put(next as any); } },
   });
 
   async function applyMechanicsProposal(
