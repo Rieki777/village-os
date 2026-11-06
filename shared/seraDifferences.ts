@@ -50,7 +50,7 @@
 import { canonicalJson } from "./canonicalJson";
 import { circlesNamed } from "./proposedSeats";
 import { circleIdFor, proposedCircleName, readSourcePay, seatIdFor, seatNameKey, sourceStatusOf } from "./structurePlan";
-import { waitingKind } from "./seraWaiting";
+import { pageKey, shownFlags, waitingKind } from "./seraWaiting";
 
 // ── The snapshot, as the sync stores it ─────────────────────────────────────
 
@@ -427,7 +427,8 @@ function normaliserFor(swap: ((text: string) => string) | undefined): Normaliser
 // ── Reading a stored record ─────────────────────────────────────────────────
 
 /** A page id with its dashes gone and lowercased, so two spellings of one id meet. */
-export const pageKey = (id: string): string => id.trim().toLowerCase().replace(/-/g, "");
+/** One key for a page id, shared with the page (./seraWaiting.ts), so both group alike (review C4). */
+export { pageKey };
 
 const PAGE_KEY_SHAPE = /^[0-9a-f]{32}$/;
 
@@ -1434,13 +1435,17 @@ export function differences(input: DifferencesInput): Difference[] {
 // ── The count (R25) ─────────────────────────────────────────────────────────
 
 export interface DifferenceCount {
-  /** Differences that wait for somebody, ours-ahead left out. */
+  /** What waits for a person: toDecide and the small changes. Never facts, never ours ahead (review C8). */
   total: number;
   /** Of the total, what a person decides: every decision and every conflict (shared/seraWaiting.ts). The headline's number. */
   toDecide: number;
+  /** Of the total, the small changes, which wait only while automatic apply is off. */
+  small: number;
+  /** The service's facts that changed since yesterday. They wait for nobody, so they are never in the total. */
+  facts: number;
   lanes: Record<Lane, number>;
   conflicts: number;
-  /** Of the total, how many carry a reason to check first. */
+  /** Of the total, how many SHOW a reason to check first (shownFlags), the chip's own number. */
   checkFirst: number;
   /** Things changed here that the service still has the old way. */
   oursAhead: number;
@@ -1448,17 +1453,24 @@ export interface DifferenceCount {
 
 /** Totals only: no subject, no name, no value. */
 export function countDifferences(list: readonly Difference[]): DifferenceCount {
-  const out: DifferenceCount = { total: 0, toDecide: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+  const out: DifferenceCount = { total: 0, toDecide: 0, small: 0, facts: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
   for (const d of list) {
-    if (d.state === "oursAhead") {
+    const kind = waitingKind(d);
+    if (kind === "oursAhead") {
       out.oursAhead += 1;
       continue;
     }
-    out.total += 1;
-    if (waitingKind(d) === "toDecide") out.toDecide += 1;
     out.lanes[d.lane] += 1;
     if (d.state === "conflict") out.conflicts += 1;
-    if (d.flags.length > 0) out.checkFirst += 1;
+    if (kind === "facts") {
+      out.facts += 1;
+      continue;
+    }
+    // What waits for a person, by the one rule (review C8).
+    out.total += 1;
+    if (kind === "toDecide") out.toDecide += 1;
+    else out.small += 1;
+    if (shownFlags(d).length > 0) out.checkFirst += 1;
   }
   return out;
 }
