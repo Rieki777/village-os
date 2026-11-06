@@ -448,3 +448,37 @@ describe.skipIf(!DB_CONFIGURED)("badges, as the gate's order says", () => {
     expect(await dialValue(OPEN_DIAL)).toBe("45");
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("the village's own reads of who holds a seat (R161)", () => {
+  // Cel's steward term ended yesterday. The gate and the admin roster already
+  // stop counting her; the pages every member reads named her as seated.
+  it("/api/roles counts and names only the seats still running", async () => {
+    const roles = await call("GET", "/api/roles");
+    expect(roles.status, roles.text).toBe(200);
+    const list: any[] = Array.isArray(roles.json) ? roles.json : roles.json?.roles ?? [];
+    const steward = list.find((r) => r.id === "steward");
+    expect(steward, "the Steward role is on the list").toBeTruthy();
+    expect(steward.holderCount).toBe(3);
+    const named = (steward.holders ?? []).map((h: any) => h.userId);
+    expect(named).not.toContain(people.cel.id);
+    expect(named).toContain(people.ada.id);
+  });
+
+  it("/api/village/powers names nobody whose seat has run out", async () => {
+    await pool.query( // module-review-ok: fixture SQL putting one power on the Steward role, against the scratch schema
+      "INSERT INTO capability_holding (capability, holder_role_id, note) VALUES ('library.keep', 'steward', 'R161 fixture')",
+    );
+    try {
+      const powers = await call("GET", "/api/village/powers");
+      expect(powers.status, powers.text).toBe(200);
+      const held = (powers.json?.powers ?? []).find((p: any) => p.capability === "library.keep");
+      expect(held?.heldBy, "the power reads as the Steward role's").toBeTruthy();
+      // First names since #903 (Rye, 2026-10-30: "Role (FirstName)"); the lapse
+      // filter now lives in villagePowerRows (server/lib/villagePowers.ts).
+      expect(held.heldBy.people).toContain("Ada");
+      expect(held.heldBy.people).not.toContain("Cel");
+    } finally {
+      await pool.query("DELETE FROM capability_holding WHERE capability = 'library.keep' AND note = 'R161 fixture'"); // module-review-ok: fixture cleanup on the scratch schema
+    }
+  });
+});

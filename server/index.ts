@@ -24888,7 +24888,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       loadRoles()
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((r) => {
-          const seated = holders.filter((h) => h.roleId === r.id);
+          const seated = holders.filter((h) => h.roleId === r.id && !holdingHasLapsed(h, new Date())); // R161: as the gate and the admin roster count
           return {
             id: r.id,
             name: r.name,
