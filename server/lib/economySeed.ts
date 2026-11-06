@@ -79,18 +79,17 @@ const RULES = [
   // and Earned Equity off. It used to mint 100 Gratitude. Set on the Mint panel.
   { trigger: "proposal.accepted", token: VILLAGE_VOICE, amount: 10, ceiling: 100, recipient: "claimant", enabled: true },
   { trigger: "proposal.accepted", token: CREDITS, amount: 25, ceiling: 250, recipient: "claimant", enabled: true },
-  // On and blank (Rye, 2026-11-05): Earned Equity means what the village says
-  // in Admin, and a piece of work that names an amount pays it. Nothing flat.
-  { trigger: "proposal.accepted", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "claimant", enabled: true },
-  // EARNED EQUITY (0266), ON AND BLANK (Rye, 2026-11-05). What it is a share of
-  // is unique to each village and set in Admin, Tokens (its meaning), and no
-  // piece of work may name it until that is written (`payLineProblem`). The
-  // amount is blank, so it pays only what a quest, role or proposal names and
-  // nothing flat: equity already in people's hands cannot be un-issued.
-  { trigger: "quest.completed", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "claimant", enabled: true },
+  { trigger: "proposal.accepted", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
+  // EARNED EQUITY (0266), OFF, because a village decides what pays equity.
+  // Seeded at all only because no route creates a mint rule: without these two
+  // rows a village could never pay it from a quest or a seat. One whole unit
+  // and a ceiling of one is the smallest payable figure and a placeholder to
+  // edit, chosen low because equity already in people's hands cannot be
+  // un-issued. Turning either on is one PATCH before launch or one vote after.
+  { trigger: "quest.completed", token: EARNED_EQUITY, amount: 1, ceiling: 1, recipient: "claimant", enabled: false },
   // Blank on a role, for the same reason as the two role rules above: a flat
   // unit to every seat would be the automatic mint again, in equity.
-  { trigger: "role.cycle", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "holder", enabled: true },
+  { trigger: "role.cycle", token: EARNED_EQUITY, amount: null, ceiling: 1, recipient: "holder", enabled: false },
 ];
 
 export interface SeedReport {

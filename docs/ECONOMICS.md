@@ -405,9 +405,9 @@ The mint rules a fresh village is seeded with:
 | `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
 | `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
-| `proposal.accepted` | `earned-equity` | read from the work | 1 | claimant | yes |
-| `quest.completed` | `earned-equity` | read from the work | 1 | claimant | yes |
-| `role.cycle` | `earned-equity` | read from the work | 1 | holder | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
+| `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
+| `role.cycle` | `earned-equity` | read from the work | 1 | holder | **no** |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
@@ -523,17 +523,13 @@ and no rule change: the flat rules go on paying the quests nobody has valued yet
 
 **Earned Equity means what each village says it means (Rye, 2026-11-05).** Its meaning is
 "unique project to project, SET IN ADMIN per village": the token's meaning field (Admin, Tokens;
-0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`). Its three
-rules are seeded on with the amount blank for a new village (a running village keeps its rules
-as they stand until a separate step, held for Rye's word, switches them), so it pays only what a
-quest, role or proposal names, and
+0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`).
 `payLineProblem` refuses any piece of work that names it until the village has written what it
-is a share of. A blank Earned Equity rule no role names is the ordinary state and is not
-reported as a rule that paid nobody.
+is a share of.
 
 **An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
 Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
-Village Voice and 25 Village Credits, Earned Equity on and blank), through `quoteWorkPay`, by
+Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
 `payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
 recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
 sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle

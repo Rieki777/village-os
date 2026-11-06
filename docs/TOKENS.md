@@ -74,9 +74,9 @@ Earned ownership. It accrues here from whichever rules the village turns on, and
 | Members may send it | no, because equity is never handed between members |
 | Can carry a price | no, a price is posted in credit tokens |
 
-**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay null on `proposal.accepted` to the claimant, up to 1 a moon; null on `quest.completed` to the claimant, up to 1 a moon; null on `role.cycle` to the holder, up to 1 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded with no rule that does. Three rules ship switched OFF and pay nobody until the village turns them on: 1 on `proposal.accepted` to the claimant; 1 on `quest.completed` to the claimant; null on `role.cycle` to the holder. They are seeded off rather than left out because no route creates a mint rule, so a village that wanted one back would have no way to add it. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
-**What happens at cycle close.** Settlement pays everyone holding a seat null of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
+**What happens at cycle close.** Nothing. Balances carry across the moon unchanged.
 
 ### Village Credits
 
@@ -320,9 +320,9 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 | `role.cycle` | `gratitude` | 20 | 100 | holder | no, seeded off |
 | `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
-| `proposal.accepted` | `earned-equity` | null | 1 | claimant | yes |
-| `quest.completed` | `earned-equity` | null | 1 | claimant | yes |
-| `role.cycle` | `earned-equity` | null | 1 | holder | yes |
+| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
+| `quest.completed` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
+| `role.cycle` | `earned-equity` | null | 1 | holder | no, seeded off |
 
 A confirmed quest also mints recognition from the consent route itself, with its own range and cap, which is not a mint rule and does not appear in that table. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
 
@@ -399,24 +399,24 @@ The same facts, for anything that would rather parse than read. Regenerated with
       "seededRules": [
         {
           "trigger": "proposal.accepted",
-          "amount": null,
+          "amount": 1,
           "ceiling": 1,
           "recipient": "claimant",
-          "enabled": true
+          "enabled": false
         },
         {
           "trigger": "quest.completed",
-          "amount": null,
+          "amount": 1,
           "ceiling": 1,
           "recipient": "claimant",
-          "enabled": true
+          "enabled": false
         },
         {
           "trigger": "role.cycle",
           "amount": null,
           "ceiling": 1,
           "recipient": "holder",
-          "enabled": true
+          "enabled": false
         }
       ],
       "description": "Earned ownership. It accrues here from whichever rules the village turns on, and a member claims it across to the equity mirror on Base. Nothing pays it until the village decides what does."
