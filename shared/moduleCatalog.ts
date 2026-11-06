@@ -383,6 +383,39 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 205,
     emblem: "Vote",
   },
+  canvas: {
+    promise: "How the village governs itself, read block by block on the Governance Canvas.",
+    benefits: [
+      "A reading for each of the twelve blocks: a level and one sentence, with who recorded it and when",
+      "Five frames for each block: sense it, see what the village already runs, learn, say the village's answer, adopt a change",
+      "Anybody in the village suggests a change, and whoever holds the power adopts it",
+      "A Decision Matrix of who approves, who is asked and who is told, and one public line per block",
+      "A printable workbook of the canvas, and a guide that answers from the village's own record first",
+    ],
+    forWhom: "Villages that want to see where their governance stands before they ask members to start.",
+    setupSummary:
+      "Nothing to set up. Record the first reading when you are ready; while it is on, every block needs one before the Game starts.",
+    dataSummary:
+      "Each block's readings with who recorded them, suggestions with their author, the Decision Matrix rows the village wrote, and the public lines.",
+    hue: 90,
+    emblem: "LayoutGrid",
+  },
+  "conflict-evolution": {
+    promise: "Somewhere for a conflict to go, written by the village and changed by its vote.",
+    benefits: [
+      "A conflict agreement: the steps, who takes a conflict and who covers when they cannot",
+      "A reply time in hours the village chose, and a contact outside the village",
+      "A private ask to the outside contact that carries no words and sends nothing",
+      "The founders write it before the Game starts, and after that a change is a vote",
+    ],
+    forWhom: "Villages that want a conflict door every member can find before they need it.",
+    setupSummary:
+      "Nothing to set up first. The agreement starts from your exit policy's restorative steps; while it is on, the launch checklist asks for a working door.",
+    dataSummary:
+      "The agreement, which names the people in its care and cover roles and an outside contact, and a record of who asked the outside contact to talk, and when.",
+    hue: 345,
+    emblem: "HeartHandshake",
+  },
   introductions: {
     promise: "A few good introductions a week, and both people say yes first.",
     benefits: [

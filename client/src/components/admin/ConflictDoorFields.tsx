@@ -23,6 +23,12 @@
  * so the refusal is rarely needed: the cover list leaves out the intake role,
  * and clearing or matching the intake role clears the cover.
  *
+ * THE THREE NEW FIELDS FOLLOW CONFLICT EVOLUTION (Rye's module ruling,
+ * 2026-10-01). The cover role, the reply time and the outside contact are the
+ * conflict door's, and the `conflict-door` launch row that asks for them
+ * applies only while that module is on. With it off (`door` false) this is
+ * the one field Departures always had, the intake role, and nothing else.
+ *
  * Out of client/src/pages/Admin.tsx because that file sits at its line
  * ratchet, and an admin surface belongs here. Light-only like the rest of the
  * admin panel, so the grays are numbered on purpose.
@@ -40,11 +46,14 @@ export function ConflictDoorFields({
   roles,
   onChange,
   inputCls,
+  door = true,
 }: {
   restorative: ConflictDoorDraft | null | undefined;
   roles: ReadonlyArray<{ id: string; name?: string | null }>;
   onChange: (patch: Partial<ConflictDoorDraft>) => void;
   inputCls: string;
+  /** Conflict Evolution is on, so the whole door is asked for. Off: the intake role alone. */
+  door?: boolean;
 }) {
   const r = restorative ?? {};
   const intake = r.intakeContactRole ?? "";
@@ -52,6 +61,20 @@ export function ConflictDoorFields({
   const contact = { name: "", organisation: "", howToReach: "", ...(r.outsideContact ?? {}) };
   const setContact = (patch: Partial<typeof contact>) => onChange({ outsideContact: { ...contact, ...patch } });
   const field = `${inputCls} w-full mt-1 min-h-[44px]`;
+
+  if (!door) {
+    return (
+      <label className="text-xs text-gray-500 block mb-4">Restorative intake role
+        <select value={intake} onChange={(e) => onChange({ intakeContactRole: e.target.value })} className={field}>
+          <option value="">none configured</option>
+          {roles.map((role) => <option key={role.id} value={role.id}>{role.name ?? role.id}</option>)}
+        </select>
+        <span className="block mt-1 text-[11px] text-gray-500">
+          A private intake reaches only the people holding this role, in their notifications here.
+        </span>
+      </label>
+    );
+  }
 
   return (
     <fieldset className="mb-4 border border-gray-200 rounded-lg p-4">

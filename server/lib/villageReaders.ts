@@ -87,6 +87,14 @@ export interface VillageReader {
 /** Injected at boot so this file stays free of the server's globals. */
 export interface ReaderDeps {
   moduleIsOn(id: string): boolean;
+  /**
+   * The module's lifecycle, for the one case `moduleIsOn` cannot answer: a
+   * module in PREVIEW serves its routes to admins only (`requireModule`), so
+   * its readers must refuse everybody else too, or the assistant becomes the
+   * way into a module the village has not opened. Optional so every existing
+   * caller and test is unchanged; absent, preview reads as on.
+   */
+  moduleLifecycle?(id: string): string;
   boolVar(key: string): boolean;
   /**
    * The village's IANA timezone (round 4, lane L6), for the one reader that
@@ -124,6 +132,7 @@ export function readerRefusal(r: VillageReader, viewer: ReaderViewer): string | 
   if (viewerRank < AUDIENCE_RANK[r.audience]) return `${r.key} is not for this audience`;
   if (r.admittedOnly && !viewer.isAdmin && viewer.admitted !== true) return `${r.key} is for the village's admitted members`;
   if (r.module && !deps.moduleIsOn(r.module)) return `${r.key} needs the ${r.module} module, which is off`;
+  if (r.module && !viewer.isAdmin && deps.moduleLifecycle?.(r.module) === "preview") return `${r.key} needs the ${r.module} module, which is open to admins only`;
   if (r.requiresVar && !deps.boolVar(r.requiresVar)) return `${r.key} needs ${r.requiresVar} switched on`;
   if (r.capability && !viewer.holds(r.capability)) return `${r.key} needs the ${r.capability} capability`;
   return null;
@@ -484,14 +493,16 @@ READERS.push({
 
 // ── The canvas, for the companion (Wave 4, plan 5.4) ─────────────────────────
 //
-// No module key: the canvas is core, so these exist on a fork that has
-// enabled nothing (server/routes/canvas.ts says why). The canvas and its
+// Behind the Governance Canvas module (Rye's module ruling, 2026-10-01): with
+// it off, the companion is handed none of the three and is never told they
+// exist, exactly as for any other module's reader. The canvas and its
 // matrix are `admittedOnly`, the rule their own routes apply; the library is
 // counsel and public metadata, so any member may read it. The SQL lives in
 // the repos and in villageBrain.ts, behind server/lib/companionCanvas.ts.
 READERS.push(
   {
     key: "canvas.answers",
+    module: "canvas",
     describe:
       "The village's governance canvas: for each block, the answer the village adopted and its latest reading. Members' words only: a section whose words stay with the administrators is listed under `others` with its state, and is never blank. Name a block in the question to read it whole.",
     audience: "member",
@@ -503,6 +514,7 @@ READERS.push(
   },
   {
     key: "canvas.library",
+    module: "canvas",
     describe:
       "Reading for a governance question: Canvas Resources that fit it, and the sections of the platform's own governance shelf that bear on it. Counsel, below the village's own record.",
     audience: "member",
@@ -511,6 +523,7 @@ READERS.push(
   },
   {
     key: "matrix.rows",
+    module: "canvas",
     describe:
       "The rows of the Decision Matrix the village wrote: for each kind of decision, who approves it, who is asked first, who is told, and the method.",
     audience: "member",

@@ -194,6 +194,12 @@ export interface BlockFramesPayload {
   birthed: boolean;
   /** Before the Birthing: a stored conflict agreement holds the care door, so the canvas cannot write it. */
   careDoorInAgreement: boolean;
+  /**
+   * After the Birthing, the care door changes by the conflict agreement's own
+   * vote. True while Conflict Evolution is on; off, the care door waits for the
+   * structural vote like the other exit terms. Absent reads as true.
+   */
+  careDoorByAgreement?: boolean;
   servesPurpose: { scoped: boolean; matrixScoped: boolean; requiredToday: boolean };
   notesArePublic: string;
 }
@@ -390,6 +396,7 @@ export function adoptEffect(
   birthed: boolean,
   sectionTitles: Record<string, string>,
   dial?: DialFacts | null,
+  careDoorByAgreement = true,
 ): string {
   const pen = p.pen;
   const notBuilt = "That vote is not built yet, so this suggestion stays open until it is.";
@@ -424,7 +431,7 @@ export function adoptEffect(
   }
   // The consequence pen: the exit terms, the care door and the matrix.
   if (pen.how === "ballot") {
-    if (door?.id === "exit:restorative") {
+    if (door?.id === "exit:restorative" && careDoorByAgreement) {
       return "The Game has started, so the care door changes only by a vote on the village's conflict agreement, which carries the whole agreement. Open that vote from the agreement itself.";
     }
     return `The Game has started, so this goes to a vote of the whole village at the structural tier. ${notBuilt}`;
@@ -625,6 +632,7 @@ export function suggestionFate(
   option: Pick<SuggestionOption, "target" | "door">,
   pen: PenView | undefined,
   careDoorInAgreement = false,
+  careDoorByAgreement = true,
 ): { text: string; href?: string; label?: string } | null {
   // Before the Birthing, once a conflict agreement is saved (a draft counts),
   // the exit-policy save refuses every canvas write to the care door, and the
@@ -636,7 +644,7 @@ export function suggestionFate(
     };
   }
   if (!pen || pen.how !== "ballot") return null;
-  if (option.target === "setting" && option.door === "exit:restorative") {
+  if (careDoorByAgreement && option.target === "setting" && option.door === "exit:restorative") {
     return {
       text: "The Game has started, so the care door changes only by a vote on the whole conflict agreement, opened from the agreement itself. A suggestion here stays open as a note to the village, and it cannot be adopted from the canvas.",
     };

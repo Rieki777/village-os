@@ -147,6 +147,16 @@ describe.skipIf(!configured)("the key moments' wiring and the canvas moon", () =
     expect(await noCare.careHolders()).toEqual([]);
   });
 
+  it("delivers nothing, to anybody, while the canvas module is off (Rye's module ruling, 2026-10-01)", async () => {
+    raiseCanvasRevisit("birthing-opened");
+    raiseCanvasRevisit("exit-opened");
+    await settleCanvasRevisits();
+    for (const p of [PEOPLE.admin, PEOPLE.member, PEOPLE.keeper, PEOPLE.care]) expect(await rowsOf(p.id)).toEqual([]);
+    // Every case below runs with the canvas switched on, as a founder would.
+    await pool.query("INSERT INTO module_settings (module_id, lifecycle) VALUES ('canvas','members')"); // module-review-ok: switching a module on in the scratch schema
+    await loadModuleSettings(pool);
+  });
+
   it("delivers a raised moment to the admins before the handover", async () => {
     raiseCanvasRevisit("birthing-opened");
     await settleCanvasRevisits();

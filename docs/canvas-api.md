@@ -6,8 +6,16 @@ it; `server/routes/canvasFrames.ts` is the implementation and changes with this 
 coordinator's governance sources ("Five frames", "Make it real", "Text-bearing objects", "Three
 pens").
 
-Every route here is core (no module switch stands in front of it) and is for the village's admitted
-members and its admins. A visitor with no session gets `401 { "error": "auth_required" }`. A
+**Every route here is behind the Governance Canvas module** (`canvas`, Rye's module ruling of
+2026-10-01), which ships off like every non-core module. `requireModule("canvas")` is mounted on
+`/api/canvas` in `server/routes/canvasModuleGates.ts`, ahead of every canvas route, so the module's
+lifecycle answers first, in the platform's own words: off is `404 { "error": "module_disabled",
+"module": "canvas" }` for everybody, preview serves admins only (the same 404 for anybody else),
+members answers a visitor `401 { "error": "auth_required", "module": "canvas" }`, and public lets a
+visitor reach the one door written for them, `GET /api/canvas/public`. The conflict agreement's routes
+are behind the separate Conflict Evolution module (`conflict-evolution`) the same way.
+
+Past the gate, every route is for the village's admitted members and its admins. A visitor with no session gets `401 { "error": "auth_required" }`. A
 signed-in account the village has not admitted gets `403 { "error": CANVAS_MEMBERS_ONLY }`, the
 sentence `server/routes/canvas.ts` exports. Every refusal below carries `error` as a sentence a
 member can read, unless it says otherwise.

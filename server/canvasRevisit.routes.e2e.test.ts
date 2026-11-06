@@ -199,6 +199,12 @@ beforeAll(async () => {
       [id, name, "A role this suite seats people in.", JSON.stringify([]), 0],
     );
   }
+  // The canvas is an optional module, off by default (Rye's module ruling,
+  // 2026-10-01), and a key moment is a canvas notice, so it is delivered only
+  // while the canvas is on. This village switched it on before anything here
+  // happened, which is the only way the instance claim at bootstrap can be a
+  // moment at all: nobody can switch a module on before a founder exists.
+  await pool.query("INSERT INTO module_settings (module_id, lifecycle) VALUES ('canvas','members')"); // module-review-ok: switching a module on in the scratch schema before boot
   await bootServer();
 
   // THE CLAIM, which is the first key moment (instance claimed). The case that

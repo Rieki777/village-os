@@ -61,6 +61,13 @@
  *      with no stored agreement too). Without this, a village birthed with no
  *      agreement document had its conflict path rewritten by an admin alone
  *      while every member was told only a vote could change it.
+ *
+ * ALL THREE ONLY WHILE CONFLICT EVOLUTION IS ON (Rye's module ruling,
+ * 2026-10-01). Off, `readExitPolicy()` serves the policy's own restorative
+ * block, `agreementStored()` answers false, and the Birthing no longer locks
+ * the block, because the vote that would change it is the module's route.
+ * The public read's withholding (1) stays for every village: it is the
+ * intake-privacy fix, and it reads the policy alone when there is no agreement.
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -126,6 +133,14 @@ export type ExitDeps = Pick<
   /** The stored agreement document, raw, for the contacts the public read must never print. */
   agreementDoc(): unknown;
   /**
+   * Whether Conflict Evolution is on (Rye, 2026-10-01). Off, there is no
+   * agreement and no vote to change one, so after the Birthing the restorative
+   * block is the exit policy's again and an admin edits it on Departures, as
+   * before the agreement existed. Absent reads as on, which is what every
+   * caller written before the module ruling assumes.
+   */
+  conflictEvolutionOn?(): boolean;
+  /**
    * The policy with the platform defaults read through: the copy every READER
    * is served, so every response here builds on it and never on
    * `exitPolicyRepo.get()`. See its note in server/index.ts for the field that
@@ -151,7 +166,7 @@ export type ExitDeps = Pick<
 };
 
 /** What the exit-policy save needs, and nothing it does not. */
-export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "getPool" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored">;
+export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "getPool" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored" | "conflictEvolutionOn">;
 
 /**
  * THE EXIT-POLICY SAVE, as one callable function (canvas-frames-server lane,
@@ -178,7 +193,8 @@ export async function saveExitPolicy(
   }
   // After the Birthing the restorative block is the village's to change, by a
   // vote on its conflict agreement, whether or not an agreement is stored.
-  if ((await readGameStart(deps.getPool())).started && !sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
+  // Only while Conflict Evolution is on, because that vote is its route.
+  if ((deps.conflictEvolutionOn?.() ?? true) && (await readGameStart(deps.getPool())).started &&!sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
     return { status: 409, body: { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_VOTE, door: AGREEMENT_CHANGE_DOOR } };
   }
   // While the conflict agreement holds the restorative block, this save
@@ -329,8 +345,11 @@ export function register(app: Express, deps: ExitDeps): void {
       terms: EXIT_POLICY_TERMS,
       circles: deps.circlesRepo.all().map((c: any) => ({ id: c.id, name: c.name })),
       conflictAgreementStored: deps.agreementStored(),
-      // After the Birthing the restorative block changes only by a village vote, so Departures stops offering it.
       gameStarted: (await readGameStart(deps.getPool())).started,
+      // After the Birthing, while Conflict Evolution is on, the restorative block changes only by a village vote on
+      // the agreement, so Departures stops offering it. Off, Departures edits it as it did before the agreement.
+      restorativeByVote: (deps.conflictEvolutionOn?.() ?? true) && (await readGameStart(deps.getPool())).started,
+      conflictEvolution: deps.conflictEvolutionOn?.() ?? true,
     });
   });
 

@@ -11,14 +11,17 @@
  * The rules are in server/lib/conflictAgreement.ts and shared/conflictAgreement.ts;
  * this file is the doors.
  *
- * ── CORE, AND ALWAYS ON ───────────────────────────────────────────────────
+ * ── BEHIND THE CONFLICT EVOLUTION MODULE (Rye's module ruling, 2026-10-01) ─
  *
- * No `requireModule` stands in front of the reads, the admin write or the
- * ombuds door: a conflict path is part of every village, like leaving is.
- * The change ballot sits under `/api/governance`, which server/index.ts mounts
- * behind the governance module before this register() runs, because a ballot
- * is governance; the launch checklist already blocks the Birthing until that
- * module is open to members.
+ * Every door here sits behind `requireModule("conflict-evolution")`, mounted in
+ * server/routes/canvasModuleGates.ts before this register() runs: the reads,
+ * the admin write, the ombuds door and the change ballot. The module ships off.
+ * A conflict path is still part of every village, like leaving is: with the
+ * module off it is the exit policy's own restorative block and the private
+ * intake, both core, and the agreement does not answer that block
+ * (`readExitPolicy`, server/index.ts). The change ballot also sits under
+ * `/api/governance`, mounted behind the governance module, because a ballot
+ * is governance, so it needs both modules on.
  *
  * ── THE CONSEQUENCE PEN, TWO DOORS, ONE OPEN AT A TIME ────────────────────
  *

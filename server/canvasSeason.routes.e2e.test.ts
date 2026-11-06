@@ -7,8 +7,11 @@
  * inside server/index.ts. This file boots `dist/index.js` and asks the real
  * one, so it proves what only the running server can:
  *
- *   1. the routes are registered at all, by server/index.ts, with no module
- *      switched on, because the canvas is core;
+ *   1. the canvas is an optional module, off by default (Rye's module ruling,
+ *      2026-10-01), and nothing turns it on by itself: with it off the season
+ *      doors answer the platform's 404, the founder's season file is refused
+ *      there and the module is still off afterwards (ruling 6); a founder
+ *      switches it on through the real lifecycle route;
  *   2. the pen is `story.tell` asked of the ONE gate in its own order: the
  *      founder before the handover, and a member once their role carries it;
  *   3. the refusals are the route's words: 401 to a visitor, 403 and a
@@ -155,7 +158,26 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("the canvas season, through the real gate", () => {
-  it("answers an admitted member with no season, and no module switched on", async () => {
+  it("is off in a fresh village, and loading the season file does not switch it on", async () => {
+    const read = await call("GET", "/api/canvas/season", undefined, people.member.token);
+    expect(read.status, read.text).toBe(404);
+    expect(read.json?.error).toBe("module_disabled");
+    const load = await call("PUT", "/api/canvas/season", TEMPLATE);
+    expect(load.status, load.text).toBe(404);
+    const modules = await call("GET", "/api/modules", undefined, "");
+    const canvas = (modules.json?.modules ?? modules.json ?? []).find?.((m: any) => m.id === "canvas");
+    expect(canvas?.lifecycle ?? "off").toBe("off");
+    const [rows] = await pool.query<any[]>("SELECT lifecycle FROM module_settings WHERE module_id = 'canvas'"); // module-review-ok: reading the scratch schema this suite provisioned
+    expect(rows.length).toBe(0);
+  });
+
+  it("a founder switches the canvas on for members through the real lifecycle route", async () => {
+    const r = await call("PUT", "/api/admin/modules/canvas/lifecycle", { lifecycle: "members" });
+    expect(r.status, r.text).toBe(200);
+    expect(r.json?.served).toBe("members");
+  });
+
+  it("answers an admitted member with no season, once the canvas is on", async () => {
     const r = await call("GET", "/api/canvas/season", undefined, people.member.token);
     expect(r.status, r.text).toBe(200);
     expect(r.json).toEqual({ season: null, savedBy: null, savedAt: null, problem: null, mayEdit: false });

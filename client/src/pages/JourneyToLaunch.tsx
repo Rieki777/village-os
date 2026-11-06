@@ -42,6 +42,7 @@ import { type StewardCandidate } from "@/components/governance/StewardSlatePicke
 import StartTheGame, { type LaunchVote } from "@/components/launch/StartTheGame";
 import HandOverPowers from "@/components/governance/HandOverPowers";
 import { useBrochurePages } from "@/lib/brochure";
+import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
 
 /**
  * THE SECTION EACH REQUIREMENT SITS IN.
@@ -67,7 +68,8 @@ const GROUP_META: Record<LaunchGroup, { title: string; blurb: string }> = {
   modules: { title: "What your village runs", blurb: "Everything ships off; opening each part is a decision." },
   governance: {
     title: "How the village decides and cares",
-    blurb: "The canvas on record, the terms of leaving, a door for a conflict, and a vote members can answer.",
+    // Each row here appears only where it applies: the canvas and conflict-door rows only while their modules are on.
+    blurb: "The terms of leaving and closing, a vote members can answer, and what the village's governance modules ask for.",
   },
   reach: { title: "Being reachable", blurb: "Domain, deliverability, and the drills only a human can do." },
 };
@@ -201,7 +203,17 @@ export default function JourneyToLaunch() {
       live = false;
     };
   }, [userId, isAdmin]);
-  const memberCanvas = admitted !== false;
+  /*
+   * THE CANVAS IS A MODULE (Rye's module ruling, 2026-10-01), off by default.
+   * While it is off nobody is offered the Canvas tab, an address that asks for
+   * the canvas view lands on the launch view, and an admin reads one line
+   * pointing to Modules where the tab would be. Until the catalogue arrives
+   * the tab waits, so a village with the canvas off never flashes it.
+   */
+  const modules = useModules();
+  const canvasOn = moduleIsOn(modules, "canvas");
+  const memberCanvas = admitted !== false && canvasOn;
+  const shownView: JourneyView = view === "canvas" && !canvasOn ? "launch" : view;
   /**
    * The founding members this proposal may name, and how many powers the seat
    * carries, both from the server (0220).
@@ -400,7 +412,7 @@ export default function JourneyToLaunch() {
             * a founder can act on, and the rows below say which.
             */}
           {status && !launched && (
-            <p data-testid="journey-remaining" className={`text-white text-xs ${view === "canvas" ? "hidden" : ""}`}>
+            <p data-testid="journey-remaining" className={`text-white text-xs ${shownView === "canvas" ? "hidden" : ""}`}>
               {status.blockingOpen} blocking · {status.recommendedOpen} recommended remaining
             </p>
           )}
@@ -408,7 +420,7 @@ export default function JourneyToLaunch() {
           <div className="flex flex-wrap gap-2 mt-5">
             <button
               onClick={() => setView("launch")}
-              className={`text-sm rounded-lg px-3 py-1.5 font-medium ${view === "launch" ? "bg-amber text-foreground" : "bg-white/10 text-white"}`}
+              className={`text-sm rounded-lg px-3 py-1.5 font-medium ${shownView === "launch" ? "bg-amber text-foreground" : "bg-white/10 text-white"}`}
             >
               Launch readiness
             </button>
@@ -418,7 +430,7 @@ export default function JourneyToLaunch() {
             >
               Village economics
             </button>
-            <ViewTab active={view === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>
+            {canvasOn && <ViewTab active={shownView === "canvas"} onClick={() => setView("canvas")}>Canvas</ViewTab>}
             {brochureOn && (
               <Link
                 href="/project-history"
@@ -440,7 +452,16 @@ export default function JourneyToLaunch() {
 
       <div className="bg-stone-50 min-h-screen py-8">
         <div className="container max-w-3xl space-y-6">
-          {view === "canvas" ? (
+          {modules.loaded && !modules.failed && !canvasOn && shownView === "launch" && (
+            <p data-testid="journey-canvas-off" className="text-sm text-stone-700 bg-white border border-stone-200 rounded-xl px-4 py-3">
+              Governance Canvas is off.{" "}
+              <Link href="/admin?tab=modules&module=canvas" className="font-medium text-teal-deep underline">
+                Turn it on in Modules
+              </Link>{" "}
+              to start your canvas.
+            </p>
+          )}
+          {shownView === "canvas" ? (
             // The guide and the companion share one corner, so opening either closes the other.
             <CanvasView cornerTaken={guideOpen} onAsk={closeGuide} />
           ) : view === "economics" ? (

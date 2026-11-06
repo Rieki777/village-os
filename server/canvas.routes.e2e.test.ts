@@ -6,8 +6,10 @@
  * server/index.ts. This file boots `dist/index.js` and asks the real one, so
  * it proves the three things only the running server can:
  *
- *   1. the routes are registered at all, with no module switched on, because
- *      the canvas is core and no lifecycle switch may take it away;
+ *   1. the canvas is an OPTIONAL module, off by default (Rye's module ruling,
+ *      2026-10-01): with it off every /api/canvas door answers the platform's
+ *      404, a founder switches it on through the real lifecycle route, and
+ *      Conflict Evolution, which nobody switched on, stays shut;
  *   2. the pen is `story.tell` asked of the ONE gate, in the gate's own order:
  *      an admin before the handover, a role that carries it, and once the
  *      village holds it, its holder and not the admin;
@@ -165,7 +167,28 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
-  it("answers an admitted member with every block, with no module switched on", async () => {
+  it("is off in a fresh village: the canvas answers the platform's 404 to a member and to the founder", async () => {
+    for (const token of [people.member.token, founderToken]) {
+      const r = await call("GET", "/api/canvas", undefined, token);
+      expect(r.status, r.text).toBe(404);
+      expect(r.json?.error).toBe("module_disabled");
+      expect(r.json?.module).toBe("canvas");
+    }
+  });
+
+  it("a founder switches it on for members through the real lifecycle route", async () => {
+    const r = await call("PUT", "/api/admin/modules/canvas/lifecycle", { lifecycle: "members" });
+    expect(r.status, r.text).toBe(200);
+    expect(r.json?.served).toBe("members");
+  });
+
+  it("Conflict Evolution, which nobody switched on, stays shut while the canvas is on", async () => {
+    const r = await call("GET", "/api/conflict-agreement", undefined, people.member.token);
+    expect(r.status, r.text).toBe(404);
+    expect(r.json?.module).toBe("conflict-evolution");
+  });
+
+  it("answers an admitted member with every block, once the canvas is on", async () => {
     const r = await call("GET", "/api/canvas", undefined, people.member.token);
     expect(r.status, r.text).toBe(200);
     expect(r.json.blocks.map((b: any) => b.id)).toEqual([...CANVAS_BLOCK_IDS]);
@@ -273,6 +296,15 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
    * held by the village, with Wren seated in the role that carries it.
    * server/routes/canvasPublic.test.ts proves the rest with a modelled gate.
    */
+  it("keeps the public lines from a visitor while the canvas is for members, until a founder makes it public", async () => {
+    const shut = await call("GET", "/api/canvas/public", undefined, "");
+    expect(shut.status, shut.text).toBe(401);
+    expect(shut.json?.module).toBe("canvas");
+    const opened = await call("PUT", "/api/admin/modules/canvas/lifecycle", { lifecycle: "public" });
+    expect(opened.status, opened.text).toBe(200);
+    expect(opened.json?.served).toBe("public");
+  });
+
   it("serves every block's public line to a visitor, and gives the write to the pen alone", async () => {
     const r = await call("GET", "/api/canvas/public", undefined, "");
     expect(r.status, r.text).toBe(200);

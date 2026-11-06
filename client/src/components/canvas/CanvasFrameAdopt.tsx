@@ -227,7 +227,7 @@ function ProposalCard({
         </p>
       )}
       <p className="text-stone-800" data-testid={`canvas-proposal-effect-${p.id}`}>
-        {adoptEffect(p, payload.birthed, titles, dial)}
+        {adoptEffect(p, payload.birthed, titles, dial, payload.careDoorByAgreement ?? true)}
       </p>
       <p className="text-xs text-stone-600">Who decides: {p.pen.sentence}</p>
       {opensPurposeVote(p) && (

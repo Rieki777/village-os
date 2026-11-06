@@ -14,12 +14,11 @@
  * The request and response shapes are written down for the UI lane in
  * docs/canvas-api.md. That file and this one change together.
  *
- * ── CORE, LIKE THE CANVAS ──────────────────────────────────────────────────
+ * ── BEHIND THE GOVERNANCE CANVAS MODULE, LIKE THE CANVAS ───────────────────
  *
- * No `requireModule` stands in front of any of these, for the reason
- * server/routes/canvas.ts gives: every block has to be on record before the
- * Birthing, so nothing a village can switch off may stand between it and the
- * canvas. Reading and suggesting are for the village's admitted members and
+ * Every path here is under /api/canvas, so `requireModule("canvas")` stands in
+ * front of it (server/routes/canvasModuleGates.ts; Rye's module ruling,
+ * 2026-10-01). Past that gate, reading and suggesting are for the village's admitted members and
  * its admins (`mayReadCanvas`), never the public.
  *
  * ── PROPOSE FREELY, ADOPT BY POWER ─────────────────────────────────────────
@@ -620,6 +619,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       // Before the Birthing, a stored conflict agreement holds the care door,
       // and the exit-policy save refuses a canvas write to it.
       careDoorInAgreement: !facts.birthed && doorsForBlock(id).some((d) => d.id === "exit:restorative") && deps.exitPolicy.agreementStored(),
+      // After it, the care door is the agreement's vote only while Conflict Evolution is on.
+      careDoorByAgreement: deps.exitPolicy.conflictEvolutionOn?.() ?? true,
       servesPurpose: {
         scoped: servesPurposeScoped(id, "words"),
         matrixScoped: id === "power",
@@ -859,7 +860,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
 
     // The consequence pen: the exit terms, the care door and the matrix.
     if (rule.how === "ballot") {
-      return { ok: false, status: 409, body: { error: p.door === "exit:restorative" ? CARE_DOOR_IS_THE_AGREEMENT_VOTE : CONSEQUENCE_VOTE_NOT_BUILT } };
+      // The agreement's vote is Conflict Evolution's route, so with that module off the care door waits like the other exit terms.
+      const agreementVote = p.door === "exit:restorative" && (deps.exitPolicy.conflictEvolutionOn?.() ?? true);
+      return { ok: false, status: 409, body: { error: agreementVote ? CARE_DOOR_IS_THE_AGREEMENT_VOTE : CONSEQUENCE_VOTE_NOT_BUILT } };
     }
     if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.consequence } };
     if (p.target === "matrix") {

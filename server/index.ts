@@ -68,6 +68,7 @@ import { conflictAgreementCloser } from "./lib/conflictAgreementCloser";
 import { raiseCanvasRevisitForLifecycle, raiseCanvasRevisitForSubmission } from "./lib/canvasRevisit";
 import { agreementCloser } from "./lib/agreementCloser";
 import { withConflictAgreement } from "./lib/conflictAgreement";
+import { conflictEvolutionOn } from "./lib/canvasModules";
 import {
   NOT_YET_WIRED,
   POWERS,
@@ -126,6 +127,7 @@ import { registerMoonSettlementRoutes } from "./routes/moonSettlement";
 import { applyDueGovernance, autoSettleExpired, digestComposerFor, itemKindsOf, markNotApplicable, overrideDials, routeOutcome, runVetoWatch, vetoWindowOn, type CloseRouting, type LandingDeps, type SubjectCloser } from "./lib/applyDue";
 import { register as registerGovernanceModeRoutes } from "./routes/governanceMode";
 import { register as registerGoverningPurposeRoutes } from "./routes/governingPurpose";
+import { register as registerCanvasModuleGates } from "./routes/canvasModuleGates";
 import { register as registerCanvasRoutes } from "./routes/canvas";
 import { register as registerCanvasSeasonRoutes } from "./routes/canvasSeason";
 import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatrix";
@@ -1411,7 +1413,9 @@ const exitPolicyRepo = dbDocument(getPool(), "exit-policy", DEFAULT_EXIT_POLICY 
  */
 // The conflict agreement (block 8) answers the restorative block once saved: server/lib/conflictAgreement.ts.
 const conflictAgreementRepo = dbDocument(getPool(), CONFLICT_AGREEMENT_KEY, null as any);
-const readExitPolicy = (): any => withConflictAgreement(withPolicyDefaults(exitPolicyRepo.get()), conflictAgreementRepo.get());
+// Only while Conflict Evolution is on (Rye, 2026-10-01): off, the exit policy's own restorative block stands, as before the agreement existed.
+const agreementHeld = (): boolean => conflictEvolutionOn() && conflictAgreementRepo.exists();
+const readExitPolicy = (): any => withConflictAgreement(withPolicyDefaults(exitPolicyRepo.get()), conflictEvolutionOn() ? conflictAgreementRepo.get() : null);
 // The runOnce ledger (one-shot data fixups) — formerly data/migrations.json.
 const dataMigrations = dbDocument(getPool(), "data-migrations", { applied: [] as string[] });
 // S19: circles — the village's organizational shape, as data.
@@ -1584,6 +1588,7 @@ async function initStores(): Promise<void> {
   // second opinion about whether a module is on.
   wireReaders({
     moduleIsOn: (id) => effectiveLifecycle(id) !== "off",
+    moduleLifecycle: (id) => effectiveLifecycle(id),
     boolVar: (key) => boolVar(key),
     // LANE L6: the one reader that says a clock out loud reads the village's
     // own zone, the same one the seasons turn on.
@@ -13839,7 +13844,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
 
   // Member exit (S52, F12): the published policy and a departure's steps, in server/routes/exits.ts.
-  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, hasMembership, agreementStored: () => conflictAgreementRepo.exists(), agreementDoc: () => conflictAgreementRepo.get(), readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
+  registerExitRoutes(app, { isAdmin, authedUser, adminActor, getPool, members, circlesRepo, loadRoles, roleIdsFor, notify, notifyAdmins, hasMembership, agreementStored: agreementHeld, agreementDoc: () => (conflictEvolutionOn() ? conflictAgreementRepo.get() : null), conflictEvolutionOn, readExitPolicy, exitPolicyRepo, roleHolders: loadRoleHolders, confirmIdentity, departureStrandingRefusal, erasureDeps });
 
   // Restorative intake (F12's hard rule as code): server/routes/restorativeIntake.ts.
   registerRestorativeIntakeRoutes(app, { authedUser, notify, overLimit, readExitPolicy, roleHolders: loadRoleHolders });
@@ -24110,10 +24115,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerStewardSlateRoutes(app, { authedUser, isAdmin, getPool, members, firstName });
   registerGoverningPurposeRoutes(app, { authedUser, isAdmin, adminActor, getPool, capabilityCtx, firstName, weightModeNow, buildElectorate, addActivity });
   registerGovernanceAgreementRoutes(app, { authedUser, isAdmin, hasMembership, getPool, capabilityCtx, firstName, weightModeNow, circlesRepo, notify, buildElectorate, addActivity, villageTimezone });
+  // The two optional canvas modules close their doors here, before any of their routes (Rye, 2026-10-01).
+  registerCanvasModuleGates(app);
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: () => conflictAgreementRepo.exists() }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
   registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });

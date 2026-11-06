@@ -21,7 +21,12 @@
  *   Conflict (8)     the conflict agreement's editor
  *                    (ConflictAgreementEditor, lazy, the same chunk the
  *                    governance page loads). The editor asks the server who
- *                    may save and offers only what will work.
+ *                    may save and offers only what will work. ONLY WHILE
+ *                    CONFLICT EVOLUTION IS ON (Rye's module ruling,
+ *                    2026-10-01); with it off, the block shows the exit
+ *                    policy's restorative steps (VillageConflictSteps), which
+ *                    every village has, and its care door is changed on
+ *                    Departures or by a suggestion here.
  *
  * Suggesting is free (Rye, 2026-09-24 and 2026-09-25): the box is offered to
  * every member and every administrator alike, and the power question is asked
@@ -34,6 +39,8 @@ import { readingDate } from "@/lib/canvasCopy";
 import { SECTION_STATUS_WORDS, sectionClosedLine, type BlockFramesPayload, type FrameId } from "@/lib/canvasFramesCopy";
 import { CanvasSuggestionForm } from "./CanvasSuggestionForm";
 import { DecisionMatrixRows } from "./DecisionMatrixRows";
+import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
+import { useModuleOn } from "@/modules/ModuleProvider";
 
 const DecisionMatrix = lazy(() => import("./DecisionMatrix"));
 const ConflictAgreementEditor = lazy(() => import("./ConflictAgreementEditor"));
@@ -52,6 +59,7 @@ export function CanvasFrameSay({
 }) {
   const [sent, setSent] = useState(false);
   const { block, answer } = payload;
+  const conflictOn = useModuleOn("conflict-evolution");
 
   return (
     <section aria-label={`Say: the village's answer on ${block.name}`} className="space-y-5 text-sm">
@@ -98,7 +106,14 @@ export function CanvasFrameSay({
         </p>
       )}
 
-      {block.id === "conflict" && (
+      {block.id === "conflict" && !conflictOn && (
+        <div className="space-y-2" data-testid="canvas-say-restorative">
+          <h4 className="font-semibold text-stone-900">The restorative steps</h4>
+          <VillageConflictSteps />
+        </div>
+      )}
+
+      {block.id === "conflict" && conflictOn && (
         <div className="space-y-2" data-testid="canvas-say-agreement">
           <h4 className="font-semibold text-stone-900">The conflict agreement</h4>
           <Suspense fallback={waiting}>

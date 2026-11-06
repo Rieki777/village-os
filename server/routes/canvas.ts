@@ -4,12 +4,21 @@
  *   GET  /api/canvas            every member: each block's newest reading and its history
  *   POST /api/canvas/readings   the canvas pen: one new reading of one block
  *
- * ── CORE, AND ALWAYS ON ────────────────────────────────────────────────────
+ * ── A MODULE, OFF BY DEFAULT (Rye's module ruling, 2026-10-01) ─────────────
  *
- * The canvas is not a module. No `requireModule` sits in front of it and no
- * lifecycle switch can take it away, because Rye ruled on 2026-09-24 that
- * every block must be on record before a village's Birthing, and a gate a
- * village has to pass cannot sit behind a switch it could turn off.
+ * The Governance Canvas is the optional module `canvas` (shared/modules.ts),
+ * and every path under /api/canvas sits behind `requireModule("canvas")`,
+ * mounted in server/routes/canvasModuleGates.ts before this file registers.
+ * Off answers 404 `module_disabled`, preview answers admins only, members
+ * answers a visitor 401, and public lets a visitor through to the one door
+ * that serves them, /api/canvas/public. The checks below run after the gate.
+ *
+ * This header used to say the canvas was not a module and could never be
+ * switched off, because every block must be on record before a village's
+ * Birthing (Rye, 2026-09-24). The module ruling keeps that rule and scopes
+ * it: the `canvas-on-record` launch row applies only while the module is on
+ * (shared/launchRequirements.ts), so a village that never chose the canvas
+ * is not held to it, and one that did cannot launch around it.
  *
  * ── WHO MAY READ: THE VILLAGE'S MEMBERS, AND ITS ADMINS ────────────────────
  *

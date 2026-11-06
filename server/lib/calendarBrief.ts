@@ -47,7 +47,7 @@ export function setOpportunitiesProvider(fn: OpportunitiesProvider | null): void
  * `canvasMoonQuestion` (./canvasMoon.ts). Titles only: never a level, a
  * reading, a sentence or a name.
  */
-export type CanvasMoonProvider = (pool: Pool, newMoonAt: Date) => Promise<string[]>;
+export type CanvasMoonProvider = (pool: Pool, newMoonAt: Date) => Promise<string[] | null>;
 
 let canvasMoonProvider: CanvasMoonProvider | null = null;
 
@@ -57,8 +57,8 @@ export function setCanvasMoonProvider(fn: CanvasMoonProvider | null): void {
 }
 
 /**
- * The titles for one new moon, or null when no reader is registered or it
- * failed. Read by the weekly brief below and by the moon digest
+ * The titles for one new moon, or null when no reader is registered, it
+ * failed, or it answered null (the Governance Canvas is off). Read by the weekly brief below and by the moon digest
  * (./moonDigest.ts), so the two carry the same moon the same way. Never
  * throws: a brief without its canvas line still says what the week holds.
  */

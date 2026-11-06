@@ -32,10 +32,9 @@ export const FORK_RUNBOOK_URL = "https://github.com/Rieki777/village-os/blob/mai
  * THE TWO OPTIONAL GOVERNANCE MODULES' IDS, as Rye's module ruling of
  * 2026-10-01 names them: "Governance Canvas" (`canvas`) and "Conflict
  * Evolution" (`conflict-evolution`), both off by default. The launch rows
- * that belong to them name them here. The modules themselves are not in the
- * catalogue yet (shared/modules.ts); until they are, `effectiveLifecycle`
- * reads an unknown id as off, so their rows apply to no village, which is
- * what the ruling asks of a module nobody has switched on.
+ * that belong to them name them here. Both are in the catalogue
+ * (shared/modules.ts) and ship off, so their rows apply to no village until a
+ * founder switches the module on in Modules.
  */
 export const CANVAS_MODULE_ID = "canvas";
 export const CONFLICT_EVOLUTION_MODULE_ID = "conflict-evolution";
@@ -607,8 +606,7 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
      * ONLY WHILE THE GOVERNANCE CANVAS MODULE IS ON (Rye's module ruling,
      * 2026-10-01: the canvas ships as an optional module, off by default, and
      * this row applies only when it is on). A village that never chose the
-     * canvas is not told the canvas blocks its launch. Until the module is in
-     * the catalogue it reads off everywhere, so the row withdraws everywhere.
+     * canvas is not told the canvas blocks its launch.
      */
     appliesWhenModule: CANVAS_MODULE_ID,
     checkKey: "canvas:on-record",

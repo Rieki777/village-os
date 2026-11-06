@@ -5636,7 +5636,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
             </label>
           </div>
 
-          {data?.conflictAgreementStored || data?.gameStarted ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} byVote={!!data?.gameStarted} /> : (<>
+          {data?.conflictAgreementStored || data?.restorativeByVote ? <RestorativeInAgreement steps={policyDraft.restorative?.steps} byVote={!!data?.restorativeByVote} /> : (<>
           <StepListEditor
             label="The restorative path"
             hint="Printed under Repair before departure. Its content reaches only the people in the room; these are the steps, never the content."
@@ -5644,7 +5644,7 @@ export function ExitsAdminTab({ password }: { password: string }) {
             onChange={(next) => setRes({ steps: next })}
           />
           <p className="text-[11px] mb-4 -mt-2">{mark(stale.includes("The restorative path"))}</p>
-          <ConflictDoorFields restorative={policyDraft.restorative} roles={roles} onChange={setRes} inputCls={inputCls} />
+          <ConflictDoorFields restorative={policyDraft.restorative} roles={roles} onChange={setRes} inputCls={inputCls} door={data?.conflictEvolution !== false} />
           </>)}
 
           {/*

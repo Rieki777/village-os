@@ -36,6 +36,11 @@
  * and hands the line back as `consent` so the page can ask. Nothing is sent
  * upstream before that yes, and a yes to one line is not a yes to another.
  *
+ * ONLY WHILE THE GOVERNANCE CANVAS IS ON (Rye's module ruling, 2026-10-01).
+ * The three readers carry `module: "canvas"`, and a question is a canvas
+ * question only while the module is on, so with it off this route answers as
+ * it did before the canvas existed, and the record's answer names no canvas.
+ *
  * WHO READS THE CANVAS. The canvas's own rule, `mayReadCanvas`
  * (server/routes/canvas.ts), asked here and handed to the readers as
  * `admitted`. A signed-in account the village has not admitted reaches the
@@ -88,6 +93,7 @@ import {
   type ReaderViewer,
 } from "../lib/villageReaders";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
+import { canvasOn } from "../lib/canvasModules";
 
 export interface CompanionDeps
   extends Pick<AppDeps, "authedUser" | "isAdmin" | "hasMembership" | "capabilityCtx" | "getPool" | "members" | "clientIp"> {
@@ -167,7 +173,10 @@ export function register(app: Express, deps: CompanionDeps): void {
     const block = blockFromBody(req.body?.block);
     const ctx: ReaderCtx = { pool, viewer, query: block ? `${CANVAS_BLOCKS[block].name}: ${question}` : question };
     const road = routeQuestion(question, catalog.map((r) => r.key));
-    const canvasAsk = block !== null || looksLikeCanvasQuestion(question);
+    // Only while the Governance Canvas is on (Rye, 2026-10-01). Off, a question
+    // that names the canvas is an ordinary question: no canvas rules in the
+    // prompt, and its three readers are not in the catalog at all.
+    const canvasAsk = canvasOn() && (block !== null || looksLikeCanvasQuestion(question));
 
     // Zero tokens, and a row that says so (harm metric 5).
     const answerFromRecord = async (rendered: Rendered, extra: Record<string, unknown> = {}) => {

@@ -1,9 +1,9 @@
 /**
  * /canvas/workbook: THE PRINTABLE GOVERNANCE CANVAS WORKBOOK (2026-09-25).
  *
- * Readable without signing in, on purpose. A Season Two project talks the
- * canvas through before its own instance exists, so the page asks nothing of
- * the visitor and reads nothing about the village except its name (from the
+ * Readable without signing in while the Governance Canvas is public, and by
+ * the village's members while it is open to members (the gate below). It asks
+ * nothing of the reader and reads nothing about the village except its name (from the
  * public config every page already loads). The sheet itself is
  * components/canvas/CanvasWorkbookSheet.tsx; this page adds the controls,
  * the paper size and the print stylesheet.
@@ -34,6 +34,8 @@
 import { useState } from "react";
 import { Download, Printer } from "lucide-react";
 import Layout from "@/components/Layout";
+import ModuleGate from "@/components/modules/ModuleGate";
+import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
 import { CanvasWorkbookSheet } from "@/components/canvas/CanvasWorkbookSheet";
 import { useVillageName } from "@/hooks/useVillageName";
 import {
@@ -84,7 +86,27 @@ function saveFile(filename: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/**
+ * BEHIND THE GOVERNANCE CANVAS MODULE (Rye's module ruling, 2026-10-01). The
+ * workbook is part of the canvas, so it opens only where the module is on for
+ * this reader, and otherwise shows the platform's one module-off card (or its
+ * sign-in card, where the canvas is open to members). While the catalogue is
+ * still arriving the page holds a quiet line instead of guessing.
+ */
 export default function CanvasWorkbook() {
+  const modules = useModules();
+  if (!modules.loaded) {
+    return (
+      <Layout>
+        <p role="status" className="py-24 text-center text-sm text-stone-600">Opening the workbook</p>
+      </Layout>
+    );
+  }
+  if (!moduleIsOn(modules, "canvas")) return <ModuleGate moduleId="canvas" name="Governance Canvas" />;
+  return <Workbook />;
+}
+
+function Workbook() {
   const villageName = useVillageName("Your village");
   const [paper, setPaper] = useState<WorkbookPaper>(() =>
     defaultPaper(typeof navigator === "undefined" ? undefined : navigator.language),

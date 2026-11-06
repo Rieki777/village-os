@@ -50,6 +50,7 @@ import { setCanvasMoonProvider } from "../lib/calendarBrief";
 import { liveIntakeRecipients, type IntakeHolding } from "../lib/restorativeIntake";
 import { isAdmitted } from "../lib/admission";
 import { effectiveLifecycle } from "../lib/modules";
+import { canvasOn } from "../lib/canvasModules";
 import { createGathering, getGathering } from "../lib/gatherings";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { readCanvasSeason } from "../repos/canvasSeason";
@@ -129,10 +130,14 @@ async function offered(deps: CanvasRevisitRouteDeps): Promise<{ id: string; stat
 
 export function register(app: Express, deps: CanvasRevisitRouteDeps): void {
   const revisitDeps = revisitDepsFrom(deps);
-  setCanvasRevisitDelivery((req) => deliverCanvasRevisit(revisitDeps, req));
+  // Both hand-overs ask the module at the moment they run (Rye's module ruling,
+  // 2026-10-01): with the Governance Canvas off, a key moment sends nothing and
+  // no brief or digest names a canvas moon. Asked per call, so switching the
+  // module on or off takes effect without a restart.
+  setCanvasRevisitDelivery(async (req) => (canvasOn() ? deliverCanvasRevisit(revisitDeps, req) : null));
   stopObserving?.();
   stopObserving = observeKeyMoments();
-  setCanvasMoonProvider(async (pool, newMoonAt) => (await canvasMoonQuestion(pool, newMoonAt)).blocks.map((b) => b.name));
+  setCanvasMoonProvider(async (pool, newMoonAt) => (canvasOn() ? (await canvasMoonQuestion(pool, newMoonAt)).blocks.map((b) => b.name) : null));
 
   app.get("/api/canvas/moon", async (req, res) => {
     const user = await deps.authedUser(req);

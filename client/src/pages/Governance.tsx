@@ -1,9 +1,9 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
-import ConflictAgreementPublic from "@/components/canvas/ConflictAgreementPublic";
-import CanvasPublicLines from "@/components/canvas/CanvasPublicLines";
-import DecisionMatrix from "@/components/canvas/DecisionMatrix";
+import { lazy, Suspense } from "react";
+import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import {
   Vote,
   Users,
@@ -28,6 +28,11 @@ import { fillVars } from "@shared/pageContent/resolve";
 import { GOVERNANCE_PAGE, VETO_HOURS_MIN, vetoWindowWords } from "@shared/pageContent/governance";
 import { CANVAS_CREDIT } from "@shared/governanceCanvasText";
 import { CANVAS_PUBLIC_MATRIX_PATH } from "@shared/canvasPublicLines";
+
+// Each behind its module, so a village with both off downloads none of them.
+const ConflictAgreementPublic = lazy(() => import("@/components/canvas/ConflictAgreementPublic"));
+const CanvasPublicLines = lazy(() => import("@/components/canvas/CanvasPublicLines"));
+const DecisionMatrix = lazy(() => import("@/components/canvas/DecisionMatrix"));
 
 /** The icons the cards and steps take in turn, whatever the village wrote. */
 const PRINCIPLE_ICONS = [CheckCircle2, Users, Eye];
@@ -58,6 +63,15 @@ const paragraphs = (...texts: string[]) => texts.filter((t) => t.trim() !== "");
  * A signed-in member also opens the village's words each block keeps for its
  * members. The canvas's readings and its radar are never on this page, for
  * anybody.
+ *
+ * EACH ADDITION FOLLOWS ITS MODULE (Rye's module ruling, 2026-10-01). The
+ * public lines, the matrix and the workbook card render only while the
+ * Governance Canvas is on for this reader (`useModuleOn`: the catalogue a
+ * visitor is served leaves out a module that is not public). The conflict
+ * section shows the agreement's public view only while Conflict Evolution is
+ * on, and the exit policy's restorative steps (VillageConflictSteps, core)
+ * otherwise. With both off the page is what it was before the canvas build,
+ * with its honest-copy fixes kept.
  */
 export default function Governance() {
   // Each story page has its own switch now; a door goes with its page.
@@ -71,6 +85,9 @@ export default function Governance() {
   // The steward's window is the village's setting, never a typed "three
   // days". Unreadable, it is said as the floor every village shares.
   const vetoHours = useVetoHours();
+  // The two canvas modules (Rye, 2026-10-01): each section below is behind its own.
+  const canvasOn = useModuleOn("canvas");
+  const conflictOn = useModuleOn("conflict-evolution");
   if (!page) {
     return (
       <Layout>
@@ -114,15 +131,20 @@ export default function Governance() {
 
       {/* The canvas, one public line per block. Visitors read the lines; a
           signed-in member also opens the words kept for members. */}
+      {canvasOn && (
       <section className="bg-stone-50 py-16">
         <div className="container max-w-5xl mx-auto px-4">
-          <CanvasPublicLines />
+          <Suspense fallback={null}>
+            <CanvasPublicLines />
+          </Suspense>
         </div>
       </section>
+      )}
 
       {/* Who decides what: the half of the canvas's Decision Matrix the
           platform writes from the rules it enforces. Read only, and from the
           PUBLIC door, which can serve nothing a village wrote. */}
+      {canvasOn && (
       <section className="bg-white py-16">
         <div className="container max-w-5xl mx-auto px-4">
           <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">
@@ -132,9 +154,12 @@ export default function Governance() {
             Who approves each kind of decision, who is asked first, who is told, and how it is made. These answers come
             from the rules this village runs on today, so they change when the village changes them.
           </p>
-          <DecisionMatrix src={CANVAS_PUBLIC_MATRIX_PATH} />
+          <Suspense fallback={null}>
+            <DecisionMatrix src={CANVAS_PUBLIC_MATRIX_PATH} />
+          </Suspense>
         </div>
       </section>
+      )}
 
       {/* Core Principles */}
       {!principles.hidden && (
@@ -276,7 +301,13 @@ export default function Governance() {
               read, ConflictAgreementPublic prints the restorative steps of the
               published exit policy (VillageConflictSteps) in its place. */}
           <div data-testid="conflict-agreement-slot">
-            <ConflictAgreementPublic />
+            {conflictOn ? (
+              <Suspense fallback={null}>
+                <ConflictAgreementPublic />
+              </Suspense>
+            ) : (
+              <VillageConflictSteps />
+            )}
           </div>
         </div>
       </section>
@@ -329,6 +360,7 @@ export default function Governance() {
       {/* The Governance Canvas on paper: twelve questions a group can talk
           through about how it governs itself, printable by anyone, signed in
           or not. Credited wherever the canvas appears. */}
+      {canvasOn && (
       <section className="bg-white py-16">
         <div className="container max-w-3xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-4">
@@ -357,6 +389,7 @@ export default function Governance() {
           </Link>
         </div>
       </section>
+      )}
 
       {/* Hypha: drawn only while this village has a Hypha space to describe. */}
       {showHypha && (

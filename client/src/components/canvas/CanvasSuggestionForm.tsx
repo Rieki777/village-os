@@ -102,7 +102,7 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
   const scoped = servesPurposeScoped(payload.block.id, option.target);
   const pen = payload.pens[penKeyFor(option)];
-  const fate = suggestionFate(option, pen, payload.careDoorInAgreement);
+  const fate = suggestionFate(option, pen, payload.careDoorInAgreement, payload.careDoorByAgreement ?? true);
   const dial = door?.kind === "dial" && option.door ? dialFor(option.door, payload.doors) : null;
   const set = (patch: Partial<SuggestionFields>) => {
     setF({ ...f, ...patch });
