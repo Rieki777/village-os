@@ -36,6 +36,7 @@ import { activeClock } from "../lib/gratitude-cycles";
 import { dryRunProposal } from "../lib/proposalDryRun";
 import { changeSetSnapsToBoundary, elementsFor, type ChangesetDeps } from "../lib/changeset";
 import { CHANGE_SET_CAP } from "../lib/mechanics";
+import { pricePreview } from "../lib/changeSetPriceNow";
 import { stewardsSeated } from "../lib/stewardship";
 import { countdownSentence, vetoHoursFrom } from "../../shared/governanceKinds";
 
@@ -100,6 +101,9 @@ export function register(app: Express, deps: Deps): void {
       nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
       snapsToBoundary: (set) => changeSetSnapsToBoundary(set as any[]),
     });
-    res.json({ ...out, closesAt: closesAt.toISOString(), preview: true });
+    // What it would be voted at now, and which change sets that bar (change
+    // requests, Rye 2026-11-06). The same function the open-ballot route
+    // prices with, so the preview is the price.
+    res.json({ ...out, price: pricePreview(changes), closesAt: closesAt.toISOString(), preview: true });
   });
 }
