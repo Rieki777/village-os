@@ -237,7 +237,13 @@ describe("a config that lands after the cover has lifted", () => {
       b.post({ type: "uncovered" });
       expect(camOf(b), "the glide starts from its first frame").toEqual(GLIDE_START);
       expect(b.landReady(), "uncovering is not handing the land over").toBe(0);
-      await settle(1200);
+      /* Her welcome is said when the glide lands, and the glide runs on
+         animation frames, which a loaded machine delivers late: a fixed
+         settle(1200) went red under load with the arrival still in flight.
+         So this waits for the landing itself. The deadline is only how long
+         a welcome that never comes is waited for. */
+      for (let waited = 0; waited < 20_000 && (b.run<boolean>("!!travel") || welcomed(b) === 0); waited += 50) await settle(50);
+      expect(b.run<boolean>("!!travel"), "the glide has landed").toBe(false);
       expect(welcomed(b), "her welcome").toBe(1);
       const landed = camOf(b);
       b.post({ type: "config" });
