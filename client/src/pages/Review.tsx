@@ -70,6 +70,8 @@ import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
+import SeraDifferences, { SeraEarlierArrivals, SeraSummaryLine, seraWaiting, useSeraDifferences } from "@/components/review/SeraDifferences";
+import { SERA_MODULE, structureHrefFor } from "@/lib/seraReview";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
@@ -263,6 +265,8 @@ export default function Review() {
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
   const consent = useConsentClaims(headers);
+  // The outside service's differences, one list (components/review/SeraDifferences.tsx).
+  const sera = useSeraDifferences(headers);
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish
@@ -345,11 +349,11 @@ export default function Review() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([loadQueue(), consent.load()]);
+      await Promise.all([loadQueue(), consent.load(), sera.load()]);
     } finally {
       setLoading(false);
     }
-  }, [loadQueue, consent.load]);
+  }, [loadQueue, consent.load, sera.load]);
 
   useEffect(() => {
     void load();
@@ -608,18 +612,24 @@ export default function Review() {
   }
 
   // The whole page refuses only when both reads did. Somebody refused one key
-  // and given the other is shown the section they hold.
+  // and given the other is shown the section they hold. A member still sees
+  // how many of the service's changes wait and who decides them (spec R38).
   if (forbidden && consent.refused) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto px-4 py-10">
-          <div className={card}>
+        <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+          {sera.read.phase === "member" ? (
+            <>
+              <h1 className="text-2xl font-bold text-foreground">Review</h1>
+              <SeraDifferences read={sera.read} structureHref={null} draftOpen={false} onRetry={sera.load} />
+            </>
+          ) : <div className={card}>
             <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
               Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
               village hands to somebody. Ask whoever looks after the village queues, and they can pass one on.
             </p>
-          </div>
+          </div>}
         </div>
       </Layout>
     );
@@ -629,11 +639,14 @@ export default function Review() {
   const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
   const readsProposals = queue?.scope?.proposals ?? true;
   const nothingWaiting =
-    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0;
+    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0 && seraWaiting(sera.read) === 0;
+  // Once the list holds the service's records, its old batches fold away unoffered.
+  const seraListed = sera.read.phase === "listed" && sera.read.list.lastReadAt !== null;
+  const isSeraBatch = (b: Batch) => seraListed && b.moduleId === SERA_MODULE;
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+      <div className="max-w-4xl xl:max-w-[1200px] mx-auto px-4 py-10 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Inbox className="w-6 h-6" aria-hidden="true" />
@@ -648,16 +661,20 @@ export default function Review() {
           )}
         </div>
 
-        {/* Finished work first. Consent is the one step that releases value,
-            and a claim sitting here is somebody's work going unpaid. */}
-        <ConsentQueue
+        <SeraSummaryLine read={sera.read} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} />
+        <SeraDifferences read={sera.read} structureHref={structureHrefFor(queue?.batches ?? [], SERA_MODULE, CHART_KINDS)}
+          draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} />
+
+        {/* Finished work, the summary line's other jump. Consent is the one step that
+            releases value, and a claim sitting here is somebody's work going unpaid. */}
+        <div id="witness" className="scroll-mt-24"><ConsentQueue
           claims={consent.claims}
           refused={consent.refused}
           error={consent.error}
           headers={headers}
           onChanged={consent.load}
           onRetry={() => void load()}
-        />
+        /></div>
         <OwedPostings headers={headers} />
 
         {/* The queue's own failure, in a card of its own. It used to be the
@@ -844,7 +861,9 @@ export default function Review() {
           </div>
         )}
 
-        {(queue?.batches ?? []).map((batch) => (
+        {sera.read.phase === "listed" && <SeraEarlierArrivals agent={sera.read.list.agent} batches={(queue?.batches ?? []).filter(isSeraBatch)}
+          when={when} chartKinds={CHART_KINDS} />}
+        {(queue?.batches ?? []).filter((b) => !isSeraBatch(b)).map((batch) => (
           <div key={batch.batchId} className={card}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-semibold text-foreground">
