@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 31 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 33 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 30 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 32 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -51,13 +51,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | --- | --- |
 | `none` | none |
 | `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | 25: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance`, `comms` |
+| `member-pii` | 27: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance`, `canvas`, `conflict-evolution`, `comms` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance`, `canvas`, `conflict-evolution` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `comms`, `saberra` |
 
@@ -68,7 +68,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 6 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
-| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
+| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 10 |
 | Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 9 |
 
 ## The whole library at a glance
@@ -103,11 +103,13 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | End-of-Moon Review | `moon-review` | Coordinate | no | included | member-pii | none | [moon-review.md](modules/moon-review.md) |
 | Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
 | Governance | `governance` | Know and decide | no | included | member-pii | none | none yet |
+| Governance Canvas | `canvas` | Know and decide | no | included | member-pii | none | [governance-canvas.md](modules/governance-canvas.md) |
+| Conflict Evolution | `conflict-evolution` | Know and decide | no | included | member-pii | none | [conflict-evolution.md](modules/conflict-evolution.md) |
 | Hypha Bridge | `hypha` | Know and decide | no | included | village-content | required | [hypha.md](modules/hypha.md) |
 | Village Comms | `comms` | Connect | no | included | member-pii | required | [comms.md](modules/comms.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 31 modules, four of them core. 25 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 33 modules, four of them core. 27 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -589,6 +591,48 @@ The village decides on-site: staged proposals go to weighted ballots with frozen
 | What it needs from you | nothing beyond its seeds |
 | Contract doc | none yet |
 
+### Governance Canvas
+
+The village reads how it governs itself, block by block, on the twelve blocks of the Governance Canvas: a reading per block, the season map, five frames to walk each block in, a Decision Matrix, one public line per block, a printable workbook and a companion that answers from the village's own record. While it is on, every block must be on record before the village is asked to start its Game.
+
+| Fact | Value |
+| --- | --- |
+| Id | `canvas` |
+| Shelf | Know and decide (`know-and-decide`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `governance`, `events` |
+| Capabilities it adds | none |
+| Variable keys it owns | none |
+| API prefixes | `/api/canvas`, `/api/documents` |
+| What a village plants | nothing beyond the platform's own layers |
+| What it needs from you | nothing beyond its seeds |
+| Contract doc | [governance-canvas.md](modules/governance-canvas.md) |
+
+### Conflict Evolution
+
+A conflict agreement the village writes and changes by vote: where a conflict goes, who takes it and who covers, how soon a member hears back, a contact outside the village, and a private ask to the ombuds. While it is on, the village names a working conflict door before it is asked to start its Game.
+
+| Fact | Value |
+| --- | --- |
+| Id | `conflict-evolution` |
+| Shelf | Know and decide (`know-and-decide`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `governance` |
+| Capabilities it adds | none |
+| Variable keys it owns | none |
+| API prefixes | `/api/conflict-agreement`, `/api/admin/conflict-agreement`, `/api/care` |
+| What a village plants | nothing beyond the platform's own layers |
+| What it needs from you | nothing beyond its seeds |
+| Contract doc | [conflict-evolution.md](modules/conflict-evolution.md) |
+
 ### Hypha Bridge
 
 Your DAO on Hypha, read from Base and shown here: the contracts this village actually holds, total supply and treasury balance as the chain reports them, and governance outcomes that find their way back to the proposal they came from. Read only, always. Needs a Base endpoint somebody pays for, and it says which of the two listener paths this village is on.
@@ -840,12 +884,14 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 | `moon-review` | `sessions`, `governance`, `saberra` |
 | `sessions` | `gratitude` |
 | `governance` | `forum` |
+| `canvas` | `governance`, `events` |
+| `conflict-evolution` | `governance` |
 | `hypha` | `governance`, `tools` |
 | `comms` | `events` |
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 31 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 33 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -890,7 +936,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 31,
+  "moduleCount": 33,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1608,6 +1654,50 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/season-plans"
       ],
       "contractDoc": null
+    },
+    {
+      "id": "canvas",
+      "name": "Governance Canvas",
+      "description": "The village reads how it governs itself, block by block, on the twelve blocks of the Governance Canvas: a reading per block, the season map, five frames to walk each block in, a Decision Matrix, one public line per block, a printable workbook and a companion that answers from the village's own record. While it is on, every block must be on record before the village is asked to start its Game.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "know-and-decide",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "governance",
+        "events"
+      ],
+      "capabilities": [],
+      "variableKeys": [],
+      "apiPrefixes": [
+        "/api/canvas",
+        "/api/documents"
+      ],
+      "contractDoc": "docs/modules/governance-canvas.md"
+    },
+    {
+      "id": "conflict-evolution",
+      "name": "Conflict Evolution",
+      "description": "A conflict agreement the village writes and changes by vote: where a conflict goes, who takes it and who covers, how soon a member hears back, a contact outside the village, and a private ask to the ombuds. While it is on, the village names a working conflict door before it is asked to start its Game.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "know-and-decide",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "governance"
+      ],
+      "capabilities": [],
+      "variableKeys": [],
+      "apiPrefixes": [
+        "/api/conflict-agreement",
+        "/api/admin/conflict-agreement",
+        "/api/care"
+      ],
+      "contractDoc": "docs/modules/conflict-evolution.md"
     },
     {
       "id": "hypha",
