@@ -29,6 +29,7 @@ const OUTSIDE_ON_PURPOSE = new Map([
   ["ops/roll.mjs", "the fleet operator's tool, run from a clone"],
   ["scripts/check-migration-compat.mjs", "a release check, run from a clone"],
   ["scripts/fork-env-audit.mjs", "checks the server's code against .env.example, so it needs the code"],
+  ["scripts/start-here-backup-contract.test.mjs", "a repository guard, not a founder's step: START_HERE cites it as what holds its backup section and selfhost-smoke.yml to each other, and it needs both of those files and the repository to run"],
 ]);
 
 const workflow = read(".github/workflows/release.yml");
