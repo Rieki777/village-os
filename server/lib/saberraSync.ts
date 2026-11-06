@@ -483,18 +483,36 @@ async function runLocked(
      * keeping only landed reads would let a dropped record go missing once and
      * never twice. A kind that failed or was cut short carries the snapshot
      * before it forward (R5), so a partial read is safe to keep too.
+     *
+     * A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC. The proposals still
+     * land and the run is still logged; the differences list reads the snapshot
+     * before, and the next read writes a whole one again, so a skipped row loses
+     * nothing a later read cannot replace. It is said once in the server's log
+     * and once to the admins, by its error code only.
      */
-    await writeSnapshot(
-      pool,
-      {
-        asked: fetched.plan.ask.map((a) => a.kind),
-        failed: fetched.failures.map((f) => f.kind),
-        truncated: fetched.truncated,
-        records: fetched.records,
-      },
-      trigger,
-      at,
-    );
+    try {
+      await writeSnapshot(
+        pool,
+        {
+          asked: fetched.plan.ask.map((a) => a.kind),
+          failed: fetched.failures.map((f) => f.kind),
+          truncated: fetched.truncated,
+          records: fetched.records,
+        },
+        trigger,
+        at,
+      );
+    } catch (e) {
+      const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+      console.warn(`[saberra] the sync kept no snapshot this time (${code}); the differences list reads the one before`);
+      void recordEvent(pool, {
+        kind: "external_proposal",
+        text: `the sync kept no snapshot this time (${code.slice(0, 40)}); the differences list reads the one before`,
+        actorKind: "agent",
+        originModuleId: MODULE_ID,
+        audience: "admin",
+      });
+    }
 
     if (trigger === "scheduled") {
       if (fetched.failures.length > 0) {

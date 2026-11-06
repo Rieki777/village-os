@@ -124,6 +124,8 @@ vi.mock("../lib/externalProposals", async (importOriginal) => {
   return {
     // Pure: the sync keys "what this read carried" by the same identity a landing stores.
     identityKeyFor: real.identityKeyFor,
+    // Pure: the differences reader proves a proposal untouched by the key it landed under.
+    dedupeKeyFor: real.dedupeKeyFor,
     landProposal: async (_p: unknown, input: Record<string, unknown>) => {
       state.landed += 1;
       state.landedPayloads.push(input);
