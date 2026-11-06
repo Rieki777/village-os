@@ -69,7 +69,7 @@ export function holderSentence(power: PowerRow): string {
   if (today.length) {
     return `${namesSentence(today)} ${today.length === 1 ? "holds" : "hold"} this today, for the stewards.`;
   }
-  if (power.stage) return `Every member holds this from the ${power.stage} stage.`;
+  if (power.stage) return `Everyone at the ${power.stage} stage or past it holds this.`;
   if (power.movable) return "The admin panel looks after this one. It is one the village can take on.";
   return "The admin panel looks after this one.";
 }

@@ -140,8 +140,8 @@ describe("role powers (2026-11-05): a power a role carries is never the panel's"
     );
   });
 
-  it("says a stage power is every member's", () => {
-    expect(holderSentence(power({ stage: "Member", movable: false }))).toBe("Every member holds this from the Member stage.");
+  it("says who holds a stage power without calling a guest a member", () => {
+    expect(holderSentence(power({ stage: "Guest", movable: false }))).toBe("Everyone at the Guest stage or past it holds this.");
   });
 
   it("says where a suggestion goes", () => {
