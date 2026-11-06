@@ -29,6 +29,15 @@ export function normaliseId(v: string): string {
   return v.trim().toLowerCase().replace(/-/g, "");
 }
 
+/**
+ * Whether a record id is shaped like an id at all: letters, digits, dashes and
+ * underscores, at most 64. A page ADDRESS is refused, because it carries the
+ * page title (R10), and so is anything with a space, a slash or a colon.
+ */
+export function idShapeOk(v: string): boolean {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(v.trim());
+}
+
 /** A Notion-style page id: 32 hex digits once the dashes are gone. */
 export function looksLikeAnId(v: string): boolean {
   return /^[0-9a-f]{32}$/.test(normaliseId(v));

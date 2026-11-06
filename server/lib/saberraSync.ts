@@ -57,6 +57,7 @@ import {
 } from "./saberraPolling";
 import { proposeStructure, type VendorRecord } from "./saberraProposals";
 import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
+import { idShapeOk } from "./saberraRelations";
 import { writeSnapshot } from "./saberraSnapshot";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
@@ -100,7 +101,8 @@ function asVendorRecord(kind: SaberraRecordKind, raw: unknown): VendorRecord | n
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
   const id = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
-  if (id === "") return null;
+  // An id is an id: a page address carries the page title, and is refused here (R10).
+  if (id === "" || !idShapeOk(id)) return null;
   const fields =
     r.fields && typeof r.fields === "object" && !Array.isArray(r.fields)
       ? (r.fields as Record<string, unknown>)
@@ -163,6 +165,8 @@ export function preflight(): Preflight {
 interface Fetched {
   plan: KindPlan;
   records: VendorRecord[];
+  /** Records dropped because their id was not shaped like one (R10), such as a page address. */
+  refusedIds?: number;
   failures: { kind: HeldKind; label: string; why: CallFailure["why"]; detail: string }[];
   truncated: HeldKind[];
 }
@@ -182,6 +186,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
   const plan = listing.ok ? planKinds(listing.tools) : planKinds(null, listing.detail);
 
   const records: VendorRecord[] = [];
+  let refusedIds = 0;
   const failures: Fetched["failures"] = [];
   const truncated: HeldKind[] = [];
   for (const { kind, wire } of plan.ask) {
@@ -200,6 +205,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
       for (const raw of r.records) {
         const rec = asVendorRecord(kind, raw);
         if (rec) records.push(rec);
+        else if (raw && typeof raw === "object" && typeof (raw as { id?: unknown }).id === "string" && (raw as { id: string }).id.trim() !== "") refusedIds += 1;
       }
       cursor = r.cursor;
       pages += 1;
@@ -211,7 +217,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
       }
     } while (cursor);
   }
-  return { plan, records, failures, truncated };
+  return { plan, records, refusedIds, failures, truncated };
 }
 
 // ── The landing ─────────────────────────────────────────────────────────────
@@ -228,6 +234,8 @@ type SyncAnswer = Record<string, unknown> & {
   held: unknown[];
   addressesSeen: unknown[];
   circles: ReturnType<typeof proposeStructure>["circles"] | null;
+  /** Records dropped because their id was not shaped like one (R10). */
+  refusedIds: number;
 };
 
 /** Where a one-apiece suggestion points back to, and so what makes two of them about the same record. */
@@ -392,6 +400,7 @@ async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promis
     facts: reading.facts.length,
     attached: reading.facts.filter((f) => f.vendorKind !== "circle" && seatIdFor(f.attachesTo)).length,
     held: reading.held,
+    refusedIds: fetched.refusedIds ?? 0,
     unmapped: reading.unmapped,
     addressesSeen: reading.addressesSeen,
     truncated: truncated.map((k) => KIND_LABEL[k]),
@@ -430,7 +439,8 @@ function describeLanding(run: SyncRun, answer: SyncAnswer): SyncRun {
   run.superseded = answer.superseded;
   run.rebatched = answer.rebatched;
   run.gone = answer.gone;
-  run.held = answer.held.length;
+  // A record dropped for its id is held back too, so the log counts it there.
+  run.held = answer.held.length + (answer.refusedIds ?? 0);
   run.addresses = answer.addressesSeen.length;
   run.circles = answer.circles
     ? {

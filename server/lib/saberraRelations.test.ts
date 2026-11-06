@@ -10,7 +10,7 @@
  * must keep working.
  */
 import { describe, expect, it } from "vitest";
-import { labelOf, looksLikeAnId, normaliseId, plainText, resolveRelation, shapeOf } from "./saberraRelations";
+import { idShapeOk, labelOf, looksLikeAnId, normaliseId, plainText, resolveRelation, shapeOf } from "./saberraRelations";
 
 const LAND = "3ed0a88e-f36a-8104-80fa-cd2bfe15c001";
 const MONEY = "3ed0a88e-f36a-8104-80fa-cd2bfe15c002";
@@ -63,6 +63,21 @@ describe("a relation, in every shape it plausibly arrives", () => {
     expect(resolveRelation(undefined, byId).present).toBe(false);
     expect(resolveRelation([], byId).present).toBe(false);
     expect(resolveRelation("  ", byId).present).toBe(false);
+  });
+});
+
+describe("a record id, by its shape (R10)", () => {
+  it("takes a page id with or without dashes, and a short test id", () => {
+    expect(idShapeOk("0123456789abcdef0123456789abcdef")).toBe(true);
+    expect(idShapeOk("01234567-89ab-cdef-0123-456789abcdef")).toBe(true);
+    expect(idShapeOk("r-1")).toBe(true);
+  });
+
+  it("refuses a page address, which carries the page title, and anything over the cap", () => {
+    expect(idShapeOk("https://www.notion.so/Water-Steward-0123456789abcdef0123456789abcdef")).toBe(false);
+    expect(idShapeOk("Water Steward")).toBe(false);
+    expect(idShapeOk("a".repeat(65))).toBe(false);
+    expect(idShapeOk("")).toBe(false);
   });
 });
 
