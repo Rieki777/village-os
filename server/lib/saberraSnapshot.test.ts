@@ -254,6 +254,38 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     }
   });
 
+  it("FLAGS A MEMBER'S FULL NAME IN A ROLE'S OR A CIRCLE'S NAME, keeps it as sent, and does nothing more (review C9)", async () => {
+    const { land, water } = serviceHolds("c9", { roleName: "Jane Example's Helper", body: "Holds the water." });
+    const circle = (state.read.circle[0] as { fields: Record<string, unknown> }).fields;
+    circle["Circle Name"] = "Jane Example Circle";
+    circle.Notes = "Keeps this circle.";
+    await syncByHand(pool);
+    const s = await newest();
+    // Chart names are compared with ours, so they are stored as sent: flagged, never rewritten.
+    const role = s.roles.records[0]!;
+    expect(role.fields).toMatchObject({ "Role Name": "Jane Example's Helper", Body: "Holds the water." });
+    expect(role.namesAMember).toEqual(["Role Name"]);
+    expect(role.swapped).toBeUndefined();
+    const held = s.circles.records[0]!;
+    expect(held.fields).toMatchObject({ "Circle Name": "Jane Example Circle", Notes: "Keeps this circle." });
+    expect(held.namesAMember).toEqual(["Circle Name"]);
+    expect(held.swapped).toBeUndefined();
+    // Each addition says so, and its name is never offered to take as it stands.
+    const mine = (await readDifferences(pool)).list.filter((d) => d.subject.pageId === land || d.subject.pageId === water);
+    expect(mine.map((d) => d.kind).sort()).toEqual(["circleAdd", "roleAdd"]);
+    for (const d of mine) expect(d).toMatchObject({ namesAMember: true, takeable: false, autoEligible: false, bulkEligible: false });
+
+    // The control: names with nobody's name in them are flagged nowhere.
+    serviceHolds("c9", { roleName: "Water Helper", body: "Holds the water." });
+    const plain = state.read.circle[0] as { fields: Record<string, unknown> };
+    plain.fields["Circle Name"] = "Water Circle";
+    plain.fields.Notes = "Keeps this circle.";
+    await syncByHand(pool);
+    const after = await newest();
+    expect(after.roles.records[0]!.namesAMember).toBeUndefined();
+    expect(after.circles.records[0]!.namesAMember).toBeUndefined();
+  });
+
   it("DROPS A RECORD WHOSE ID IS AN ADDRESS, and counts it in the sync's report (R10)", async () => {
     const { water } = serviceHolds("ids");
     // The service sends a second role with its page ADDRESS where the id belongs: the title rides in it.
