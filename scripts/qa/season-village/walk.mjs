@@ -722,7 +722,8 @@ if (SELF_CHECK) {
 }
 
 function summary(r) {
-  const cell = (s) => String(s).replace(/\|/g, "\\|");
+  // A backslash first, or one in the value would cancel the pipe's escape.
+  const cell = (s) => String(s).replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
   const lines = [];
   lines.push("# Season village walk", "");
   lines.push(`- Village: ${r.base}, build \`${r.build}\`, boot \`${r.bootId ?? "external"}\``);

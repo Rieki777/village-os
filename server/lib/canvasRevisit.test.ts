@@ -198,7 +198,7 @@ describe("the seam every call site raises through", () => {
     });
     expect(() => raiseCanvasRevisit("objection-ruled")).not.toThrow();
     await settleCanvasRevisits();
-    expect(logged.mock.calls.some((c) => String(c[0]).includes("objection-ruled"))).toBe(true);
+    expect(logged.mock.calls.some((c) => String(c[0]).startsWith("[canvas-revisit]") && c.some((a: unknown) => String(a).includes("objection-ruled")))).toBe(true);
     logged.mockRestore();
   });
 });

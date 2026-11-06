@@ -216,7 +216,8 @@ function track(work: Promise<unknown>, failure: string): void {
     .then(
       () => undefined,
       (e) => {
-        console.error(`[canvas-revisit] ${failure}`, e);
+        // The message is an argument, never the format string (CodeQL js/tainted-format-string).
+        console.error("[canvas-revisit] %s", failure, e);
       },
     )
     .finally(() => {

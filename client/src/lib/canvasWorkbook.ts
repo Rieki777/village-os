@@ -121,10 +121,16 @@ export function workbookFilename(villageName: string): string {
   return slug ? `governance-canvas-workbook-${slug}.md` : "governance-canvas-workbook.md";
 }
 
-/** One Markdown table row. A pipe inside a cell would split it, so it is escaped. */
-function row(cells: readonly string[]): string {
-  return `| ${cells.map((c) => c.replace(/\|/g, "\\|")).join(" | ")} |`;
+/**
+ * One Markdown table row. A pipe inside a cell would split it, so it is
+ * escaped, and a backslash is escaped first, or one already in the cell would
+ * cancel the pipe's escape (CodeQL js/incomplete-sanitization).
+ */
+export function markdownRow(cells: readonly string[]): string {
+  return `| ${cells.map((c) => c.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")).join(" | ")} |`;
 }
+
+const row = markdownRow;
 
 /** The whole workbook as Markdown, for the village of that name. */
 export function workbookMarkdown(villageName: string): string {

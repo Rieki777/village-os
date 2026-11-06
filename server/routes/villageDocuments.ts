@@ -170,8 +170,22 @@ const RESOURCE_KEY = /^[\x21-\x7e]{1,191}$/;
 
 /** The filename a download is offered under: ASCII letters, digits, dots, dashes and underscores. */
 export function safeDownloadName(name: string, fallback: string): string {
-  const s = String(name ?? "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
+  const s = trimDashes(String(name ?? "").replace(/[^A-Za-z0-9._-]+/g, "-")).slice(0, 120);
   return s && s !== "." && s !== ".." ? s : fallback;
+}
+
+/**
+ * The dashes at either end, cut by a scan. The name is the uploader's, and the
+ * pattern this replaces (`/^-+|-+$/g`) retried its trailing half from every
+ * dash in a run, which is quadratic: 2.7 seconds on 80,000 dashes between two
+ * letters (CodeQL js/polynomial-redos).
+ */
+function trimDashes(s: string): string {
+  let start = 0;
+  let end = s.length;
+  while (start < end && s.charCodeAt(start) === 45) start++;
+  while (end > start && s.charCodeAt(end - 1) === 45) end--;
+  return s.slice(start, end);
 }
 
 export function register(app: Express, deps: DocumentRouteDeps): void {

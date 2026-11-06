@@ -23,6 +23,7 @@ import {
   WORKBOOK_WHAT_IS_QUOTED,
   defaultPaper,
   levelLine,
+  markdownRow,
   workbookFilename,
   workbookMarkdown,
 } from "./canvasWorkbook";
@@ -120,5 +121,16 @@ describe("the file name and the paper", () => {
     expect(defaultPaper("en-GB")).toBe("a4");
     expect(defaultPaper("nl")).toBe("a4");
     expect(defaultPaper(undefined)).toBe("a4");
+  });
+});
+
+describe("one Markdown table row", () => {
+  // CodeQL js/incomplete-sanitization: escaping the pipe alone leaves a
+  // backslash already in the cell free to cancel the escape, and the cell
+  // splits in two.
+  it("escapes a backslash before it escapes a pipe, so a cell never splits", () => {
+    expect(markdownRow(["a|b"])).toBe("| a\\|b |");
+    expect(markdownRow(["a\\|b"])).toBe("| a\\\\\\|b |");
+    expect(markdownRow(["plain", "two"])).toBe("| plain | two |");
   });
 });
