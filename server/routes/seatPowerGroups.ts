@@ -39,12 +39,8 @@ import { founderPowerStands } from "../lib/gameStart";
 import { EXAMPLE_REFUSAL_BODY, isExampleUser } from "../lib/examples";
 import { accountsWithReach, LAST_ADMIN_REFUSAL, type AdminGroup, type GroupHolding } from "../lib/groupAdmin";
 import { stewardSeatRefusal } from "../lib/roleGrants";
-import {
-  bridgedHoldings,
-  effectiveHoldings,
-  listSeatGroupLinks,
-  type SeatGrantCache,
-} from "../lib/seatGrants";
+import { bridgedHoldings, effectiveHoldings, type SeatGrantCache } from "../lib/seatGrants";
+import { listSeatGroupLinks, seatHeader, writeSeatGroupLinks } from "../repos/seatPowerGroups";
 import { onSeatingsChanged, type LapseContext } from "../lib/orgChart";
 import { CAPABILITY_CONSEQUENCE } from "../../shared/draftKinds";
 import { CAPABILITY_LABELS, capabilityLabel, type Capability, type CapabilityCtx } from "../../shared/capabilities";
@@ -119,11 +115,7 @@ export function register(app: Express, deps: Deps): void {
   const { isAdmin, getPool, members, rolesRepo, loadRoleHolders, lapseContext, seatGrants, addActivity } = deps;
   const powerAssignGate = makePowerAssignGate(deps);
 
-  async function seatRow(id: string): Promise<{ id: string; name: string; isExample: boolean } | null> {
-    const [rows]: any = await getPool().query("SELECT id, name, is_example FROM org_roles WHERE id = ?", [id]);
-    const r = (rows as any[])[0];
-    return r ? { id: String(r.id), name: String(r.name), isExample: !!r.is_example } : null;
-  }
+  const seatRow = (id: string) => seatHeader(getPool(), id);
 
   app.get("/api/admin/org-roles/:id/power-groups", async (req, res) => {
     if (!(await isAdmin(req)) && !(await powerAssignGate(req)).ok) return res.status(401).json({ error: "auth_required" });
@@ -188,20 +180,7 @@ export function register(app: Express, deps: Deps): void {
     }
 
     if (added.length || removed.length) {
-      const conn = await getPool().getConnection();
-      try {
-        await conn.beginTransaction();
-        if (removed.length) await conn.query("DELETE FROM org_role_power_groups WHERE org_role_id = ? AND role_id IN (?)", [seat.id, removed]);
-        for (const id of added) {
-          await conn.query("INSERT IGNORE INTO org_role_power_groups (org_role_id, role_id, created_by) VALUES (?, ?, ?)", [seat.id, id, actor?.id ?? null]);
-        }
-        await conn.commit();
-      } catch (err) {
-        await conn.rollback();
-        throw err;
-      } finally {
-        conn.release();
-      }
+      await writeSeatGroupLinks(getPool(), seat.id, { added, removed, by: actor?.id ?? null });
       // The gate reads the cache synchronously: refresh before answering, so
       // the very next request already sees the change.
       await seatGrants.refresh();
