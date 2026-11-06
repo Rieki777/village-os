@@ -715,7 +715,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, BASE_RPC_CARD, GOOGLE_CARDS, HYPHA_VOICE_CARD, ROOT_SLOT_CARDS,
+  allSecretStatuses, BASE_RPC_CARD, ERROR_WEBHOOK_CARD, GOOGLE_CARDS, HYPHA_VOICE_CARD, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -17168,7 +17168,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, HYPHA_VOICE_CARD, ...GOOGLE_CARDS, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, HYPHA_VOICE_CARD, ...GOOGLE_CARDS, ERROR_WEBHOOK_CARD, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {

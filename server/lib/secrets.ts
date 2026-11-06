@@ -117,6 +117,10 @@ const BASE_SECRET_KEYS = [
   // and so clearing either half turns the button off the way the env pair did.
   "google_client_id",
   "google_client_secret",
+  // Where crash alerts are posted outside the app (readiness R171). An
+  // incoming-webhook address carries its token in the path, like the Base RPC
+  // endpoint below, so it is sealed here, with ERROR_WEBHOOK_URL as fallback.
+  "error_webhook_url",
   "basescan_api_key",
   // The Base RPC endpoint. A dedicated one carries its provider key in the
   // address, so it is a credential, and it used to be the plain game variable
@@ -168,6 +172,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   hypha_voice_webhook_secret: "HYPHA_VOICE_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   google_client_id: "GOOGLE_CLIENT_ID",
   google_client_secret: "GOOGLE_CLIENT_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
+  error_webhook_url: "ERROR_WEBHOOK_URL",
   basescan_api_key: "BASESCAN_API_KEY",
   base_rpc_url: "BASE_RPC_URL",
   railway_project_token: null,
@@ -232,6 +237,18 @@ export const GOOGLE_CARDS: ReadonlyArray<{ key: BaseSecretKey; title: string; un
   { key: "google_client_id", title: "Google sign-in, client ID", unlocks: "Sign in with Google, beside email and password. It takes both halves of one OAuth client, this ID and its secret. Google sends members back to this village's own address at /api/auth/google/callback, so the site address has to be set on the host too.", getAt: "console.cloud.google.com → APIs & Services → Credentials → your OAuth client", placeholder: "…apps.googleusercontent.com" },
   { key: "google_client_secret", title: "Google sign-in, client secret", unlocks: "The other half of the same OAuth client. Clear either half and the Google button goes away; email and password keep working.", getAt: "The same OAuth client in Google Cloud → Client secret", placeholder: "GOCSPX-…" },
 ];
+
+/**
+ * The Integrations card for crash alerts (readiness R171), read by
+ * `reportError` in server/lib/errors.ts through the pinned-IP dialer.
+ */
+export const ERROR_WEBHOOK_CARD: { key: BaseSecretKey; title: string; unlocks: string; getAt: string; placeholder: string } = {
+  key: "error_webhook_url",
+  title: "Crash alerts, outside the app",
+  unlocks: "Posts a short note to a channel of your choosing when something breaks, as well as telling admins inside the app. Slack and Discord incoming webhooks both take it. The address carries its own key, which is why it is kept here, sealed.",
+  getAt: "Your channel's incoming webhook settings, in Slack or Discord",
+  placeholder: "https://hooks.slack.com/services/…",
+};
 
 /**
  * SLOTS WHOSE VALUE AN OLDER RELEASE KEPT IN A PLAIN GAME VARIABLE.
