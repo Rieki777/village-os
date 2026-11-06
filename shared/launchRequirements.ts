@@ -597,6 +597,31 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     runbookAnchor: "env",
   },
   {
+    id: "site-address",
+    group: "reach",
+    title: "Tell the server its own address",
+    /*
+     * BLOCKING, by the coordinator's ruling on readiness R108 (2026-11-05).
+     * Without FRONTEND_URL the server learns its address from the first
+     * request it answers, and every set-password link it emails sits on
+     * that. It no longer believes X-Forwarded-Host for this, but a village
+     * should not launch on a guess at all. Launched villages are unaffected:
+     * `launchedAt` is written by the launch ballot and never derived from
+     * this list, so the row only holds a village's launch vote until it says
+     * where it lives.
+     */
+    why:
+      "Every link this village emails is built on FRONTEND_URL: set-password links, invitations, sign-in letters. " +
+      "Without it the server guesses its address from the first request it answered, and a stranger can be first. " +
+      "Set FRONTEND_URL to the address members use, such as https://village.example.org, with no quotes, then redeploy.",
+    severity: "blocking",
+    checkKey: "site-address",
+    // An environment variable, so the host's own settings are the door.
+    fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
+    fixLabel: "How to set it on your host",
+    runbookAnchor: "env",
+  },
+  {
     id: "exit-policy-terms",
     group: "reach",
     title: "Write your exit policy's actual terms",
