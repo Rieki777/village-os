@@ -54,6 +54,8 @@ const state = vi.hoisted(() => ({
   logDoc: null as Record<string, unknown> | null,
   /** The module's stored `pollSchedule`. */
   pollSchedule: undefined as string | undefined,
+  /** Every snapshot a sync kept, newest first, as the repo would hold them. */
+  snapshots: [] as Record<string, unknown>[],
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -138,6 +140,20 @@ vi.mock("../repos/externalProposals", async (importOriginal) => ({
   withdrawGone: async () => [],
 }));
 
+// The snapshot every read keeps (server/lib/saberraSnapshot.ts) is held against
+// a real schema in server/lib/saberraSnapshot.test.ts; here it is kept in memory,
+// and the roster its name swap reads is empty.
+vi.mock("../repos/saberraSnapshots", () => ({
+  insertSnapshot: async (_p: unknown, _at: Date, s: Record<string, unknown>) => {
+    state.snapshots.unshift(JSON.parse(JSON.stringify(s)));
+    return state.snapshots.length;
+  },
+  recentSnapshots: async (_p: unknown, limit: number) =>
+    state.snapshots.slice(0, limit).map((s, i) => ({ seq: 1000 - i, snapshot: { takenAt: "2026-11-06T09:00:00.000Z", ...s } })),
+  pruneSnapshots: async () => 0,
+}));
+vi.mock("../repos/peopleRoster", () => ({ rosterRows: async () => [] }));
+
 vi.mock("../repos/moduleFacts", () => ({
   upsertFacts: async (_p: unknown, _v: unknown, _m: unknown, f: Record<string, unknown>[]) => {
     state.facts += f.length;
@@ -216,6 +232,7 @@ beforeEach(() => {
   state.lockHeld = false;
   state.logDoc = null;
   state.pollSchedule = undefined;
+  state.snapshots = [];
 });
 
 describe("who may cause a sync", () => {

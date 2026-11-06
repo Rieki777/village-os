@@ -56,7 +56,8 @@ import {
   type SyncLog,
 } from "./saberraPolling";
 import { proposeStructure, type VendorRecord } from "./saberraProposals";
-import type { SaberraRecordKind } from "./saberraRecords";
+import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
+import { writeSnapshot } from "./saberraSnapshot";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "./secrets";
@@ -105,7 +106,9 @@ function asVendorRecord(kind: SaberraRecordKind, raw: unknown): VendorRecord | n
       ? (r.fields as Record<string, unknown>)
       : r;
   const url = typeof r.url === "string" ? r.url : undefined;
-  return { id, kind, fields, url };
+  // When the service last edited it, through the boundary's own door (never who).
+  const editedAt = editedAtOf(r);
+  return { id, kind, fields, url, ...(editedAt ? { editedAt } : {}) };
 }
 
 function sameName(a: string, b: string): boolean {
@@ -472,6 +475,26 @@ async function runLocked(
     }
     const fetched = await readService(client, sessionId);
     const fingerprint = fingerprintRead(fetched.records);
+
+    /*
+     * EVERY READ KEEPS A SNAPSHOT, before the scheduled read decides whether to
+     * land anything. The differences list counts consecutive WHOLE reads (R4),
+     * and an unchanged scheduled read is a whole read that lands nothing, so
+     * keeping only landed reads would let a dropped record go missing once and
+     * never twice. A kind that failed or was cut short carries the snapshot
+     * before it forward (R5), so a partial read is safe to keep too.
+     */
+    await writeSnapshot(
+      pool,
+      {
+        asked: fetched.plan.ask.map((a) => a.kind),
+        failed: fetched.failures.map((f) => f.kind),
+        truncated: fetched.truncated,
+        records: fetched.records,
+      },
+      trigger,
+      at,
+    );
 
     if (trigger === "scheduled") {
       if (fetched.failures.length > 0) {

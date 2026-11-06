@@ -118,6 +118,14 @@ function refsOf(v: unknown, depth = 0): Ref[] {
   return [];
 }
 
+/**
+ * Every pointer a relation carries, unresolved, for a caller that keeps the
+ * pointers themselves (the sync's snapshot) rather than the names they reach.
+ */
+export function relationRefs(v: unknown): Array<{ id: string | null; name: string | null }> {
+  return refsOf(v);
+}
+
 export interface RelationReading {
   /** Every record the relation named that could be resolved, in order. */
   names: string[];
