@@ -260,6 +260,25 @@ export const GOVERNANCE_MODE = "governance_mode";
  */
 export const ORG_DRAFT = "org_draft";
 
+/**
+ * A manual mint that waits for a second steward, put to the village instead
+ * (vote-path gap 8, Rye 2026-11-06: "EVERYTHING can change with the highest
+ * village vote"). `subject_ref` is the `admin_mint_requests` id. Carried, the
+ * closer approves it through the same function the admin route calls
+ * (server/lib/mintRequests.ts); not carried, it is declined.
+ *
+ * PRICED AT THE STRUCTURAL TIER. A grant is new issuance into one member's
+ * hands and it cannot be un-issued, so it asks at least what a new minting
+ * rule asks, and it is conducted by `custom` so the tier's unity is counted.
+ * No electorate floor, for the reason MINT_RULE gives.
+ *
+ * Absent from `KIND_FOR_SUBJECT` in shared/governanceKinds.ts on purpose, so
+ * it is a Game change: it waits its window and a seated steward may stop it.
+ * That is the conservative reading of a token send nobody priced, and moving
+ * it to `token_send` is one line there.
+ */
+export const MINT_REQUEST = "mint_request";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -446,6 +465,19 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minElectorate: 0,
     criticality: "routine",
     why: "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
+  },
+  [MINT_REQUEST]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    /*
+     * `custom` for GOVERNANCE_MODE's reason: the structural unity floor is
+     * above 50, and `custom` is the only method that reads the unity a ballot
+     * freezes. Under `majority` or `consent` the 80 would be printed and never
+     * counted, which is a bar in name only on a decision that mints.
+     */
+    method: "custom",
+    why: "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.",
   },
 };
 
@@ -766,6 +798,7 @@ export function evaluationRulesFor(
  *
  *   dial              a game variable moves within its bounds.
  *   mint_rule         a minting rule changes what the village pays for what.
+ *   mint_rule_create  a new minting rule starts paying, from the next moon.
  *   weight_allocation the custom allocation table gives somebody weight.
  *   mode_switch       how votes are counted changes.
  *   module_lifecycle  a part of the Game is turned on, opened or closed.
@@ -780,6 +813,7 @@ export function evaluationRulesFor(
 export const CHANGE_ITEM_KINDS = [
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
@@ -797,6 +831,7 @@ export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
   dial: "mechanics",
   mint_rule: MINT_RULE,
+  mint_rule_create: MINT_RULE,
   weight_allocation: "mechanics",
   mode_switch: GOVERNANCE_MODE,
   module_lifecycle: "mechanics",
@@ -812,6 +847,10 @@ export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
  */
 export const CRITICALITY_FOR_ITEM_KIND: Readonly<Record<Exclude<ChangeItemKind, "dial">, Criticality>> = {
   mint_rule: "structural",
+  // A new rule is new issuance, so it is priced at structural EVEN THOUGH its
+  // subject declares a floor of its own (`pricingOf` in server/lib/mechanics.ts
+  // takes the higher of the two for this kind alone).
+  mint_rule_create: "structural",
   weight_allocation: "structural",
   mode_switch: "constitutional",
   module_lifecycle: "structural",
