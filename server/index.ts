@@ -138,6 +138,7 @@ import { register as registerGovernanceAgreementRoutes } from "./routes/governan
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
+import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
 import { applyMechanicsProposal as applyChangeSetForProposal, changeSetSnapsToBoundary, changeSetWaitsForCycleClose, publicAmendment, publicChangeSet, publicProposal, recordMechanicsChangeRow, UntypedElementError, type ApplySetResult, type ChangesetDeps } from "./lib/changeset";
@@ -24124,6 +24125,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo });
   registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });
+  registerVillageDocumentRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, overLimit, clientIp, villageName: () => String(mergedConfig().project.name ?? "") });
 
   /**
    * The subset of variables the CLIENT is allowed to know, so the UI can render
@@ -25217,6 +25219,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       memberIntents: await exportIntentsForMember(pool, user.id),
       onchainBalances: await mine("SELECT * FROM onchain_balances WHERE user_id = ?"),
       exits: await mine("SELECT * FROM exits WHERE user_id = ?"),
+      notebook: await notebookForExport(pool, user.id), // their own documents (0326), private and shared, and their picks
       /*
        * THE FACE, THE BUDGET IT COST, AND WHAT THE POOL CREDITED THEM.
        *

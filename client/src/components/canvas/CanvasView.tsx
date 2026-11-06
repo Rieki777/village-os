@@ -18,7 +18,7 @@
  * its header, every block card and each block's Learn frame carry an Ask door
  * (client/src/components/companion/Companion.tsx).
  */
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
 import type { CanvasMoonPayload } from "@shared/canvasRevisit";
@@ -26,6 +26,12 @@ import { CanvasBaseline } from "./CanvasBaseline";
 import { CanvasMoon, type MoonOfferAnswer } from "./CanvasMoon";
 import { CanvasSeason } from "./CanvasSeason";
 import { AskButton, CompanionProvider } from "@/components/companion/Companion";
+
+/**
+ * The member's notebook and "Take the canvas with you" (plan 5.5 and 5.6),
+ * under the baseline. Lazy, so the main bundle pays nothing for it.
+ */
+const NotebookPanel = lazy(() => import("@/components/notebook/NotebookPanel"));
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -149,6 +155,9 @@ export function CanvasView({
         />
         <CanvasMoon payload={moon} onOffer={offerMoon} />
         <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+        <Suspense fallback={null}>
+          <NotebookPanel />
+        </Suspense>
       </div>
     </CompanionProvider>
   );

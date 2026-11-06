@@ -1626,7 +1626,9 @@ export const MODULES: ModuleDef[] = [
     // The pen is `story.tell`, which is core. The canvas adds no capability.
     capabilities: [],
     variableKeys: [],
-    apiPrefixes: ["/api/canvas"],
+    // `/api/documents` is the member's notebook (own documents and the export
+    // pack), which the ruling puts inside this module.
+    apiPrefixes: ["/api/canvas", "/api/documents"],
     // No openStateCheck: a reading holds no value anybody is owed. Off hides
     // every surface; the readings stay in their table for when it is on again.
   },

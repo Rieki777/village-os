@@ -33,7 +33,7 @@ do not restate these lists.
 | Name | Values |
 | --- | --- |
 | `CanvasBlockId` | the twelve ids in `CANVAS_BLOCK_IDS` (`shared/governanceCanvas.ts`) |
-| `ProposalTarget` | `words` (a brief section), `purpose` (the governing purpose statement), `setting` (a setting behind a door), `matrix` (a human row of the Decision Matrix) |
+| `ProposalTarget` | `words` (a brief section), `purpose` (the governing purpose statement), `setting` (a setting behind a door), `matrix` (a human row of the Decision Matrix), `document` (a member's own document into the village's notebook, filed only by `POST /api/documents/:id/share`) |
 | `ProposalSource` | `member`, `derived` (drafted from the live system), `import` |
 | `ProposalStatus` | `open`, `adopted`, `declined`. A suggestion moves once and is never reopened |
 | `CanvasDoorId` | `dial:membership.vouches_required` and `exit:terms` (Team), `dial:governance.default_method` and `module:governance` (Power), `exit:restorative` (Conflict), `dial:ledger.admin_mint_cycle_cap` (Resourcing) |
@@ -47,6 +47,7 @@ What each target can carry, and where:
 | `purpose` | `purpose` only | `body` is the statement itself, held to `purposeStatementProblem` | none |
 | `setting` | the door's block only | `door` | a dial door: `{ "value": string }`; `module:governance`: `{ "to": <lifecycle> }`, one of `off`, `preview`, `members`, `public`; `exit:terms`: any of `noticePeriodDays` (whole days), `valuationMethod`, `unwindSteps` (string[]), `involuntaryProcess`; `exit:restorative`: any of `steps` (string[]), `intakeContactRole` (a role id, or `""`), `coverRole`, `replyHours` (whole hours, or `null`). At least one field |
 | `matrix` | `power` only | `change` | `{ rowId?, subject, approval, consultation, information, method?, riskTags?: string[] }` |
+| `document` | any block its owner names | never through `POST /api/canvas/proposals`, which answers `400` with `DOCUMENT_SHARE_DOOR` | `{ documentId, title }`. Adopted by the prose pen (`story.tell`); adopting shares the document, and answers `409` if it is gone or no longer its proposer's |
 
 The settings plan 2.3 maps to Roles (seat terms) and Meetings (the season's dates) have no door yet. A suggestion cannot carry a value for
 them; the block's `doors` list names each with `wired: false`, a link to its own control and a
@@ -344,3 +345,39 @@ of block titles (`canvasMoonLine`, shared/canvasRevisit.ts).
 The four key moments themselves have no route: each is raised where it happens
 (`raiseCanvasRevisit`, server/lib/canvasRevisit.ts) and lands as a `canvas_revisit` notification in
 the daily digest. See that file's header for who hears which.
+
+## A member's notebook, the picks and the export pack (Wave 4, 0326)
+
+Served by `server/routes/villageDocuments.ts`; the vocabulary is `shared/villageDocuments.ts` and
+`shared/documentDraft.ts`. Every route answers `401` to a visitor with no session and `403` with
+`CANVAS_MEMBERS_ONLY` to an account the village has not admitted, like the canvas itself. A document
+somebody may not read answers `404` with `DOCUMENT_WORDS.notFound`, the same as one that does not
+exist.
+
+Who reads a document (`mayReadDocument`, `server/lib/villageDocuments.ts`): its owner; every member
+once the village's pen adopted the owner's share; and whoever holds the village's story (`story.tell`,
+which before the handover includes the administrators) while the owner's share is open.
+
+| Route | Who | Body | Answers |
+| --- | --- | --- | --- |
+| `GET /api/documents` | members and admins | none | `200 { mine, shared, toDecide, privateNote, limits }`; each entry a `DocumentSummary`; `toDecide` (with `proposalId`) is filled only for somebody who holds the story pen |
+| `POST /api/documents` | members and admins | `{ kind: "paste" \| "md" \| "txt", title, body }` | `201 { document }`, private; `400` in `parseTextDocument`'s words; `409` at 100 documents |
+| `POST /api/documents/file` | members and admins | multipart: `file` (`.md`, `.markdown`, `.txt`, `.pdf`, `.docx`, up to 8 MB), `title` (optional) | `201 { document }`; `400` when the bytes are not what the name says; `413` over 8 MB; `409` at 100 documents, or when the member's PDF and Word files would come to more than 40 MB together |
+| `GET /api/documents/search?q=` | members and admins | none | `200 { hits: [{ documentId, title, heading, excerpt }] }`, ranked with the shelves' BM25 over the shared text documents and the asker's own |
+| `GET /api/documents/:id` | whoever may read it | none | `200 { document, body, fileName, shareProposalId, model, purposeWritten }`; `model` is `{ available, sentence, consented }` for the owner of a text document, else `null` |
+| `GET /api/documents/:id/file` | whoever may read it | none | the PDF or DOCX bytes, `attachment`, `private, no-store` |
+| `DELETE /api/documents/:id` | its owner | none | `200 { deleted }`; `403` for a reader who is not the owner. An open share is withdrawn in the owner's name |
+| `POST /api/documents/:id/share` | its owner | `{ blockId, note? }` | `201 { proposalId, document, message }`: a canvas suggestion with target `document`; `409` when shared already or an ask is open |
+| `POST /api/documents/:id/draft` | the owner of a text document, or any member once the village shared it | `{ mode: "words" }`, or `{ mode: "model", consent?: true }` for its owner | `200 { mode, read, draft: { items, gaps, noSection }, draftId, purposeWritten }`; model: `409 { needsConsent, disclosure }` until the owner says yes to where the text goes, `409` `NO_MODEL` with no key, `403` `MODEL_OWNER_ONLY` for anybody else; `403` `DRAFT_AFTER_ADOPTION` to the pen reading a document whose share waits |
+| `POST /api/documents/:id/draft/file` | the owner, or any member once the village shared it | `{ blocks: CanvasBlockId[], draftId?, servesPurpose?: { [block]: string } }` | `201 { filed: [{ blockId, proposalId }], refused: [{ blockId, error }] }`: `words` suggestions with source `import`, whose bodies are the server's own draft (a fresh split, or the model's draft held under `draftId` for an hour); `410` for an expired or somebody else's `draftId`; `403` `DRAFT_AFTER_ADOPTION` to the pen while the share waits, and nothing is filed |
+| `GET /api/canvas/resource-picks` | members and admins | none | `200 { village: string[], mine: string[] }` |
+| `POST /api/canvas/resource-picks` | members; the village's list under `story.tell` | `{ resourceKey, forVillage? }` | `201` added, `200` already there, `403` `VILLAGE_PICK_REFUSAL` |
+| `DELETE /api/canvas/resource-picks/:key` | the same (`?village=1` for the village's) | none | `200 { removed }`, `404` |
+| `POST /api/canvas/exports` | members and admins | none | `200 { files: [{ name, content }], exportedAt, hash }`: four Markdown files named README, canvas, resources and our-documents (`PACK_FILE_NAMES` in `server/lib/notebookExport.ts`). Writes an admin audit event `canvas:export:<hash>` with `entity_type` `canvas_export` and the brain's etag as `entity_ref` |
+| `GET /api/canvas/exports/latest` | members and admins | none | `200 { lastExportAt, changedSince }`: both `null` before the first export |
+
+What the pack carries is decided in `server/lib/notebookExport.ts`, which reads the brief through
+`memberCanvasAnswers` alone (member audience, confirmed, never `people`, `legal`, `land` or
+`constraints`), the readings without their recorders, the shared documents, the exporter's own
+private documents, and both lists of picks. The resources file names a pick from `canvas_resources`
+(0224) when that table is there and lists it by key when it is not.

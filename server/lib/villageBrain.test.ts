@@ -17,6 +17,7 @@ import {
   decisionOccurredAt,
   decisionToRecord,
   estimateTokens,
+  memberCanvasAnswers,
   renderIndexMarkdown,
   renderSectionMarkdown,
   slugify,
@@ -67,6 +68,69 @@ describe("the brain never leaves the fork", () => {
     }
     // Without this the sweep passes by checking nothing at all.
     expect(checked, "no outward-facing module was found to check").toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("the canvas export reads the brief through one fenced reader (plan 5.6)", () => {
+  /** Block and line comments out, strings left in, so a header naming a reader cannot trip the sweep. */
+  const code = (rel: string) =>
+    fs
+      .readFileSync(path.join(__dirname, "..", "..", rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+
+  it("notebookExport.ts imports memberCanvasAnswers from the brain and nothing else", () => {
+    const src = code("server/lib/notebookExport.ts");
+    const fromBrain = Array.from(src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\/villageBrain"/g)).map((m) => m[1].split(",").map((s) => s.trim()).filter(Boolean));
+    expect(fromBrain, "notebookExport.ts must import from ./villageBrain exactly once").toHaveLength(1);
+    expect(fromBrain[0]).toEqual(["memberCanvasAnswers"]);
+    // Nor may it reach the brief another way: a second import path, or the tables themselves.
+    const readers = ["village_brief", "village_record", "village_brief_revisions", "briefAll", "briefGet", "recordSummaries", "briefIndexForPrompt", "briefForPublicPrompt", "renderSectionMarkdown", "brainEtag"];
+    for (const token of readers) {
+      expect(src, `notebookExport.ts must not touch ${token}`).not.toContain(token);
+    }
+    expect(src).toContain("memberCanvasAnswers(pool)");
+  });
+
+  /**
+   * A pool that IGNORES the WHERE: every village_brief query gets every row
+   * back, admin audience included. It records the SQL it was sent, so the
+   * test can also say the query asked for the member audience.
+   */
+  function leakyPool(rows: Array<Record<string, unknown>>) {
+    const sent: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        sent.push(sql);
+        return [rows];
+      },
+    };
+    return { pool: pool as unknown as Parameters<typeof memberCanvasAnswers>[0], sent };
+  }
+
+  const row = (section: string, audience: "admin" | "member", body: string) => ({
+    id: `brief-${section}`, section, title: section, body, audience, source: "admin", status: "confirmed",
+    confirmed_by: "x", confirmed_at: new Date(), revision: 1, updated_at: new Date(),
+  });
+
+  it("never hands on an admin-audience row, even from a pool that returns one", async () => {
+    const { pool, sent } = leakyPool([
+      row("aims", "member", "MEMBER-AIMS"),
+      row("vision", "admin", "ADMIN-VISION"),
+      row("decisions", "admin", "ADMIN-DECISIONS"),
+      row("economy", "admin", "ADMIN-ECONOMY"),
+      row("people", "member", "PEOPLE-EVEN-OPENED"),
+      row("legal", "member", "LEGAL-EVEN-OPENED"),
+    ]);
+    const answers = await memberCanvasAnswers(pool);
+    const all = JSON.stringify(answers);
+    expect(all).toContain("MEMBER-AIMS");
+    for (const kept of ["ADMIN-VISION", "ADMIN-DECISIONS", "ADMIN-ECONOMY", "PEOPLE-EVEN-OPENED", "LEGAL-EVEN-OPENED"]) {
+      expect(all, kept).not.toContain(kept);
+    }
+    // And the query itself asked for member rows only: the first of the two locks.
+    expect(sent.filter((s) => s.includes("village_brief"))).toHaveLength(1);
+    expect(sent[0]).toContain("audience = 'member'");
   });
 });
 

@@ -223,6 +223,7 @@ import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
+import { forgetNotebookForMember } from "../repos/villageDocuments";
 import {
   abandonErasure,
   beginErasure,
@@ -1678,6 +1679,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "reward-moments-after-tombstone",
       run: async () => {
         await forgetRewardMomentsOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S OWN NOTEBOOK (0326, plan 5.5): every document they kept
+       * private, with its stored bytes, and their own list of picked
+       * resources. A document the village's pen ADOPTED stays, because it is
+       * the village's material now; its owner reads as "a departed member"
+       * through the tombstone. The village's own picks (user_id '') are never
+       * a member's and are never touched.
+       *
+       * AFTER THE TOMBSTONE, for the reason the step above gives: adding a
+       * document is a write any signed-in session can make, so the deletion
+       * comes after the last moment the member could make one.
+       */
+      name: "notebook-after-tombstone",
+      run: async () => {
+        await forgetNotebookForMember(pool, target.id);
       },
     },
     {

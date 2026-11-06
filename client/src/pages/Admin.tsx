@@ -2727,7 +2727,7 @@ function QuestClaimsTab() {
  * application is real and usable and nobody has agreed to it yet, and that
  * difference is what the guide cites when she leans on it.
  */
-function VillageBrainTab({ password }: { password: string }) {
+export function VillageBrainTab({ password }: { password: string }) {
   const [sections, setSections] = useState<any[]>([]);
   const [record, setRecord] = useState<any[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -2824,6 +2824,7 @@ function VillageBrainTab({ password }: { password: string }) {
           The guide reads this before it suggests anything. It ranks it above the shipped
           literature and below what is live in the game, and it names which section it drew on.
           When the guide answers in its own words, what it reads here goes to its model provider with the question.
+          A member may export the canvas: that copy carries the confirmed sections open to members that a canvas block reads, and never people, legal, land, red lines or anything kept to admins.
         </p>
         {blanks.length > 0 && (
           <p className="text-sm text-gray-600 mt-2">
