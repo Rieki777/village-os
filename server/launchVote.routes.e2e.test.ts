@@ -225,6 +225,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchvote-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
@@ -414,6 +416,24 @@ describe.skipIf(!DB_CONFIGURED)("a village sets itself up alone, and can issue n
     expect(early.status).toBe(409);
     expect(String(early.json?.error)).toContain("One more member");
     expect(early.json?.onTheRoll).toBe(2);
+    expect(await launchBallots()).toEqual([]);
+  });
+
+  it("the head count is the village's own dial: two clears the floor, and three brings it back (Rye, 2026-11-06)", async () => {
+    const set = (value: string) => call("PUT", "/api/admin/variables/governance.launch_min_electorate", { body: { value } });
+    expect((await set("0")).status, "never below one").toBeGreaterThanOrEqual(400);
+    expect((await set("2")).status).toBe(200);
+    try {
+      const status = await call("GET", "/api/admin/launch");
+      expect(status.json?.vote?.minElectorate).toBe(2);
+      expect(status.json?.vote?.tooFew ?? null, "two on the roll is enough now").toBeNull();
+    } finally {
+      expect((await set("3")).status).toBe(200);
+    }
+    // Control: back at the default, the same two are one short again.
+    const again = await call("GET", "/api/admin/launch");
+    expect(again.json?.vote?.minElectorate).toBe(3);
+    expect(String(again.json?.vote?.tooFew)).toContain("One more member");
     expect(await launchBallots()).toEqual([]);
   });
 });

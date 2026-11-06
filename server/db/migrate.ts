@@ -261,6 +261,23 @@ export function sha256Hex(bytes: Buffer): string {
 }
 
 /**
+ * Whether the migration on disk is the text that ran here (R130).
+ *
+ * The checksum recorded is of the raw bytes, and git hands the same file back
+ * with CRLF on a Windows checkout (`core.autocrlf`) and with LF everywhere
+ * else. A village built once from each read its own migrations as edited and
+ * refused to boot. So the bytes match if they hash to the record as they are,
+ * with every CRLF read as LF, or with every LF written as CRLF. A lone CR, and
+ * any other change at all, is still an edit.
+ */
+export function sameMigrationText(recorded: string, bytes: Buffer): boolean {
+  if (recorded === sha256Hex(bytes)) return true;
+  const lf = bytes.toString("latin1").replace(/\r\n/g, "\n");
+  if (recorded === sha256Hex(Buffer.from(lf, "latin1"))) return true;
+  return recorded === sha256Hex(Buffer.from(lf.replace(/\n/g, "\r\n"), "latin1"));
+}
+
+/**
  * Whether THIS database has run 0121 (the migration that adds `checksum`)
  * yet. Checked fresh every time it is asked, never cached: a village that is
  * many migrations behind can apply 0121 itself partway through one boot, and
@@ -388,7 +405,7 @@ async function verifyAndBackfillChecksums(
       backfilled += 1;
       continue;
     }
-    if (recorded !== actual) {
+    if (!sameMigrationText(recorded, bytes)) {
       return {
         kind: "tamper-detected",
         file: filename,

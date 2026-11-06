@@ -27,8 +27,8 @@
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 
-/** The ballot subjects whose `subject_ref` is `<userId>@<roleId>`. */
-export const SUBJECTS_ABOUT_A_MEMBER: readonly string[] = ["role_seat", "role_unseat"];
+/** The ballot subjects whose `subject_ref` is `<userId>@<something>`: a role, or a badge (server/lib/badgeGrantCloser.ts). */
+export const SUBJECTS_ABOUT_A_MEMBER: readonly string[] = ["role_seat", "role_unseat", "badge_grant"];
 
 export interface BallotWords {
   id: string;

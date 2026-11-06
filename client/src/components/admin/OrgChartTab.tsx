@@ -42,6 +42,7 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
 import RoleValueEditor from "@/components/admin/RoleValueEditor";
+import RolePowerGroupsEditor from "@/components/admin/RolePowerGroupsEditor";
 import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
@@ -469,6 +470,8 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
                       {/* What the role is worth and pays each seat every cycle (0265). */}
                       {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* The Power groups whoever holds this role holds (0322). */}
+                      {!r.isExample && <RolePowerGroupsEditor role={r} call={call} />}
                       {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
                       {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
                       {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}

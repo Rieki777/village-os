@@ -60,6 +60,7 @@ import { dialFromSearch } from "@shared/comms/memberView";
 import InfoTip, { DialFact } from "@/components/InfoTip";
 import LongText from "@/components/LongText";
 import PurposeAlignmentField, { usePurposeAlignment } from "@/components/governance/PurposeAlignmentField";
+import { AskVillageButton, mayAskVillageOn } from "./gameMechanicsAskVillage";
 
 interface MechanicsVariable {
   key: string;
@@ -200,6 +201,7 @@ interface Standing {
   mayOpenBallot: boolean;
   /** Proposals this viewer raised. The other half of who the route admits. */
   mine: string[];
+  mayAskVillage?: boolean; // a held outcome after launch (./gameMechanicsAskVillage.tsx)
 }
 
 export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }> = {
@@ -1139,6 +1141,7 @@ export default function GameMechanics() {
                               Open the village vote
                             </button>
                           )}
+                          {mayAskVillageOn(p, standing) && <AskVillageButton onAsk={() => openBallot(p)} />}
                           {/* 0219: the field asks itself whether to render, from
                               the same condition the route refuses on. */}
                           {mayOpenBallotOn(p) && <PurposeAlignmentField {...alignment.propsFor(p.id)} />}

@@ -47,6 +47,7 @@ import {
   IDENTITY_CONFIRM_COOKIE_PATH,
   IDENTITY_CONFIRM_TTL_MS,
   confirmCookieName,
+  readCookieValue,
   confirmReturnUrl,
   confirmWithFor,
   isConfirmAction,
@@ -134,20 +135,9 @@ export function resolveTokenEndpoint(env: Record<string, string | undefined>): s
   return real;
 }
 
-/** One cookie by name, out of the raw header. No cookie parser is wired in this app. */
+/** One cookie by name: the shared reader, which refuses a name sent twice (R041, lib/identityConfirm.ts). */
 function readCookie(req: Request, name: string): string | null {
-  const raw = String(req.headers.cookie ?? "");
-  for (const part of raw.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq < 0) continue;
-    if (part.slice(0, eq).trim() !== name) continue;
-    try {
-      return decodeURIComponent(part.slice(eq + 1).trim());
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return readCookieValue(req.headers.cookie, name);
 }
 
 /** Where a failed sign-in lands, with a reason the page can turn into a sentence. */

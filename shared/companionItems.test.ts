@@ -7,6 +7,7 @@ import {
   carriesContact,
   daysBetweenKeys,
   effectiveCap,
+  outsideAddressesOf,
   parseLook,
   questionExpired,
   validateCompanionPayload,
@@ -25,6 +26,27 @@ describe("a purchase draft", () => {
     expect(validateCompanionPayload("purchase", { ...ok, toOutside: "Finca Verde, sales@fincaverde.example, +506 8888 1234" })).toBeNull();
     expect(validateCompanionPayload("purchase", { ...ok, note: "from sales@fincaverde.example" })).toMatch(/email address or a phone number/);
     expect(validateCompanionPayload("budget_spend", { budgetId: "b", amountMinor: 1, toUserId: "u", toOutside: "x" })).toMatch(/no field called toOutside/);
+  });
+});
+
+describe("an email draft (Rye, 2026-10-31: \"don't refuse vendor emails\")", () => {
+  const ok = { subject: "Six trays", text: "Could you hold six for Friday?" };
+  it("may carry one vendor address in toOutside, and nothing else there", () => {
+    expect(validateCompanionPayload("email", ok)).toBeNull();
+    expect(validateCompanionPayload("email", { ...ok, toOutside: "shop@farm.example" })).toBeNull();
+    expect(validateCompanionPayload("email", { ...ok, toOutside: "Farm shop, shop@farm.example" })).toMatch(/one email address/);
+    expect(validateCompanionPayload("email", { ...ok, toOutside: "a@farm.example, b@farm.example" })).toMatch(/one email address/);
+  });
+  it("still refuses an address in its words", () => {
+    expect(validateCompanionPayload("email", { ...ok, text: "write to shop@farm.example" })).toMatch(/email address or a phone number/);
+  });
+});
+
+describe("the addresses in toOutside", () => {
+  it("lists every address a vendor line holds, lower-cased", () => {
+    expect(outsideAddressesOf({ toOutside: "Finca Verde, Sales@FincaVerde.example, +506 8888 1234" })).toEqual(["sales@fincaverde.example"]);
+    expect(outsideAddressesOf({ toOutside: "shop@farm.example" })).toEqual(["shop@farm.example"]);
+    expect(outsideAddressesOf({ note: "x" })).toEqual([]);
   });
 });
 

@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import mysql from "mysql2/promise";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import {
+  ADVISORY_TYPES,
   CONDUCTABLE_TYPES,
   DRAFT_CAP,
   TYPE_CAPABILITY_REFUSALS,
@@ -139,11 +140,13 @@ describe("which capability keys a proposal type may name", () => {
   });
 
   it("keeps the transfer type conductable, so the wizard is not walking members at a wall", () => {
-    // The badge_grant cautionary tale in one assertion: full client config,
-    // working pickers, a SUBJECT_NOUN entry, and no route. A type that cannot
-    // be published belongs in the advisory list and says so on its card.
+    // UPDATED, NEVER DELETED (gap 6, 2026-11-06). This held badge_grant back
+    // while it had full client config, working pickers, a SUBJECT_NOUN entry
+    // and no route. The route exists now (POST /api/governance/badge-grants),
+    // so it is conductable and off the advisory list.
     expect(CONDUCTABLE_TYPES).toContain("power_transfer");
-    expect(CONDUCTABLE_TYPES).not.toContain("badge_grant");
+    expect(CONDUCTABLE_TYPES).toContain("badge_grant");
+    expect(ADVISORY_TYPES).not.toContain("badge_grant");
   });
 });
 

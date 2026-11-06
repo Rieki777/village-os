@@ -21,6 +21,7 @@
  * the way server/repos/seatHoldings.ts reads the same column.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { seatingsChanged } from "../lib/orgChart";
 
 export interface FollowingOrgSeating {
   id: string;
@@ -54,4 +55,5 @@ export async function restampOrgSeating(pool: Pool, assignmentId: string, termEn
     termEndsAt,
     assignmentId,
   ]);
+  seatingsChanged(); // 0322: a term is what ends a seat's powers
 }

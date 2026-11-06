@@ -528,6 +528,32 @@ check("FIXTURE TREE: a listed count that only partly fell exits 1 and says the n
   assert.match(out, /--update-pending/);
 });
 
+check("FIXTURE TREE: a fall in one file does not buy a NEW fact in another (R205)", () => {
+  // The finding's own control. Reserve.tsx is listed at 3 money hits and now
+  // carries 1; Fresh.tsx is unlisted and carries a new price. The total fell
+  // from 3 to 2, which is all the write path used to look at.
+  const { page } = inject("<p>Homes from $80,000</p>");
+  const key = "client/src/pages/Reserve.tsx::money";
+  const pending = { total: 3, counts: { [key]: 3 }, entries: { [key]: { since: "2026-09-03" } } };
+  const files = {
+    "client/src/pages/Reserve.tsx": page,
+    "client/src/pages/Fresh.tsx": "export function Fresh() {\n  return <p>Plots from $25,000</p>;\n}\n",
+  };
+
+  const gate = runGate("fall-buys-new", files, pending);
+  assert.strictEqual(gate.code, 1, gate.out);
+  assert.match(gate.out, /Fresh\.tsx/);
+  assert.match(gate.out, /cannot be recorded yet/, "the fall is named, and the advice waits for the growth");
+  assert.doesNotMatch(gate.out, /Good news, and the ratchet has to record it: run/, "it must not send the reader to a write that refuses");
+
+  const write = runGate("fall-buys-new", files, pending, ["--update-pending"]);
+  assert.strictEqual(write.code, 1, write.out);
+  assert.match(write.out, /refusing to write the village-fact pending list/);
+  assert.match(write.out, /Fresh\.tsx::money: 1, not on the pending list at all/);
+  const after = JSON.parse(fs.readFileSync(path.join(FIXTURES, "fall-buys-new", "pending.json"), "utf8"));
+  assert.deepStrictEqual(after.counts, pending.counts, "nothing was written");
+});
+
 check("FIXTURE TREE: a list whose own total disagrees with its counts exits 1", () => {
   const key = "client/src/pages/Reserve.tsx::money";
   const { page } = inject("<p>Homes from $80,000</p>");

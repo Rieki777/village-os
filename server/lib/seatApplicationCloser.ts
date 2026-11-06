@@ -57,6 +57,10 @@ import type { BallotRow } from "./ballots";
 import { isLapsed, seatHolder, type LapseContext } from "./orgChart";
 import { ensureApplicationText, recordVillageAlignment, settleText } from "./alignmentSubjects";
 import { civilDateKey } from "../../shared/lunar";
+import { APPLICATION_BALLOT_ACTOR } from "../../shared/seatApplications";
+import { applyProposalChanges } from "./roleProposals";
+import { revertDraft } from "./orgDrafts";
+import { proposalsForApplications } from "../repos/roleProposals";
 import {
   endSeatingForRenewal,
   inApplicationTransaction,
@@ -370,6 +374,27 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
     },
 
     execute: async (b: BallotRow, actorId) => {
+      /*
+       * A ROLE PROPOSAL'S CHANGES LAND WITH ITS VOTE (R164). In the two cases
+       * a proposal that changes roles goes to a vote, the carried vote does
+       * what a holder's adopt click does: the new and changed roles are made
+       * as one published org draft first, and put back if the adoption then
+       * does not go through, so the chart never changes for a proposal
+       * nobody adopted.
+       */
+      const pool = deps.getPool();
+      const proposal = (await proposalsForApplications(pool, [b.subjectRef])).get(b.subjectRef) ?? null;
+      let draftId: string | null = null;
+      if (proposal) {
+        const waiting = await readApplication(pool, b.subjectRef);
+        if (waiting && waiting.status === "voting") {
+          const proposed = new Map(proposal.body.newRoles.map((r) => [r.id, typeof r.words.name === "string" ? r.words.name : r.id]));
+          const names = (await seatNamesOf(pool, waiting)).map((n, i) => proposed.get(waiting.seatIds[i]) ?? n);
+          const applied = await applyProposalChanges(pool, proposal, APPLICATION_BALLOT_ACTOR, deps.calendar(), names);
+          if (!applied.ok) return { applied: [], held: applied.error, proposerTold: waiting.candidateUserId };
+          draftId = applied.draftId;
+        }
+      }
       const { outcome, app, textId } = await adoptApplication(
         deps.getPool(),
         b.subjectRef,
@@ -377,6 +402,7 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
         { via: "ballot", ref: b.id, authority: b.id },
         { now: now(), lapse: deps.lapse(), calendar: deps.calendar() },
       );
+      if (draftId && (outcome.kind === "lost" || outcome.kind === "cannot" || !app)) await revertDraft(pool, draftId);
       if (outcome.kind === "lost" || !app) {
         return {
           applied: [],

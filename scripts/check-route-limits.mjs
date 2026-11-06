@@ -537,6 +537,16 @@ for (const file of files) {
   }
 }
 
+// A FLOOR ON WHAT WAS READ (R206). A route pattern that stopped matching would
+// read zero routes and pass, and a zero is not a measurement. 1,049 were read on
+// 2026-11-05; the floor is half that. ROUTE_LIMITS_MIN moves it, and a fixture
+// tree (ROUTE_LIMITS_ROOT) has none unless the test sets one.
+const ROUTE_FLOOR = Number(process.env.ROUTE_LIMITS_MIN ?? (process.env.ROUTE_LIMITS_ROOT ? 0 : 500));
+if (routes.length < ROUTE_FLOOR) {
+  console.error(`::error::the route-limit guard read only ${routes.length} route(s), under its floor of ${ROUTE_FLOOR}. The route pattern has stopped matching the tree, so nothing was checked.`);
+  process.exit(1);
+}
+
 const public_ = routes.filter((r) => !r.guarded && !r.staticServe);
 const failing = public_.filter((r) => r.costly && !r.bounded && !r.waiver);
 const waived = public_.filter((r) => r.costly && !r.bounded && r.waiver);

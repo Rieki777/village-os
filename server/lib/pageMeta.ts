@@ -65,7 +65,8 @@ export function spliceMeta(shell: string, m: PageMeta): string {
     .replace(/<title>[\s\S]*?<\/title>\s*/i, "")
     .replace(/<meta\s+name="description"[^>]*>\s*/i, "")
     .replace(/<meta\s+property="og:[^"]*"[^>]*>\s*/gi, "")
-    .replace("</head>", `  ${metaTags(m)}\n  </head>`);
+    // A function, so a `$&` or `$'` in a title is text and never a replacement pattern (R114).
+    .replace("</head>", () => `  ${metaTags(m)}\n  </head>`);
 }
 
 interface SiteConfig {
