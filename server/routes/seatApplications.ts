@@ -79,6 +79,7 @@ import {
   APPLICATION_WITHDRAWN_NOTE,
   OPEN_STATUSES,
   parseApplicationInput,
+  proposalMayGoToVote,
   putToVillageRefusal,
   ROLE_APPLICATION,
   STATUS_WORDS,
@@ -276,7 +277,12 @@ export function register(app: Express, deps: Deps): void {
         return { name: r.name, holders: names };
       }),
     );
-    return { villageHolds: isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld), heldLive: live.size > 0, groups };
+    return {
+      villageHolds: isVillageHeld(ADOPTING_POWER as Capability, ctx.villageHeld),
+      heldLive: live.size > 0,
+      groups,
+      othersHoldLive: Array.from(live).some((id) => id !== candidateId),
+    };
   }
   adopters = adopterFacts;
 
@@ -447,7 +453,8 @@ export function register(app: Express, deps: Deps): void {
             you: {
               isCandidate,
               mayAdopt: awaiting && adoptRefusal(rule, viewerId, a.candidateUserId) === null,
-              mayPutToVillage: awaiting && !changes && putToVillageRefusal(rule, viewerId) === null,
+              // A proposal that changes roles: the candidate opens the vote, in the two cases nobody else can adopt it (R164).
+              mayPutToVillage: awaiting && (changes ? isCandidate && proposalMayGoToVote(rule, a.candidateUserId) : putToVillageRefusal(rule, viewerId) === null),
               mayWithdraw: isCandidate && (await withdrawable(a, ballot)),
               holdsThePower: rule.who === "live-holders" && rule.holders.includes(viewerId),
             },
@@ -989,10 +996,19 @@ export function register(app: Express, deps: Deps): void {
     const got = await forHolder(req, res, "seat-application-to-village");
     if (!got) return;
     const { user, a, rule, proposal } = got;
-    // A proposal that changes roles is decided by its circle or by the power (Rye, 2026-10-22), never by a vote.
-    if (proposal && changesRoles(proposal.body)) return res.status(409).json({ error: "proposal_changes_roles", message: CONSENT_WORDS.noVote });
-    const refusal = putToVillageRefusal(rule, String(user.id));
-    if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
+    /*
+     * A proposal that changes roles is decided by its circle or by the power
+     * (Rye, 2026-10-22). When nobody but the candidate could adopt it, the
+     * village votes, and the candidate opens it (R164; coordinator ruling
+     * 2026-11-06, `proposalMayGoToVote`). Everywhere else the no-vote rule stands.
+     */
+    if (proposal && changesRoles(proposal.body)) {
+      if (!proposalMayGoToVote(rule, a.candidateUserId)) return res.status(409).json({ error: "proposal_changes_roles", message: CONSENT_WORDS.noVote });
+      if (String(user.id) !== a.candidateUserId) return res.status(403).json({ error: "candidate_opens", message: CONSENT_WORDS.candidateOpens });
+    } else {
+      const refusal = putToVillageRefusal(rule, String(user.id));
+      if (refusal) return res.status(refusal.status).json({ error: refusal.error, message: refusal.message });
+    }
     let moved = false;
     const opened = await openVote(a, String(user.id), async (conn) => {
       moved = await setStatus(conn, a.id, ["awaiting-holder"], "voting");

@@ -95,6 +95,7 @@ import { setWeight, weightChangeProblem, weightTokenProblem } from "./governance
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
+import { brandFieldValue, brandVoteProblem, withBrandField } from "../../shared/brandVote";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
@@ -118,6 +119,7 @@ export const WRITE_ORDER: readonly string[] = [
   "mint_rule",
   "weight_allocation",
   "mode_switch",
+  "brand_field",
 ];
 
 const rankOf = (kind: string): number => {
@@ -152,6 +154,12 @@ export interface ChangesetDeps {
   reloadCaches: () => Promise<void>;
   /** The lifecycle guard `setModuleLifecycle` asks for. */
   sharedPasswordPosture: () => boolean;
+  /**
+   * The brand document's reader and writer, for a `brand_field` item (Rye,
+   * 2026-11-06). Absent means this build cannot write the brand from here, and
+   * the item is refused before anything is written.
+   */
+  brand?: { read: () => unknown; write: (next: unknown) => Promise<void> };
 }
 
 export interface ValidatedElement {
@@ -305,6 +313,24 @@ export async function validateElements(
         oldValue: before,
         newValue: String(item.to),
         sentence: `${def.name} moves from ${before} to ${item.to}`,
+      });
+      continue;
+    }
+
+    if (item.kind === "brand_field") {
+      if (!deps.brand) return refuse(index, item.kind, "this build cannot write the village's brand from here");
+      const field = String(item.field ?? "").trim();
+      const current = deps.brand.read();
+      const problem = brandVoteProblem(current, field, String(item.to ?? ""));
+      if (problem) return refuse(index, item.kind, problem.charAt(0).toLowerCase() + problem.slice(1));
+      const before = brandFieldValue(current, field) ?? "";
+      elements.push({
+        index,
+        item,
+        kind,
+        oldValue: before,
+        newValue: String(item.to),
+        sentence: `the village's ${field} changes from "${before}" to "${String(item.to)}"`,
       });
       continue;
     }
@@ -634,6 +660,30 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
         newValue: el.newValue,
       });
       applied.push(`module:${item.moduleId}`);
+      touchedCaches = true;
+      continue;
+    }
+
+    if (item.kind === "brand_field") {
+      const field = String(item.field ?? "").trim();
+      if (!deps.brand) {
+        failed.push({ key: `brand:${field}`, problem: "this build cannot write the village's brand from here" });
+        continue;
+      }
+      await deps.brand.write(withBrandField(deps.brand.read(), field, String(item.to)));
+      await recordElement(deps.pool, {
+        ballotId: input.ballotId,
+        proposalId: input.proposalRef,
+        elementIndex: el.index,
+        writeSeq,
+        elementKind: item.kind,
+        sentence: el.sentence,
+        wroteTable: "app_config",
+        wroteId: `brand:${field}`.slice(0, 64),
+        oldValue: el.oldValue,
+        newValue: el.newValue,
+      });
+      applied.push(`brand:${field}`);
       touchedCaches = true;
       continue;
     }
