@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `e6e7112a3182f836`, which regenerating reproduces.
+It describes the sources at fingerprint `9a77784af0a47cbd`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -226,7 +226,7 @@ The wizard offers types the executors have not reached. Those open as practice v
 
 The wizard's type list is held in two files, once on the server and once in the browser, and they agree today.
 
-A change set carries at most 12 entries, all game dials or all minting rules and never both, because a ballot carries one threshold priced by its subject and a set that is two subjects has no honest price.
+A change set carries at most 22 entries by default. Each village moves that number by vote (`governance.change_set_cap`), anywhere from 1 to 50. A set is priced at its hardest element and applies whole or not at all. A game dial and a minting rule still go up as two proposals, because a dial moves when the vote carries and a minting rule moves at the next moon.
 
 ## What closing a decision does
 
@@ -775,7 +775,7 @@ Built: `governance.weight_mode` carries 3 choices, nothing refuses a change in e
 > explain
 
 <!-- written by a person: ruling-15 -->
-Built: a change set carries up to 12 entries and passes or fails as one. Staged: the set must be all dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor among its elements, so nobody can smuggle a big change under a small one; and when one element fails at apply time nothing applies, and the proposal names the element that blocked it.
+Built: a change set carries up to 22 entries by default (a village dial, 1 to 50) and passes or fails as one. Staged: the set must be all dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor among its elements, so nobody can smuggle a big change under a small one; and when one element fails at apply time nothing applies, and the proposal names the element that blocked it.
 
 ### 16. Vote it down, say what to fix, withdraw, edit, resubmit
 
@@ -1063,7 +1063,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "e6e7112a3182f836",
+  "commit": "9a77784af0a47cbd",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1788,7 +1788,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "token",
     "custom"
   ],
-  "changeSetMaxEntries": 12,
+  "changeSetMaxEntries": 22,
   "wizard": {
     "types": [
       "role_application",
@@ -2943,6 +2943,7 @@ The generator reads these and fails loudly if any of them moves:
 
 - `shared/governanceEngine.ts`
 - `shared/ballotSubjects.ts`
+- `shared/changeSetCap.ts`
 - `shared/governanceKinds.ts`
 - `shared/cycleClock.ts`
 - `shared/gameVariables.ts`

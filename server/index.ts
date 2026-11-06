@@ -363,7 +363,7 @@ import {
   currentMintRuleValue,
   mintRuleLabel, moduleChangeLabel,
   rowToProposal,
-  priceChangeSet, validateChangeSet, asChangeItem,
+  priceChangeSet, validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
   type MintRuleValues,
 } from "./lib/mechanics";
 import { buildMechanicsHandoff } from "./lib/hypha-bridge";
@@ -20735,7 +20735,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       Array.isArray(req.body?.changes) ? req.body.changes : [],
       rawValue,
       cooldown,
-      readMintRulesForChangeSet, { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) },
+      readMintRulesForChangeSet, { ...moduleChangeReaders, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) },
     );
     if (problems.length) return res.status(400).json({ error: "The change-set has problems", problems });
     const id = `gmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

@@ -1056,6 +1056,10 @@ export const META_SETTING_KEYS: readonly string[] = [
   // same power as moving the bar.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // How many changes one proposal may carry (Rye, 2026-11-06). It shapes
+  // every other proposal, so a cheap trial of it would be a moon in which
+  // larger bundles go up at a bar nobody agreed to.
+  "governance.change_set_cap",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */

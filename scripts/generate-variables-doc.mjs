@@ -72,6 +72,9 @@ export const SOURCES = [
   // Added when the issuance cap's dial took its scope sentence from here, so
   // the dial and the Mint by hand panel say the same thing (2026-11-01).
   "shared/mintCapWords.ts",
+  // The change-set cap dial reads its default, floor and ceiling from here
+  // (Rye, 2026-11-06).
+  "shared/changeSetCap.ts",
   "shared/gameConfig.ts",
   "shared/capabilities.ts",
   "shared/villageMoon.ts",

@@ -26,6 +26,7 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
+import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1249,6 +1250,22 @@ export const VARIABLES: VariableDef[] = [
     min: 0,
     max: 365,
     unit: "days",
+  },
+  {
+    // Rye, 2026-11-06: the cap rises from 12 to 22 and each village may move
+    // it by vote. The floor and the ceiling live in shared/changeSetCap.ts,
+    // which the validator reads too, so the two can never disagree.
+    key: CHANGE_SET_CAP_KEY,
+    category: "Governance",
+    label: "Changes one proposal may carry",
+    criticality: "structural",
+    description:
+      `The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. ${CHANGE_SET_CAP_MIN} to ${CHANGE_SET_CAP_MAX}.`,
+    type: "integer",
+    default: String(CHANGE_SET_CAP_DEFAULT),
+    min: CHANGE_SET_CAP_MIN,
+    max: CHANGE_SET_CAP_MAX,
+    unit: "changes",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────
