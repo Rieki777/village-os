@@ -42,6 +42,9 @@ export function precompileEnglish(): Plugin {
     transform(code, id) {
       if (!/\.[jt]sx?$/.test(id.split("?")[0]) || id.includes("node_modules")) return null;
       if (!code.includes("message:")) return null;
+      // Only code the macro produced: it imports the runtime. A file that
+      // merely contains descriptor-shaped text (this plugin's own tests) is left alone.
+      if (!/from\s*["'](?:@lingui\/core|@\/i18n\/runtime)["']/.test(code)) return null;
       const out = precompileMessages(code);
       return out === code ? null : { code: out, map: null };
     },

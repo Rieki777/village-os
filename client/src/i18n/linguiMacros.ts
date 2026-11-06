@@ -14,5 +14,16 @@ import { precompileEnglish } from "./precompileEnglish";
  * the browser never needs Lingui's ICU compiler.
  */
 export function linguiMacros() {
-  return [lingui({ macroTransform: { macro: { descriptorFields: "message" } } }), precompileEnglish()];
+  return [
+    lingui({
+      macroTransform: {
+        macro: {
+          descriptorFields: "message",
+          // Our runtime falls back to English outside a provider (runtime.tsx).
+          runtimeModules: { Trans: ["@/i18n/runtime", "Trans"], useLingui: ["@/i18n/runtime", "useLingui"] },
+        },
+      },
+    }),
+    precompileEnglish(),
+  ];
 }
