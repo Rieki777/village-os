@@ -126,6 +126,13 @@ type Preflight =
  *
  * The bodies are the ones the route has always answered a press with.
  */
+/**
+ * How long one call to the service may take during a sync (R169). The sync
+ * holds a named lock while it reads, so a service that accepted the
+ * connection and never answered held it until the process restarted.
+ */
+export const SYNC_CALL_TIMEOUT_MS = 60_000;
+
 export function preflight(): Preflight {
   const connection = readConnection(secretStatus(SECRET_KEY), villageSecretsConfigured(), villageSecretsKeyProblem());
   if (!connection.mayCall) {
@@ -145,7 +152,7 @@ export function preflight(): Preflight {
       },
     };
   }
-  return { ok: true, client: { baseUrl, token, fetchImpl: fetch as never } };
+  return { ok: true, client: { baseUrl, token, fetchImpl: fetch as never, timeoutMs: SYNC_CALL_TIMEOUT_MS } };
 }
 
 // ── The read ────────────────────────────────────────────────────────────────
