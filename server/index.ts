@@ -98,6 +98,8 @@ import { matchOnEvent } from "./lib/seraPersonMatch";
 import { register as registerPulseRoutes } from "./routes/pulse";
 import { register as registerPlayersRoutes } from "./routes/players";
 import { register as registerGroupAdminRoutes } from "./routes/groupAdmin";
+import { villagePowerRows } from "./lib/villagePowers";
+import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
@@ -13184,32 +13186,17 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
         { roleId: h.holderRoleId, roleName: h.holderRoleName, movedAt: h.movedAt, byBallot: !!h.movedByBallotId },
       ]),
     );
-    const seats = loadPowerHoldings(); // 0322: whoever sits there through a role, too
-    const names = new Map((await members.all()).map((m: any) => [m.id, m.name]));
-    res.json({
-      powers: powersForReading(holders).map((p) => ({
-        capability: p.capability,
-        title: p.title,
-        surface: p.surface,
-        consequence: p.consequence,
-        movable: TRANSFERABLE[p.capability] === true,
-        heldBy: p.heldBy
-          ? {
-              roleName: p.heldBy.roleName ?? p.heldBy.roleId,
-              byBallot: p.heldBy.byBallot,
-              movedAt: p.heldBy.movedAt,
-              // Who is actually sitting there. A power held by a role nobody
-              // sits in is a real state and the page says so plainly, because
-              // "the library keepers" with nobody in the chair is exactly the
-              // thing a village needs to notice.
-              people: seats
-                .filter((s: any) => s.roleId === p.heldBy!.roleId)
-                .map((s: any) => names.get(s.userId) ?? null)
-                .filter((n): n is string => !!n),
-            }
-          : null,
-      })),
+    // Who holds each power today through a role, too (server/lib/villagePowers.ts), so a power a role
+    // carries is never described as the admin panel's. Fixed order, no count: the R55 rules hold there.
+    const people = new Map((await members.all()).filter((m: any) => !isExampleUser(m)).map((m: any) => [String(m.id), { full: String(m.name ?? ""), first: firstName(m.name ?? "Member") }]));
+    const orgNames = new Map((await listOrgRoles(getPool())).map((r) => [r.id, r.name]));
+    const ladder = servedLadder(mergedConfig().project.commitmentName) as Array<{ id: string; name?: string }>;
+    const unlock = stageUnlockOverridesFromVars();
+    const rows = villagePowerRows({
+      holders, groups: loadRoles() as any, holdings: loadPowerHoldings() as any, orgRoleName: (id) => orgNames.get(id), nameOf: (id) => people.get(id) ?? null,
+      stageName: (cap) => { const id = unlock[cap] ?? STAGE_UNLOCKS[cap]; return id ? ladder.find((st) => st.id === id)?.name ?? id : null; },
     });
+    res.json({ families: POWER_FAMILIES, guidance: GUIDANCE_WORDS, powers: rows });
   });
 
   /** What's on the shelf — the admin UI lists it for transparency. */

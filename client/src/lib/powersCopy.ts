@@ -22,6 +22,16 @@ export interface PowerRow {
   /** Whether this power is one that can move to a role at all. */
   movable: boolean;
   heldBy: PowerHolderRow | null;
+  /** Before the village holds it: who holds it today through a role, as "Role (FirstName)". */
+  heldToday?: string[];
+  /** The stage that gives it to every member, by its name. */
+  stage?: string | null;
+  /** The family it belongs to, by what it does (shared/powerBoard.ts). */
+  family?: string;
+  /** What a village usually does with it at launch. */
+  guidance?: string;
+  /** Where a suggested change goes. */
+  suggestionsGoTo?: "holders" | "vote";
 }
 
 /** Names as a person would say them out loud. */
@@ -53,6 +63,35 @@ export function holderSentence(power: PowerRow): string {
     const verb = power.heldBy.people.length === 1 ? "sits" : "sit";
     return `${who} holds this. ${namesSentence(power.heldBy.people)} ${verb} there.`;
   }
+  // Role powers (2026-11-05): a power a role carries is held by that role's
+  // holders today, for the stewards, and saying the panel has it would be false.
+  const today = power.heldToday ?? [];
+  if (today.length) {
+    return `${namesSentence(today)} ${today.length === 1 ? "holds" : "hold"} this today, for the stewards.`;
+  }
+  if (power.stage) return `Every member holds this from the ${power.stage} stage.`;
   if (power.movable) return "The admin panel looks after this one. It is one the village can take on.";
   return "The admin panel looks after this one.";
+}
+
+/** Where a suggested change to this power goes, in one sentence. */
+export function suggestionSentence(power: PowerRow): string {
+  return power.suggestionsGoTo === "holders"
+    ? "A suggested change to this goes to its holders to review."
+    : "A suggested change to this goes to a village vote.";
+}
+
+/**
+ * The powers in their families, in the families' own order and the server's
+ * own order inside each. A family is what a power DOES, so this groups the
+ * same way for a village holding none of them and one holding every one: it
+ * never reads who holds what.
+ */
+export function inFamilies<T extends { family?: string }>(
+  powers: readonly T[],
+  families: ReadonlyArray<{ id: string; title: string }>,
+): Array<{ id: string; title: string; powers: T[] }> {
+  return families
+    .map((f) => ({ ...f, powers: powers.filter((p) => p.family === f.id) }))
+    .filter((f) => f.powers.length > 0);
 }
