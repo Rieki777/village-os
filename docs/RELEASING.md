@@ -137,6 +137,45 @@ Two consequences to expect, both intended:
 
 ---
 
+## The daily train
+
+Rye ruled on 2026-11-06 that Village OS cuts a release every day. Three
+workflows do the procedure below without a person, and the gates stay where
+they were:
+
+1. `.github/workflows/daily-release.yml`, at 05:17 UTC. If main has commits
+   since the last release tag and ci concluded success on main's tip, it
+   opens a pull request on `release/vX.Y.Z` that does steps 3 and 4: it moves
+   the version in every place and rolls `## Unreleased` into the new section,
+   adding the migrations the release carries and the merged pull requests.
+   It skips the day, and says why, when nothing changed, when main is red or
+   unfinished, or when a release is already in flight.
+2. `.github/workflows/release-train-land.yml` merges that pull request when ci
+   passes on it (refusing one that touches any other file), then tags the
+   merge commit when ci passes on main.
+3. `release.yml`, unchanged, takes the tag: step 6 onwards.
+
+The number is minor unless a merged pull request carries the label
+`release:major`, or every one is a fix (`fix:` in the title, or the label
+`release:patch`). `scripts/release-train.mjs` makes every decision and
+`server/releaseTrain.test.ts` holds them.
+
+**The changelog still wants writing as work lands.** The train moves what is
+under `## Unreleased`; when nothing is there, the entry says so and the
+pull request list stands in for it, which is the summary-of-the-log this file
+warns about. A release pull request can be edited before it merges.
+
+**Switching it on, and pausing it.** Both live in the repository's Settings,
+Secrets and variables, Actions. The secret `RELEASE_BOT_TOKEN` is a
+fine-grained token on this repository with Contents and Pull requests set to
+read and write (the built-in token cannot start ci or release.yml). The
+variable `RELEASE_TRAIN` set to `on` runs the train; any other value pauses
+it, and every run then ends green saying it is paused. A release by hand
+(below) still works with the train on: the land workflow tags any version on
+main that has its changelog section and no tag yet.
+
+---
+
 ## The procedure
 
 1. **Get the commit green.** CI has to have passed on the exact commit you are
