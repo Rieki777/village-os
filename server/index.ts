@@ -24162,13 +24162,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const maySeePeople = (await isAdmin(req))
       || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
     const allMembers = await members.all();
-    const holders = loadRoleHolders();
+    const holders = loadPowerHoldings(); // 0322: a seat-granted holder sits in the group too, as the gate and the admin roster count
     const nameOf = (id: string) => firstName(allMembers.find((u: any) => u.id === id)?.name ?? "Member");
     res.json(
       loadRoles()
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map((r) => {
-          const seated = holders.filter((h) => h.roleId === r.id);
+          const seated = holders.filter((h) => h.roleId === r.id && !holdingHasLapsed(h, new Date())); // R161: as the gate and the admin roster count
           return {
             id: r.id,
             name: r.name,
