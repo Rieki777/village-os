@@ -31,7 +31,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import type { SubjectCloser } from "../lib/applyDue";
 import type { RollNotice } from "../lib/ballotNotices";
-import type { BallotSetup } from "../lib/orgDraftDecide";
+import type { BallotSetup } from "../lib/ballotSetup";
 import { MINT_REQUEST, mintRequestCloser, putMintRequestToVillage, type MintRequestDeps } from "../lib/mintRequests";
 import { capabilityDecision } from "../../shared/capabilities";
 import { deadlineInVillage } from "../lib/villageReaders";

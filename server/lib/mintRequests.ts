@@ -49,7 +49,7 @@ import { EXAMPLE_REFUSAL_BODY } from "./examples";
 import { mintRecipientRefusal } from "./gratitude";
 import { memberAccount, postTransfer, tokenDef } from "./ledger";
 import { mintCapGuard } from "./mintCap";
-import type { BallotSetup } from "./orgDraftDecide";
+import type { BallotSetup } from "./ballotSetup";
 import { numberVar, stringVar } from "./variables";
 import {
   claimForApproval,
