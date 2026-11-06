@@ -92,6 +92,7 @@ export async function grantCashPayToTreasury<T extends { id: string; capabilitie
 export async function grantMoonReviewKeys<T extends { id: string; capabilities?: string[] }>(
   repo: RolesStore<T>,
   grants: ReadonlyArray<{ capability: string; roleIds: readonly string[] }>,
+  what = "the end-of-moon review's approval keys (decisions 18 and 19)",
 ): Promise<number> {
   const all = repo.all();
   let written = 0;
@@ -104,9 +105,32 @@ export async function grantMoonReviewKeys<T extends { id: string; capabilities?:
   });
   if (written === 0) return 0;
   await repo.replaceAll(next);
-  console.log(`[roles] the end-of-moon review's approval keys reached ${written} power group(s) (decisions 18 and 19)`);
+  console.log(`[roles] ${what} reached ${written} power group(s)`);
   return written;
 }
+
+/**
+ * STEWARD CIRCLE SEATS ROLES AND ADOPTS ROLE PROPOSALS (Rye, 2026-11-01).
+ *
+ * His ruling that day: founders and stewards are equivalent, and stewards and
+ * Ops seat roles and adopt role-changing proposals directly until they hand the
+ * power to the village. His answer to the role powers design (Q4) put the three
+ * keys that takes on the seeded Steward Circle. The seed carries them for a new
+ * village; this reaches a village that already has the group, once, through
+ * `runOnce`, by the same generic grant the moon review uses.
+ *
+ * `power.assign` is deliberately NOT granted to an existing village here. The
+ * moment anybody holds it, an admin who does not is refused on the routes that
+ * hand out powers, and a holder may give only what they hold (Q7). Granting it
+ * silently on a release would change who may edit powers on a live village the
+ * day it deploys. A new village gets it on Founders Circle through the seed; an
+ * existing one gives it to a role on purpose, from the role's own editor.
+ */
+export const STEWARD_CIRCLE_GRANTS = [
+  { capability: "org.seat", roleIds: ["steward-circle"] },
+  { capability: "org.decide", roleIds: ["steward-circle"] },
+  { capability: "proposal.decide", roleIds: ["steward-circle"] },
+] as const;
 
 /** The two grants, as decisions 18 and 19 name them. */
 export const MOON_REVIEW_GRANTS = [

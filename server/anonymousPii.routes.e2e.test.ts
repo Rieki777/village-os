@@ -480,6 +480,28 @@ describe.skipIf(!DB_CONFIGURED)("a signed-out visitor, on every GET the server r
     expect(cards.json.every((c: any) => c.viewerTier === "stranger" && c.subjectRef === "")).toBe(true);
   });
 
+  it("an account the village has not admitted reads the ballot as a stranger does (R098 follow-up)", async () => {
+    // With membership.invite_only off anybody can make an account, and making
+    // one is not being admitted. The named roll is for whoever may vote
+    // (ballot.vote, the member rung), the ballot's own electors and admins.
+    const r = await call("POST", "/api/auth/register", {
+      body: { name: "Quill Newcomer", email: `newcomer-${PORT}@example.test`, password: PASSWORD, paths: ["resident"] },
+      token: null,
+    });
+    expect(r.status, `the newcomer must register: ${r.text.slice(0, 200)}`).toBe(200);
+    const seen = await call("GET", `/api/governance/ballots/${seeded.ballotIds[0]}`, { token: String(r.json?.token ?? "") });
+    expect(seen.status).toBe(200);
+    expect(seen.json.viewerTier).toBe("stranger");
+    expect(seen.json.votes).toEqual([]);
+    expect(seen.json.silent).toEqual([]);
+    expect(seen.json.objections).toEqual([]);
+    expect(seen.json.votedCount).toBe(2);
+    // An admitted member still reads the named roll, exactly as before.
+    const member = await ok("GET", `/api/governance/ballots/${seeded.ballotIds[0]}`, undefined, people.abstain.token);
+    expect(member.votes.length).toBe(2);
+    expect(member.viewerTier).toBeUndefined();
+  });
+
   it("LOCK ON: a handle finds nobody for a stranger, and a member still reads the person", async () => {
     await setVar("org.public_people", "false");
     const h = people.proposer.handle;

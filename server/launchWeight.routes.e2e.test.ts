@@ -524,9 +524,36 @@ describe.skipIf(!DB_CONFIGURED)("after the Birthing, what weighs a vote is the v
 
     // Refused means nothing was written. A 409 that had already flipped the
     // mode would be the worst of both.
+    // The listing answers grouped by category. This read `json.variables`,
+    // which the route never sends, so it found nothing and passed on nothing.
     const now = await call("GET", "/api/admin/variables");
-    const mode = (now.json?.variables ?? []).find((v: any) => v.key === "governance.weight_mode");
-    expect(String(mode?.value ?? mode?.default)).not.toBe("token");
+    const mode = (now.json?.categories ?? [])
+      .flatMap((c: any) => c.variables ?? [])
+      .find((v: any) => v.key === "governance.weight_mode");
+    expect(mode, "the mode is listed").toBeTruthy();
+    expect(String(mode?.value)).toBe("custom");
+  });
+
+  /*
+   * THE CAP ON ONE MEMBER'S WEIGHT IS THE SAME KIND OF DIAL (Rye, 2026-11-05).
+   * Switching it on or off moves what one vote weighs exactly as the mode does,
+   * so after the Birthing the panel refuses it the same way and the village
+   * raises it as a proposal at the constitutional bar.
+   */
+  it("refuses the admin flip of the weight cap too, and writes nothing", async () => {
+    for (const [key, value] of [["governance.weight_cap_on", "true"], ["governance.weight_cap_pct", "10"]]) {
+      const refused = await call("PUT", `/api/admin/variables/${key}`, { body: { value } });
+      expect(refused.status, `${key}: ${JSON.stringify(refused.json)}`).toBe(409);
+      expect(String(refused.json?.error)).toContain("the village's to decide");
+    }
+    // The listing answers grouped by category, so read every group.
+    const now = await call("GET", "/api/admin/variables");
+    const listed = (now.json?.categories ?? []).flatMap((c: any) => c.variables ?? []);
+    for (const [key, shipped] of [["governance.weight_cap_on", "false"], ["governance.weight_cap_pct", "20"]]) {
+      const dial = listed.find((v: any) => v.key === key);
+      expect(dial, `${key} is listed`).toBeTruthy();
+      expect(String(dial?.value), key).toBe(shipped);
+    }
   });
 
   it("refuses the admin weight-allocation writes too, and points at the proposal", async () => {

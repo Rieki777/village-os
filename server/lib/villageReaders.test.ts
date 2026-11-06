@@ -415,3 +415,20 @@ describe("the village record is readable", () => {
     expect(readerCatalog(anon).map((r) => r.key)).not.toContain("record.decisions");
   });
 });
+
+describe("the quest library tells Maia nothing about Gratitude pay", () => {
+  // Rye, 2026-11-01: "Gratitude ONLY for the recognition token and NOT for the
+  // credit or earned equity tokens". No quest pays Gratitude (2026-10-21), so
+  // the description she reads and the rows she is handed say nothing of it,
+  // even for a quest that still carries its old reward label.
+  it("describes the quests without Gratitude and hands over no Gratitude figure", async () => {
+    const reader = READERS.find((r) => r.key === "quests.library")!;
+    expect(reader.describe).not.toMatch(/gratitude/i);
+    const pool = {
+      query: async () => [[{ id: "q1", title: "Plant the swale", circle: "land", gratitude: "50-100", status: "active" }]],
+    } as any;
+    const rows = (await reader.read({ pool, viewer: viewer() })) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({ id: "q1", title: "Plant the swale", circle: "land", status: "active" });
+  });
+});

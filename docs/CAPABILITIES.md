@@ -1,6 +1,6 @@
 # Capabilities
 
-Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 44 keys, 8 steps.
+Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 45 keys, 8 steps.
 
 There is ONE capability gate, `capabilityDecision()` in `shared/capabilities.ts`, and every permission answer in the product comes through it. The order it resolves in IS the policy: it decides whether a warning badge's deny survives an appointment, and whether an administrator still outranks a village on a power that village has taken over.
 
@@ -94,7 +94,7 @@ These rows are not a description of the order. They are answers: the generator c
 
 ## Every capability key
 
-44 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `cash`, `module`, `steward`, `comms`, `session`, `companion`, `moon`.
+45 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `cash`, `module`, `steward`, `comms`, `session`, `companion`, `moon`, `power`.
 
 Four columns need a word before the tables:
 
@@ -282,21 +282,27 @@ Four columns need a word before the tables:
 | `moon.approve_alone` | Give both approvals of a member's end-of-moon recap by yourself | yes | no | no | no rung | End-of-Moon Review |
 | `moon.approve_own` | Approve your own end-of-moon recap and invoice, marked for review | yes | no | no | no rung | End-of-Moon Review |
 
+### `power`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `power.assign` | Give powers to the village's roles, and take them away | yes | no | yes | no rung | no module |
+
 ## The voices
 
-5 of the 44 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
+5 of the 45 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
 
 ## The keys no badge may grant
 
-4 of the 44 keys cannot be handed out by a badge: `steward.veto`, `moon.approve`, `moon.approve_alone` and `moon.approve_own`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
+5 of the 45 keys cannot be handed out by a badge: `steward.veto`, `moon.approve`, `moon.approve_alone`, `moon.approve_own` and `power.assign`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
 
 The line this draws is narrow on purpose. A key stays grantable while an ordinary admin route can already put it on a role or a rung, because closing the badge door on those would be a new policy rather than a fix. The keys above are the ones with no admin route left to them at all.
 
 ## The keys a village can take off the admin panel
 
-23 of the 44 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `module.switch`, `steward.veto` and `comms.manage`.
+24 of the 45 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `module.switch`, `steward.veto`, `comms.manage` and `power.assign`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -322,7 +328,7 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 | Village Comms | `comms` | `comms.manage` |
 
-18 keys are declared by no module: `terms.read`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `cash.pay`, `module.switch`, `steward.veto` and `companion.use`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+19 keys are declared by no module: `terms.read`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `cash.pay`, `module.switch`, `steward.veto`, `companion.use` and `power.assign`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -331,13 +337,13 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
 ```json
 {
   "counts": {
-    "keys": 44,
+    "keys": 45,
     "steps": 8,
     "voices": 5,
-    "villageHoldable": 23,
-    "badgeUngrantable": 4,
+    "villageHoldable": 24,
+    "badgeUngrantable": 5,
     "climbable": 16,
-    "undeclared": 18
+    "undeclared": 19
   },
   "breakGlassSeat": "steward.veto",
   "resolutionOrder": [
@@ -853,6 +859,15 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
       "modules": [
         "moon-review"
       ]
+    },
+    {
+      "key": "power.assign",
+      "label": "Give powers to the village's roles, and take them away",
+      "deniable": true,
+      "transferable": true,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
     }
   ],
   "workedDecisions": [

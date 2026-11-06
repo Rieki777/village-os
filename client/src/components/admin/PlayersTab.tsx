@@ -101,12 +101,19 @@ export default function PlayersTab({ password }: { password: string }) {
   const setRole = async (id: string, role: string, name: string) => {
     if (role === "founder" && !confirm(`Make ${name} a FOUNDER? Founders manage admins and can only be demoted by another founder.`)) return;
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}/role`, {
+      const put = (body: object) => fetch(`${API_BASE}/admin/users/${id}/role`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
-        body: JSON.stringify({ role }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json();
+      let res = await put({ role });
+      let data = await res.json();
+      // The server asks before raising an account whose address nobody proved (R104).
+      if (res.status === 409 && data?.code === "address_unproved") {
+        if (!confirm(`${data.error}\n\nGive ${name} ${role} access anyway?`)) return;
+        res = await put({ role, addressUnprovedOk: true });
+        data = await res.json();
+      }
       if (!res.ok) throw new Error(refusal(data, "failed"));
       toast.success(`${name} now has ${role} access`);
       load();

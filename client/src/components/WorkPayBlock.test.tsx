@@ -59,6 +59,20 @@ describe("WorkPayBlock", () => {
     expect(container.querySelector("[data-work-pay-badges]")).toBeNull();
   });
 
+  /*
+   * EARNED EQUITY MEANS WHAT THE VILLAGE SAYS (Rye, 2026-11-05): its meaning is
+   * set in Admin per village and shown wherever it appears. The words are the
+   * village's own, carried on the line, and the platform writes none of them.
+   */
+  it("says what Earned Equity is here, in the village's own words, on the full block", () => {
+    const withEquity: WorkPay = {
+      ...PAY,
+      lines: [...PAY.lines, { token: "earned-equity", name: "Earned Equity", amount: 3, meaning: "A share of the hearth land trust's yearly surplus." }],
+    };
+    const { container } = render(<WorkPayBlock pay={withEquity} variant="full" />);
+    expect(container.querySelector("[data-work-pay-meaning]")?.textContent).toBe("Earned Equity: A share of the hearth land trust's yearly surplus.");
+  });
+
   it("draws nothing at all for absent pay", () => {
     const { container } = render(<WorkPayBlock pay={undefined} />);
     expect(container.innerHTML).toBe("");

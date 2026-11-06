@@ -236,7 +236,7 @@ beforeAll(async () => {
   // for it, so proving the third mint door needs somebody else at the desk.
   const cal = await register("Cal Reed", calEmail());
   calToken = cal.token;
-  expect((await call("PUT", `/api/admin/users/${cal.id}/role`, { body: { role: "admin" } })).status).toBe(200);
+  expect((await call("PUT", `/api/admin/users/${cal.id}/role`, { body: { role: "admin", addressUnprovedOk: true } })).status).toBe(200);
 });
 
 afterAll(async () => {
