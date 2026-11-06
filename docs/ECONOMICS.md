@@ -708,7 +708,12 @@ directly to Base. **What exists today is stage 1**, and `server/lib/voiceClaim.t
 says so in one line that is worth reading before believing any of this reaches a
 chain: `export const BRIDGE_DISPATCH_BUILT = false;`. Nothing in this build
 dispatches a claim to Hypha. A claim is recorded, the voice is debited and held
-at the bridge, and something outside this repository has to confirm it.
+at the bridge, and something outside this repository has to confirm it. That
+confirmation arrives at a receiver signed with `HYPHA_VOICE_WEBHOOK_SECRET`, and
+the check that guards it (`checkVoiceSecret`) refuses a value shared with any
+other secret the village holds, the session key and the callback secrets typed
+into Admin, Integrations included (readiness R171): anything able to sign that
+other callback could otherwise confirm a claim on value.
 
 ### Earned equity crosses the same bridge (0266)
 

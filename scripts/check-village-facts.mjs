@@ -770,6 +770,29 @@ function main(argv) {
       );
       return 1;
     }
+    // PER FILE, NOT ONLY THE TOTAL (readiness R205). The list is per file and
+    // per rule, and a fall in one pair used to pay for a NEW fact in another:
+    // the total went down, the write recorded the new one as pending, and the
+    // diff showed the ceiling falling. sql-burndown.mjs closed the same hole
+    // in 2026-09; `auditPending` below has computed both lists all along.
+    if (!seeding) {
+      const audit = auditPending(counts, old, null);
+      const rising = [
+        ...audit.grown.map((g) => `${g.key}: ${g.found}, the pending list allows ${g.allowed}`),
+        ...audit.unexpected.map((u) => `${u.key}: ${u.found}, not on the pending list at all`),
+      ];
+      if (rising.length) {
+        console.error(
+          `::error::refusing to write the village-fact pending list: ${rising.length} file/rule pair(s) are above ` +
+            `their recorded number, so writing now would record them as allowed. The list only ever falls per pair; ` +
+            `a fall elsewhere does not buy this.\n    ` +
+            rising.join("\n    ") +
+            `\n\n  Read the amount, the unit or the name from the village's own settings, or if a hit is a genuine ` +
+            `false positive put \`village-ok: <reason>\` on the line. Then run this again.`,
+        );
+        return 1;
+      }
+    }
     const entries = {};
     const today = new Date().toISOString().slice(0, 10);
     for (const k of Object.keys(counts).sort()) {
@@ -854,8 +877,21 @@ function main(argv) {
       ].join("\n"),
     );
   }
+  // A fall is good news, and `--update-pending` is the right advice only when
+  // nothing else in the same run went UP: it writes the whole tree, and it
+  // refuses while anything grows (R205), so naming it then sends the reader
+  // to a command that says no. sql-burndown.mjs words this the same way.
+  const blockedByGrowth = result.grown.length + result.unexpected.length;
   for (const s of result.stale) {
     const [file, ruleId] = s.key.split("::");
+    if (blockedByGrowth) {
+      problems.push(
+        `${file} is listed as pending for rule "${ruleId}" at ${s.listed} and now carries ${s.found}, a real fall that cannot be recorded yet: ` +
+          `${blockedByGrowth} file/rule pair(s) in this same run are above their recorded number, and \`--update-pending\` writes the whole tree. ` +
+          `Clear the growth above first, then the fall writes down on its own.`,
+      );
+      continue;
+    }
     problems.push(
       s.found === 0
         ? `${file} is listed as pending for rule "${ruleId}" and is now CLEAN. Good news, and it needs the bookkeeping: delete that entry from scripts/village-facts-pending.json and lower PENDING_CEILING to ${result.listedTotal - s.listed}. \`node scripts/check-village-facts.mjs --update-pending\` does the JSON. A pending entry left behind is a standing permission for that fact to come back without anybody noticing.`
