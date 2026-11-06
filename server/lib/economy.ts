@@ -3309,6 +3309,10 @@ export async function runSettlement(
       // A role DID name it, and could not pay it: that seat's own reason is
       // said below, and "no role names an amount" would be false.
       if (quoted.some((q) => q.quote.unpayable.some((u) => u.token === r.tokenSlug))) continue;
+      // EARNED EQUITY IS PAID WHERE A VILLAGE CHOOSES (Rye, 2026-11-05): its rule
+      // is on and blank everywhere, so no role naming it is the ordinary state,
+      // and saying so each moon would be noise. The quest path is quiet too.
+      if (r.tokenSlug === EARNED_EQUITY) continue;
       ruleProblems.push({
         token: r.tokenSlug,
         reason: "this rule reads its amount from the role, and no role anybody holds names an amount in this token",
