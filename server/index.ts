@@ -454,6 +454,7 @@ import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { blankFlatRoleMint } from "./lib/flatRoleMint";
+import { enableEarnedEquityRules } from "./lib/earnedEquityRules";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
@@ -4840,6 +4841,7 @@ async function startServer() {
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
   await runOnce("flat-role-mint-off-2026-11-01", () => blankFlatRoleMint(getPool()).then(() => undefined)); // Rye, 2026-11-01: no flat role mint, from the next cycle
+  await runOnce("earned-equity-rules-on-2026-11-05", () => enableEarnedEquityRules(getPool()).then(() => undefined)); // Rye, 2026-11-05: on and blank, meaning set in Admin
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
