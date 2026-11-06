@@ -455,7 +455,7 @@ describe("a role this village already made from the source (D2, 2026-11-06)", ()
   // next sync sends it again: it answers by name AND by id, and the id is its
   // own, so it is the same role to update. It used to be reported as "A role
   // with the id ... already exists", so "update" could never pass for it.
-  const madeHere = seatIdFor("rec-pm-page");
+  const madeHere = seatIdFor("rec-pm-page", "unused-fallback");
   const lived: PlanLiveSeat[] = [
     ...LIVE_SEATS.filter((s) => s.name !== "Project Manager"),
     { id: madeHere, name: "Project Manager", circleId: "development-circle", active: true, isExample: false, holders: 1 },
