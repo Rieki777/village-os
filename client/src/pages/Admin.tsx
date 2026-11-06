@@ -45,7 +45,7 @@ import HealthStrip from "@/components/admin/HealthStrip";
 import AdminHelp from "@/components/admin/AdminHelp";
 import UndoBar from "@/components/admin/UndoBar";
 import { isSnoozed } from "@/components/admin/adminSnooze";
-import { limitNav, simpleNav } from "@/components/admin/adminFeel";
+import { limitNav, simpleNav } from "@/components/admin/adminFeelState";
 import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
@@ -62,7 +62,7 @@ import IdentityPackPanel from "@/components/IdentityPackPanel";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import AdminMobileNav from "@/components/admin/AdminMobileNav";
 import AdminQueueState from "@/components/admin/AdminQueueState";
-import { loadSubmissionRows } from "@/components/admin/adminQueueState";
+import { loadSubmissionRows } from "@/components/admin/adminQueueModel";
 import { putSubmissionStatus } from "@/components/admin/submissionStatus";
 import SubmissionHandling from "@/components/admin/SubmissionHandling";
 import SubmissionDesk, { Pick } from "@/components/admin/SubmissionDesk";

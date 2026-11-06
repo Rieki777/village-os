@@ -5,7 +5,7 @@
  * person, or taken from the right one.
  */
 import { describe, expect, it } from "vitest";
-import { decideFounderGrant, parseFounderEmails } from "./founderGrant";
+import { decideFounderGrant, isUnprovedRaise, parseFounderEmails, UNPROVED_RAISE_REFUSAL } from "./founderGrant";
 
 const LIST = parseFounderEmails("founder@example.com, second@example.com");
 /** An account whose address its owner proved, so its password is theirs. */
@@ -135,5 +135,36 @@ describe("granting the founder role", () => {
       decide({ account: { passwordHash: "set-by-somebody", emailVerifiedAt: null } }).reason,
     ]);
     expect(reasons.size).toBe(6);
+  });
+});
+
+describe("an administrator raising an account whose address nobody proved", () => {
+  const UNPROVED = { passwordHash: "set-by-somebody", emailVerifiedAt: null };
+
+  it("asks before any raise of a row holding an unproved password", () => {
+    expect(isUnprovedRaise("member", "admin", UNPROVED)).toBe(true);
+    expect(isUnprovedRaise("member", "founder", UNPROVED)).toBe(true);
+    expect(isUnprovedRaise("admin", "founder", UNPROVED)).toBe(true);
+    // A row with no role yet is a member.
+    expect(isUnprovedRaise(undefined, "admin", UNPROVED)).toBe(true);
+    // The field missing is the same fact as the field empty.
+    expect(isUnprovedRaise("member", "admin", { passwordHash: "set-by-somebody" })).toBe(true);
+  });
+
+  it("never asks about a proved address, or an account with no password to keep", () => {
+    expect(isUnprovedRaise("member", "admin", PROVED)).toBe(false);
+    expect(isUnprovedRaise("member", "admin", { passwordHash: "", emailVerifiedAt: null })).toBe(false);
+  });
+
+  it("never asks about a demotion or a re-save, so a stranger already raised can still be stood down", () => {
+    expect(isUnprovedRaise("admin", "member", UNPROVED)).toBe(false);
+    expect(isUnprovedRaise("founder", "admin", UNPROVED)).toBe(false);
+    expect(isUnprovedRaise("admin", "admin", UNPROVED)).toBe(false);
+    expect(isUnprovedRaise("member", "member", UNPROVED)).toBe(false);
+  });
+
+  it("names a code the panel can ask on, and a way for the member to prove it", () => {
+    expect(UNPROVED_RAISE_REFUSAL.code).toBe("address_unproved");
+    expect(UNPROVED_RAISE_REFUSAL.error).toMatch(/\/verify-email/);
   });
 });

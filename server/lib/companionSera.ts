@@ -19,11 +19,15 @@
  * `recordToLandInput` has applied the refusals below.
  *
  * Refused whole, never stored (section 4.1): no source, a fractional amount,
- * an unknown kind, and an email address or phone number in any field. The
- * contract asks Rye whether `to_outside` may carry a vendor's address; until
- * that is ruled, it may not, so this file refuses it with the rest.
+ * an unknown kind, and an email address or phone number in any field except
+ * one. `to_outside` carries a vendor's address on an email (Rye, 2026-10-31,
+ * ruling 15: "don't refuse vendor emails"), and is refused there too when the
+ * address is a member's of this village: a member's own address never crosses.
  */
-import { carriesContact, isDraftKind, refusalFor, type DraftKind } from "../../shared/companionItems";
+import { carriesContact, isDraftKind, MEMBER_ADDRESS, outsideAddressesOf, refusalFor, type DraftKind } from "../../shared/companionItems";
+
+/** One email address and nothing else. */
+const ONE_ADDRESS = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 import type { LandInput } from "./companions";
 
 /** One `companion_item` record as the service would serve it. Flat, because its store cannot nest. */
@@ -125,14 +129,25 @@ export type MappedRecord = { ok: true; input: LandInput } | { ok: false; error: 
  * role page id into this village's role id, or null when the village does not
  * know it.
  */
-export function recordToLandInput(rec: SeraCompanionItemRecord, roleId: (pageId: string) => string | null): MappedRecord {
+export function recordToLandInput(
+  rec: SeraCompanionItemRecord,
+  roleId: (pageId: string) => string | null,
+  /** Every member's address, lower-cased (the sync reads them once per batch). */
+  memberAddresses: ReadonlySet<string> = new Set(),
+): MappedRecord {
   if (!rec || typeof rec !== "object" || typeof rec.id !== "string" || !rec.id) return { ok: false, error: "A record needs a stable id." };
   if (!rec.source_quote || !rec.source_ref) return { ok: false, error: "A record with no source is refused whole." };
   if (rec.amount !== undefined && rec.amount !== null && (!Number.isFinite(rec.amount) || !Number.isInteger(rec.amount))) {
     return { ok: false, error: "A fractional amount is refused whole." };
   }
-  const words = [rec.title, rec.body, rec.draft_text, rec.subject, rec.source_quote, rec.to_outside, rec.budget_note, rec.confidence];
+  const words = [rec.title, rec.body, rec.draft_text, rec.subject, rec.source_quote, rec.budget_note, rec.confidence];
   if (carriesContact(words)) return { ok: false, error: "A record carrying an email address or a phone number is refused whole." };
+  const outside = typeof rec.to_outside === "string" && rec.to_outside.trim() ? rec.to_outside.trim() : null;
+  if (outside) {
+    if (rec.draft_kind !== "email" && rec.draft_kind !== "purchase") return { ok: false, error: "to_outside is for an email or a purchase, and this record is neither." };
+    if (rec.draft_kind === "email" && !ONE_ADDRESS.test(outside)) return { ok: false, error: "to_outside on an email holds one address, the vendor's." };
+    if (outsideAddressesOf({ toOutside: outside }).some((a) => memberAddresses.has(a))) return { ok: false, error: MEMBER_ADDRESS };
+  }
   const type = rec.item_type === "Question" ? "question" : rec.item_type === "Draft" ? "draft" : null;
   if (!type) return { ok: false, error: "item_type must be Question or Draft." };
 
@@ -163,7 +178,7 @@ export function recordToLandInput(rec: SeraCompanionItemRecord, roleId: (pageId:
         payload = { title: rec.title, description: rec.body ?? null };
         break;
       case "email":
-        payload = { subject: rec.subject ?? "", text: rec.draft_text ?? "" };
+        payload = { subject: rec.subject ?? "", text: rec.draft_text ?? "", ...(outside ? { toOutside: outside } : {}) };
         break;
       case "budget_spend":
         // The service names a project, and a budget is this village's own record. Until the

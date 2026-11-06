@@ -237,7 +237,13 @@ describe("a config that lands after the cover has lifted", () => {
       b.post({ type: "uncovered" });
       expect(camOf(b), "the glide starts from its first frame").toEqual(GLIDE_START);
       expect(b.landReady(), "uncovering is not handing the land over").toBe(0);
-      await settle(1200);
+      /* Her welcome is said when the glide lands, and the glide runs on
+         animation frames, which a loaded machine delivers late: a fixed
+         settle(1200) went red under load with the arrival still in flight.
+         So this waits for the landing itself. The deadline is only how long
+         a welcome that never comes is waited for. */
+      for (let waited = 0; waited < 20_000 && (b.run<boolean>("!!travel") || welcomed(b) === 0); waited += 50) await settle(50);
+      expect(b.run<boolean>("!!travel"), "the glide has landed").toBe(false);
       expect(welcomed(b), "her welcome").toBe(1);
       const landed = camOf(b);
       b.post({ type: "config" });
@@ -387,28 +393,59 @@ describe("the painterly bake (F67)", () => {
 
   /*
    * jsdom has no Worker, so this is the fallback a browser that refuses one
-   * would take. A heartbeat in this file's own timers measures the longest
-   * stretch the page held the thread. The bake it replaced ran as one task:
-   * 660 to 1290 ms here when measured, 1.4 to 1.9 s in Chromium. The slices held it
-   * 87 ms at most here (a slice is 12 ms, plus one step and any collection
-   * the step's arrays cause), so the bound leaves room for a loaded machine.
+   * would take. The bake it replaced ran as one task: 660 to 1290 ms here
+   * when measured, 1.4 to 1.9 s in Chromium.
+   *
+   * What is asserted is the SHAPE of the work, never its duration. This file
+   * and the page share one thread, so a heartbeat in this file's own timers
+   * can only run once the page has given the thread back. Each step of the
+   * bake notes the heartbeat's count as it starts, so a count that moved
+   * between two steps is a yield between them, and a bake run whole in one
+   * task sees the count never move. The bound this replaced was wall-clock
+   * (the longest stretch held, under 400 ms), and it went red under CI load
+   * at 433.7 and 403.95 ms on 2026-11-06 while the slicing worked: how long a
+   * slice holds the thread is the machine's speed, and whether it yields is
+   * the code's.
    */
   it("gives the thread back between slices where no worker can be made", async () => {
-    let last = performance.now();
-    let longest = 0;
+    const heart = { beats: 0 };
     const beat = setInterval(() => {
-      const now = performance.now();
-      longest = Math.max(longest, now - last);
-      last = now;
-    }, 5);
+      heart.beats += 1;
+    }, 1);
+    (b.window as unknown as { beatNow: () => number }).beatNow = () => heart.beats;
+    // Each of the page's own steps notes the heartbeat as it starts; the steps themselves are untouched.
+    b.run(
+      "window.stepBeats=[];window.realBakeSteps=bakeSteps;" +
+        "bakeSteps=function(px,donor){const it=window.realBakeSteps(px,donor);" +
+        "return{next(){window.stepBeats.push(window.beatNow());return it.next()}}}",
+    );
     try {
       // Asked for, as the first opening of Your view asks (D31).
       b.run("satPlate={};askPaint()");
       for (let waited = 0; waited < 30_000 && !b.run<boolean>("paintReady"); waited += 100) await settle(100);
     } finally {
       clearInterval(beat);
+      b.run("bakeSteps=window.realBakeSteps");
     }
-    expect(longest, "the longest stretch the page held the thread, in ms").toBeLessThan(400);
+    const at = b.run<number[]>("window.stepBeats.slice()");
+    // A yield is a heartbeat between two steps; the longest run is the most steps done without one.
+    let yields = 0;
+    let run = 1;
+    let longest = 1;
+    for (let i = 1; i < at.length; i += 1) {
+      if (at[i] > at[i - 1]) {
+        yields += 1;
+        run = 1;
+      } else longest = Math.max(longest, (run += 1));
+    }
+    /* Measured on a desk, three runs: 3599 steps, 32 to 34 yields, at most 432
+       steps without one. Run whole, it is 0 yields and all 3599. A slice ends
+       on its own 12 ms clock, so a loaded machine does FEWER steps per slice
+       and only moves further from these bounds; they leave room for a machine
+       about three times faster than that desk. */
+    expect(at.length, "the bake has steps to slice").toBeGreaterThan(100);
+    expect(yields, "times the page gave the thread back mid-bake").toBeGreaterThanOrEqual(5);
+    expect(longest, "the most steps run without giving the thread back").toBeLessThan(at.length / 3);
     // The end of the bake is the end it always had: the chip that offers it.
     expect(b.run<boolean>("paintReady")).toBe(true);
     expect(b.run<string>("document.getElementById('tmPaint').style.display"), "the Painted chip shows").toBe("");

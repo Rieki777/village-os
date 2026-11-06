@@ -180,6 +180,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchweight-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
@@ -414,7 +416,7 @@ describe.skipIf(!DB_CONFIGURED)("everybody carries weight, and skew is left alon
  * pass once the window has run out. Every step is the real route; only the
  * clock is moved, the same way `expire` moves it.
  */
-async function turnOnByVote(moduleId: string, to: "members" | "public") {
+async function turnOnByVote(moduleId: string, to: "off" | "preview" | "members" | "public") {
   const made = await call("POST", "/api/game/mechanics/proposals", {
     body: {
       title: `Turn on ${moduleId}`,
@@ -524,9 +526,36 @@ describe.skipIf(!DB_CONFIGURED)("after the Birthing, what weighs a vote is the v
 
     // Refused means nothing was written. A 409 that had already flipped the
     // mode would be the worst of both.
+    // The listing answers grouped by category. This read `json.variables`,
+    // which the route never sends, so it found nothing and passed on nothing.
     const now = await call("GET", "/api/admin/variables");
-    const mode = (now.json?.variables ?? []).find((v: any) => v.key === "governance.weight_mode");
-    expect(String(mode?.value ?? mode?.default)).not.toBe("token");
+    const mode = (now.json?.categories ?? [])
+      .flatMap((c: any) => c.variables ?? [])
+      .find((v: any) => v.key === "governance.weight_mode");
+    expect(mode, "the mode is listed").toBeTruthy();
+    expect(String(mode?.value)).toBe("custom");
+  });
+
+  /*
+   * THE CAP ON ONE MEMBER'S WEIGHT IS THE SAME KIND OF DIAL (Rye, 2026-11-05).
+   * Switching it on or off moves what one vote weighs exactly as the mode does,
+   * so after the Birthing the panel refuses it the same way and the village
+   * raises it as a proposal at the constitutional bar.
+   */
+  it("refuses the admin flip of the weight cap too, and writes nothing", async () => {
+    for (const [key, value] of [["governance.weight_cap_on", "true"], ["governance.weight_cap_pct", "10"]]) {
+      const refused = await call("PUT", `/api/admin/variables/${key}`, { body: { value } });
+      expect(refused.status, `${key}: ${JSON.stringify(refused.json)}`).toBe(409);
+      expect(String(refused.json?.error)).toContain("the village's to decide");
+    }
+    // The listing answers grouped by category, so read every group.
+    const now = await call("GET", "/api/admin/variables");
+    const listed = (now.json?.categories ?? []).flatMap((c: any) => c.variables ?? []);
+    for (const [key, shipped] of [["governance.weight_cap_on", "false"], ["governance.weight_cap_pct", "20"]]) {
+      const dial = listed.find((v: any) => v.key === key);
+      expect(dial, `${key} is listed`).toBeTruthy();
+      expect(String(dial?.value), key).toBe(shipped);
+    }
   });
 
   it("refuses the admin weight-allocation writes too, and points at the proposal", async () => {
@@ -557,6 +586,65 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     });
     expect(res.status, JSON.stringify(res.json)).toBe(403);
     expect(res.json?.proposeInstead).toBe(true);
+  });
+
+  it("the village renames itself by vote, through the change set (Rye, 2026-11-06)", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Rename the village",
+        rationale: "We picked the old name in a hurry, and the river has a better one.",
+        changes: [{ kind: "brand_field", field: "project.tagline", to: "Where the two rivers meet" }],
+      },
+    });
+    expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      body: { purposeAlignment: "Members asked for this together, and it lets the village name itself in the open." },
+    });
+    expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, wrenToken, idaToken]) expect((await vote(ballotId, t, "yes")).status).toBe(200);
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Everyone agreed to the new tagline." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    expect((await call("POST", "/api/admin/cycles/close", { body: {} })).status).toBe(200);
+    const brand = await call("GET", "/api/admin/brand");
+    expect(brand.json?.brand?.project?.tagline).toBe("Where the two rivers meet");
+  });
+
+  it("control: a vote may not move the currency the village launched with", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: { title: "Change currency", rationale: "A test of the lock.", changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" }] },
+    });
+    expect(made.status).toBe(400);
+    expect(JSON.stringify(made.json)).toContain("set at launch");
+  });
+
+  it("refuses that admin a pause of governance, which nothing could turn back on (R156)", async () => {
+    const res = await call("PUT", "/api/admin/modules/governance/lifecycle", {
+      body: { lifecycle: "off" },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(403);
+    const catalog = await call("GET", "/api/modules/catalog");
+    const row = (catalog.json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle, "governance is still on for members").toBe("members");
+  });
+
+  it("the village switches a module on AND off by vote while nobody holds module.switch (Rye, 2026-11-06)", async () => {
+    await turnOnByVote("forum", "members");
+    await turnOnByVote("forum", "off");
+  });
+
+  it("control: the vote cannot switch governance, the module every vote runs on", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Turn governance off",
+        rationale: "A vote that would end every vote after it.",
+        changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBeGreaterThanOrEqual(400);
+    expect(JSON.stringify(made.json)).toContain("holds the vote itself");
   });
 
   it("still lets that admin narrow a module that is on", async () => {

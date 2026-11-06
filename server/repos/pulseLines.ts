@@ -61,6 +61,7 @@
  * times.
  */
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { SEAT_JOURNAL_ROWS_SQL } from "./orgSeatErasure";
 
 /** The departed member, as a line names them. */
 const DEPARTED = "A departed member";
@@ -133,7 +134,8 @@ export async function forgetPulseLinesNaming(
   // Their own lines once more, now that nothing can write one: a line written
   // between "public-health-events" and the tombstone is theirs as well.
   const [own] = await pool.query<ResultSetHeader>(
-    "DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ?",
+    // A seat journal's line stays for orgSeatErasure to rewrite (R103).
+    `DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ? AND NOT ${SEAT_JOURNAL_ROWS_SQL}`,
     [who.userId],
   );
   counts.ownLines = Number(own.affectedRows ?? 0);

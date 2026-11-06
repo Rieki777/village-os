@@ -3815,37 +3815,8 @@ export async function queueRuleChange(
      * is the moment it is typed. The refusal names the smallest amount this
      * token CAN hold so the founder knows what to type instead.
      */
-    const slug = String(rule.token_slug);
-    const step = 1 / 10 ** decimalsFor(slug);
-    /*
-     * A TOLERANCE, BECAUSE THE SCALING ITSELF DRIFTS. 1.001 is a whole number
-     * of Voice's thousandths and `1.001 * 1000` is 1000.9999999999999 in
-     * binary, so an exact whole-number test would refuse a perfectly payable
-     * amount — 175 of them below 10 in that token alone, measured. The test
-     * "accepts a fraction the token can actually hold" pins 1.001 for this.
-     *
-     * The number this comment used to carry, `0.3 * 1000`, is exactly 300 and
-     * proves nothing. It arrived from the lane this was ported from and was
-     * never checked.
-     */
-    const scaled = Number(change.amount) * 10 ** decimalsFor(slug);
-    const drift = Math.abs(scaled - Math.round(scaled));
-    if (drift > 1e-6 * Math.max(1, Math.abs(scaled))) {
-      return {
-        ok: false,
-        error:
-          `${change.amount} is not a whole number of this token's smallest unit. ` +
-          `${slug} is held in steps of ${step}, so round to the nearest one.`,
-      };
-    }
-    if (toLedgerUnits(slug, change.amount) <= 0) {
-      return {
-        ok: false,
-        error:
-          `${change.amount} is smaller than the smallest amount ${slug} can hold, ` +
-          `which is ${step}. A rule saved at this amount would pay nobody.`,
-      };
-    }
+    const stepProblem = mintAmountStepProblem(String(rule.token_slug), change.amount);
+    if (stepProblem) return { ok: false, error: stepProblem };
   }
 
   const fromCycle = Number.isFinite(intendedFromCycle) ? Number(intendedFromCycle) : currentCycleNumber(new Date()) + 1;
@@ -3864,6 +3835,43 @@ export async function queueRuleChange(
     ],
   );
   return { ok: true, fromCycle };
+}
+
+/**
+ * An amount this token cannot hold, said in the founder's words, or null.
+ *
+ * Moved out of `queueRuleChange` unchanged so the one other writer of a rule's
+ * amount, a new rule created by vote (server/lib/mintRuleCreate.ts), refuses
+ * exactly what an edit refuses. The reasoning stays with it below.
+ */
+export function mintAmountStepProblem(slug: string, amount: number): string | null {
+  const step = 1 / 10 ** decimalsFor(slug);
+  /*
+   * A TOLERANCE, BECAUSE THE SCALING ITSELF DRIFTS. 1.001 is a whole number
+   * of Voice's thousandths and `1.001 * 1000` is 1000.9999999999999 in
+   * binary, so an exact whole-number test would refuse a perfectly payable
+   * amount — 175 of them below 10 in that token alone, measured. The test
+   * "accepts a fraction the token can actually hold" pins 1.001 for this.
+   *
+   * The number this comment used to carry, `0.3 * 1000`, is exactly 300 and
+   * proves nothing. It arrived from the lane this was ported from and was
+   * never checked.
+   */
+  const scaled = Number(amount) * 10 ** decimalsFor(slug);
+  const drift = Math.abs(scaled - Math.round(scaled));
+  if (drift > 1e-6 * Math.max(1, Math.abs(scaled))) {
+    return (
+      `${amount} is not a whole number of this token's smallest unit. ` +
+      `${slug} is held in steps of ${step}, so round to the nearest one.`
+    );
+  }
+  if (toLedgerUnits(slug, amount) <= 0) {
+    return (
+      `${amount} is smaller than the smallest amount ${slug} can hold, ` +
+      `which is ${step}. A rule saved at this amount would pay nobody.`
+    );
+  }
+  return null;
 }
 
 /**

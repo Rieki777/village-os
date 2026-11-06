@@ -617,6 +617,18 @@ describe.skipIf(!DB_CONFIGURED)("what these votes deliberately cannot do", () =>
     expect(await roleCapabilities(ROLE_ID)).toEqual(["library.keep"]);
   });
 
+  it("will not declare a role whose name is the seat the launch fills (R159)", async () => {
+    // A role named "Steward" takes the id `steward`, and the launch adopts a
+    // row with that id as the founding seat, its holders and all.
+    const refused = await call("POST", "/api/governance/role-declarations", {
+      token: rhodaToken,
+      body: { name: "Steward", purpose: "Keeps the village's founding agreements and answers for them at the gathering." },
+    });
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(String(refused.json?.error)).toContain("another name");
+    expect(await roleRow("steward")).toBeNull();
+  });
+
   it("will not declare a role out of a name with nothing in it", async () => {
     const refused = await call("POST", "/api/governance/role-declarations", {
       token: rhodaToken,

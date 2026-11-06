@@ -22,6 +22,13 @@ import type { Pool } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { onlyHandoverPowers } from "./launchHandover";
+import { EVERYDAY_FLOOR_KEYS } from "./villageFloors";
+
+/** A list the hand-over may carry: governance powers, then everyday floors (server/lib/villageFloors.ts), each in its own fixed order. */
+function passableList(raw: unknown): Capability[] {
+  const asked = new Set(Array.isArray(raw) ? raw.map(String) : []);
+  return [...onlyHandoverPowers(raw), ...EVERYDAY_FLOOR_KEYS.filter((c) => asked.has(c))];
+}
 
 export const PENDING_HANDOVER_KEY = "handover-pending";
 
@@ -51,7 +58,7 @@ export async function readPendingHandover(pool: Pool, stage: HandoverStage, now:
   if (new Date(String(doc.expiresAt)).getTime() <= now.getTime()) return null;
   return {
     stage,
-    capabilities: onlyHandoverPowers(doc.capabilities),
+    capabilities: passableList(doc.capabilities),
     requestedBy: String(doc.requestedBy),
     requestedAt: String(doc.requestedAt ?? ""),
     expiresAt: String(doc.expiresAt),
@@ -67,7 +74,7 @@ export async function askForCosign(
 ): Promise<PendingHandover> {
   const pending: PendingHandover = {
     stage,
-    capabilities: onlyHandoverPowers(capabilities),
+    capabilities: passableList(capabilities),
     requestedBy,
     requestedAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + COSIGN_WAIT_DAYS * 86400000).toISOString(),

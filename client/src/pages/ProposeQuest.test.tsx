@@ -18,8 +18,12 @@ vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => null,
   fetchConfigCached: async () => ({ project: { name: "Sample Village" } }),
+  // The registry's names by slug, as GET /api/game/config serves them.
+  useGameConfig: () => ({
+    currency: { name: "Gratitude", names: { gratitude: "Gratitude", credits: "Village Credits", "earned-equity": "Earned Equity" } },
+  }),
 }));
-vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Recognition" }));
+vi.mock("@/hooks/useTokenNames", () => ({ useTokenName: () => "Gratitude" }));
 // The guided chat is its own component and is not offered here: the assistant answers unavailable.
 vi.mock("@/components/GuideChat", () => ({ default: () => null }));
 
@@ -52,6 +56,19 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe("what the form offers as compensation", () => {
+  // Rye, 2026-11-01: "Gratitude ONLY for the recognition token and NOT for the
+  // credit or earned equity tokens". Gratitude never pays work, so the example
+  // answer names the village's pay tokens by their registry names.
+  it("names Credits and Earned Equity and never offers Gratitude", () => {
+    render(<ProposeQuest />);
+    const asked = screen.getByLabelText(/What compensation, if any, do you want\?/) as HTMLTextAreaElement;
+    expect(asked.placeholder).not.toMatch(/gratitude/i);
+    expect(asked.placeholder).toContain("Village Credits");
+    expect(asked.placeholder).toContain("Earned Equity");
+  });
+});
 
 describe("after a Quest idea is sent", () => {
   it("says it is in when it reached the review queue", async () => {

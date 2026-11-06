@@ -330,6 +330,15 @@ for (const { method, route } of routes) {
   if (!isReached && !WAIVED[key]) orphans.push(key);
 }
 
+// A FLOOR ON WHAT WAS READ (R206). Reading no admin write routes would find no
+// orphan and pass. 252 were read on 2026-11-05; the floor is half that, and
+// ADMIN_REACH_MIN moves it.
+const ROUTE_FLOOR = Number(process.env.ADMIN_REACH_MIN ?? 120);
+if (routes.length < ROUTE_FLOOR) {
+  console.error(`::error::the admin-reach guard read only ${routes.length} admin write route(s), under its floor of ${ROUTE_FLOOR}. It has stopped reading the server, so nothing was checked.`);
+  process.exit(1);
+}
+
 const json = process.argv.includes("--json");
 if (json) {
   console.log(JSON.stringify({

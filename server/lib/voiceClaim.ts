@@ -36,6 +36,7 @@
  */
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { numberVar, stringVar } from "./variables";
+import { secretValue } from "./secrets";
 import { zonedTimeToUtc } from "../../shared/lunar";
 import { villageTimezone } from "./villageReaders";
 import { memberAccount, postTransfer, tokenDef } from "./ledger";
@@ -806,19 +807,45 @@ export function checkVoiceSecret(
       error: "HYPHA_VOICE_WEBHOOK_SECRET is too short to be a real secret. Generate 32 bytes of hex.",
     };
   }
-  const borrowed = [env.GOVERNANCE_HUB_SECRET, env.STRIPE_WEBHOOK_SECRET, env.JWT_SECRET, env.SESSION_SECRET]
-    .map((v) => String(v ?? "").trim())
-    .filter(Boolean);
-  if (borrowed.includes(secret)) {
+  if (otherSecrets(env).includes(secret)) {
     return {
       ok: false,
       fatal: true,
       error:
-        "HYPHA_VOICE_WEBHOOK_SECRET matches another secret in this environment. One secret, one job: " +
+        "HYPHA_VOICE_WEBHOOK_SECRET matches another secret this village holds. One secret, one job: " +
         "anything able to sign that other callback could otherwise confirm a claim on value.",
     };
   }
   return { ok: true };
+}
+
+/** The callback secrets the store holds, which a borrowed voice secret could also sign. */
+const STORE_CALLBACK_SECRETS = ["governance_hub_secret", "stripe_webhook_secret", "resend_webhook_secret", "riverside_webhook_secret"] as const;
+
+/**
+ * Every other secret this village holds, read the way the server reads it
+ * (readiness R171).
+ *
+ * The check used to compare against environment copies only, while
+ * server/lib/secrets.ts makes the admin-typed store value the primary home for
+ * four of them: a hub secret typed into Admin, Integrations was invisible here.
+ * It also left out AUTH_TOKEN_SECRET, the key member sessions are actually
+ * signed with, and listed two names (JWT_SECRET, SESSION_SECRET) nothing here
+ * reads; those stay, because a fork may still carry them.
+ *
+ * Before boot has loaded the store, `secretValue` throws, and the environment
+ * copies still count.
+ */
+function otherSecrets(env: NodeJS.ProcessEnv): string[] {
+  const found: unknown[] = [env.GOVERNANCE_HUB_SECRET, env.STRIPE_WEBHOOK_SECRET, env.AUTH_TOKEN_SECRET, env.JWT_SECRET, env.SESSION_SECRET];
+  for (const key of STORE_CALLBACK_SECRETS) {
+    try {
+      found.push(secretValue(key, env));
+    } catch {
+      // The store is not loaded yet; the environment copies above still count.
+    }
+  }
+  return found.map((v) => String(v ?? "").trim()).filter(Boolean);
 }
 
 export function assertVoiceSecret(env: NodeJS.ProcessEnv = process.env): void {

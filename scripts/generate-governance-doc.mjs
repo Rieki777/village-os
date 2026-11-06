@@ -1988,6 +1988,11 @@ const KNOWN_DIALS = [
   "governance.window_grace_days",
   "governance.weight_mode",
   "governance.weight_token",
+  // Rye, 2026-11-05: the cap on one member's weight is "built as an option, OFF
+  // by default". It builds no staged ruling here: ruling 8 allows concentration
+  // and asks for it to be visible, and the cap ships off, so that stands as is.
+  "governance.weight_cap_on",
+  "governance.weight_cap_pct",
   "governance.unity_pct",
   "governance.quorum_pct",
   "governance.vote_days",
@@ -2002,6 +2007,8 @@ const KNOWN_DIALS = [
   "governance.subject_mint_rule_quorum_pct",
   "governance.subject_mint_rule_unity_pct",
   "governance.highest_tier",
+  // The launch's head count, a dial since Rye's 2026-11-06 "everything can change with the highest village vote".
+  "governance.launch_min_electorate",
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",

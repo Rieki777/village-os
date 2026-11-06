@@ -4,7 +4,7 @@
  * unexpected shape is REPORTED and never mistaken for an empty village.
  */
 import { describe, expect, it } from "vitest";
-import { callTool, listTools, openSession, type FetchLike } from "./saberraClient";
+import { callTool, listTools, MAX_REPLY_BYTES, openSession, type FetchLike } from "./saberraClient";
 
 const reply = (body: string, init: { status?: number; sessionId?: string } = {}) =>
   new Response(body, {
@@ -129,6 +129,17 @@ describe("talking to the outside service", () => {
     if (!r.ok) {
       expect(r.why).toBe("refused");
       expect(r.detail).toContain("403");
+    }
+  });
+
+  it("stops reading a reply larger than any real answer, and says so (R169)", async () => {
+    // A stalled or endless stream held the sync lock for as long as it ran.
+    const s = spy(() => reply("x".repeat(MAX_REPLY_BYTES + 1)));
+    const r = await callTool(opts(s.fetchImpl), "s", "list_records", {});
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.why).toBe("refused");
+      expect(r.detail).toMatch(/larger than/);
     }
   });
 

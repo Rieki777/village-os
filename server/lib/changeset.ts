@@ -85,16 +85,18 @@ import { elementRowsForBallot, upsertElementRow } from "../repos/governanceEleme
 import { insertMechanicsChange } from "../repos/mechanicsChanges";
 import { markProposalApplied } from "../repos/mechanicsProposals";
 import { VARIABLES_BY_KEY, applyTimingOf, validateVariable } from "../../shared/gameVariables";
-import { isMintRuleKey } from "../../shared/mintRuleKeys";
+import { isMintRuleCreateKey, isMintRuleKey, mintRuleCreateKey, mintRuleDraftProblem, type MintRuleDraft } from "../../shared/mintRuleKeys";
 import { WEIGHING_KEYS, asChangeItem, type ChangeInput, type ChangeItem } from "./mechanics";
 import { kindOfItem, kindOfSet, type GovernanceKind } from "../../shared/governanceKinds";
 import { keyIsVetoLocked } from "./stewardship";
 import { setVariable, variableSetRefusal, type SetResult } from "./variables";
 import { applyMintRuleChanges } from "./economy";
+import { createMintRule } from "./mintRuleCreate";
 import { setWeight, weightChangeProblem, weightTokenProblem } from "./governanceWeights";
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
+import { brandFieldValue, brandVoteProblem, withBrandField } from "../../shared/brandVote";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
@@ -116,8 +118,12 @@ export const WRITE_ORDER: readonly string[] = [
   "dial",
   "module_lifecycle",
   "mint_rule",
+  // After the edits: a new rule is new issuance, the dearest of the minting
+  // writes to undo, and it lands at the same next moon.
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
+  "brand_field",
 ];
 
 const rankOf = (kind: string): number => {
@@ -152,6 +158,12 @@ export interface ChangesetDeps {
   reloadCaches: () => Promise<void>;
   /** The lifecycle guard `setModuleLifecycle` asks for. */
   sharedPasswordPosture: () => boolean;
+  /**
+   * The brand document's reader and writer, for a `brand_field` item (Rye,
+   * 2026-11-06). Absent means this build cannot write the brand from here, and
+   * the item is refused before anything is written.
+   */
+  brand?: { read: () => unknown; write: (next: unknown) => Promise<void> };
 }
 
 export interface ValidatedElement {
@@ -237,6 +249,24 @@ export async function validateElements(
       continue;
     }
 
+    if (item.kind === "mint_rule_create") {
+      // The shape is judged here, writing nothing. The registry's half runs in
+      // `createMintRule` at the write, against the token and the table as they
+      // stand at landing.
+      const draft = draftOf(item);
+      const problem = mintRuleDraftProblem(draft);
+      if (problem) return refuse(index, item.kind, problem);
+      elements.push({
+        index,
+        item,
+        kind,
+        oldValue: null,
+        newValue: draft.amount,
+        sentence: `a new rule paying ${draft.tokenSlug} for ${draft.trigger} is created, paying from the next moon`,
+      });
+      continue;
+    }
+
     if (item.kind === "weight_allocation") {
       const problem = weightChangeProblem({ weight: item.to, note: item.note });
       if (problem) return refuse(index, item.kind, problem.toLowerCase());
@@ -305,6 +335,24 @@ export async function validateElements(
         oldValue: before,
         newValue: String(item.to),
         sentence: `${def.name} moves from ${before} to ${item.to}`,
+      });
+      continue;
+    }
+
+    if (item.kind === "brand_field") {
+      if (!deps.brand) return refuse(index, item.kind, "this build cannot write the village's brand from here");
+      const field = String(item.field ?? "").trim();
+      const current = deps.brand.read();
+      const problem = brandVoteProblem(current, field, String(item.to ?? ""));
+      if (problem) return refuse(index, item.kind, problem.charAt(0).toLowerCase() + problem.slice(1));
+      const before = brandFieldValue(current, field) ?? "";
+      elements.push({
+        index,
+        item,
+        kind,
+        oldValue: before,
+        newValue: String(item.to),
+        sentence: `the village's ${field} changes from "${before}" to "${String(item.to)}"`,
       });
       continue;
     }
@@ -406,6 +454,16 @@ export function finalDialValues(elements: readonly ValidatedElement[]): Record<s
     }
   }
   return out;
+}
+
+/** A new rule's four strings, read off a typed or a stored element. */
+function draftOf(item: { trigger?: unknown; tokenSlug?: unknown; amount?: unknown; ceiling?: unknown }): MintRuleDraft {
+  return {
+    trigger: String(item.trigger ?? "").trim(),
+    tokenSlug: String(item.tokenSlug ?? "").trim(),
+    amount: String(item.amount ?? "").trim(),
+    ceiling: String(item.ceiling ?? "").trim(),
+  };
 }
 
 /** The value in force for a dial right now, or null when it sits at its default. */
@@ -638,6 +696,30 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
       continue;
     }
 
+    if (item.kind === "brand_field") {
+      const field = String(item.field ?? "").trim();
+      if (!deps.brand) {
+        failed.push({ key: `brand:${field}`, problem: "this build cannot write the village's brand from here" });
+        continue;
+      }
+      await deps.brand.write(withBrandField(deps.brand.read(), field, String(item.to)));
+      await recordElement(deps.pool, {
+        ballotId: input.ballotId,
+        proposalId: input.proposalRef,
+        elementIndex: el.index,
+        writeSeq,
+        elementKind: item.kind,
+        sentence: el.sentence,
+        wroteTable: "app_config",
+        wroteId: `brand:${field}`.slice(0, 64),
+        oldValue: el.oldValue,
+        newValue: el.newValue,
+      });
+      applied.push(`brand:${field}`);
+      touchedCaches = true;
+      continue;
+    }
+
     if (item.kind === "weight_allocation") {
       if (landedBefore.has(`weight_allocation:${el.index}`)) {
         applied.push(`weight:${item.userId}`);
@@ -706,6 +788,50 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
         newValue: q.to,
       });
     }
+  }
+
+  /*
+   * NEW RULES, after the edits. Each one is created disabled for the moon the
+   * village is in and live from the next (`createMintRule`), and a refusal at
+   * landing writes nothing and keeps the proposal unapplied.
+   */
+  for (const el of validated.elements) {
+    if (el.item.kind !== "mint_rule_create") continue;
+    const draft = draftOf(el.item);
+    const key = mintRuleCreateKey(draft.trigger, draft.tokenSlug);
+    if (landedBefore.has(`mint_rule_create:${el.index}`)) {
+      queued.push(key);
+      continue;
+    }
+    const out = await createMintRule(deps.pool, draft, input.actor ?? "governance");
+    if (!out.ok) {
+      failed.push({ key, problem: out.error });
+      continue;
+    }
+    queued.push(key);
+    landsAtCycle = out.fromCycle;
+    const summary = `${draft.amount} ${draft.tokenSlug}, ceiling ${draft.ceiling}`;
+    if (!out.alreadyThere) {
+      await deps.recordMechanicsChange(
+        key,
+        { value: summary, previous: null },
+        input.actor,
+        "governance",
+        input.proposalRef,
+        `Carried by the village. A new rule, paying from cycle ${out.fromCycle}.`,
+      );
+    }
+    await recordElement(deps.pool, {
+      ballotId: input.ballotId,
+      proposalId: input.proposalRef,
+      elementIndex: el.index,
+      elementKind: "mint_rule_create",
+      sentence: `${key} is created as rule ${out.ruleId}, paying from cycle ${out.fromCycle}`,
+      wroteTable: "mint_rules",
+      wroteId: out.ruleId,
+      oldValue: null,
+      newValue: summary,
+    });
   }
 
   /*
@@ -877,9 +1003,9 @@ export const changeSetWaitsForCycleClose = (changeSet: readonly { key?: string }
  */
 export const changeSetSnapsToBoundary = (changeSet: readonly { key?: string; kind?: string }[]): boolean =>
   changeSet.some((c) => {
-    if (String(c?.kind ?? "") === "mint_rule") return true;
+    if (String(c?.kind ?? "") === "mint_rule" || String(c?.kind ?? "") === "mint_rule_create") return true;
     const key = String(c?.key ?? "");
-    if (isMintRuleKey(key)) return true;
+    if (isMintRuleKey(key) || isMintRuleCreateKey(key)) return true;
     const def = VARIABLES_BY_KEY[key];
     return def ? applyTimingOf(def) === "cycle-close" : false;
   });

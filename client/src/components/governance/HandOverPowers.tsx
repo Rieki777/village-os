@@ -32,6 +32,8 @@ interface Standing {
   twoSign?: boolean;
   /** The list waiting for its second signature, and whether this person signed it. */
   pending?: { capabilities: string[]; mine: boolean } | null;
+  /** Mature-only powers signed and waiting their week, any steward may stop one (ROLE_POWERS_DESIGN.md §4.1b). */
+  cooling?: Array<{ capability: string; title: string; landsAt: string }>;
   powers?: Power[];
 }
 
@@ -47,6 +49,8 @@ export default function HandOverPowers() {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const [matureOk, setMatureOk] = useState(false);
+  const [stopping, setStopping] = useState<string | null>(null);
+  const [why, setWhy] = useState("");
 
   const load = () =>
     fetch(PATH, { headers: headers() })
@@ -70,6 +74,21 @@ export default function HandOverPowers() {
     setMatureOk(false);
     setTicked((t) => (t.includes(c) ? t.filter((x) => x !== c) : [...t, c]));
   };
+  const stop = (capability: string) => {
+    setBusy(true);
+    setSaid(null);
+    fetch(`${PATH}/cooling/${encodeURIComponent(capability)}/stop`, { method: "POST", headers: headers(), body: JSON.stringify({ reason: why }) })
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) return setSaid(String(body.error ?? "That did not go through. Try again."));
+        setStopping(null);
+        setWhy("");
+        setSaid("Stopped. It stays with the stewards, and the village reads why.");
+        await load();
+      })
+      .catch(() => setSaid("That did not go through. Try again."))
+      .finally(() => setBusy(false));
+  };
   const send = () => {
     setBusy(true);
     setSaid(null);
@@ -87,7 +106,9 @@ export default function HandOverPowers() {
             ? body.selected.length === 0
               ? "Saved. The launch hands the village none of its powers."
               : `Saved. The launch hands the village ${body.selected.length} of its powers.`
-            : `Done. The village now holds ${body.moved.length} more of its powers.`,
+            : (body.cooling ?? []).length
+              ? `Done. ${body.moved.length ? `The village now holds ${body.moved.length} more of its powers, and ` : ""}${body.cooling.length === 1 ? "one power waits" : `${body.cooling.length} powers wait`} a week before crossing.`
+              : `Done. The village now holds ${body.moved.length} more of its powers.`,
         );
         setConfirming(false);
         await load();
@@ -135,6 +156,28 @@ export default function HandOverPowers() {
             : "The ticked list waits for your signature. Confirm it to complete the hand-over, or tick a different list to start a new one."}
         </p>
       )}
+      {(standing.cooling ?? []).map((c) => (
+        <div key={c.capability} className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-stone-800 max-w-lg">
+          <p>
+            {c.title} crosses to the village on {new Date(c.landsAt).toLocaleDateString()}, unless a steward stops it.
+          </p>
+          {stopping === c.capability ? (
+            <div className="mt-2 space-y-2">
+              <label className="block">
+                <span className="block font-semibold">Why stop it? The village reads this.</span>
+                <input value={why} onChange={(e) => setWhy(e.target.value)} className="mt-1 w-full rounded border border-stone-300 px-2 py-2 text-sm" />
+              </label>
+              <button type="button" disabled={busy || why.trim().length < 3} onClick={() => stop(c.capability)} className="min-h-[44px] rounded-lg border border-stone-300 bg-white px-3 font-semibold disabled:opacity-40">
+                Stop it crossing
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setStopping(c.capability); setWhy(""); }} className="mt-2 min-h-[44px] rounded-lg border border-stone-300 bg-white px-3 font-semibold">
+              Stop this one
+            </button>
+          )}
+        </div>
+      ))}
       {standing.twoSign && !standing.pending && !frozen && (
         <p className="mt-3 text-xs text-stone-600 max-w-lg">Two of you can sign, so this takes two signatures.</p>
       )}

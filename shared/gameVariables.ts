@@ -18,6 +18,7 @@
  * express "equal voice or mirror Hypha" or an ERC-20 address; this shape can.
  */
 
+import { MINT_CAP_SCOPE } from "./mintCapWords";
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
@@ -340,7 +341,19 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1000",
     min: 0,
-    max: 1000000,
+    /*
+     * SIZED FOR A COLON VILLAGE. The pool pays a credit, and credits are priced
+     * in the village's own currency, so a village counting in colones (about
+     * 500 to the dollar) holds about 500 times the numbers a dollar village
+     * does. The old 1,000,000 let it reach twice its scaled default.
+     *
+     * 1,000,000,000 IS THE CEILING THE STORAGE ALLOWS. One member can be
+     * credited the whole pool, and `gratitude_distributions.credited` is a
+     * signed INT (0010), so the next power of ten would overflow it and fail
+     * the close. In minor units it is 1e11 at two decimals, a safe integer.
+     * shared/currencyScaleBounds.test.ts holds both limits.
+     */
+    max: 1000000000,
     unit: "tokens",
   },
   {
@@ -362,7 +375,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Issuance cap per lunar cycle",
     description:
-      "The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.",
+      "The most this village can bring into existence of one token in one lunar cycle. " +
+      `${MINT_CAP_SCOPE} ` +
+      "COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door of the mint faucet for this token, because a cap of zero means zero.",
     type: "integer",
     default: "10000",
     min: 0,
@@ -674,7 +689,15 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "100",
     min: 1,
-    max: 100000,
+    /*
+     * SIZED FOR A COLON VILLAGE (Rye, 2026-10-31: Voice is paid at one per
+     * unit of the village's currency). A village counting in colones gathers
+     * about 500 times the Voice a dollar village does, and the old 100,000 let
+     * it reach twice its scaled default. 100,000,000 is 1e10 minor units at
+     * two decimals, a safe integer, and fits `voice_claims.amount`
+     * (decimal(18,4)). shared/currencyScaleBounds.test.ts holds both.
+     */
+    max: 100000000,
     unit: "voice",
   },
   {
@@ -689,7 +712,9 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1",
     min: 1,
-    max: 100000,
+    // Sized for a colon village for the reason on the voice threshold above:
+    // Earned Equity matches the base pay 1:1, in the village's own currency.
+    max: 100000000,
     unit: "equity",
   },
   {
@@ -1397,6 +1422,37 @@ export const VARIABLES: VariableDef[] = [
     type: "text",
     default: "gratitude",
   },
+  // THE CAP ON ONE MEMBER'S SHARE OF THE VOTE (Rye, 2026-11-05: "built as an
+  // option, OFF by default"). A switch and a number, and never a 0 that means
+  // "no cap": caps fail closed here, so 0 would mean zero, and OFF is what the
+  // switch is for. Same ring and bar as the mode, because both move what one
+  // vote weighs. The water-fill, and why a small roll weighs everyone the
+  // same: `capWeights`, shared/governanceShare.ts.
+  {
+    key: "governance.weight_cap_on",
+    category: "Governance",
+    label: "Cap one member's voting weight",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "governance.weight_cap_pct",
+    category: "Governance",
+    label: "The most voting weight one member can carry",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.",
+    type: "percentage",
+    default: "20",
+    min: 1,
+    max: 100,
+    unit: "%",
+  },
   {
     key: "governance.unity_pct",
     category: "Governance",
@@ -1587,6 +1643,28 @@ export const VARIABLES: VariableDef[] = [
     criticality: "constitutional",
   },
   {
+    /*
+     * THE LAUNCH'S HEAD COUNT, as the village's own dial (Rye, 2026-11-06:
+     * "EVERYTHING can change with the highest village vote"). The default is
+     * the registry's floor, so a village that never touches it launches with
+     * the three founders it always did, and `membership.vouches_required`
+     * still reads that same registry number for its default. Constitutional,
+     * so after launch only the highest tier moves it. Never below one: a
+     * launch nobody votes on is not a launch.
+     */
+    key: "governance.launch_min_electorate",
+    category: "Governance",
+    label: "Members it takes to launch",
+    description:
+      "How many members must hold a voice before the village can vote to start its Game. Every one of them has to say yes. The default is three: a founder and two more. Moving it costs the highest tier your village works at.",
+    type: "integer",
+    unit: "members",
+    default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
+    min: 1,
+    max: 50,
+    criticality: "constitutional",
+  },
+  {
     key: "governance.subject_mint_rule_quorum_pct",
     category: "Governance",
     label: "Minting rule changes: quorum floor",
@@ -1709,7 +1787,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Hypha",
     label: "Hypha space id (on-chain)",
     description:
-      "The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is still accepted and an operator is told, so an idle check is never read as a passing one. Blank checks nothing.",
+      "The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is recorded and an operator is told, and a passed one waits for a person to apply it, so an idle check is never read as a passing one. Blank checks nothing.",
     type: "text",
     default: "",
     ring: "founder",

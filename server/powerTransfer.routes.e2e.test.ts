@@ -20,8 +20,9 @@
  *     letting a member who reached co-creator do the same thing.
  *  2. `badge_grant` refuses `ballot.vote`; the transfer type does not. The
  *     unit half is in `server/lib/proposalDrafts.test.ts`; the half here is
- *     that the wizard actually offers the transfer type as conductable while
- *     badge_grant stays advisory.
+ *     that the wizard actually offers the transfer type as conductable. Since
+ *     2026-11-06 badge_grant is conductable too (gap 6), and its own cases sit
+ *     after the crossing, because they need a power the village holds.
  *
  * Plus the three things that make it safe to ship a permission change:
  * exactly ONE holding row per crossing, idempotent on a double close, and the
@@ -41,6 +42,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { BREAK_GLASS_WAY_THROUGH } from "../shared/capabilities";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -412,14 +414,15 @@ describe.skipIf(!DB_CONFIGURED)("the crossing, end to end", () => {
   let witnessId = "";
   let witnessBefore: any = null;
 
-  it("the wizard offers it as a real vote, and still holds badge grants back", async () => {
+  it("the wizard offers it as a real vote, and badge grants beside it", async () => {
     const facts = await call("GET", "/api/governance/wizard", { token: wrenToken });
     expect(facts.status).toBe(200);
     expect(facts.json?.conductable).toContain("power_transfer");
-    // The badge_grant cautionary tale: config, pickers, a noun and no route.
-    // It stays on the advisory list until somebody builds one.
-    expect(facts.json?.conductable).not.toContain("badge_grant");
-    expect(facts.json?.advisory).toContain("badge_grant");
+    // UPDATED, NEVER DELETED (gap 6, 2026-11-06). badge_grant was the
+    // cautionary tale here: config, pickers, a noun and no route. The route
+    // exists now, so it is a real vote and off the advisory list.
+    expect(facts.json?.conductable).toContain("badge_grant");
+    expect(facts.json?.advisory).not.toContain("badge_grant");
   });
 
   it("a member opens the ask, and the frozen document says all three things", async () => {
@@ -572,6 +575,139 @@ describe.skipIf(!DB_CONFIGURED)("the crossing, end to end", () => {
   });
 });
 
+/*
+ * A BADGE IS ONE MORE DOOR ONTO A POWER, AND THE VILLAGE HOLDS THIS ONE NOW.
+ *
+ * Rye, 2026-11-06: "EVERYTHING can change with the highest village vote." The
+ * crossing above put event.manage in the village's hands, so from here a badge
+ * carrying it moves that power to whoever wears it. R157: an admin could mint
+ * such a badge and award it to themselves with no vote and no public line.
+ * Gap 6: badges had no vote path at all, because badge_grant was advisory.
+ *
+ * Two rows go in by hand: a badge carrying event.manage, standing in for one a
+ * village made before it took the power on (the admin route now refuses to make
+ * it), and one carrying the veto, which no route has made since 2026-09-23.
+ */
+describe.skipIf(!DB_CONFIGURED)("badges: a power the village holds moves only by the village's vote (R157, gap 6)", () => {
+  const HELD = "calendar-keeper-by-hand";
+  const VETO = "veto-badge-by-hand";
+  let libraryBadgeId = "";
+  const awards = async (badgeId: string, userId: string): Promise<number> => {
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM badge_awards WHERE badge_id = ? AND user_id = ?", [badgeId, userId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return Number(rows[0]?.n ?? 0);
+  };
+  const badgesNamed = async (name: string): Promise<number> => {
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM badges WHERE name = ?", [name]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return Number(rows[0]?.n ?? 0);
+  };
+  const grantReason = "Otto has opened the hall for every gathering since the spring, and the stewards asked for him to keep the calendar with them.";
+  /** Every member says yes, the window runs out, the close stamps, the landing writes. */
+  const carry = async (ballotId: string) => {
+    for (const t of [founderToken, wrenToken, idaToken, ottoToken]) {
+      const r = await call("POST", `/api/governance/ballots/${ballotId}/vote`, { token: t, body: { choice: "yes" } });
+      expect(r.status, JSON.stringify(r.json)).toBe(200);
+    }
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { token: wrenToken, body: { outcomeNote: "Everybody said yes." } });
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    expect(closed.json?.outcome).toBe("passed");
+    await land(ballotId);
+  };
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    const on = await call("PUT", "/api/admin/modules/badges/lifecycle", { body: { lifecycle: "public", examples: false } });
+    expect(on.status, JSON.stringify(on.json)).toBe(200);
+    for (const [id, name, caps] of [[HELD, `Calendar Keeper ${PORT}`, ["event.manage"]], [VETO, `Veto By Hand ${PORT}`, ["steward.veto"]]] as const) {
+      await pool.query( // module-review-ok: fixture SQL standing in for badges made before the village held the power, against the scratch schema
+        "INSERT INTO badges (id, name, kind, capabilities, denies, active) VALUES (?,?,?,?,?,1)",
+        [id, name, "granted", JSON.stringify(caps), JSON.stringify([])],
+      );
+    }
+  });
+
+  it("the village holds event.manage before any of this", async () => {
+    expect((await holdingRows()).map((r) => r.capability)).toContain("event.manage");
+  });
+
+  it("R157: an admin cannot mint a badge carrying a power the village holds, and nothing is written", async () => {
+    const name = `Calendar Badge ${PORT}`;
+    const made = await call("POST", "/api/admin/badges", { body: { name, kind: "granted", capabilities: ["event.manage"] } });
+    expect(made.status, JSON.stringify(made.json)).toBe(409);
+    expect(String(made.json?.error)).toContain("/api/governance/badge-grants");
+    expect(made.json?.villageHolds).toEqual(["event.manage"]);
+    expect(await badgesNamed(name), "no badge row").toBe(0);
+  });
+
+  it("R157 control: the same badge with a power the village does not hold still works for the admin", async () => {
+    const made = await call("POST", "/api/admin/badges", { body: { name: `Shelf Keeper ${PORT}`, kind: "granted", capabilities: ["library.keep"] } });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    libraryBadgeId = String(made.json?.badge?.id ?? "");
+    const awarded = await call("POST", `/api/admin/badges/${libraryBadgeId}/award`, { body: { userId: ottoId } });
+    expect(awarded.status, JSON.stringify(awarded.json)).toBe(200);
+    expect(await awards(libraryBadgeId, ottoId)).toBe(1);
+  });
+
+  it("R157: an admin cannot award a badge carrying a power the village holds, and nothing is written", async () => {
+    const r = await call("POST", `/api/admin/badges/${HELD}/award`, { body: { userId: ottoId } });
+    expect(r.status, JSON.stringify(r.json)).toBe(409);
+    expect(String(r.json?.error)).toContain("/api/governance/badge-grants");
+    expect(await awards(HELD, ottoId), "no award row").toBe(0);
+  });
+
+  it("R157: an admin cannot edit a badge into carrying a power the village holds", async () => {
+    const r = await call("PUT", `/api/admin/badges/${libraryBadgeId}`, {
+      body: { capabilities: ["library.keep", "event.manage"], confirmCapabilityChange: true },
+    });
+    expect(r.status, JSON.stringify(r.json)).toBe(409);
+    const [[row]] = await pool.query<any[]>("SELECT capabilities FROM badges WHERE id = ?", [libraryBadgeId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(JSON.stringify(row.capabilities)).not.toContain("event.manage");
+  });
+
+  it("R157: an admin cannot award themselves a badge that carries any power", async () => {
+    const r = await call("POST", `/api/admin/badges/${libraryBadgeId}/award`, { body: { userId: founderId } });
+    expect(r.status, JSON.stringify(r.json)).toBe(403);
+    expect(String(r.json?.error)).toContain("/api/governance/badge-grants");
+    expect(await awards(libraryBadgeId, founderId), "no award row").toBe(0);
+  });
+
+  it("gap 6 control: a badge_grant naming a badge that carries the veto is refused at open", async () => {
+    const r = await call("POST", "/api/governance/badge-grants", { token: wrenToken, body: { badgeId: VETO, userId: ottoId, reason: grantReason } });
+    expect(r.status, JSON.stringify(r.json)).toBe(409);
+    expect(String(r.json?.error)).toContain("seating vote");
+    const [rows] = await pool.query<any[]>("SELECT id FROM ballots WHERE subject_type = 'badge_grant'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(rows, "no ballot opened").toHaveLength(0);
+  });
+
+  it("gap 6: a carried badge_grant awards the badge at the highest tier, and the holder passes the gate", async () => {
+    const opened = await call("POST", "/api/governance/badge-grants", { token: wrenToken, body: { badgeId: HELD, userId: ottoId, reason: grantReason } });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const ballot = opened.json?.ballot;
+    expect(ballot.binding).toBe(true);
+    expect(ballot.subjectType).toBe("badge_grant");
+    const top = TIER_FLOORS.constitutional;
+    expect(ballot.unityPct, "unity at the highest tier").toBeGreaterThanOrEqual(top.unityPct);
+    expect(ballot.quorumPct, "quorum at the highest tier").toBeGreaterThanOrEqual(top.quorumPct);
+    expect(await awards(HELD, ottoId), "nothing lands at open").toBe(0);
+
+    await carry(String(ballot.id));
+    expect(await awards(HELD, ottoId), "the landing wrote the award").toBe(1);
+    const caps = await call("GET", `/api/admin/members/${ottoId}/capabilities`);
+    const row = (caps.json?.capabilities ?? []).find((c: any) => c.capability === "event.manage");
+    expect(row?.held, JSON.stringify(caps.json)).toBe(true);
+    expect(row?.source).toBe("badge");
+
+    // Taking it back is the village's too: the admin route refuses, and the vote does it.
+    const adminRevoke = await call("DELETE", `/api/admin/badges/${HELD}/award/${ottoId}`);
+    expect(adminRevoke.status, JSON.stringify(adminRevoke.json)).toBe(409);
+    expect(await awards(HELD, ottoId)).toBe(1);
+    const back = await call("POST", "/api/governance/badge-grants", { token: wrenToken, body: { badgeId: HELD, userId: ottoId, revoke: true, reason: grantReason } });
+    expect(back.status, JSON.stringify(back.json)).toBe(200);
+    await carry(String(back.json?.ballot?.id));
+    expect(await awards(HELD, ottoId), "the landing took the award back").toBe(0);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
   it("the seated steward puts a gathering on the calendar with a MEMBER token", async () => {
     const made = await call("POST", "/api/admin/events", {
@@ -647,7 +783,9 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
     const entry = (powers.json?.powers ?? []).find((p: any) => p.capability === "event.manage");
     expect(entry.heldBy.roleName).toBe("Steward Circle");
     expect(entry.heldBy.byBallot).toBe(true);
-    expect(entry.heldBy.people).toContain("Ida Kestrel");
+    // Role (FirstName), the house form (Rye, 2026-10-30): first names only, never the surname.
+    expect(entry.heldBy.people).toContain("Ida");
+    expect(JSON.stringify(entry)).not.toContain("Kestrel");
     /*
      * R55, held at the payload. A village of two weeks and a village of two
      * years read the same shape here: no count, no total, no fraction, and no
@@ -676,5 +814,30 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
     });
     expect(again.status).toBe(409);
     expect(String(again.json?.error)).toContain("already holds this one");
+  });
+
+  it("re-pointing a power the village holds is the village's HIGHEST vote (Rye, 2026-11-06)", async () => {
+    // A second role that can act on it, so the move is a real one.
+    const roles = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(roles) ? roles : roles?.roles ?? []).find((r: any) => r.id === "founders-circle");
+    const granted = await call("PUT", "/api/admin/roles/founders-circle/capabilities", { body: { capabilities: [...(founders?.capabilities ?? []), "event.manage"] } });
+    expect(granted.status, JSON.stringify(granted.json)).toBe(200);
+
+    const moved = await call("POST", "/api/governance/power-transfers", {
+      token: wrenToken,
+      body: { capability: "event.manage", roleId: "founders-circle", reason: "The founders are taking the calendar back for the harvest season, and the stewards asked them to." },
+    });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    const repoint = (await call("GET", `/api/governance/ballots/${moved.json.ballot.id}`, { token: wrenToken })).json;
+    const top = TIER_FLOORS.constitutional;
+    expect(repoint.unityPct, "unity at the highest tier").toBeGreaterThanOrEqual(top.unityPct);
+    expect(repoint.quorumPct, "quorum at the highest tier").toBeGreaterThanOrEqual(top.quorumPct);
+    expect(String(repoint.docMarkdown)).toContain("decided at the village's highest tier");
+
+    // Control: the first crossing, which moved a power nobody held yet, ran on the ordinary dials.
+    const [firstRows] = await pool.query<any[]>("SELECT id FROM ballots WHERE subject_type = 'power_transfer' AND subject_ref = 'event.manage@steward-circle' ORDER BY created_at LIMIT 1"); // module-review-ok: the e2e harness reading its own scratch schema
+    const first = (await call("GET", `/api/governance/ballots/${String(firstRows[0].id)}`, { token: wrenToken })).json;
+    expect(first.unityPct < top.unityPct || first.quorumPct < top.quorumPct, JSON.stringify({ unity: first.unityPct, quorum: first.quorumPct })).toBe(true);
+    expect(String(first.docMarkdown)).not.toContain("highest tier");
   });
 });

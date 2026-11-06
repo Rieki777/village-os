@@ -127,3 +127,40 @@ export function decideFounderGrant(input: {
   }
   return { grant: true, reason: "address is in FOUNDER_EMAILS and the role was missing" };
 }
+
+/**
+ * AN ADMINISTRATOR RAISING A MEMBER (R104's follow-up). The grant above
+ * refuses a row holding a password nobody proved, and that closed the door
+ * FOUNDER_EMAILS opens. `PUT /api/admin/users/:id/role` was the other door: a
+ * stranger who made a password account at a trusted person's address shows on
+ * the roster under that person's address, and an administrator promoting
+ * "them" promoted the stranger.
+ *
+ * It asks, and does not refuse outright, because 0304 backfilled nothing:
+ * every password account made before it is unproved, and a village with no
+ * email provider has no way to prove one. A hard refusal would leave that
+ * village unable ever to raise a password member. So the route refuses the
+ * first time with `code: "address_unproved"` and says why, and carries on
+ * only when the request says the administrator has read it
+ * (`addressUnprovedOk: true`). Nobody can be raised without being told.
+ *
+ * Only a raise is asked about. A demotion, or saving the role an account
+ * already holds, is never this question.
+ */
+const RAISE_ORDER: Record<string, number> = { member: 0, admin: 1, founder: 2 };
+
+export function isUnprovedRaise(
+  fromRole: unknown,
+  toRole: unknown,
+  account: { passwordHash?: string; emailVerifiedAt?: string | null },
+): boolean {
+  const from = RAISE_ORDER[String(fromRole ?? "member")] ?? 0;
+  const to = RAISE_ORDER[String(toRole ?? "")] ?? 0;
+  return to > from && holdsUnprovenPassword(account);
+}
+
+export const UNPROVED_RAISE_REFUSAL = {
+  code: "address_unproved",
+  error:
+    "This account's address was never confirmed, so it may have been made by someone else who typed that address. They can confirm it while signed in, from Send me a new link at /verify-email, or by signing in with Google at that address.",
+} as const;
