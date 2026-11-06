@@ -23299,7 +23299,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       amendedKeysFor(getPool(), b.id),
       ballotsFor(getPool(), b.subjectType, b.subjectRef),
     ]);
-    res.json(ballotForViewer(viewer, {
+    // Signing in is not being admitted (with membership.invite_only off anybody can). The named
+    // roll is for whoever may vote, this ballot's own electors and admins; anyone else reads a stranger's (R098).
+    const readsRoll = !!viewer && (payload.myWeight !== null || (await isAdmin(req)) || hasCapability("ballot.vote", await capabilityCtx(viewer)));
+    res.json(ballotForViewer(readsRoll ? viewer : null, {
       ...payload,
       appliedKeys,
       priorAttempts: chain
