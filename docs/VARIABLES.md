@@ -110,10 +110,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Fee taken from the payment | `redemption.fee_pct` | Ledger | percentage | `0` | the founder or an admin |
 | Fixed fee taken from the payment | `redemption.fee_fixed` | Ledger | decimal | `0` | the founder or an admin |
 | Smallest redemption, in money | `redemption.min_amount` | Ledger | decimal | `0` | the whole village |
-| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | `0` | the whole village |
-| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | blank, which is no ceiling | the whole village |
+| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
-| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | Earned equity needed before a member can claim | `economy.equity_claim_threshold` | The Mint | integer | `1` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
@@ -745,28 +745,30 @@ The least a member may ask to redeem at once, counted in the redemption's own cu
 
 ### Most in one redemption, in money
 
-The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
+The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_request` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Most one member may redeem per cycle, in money
 
-Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.
+Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_member_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -787,14 +789,15 @@ The village's own words for what happens after a member asks: who to speak to, w
 
 ### Most the village will redeem per cycle, in money
 
-Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.
+Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_village_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
