@@ -456,13 +456,21 @@ describe("what is never on screen", () => {
     serve({ list: [200, listAnswer(maia, { agent: "Maia", lastReadWhole: false, reads: { circles: "failed", roles: "failed" } })] });
     show({ witness: 1 });
     expect((await screen.findByRole("heading", { level: 2 })).textContent).toBe("Maia suggests 5 changes for you to decide");
+    // Every view the reader can reach, each read whole: the list, the compare, and the folded parts.
+    const seen: string[] = [];
+    fireEvent.click(screen.getByText("Facts updated since yesterday: 2"));
+    fireEvent.click(screen.getByRole("button", { name: "See which one" }));
+    seen.push(document.body.textContent ?? "");
     fireEvent.click(screen.getByRole("button", { name: "Compare them" }));
     expect(screen.getByRole("heading", { level: 3, name: "Maia's version" })).toBeTruthy();
+    seen.push(document.body.textContent ?? "");
     fireEvent.click(screen.getByRole("button", { name: "Back to all 5" }));
-    const text = document.body.textContent ?? "";
-    expect(text).toContain("Maia didn't answer");
-    expect(text).not.toMatch(/\bSera\b/);
-    expect(text).not.toMatch(/amora/i); // brand-ok: the assertion that the copy names no village
+    expect(seen[0]).toContain("Maia didn't answer");
+    expect(seen[1]).toContain("Underlined words are only in Maia's version.");
+    for (const text of seen) {
+      expect(text).not.toMatch(/\bSera\b/);
+      expect(text).not.toMatch(/amora/i); // brand-ok: the assertion that the copy names no village
+    }
   });
 });
 
