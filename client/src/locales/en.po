@@ -8,33 +8,73 @@ msgstr ""
 "Language: en\n"
 
 #: client/src/components/Layout.tsx
-msgid "Sign in"
-msgstr "Sign in"
-
-#: client/src/components/Layout.tsx
+msgctxt "site header"
 msgid "Open menu"
 msgstr "Open menu"
 
 #: client/src/components/Layout.tsx
-msgid "Skip to content"
-msgstr "Skip to content"
+#~ msgid "Sign in"
+#~ msgstr "Sign in"
 
 #: client/src/components/Layout.tsx
-msgid "Sign out everywhere"
-msgstr "Sign out everywhere"
-
-#: client/src/components/Layout.tsx
+msgctxt "site header"
 msgid "Close menu"
 msgstr "Close menu"
 
 #: client/src/components/Layout.tsx
-msgid "Main Site"
-msgstr "Main Site"
+msgctxt "site header"
+msgid "Sign in"
+msgstr "Sign in"
 
 #: client/src/components/Layout.tsx
+#~ msgid "Open menu"
+#~ msgstr "Open menu"
+
+#: client/src/components/Layout.tsx
+msgctxt "site header"
+msgid "Sign out everywhere"
+msgstr "Sign out everywhere"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Skip to content"
+#~ msgstr "Skip to content"
+
+#: client/src/components/Layout.tsx
+msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Your account, {firstName}"
 
 #: client/src/components/Layout.tsx
+msgctxt "site header"
 msgid "Sign in or join"
 msgstr "Sign in or join"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Sign out everywhere"
+#~ msgstr "Sign out everywhere"
+
+#: client/src/components/Layout.tsx
+msgctxt "site header"
+msgid "Main Site"
+msgstr "Main Site"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Close menu"
+#~ msgstr "Close menu"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Main Site"
+#~ msgstr "Main Site"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Your account, {firstName}"
+#~ msgstr "Your account, {firstName}"
+
+#: client/src/components/Layout.tsx
+msgctxt "site header"
+msgid "Skip to content"
+msgstr "Skip to content"
+
+#: client/src/components/Layout.tsx
+#~ msgid "Sign in or join"
+#~ msgstr "Sign in or join"
