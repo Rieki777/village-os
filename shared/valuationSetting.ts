@@ -28,21 +28,25 @@
  * Pure: no clock, no pool. Who holds which power is the server's to work out
  * through the one gate; this file is handed the member ids.
  */
-import { ENGINE_DEFAULTS, type EngineDials } from "./valuation";
+import { ENGINE_DEFAULTS, paidTokens, rewardFromTotal, type EngineDials, type ValuationModel } from "./valuation";
+import type { TokenAmount } from "./workValue";
 import type { PayeeSuggestion, RangeWidth } from "./valuationEngine";
 
 /** Days a figure outside the band waits for its second signer before it goes to the village vote by itself (spec 3.4). */
 export const SECOND_SIGN_DAYS = 7;
 
+/** A member's id, as the server holds it. */
+export type MemberId = string | number;
+
 /** Who is setting, who the work pays, and who could sign second. */
 export interface SettingContext {
-  setterId: number;
+  setterId: MemberId;
   /** Everyone this work pays. */
-  payeeIds: number[];
+  payeeIds: MemberId[];
   /** Holders of the setting power (role.pay for roles, quest.approve for quests) or of steward.veto, live now. */
-  secondSigners: number[];
+  secondSigners: MemberId[];
   /** Members whose own pay this setter set this season: they may not sign the setter's figure (no swapping). */
-  setterSetPayOf: number[];
+  setterSetPayOf: MemberId[];
 }
 
 /** One input the setter changed after the proposer's were frozen. */
@@ -71,7 +75,7 @@ export interface SettingDecision {
   gapPct: number;
   needs: SignNeed;
   /** Who may sign second. Empty when the village votes. */
-  signers: number[];
+  signers: MemberId[];
   /** Present when a second signer is asked: after this many days, the village vote. */
   voteAfterDays?: number;
   /** What the setter still has to give. */
@@ -120,9 +124,9 @@ export interface SettingRecord {
   note: string | null;
   ownNumberFirst: number | null;
   inputChanges: InputChange[];
-  setterId: number;
+  setterId: MemberId;
   /** Filled when the second signer signs; null for a word-alone or voted figure. */
-  signerId: number | null;
+  signerId: MemberId | null;
   conflicted: boolean;
   /** Earned Equity was owed, not paid, when this was set: never pooled with paid records. */
   eeHeld: boolean;
@@ -137,7 +141,7 @@ export function settingRecord(p: {
   set: { totalMinor: number };
   ctx: SettingContext;
   opts?: SettingOptions;
-  signerId?: number | null;
+  signerId?: MemberId | null;
   at: string;
 }): SettingRecord {
   const opts = p.opts ?? {};
@@ -318,4 +322,27 @@ export function settleDeficit(
     return { choice: picked, deficitUnits, cashNowMinor, cashOwedLaterMinor: 0, credits: paid.credits - deficitUnits, earnedEquity: paid.earnedEquity + deficitUnits };
   }
   return { choice: picked, deficitUnits, cashNowMinor, cashOwedLaterMinor: deficitUnits * 100, credits: paid.credits - deficitUnits, earnedEquity: paid.earnedEquity };
+}
+
+// ── A set figure, as the work stores it ─────────────────────────────────────
+
+/**
+ * What a work stores once a figure is set: the figure shared out by Rye's rule
+ * (`rewardFromTotal`: the base, the Earned Equity match and the Credits bonus,
+ * as for any whole reward, II.9), with the cycle's cash share out of the base.
+ * While Earned Equity is owed (its meaning unwritten, #892) its line is left
+ * off and Voice counts only what is paid (II.8); the setting record keeps what
+ * is owed.
+ */
+export function storedPayFor(
+  model: ValuationModel,
+  totalMinor: number,
+  opts: { cashPct?: number; eeHeld: boolean },
+): { valueMinor: number; valueTokens: TokenAmount[]; cashMinor: number | null; earnedEquityOwed: number } {
+  const r = rewardFromTotal(model, totalMinor, { cashPct: opts.cashPct });
+  if (!opts.eeHeld) return { valueMinor: r.totalMinor, valueTokens: paidTokens(r), cashMinor: r.cashMinor, earnedEquityOwed: 0 };
+  const owed = r.equityUnits;
+  const voice = { token: r.voice.token, amount: Math.floor(((r.totalMinor - owed * 100) / 100) * model.voicePerUnit + 1e-9) };
+  const tokens = paidTokens({ voice, payTokens: r.payTokens.filter((t) => t.token !== model.tokens.equity) });
+  return { valueMinor: r.totalMinor, valueTokens: tokens, cashMinor: r.cashMinor, earnedEquityOwed: owed };
 }

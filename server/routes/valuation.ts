@@ -1,0 +1,218 @@
+/**
+ * THE VALUATION ENGINE'S ROUTES (0332): the model, a suggestion, and setting a
+ * role's pay with the Treasurer AND the algorithm (Rye, 2026-11-06).
+ *
+ *   GET  /api/valuation/model              every signed-in member reads the model (constitution I.3)
+ *   POST /api/valuation/suggest            a suggestion for a piece of work, nothing written
+ *   PUT  /api/org/roles/:id/pay            a role.pay holder sets a role's pay beside the suggestion
+ *   GET  /api/org/roles/:id/pay/settings   the record of every figure set for a role, members only
+ *   POST /api/valuation/settings/:id/sign  a second, different signer signs a figure outside the band
+ *
+ * THE RULE (shared/valuationSetting.ts, Rye's answers C1, C3, C10). The setter
+ * gives the inputs and the figure; the server prices the inputs itself, so the
+ * suggestion is never taken from the body. Inside the no-sign band the setter's
+ * word stands and the role's pay is written. Outside it, a written reason, and
+ * the figure waits for a second signer: a different holder of role.pay or
+ * steward.veto, not paid by the role, whose own pay the setter did not set this
+ * season. With nobody eligible, or a role that pays the setter, the vote path is
+ * named: an org draft carrying the change, put to the village. Nothing is ever
+ * refused for its size (II.6).
+ */
+import type { Express } from "express";
+import type { AppDeps } from "../lib/appDeps";
+import { recordEvent } from "../lib/events";
+import { EXAMPLE_REFUSAL_BODY } from "../lib/examples";
+import { listOrgAssignments, listOrgRoles, updateOrgRole } from "../lib/orgChart";
+import { calibrationRecords, currentModel, payeesSetBy, settingById, settingsForWork, signSetting, writeSetting } from "../lib/valuationStore";
+import { payLineProblem, rolePayRules } from "../lib/workPay";
+import { defaultDisplayCurrency } from "../../shared/money";
+import type { WorkInputs } from "../../shared/valuation";
+import { suggestValuation, type PayeeSuggestion } from "../../shared/valuationEngine";
+import { calibrate, combineSetting, settingRecord, storedPayFor, widenRange, type InputChange } from "../../shared/valuationSetting";
+
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> & {
+  /** Who holds a power through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
+  liveHoldersOf: (capability: string) => Promise<string[]>;
+  /** The village's currency (`project.fiatCurrency`). */
+  projectCurrency: () => string;
+  /** Whether the village has written what Earned Equity is a share of (#892). */
+  eeMeaningWritten: () => boolean;
+  /** Why a pay line cannot be stored, or null. Defaults to the admin door's own check (`payLineProblem`). */
+  payLineCheck?: (rules: Awaited<ReturnType<typeof rolePayRules>>, token: string) => string | null;
+};
+
+/** Where a figure goes when no second signer can sign it: the village, by an org draft (constitution 0.3, 0.4). */
+export const ROLE_PAY_VOTE_PATH = "/api/org/drafts/:id/put-to-village";
+
+const SEASON_MS = 91 * 24 * 60 * 60 * 1000;
+
+const readInputs = (raw: unknown): WorkInputs | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const w = raw as Partial<WorkInputs>;
+  if (!Array.isArray(w.lines)) return null;
+  return { ...w, kind: "role", lines: w.lines } as WorkInputs;
+};
+
+const readChanges = (raw: unknown): InputChange[] =>
+  Array.isArray(raw)
+    ? raw
+        .filter((c) => c && typeof c === "object")
+        .slice(0, 20)
+        .map((c: any) => ({ field: String(c.field ?? "").slice(0, 60), from: String(c.from ?? "").slice(0, 120), to: String(c.to ?? "").slice(0, 120) }))
+    : [];
+
+export function register(app: Express, deps: Deps): void {
+  const { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency, eeMeaningWritten } = deps;
+  const payLineCheck = deps.payLineCheck ?? payLineProblem;
+  const currency = () => defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
+
+  app.get("/api/valuation/model", async (req, res) => {
+    if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
+    res.json({ model: await currentModel(getPool(), currency()) });
+  });
+
+  app.post("/api/valuation/suggest", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (await overLimit(`valuation-suggest:${user.id}`, 120, 60 * 60 * 1000)) return res.status(429).json({ error: "Too many suggestions in an hour. Try again shortly." });
+    const raw = req.body?.work;
+    const work = raw && typeof raw === "object" && Array.isArray(raw.lines) ? ({ ...raw, kind: raw.kind === "role" ? "role" : "quest" } as WorkInputs) : null;
+    if (!work) return res.status(400).json({ error: "Send the work's effort lines to price." });
+    const model = await currentModel(getPool(), currency());
+    const s = suggestValuation(model, work, { eeMeaningWritten: eeMeaningWritten() });
+    if (!s.ok) return res.status(400).json({ refusals: s.refusals });
+    res.json(s);
+  });
+
+  /** What a figure stores on the role, or the reason a pay line cannot be stored (the admin door's own check). */
+  const rolePayFor = async (figure: number, cashPct: number | undefined, eeHeld: boolean) => {
+    const model = await currentModel(getPool(), currency());
+    const pay = storedPayFor(model, figure, { cashPct, eeHeld });
+    const rules = await rolePayRules(getPool());
+    for (const t of pay.valueTokens) {
+      const problem = payLineCheck(rules, t.token);
+      if (problem) return { problem, pay };
+    }
+    return { problem: null, pay };
+  };
+
+  /** Write a set figure onto the role. Returns a problem, or null. */
+  const writeRolePay = async (roleId: string, figure: number, cashPct: number | undefined, eeHeld: boolean): Promise<string | null> => {
+    const { problem, pay } = await rolePayFor(figure, cashPct, eeHeld);
+    if (problem) return problem;
+    const cur = currency();
+    await updateOrgRole(getPool(), roleId, {}, {
+      valueMinor: pay.valueMinor,
+      valueCurrency: cur,
+      valueTokens: pay.valueTokens,
+      cashMinor: pay.cashMinor,
+      cashCurrency: pay.cashMinor === null ? null : cur,
+    });
+    return null;
+  };
+
+  app.put("/api/org/roles/:id/pay", async (req, res) => {
+    if (!(await guardCapability(req, res, "role.pay"))) return;
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
+    if (!role) return res.status(404).json({ error: "Role not found" });
+    if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+
+    const body = req.body ?? {};
+    const inputs = readInputs(body.work);
+    const figure = Number(body.set?.totalMinor);
+    if (!inputs) return res.status(400).json({ error: "Send the role's effort estimate, so the figure is set beside a suggestion." });
+    if (!Number.isFinite(figure) || figure < 0) return res.status(400).json({ error: "Say the figure you are setting." });
+
+    const model = await currentModel(getPool(), currency());
+    const ee = eeMeaningWritten();
+    const s = suggestValuation(model, inputs, { eeMeaningWritten: ee });
+    if (!s.ok) return res.status(400).json({ refusals: s.refusals });
+    const first: PayeeSuggestion = s.payees[0];
+
+    const payeeIds = (await listOrgAssignments(getPool())).filter((a) => a.orgRoleId === role.id && a.userId).map((a) => String(a.userId));
+    const signerPool = Array.from(new Set([...(await liveHoldersOf("role.pay")), ...(await liveHoldersOf("steward.veto"))]));
+    const ctx = {
+      setterId: String(actor.id),
+      payeeIds,
+      secondSigners: signerPool,
+      setterSetPayOf: await payeesSetBy(getPool(), String(actor.id), new Date(Date.now() - SEASON_MS)),
+    };
+    const opts = {
+      reason: typeof body.reason === "string" ? body.reason : undefined,
+      note: typeof body.note === "string" ? body.note : undefined,
+      ownNumberFirst: Number.isFinite(Number(body.ownNumberFirst)) && body.ownNumberFirst !== null && body.ownNumberFirst !== undefined ? Number(body.ownNumberFirst) : undefined,
+      inputChanges: readChanges(body.inputChanges),
+    };
+    const decision = combineSetting(first, { totalMinor: figure }, ctx, opts);
+    if (decision.missing.length) return res.status(400).json({ error: "This figure is outside the suggestion's band, so give a reason for it.", decision });
+
+    const cashPct = Number.isFinite(Number(body.cashPct)) ? Number(body.cashPct) : undefined;
+    // Checked now, whatever the figure needs, so a figure that waits for a signer can be written when it is signed.
+    const check = await rolePayFor(figure, cashPct, first.expected.earnedEquityHeld > 0);
+    if (check.problem) return res.status(400).json({ error: check.problem });
+    if (decision.needs === "none") {
+      const problem = await writeRolePay(role.id, figure, cashPct, first.expected.earnedEquityHeld > 0);
+      if (problem) return res.status(400).json({ error: problem });
+    }
+    const rec = settingRecord({ workKind: "role", workId: 0, category: `role:${inputs.lines[0]?.band ?? "none"}`, first, set: { totalMinor: figure }, ctx, opts, at: new Date().toISOString() });
+    const state = decision.needs === "none" ? "set" : decision.needs === "second" ? "awaiting_second" : "awaiting_vote";
+    const settingId = await writeSetting(getPool(), rec, { workRef: role.id, state, modelVersion: model.version, currency: model.currency, inputs, suggestion: first, payeeIds, setterId: String(actor.id) });
+    await recordEvent(getPool(), {
+      kind: "org",
+      text: state === "set" ? `${role.name}: pay set beside the valuation engine's suggestion` : `${role.name}: a pay figure waits for ${state === "awaiting_second" ? "a second signer" : "the village"}`,
+      actorUserId: String(actor.id),
+      entityType: "org_role",
+      entityRef: role.id,
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
+    });
+    res.json({
+      success: true,
+      settingId,
+      state,
+      decision,
+      suggestion: first,
+      ...(decision.needs === "vote" ? { proposeInstead: ROLE_PAY_VOTE_PATH } : {}),
+      ...(decision.needs === "second" ? { voteAfterDays: decision.voteAfterDays, proposeInstead: ROLE_PAY_VOTE_PATH } : {}),
+    });
+  });
+
+  app.get("/api/org/roles/:id/pay/settings", async (req, res) => {
+    if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
+    const settings = await settingsForWork(getPool(), "role", String(req.params.id));
+    const latest = settings[0];
+    const cal = latest ? calibrate(await calibrationRecords(getPool(), latest.category)).find((c) => c.category === latest.category && !c.eeHeld) : undefined;
+    res.json({ settings, range: latest?.suggestion ? widenRange(latest.suggestion, cal) : null, calibration: cal ?? null });
+  });
+
+  app.post("/api/valuation/settings/:id/sign", async (req, res) => {
+    const actor = await authedUser(req);
+    if (!actor) return res.status(401).json({ error: "auth_required" });
+    const s = await settingById(getPool(), String(req.params.id));
+    if (!s) return res.status(404).json({ error: "No such figure." });
+    if (s.state !== "awaiting_second") return res.status(409).json({ error: "This figure is not waiting for a second signer." });
+    const me = String(actor.id);
+    const eligible = Array.from(new Set([...(await liveHoldersOf("role.pay")), ...(await liveHoldersOf("steward.veto"))]));
+    const setterSet = await payeesSetBy(getPool(), s.setterId, new Date(Date.now() - SEASON_MS), s.id);
+    const refused =
+      me === s.setterId ? "The person who set a figure cannot also sign it." :
+      s.payeeIds.includes(me) ? "This role pays you, so its figure is not yours to sign." :
+      setterSet.includes(me) ? "The setter set your own pay this season, so you cannot sign theirs." :
+      !eligible.includes(me) ? "A second signer holds role.pay or steward.veto." : null;
+    if (refused) return res.status(403).json({ error: refused, proposeInstead: ROLE_PAY_VOTE_PATH });
+    // Claimed first (compare-and-set), so two signers can never both write the pay.
+    if (!(await signSetting(getPool(), s.id, me))) return res.status(409).json({ error: "Someone signed this figure a moment ago." });
+    const problem = s.workKind === "role" ? await writeRolePay(s.workRef, s.setMinor, undefined, s.eeHeld) : null;
+    if (problem) return res.status(400).json({ error: problem });
+    await recordEvent(getPool(), {
+      kind: "org",
+      text: "a role's pay figure was signed by a second signer",
+      actorUserId: me,
+      entityType: "org_role",
+      entityRef: s.workRef,
+      audience: "public",
+    });
+    res.json({ success: true });
+  });
+}

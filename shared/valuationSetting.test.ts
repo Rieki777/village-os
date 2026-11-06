@@ -20,6 +20,7 @@ import {
   cycleCashShare,
   settleDeficit,
   settingRecord,
+  storedPayFor,
   widenRange,
   type SettingContext,
   type SettingRecord,
@@ -216,5 +217,31 @@ describe("the cycle's cash share and the deficit (C7)", () => {
   it("has no deficit when the budget covers the base, or when no budget offers cash", () => {
     expect(settleDeficit({ ...base, cashMinor: 100000, credits: 100 }, 100, "equity").deficitUnits).toBe(0);
     expect(settleDeficit({ ...base, cashMinor: null, credits: 1100 }, 0, "equity", { budgetSet: false })).toMatchObject({ deficitUnits: 0, credits: 1100 });
+  });
+});
+
+describe("a set figure, as the role stores it", () => {
+  it("shares the figure by Rye's rule as a whole reward, with Voice for everything paid (II.8, II.9)", () => {
+    const p = storedPayFor(CRC, 3000000, { eeHeld: false });
+    const tok = (t: string) => p.valueTokens.find((x) => x.token === t)?.amount ?? 0;
+    expect(p.valueMinor).toBe(3000000);
+    expect(tok(CRC.tokens.voice)).toBe(30000);
+    expect(tok(CRC.tokens.equity)).toBe(Math.floor((30000 * 100) / 210));
+    expect(p.earnedEquityOwed).toBe(0);
+  });
+
+  it("leaves Earned Equity off while its meaning is unwritten, counts it as owed, and pays Voice for what is paid now (C4)", () => {
+    const paid = storedPayFor(CRC, 3000000, { eeHeld: false });
+    const held = storedPayFor(CRC, 3000000, { eeHeld: true });
+    const tok = (p: typeof paid, t: string) => p.valueTokens.find((x) => x.token === t)?.amount ?? 0;
+    expect(tok(held, CRC.tokens.equity)).toBe(0);
+    expect(held.earnedEquityOwed).toBe(tok(paid, CRC.tokens.equity));
+    expect(tok(held, CRC.tokens.voice)).toBe(tok(paid, CRC.tokens.voice) - held.earnedEquityOwed);
+    expect(held.valueMinor).toBe(paid.valueMinor);
+  });
+
+  it("takes the cycle's cash share out of the base only", () => {
+    const p = storedPayFor(CRC, 2100000, { cashPct: 50, eeHeld: false });
+    expect(p.cashMinor).toBe(Math.floor(10000 * 0.5) * 100);
   });
 });
