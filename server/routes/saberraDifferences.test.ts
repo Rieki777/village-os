@@ -190,6 +190,13 @@ describe("the list", () => {
     expect(Object.keys((await get("/api/saberra/differences/count")).body)).not.toContain("lastWholeAt");
   });
 
+  it("CARRIES THE CIRCLES HERE IN CHART ORDER, by id alone, so the page groups in that order (US2.3)", async () => {
+    who.mayLook = true;
+    const r = await get("/api/saberra/differences");
+    expect(r.body.circleOrder).toEqual(["land"]);
+    expect(Object.keys((await get("/api/saberra/differences/count")).body)).not.toContain("circleOrder");
+  });
+
   it("WITHOUT THE READ GATE WIRED, falls back to the module's own gate and never opens wider", async () => {
     const refused = await get("/api/saberra/differences", bareBase);
     expect(refused.status).toBe(403);

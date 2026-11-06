@@ -63,6 +63,8 @@ export interface DifferencesRead {
   latest: { takenAt: string; circles: SnapshotRead; roles: SnapshotRead } | null;
   /** When each kind was last read whole, so a failed read can say which check the list is from (R36). */
   lastWhole: { circles: string | null; roles: string | null };
+  /** The circles here in chart order, by id, so the page can group in that order (US2.3). Ids only, never a name. */
+  circleOrder: string[];
 }
 
 /**
@@ -134,6 +136,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
     list,
     latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null,
     lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
+    circleOrder: liveIn.circles.map((c) => c.id),
   };
   cached = { key, value };
   return value;
@@ -168,6 +171,7 @@ export function listAnswer(
   lastReadWhole: boolean;
   reads: { circles: SnapshotRead; roles: SnapshotRead } | null;
   lastWholeAt: { circles: string | null; roles: string | null };
+  circleOrder: string[];
   count: DifferenceCount;
   differences: ListedDifference[];
 } {
@@ -178,6 +182,7 @@ export function listAnswer(
     lastReadWhole: wholeRead(read),
     reads: read.latest ? { circles: read.latest.circles, roles: read.latest.roles } : null,
     lastWholeAt: read.lastWhole,
+    circleOrder: read.circleOrder,
     count: countDifferences(read.list),
     differences: read.list.map((d) => ({
       ...d,
