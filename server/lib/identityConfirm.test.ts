@@ -338,6 +338,13 @@ describe("the pieces around the gate", () => {
     expect(readCookieValue(undefined, "a")).toBeNull();
   });
 
+  it("reads nothing when the header carries the name twice (R041)", () => {
+    // A cookie tossed from a sibling subdomain arrives beside the real one, and
+    // first-match let it win. Two of the name is no value at all.
+    expect(readCookieValue("village_confirm_request-exit=tossed; village_confirm_request-exit=mine", "village_confirm_request-exit")).toBeNull();
+    expect(readCookieValue("a=1; village_confirm_request-exit=mine", "village_confirm_request-exit")).toBe("mine");
+  });
+
   it("tells the screen what a member confirms with", () => {
     const linked = { id: "user-g", passwordHash: "", prefs: { googleLink: makeGoogleLink(SECRET, "user-g", "sub-g") } };
     expect(confirmWithFor({ ...linked, passwordHash: "hash" }, SECRET, true)).toBe("password");
