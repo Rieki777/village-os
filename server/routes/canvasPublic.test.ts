@@ -116,6 +116,7 @@ describe.skipIf(!configured)("the canvas in public", () => {
       getPool: () => pool,
       liveHoldersOf: async () => [],
       rolesCarrying: () => [],
+      capabilityCtx: async (user) => ctxFor(user as Person),
       guardCapability: async (req, res, cap: Capability, refusal) => {
         const user = who(req);
         const decision = user ? capabilityDecision(cap, ctxFor(user)) : null;
@@ -319,6 +320,30 @@ describe.skipIf(!configured)("the canvas in public", () => {
 
       roster.pop();
       expect((await call("GET", CANVAS_PUBLIC_PATH, null)).body.blocks[0].withheld).toBe(false);
+    });
+
+    it("shows the pen, and only the pen, the held-back line and the name it matched (W3a-withheld-line-hidden-from-pen)", async () => {
+      expect((await put("purpose", "Juniper trees shade the whole of the upper field.")).status).toBe(200);
+      roster.push({ id: "cp-juniper", name: "Juniper Vale", email: "juniper@example.test", role: "member", roleCapabilities: [], membershipGranted: true });
+      try {
+        const pen = await call("GET", CANVAS_PUBLIC_PATH, "pen");
+        expect(pen.body.blocks[0]).toEqual({
+          id: "purpose",
+          line: null,
+          withheld: true,
+          forPen: { line: "Juniper trees shade the whole of the upper field.", matched: "Juniper" },
+        });
+        // Every other reader still gets the line held back, with nothing to rebuild it from.
+        for (const as of [null, "member"] as const) {
+          const r = await call("GET", CANVAS_PUBLIC_PATH, as);
+          expect(r.body.blocks[0], String(as)).toEqual({ id: "purpose", line: null, withheld: true });
+          expect(r.text).not.toContain("Juniper");
+        }
+        // A line that is served carries nothing extra, even to the pen.
+        expect(pen.body.blocks[1]).toEqual({ id: "team", line: null, withheld: false });
+      } finally {
+        roster.pop();
+      }
     });
 
     it("holds back a line when a member changes their display name to one it holds", async () => {

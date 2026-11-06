@@ -61,9 +61,10 @@ import {
 } from "../../shared/canvasPublicLines";
 import { nameInLine, namesToProtect, nameRefusal } from "../lib/canvasNames";
 import { recordEvent } from "../lib/events";
+import { capabilityDecision } from "../../shared/capabilities";
 import { MATRIX_UNREADABLE, readMatrixInputs, type DecisionMatrixDeps } from "./decisionMatrix";
 
-export type CanvasPublicDeps = DecisionMatrixDeps & Pick<AppDeps, "guardCapability" | "members" | "contentRepo">;
+export type CanvasPublicDeps = DecisionMatrixDeps & Pick<AppDeps, "guardCapability" | "members" | "contentRepo" | "capabilityCtx">;
 
 /** What a signed-in member who does not hold the pen is told. */
 export const PUBLIC_LINE_PEN_REFUSAL =
@@ -88,7 +89,7 @@ export function register(app: Express, deps: CanvasPublicDeps): void {
   /** The names no public line may hold, read now. Throws when the roster cannot be read. */
   const protectedNames = async () => namesToProtect(await members.all());
 
-  app.get("/api/canvas/public", async (_req, res) => {
+  app.get("/api/canvas/public", async (req, res) => {
     let names: string[];
     try {
       names = await protectedNames();
@@ -97,11 +98,28 @@ export function register(app: Express, deps: CanvasPublicDeps): void {
       return res.status(503).json({ error: PUBLIC_LINES_UNREADABLE });
     }
     const stored = readPublicLines(contentRepo.get()?.[CANVAS_PUBLIC_SECTION]);
-    const blocks: CanvasPublicBlock[] = CANVAS_BLOCK_IDS.map((id) => {
+    /*
+     * THE PEN SEES WHAT IT MUST FIX (W3a-withheld-line-hidden-from-pen). A
+     * held-back line used to reach nobody, the pen included, so the pen
+     * rewrote it from memory and guessed which word matched. The pen can read
+     * every member's name already, so its own line and the matched word leak
+     * nothing; every other reader still gets the line held back, unchanged.
+     * Asked only when a line is held back, of the one gate.
+     */
+    const matches = CANVAS_BLOCK_IDS.map((id) => {
       const line = stored[id] ?? null;
-      const withheld = line !== null && nameInLine(line, names) !== null;
-      return { id, line: withheld ? null : line, withheld };
+      return { id, line, matched: line !== null ? nameInLine(line, names) : null };
     });
+    let penReads = false;
+    if (matches.some((m) => m.matched !== null)) {
+      const user = await authedUser(req).catch(() => null);
+      penReads = !!user && capabilityDecision("story.tell", await deps.capabilityCtx(user)).allowed;
+    }
+    const blocks: CanvasPublicBlock[] = matches.map(({ id, line, matched }) => {
+      if (line === null || matched === null) return { id, line, withheld: false };
+      return penReads ? { id, line: null, withheld: true, forPen: { line, matched } } : { id, line: null, withheld: true };
+    });
+    res.setHeader("Cache-Control", "private, no-store");
     res.json({ blocks });
   });
 

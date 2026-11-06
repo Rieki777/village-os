@@ -69,6 +69,8 @@ vi.mock("@/hooks/useVillageContent", () => ({
   readVillageSection: (section: string) => Promise.resolve(stored[section] ?? null),
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
+  // Both canvas modules on, so the canvas sections this file reads render.
+  useModuleOn: () => true,
   useHypha: () =>
     hyphaConfigured
       ? { configured: true, orgUrl: "https://dho.example.org/willowbrook", links: {} }
@@ -656,6 +658,27 @@ describe("How we work together", () => {
     renderPage();
     expect((await screen.findByTestId("public-line-withheld-roles")).textContent).toMatch(/holds the name of someone/);
     expect(within(screen.getByTestId("public-line-roles")).getByRole("button", { name: "Change the public line" })).toBeTruthy();
+  });
+
+  it("opens the pen's form on the held-back line and names the word that matched (W3a-withheld-line-hidden-from-pen)", async () => {
+    viewer = { id: "u-wren", name: "Wren Halloway", role: "member" };
+    routes["GET /api/canvas"] = () => ({ body: memberCanvas(true) });
+    // The server sends `forPen` only to a signed-in pen (server/routes/canvasPublic.test.ts).
+    routes[`GET ${CANVAS_PUBLIC_PATH}`] = () => ({
+      body: {
+        blocks: CANVAS_BLOCK_IDS.map((id) =>
+          id === "roles"
+            ? { id, line: null, withheld: true, forPen: { line: "Ash keeps the keys to the barn.", matched: "Ash" } }
+            : { id, line: null, withheld: false },
+        ),
+      },
+    });
+    renderPage();
+    const note = await screen.findByTestId("public-line-withheld-roles");
+    await waitFor(() => expect(note.textContent).toContain('"Ash"'));
+    const card = screen.getByTestId("public-line-roles");
+    fireEvent.click(within(card).getByRole("button", { name: "Change the public line" }));
+    expect((within(card).getByLabelText("The public line for Roles") as HTMLInputElement).value).toBe("Ash keeps the keys to the barn.");
   });
 
   it("reads the Decision Matrix from its PUBLIC door, and only when a reader opens it", async () => {
