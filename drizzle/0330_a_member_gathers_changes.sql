@@ -15,6 +15,11 @@
 -- 'agent' for a change request an outside service filed (I.2), whose author
 -- id is then the seated agent's.
 --
+-- `review_opened_at` is when the review clock last started (it restarts
+-- whenever a change or the why is edited in review), and `review_days_at_open`
+-- is the review length the village had then: the length that applies is the
+-- longer of that and today's, so lowering the dial mid-review shortens nothing.
+--
 -- `change_request_items`: the changes of every revision, append-only. A new
 -- revision writes a new set of rows and the old rows stay, which is the
 -- record of what the change request said at each moment. `change_key` is
@@ -41,6 +46,7 @@ CREATE TABLE IF NOT EXISTS `change_requests` (
   `closed_reason` varchar(40) NULL,
   `trial_moons` int NULL,
   `review_opened_at` datetime NULL,
+  `review_days_at_open` int NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
