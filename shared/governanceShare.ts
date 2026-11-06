@@ -86,6 +86,63 @@ export function topShares(weights: ReadonlyMap<string, bigint | number>, n: numb
   return all.slice(0, bound);
 }
 
+/**
+ * THE CAP ON ONE MEMBER'S WEIGHT (Rye, 2026-11-05: an option, OFF by default).
+ *
+ * Each weight is clamped to `capPct` percent of the roll's UNCAPPED total, in
+ * one pass. Nobody under the ceiling moves, and nobody is raised.
+ *
+ * ── WHY ONE PASS AGAINST THE UNCAPPED TOTAL ────────────────────────────────
+ *
+ * The other shape is a fixed point: lower the ceiling until no member holds
+ * more than `capPct` of the CAPPED total. It was rejected for two reasons.
+ *
+ *   It collapses on a small roll. With fewer than 100 / capPct members holding
+ *   anything (fewer than five at 20) no positive ceiling satisfies it at all,
+ *   so it ends at zero weight for everybody, and `openBallot` refuses a roll
+ *   whose total is zero. At exactly five holders it flattens the roll to equal
+ *   weights. A dial that silently becomes "one person, one vote" or "nobody
+ *   may vote" depending on how many people hold the token is not one a founder
+ *   can predict.
+ *   One pass can be checked by hand. Anybody can read the roll's balances, take
+ *   the cap's share of their sum, and know every member's frozen weight.
+ *
+ * ── WHAT IT COSTS WHEN FEW MEMBERS HOLD ALL THE WEIGHT ─────────────────────
+ *
+ * The frozen total shrinks by whatever the cap trimmed, and quorum and unity
+ * are shares of the FROZEN total. So a capped member's share of the vote can
+ * still be above `capPct`. One member holding 90 and four holding 2.5 each, at
+ * 20: the big holder freezes at 20, the roll totals 30, and 20 of 30 is two
+ * thirds of the vote. The cap guarantees nobody carries more than `capPct` of
+ * the weight the roll held; it cannot share power out among people who hold
+ * none. A lone holder stays the whole roll however low the cap is.
+ *
+ * ── THE NUMBERS AT THE EDGES ───────────────────────────────────────────────
+ *
+ * Caps fail closed: 0 means zero, never unlimited, and so does a percentage
+ * that is not a number. Above 100 is read as 100, which trims nobody. The
+ * registry refuses both ends (`governance.weight_cap_pct` runs 1 to 100); this
+ * is belt to those braces. The ceiling is rounded DOWN to the four places
+ * `ballot_electorate.weight` stores, so a frozen weight cannot round up past
+ * the cap on its way into the column.
+ */
+export function capWeights(weights: ReadonlyMap<string, number>, capPct: number): Map<string, number> {
+  const held = new Map<string, number>();
+  let total = 0;
+  weights.forEach((raw, id) => {
+    const w = Math.max(0, asNumber(raw));
+    held.set(id, w);
+    total += w;
+  });
+  const pct = Number.isFinite(capPct) ? Math.min(100, Math.max(0, capPct)) : 0;
+  // The 1e-6 is a millionth of a stored step: enough to absorb a double that
+  // lands a hair under a whole step, far too small to lift a ceiling past one.
+  const ceiling = Math.floor(((total * pct) / 100) * 10_000 + 1e-6) / 10_000;
+  const out = new Map<string, number>();
+  held.forEach((w, id) => out.set(id, Math.min(w, ceiling)));
+  return out;
+}
+
 /** A weight as a double, total over both numeric types and over rubbish. */
 function asNumber(raw: bigint | number): number {
   if (typeof raw === "bigint") return Number(raw);

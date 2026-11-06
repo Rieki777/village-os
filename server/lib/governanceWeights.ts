@@ -21,6 +21,8 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { tokenDef, memberAccount } from "./ledger";
 import { isListedForTrade } from "./exchange";
+import { boolVar, numberVar, stringVar } from "./variables";
+import { capWeights } from "../../shared/governanceShare";
 
 /**
  * The share arithmetic, re-exported so a server caller has ONE door to
@@ -28,14 +30,72 @@ import { isListedForTrade } from "./exchange";
  * run needs it and may not import this file: `shared/dryRun/` has no import
  * path to a connection, and this module opens one on its second line.
  */
-export { shareOfTotal, topShares } from "../../shared/governanceShare";
+export { capWeights, shareOfTotal, topShares } from "../../shared/governanceShare";
 
 export type WeightMode = "equal" | "token" | "custom";
+
+/** The switch and the number for the cap on one member's weight (Rye, 2026-11-05). */
+export const WEIGHT_CAP_ON_KEY = "governance.weight_cap_on";
+export const WEIGHT_CAP_PCT_KEY = "governance.weight_cap_pct";
 
 export interface WeightModeSnapshot {
   mode: WeightMode;
   /** The token slug when mode = token, else null. */
   token: string | null;
+  /**
+   * The cap on one member's share of the roll, in percent, when mode = token
+   * and the cap is switched on. Null or absent means no cap, which is the
+   * shipped posture, so a snapshot built before the cap existed reads the same.
+   */
+  capPct?: number | null;
+}
+
+/**
+ * The weight-mode snapshot the NEXT ballot would freeze, read off the
+ * founder-held dials. The one place that decides it: `server/index.ts` passes
+ * this to every route module through deps, and none of them rebuilds it.
+ *
+ * The cap rides the snapshot only in token mode, the same way the token does,
+ * because it is only in token mode that one member's weight can grow without
+ * a steward allocating it.
+ */
+export function weightModeNow(): WeightModeSnapshot {
+  const raw = stringVar("governance.weight_mode");
+  const mode: WeightMode = raw === "token" || raw === "custom" ? raw : "equal";
+  if (mode !== "token") return { mode, token: null, capPct: null };
+  return {
+    mode,
+    token: stringVar("governance.weight_token").trim(),
+    capPct: boolVar(WEIGHT_CAP_ON_KEY) ? numberVar(WEIGHT_CAP_PCT_KEY) : null,
+  };
+}
+
+/**
+ * What a member reads about the cap, or null when there is nothing to say: the
+ * switch is off, or the mode is not token, where the cap does nothing.
+ */
+export function weightCapLine(snapshot: WeightModeSnapshot): string | null {
+  if (snapshot.mode !== "token" || snapshot.capPct == null) return null;
+  return `The cap is on: when a ballot opens, no member's weight goes above ${snapshot.capPct}% of the whole roll's balance.`;
+}
+
+/**
+ * Every weight on a WHOLE roll, as a ballot freezes it: `weightsFor`, then
+ * the cap when the snapshot carries one.
+ *
+ * Its own function because the cap is a fact about the roll and never about
+ * one member. `weightsFor` is also asked about a single member (a member's
+ * own standing), and capping a roll of one would trim that member against
+ * their own balance. Only a caller holding the whole roll may call this.
+ */
+export async function rollWeightsFor(
+  pool: Pool,
+  userIds: string[],
+  snapshot: WeightModeSnapshot,
+): Promise<Map<string, number>> {
+  const weights = await weightsFor(pool, userIds, snapshot);
+  if (snapshot.mode !== "token" || snapshot.capPct == null) return weights;
+  return capWeights(weights, snapshot.capPct);
 }
 
 /**

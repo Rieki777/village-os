@@ -1397,6 +1397,36 @@ export const VARIABLES: VariableDef[] = [
     type: "text",
     default: "gratitude",
   },
+  // THE CAP ON ONE MEMBER'S WEIGHT (Rye, 2026-11-05: "built as an option, OFF
+  // by default"). A switch and a number, and never a 0 that means "no cap":
+  // caps fail closed here, so 0 would mean zero, and OFF is what the switch is
+  // for. Same ring and bar as the mode, because both move what one vote weighs.
+  // The arithmetic and why it was chosen: `capWeights`, shared/governanceShare.ts.
+  {
+    key: "governance.weight_cap_on",
+    category: "Governance",
+    label: "Cap one member's voting weight",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "Turns on a ceiling on how much voting weight any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member's weight goes above the cap below, counted against the whole roll's balance. What it costs: a large holder's extra balance stops counting at the cap, and with few holders the trimmed total is smaller, so a capped member can still hold a large share of what is left. It is off unless you turn it on.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "governance.weight_cap_pct",
+    category: "Governance",
+    label: "The most voting weight one member can carry",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "While the cap above is on, the largest share of the roll's total balance that one member's weight can reach when a ballot opens. It only matters in token mode, and only with the cap switched on. 20 means a member holding 90 of 100 counts as 20, and members under the cap count in full. Lower spreads power wider and discards more of what the largest holders hold. To have no cap, turn the switch off. This number never does that.",
+    type: "percentage",
+    default: "20",
+    min: 1,
+    max: 100,
+    unit: "%",
+  },
   {
     key: "governance.unity_pct",
     category: "Governance",

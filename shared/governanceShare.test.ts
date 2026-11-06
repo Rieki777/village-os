@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shareOfTotal, topShares } from "./governanceShare";
+import { capWeights, shareOfTotal, topShares } from "./governanceShare";
 
 const m = (entries: [string, bigint | number][]): Map<string, bigint | number> => new Map(entries);
 
@@ -73,5 +73,43 @@ describe("topShares", () => {
     const top = topShares(m([["a", 0], ["b", 0]]), 1);
     expect(top).toHaveLength(1);
     expect(top[0].share).toBe(0);
+  });
+});
+
+/*
+ * THE CAP ON ONE MEMBER'S WEIGHT (Rye, 2026-11-05). The DB-backed proof that
+ * a frozen roll carries it is server/lib/governanceWeights.cap.test.ts; these
+ * are the edges of the arithmetic, where the few-holders cost is visible.
+ */
+describe("capWeights", () => {
+  const n = (entries: [string, number][]): Map<string, number> => new Map(entries);
+
+  it("clamps each weight to the cap's share of the uncapped total, once", () => {
+    const out = capWeights(n([["big", 90], ["a", 2.5], ["b", 2.5], ["c", 2.5], ["d", 2.5]]), 20);
+    expect(out.get("big")).toBe(20);
+    for (const id of ["a", "b", "c", "d"]) expect(out.get(id)).toBe(2.5);
+  });
+
+  it("leaves a lone holder holding the whole of what is left, because nobody else holds any", () => {
+    const out = capWeights(n([["only", 100], ["none", 0]]), 20);
+    expect(out.get("only")).toBe(20);
+    expect(out.get("none")).toBe(0);
+    expect(shareOfTotal(out).get("only")).toBe(1);
+  });
+
+  it("reads 0 as zero, never as unlimited, and a number it cannot read as 0", () => {
+    expect(capWeights(n([["a", 5], ["b", 5]]), 0).get("a")).toBe(0);
+    expect(capWeights(n([["a", 5], ["b", 5]]), Number.NaN).get("a")).toBe(0);
+  });
+
+  it("changes nothing at 100, and floors a negative weight at zero on the way through", () => {
+    const out = capWeights(n([["a", 7], ["b", -3]]), 100);
+    expect(out.get("a")).toBe(7);
+    expect(out.get("b")).toBe(0);
+  });
+
+  it("rounds the ceiling down to the four places a frozen weight is stored at", () => {
+    // 20% of 10.00007 is 2.000014, and the column keeps 2.0000 of it.
+    expect(capWeights(n([["big", 10], ["dust", 0.00007]]), 20).get("big")).toBe(2);
   });
 });
