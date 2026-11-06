@@ -543,3 +543,22 @@ describe.skipIf(!DB_CONFIGURED)("Q5: every member may READ the admin routes the 
     expect((await call("GET", "/api/admin/capabilities/holding", undefined, "")).status).toBe(401);
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("an everyday power's stage, once the village sets it, changes only by its vote", () => {
+  const catalogue = async (token: string) => (await call("GET", "/api/game/progression", undefined, token)).json?.capabilityCatalogue ?? [];
+
+  it("refuses the direct dial edit to the admin too, and every member keeps the power", async () => {
+    await pool.query("INSERT INTO app_config (config_key, value) VALUES ('village-floors', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [JSON.stringify({ keys: ["ballot.vote"] })]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    const r = await call("PUT", "/api/admin/variables/progression.unlock.ballot.vote", { value: "steward" });
+    expect(r.status, r.text).toBe(409);
+    expect(r.json.proposeInstead).toBe(true);
+    expect((await catalogue(ottoToken)).find((c: any) => c.key === "ballot.vote")?.held).toBe(true);
+    const [rows] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM capability_holding WHERE capability = 'ballot.vote'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect(Number(rows[0].n)).toBe(0);
+  });
+
+  it("control: a floor the village has not taken still edits directly", async () => {
+    const r = await call("PUT", "/api/admin/variables/progression.unlock.forum.post", { value: "member" });
+    expect(r.status, r.text).toBe(200);
+  });
+});

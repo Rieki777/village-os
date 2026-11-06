@@ -104,6 +104,7 @@ import { GUIDANCE_WORDS, POWER_FAMILIES } from "../shared/powerBoard";
 import { giveOnlyWhatYouHold, makePowerAssignGate, register as registerSeatPowerGroupRoutes, registerSeatGrantFreshness } from "./routes/seatPowerGroups";
 import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapshot } from "./lib/seatGrants";
 import { isMemberReadable } from "./lib/memberReadable";
+import { floorDialRefusal } from "./lib/villageFloors";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
@@ -138,7 +139,7 @@ import { landingRow } from "./lib/applyDue";
 import { closeActivityLine, decisionLink, notifyRollRows, tellRollTheOutcome, type RollNotice } from "./lib/ballotNotices";
 import { isPresentMember, presenceTest } from "./lib/memberPresence";
 import { runSeasonReminders } from "./lib/seasonReminders";
-import { forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
+import { crossOwedLaunchSelection, forgetStewardActs, holdingHasLapsed, recordTermStarted, runTermWatch, setVetoWindowCheck, STEWARD_ROLE_ID, STEWARD_VETO, stewardMailRefusal, termWatchLookaheadDays } from "./lib/stewardship";
 import { seatFoundersAtLaunch } from "./lib/launchSeating";
 import { launchProposalDoc, launchSlateProblem } from "./lib/launchProposal";
 import { insertSlate } from "./repos/stewardSlate";
@@ -403,6 +404,7 @@ import { ADVISORY_TYPES, typeRefusesCapability } from "./lib/proposalDrafts";
 import {
   BALLOT_METHODS,
   dialsForMethod,
+  raiseDials,
   quorumPctOf,
   unityPctOf,
   villageBallotMethod,
@@ -413,6 +415,7 @@ import {
   delegatedRowsCountOn,
   dialsForSubject,
   methodForSubject,
+  overrideDials as highestTierBar,
   thresholdSettingsFrom,
   rollProblem,
   thresholdsForSubject,
@@ -12245,7 +12248,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
     try {
       const roll = await buildElectorate();
       onTheRoll = roll.length;
-      tooFew = rollProblem(VILLAGE_LAUNCH, roll);
+      tooFew = rollProblem(VILLAGE_LAUNCH, roll, numberVar("governance.launch_min_electorate"));
     } catch (e: any) {
       // Building the roll reads the weight mode, which can refuse (a weight
       // token the engine may not conduct). That is a real answer about this
@@ -12258,7 +12261,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       tooFew,
       unityPct: threshold?.minUnityPct ?? null,
       quorumPct: threshold?.minQuorumPct ?? null,
-      minElectorate: threshold?.minElectorate ?? null,
+      minElectorate: threshold ? Math.max(1, Math.floor(numberVar("governance.launch_min_electorate"))) : null,
       // The subject's own fact, then this village's. `why` is what the card
       // renders in the ready-to-ask state, so a mode note appended here lands
       // in front of the founder with no new field for a client to learn.
@@ -13724,7 +13727,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * says the whole village agreed. `rollProblem` is both, in one sentence,
      * and the reasoning is in `shared/ballotSubjects.ts`.
      */
-    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate);
+    const rollNotReady = rollProblem(VILLAGE_LAUNCH, electorate, numberVar("governance.launch_min_electorate"));
     if (rollNotReady) return res.status(409).json({ error: rollNotReady, onTheRoll: electorate.length });
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
@@ -20392,6 +20395,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (hatch) return res.status(409).json(hatch);
       return res.status(401).json({ error: "auth_required" });
     }
+    // An everyday power's stage the village sets changes only by its vote, for every path here (server/lib/villageFloors.ts).
+    const floorNo = await floorDialRefusal(getPool(), req.params.key);
+    if (floorNo) return res.status(409).json({ error: floorNo, proposeInstead: true });
     if (verdict.source !== "admin") {
       if (def && ringOf(def) !== "open") {
         return res.status(403).json({
@@ -22260,6 +22266,24 @@ Send an empty drafts array when you are still listening. A role payload is {name
         entityType: "user", // its subject, so an erasure finds it (server/repos/pulseLines.ts); the audit row below names the role
         entityRef: member.id,
       });
+      /*
+       * R165: a launch that seated nobody owes the village the stewards'
+       * selection, and this is the moment it was promised for. It crosses
+       * once, through the launch's own crossing (never re-pointing a power the
+       * village holds elsewhere), and the village reads that it did.
+       */
+      if (seatedRowId && role.id === STEWARD_ROLE_ID) {
+        const crossed = await crossOwedLaunchSelection(getPool(), b.id);
+        if (crossed && crossed.moved.length > 0) {
+          out.applied = crossed.moved;
+          await addActivity("governance", `The powers the stewards chose at launch are the village's now, looked after by ${who}.`, {
+            actorUserId: actorId,
+            entityType: "role",
+            entityRef: role.id,
+          });
+        }
+        if (crossed && crossed.refusals.length > 0) out.held = crossed.refusals.join(" ");
+      }
       void recordEvent(getPool(), {
         kind: "audit",
         text: `role:seated-by-ballot:${role.id}:${member.id}:${b.id}`,
@@ -24047,10 +24071,20 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const method: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-    const dials = dialsForMethod(method, {
+    /*
+     * RE-POINTING A POWER THE VILLAGE HOLDS IS THE HIGHEST VOTE (Rye,
+     * 2026-11-06: "EVERYTHING can change with the highest village vote").
+     * The village owns a power it holds, so moving it to another role, the
+     * stewards included, clears the village's highest set tier and nothing
+     * less. A first crossing keeps the village's ordinary dials.
+     */
+    const ordinary = dialsForMethod(method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
+    const dials = already
+      ? raiseDials(ordinary, highestTierBar(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))))
+      : ordinary;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -24085,6 +24119,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
       "",
       `${role.name ?? roleId} looks after it. An administrator who is not seated there stops passing this gate by being an administrator: they can still act on it, and every time they do, the village is told and the act goes on the village's own record. Handing it back is the same kind of act, in the open.`,
       "",
+      already
+        ? "The village already holds this power, so moving it to another role is decided at the village's highest tier."
+        : "",
       villageMethod === "hypha"
         ? "This village takes its rule changes to Hypha. A power has no Hypha leg to travel on, so this one is decided here, on the village's own dials."
         : "",

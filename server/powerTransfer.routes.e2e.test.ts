@@ -41,6 +41,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
 import { BREAK_GLASS_WAY_THROUGH } from "../shared/capabilities";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -678,5 +679,30 @@ describe.skipIf(!DB_CONFIGURED)("what the village actually got", () => {
     });
     expect(again.status).toBe(409);
     expect(String(again.json?.error)).toContain("already holds this one");
+  });
+
+  it("re-pointing a power the village holds is the village's HIGHEST vote (Rye, 2026-11-06)", async () => {
+    // A second role that can act on it, so the move is a real one.
+    const roles = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(roles) ? roles : roles?.roles ?? []).find((r: any) => r.id === "founders-circle");
+    const granted = await call("PUT", "/api/admin/roles/founders-circle/capabilities", { body: { capabilities: [...(founders?.capabilities ?? []), "event.manage"] } });
+    expect(granted.status, JSON.stringify(granted.json)).toBe(200);
+
+    const moved = await call("POST", "/api/governance/power-transfers", {
+      token: wrenToken,
+      body: { capability: "event.manage", roleId: "founders-circle", reason: "The founders are taking the calendar back for the harvest season, and the stewards asked them to." },
+    });
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    const repoint = (await call("GET", `/api/governance/ballots/${moved.json.ballot.id}`, { token: wrenToken })).json;
+    const top = TIER_FLOORS.constitutional;
+    expect(repoint.unityPct, "unity at the highest tier").toBeGreaterThanOrEqual(top.unityPct);
+    expect(repoint.quorumPct, "quorum at the highest tier").toBeGreaterThanOrEqual(top.quorumPct);
+    expect(String(repoint.docMarkdown)).toContain("decided at the village's highest tier");
+
+    // Control: the first crossing, which moved a power nobody held yet, ran on the ordinary dials.
+    const [firstRows] = await pool.query<any[]>("SELECT id FROM ballots WHERE subject_type = 'power_transfer' AND subject_ref = 'event.manage@steward-circle' ORDER BY created_at LIMIT 1"); // module-review-ok: the e2e harness reading its own scratch schema
+    const first = (await call("GET", `/api/governance/ballots/${String(firstRows[0].id)}`, { token: wrenToken })).json;
+    expect(first.unityPct < top.unityPct || first.quorumPct < top.quorumPct, JSON.stringify({ unity: first.unityPct, quorum: first.quorumPct })).toBe(true);
+    expect(String(first.docMarkdown)).not.toContain("highest tier");
   });
 });

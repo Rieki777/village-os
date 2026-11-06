@@ -25,7 +25,9 @@ import http from "node:http";
 import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { BREAK_GLASS_SEAT, HANDOVER_SET } from "../../shared/capabilities";
+import { BREAK_GLASS_SEAT, HANDOVER_SET, hasCapability } from "../../shared/capabilities";
+import { readVillageFloors } from "../lib/villageFloors";
+import { villageHeldCapabilities } from "../lib/capabilityHolding";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { STEWARD_ROLE_ID } from "../lib/capabilityHolding";
 import { readLaunchSelection } from "../lib/launchHandover";
@@ -112,7 +114,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
   beforeEach(async () => {
     viewer = null;
     await q("DELETE FROM capability_holding");
-    await q("DELETE FROM app_config WHERE config_key IN ('launch-handover', 'handover-pending', 'handover-cooling')");
+    await q("DELETE FROM app_config WHERE config_key IN ('launch-handover', 'handover-pending', 'handover-cooling', 'village-floors')");
   });
 
   it("the fixture's steward is the one live holder of the veto, counted the way the gate counts a seat", () => {
@@ -321,10 +323,11 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       const none = await handOver({ capabilities: [], confirm: true });
       expect(none.status).toBe(400);
       expect(none.json.error).toBe(HAND_OVER_WORDS.nonePicked);
-      // `message.send` is a member's own act, never a power anybody holds for the village.
-      const stray = await handOver({ capabilities: ["org.seat", "message.send"], confirm: true });
+      // `message.send` passes now, as its stage floor only (villageFloors.ts). `moon.approve` is
+      // held back by decisions 18 and 19 and passes neither way.
+      const stray = await handOver({ capabilities: ["org.seat", "moon.approve"], confirm: true });
       expect(stray.status).toBe(400);
-      expect(stray.json.error).toBe(HAND_OVER_WORDS.notAPower("message.send"));
+      expect(stray.json.error).toBe(HAND_OVER_WORDS.notAPower("moon.approve"));
       expect(await holdings()).toEqual([]);
     });
 
@@ -377,6 +380,51 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
         expect((await stop("cash.pay", { reason: "No thanks" })).status).toBe(403);
         viewer = "u-steward";
         expect((await stop("dial.set", { reason: "Nothing waits" })).status).toBe(404);
+      });
+    });
+
+    describe("an everyday power passes as its floor only (the coordinator's guardrail, 2026-11-05)", () => {
+      it("moves who sets the stage, writes no holding row, and every member at the stage still votes and posts", async () => {
+        viewer = "u-steward";
+        const r = await handOver({ capabilities: ["ballot.vote", "forum.post"], confirm: true });
+        expect(r.status, JSON.stringify(r.json)).toBe(200);
+        expect(r.json.floors).toEqual(["forum.post", "ballot.vote"]);
+        expect(r.json.moved).toEqual([]);
+        expect(await holdings(), "no role holds voting or posting for the village").toEqual([]);
+        expect(await readVillageFloors(pool)).toEqual(expect.arrayContaining(["ballot.vote", "forum.post"]));
+        // A member at the member stage, judged by the one gate with what the village holds now.
+        const member = { stageIndex: 3, stageIndexOf: (id: string) => ["visitor", "guest", "contributor", "member"].indexOf(id), roleCapabilities: [], isAdmin: false, villageHeld: await villageHeldCapabilities(pool) };
+        expect(hasCapability("ballot.vote", member)).toBe(true);
+        expect(hasCapability("forum.post", member)).toBe(true);
+        expect((await call("GET")).json.powers.filter((p: any) => p.floorOnly && p.held).map((p: any) => p.capability).sort()).toEqual(["ballot.vote", "forum.post"]);
+      });
+
+      it("control: the same power passed as a governance power would have written the row this one does not", async () => {
+        viewer = "u-steward";
+        await handOver({ capabilities: ["library.keep"], confirm: true });
+        expect((await holdings()).map((h: any) => h.capability)).toEqual(["library.keep"]);
+      });
+
+      it("one pass that carries a floor and a mature-only power answers with both, floors and cooling", async () => {
+        viewer = "u-steward";
+        const r = await handOver({ capabilities: ["ballot.vote", "cash.pay"], confirm: true, confirmMature: true });
+        expect(r.status, JSON.stringify(r.json)).toBe(200);
+        expect(r.json.floors, "the floor is in the payload").toEqual(["ballot.vote"]);
+        expect(r.json.cooling.map((c: any) => c.capability), "the waiting power is in the same payload").toEqual(["cash.pay"]);
+        expect(r.json.moved).toEqual([]);
+        expect(await holdings(), "neither writes a holding row today").toEqual([]);
+      });
+
+      it("a floor does not pass at launch, and says when it can", async () => {
+        await started(false);
+        try {
+          viewer = "u-founder";
+          const r = await handOver({ capabilities: ["ballot.vote"], confirm: true });
+          expect(r.status).toBe(400);
+          expect(r.json.error).toBe(HAND_OVER_WORDS.floorsAfterStart);
+        } finally {
+          await started(true);
+        }
       });
     });
   });

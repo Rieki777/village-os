@@ -1643,6 +1643,28 @@ export const VARIABLES: VariableDef[] = [
     criticality: "constitutional",
   },
   {
+    /*
+     * THE LAUNCH'S HEAD COUNT, as the village's own dial (Rye, 2026-11-06:
+     * "EVERYTHING can change with the highest village vote"). The default is
+     * the registry's floor, so a village that never touches it launches with
+     * the three founders it always did, and `membership.vouches_required`
+     * still reads that same registry number for its default. Constitutional,
+     * so after launch only the highest tier moves it. Never below one: a
+     * launch nobody votes on is not a launch.
+     */
+    key: "governance.launch_min_electorate",
+    category: "Governance",
+    label: "Members it takes to launch",
+    description:
+      "How many members must hold a voice before the village can vote to start its Game. Every one of them has to say yes. The default is three: a founder and two more. Moving it costs the highest tier your village works at.",
+    type: "integer",
+    unit: "members",
+    default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
+    min: 1,
+    max: 50,
+    criticality: "constitutional",
+  },
+  {
     key: "governance.subject_mint_rule_quorum_pct",
     category: "Governance",
     label: "Minting rule changes: quorum floor",
