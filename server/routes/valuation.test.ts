@@ -121,6 +121,8 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
     const out = await call("GET /api/valuation/model");
     expect(out.status).toBe(200);
     expect(out.body.model).toMatchObject({ version: 0, currency: "CRC" });
+    expect(out.body.eeMeaningWritten).toBe(true);
+    expect(out.body.tokenNames[MODEL.tokens.voice]).toBe(MODEL.tokens.voice);
     actor = null;
     expect((await call("GET /api/valuation/model")).status).toBe(401);
   });

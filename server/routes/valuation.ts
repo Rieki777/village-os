@@ -37,6 +37,8 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLi
   projectCurrency: () => string;
   /** Whether the village has written what Earned Equity is a share of (#892). */
   eeMeaningWritten: () => boolean;
+  /** A token's live display name, so a rename reaches the receipt (II.17). Defaults to the slug. */
+  tokenName?: (slug: string) => string;
   /** Why a pay line cannot be stored, or null. Defaults to the admin door's own check (`payLineProblem`). */
   payLineCheck?: (rules: Awaited<ReturnType<typeof rolePayRules>>, token: string) => string | null;
 };
@@ -68,7 +70,13 @@ export function register(app: Express, deps: Deps): void {
 
   app.get("/api/valuation/model", async (req, res) => {
     if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
-    res.json({ model: await currentModel(getPool(), currency()) });
+    const model = await currentModel(getPool(), currency());
+    const name = deps.tokenName ?? ((s: string) => s);
+    res.json({
+      model,
+      eeMeaningWritten: eeMeaningWritten(),
+      tokenNames: { [model.tokens.credits]: name(model.tokens.credits), [model.tokens.equity]: name(model.tokens.equity), [model.tokens.voice]: name(model.tokens.voice) },
+    });
   });
 
   app.post("/api/valuation/suggest", async (req, res) => {

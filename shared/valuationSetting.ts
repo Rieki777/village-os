@@ -32,6 +32,22 @@ import { ENGINE_DEFAULTS, paidTokens, rewardFromTotal, type EngineDials, type Va
 import type { TokenAmount } from "./workValue";
 import type { PayeeSuggestion, RangeWidth } from "./valuationEngine";
 
+/**
+ * Why a setter set a figure away from the suggestion (spec 3.5, research 03 §4.2).
+ * A short list so people pick honestly; "Other" asks for words. A village may
+ * change the list by the same doors as any dial.
+ */
+export const REASON_CODES: readonly string[] = [
+  "The effort estimate was off",
+  "The skill needed is higher or lower",
+  "The local going rate is different",
+  "Urgency or short notice",
+  "Community benefit the estimate misses",
+  "The cash budget this cycle",
+  "Fairness with similar work",
+  "Other",
+];
+
 /** Days a figure outside the band waits for its second signer before it goes to the village vote by itself (spec 3.4). */
 export const SECOND_SIGN_DAYS = 7;
 
