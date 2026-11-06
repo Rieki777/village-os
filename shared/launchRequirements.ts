@@ -27,7 +27,7 @@
 import { MODULES } from "./modules";
 
 /** The provisioning runbook, for the steps no screen in a village can take. */
-export const FORK_RUNBOOK_URL = "https://github.com/Rieki777/village-os/blob/main/docs/FORK_RUNBOOK.md"; // brand-ok: the upstream platform repository's own address, never a village's brand
+export const FORK_RUNBOOK_URL = "https://github.com/ReGen-Civics/village-os/blob/main/docs/FORK_RUNBOOK.md"; // brand-ok: the upstream platform repository's own address, never a village's brand
 
 export type LaunchGroup =
   | "identity" // who runs this village: admins, handles, the shared-password exit

@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         If this is a security problem, close this and use
-        [private reporting](https://github.com/Rieki777/village-os/security/advisories/new)
+        [private reporting](https://github.com/ReGen-Civics/village-os/security/advisories/new)
         instead. A public issue is a disclosure.
 
   - type: input

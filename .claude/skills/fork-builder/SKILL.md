@@ -7,7 +7,7 @@ description: Build or modify a custom village fork of the Village OS platform (f
 
 Operating procedure for building a new village fork or adding/removing modules on any fork.
 The platform is white-label: the "Amora" deployment is only the first tenant. A fork is only for a
-village that changes code: running a village needs no fork and no access to `Rieki777/village-os`,
+village that changes code: running a village needs no fork and no access to `ReGen-Civics/village-os`,
 only the published image (`START_HERE.md`). A fork deploys through the repository's own
 `Dockerfile`, and changes are offered back by pull request from the fork. Everything below is
 verifiable in code today; where a claim matters, the enforcing file is named.

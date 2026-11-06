@@ -151,7 +151,7 @@ Two consequences to expect, both intended:
    not read the code.
 4. **Set the version** in `package.json`, `PLATFORM_VERSION` in
    `server/lib/identity.ts`, and the default image in `docker-compose.yml`
-   (`ghcr.io/rieki777/village-os:<version>`) to the same number, and the
+   (`ghcr.io/regen-civics/village-os:<version>`) to the same number, and the
    image named in `START_HERE.md` part B. The workflow refuses a tag that the
    first three disagree with, because the starter kit carries the compose file
    and a kit that starts an older image is a release that lies.
