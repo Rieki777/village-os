@@ -185,6 +185,12 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/cash-owed/queue", "/api/cash-owed/:id/paid"],
   },
   {
+    capability: "role.pay",
+    title: "What roles are paid",
+    surface: "Setting what a role is worth and pays, beside the valuation engine's suggestion",
+    routes: ["/api/org/roles/:id/pay"],
+  },
+  {
     capability: "module.switch",
     title: "Which modules the village runs",
     surface: "Turning a module on after launch, without a vote",
