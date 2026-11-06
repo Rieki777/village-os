@@ -725,6 +725,7 @@ import { backfillPathEnrollments } from "./lib/comms/paths";
 import { exportCommsForMember, sweepIdleContacts } from "./repos/commsPeople";
 import {
   confirmManual,
+  launchedAtOf,
   launchStatus,
   launchVoteBlocked,
   recordLaunchCarried,
@@ -18663,7 +18664,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   registerSitePullRoutes(app, { isAdmin, adminActor, overLimit, clientIp, uploadsDir: UPLOADS_DIR });
   // Brand overlay: the Setup Wizard reads/writes this to white-label the site live.
-  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt });
+  registerBrandRoutes(app, { isAdmin, brandRepo, getBrand, withoutOrphanedAlt, launchedAt: () => launchedAtOf(getPool()) });
 
   /**
    * The Living Map's skin, for the shell to hand its iframe.
