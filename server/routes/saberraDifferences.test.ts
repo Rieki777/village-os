@@ -31,6 +31,8 @@ vi.mock("../lib/modules", () => ({
 }));
 
 import { register } from "./saberra";
+import { listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
+import type { Difference } from "../../shared/seraDifferences";
 
 const LAND = "0".repeat(31) + "1";
 const NEW = "0".repeat(30) + "30";
@@ -132,6 +134,7 @@ describe("the count", () => {
     expect(r.status).toBe(200);
     expect(r.body).toEqual({
       total: 2,
+      toDecide: 2,
       lanes: { facts: 0, lowRisk: 0, decision: 2 },
       conflicts: 0,
       checkFirst: 2,
@@ -173,12 +176,17 @@ describe("the list", () => {
       "Sera suggests a new circle, Land Stewardship, with 1 role.",
       "Sera suggests a new role, Seed Keeper, in Land Stewardship.",
     ]);
+    // A first sight implies the unknown base, so the screen leaves the base off (R39)...
     expect(r.body.differences[1].words).toMatchObject({
-      flags: ["Check first: nothing was taken from Sera for this before, so there is no earlier version to compare", "Check first: the first time Sera has sent this", "Check first: Sera puts it in a circle this village doesn't have"],
+      flags: ["Check first: the first time Sera has sent this", "Check first: Sera puts it in a circle this village doesn't have"],
       source: "From Sera's record",
       open: `https://dash.example.test/${SEED}`,
       openWords: "Open in Sera",
     });
+    // ...and the data keeps it, so an unknown base is still never taken in bulk or applied by itself (R2).
+    expect(r.body.differences[1].flags.map((f: { key: string }) => f.key)).toContain("baseUnknown");
+    expect(r.body.differences[1].bulkEligible).toBe(false);
+    expect(r.body.differences[1].autoEligible).toBe(false);
   });
 
   it("SAYS WHEN EACH KIND WAS LAST READ WHOLE, so a failed read can name the check the list is from (R36)", async () => {
@@ -203,6 +211,35 @@ describe("the list", () => {
     expect(asked).toEqual(["guard:intake.moderate"]);
     who.mayGuard = true;
     expect((await get("/api/saberra/differences", bareBase)).status).toBe(200);
+  });
+});
+
+describe("the words the list sends", () => {
+  /** A role here, matched by its page id. */
+  const role = (over: Partial<Difference>): Difference => ({
+    key: "p:x", kind: "roleMove", lane: "decision", state: "suggestion", field: "circle", sera: "land", ours: "water",
+    base: { value: "water" }, seraHash: "s", oursHash: "o", flags: [], namesAMember: false, autoEligible: false,
+    bulkEligible: true, takeable: true, source: { pageId: "p", editedAt: null }, params: { from: "Water", to: ["Land & Ecology"] },
+    subject: { kind: "role", pageId: "p", ourId: "r-water", via: "pageId", name: "Water Steward", circleId: "water", circleName: "Water" },
+    ...over,
+  });
+  const read = (list: Difference[], holders: Record<string, string[]>): DifferencesRead => ({
+    list, latest: null, lastWhole: { circles: null, roles: null }, circleOrder: [], holders,
+  });
+  const sentences = (r: DifferencesRead) =>
+    listAnswer(r, { agent: "Sera", dashboard: "", timeZone: "UTC" }).differences.map((d) => d.words.sentence);
+
+  it("NAMES A ROLE WITH ITS HOLDERS HERE, from the live chart (Role (FirstName))", () => {
+    expect(sentences(read([role({})], { "r-water": ["Ana Moss"] }))).toEqual([
+      "Sera suggests moving Water Steward (Ana) from Water to Land & Ecology.",
+    ]);
+    expect(sentences(read([role({})], {}))).toEqual(["Sera suggests moving Water Steward from Water to Land & Ecology."]);
+  });
+
+  it("SAYS NOBODY HOLDS A ROLE THE SERVICE ARCHIVED, and names who does", () => {
+    const rest = role({ kind: "roleRest", field: null, sera: "gone", ours: "live", subject: { kind: "role", pageId: "p", ourId: "r-dish", via: "pageId", name: "Dish Rota", circleId: "kitchen", circleName: "Kitchen" } });
+    expect(sentences(read([rest], {}))).toEqual(["Sera has archived Dish Rota. It is still live here, and nobody holds it."]);
+    expect(sentences(read([rest], { "r-dish": ["Ana Moss"] }))).toEqual(["Sera has archived Dish Rota (Ana). It is still live here."]);
   });
 });
 

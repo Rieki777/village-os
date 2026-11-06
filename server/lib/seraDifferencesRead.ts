@@ -31,6 +31,14 @@
  * The cheap reads that decide the key run every time; the snapshots' records
  * and the history are read only on a miss.
  *
+ * ── WHO HOLDS EACH ROLE ──────────────────────────────────────────────────
+ *
+ * A role is named with its holders' first names in its sentence ("Role
+ * (FirstName)", Rye 2026-10-30). The names are read from the seatings HERE on
+ * every call, outside the cache, and never from the service, so a seating
+ * changed a moment ago shows at once and nothing the service holds names
+ * anybody.
+ *
  * WRITES NOTHING. No row, no event, no notice: looking at the list changes
  * nothing anywhere.
  */
@@ -46,10 +54,11 @@ import {
   type DifferencesInput,
   type SnapshotRead,
 } from "../../shared/seraDifferences";
-import { differenceSentence, flagWords, openInUrl, openInWords, sourceWords } from "../../shared/seraDifferenceWords";
+import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "../../shared/seraDifferenceWords";
 import { dedupeKeyFor } from "./externalProposals";
 import { nameCheckFor } from "./saberraNames";
 import { liveChart } from "./structureReview";
+import { listOrgAssignments, type OrgAssignment } from "./orgChart";
 import { rosterRows } from "../repos/peopleRoster";
 import { snapshotIndex, snapshotsBySeq, type SnapshotIndexRow } from "../repos/saberraSnapshots";
 import { acceptedProposalsFor, circlesForDifferences, publishedFromModule, publishStamp, rolesWithPaySet } from "../repos/seraDifferences";
@@ -65,6 +74,24 @@ export interface DifferencesRead {
   lastWhole: { circles: string | null; roles: string | null };
   /** The circles here in chart order, by id, so the page can group in that order (US2.3). Ids only, never a name. */
   circleOrder: string[];
+  /** Who holds each role here now, by role id, as names. Read on every call, never cached. */
+  holders: Record<string, string[]>;
+}
+
+/** Each role's holders here, by name: a member by the roster's name, a documented holder by the name written. Examples left out. */
+export function holderNamesByRole(
+  seatings: readonly Pick<OrgAssignment, "orgRoleId" | "userId" | "displayName" | "isExample">[],
+  roster: readonly { id: string | null; name: string }[],
+): Record<string, string[]> {
+  const nameOf = new Map(roster.filter((r) => r.id !== null).map((r) => [String(r.id), r.name]));
+  const out: Record<string, string[]> = {};
+  for (const a of seatings) {
+    if (a.isExample) continue;
+    const name = a.userId ? nameOf.get(String(a.userId)) : a.displayName;
+    if (!name) continue;
+    (out[a.orgRoleId] ??= []).push(name);
+  }
+  return out;
 }
 
 /**
@@ -85,13 +112,15 @@ export function snapshotsNeeded(index: readonly SnapshotIndexRow[], nowSeconds: 
 let cached: { key: string; value: DifferencesRead } | null = null;
 
 export async function readDifferences(pool: Pool, now: number = Date.now()): Promise<DifferencesRead> {
-  const [index, circles, paid, stamp, roster] = await Promise.all([
+  const [index, circles, paid, stamp, roster, seatings] = await Promise.all([
     snapshotIndex(pool),
     circlesForDifferences(pool),
     rolesWithPaySet(pool),
     publishStamp(pool, MODULE_ID),
     rosterRows(pool),
+    listOrgAssignments(pool),
   ]);
+  const holders = holderNamesByRole(seatings, roster);
   const live = await liveChart(pool, circles);
   const check = nameCheckFor(roster);
   const seqs = snapshotsNeeded(index, Math.floor(now / 1000));
@@ -109,7 +138,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
     })),
   };
   const key = createHash("sha256").update(canonicalJson({ seqs, live: liveIn, stamp, names: check.fingerprint })).digest("hex");
-  if (cached?.key === key) return cached.value;
+  if (cached?.key === key) return { ...cached.value, holders };
 
   const [rows, changes] = await Promise.all([snapshotsBySeq(pool, seqs), publishedFromModule(pool, MODULE_ID)]);
   const proposals = await acceptedProposalsFor(pool, MODULE_ID, Array.from(new Set(changes.map((c) => c.draftId))));
@@ -137,6 +166,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now()): Pro
     latest: top ? { takenAt: top.takenAt, circles: top.circles.read, roles: top.roles.read } : null,
     lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
     circleOrder: liveIn.circles.map((c) => c.id),
+    holders,
   };
   cached = { key, value };
   return value;
@@ -187,8 +217,10 @@ export function listAnswer(
     differences: read.list.map((d) => ({
       ...d,
       words: {
-        sentence: differenceSentence(d, agent),
-        flags: d.flags.map((f) => flagWords(f, agent)),
+        // A role here is named with who holds it here; a circle, or a role not here yet, with nobody.
+        sentence: differenceSentence(d, agent, d.subject.kind === "role" && d.subject.ourId ? { holders: read.holders[d.subject.ourId] ?? [] } : {}),
+        // Shown flags only (R39); `d.flags` keeps every one for R2.
+        flags: shownFlags(d).map((f) => flagWords(f, agent)),
         source: sourceWords(d, agent, timeZone),
         open: d.source.pageId ? openInUrl(dashboard, d.source.pageId) : null,
         openWords: openInWords(agent),

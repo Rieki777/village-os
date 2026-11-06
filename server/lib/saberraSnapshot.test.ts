@@ -440,6 +440,11 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
         human: await accepted("human", { status: "published", draftModule: "saberra", sourceKind: "human" }),
       };
       for (const r of ROLES) await liveRole(r, ourWords[r]);
+      // Somebody holds the water role here, named the way a documented holder is.
+      await pool.query( // module-review-ok: fixture SQL, a seating on the live role
+        "INSERT INTO org_role_assignments (id, org_role_id, holder_kind, display_name, holder_key) VALUES ('a-water', ?, 'documented', 'Robin Wells', 'documented:robin')",
+        [idOf("water")],
+      );
       // The service now says something new for every one of them.
       state.read = {
         circle: [{ id: land, fields: { "Circle Name": `${tag} Land`, Status: "Active" } }],
@@ -449,6 +454,9 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       await syncByHand(pool);
 
       const read = await readDifferences(pool);
+      // Who holds each role here, read from the live chart, for "Role (FirstName)".
+      expect(read.holders[idOf("water")]).toEqual(["Robin Wells"]);
+      expect(read.holders[idOf("cook")] ?? []).toEqual([]);
       const baseOf = (r: Role) => read.list.find((d) => d.field === "aim" && d.subject.ourId === idOf(r))?.base;
       expect(baseOf("water")).toEqual({ value: said("water") });
       for (const r of ["cook", "keeper", "pantry", "edited", "human"] as const) expect(baseOf(r), r).toBe("unknown");
