@@ -3527,6 +3527,29 @@ const UNLOCK_DEFS: VariableDef[] = (Object.entries(STAGE_UNLOCKS) as Array<[stri
 
 VARIABLES.push(...STAGE_MULTIPLIER_DEFS, ...STAGE_QUEST_DEFS, ...UNLOCK_DEFS);
 
+/**
+ * The village's default language (internal spec i18n, US3; C8). Used only when
+ * a visitor's browser names no language Village OS offers: a member's own
+ * choice and the browser's languages both come first. Open ring, so every
+ * member sees it and may propose a change, and a vote can move it (I.3, 0.1).
+ * Each choice is labelled in its own language.
+ */
+VARIABLES.push({
+  key: "village.default_locale",
+  category: "Language",
+  label: "Default language",
+  description:
+    "The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.",
+  type: "choice",
+  default: "en",
+  // Literal so the generated docs can read them; shared/i18nDefaultLocale.test.ts
+  // holds them equal to the offered languages, each named in its own language.
+  choices: [
+    { value: "en", label: "English" },
+    { value: "es", label: "Español" },
+  ],
+});
+
 /** Lookup by key, for validation and defaults. */
 export const VARIABLES_BY_KEY: Record<string, VariableDef> = Object.fromEntries(
   VARIABLES.map((v) => [v.key, v]),
