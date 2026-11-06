@@ -731,6 +731,7 @@ describe("the count", () => {
     );
     expect(countDifferences(list)).toEqual({
       total: 3,
+      toDecide: 2,
       lanes: { facts: 0, lowRisk: 1, decision: 2 },
       conflicts: 0,
       checkFirst: 1,

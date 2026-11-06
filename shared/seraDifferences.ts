@@ -50,6 +50,7 @@
 import { canonicalJson } from "./canonicalJson";
 import { circlesNamed } from "./proposedSeats";
 import { circleIdFor, proposedCircleName, readSourcePay, seatIdFor, seatNameKey, sourceStatusOf } from "./structurePlan";
+import { waitingKind } from "./seraWaiting";
 
 // ── The snapshot, as the sync stores it ─────────────────────────────────────
 
@@ -1185,6 +1186,8 @@ export function differences(input: DifferencesInput): Difference[] {
 export interface DifferenceCount {
   /** Differences that wait for somebody, ours-ahead left out. */
   total: number;
+  /** Of the total, what a person decides: every decision and every conflict (shared/seraWaiting.ts). The headline's number. */
+  toDecide: number;
   lanes: Record<Lane, number>;
   conflicts: number;
   /** Of the total, how many carry a reason to check first. */
@@ -1195,13 +1198,14 @@ export interface DifferenceCount {
 
 /** Totals only: no subject, no name, no value. */
 export function countDifferences(list: readonly Difference[]): DifferenceCount {
-  const out: DifferenceCount = { total: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
+  const out: DifferenceCount = { total: 0, toDecide: 0, lanes: { facts: 0, lowRisk: 0, decision: 0 }, conflicts: 0, checkFirst: 0, oursAhead: 0 };
   for (const d of list) {
     if (d.state === "oursAhead") {
       out.oursAhead += 1;
       continue;
     }
     out.total += 1;
+    if (waitingKind(d) === "toDecide") out.toDecide += 1;
     out.lanes[d.lane] += 1;
     if (d.state === "conflict") out.conflicts += 1;
     if (d.flags.length > 0) out.checkFirst += 1;
