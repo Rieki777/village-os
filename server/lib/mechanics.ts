@@ -64,6 +64,7 @@ import {
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { brandChangeKey, brandFieldValue, brandVoteProblem } from "../../shared/brandVote";
 
 /**
  * -- WHAT A CHANGE SET IS MADE OF, AFTER Q9 ----------------------------------
@@ -350,8 +351,10 @@ export interface ProposedChange {
    * executor reads it back as a `module_lifecycle` item and never as a dial:
    * `asChangeItem` takes any change carrying a `kind` exactly as written.
    */
-  kind?: "module_lifecycle";
+  kind?: "module_lifecycle" | "brand_field";
   moduleId?: string;
+  /** Present on a brand change only: the `section.field` it writes. */
+  field?: string;
 }
 
 /** The key a module switch is filed under on a proposal: `module:<id>`. */
@@ -444,16 +447,18 @@ export function mintRuleLabel(rule: MintRuleValues, field: MintRuleField): strin
  * refused at validation rather than voted on and silently dropped.
  */
 // Widened by the dispatcher lane as each executor landed in
-// `server/lib/changeset.ts`. `brand_field` and `role` are deliberately still
-// outside it: a role act has its own subject types and its own closers, and the
-// brand writer has no change-set executor yet. Absence refuses at validation,
-// which is the fail-safe direction.
+// `server/lib/changeset.ts`. `role` is deliberately still outside it: a role
+// act has its own subject types and its own closers. `brand_field` came in with
+// Rye's 2026-11-06 rule ("EVERYTHING can change with the highest village
+// vote"), within the limits shared/brandVote.ts sets. Absence refuses at
+// validation, which is the fail-safe direction.
 export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<ChangeItemKind>([
   "dial",
   "mint_rule",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
+  "brand_field",
 ]);
 
 /** The cap a change set may not pass. A proposal is read before it is voted on. */
@@ -478,6 +483,8 @@ export interface ValidateChangeSetOptions {
    * kept now the vote is binding).
    */
   openModuleProposal?: (moduleId: string) => Promise<string | null>;
+  /** The brand document as it stands, for a `brand_field` item. Refused without it. */
+  brandOf?: () => unknown;
   /**
    * True before the start, when the founders hold founder-held dials and a
    * founder adopts a proposal on them by hand (./founderDials.ts). A set may
@@ -558,6 +565,33 @@ export async function validateChangeSet(
       const checked = await moduleSwitchProblem(item, seen, options);
       if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });
       else normalized.push(checked);
+      continue;
+    }
+    if (item.kind === "brand_field") {
+      const field = String(item.field ?? "").trim();
+      const key = brandChangeKey(field);
+      if (!options?.brandOf) {
+        problems.push({ key, problem: "This build cannot read the village's brand from here" });
+        continue;
+      }
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same brand field appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const brand = options.brandOf();
+      const to = String(item.to ?? "");
+      const problem = brandVoteProblem(brand, field, to);
+      if (problem) {
+        problems.push({ key, problem });
+        continue;
+      }
+      const from = brandFieldValue(brand, field) ?? "";
+      if (from === to) {
+        problems.push({ key, problem: "That field already says this" });
+        continue;
+      }
+      normalized.push({ key, from, to, kind: "brand_field", field });
       continue;
     }
     const key = String((item as DialItem | MintRuleItem).key ?? "");
