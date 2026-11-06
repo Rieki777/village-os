@@ -246,8 +246,10 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
       expect(draft.changes[0].payload.valueMinor).toBe(before * 2);
       expect((await roleOf(id)).valueMinor).toBe(before);
       const rec = await call("GET /api/org/roles/:id/pay/settings", { params: { id } });
-      expect(rec.body.settings[0]).toMatchObject({ state: "awaiting_vote", reason: "Retro top-up", setterId: "member-9" });
-      expect(rec.body.settings[1]).toMatchObject({ state: "set", setterId: "treasurer-1" });
+      // Both records are kept; found by state, since two written in the same second have no order between them.
+      const byState = (st: string) => rec.body.settings.find((x: any) => x.state === st);
+      expect(byState("awaiting_vote")).toMatchObject({ reason: "Retro top-up", setterId: "member-9" });
+      expect(byState("set")).toMatchObject({ setterId: "treasurer-1" });
     });
 
     it("never lowers a figure, and names the different proposal that can", async () => {
