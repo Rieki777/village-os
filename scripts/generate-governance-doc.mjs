@@ -2007,6 +2007,8 @@ const KNOWN_DIALS = [
   "governance.subject_mint_rule_quorum_pct",
   "governance.subject_mint_rule_unity_pct",
   "governance.highest_tier",
+  // The launch's head count, a dial since Rye's 2026-11-06 "everything can change with the highest village vote".
+  "governance.launch_min_electorate",
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",

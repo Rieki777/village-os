@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 195 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 196 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 217 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 218 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-244 dials in 36 categories. 144 carry a minimum and a maximum. By type: 107 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
+245 dials in 36 categories. 145 carry a minimum and a maximum. By type: 108 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 217 of them as soon as it is saved, and
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
-| Governance | 46 | 40 | 6 |
+| Governance | 47 | 41 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -196,6 +196,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Constitutional changes: quorum floor | `governance.tier_constitutional_quorum_pct` | Governance | percentage | `97` | the whole village |
 | Constitutional changes: unity floor | `governance.tier_constitutional_unity_pct` | Governance | percentage | `97` | the whole village |
 | The tier a veto override is passed at | `governance.highest_tier` | Governance | choice | `constitutional` | the whole village |
+| Members it takes to launch | `governance.launch_min_electorate` | Governance | integer | `3` | the whole village |
 | Minting rule changes: quorum floor | `governance.subject_mint_rule_quorum_pct` | Governance | percentage | `50` | the whole village |
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
 | Roles speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
@@ -1661,7 +1662,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-46 dials. 40 for the whole village, 6 for the founder or an admin.
+47 dials. 41 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -2295,6 +2296,21 @@ What it may be set to:
 - `routine` Routine. Your own unity and quorum settings decide an override.
 - `structural` Structural. An override asks the structural bar: how the village decides.
 - `constitutional` Constitutional. An override asks the highest bar this platform ships.
+
+### Members it takes to launch
+
+How many members must hold a voice before the village can vote to start its Game. Every one of them has to say yes. The default is three: a founder and two more. Moving it costs the highest tier your village works at.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.launch_min_electorate` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 50 |
+| Counted in | members |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
 
 ### Minting rule changes: quorum floor
 
