@@ -609,7 +609,11 @@ once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the 
 **The invoice rails and the treasury sync (0329, Rye 2026-11-06) read this record and never write
 it.** A member's own "Send for approval" also emails the invoice, with a PDF and its bill ref in the
 subject, to the village's Sera inbox when the moon-review setting `seraInbox` names one (blank on
-the platform, so nothing is emailed by default). Each invoice carries one track: sent, received by
+the platform, so nothing is emailed by default). The copy that leaves names the member by village
+name and bridge code-name; the legal name on the pay route never leaves the village (Rye,
+2026-11-06). While two or more people hold `cash.pay` or `steward.veto`, a new inbox address waits
+for a second of them to confirm it, and every member is told the new address when it applies;
+clearing the inbox applies at once, since it only stops mail (C7, Rye 2026-11-06). Each invoice carries one track: sent, received by
 Sera, approved, paid. Sent, approved and paid are read off `moon_invoices` and the transfer note the
 transfers door writes, so nothing is copied and nothing can count twice; received is read only off
 Sera's own typed record. The Sync on the member's Cash card reconciles three sources, each shown with
