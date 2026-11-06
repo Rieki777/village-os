@@ -601,7 +601,7 @@ export const MODULES: ModuleDef[] = [
   //    per-deployment admin act. ──────────────────────────────────────────────
   {
     id: "map",
-    guild: [],
+    guild: ["satellite-imagery-key"],
     setupNeeds: [
       {
         id: "first-circle",

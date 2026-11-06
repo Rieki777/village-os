@@ -23,6 +23,7 @@
  * mode of every alerting system is the same one: a loop that fires ten
  * thousand identical alerts and teaches everyone to mute the channel.
  */
+import { secretValue } from "./secrets";
 import { guardedFetchJson } from "./toolcheck";
 
 export interface ErrorContext {
@@ -82,6 +83,20 @@ function fingerprint(err: unknown, where: string): string {
   return `${where}|${msg.slice(0, 120)}|${frame.slice(0, 120)}`;
 }
 
+/**
+ * Where crash alerts go outside the app: typed into Admin, Integrations first,
+ * ERROR_WEBHOOK_URL second (readiness R171). A crash can come before boot has
+ * loaded the store, when `secretValue` throws, and the host's address is then
+ * all there is. Reading it must never become a second crash.
+ */
+function errorWebhookUrl(): string {
+  try {
+    return secretValue("error_webhook_url").trim();
+  } catch {
+    return String(process.env.ERROR_WEBHOOK_URL ?? "").trim();
+  }
+}
+
 export async function reportError(err: unknown, ctx: ErrorContext): Promise<ErrorDelivery> {
   const e = err as any;
   const message = String(e?.message ?? e ?? "unknown error");
@@ -112,7 +127,7 @@ export async function reportError(err: unknown, ctx: ErrorContext): Promise<Erro
     }
   }
 
-  const url = process.env.ERROR_WEBHOOK_URL;
+  const url = errorWebhookUrl();
   if (!url) return delivery;
   try {
     // Through the pinned-IP dialer, like every other outbound call: an
@@ -133,7 +148,7 @@ export async function reportError(err: unknown, ctx: ErrorContext): Promise<Erro
     });
     delivery.webhook = "sent";
   } catch (sendErr) {
-    console.error("[error] could not reach ERROR_WEBHOOK_URL", sendErr);
+    console.error("[error] could not reach the crash alert address (Admin, Integrations, or ERROR_WEBHOOK_URL)", sendErr);
     delivery.webhook = "failed";
   }
   return delivery;
