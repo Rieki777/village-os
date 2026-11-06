@@ -387,9 +387,11 @@ import {
   type BallotRow,
 } from "./lib/ballots";
 import {
-  weightsFor,
+  WEIGHT_CAP_ON_KEY,
+  WEIGHT_CAP_PCT_KEY,
+  rollWeightsFor,
+  weightModeNow,
   weightTokenProblem,
-  type WeightModeSnapshot,
 } from "./lib/governanceWeights";
 import { ADVISORY_TYPES, typeRefusesCapability } from "./lib/proposalDrafts";
 import {
@@ -415,8 +417,8 @@ import {
 } from "../shared/ballotSubjects";
 import { timingOf } from "../shared/governanceKinds";
 import { CURRENCY_DECIMALS, WHOLE_UNITS } from "../shared/tokenScale";
-/** The two dials a started Game answers for itself, through a governance_mode ballot. */
-const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token"]);
+/** The dials a started Game answers for itself: the mode and token by a governance_mode ballot, the cap by a proposal. */
+const WEIGHT_KEYS_AFTER_START = new Set(["governance.weight_mode", "governance.weight_token", WEIGHT_CAP_ON_KEY, WEIGHT_CAP_PCT_KEY]);
 import { isMintRuleKey, parseMintRuleKey } from "../shared/mintRuleKeys";
 import {
   allTokens,
@@ -21382,12 +21384,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   app.use("/api/governance", requireModule("governance"));
   app.use("/api/admin/governance", requireModule("governance"));
 
-  /** The weight-mode snapshot the NEXT ballot would freeze (founder-held). */
-  function weightModeNow(): WeightModeSnapshot {
-    const raw = stringVar("governance.weight_mode");
-    const mode = raw === "token" || raw === "custom" ? raw : "equal";
-    return { mode, token: mode === "token" ? stringVar("governance.weight_token").trim() : null };
-  }
+  // `weightModeNow`, the snapshot the NEXT ballot would freeze, lives in
+  // server/lib/governanceWeights.ts beside the cap it now carries.
 
   /**
    * The village-wide electorate, built through the ONE gate: every real,
@@ -21417,8 +21415,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       const ctx = await capabilityCtx(u);
       if (hasCapability("ballot.vote", ctx)) eligible.push(u);
     }
+    // The whole roll, so the cap on one member's weight (when it is on) is
+    // measured against everybody who may vote, and frozen with them.
     const snapshot = weightModeNow();
-    const weights = await weightsFor(getPool(), eligible.map((u: any) => String(u.id)), snapshot);
+    const weights = await rollWeightsFor(getPool(), eligible.map((u: any) => String(u.id)), snapshot);
     return eligible.map((u: any) => ({ userId: String(u.id), weight: weights.get(String(u.id)) ?? 0 }));
   }
 

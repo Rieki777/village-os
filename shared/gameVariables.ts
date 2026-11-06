@@ -1422,6 +1422,37 @@ export const VARIABLES: VariableDef[] = [
     type: "text",
     default: "gratitude",
   },
+  // THE CAP ON ONE MEMBER'S SHARE OF THE VOTE (Rye, 2026-11-05: "built as an
+  // option, OFF by default"). A switch and a number, and never a 0 that means
+  // "no cap": caps fail closed here, so 0 would mean zero, and OFF is what the
+  // switch is for. Same ring and bar as the mode, because both move what one
+  // vote weighs. The water-fill, and why a small roll weighs everyone the
+  // same: `capWeights`, shared/governanceShare.ts.
+  {
+    key: "governance.weight_cap_on",
+    category: "Governance",
+    label: "Cap one member's voting weight",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "governance.weight_cap_pct",
+    category: "Governance",
+    label: "The most voting weight one member can carry",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.",
+    type: "percentage",
+    default: "20",
+    min: 1,
+    max: 100,
+    unit: "%",
+  },
   {
     key: "governance.unity_pct",
     category: "Governance",
