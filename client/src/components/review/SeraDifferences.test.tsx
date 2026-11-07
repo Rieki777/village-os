@@ -60,9 +60,19 @@ function listAnswer(differences: ListedDifference[], over: Record<string, unknow
   };
 }
 
-function serve(routes: { count?: Answer; list?: Answer; guide?: Answer }) {
-  const fetchMock = vi.fn(async (url: string) => {
+function serve(routes: { count?: Answer; list?: Answer; guide?: Answer; sync?: Answer; listAfterSync?: Answer }) {
+  let synced = false;
+  const fetchMock = vi.fn(async (url: string, init?: { method?: string }) => {
     const path = String(url);
+    if (path === "/api/saberra/sync" && init?.method === "POST") {
+      synced = true;
+      const [s, b] = routes.sync ?? [200, {}];
+      return { ok: s >= 200 && s < 300, status: s, json: async () => b };
+    }
+    if (path === "/api/saberra/differences" && synced && routes.listAfterSync) {
+      const [s, b] = routes.listAfterSync;
+      return { ok: s >= 200 && s < 300, status: s, json: async () => b };
+    }
     const [status, body]: Answer =
       path === "/api/saberra/differences/count"
         ? (routes.count ?? [200, { ...COUNT, lastReadAt: TODAY_1405(), lastReadWhole: true }])
@@ -235,8 +245,12 @@ describe("the Waiting for you board", () => {
     serve({ list: [200, listAnswer(mainBoard())] });
     show();
     await screen.findByRole("heading", { level: 2 });
+    // What is shown is said under the chips, in the status line (Q4).
+    const shown = () => screen.getAllByRole("status").map((s) => s.textContent).join(" ");
+    expect(shown()).toContain("Showing 5 changes: To decide");
     fireEvent.click(screen.getByRole("button", { name: "Conflicts 1" }));
     expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(shown()).toContain("Showing 1 change: Conflicts");
     expect(screen.getByRole("button", { name: "Conflicts 1" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Check first 1" }));
     expect(screen.getAllByRole("article")[0].textContent).toContain("Well Monitor");
@@ -244,6 +258,8 @@ describe("the Waiting for you board", () => {
     expect(screen.getAllByRole("article")).toHaveLength(5);
     // The lane and the circle live behind Filter.
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));
+    fireEvent.change(screen.getByLabelText("Which changes"), { target: { value: "all" } });
+    expect(shown()).toContain("Showing all 7 waiting changes");
     fireEvent.change(screen.getByLabelText("Which changes"), { target: { value: "small" } });
     expect(screen.getAllByRole("article")).toHaveLength(2);
     fireEvent.change(screen.getByLabelText("Circle"), { target: { value: "c-water" } });
@@ -401,6 +417,9 @@ describe("the conflict board", () => {
     expect(seraBlock.querySelector("del")?.className).toContain("line-through");
     expect(seraBlock.querySelector("ins")?.className).toContain("underline");
     expect(within(seraBlock).getByText("Struck words are only here. Underlined words are only in Sera's version.")).toBeTruthy();
+    // A screen reader hears which words went and which came (nit).
+    expect(seraBlock.querySelector("del")?.previousElementSibling?.textContent).toBe("removed: ");
+    expect(seraBlock.querySelector("ins")?.previousElementSibling?.textContent).toBe("added: ");
     // Clamped to four lines until the reader asks for both in full.
     const ours = (here.closest("section") as HTMLElement).querySelector("p") as HTMLElement;
     expect(ours.className).toContain("line-clamp-4");
@@ -431,10 +450,24 @@ describe("the read states", () => {
     expect(screen.getByText(/^Nothing counts as removed because of a check that failed\./)).toBeTruthy();
     // The list it is from still shows.
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Sera suggests 5 changes for you to decide");
-    const before = fetchMock.mock.calls.length;
+    // Check again asks the service through the by-hand sync (Q3), and says so inside the card.
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
-    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/^Checked again at \d\d:\d\d\.$/));
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    const card = screen.getByRole("heading", { level: 3, name: "Sera didn't answer at 14:05" }).closest("section") as HTMLElement;
+    await waitFor(() => expect(within(card).getByRole("status").textContent).toMatch(/^Sera still didn't answer at \d\d:\d\d\.$/));
+    expect(fetchMock.mock.calls.some(([u, i]) => String(u) === "/api/saberra/sync" && (i as { method?: string } | undefined)?.method === "POST")).toBe(true);
+  });
+
+  it("says the service answered when the by-hand sync reads it whole, and a refusal in its own words (Q3)", async () => {
+    const failed = listAnswer(mainBoard(), { lastReadWhole: false, reads: { circles: "failed", roles: "failed" } });
+    serve({ list: [200, failed], sync: [200, {}], listAfterSync: [200, listAnswer(mainBoard())] });
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toMatch(/Sera answered at \d\d:\d\d\./));
+    cleanup();
+    serve({ list: [200, failed], sync: [409, { error: "A sync is already running. Its report appears under Sync now when it finishes." }] });
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toContain("A sync is already running."));
   });
 
   it("names the one kind that did not come through, and never empties the list for it", async () => {
@@ -507,6 +540,18 @@ describe("what a member sees", () => {
     expect(screen.getByText(/^Members see how many changes wait and who decides them\./)).toBeTruthy();
     expect(screen.queryAllByRole("article")).toHaveLength(0);
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("asks no list a member may not read, and tells a decider how the changes reach them (Q5)", async () => {
+    const fetchMock = serve({ count: [200, { ...count, reader: { mayRead: false, decides: true } }], guide: [200, guide] });
+    show();
+    expect(await screen.findByText("These reach you as a draft to publish, once someone who reads the list puts them in one.")).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([u]) => String(u))).not.toContain("/api/saberra/differences");
+    cleanup();
+    serve({ count: [200, { ...count, reader: { mayRead: false, decides: false } }], guide: [200, guide] });
+    show();
+    await screen.findByRole("heading", { level: 2 });
+    expect(screen.queryByText(/These reach you as a draft/)).toBeNull();
   });
 
   it("says the village decides by vote when nobody holds the power", async () => {
@@ -582,6 +627,8 @@ describe("the 1280 px board", () => {
     const cols = within(pane).getAllByRole("heading", { level: 4 });
     expect(cols.map((h) => h.textContent)).toEqual(["Here now", "Sera's version"]);
     expect((cols[0].parentElement?.parentElement as HTMLElement).className).toContain("grid-cols-2");
+    // A button holds phrasing content only: its chips are spans (nit).
+    expect(firstRow.querySelector("p")).toBeNull();
     // Compact rows: no source line and no actions in the list column.
     expect(screen.getAllByRole("link", { name: "Decide it in the structure review" })).toHaveLength(1);
     expect(screen.getAllByRole("article").every((a) => !a.textContent?.includes("Edited in Sera"))).toBe(true);

@@ -26,9 +26,15 @@ export function DiffText({ here, sera }: { here: string; sera: string }) {
         <span key={i}>
           {i > 0 && " "}
           {p.side === "here" ? (
-            <del className="text-coral line-through">{p.text}</del>
+            <>
+              <span className="sr-only">removed: </span>
+              <del className="text-coral line-through">{p.text}</del>
+            </>
           ) : p.side === "sera" ? (
-            <ins className="text-sage underline decoration-2 underline-offset-2">{p.text}</ins>
+            <>
+              <span className="sr-only">added: </span>
+              <ins className="text-sage underline decoration-2 underline-offset-2">{p.text}</ins>
+            </>
           ) : (
             p.text
           )}
@@ -89,11 +95,11 @@ export function CompareBlocks({ d, agent, layout }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5 min-w-0">
             <h4 className="text-sm font-bold text-foreground">Here now</h4>
-            <p ref={hereRef} className={`text-[15px] leading-relaxed text-foreground${clamp}`}>{hereText}</p>
+            <p ref={hereRef} className={`text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere]${clamp}`}>{hereText}</p>
           </div>
           <div className="flex flex-col gap-1.5 min-w-0">
             <h4 className="text-sm font-bold text-foreground">{theirsTitle}</h4>
-            <p ref={seraRef} className={`text-[15px] leading-relaxed text-foreground${clamp}`}>
+            <p ref={seraRef} className={`text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere]${clamp}`}>
               <DiffText here={ours} sera={theirs} />
             </p>
           </div>
@@ -107,11 +113,11 @@ export function CompareBlocks({ d, agent, layout }: Props) {
     <div className="flex flex-col gap-4">
       <section aria-labelledby={`${id}-here`} className="bg-card border border-border rounded-xl p-3.5 flex flex-col gap-2">
         <h3 id={`${id}-here`} className="text-[15px] font-bold text-foreground">Here now</h3>
-        <p ref={hereRef} className={`text-[15px] leading-normal text-foreground${clamp}`}>{hereText}</p>
+        <p ref={hereRef} className={`text-[15px] leading-normal text-foreground [overflow-wrap:anywhere]${clamp}`}>{hereText}</p>
       </section>
       <section aria-labelledby={`${id}-sera`} className="bg-card border border-border rounded-xl p-3.5 flex flex-col gap-2">
         <h3 id={`${id}-sera`} className="text-[15px] font-bold text-foreground">{theirsTitle}</h3>
-        <p ref={seraRef} className={`text-[15px] leading-normal text-foreground${clamp}`}>
+        <p ref={seraRef} className={`text-[15px] leading-normal text-foreground [overflow-wrap:anywhere]${clamp}`}>
           <DiffText here={ours} sera={theirs} />
         </p>
         {legend}
@@ -152,7 +158,7 @@ export default function SeraCompare({
       >
         {backWords}
       </button>
-      <h2 ref={heading} tabIndex={-1} className="text-xl leading-snug font-bold text-foreground focus:outline-none">
+      <h2 ref={heading} tabIndex={-1} className="text-xl leading-snug font-bold text-foreground focus:outline-none [overflow-wrap:anywhere]">
         {d.words.sentence}
       </h2>
       <p className="text-sm leading-normal text-muted-foreground">{source}</p>

@@ -97,7 +97,11 @@ export function useSeraDifferences() {
       if (!c.ok) return setRead({ phase: "failed", error: errorOf(c.body) ?? "Could not read the differences" });
       const count = readCount(c.body);
       if (!count) return setRead({ phase: "off" });
-      const l = await answer(await fetch("/api/saberra/differences", { headers: { Authorization: `Bearer ${token}` } }));
+      // A reader the list would refuse is never sent to it (QA Q5): no 401 on every member's page.
+      const l =
+        count.reader?.mayRead === false
+          ? { status: 401, ok: false, body: null }
+          : await answer(await fetch("/api/saberra/differences", { headers: { Authorization: `Bearer ${token}` } }));
       if (l.status === 401 || l.status === 403) {
         const guide = await fetch("/api/guide", { headers: { Authorization: `Bearer ${token}` } }).then(answer).catch(() => null);
         return setRead({ phase: "member", count, agent: agentFromGuide(guide?.ok ? guide.body : null) });
@@ -167,23 +171,26 @@ function useWide(): boolean {
 }
 
 const card = "bg-card border border-border rounded-xl";
+/** A ring offset from the fill, so focus shows on a teal control (QA Q2): the default outline is the fill's own colour. */
+const ring = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-deep";
 const primary =
-  "inline-flex items-center justify-center min-h-[44px] px-3.5 rounded-lg bg-teal-deep text-white text-sm font-semibold hover:bg-teal-deep-dark";
+  `inline-flex items-center justify-center min-h-[44px] px-3.5 rounded-lg bg-teal-deep text-white text-sm font-semibold hover:bg-teal-deep-dark ${ring}`;
 const secondary =
   "inline-flex items-center justify-center min-h-[44px] px-3.5 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-muted";
 const inlineLink = "text-teal-deep underline hover:text-teal-deep-dark";
 const chip = "self-start rounded-md bg-amber-light text-amber-ink font-semibold";
 
 /** Flags in words, then the conflict, each its own chip and never a colour alone (R39). */
-function Chips({ d, small }: { d: ListedDifference; small?: boolean }) {
+function Chips({ d, small, inline }: { d: ListedDifference; small?: boolean; inline?: boolean }) {
+  const Tag = inline ? "span" : "p";
   const size = small ? "px-2 py-0.5 text-xs" : "px-2 py-1 text-[13px]";
   if (d.words.flags.length === 0 && d.state !== "conflict") return null;
   return (
     <>
       {d.words.flags.map((f, i) => (
-        <p key={i} className={`${chip} ${size}`}>{f}</p>
+        <Tag key={i} className={`${chip} ${size}`}>{f}</Tag>
       ))}
-      {d.state === "conflict" && <p className={`${chip} ${size}`}>Conflict</p>}
+      {d.state === "conflict" && <Tag className={`${chip} ${size}`}>Conflict</Tag>}
     </>
   );
 }
@@ -247,7 +254,7 @@ const nestedWords = (n: number) =>
 function RowCard({ ctx, d, nested }: { ctx: Ctx; d: ListedDifference; nested: ListedDifference[] }) {
   return (
     <article className={`${card} p-3 flex flex-col gap-1.5`}>
-      <p className="text-[15px] leading-snug font-medium text-foreground">{d.words.sentence}</p>
+      <p className="text-[15px] leading-snug font-medium text-foreground [overflow-wrap:anywhere]">{d.words.sentence}</p>
       <p className="text-[13px] text-muted-foreground">
         <Source d={d} />
       </p>
@@ -282,8 +289,8 @@ function CompactRow({ d, selected, onSelect, inset }: { d: ListedDifference; sel
         onClick={onSelect}
         className={`w-full text-left min-h-[44px] flex flex-col gap-1 rounded-[10px] ${selected ? "p-[11px]" : "p-3"}`}
       >
-        <span className={`text-sm leading-normal text-foreground${selected ? " font-semibold" : ""}`}>{d.words.sentence}</span>
-        <Chips d={d} small />
+        <span className={`text-sm leading-normal text-foreground [overflow-wrap:anywhere]${selected ? " font-semibold" : ""}`}>{d.words.sentence}</span>
+        <Chips d={d} small inline />
       </button>
     </article>
   );
@@ -296,9 +303,9 @@ function Pane({ ctx, d }: { ctx: Ctx; d: ListedDifference | null }) {
     <section
       id="sera-pane"
       aria-labelledby="sera-pane-h"
-      className={`${card} flex-1 min-w-0 p-5 flex flex-col gap-3.5 sticky top-24 self-start`}
+      className={`${card} flex-1 min-w-0 p-5 flex flex-col gap-3.5 sticky top-24 self-start max-h-[calc(100vh-7rem)] overflow-y-auto`}
     >
-      <h3 id="sera-pane-h" className="text-lg leading-snug font-bold text-foreground">
+      <h3 id="sera-pane-h" className="text-lg leading-snug font-bold text-foreground [overflow-wrap:anywhere]">
         {d.words.sentence.replace(/\.$/, "")}
       </h3>
       <p className="text-sm text-muted-foreground">
@@ -348,7 +355,7 @@ function SeraList({
   const [factsOpen, setFactsOpen] = useState(false);
   const [comparing, setComparing] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
+  const [asked, setAsked] = useState("");
   const backTo = useRef<string | null>(null);
   const root = useRef<HTMLElement>(null);
   const ids = useId();
@@ -382,10 +389,22 @@ function SeraList({
     });
   }, [comparing]);
 
+  /**
+   * Check again asks the service now, through the same by-hand sync the admin panel offers
+   * (`POST /api/saberra/sync`, behind the list's own key). It writes nothing to the chart; a
+   * sync already running is its own named refusal. The outcome stays in the card (QA Q3).
+   */
   const checkAgain = async () => {
-    setStatus(`Checking again.`);
+    setAsked("Asking now.");
+    const token = authToken();
+    const r = await fetch("/api/saberra/sync", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }).catch(() => null);
+    const at = clockWords(new Date().toISOString()) ?? "now";
+    if (!r) return setAsked("Could not reach the server.");
+    const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
+    if (r.status === 502) setAsked(`${agent} still didn't answer at ${at}.`);
+    else if (!r.ok) setAsked(typeof body?.error === "string" ? body.error : `The check did not run (${r.status}).`);
     await onRetry();
-    setStatus(`Checked again at ${clockWords(new Date().toISOString()) ?? "now"}.`);
+    if (r.ok) setAsked(`answered:${at}`);
   };
 
   const headline = headlineWords(agent, w, step);
@@ -396,9 +415,14 @@ function SeraList({
   const headCount = w.toDecide.length || w.small.length;
   const nChecks = waiting.filter(checkFirst).length;
   const nConflicts = waiting.filter((d) => d.state === "conflict").length;
-  const status_ = (
-    <p role="status" className={status ? "text-sm text-muted-foreground" : "sr-only"}>
-      {status}
+  // What the chips and the filter show, said out loud and under the chips (QA Q4).
+  const shownLabel =
+    only === "checkFirst" ? "Check first" : only === "conflicts" ? "Conflicts" : view === "decide" ? "To decide" : view === "small" ? "Small changes" : null;
+  const circleName = circle ? allGroups.find((g) => g.key === circle)?.name ?? "Not in a circle" : null;
+  const shownWords = [shownLabel, circleName].filter(Boolean).join(", ");
+  const status_ = waiting.length > 0 && (
+    <p role="status" className="text-sm text-muted-foreground">
+      {shownWords ? `Showing ${changes(shownList.length)}: ${shownWords}` : `Showing all ${shownList.length} waiting changes`}
     </p>
   );
 
@@ -426,7 +450,7 @@ function SeraList({
 
   const pressed = (on: boolean) =>
     `min-h-[44px] px-3.5 rounded-full border text-sm ${
-      on ? "bg-teal-deep border-teal-deep text-white font-semibold hover:bg-teal-deep-dark" : "bg-card border-border text-foreground font-medium hover:bg-muted"
+      on ? `bg-teal-deep border-teal-deep text-white font-semibold hover:bg-teal-deep-dark ${ring}` : "bg-card border-border text-foreground font-medium hover:bg-muted"
     }`;
   const chipRow = waiting.length > 0 && (
     <div className="flex flex-col gap-3">
@@ -538,6 +562,11 @@ function SeraList({
     </>
   );
 
+  // What Check again found, said in the card while the card stands, and under the headline once the read is whole.
+  const askedWords = asked.startsWith("answered:") ? `${agent} ${trouble?.noAnswer ? "still didn't answer" : "answered"} at ${asked.slice(9)}.` : asked;
+  const askedLine = !trouble?.noAnswer && asked && (
+    <p role="status" className="text-sm text-foreground">{askedWords}</p>
+  );
   const troubleCards = trouble && (
     <>
       {trouble.noAnswer ? (
@@ -548,9 +577,12 @@ function SeraList({
           {trouble.lines.map((l) => (
             <p key={l} className="text-[15px] leading-normal text-foreground">{l}</p>
           ))}
-          <button type="button" onClick={() => void checkAgain()} className={`${primary} self-start px-4`}>
-            Check again
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => void checkAgain()} className={`${primary} self-start px-4`}>
+              Check again
+            </button>
+            <p role="status" className="text-sm text-foreground">{askedWords}</p>
+          </div>
         </section>
       ) : (
         <div className={`${card} p-3.5`}>
@@ -577,7 +609,7 @@ function SeraList({
           {aheadOpen && (
             <ul className="flex flex-col gap-2">
               {w.oursAhead.map((d) => (
-                <li key={d.key} className={`${card} p-3 text-sm text-foreground`}>
+                <li key={d.key} className={`${card} p-3 text-sm text-foreground [overflow-wrap:anywhere]`}>
                   {d.words.sentence}
                   <span className="block text-[13px] text-muted-foreground mt-1"><Source d={d} /></span>
                 </li>
@@ -599,7 +631,7 @@ function SeraList({
           <p className="mt-2 text-sm text-muted-foreground">Review dates, sectors and role types {agent} keeps.</p>
           <ul className="mt-3 flex flex-col gap-3">
             {w.facts.map((d) => (
-              <li key={d.key} className="text-sm text-foreground">
+              <li key={d.key} className="text-sm text-foreground [overflow-wrap:anywhere]">
                 {d.words.sentence}
                 <span className="block text-[13px] text-muted-foreground mt-0.5"><Source d={d} /></span>
               </li>
@@ -615,6 +647,7 @@ function SeraList({
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
         {troubleCards}
+        {askedLine}
         <p className="text-[15px] leading-normal text-muted-foreground">
           {checked ?? `Nothing has been read from ${agent} yet.`}
           {step ? " Nothing waits for you, and no draft is open." : draftOpen ? " A draft from this queue is still open." : ""}
@@ -627,7 +660,6 @@ function SeraList({
           </section>
         )}
         {bottom}
-        {status_}
       </section>
     );
   }
@@ -647,13 +679,14 @@ function SeraList({
           </p>
         )}
         {troubleCards}
+        {askedLine}
         {chipRow}
+        {status_}
         <div className="flex gap-6 items-start">
           <div className="w-[480px] shrink-0 flex flex-col gap-2">{groups(true)}</div>
           <Pane ctx={ctx} d={pick} />
         </div>
         {bottom}
-        {status_}
       </section>
     );
   }
@@ -663,6 +696,7 @@ function SeraList({
       <div className="flex flex-col gap-3">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
         {troubleCards}
+        {askedLine}
         {facts && <p className="text-sm leading-normal text-muted-foreground">{factsLine}</p>}
         {(small || checked) && (
           <p className="text-sm leading-normal text-muted-foreground">
@@ -672,10 +706,10 @@ function SeraList({
           </p>
         )}
         {chipRow}
+        {status_}
       </div>
       {groups(false)}
       {bottom}
-      {status_}
     </section>
   );
 }
@@ -697,6 +731,9 @@ function SeraMember({ count, agent }: { count: CountAnswer; agent: string }) {
       <div className={`${card} p-3.5 flex flex-col gap-2.5`}>
         <h2 id={`${ids}-h`} className="text-[19px] leading-snug font-bold text-foreground">{heading}</h2>
         {n > 0 && count.decides && <p className="text-[15px] leading-normal text-foreground">{whoDecidesWords(count.decides, n)}</p>}
+        {count.reader?.decides && (
+          <p className="text-[15px] leading-normal text-foreground">These reach you as a draft to publish, once someone who reads the list puts them in one.</p>
+        )}
         <p className="text-sm leading-normal text-muted-foreground">Small changes applying by themselves: off.</p>
       </div>
       <p className="text-[13px] leading-normal text-muted-foreground">

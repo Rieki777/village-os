@@ -32,6 +32,8 @@ export interface CountAnswer extends DifferenceCount {
   decides: Door | null;
   /** Who sets pay, the same way. */
   paySetBy: Door | null;
+  /** About this reader: may they read the list (null when the server could not say), and do they decide. */
+  reader?: { mayRead: boolean | null; decides: boolean };
 }
 
 /** `GET /api/saberra/differences`, behind the review queue's key. */
@@ -79,6 +81,9 @@ export function readCount(v: unknown): CountAnswer | null {
     lastReadWhole: v.lastReadWhole === true,
     decides: readDoor(v.decides),
     paySetBy: readDoor(v.paySetBy),
+    reader: isObj(v.reader)
+      ? { mayRead: typeof v.reader.mayRead === "boolean" ? v.reader.mayRead : null, decides: v.reader.decides === true }
+      : undefined,
   };
 }
 

@@ -340,8 +340,13 @@ export function register(app: Express, deps: Deps): void {
     try {
       const count = countAnswer(await read());
       // Who decides and who sets pay, by the holder test: role names and first names only (S2).
-      const doors = deciders && members ? await doorsNow(getPool(), deciders, members) : { decides: null, paySetBy: null };
-      res.json({ ...count, ...doors });
+      const doors = deciders && members ? await doorsNow(getPool(), deciders, members) : null;
+      // About this reader, outside the cache (QA Q5): the list's own gate, and whether they decide.
+      const reader = {
+        mayRead: mayStillSee ? await mayStillSee(req, "intake.moderate") : null,
+        decides: !!doors && doors.deciderIds.includes(String(user.id)),
+      };
+      res.json({ ...count, decides: doors?.decides ?? null, paySetBy: doors?.paySetBy ?? null, reader });
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
     }

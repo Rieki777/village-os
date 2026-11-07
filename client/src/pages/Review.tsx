@@ -589,6 +589,8 @@ export default function Review() {
         </div>
 
         <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} />
+        {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
+        <div className="max-w-4xl space-y-6">
 
         {/* Finished work, the summary line's other jump. Consent is the one step that
             releases value, and a claim sitting here is somebody's work going unpaid. */}
@@ -908,6 +910,7 @@ export default function Review() {
             onReject={(reason) => void rejectQuest(q, reason)}
           />
         ))}
+        </div>
       </div>
     </Layout>
   );

@@ -105,7 +105,7 @@ export async function doorsNow(
   pool: Pool,
   deciders: Deciders,
   members: { all(): Promise<unknown[]> },
-): Promise<{ decides: Door; paySetBy: Door }> {
+): Promise<{ decides: Door; paySetBy: Door; deciderIds: string[] }> {
   const [launched, people, orgRoles] = await Promise.all([launchedByVote(pool), members.all(), deciders.orgRoles()]);
   const names = new Map<string, string>();
   for (const m of people as Array<Record<string, unknown>>) {
@@ -113,15 +113,19 @@ export async function doorsNow(
     if (typeof m.id === "string" || typeof m.id === "number") names.set(String(m.id), String(m.name ?? ""));
   }
   const orgName = new Map(orgRoles.map((r) => [r.id, r.name]));
-  const door = async (capability: string): Promise<Door> =>
-    doorFrom({
+  const inputFor = async (capability: string): Promise<DoorInput> => ({
       capability,
       roles: deciders.roles(),
       holdings: deciders.roleHolders(),
       nameOf: (u) => names.get(u) ?? null,
       orgRoleName: (id) => orgName.get(id),
       villageHolder: await deciders.villageHolder(capability),
-      launched,
     });
-  return { decides: await door("org.decide"), paySetBy: await door("cash.pay") };
+  const decideIn = await inputFor("org.decide");
+  return {
+    decides: doorFrom({ ...decideIn, launched }),
+    paySetBy: doorFrom({ ...(await inputFor("cash.pay")), launched }),
+    // Who decides, by id, for the reader's own line (QA Q5); never sent.
+    deciderIds: doorHolders(decideIn).map((h) => h.userId),
+  };
 }

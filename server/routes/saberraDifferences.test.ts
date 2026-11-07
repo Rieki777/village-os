@@ -151,6 +151,8 @@ describe("the count", () => {
       // Before launch (the mock has held no launch vote) the admins hold the door beside the role (N4).
       decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: false, others: 0, admins: true },
       paySetBy: { by: "admins" },
+      // About this reader only, outside the cache (Q5): may they read the list, and do they decide.
+      reader: { mayRead: false, decides: false },
       lanes: { facts: 0, lowRisk: 0, decision: 2 },
       conflicts: 0,
       checkFirst: 2,
@@ -158,8 +160,8 @@ describe("the count", () => {
       lastReadAt: "2025-11-06T09:00:00.000Z",
       lastReadWhole: true,
     });
-    // It asked for no key at all.
-    expect(asked).toEqual([]);
+    // It gated on no key: it only LOOKED, to tell this reader whether the list is theirs to read (Q5).
+    expect(asked).toEqual(["look:intake.moderate"]);
     // The known positive: the list for a reader with the key DOES carry the subjects.
     who.mayLook = true;
     const list = JSON.stringify((await get("/api/saberra/differences")).body);
@@ -266,6 +268,14 @@ describe("who decides, on the count", () => {
     const bare = (await get("/api/saberra/differences/count", bareBase)).body;
     expect(bare.decides).toBeNull();
     expect(bare.paySetBy).toBeNull();
+  });
+});
+
+describe("about this reader (Q5)", () => {
+  it("SAYS WHETHER THIS READER MAY READ THE LIST, by the list's own gate, and whether they decide", async () => {
+    who.mayLook = true;
+    expect((await get("/api/saberra/differences/count")).body.reader).toEqual({ mayRead: true, decides: false });
+    expect((await get("/api/saberra/differences/count", bareBase)).body.reader).toEqual({ mayRead: null, decides: false });
   });
 });
 
