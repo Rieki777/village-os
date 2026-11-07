@@ -1261,15 +1261,16 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
       ]),
     };
     // Pay set here: the service's pay when ours was last in step, carried while ours stays as it was.
-    // Ours changed since the read before: a person set it, having seen the service's pay at that read,
-    // so that read's pay is in step now (review K3). The first time, the read a day before stands in,
-    // the rule a row kept before this one is read by.
+    // Ours changed since the read before, or was not set at all then: a person set it, having seen the
+    // service's pay at that read, so that read's pay is in step now (review K3, R3-1). Only with no
+    // stored match for the role at all does the read a day before stand in, the rule a row kept
+    // before matches were stored is read by.
     if (live.paySet) {
       const before = newestStampOf(older, "roles", pageKey(rec.id), live.id);
       const kept = before?.match;
       const prior = dayBefore?.roles?.records?.find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pageKey(rec.id));
       if (kept?.pay !== undefined && (kept.ourPay === undefined || kept.ourPay === live.payHash)) out.pay = kept.pay;
-      else if (kept?.pay !== undefined && before) out.pay = valueHash(payOf(before, norm)?.key ?? null);
+      else if (before) out.pay = valueHash(payOf(before, norm)?.key ?? null);
       else out.pay = valueHash(prior ? (payOf(prior, norm)?.key ?? null) : (payOf(rec, norm)?.key ?? null));
       if (live.payHash !== undefined) out.ourPay = live.payHash;
     }
@@ -1476,8 +1477,11 @@ export function differences(input: DifferencesInput): Difference[] {
       const was = prior ? (payOf(prior, norm)?.key ?? null) : undefined;
       // With pay set here, against the pay the stored match carries: it shows until a person
       // settles it, never only for a day. A row kept before matches were stored keeps the day.
-      const stamp = newestStampOf(input.snapshots, "roles", pk, live.id)?.match;
-      const inStep = stamp?.pay;
+      const stamped = newestStampOf(input.snapshots, "roles", pk, live.id);
+      const stamp = stamped?.match;
+      // A stored match with no pay: none was set here at that read, so ours was set after it, in
+      // step with what it showed (review R3-1). The read a day before only with no stored match.
+      const inStep = stamp?.pay ?? (stamped ? valueHash(payOf(stamped, norm)?.key ?? null) : undefined);
       // Pay set here changed since the newest read: a person settled what that read showed (review K3).
       const settledHere = inStep !== undefined && stamp?.ourPay !== undefined && live.payHash !== undefined && stamp.ourPay !== live.payHash;
       const moved = settledHere ? false : inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;

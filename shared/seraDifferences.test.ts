@@ -1204,6 +1204,30 @@ describe("second review: pay never leaves the list undecided", () => {
     const [day] = differences(input({ snapshots: [at(30, 1200), at(0, 1000)], live: ours("h-1000"), accepted, asOf: at(30, 1200).takenAt }));
     expect(differenceSentence(day, "Sera")).toContain("It changed since the read a day before, and pay is already set here.");
   });
+
+  it("PAY SET HERE FOR THE FIRST TIME, JUST AFTER THE SERVICE CHANGED IT, IS IN STEP WITH THE READ IT WAS SET AFTER (probe 8 K3, review R3-1)", () => {
+    const ours = (paySet: boolean, hash?: string) => ({ circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { paySet, ...(hash ? { payHash: hash } : {}) })] });
+    const keep = (reads: Snapshot[], l: DifferencesInput["live"], from: Snapshot[] = []) => {
+      let kept = from;
+      for (const s of reads) kept = [stampMatches(input({ snapshots: [s, ...kept], live: l, accepted }))!, ...kept].slice(0, 30);
+      return kept;
+    };
+    const shown = (kept: Snapshot[], l: DifferencesInput["live"]) => differences(input({ snapshots: kept, live: l, accepted })).map((d) => [d.kind, d.state]);
+    // No pay here: the service's figure is a suggestion, read after read.
+    let kept = keep([at(0, 1000)], ours(false));
+    expect(shown(kept, ours(false))).toEqual([["pay", "suggestion"]]);
+    // The service changes it; then the Treasurer sets ours, having seen the newest read.
+    kept = keep([at(6, 1200)], ours(false), kept);
+    expect(shown(kept, ours(true, "h-1200"))).toEqual([]);
+    // The first read after, and six more: still in step, never "changed after pay was last set here".
+    kept = keep([at(12, 1200)], ours(true, "h-1200"), kept);
+    expect(shown(kept, ours(true, "h-1200"))).toEqual([]);
+    kept = keep(later(18, 6, 1200), ours(true, "h-1200"), kept);
+    expect(shown(kept, ours(true, "h-1200"))).toEqual([]);
+    // The control: the service changing it after that is a decision.
+    kept = keep([at(30, 1500)], ours(true, "h-1200"), kept);
+    expect(shown(kept, ours(true, "h-1200"))).toEqual([["pay", "conflict"]]);
+  });
 });
 
 describe("second review C5: a steward's capitals at accept are never taken for the service's words", () => {
