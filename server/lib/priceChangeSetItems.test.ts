@@ -17,7 +17,7 @@ import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 const village = { unityPct: 50, quorumPct: 20 };
 const settings = thresholdSettingsFrom((key) => Number(VARIABLES_BY_KEY[key]?.default ?? 0));
 
-const ROUTINE = { key: "governance.proposals_per_member_per_cycle", to: "6" };
+const ROUTINE = { key: "governance.sensing_days", to: "4" };
 const STRUCTURAL = { key: "governance.landing_expiry_cycles", to: "4" };
 const CONSTITUTIONAL = { key: "governance.veto_hours", to: "96" };
 const MODULE: ChangeInput = { kind: "module_lifecycle", moduleId: "journal", to: "members" };
