@@ -360,6 +360,8 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     serviceHolds("carry");
     await syncByHand(pool);
     const first = await newest();
+    // Carried as they were, each saying when it was read whole (review N1).
+    const carriedFirst = first.circles.records.map((r) => ({ ...r, readAt: first.takenAt }));
 
     const press = async () => {
       // The roles change every time, so each row shows the whole kind moved on.
@@ -371,7 +373,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     let s = await newest();
     expect([s.circles.read, s.roles.read]).toEqual(["failed", "whole"]);
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
     expect(s.roles.records[0]!.fields["Role Name"]).not.toBe(first.roles.records[0]!.fields["Role Name"]);
 
     state.fail = {};
@@ -379,14 +381,14 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     s = await newest();
     expect(s.circles.read).toBe("cut-short");
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     state.endless = {};
     state.read.circle = [];
     await syncByHand(pool);
     s = await newest();
     expect(s.circles.read).toBe("empty");
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     // A schema that offers roles and not circles: the circles were never asked for.
     serviceHolds("carry");
@@ -394,7 +396,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     s = await newest();
     expect([s.circles.read, s.roles.read]).toEqual(["not-asked", "whole"]);
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     // The control: a whole read of the kind replaces it.
     state.tools = [];
@@ -560,6 +562,33 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect([top!.snapshot.circles.read, top!.snapshot.roles.read]).toEqual(["whole", "whole"]);
     expect(under!.snapshot.circles.read).toBe("failed");
   });
+
+  it("A DAILY SCHEDULE AGAINST A DEAD SERVICE FOR 61 DAYS ENDS WITH NO CARRIED RECORDS: a kind ages from its last whole read (review N1, N6)", async () => {
+    const DAY = 86_400_000;
+    const start = Date.now() - 61 * DAY;
+    const { water } = serviceHolds("dead");
+    // The last whole read, 61 days ago, through the same writer every sync uses.
+    const records = [
+      ...(state.read.circle as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "circle" as const })),
+      ...(state.read.role as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "role" as const })),
+    ];
+    await writeSnapshot(pool, { asked: ["circle", "role"], failed: [], truncated: [], records }, "scheduled", new Date(start));
+    // Then the schedule, every day, and the service never answers.
+    state.session = null;
+    for (let day = 1; day <= 59; day += 1) await pollOnce(pool, () => start + day * DAY);
+    // Day 59: still carried, and each carried record says when it was read whole, never when it was carried.
+    const rows = (await recentSnapshots(pool, 100)).map((r) => r.snapshot);
+    const whole = rows.find((s) => s.roles.read === "whole")!;
+    const carried = rows.filter((s) => s.roles.read !== "whole").flatMap((s) => [...s.circles.records, ...s.roles.records]);
+    expect(carried.some((r) => r.id === water)).toBe(true);
+    expect(new Set(carried.map((r) => r.readAt))).toEqual(new Set([whole.takenAt]));
+    for (let day = 60; day <= 61; day += 1) await pollOnce(pool, () => start + day * DAY);
+    // Day 61: the read is past the age, so no row holds it, carried or whole.
+    const after = await recentSnapshots(pool, 100);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.flatMap((r) => [...r.snapshot.circles.records, ...r.snapshot.roles.records])).toEqual([]);
+    expect(JSON.stringify(after)).not.toContain("Jane");
+  }, 60_000);
 
   it("THIRTY ATTEMPTS THE SERVICE NEVER ANSWERED NEVER PRUNE THE LAST FULL CHECK (review C6)", async () => {
     serviceHolds("outage");

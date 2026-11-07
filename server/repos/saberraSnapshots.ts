@@ -181,3 +181,40 @@ export async function pruneSnapshotsOlderThan(pool: Pool, cutoff: Date): Promise
   ]);
   return Number(res.affectedRows ?? 0);
 }
+
+/**
+ * Take, out of every row that carries a kind it did not read whole, the
+ * records whose own whole read was taken before `cutoff` (review N1). A row
+ * carries what an older read said, and is newer than that read, so the age
+ * prune by `taken_at` alone never reached it. A carried record whose time
+ * cannot be read goes too; one kept before records carried a time stays,
+ * because its age cannot be told. Says how many carried kinds were cut.
+ */
+export async function pruneCarriedOlderThan(pool: Pool, cutoff: Date): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT seq, circles_read, circles, roles_read, roles FROM saberra_snapshots WHERE circles_read <> 'whole' OR roles_read <> 'whole'",
+  );
+  const line = cutoff.getTime();
+  const young = (r: unknown): boolean => {
+    if (!r || typeof r !== "object" || !("readAt" in r)) return true;
+    const t = Date.parse(String((r as { readAt: unknown }).readAt));
+    return Number.isFinite(t) && t >= line;
+  };
+  let cut = 0;
+  for (const r of rows) {
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const [read, column] of [["circles_read", "circles"], ["roles_read", "roles"]] as const) {
+      if (r[read] === "whole") continue;
+      const list = jsonOf(r[column]);
+      if (!Array.isArray(list) || list.length === 0) continue;
+      const kept = list.filter(young);
+      if (kept.length === list.length) continue;
+      sets.push(`${column} = ?`);
+      args.push(JSON.stringify(kept));
+      cut += 1;
+    }
+    if (sets.length) await pool.query<ResultSetHeader>(`UPDATE saberra_snapshots SET ${sets.join(", ")} WHERE seq = ?`, [...args, Number(r.seq)]);
+  }
+  return cut;
+}

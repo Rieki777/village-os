@@ -83,6 +83,12 @@ export interface SnapshotRecord {
   /** The page id arrived more than once in this read; the first copy is kept (R7). */
   duplicate?: boolean;
   /**
+   * On a kind carried forward (R5): when the whole read this record came from
+   * was taken, carried unchanged, so a record ages from when it was read and
+   * never from when it was carried (review N1). Absent: this row's own read.
+   */
+  readAt?: string;
+  /**
    * What the record was matched to here when its read was kept, and how (R1,
    * review C2), so an older read keeps its match after a rename here. Null:
    * it matched nothing then. Absent: the row was kept before matches were
