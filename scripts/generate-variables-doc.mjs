@@ -287,6 +287,7 @@ const RENDERED_FIELDS = [
   "max",
   "choices",
   "unit",
+  "blank",
   "ring",
   "applyTiming",
   "criticality",
@@ -401,6 +402,14 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
   if (def.unit !== undefined && (!isString(def.unit) || !def.unit.trim())) {
     fail(`variables-doc: the dial "${def.key}" has a unit that is not a word`);
   }
+  // `blank` says what an empty number means, so it is words, and only a number
+  // dial has a blank that differs from a value (shared/gameVariables.ts).
+  if (def.blank !== undefined && (!isString(def.blank) || !def.blank.trim())) {
+    fail(`variables-doc: the dial "${def.key}" says what blank means in no words`);
+  }
+  if (def.blank !== undefined && !["integer", "decimal", "percentage"].includes(def.type)) {
+    fail(`variables-doc: the dial "${def.key}" says what a blank number means and is not a number`);
+  }
   if (def.type === "choice" && (!Array.isArray(def.choices) || def.choices.length === 0)) {
     fail(
       `variables-doc: the dial "${def.key}" is a choice and carries no choices, so neither this ` +
@@ -442,6 +451,7 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
     min: def.min ?? null,
     max: def.max ?? null,
     unit: def.unit ?? null,
+    blank: def.blank ?? null,
     choices,
     ring,
     ringExplicit: def.ring !== undefined,
@@ -595,7 +605,7 @@ export function rangeOf(v) {
   return "no bounds are set";
 }
 
-const defaultOf = (v) => (v.default === "" ? "blank" : `\`${v.default}\``);
+const defaultOf = (v) => (v.default === "" ? (v.blank ? `blank, which is ${v.blank}` : "blank") : `\`${v.default}\``);
 
 function variableSection(v) {
   const lines = [];
@@ -610,6 +620,7 @@ function variableSection(v) {
     ["Range", rangeOf(v)],
   ];
   if (v.unit) rows.push(["Counted in", v.unit]);
+  if (v.blank) rows.push(["Left blank", `${v.blank}, and 0 is the number zero`]);
   rows.push(["Who may change it", RING_GLOSS[v.ring].short]);
   rows.push(["A change takes effect", TIMING_GLOSS[v.applyTiming].short]);
   // The tier is what PRICES a change to this dial: it sets the floor a ballot

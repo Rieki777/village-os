@@ -2607,6 +2607,20 @@ posting is derived from any of these figures. A token with no rate is a real sta
 and while any money cap is set a request that cannot be valued is refused instead
 of passing unmeasured.
 
+**2026-11-05: the three money ceilings fail closed (Rye's decision 3; his yes came
+on 2026-11-06).** `redemption.max_per_request`, `redemption.max_per_member_per_cycle`
+and `redemption.max_village_per_cycle` ship blank, and blank is no ceiling. A
+ceiling of 0 is zero: nobody redeems past it, and it counts as a money cap that is
+set, so a request that cannot be valued is refused under it. `optionalNumberVar` in
+`server/lib/variables.ts` reads a blank ceiling as null, and `moneyCapsSet` in
+`server/lib/redemption.ts` counts a 0 as set. `requestRedemption` in
+`server/lib/redemptionStore.ts` takes its range lock over the cycle's village asks
+only when the village ceiling is set, 0 included. Until this a 0 meant no ceiling, so the once-only boot step
+`redemption-ceilings-blank-2026-11-05` (`server/lib/redemptionCeilings.ts`) turns a
+stored 0 into blank on a running village and writes one `platform` row to the
+mechanics ledger for each. The ceilings are read at the ask and never stored on a
+request (0213 keeps the rate, the fees and the currency), so no open request changes.
+
 **2026-09-15: who confirms is derived, and a village with no steward votes.**
 `redemption.confirmed_by` is retired. The ask counts who holds `redemption.confirm`
 through the village's own powers, excluding the admin short-circuit, and routes to
