@@ -937,6 +937,8 @@ describe("tracing a published change to the service's proposal", () => {
       { pageId: pid(86), name: "Orchard" },
       null,
     ]);
+    // Each keeps the draft it was published in: which publish set a field is what a stored match marks (review R3-4).
+    expect(out.map((c) => c.draftId)).toEqual(["d1", "d1", "d1", "d1"]);
   });
 
   it("NEVER TRACES TO A PROPOSAL SOMEBODY EDITED, OR TO ANOTHER DRAFT'S", () => {
