@@ -24,6 +24,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { formatMoney } from "@shared/money";
 import { INVOICE_STATUS_WORDS, type InvoiceStatus } from "@shared/moonRecap";
@@ -72,7 +73,7 @@ const instant = (at: string | null) => (at ? new Date(at).toLocaleString(undefin
 export function DiffersPill({ detail }: { detail: string }) {
   return (
     <span className="mt-1 inline-block rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-950">
-      Differs<span className="sr-only">: {detail}</span>
+      <Trans context="treasury sync">Differs</Trans><span className="sr-only">: {detail}</span>
     </span>
   );
 }
@@ -83,12 +84,15 @@ export function DiffersPill({ detail }: { detail: string }) {
  * member's own surfaces.
  */
 export function InvoiceTrack({ row, own = false }: { row: TrackRow; own?: boolean }) {
+  const { t } = useLingui();
   const doneCount = row.track.filter((s) => s.done).length;
+  const ref = row.ref;
+  const amount = formatMoney(row.totalMinor, row.currency);
   const current = row.track.find((s) => !s.done)?.step ?? null;
   return (
     <ol
       className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-4"
-      aria-label={`Invoice ${row.ref}, ${formatMoney(row.totalMinor, row.currency)}, ${doneCount} of 4 steps done`}
+      aria-label={t({ message: `Invoice ${ref}, ${amount}, ${doneCount} of 4 steps done`, context: "treasury sync" })}
     >
       {row.track.map((s) => {
         const stopped = !s.done && s.stopped ? TRACK_STOPPED_WORDS[s.stopped] : null;
@@ -144,14 +148,16 @@ function Pair({ label, value, muted = false }: { label: string; value: string; m
 
 function OpenOrPaid({ t }: { t: TrackRow }) {
   const paid = t.track.find((s) => s.step === "paid");
+  const ref = t.ref;
+  const paidOn = when(paid?.at ?? null);
   if (paid?.done) {
     return (
       <details className="rounded-xl border border-border p-4">
         <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center justify-between gap-2">
           <span className="font-semibold text-card-foreground">{formatMoney(t.totalMinor, t.currency)}</span>
-          <span className="text-sm text-muted-foreground">Paid {when(paid.at)}</span>
+          <span className="text-sm text-muted-foreground"><Trans context="treasury sync">Paid {paidOn}</Trans></span>
         </summary>
-        <p className="mt-1 text-xs text-muted-foreground">Invoice {t.ref}</p>
+        <p className="mt-1 text-xs text-muted-foreground"><Trans context="treasury sync">Invoice {ref}</Trans></p>
         <InvoiceTrack row={t} own />
       </details>
     );
@@ -160,7 +166,7 @@ function OpenOrPaid({ t }: { t: TrackRow }) {
     <div className="rounded-xl border border-border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="font-semibold text-card-foreground">{formatMoney(t.totalMinor, t.currency)}</p>
-        <p className="text-xs text-muted-foreground">Invoice {t.ref}</p>
+        <p className="text-xs text-muted-foreground"><Trans context="treasury sync">Invoice {ref}</Trans></p>
       </div>
       <InvoiceTrack row={t} own />
     </div>
@@ -169,7 +175,13 @@ function OpenOrPaid({ t }: { t: TrackRow }) {
 
 type Load = "loading" | "failed" | "ready";
 
+function InvoiceName({ ref_ }: { ref_: string }) {
+  const ref = ref_;
+  return <Trans context="treasury sync">Invoice {ref}</Trans>;
+}
+
 export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
+  const { t } = useLingui();
   const [view, setView] = useState<View | null>(null);
   const [load, setLoad] = useState<Load>("loading");
   const [busy, setBusy] = useState(false);
@@ -225,20 +237,26 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
     }
   };
 
+  const syncedAt = view ? instant(view.syncedAt) : "";
   const differs = view ? view.tokens.filter((t) => t.disagree).length + view.invoices.filter((i) => i.disagree).length : 0;
   const seraRead = view?.sources.sera.state === "read";
+  const owedWords = view ? view.cash.map((c) => formatMoney(c.owedMinor, c.currency)).join(", ") : "";
 
   return (
     <div className="space-y-5">
       {differs > 0 && (
         <p className="rounded-lg border-l-4 border-amber-400 bg-amber-100 p-3 text-sm font-medium text-amber-950">
-          {differs === 1 ? "One of your numbers differs" : `${differs} of your numbers differ`} between sources. The Treasurer has been shown {differs === 1 ? "it" : "each one"}.
+          {differs === 1 ? (
+            <Trans>One of your numbers differs between sources. The Treasurer has been shown it.</Trans>
+          ) : (
+            <Trans>{differs} of your numbers differ between sources. The Treasurer has been shown each one.</Trans>
+          )}
         </p>
       )}
 
       {tracks.length > 0 && (
         <section aria-labelledby="invoice-tracks" className="space-y-3">
-          <h4 id="invoice-tracks" className="font-semibold text-card-foreground">Your invoices</h4>
+          <h4 id="invoice-tracks" className="font-semibold text-card-foreground"><Trans context="treasury sync">Your invoices</Trans></h4>
           <ul className="space-y-3">
             {tracks.map((t) => <li key={t.invoiceId}><OpenOrPaid t={t} /></li>)}
           </ul>
@@ -247,7 +265,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
 
       <section aria-labelledby="treasury-numbers" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 id="treasury-numbers" className="font-semibold text-card-foreground">Your numbers, from every source</h4>
+          <h4 id="treasury-numbers" className="font-semibold text-card-foreground"><Trans>Your numbers, from every source</Trans></h4>
           <button
             type="button"
             onClick={() => void sync()}
@@ -260,26 +278,28 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
           </button>
         </div>
         <p id="treasury-sync-note" className="text-sm text-muted-foreground">
-          Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera
-          (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can
-          sync once a minute.
+          <Trans>
+            Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera
+            (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can
+            sync once a minute.
+          </Trans>
         </p>
         <p role="status" className="text-sm text-card-foreground">{status}</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
         {load === "loading" && !view ? (
-          <p className="text-sm text-muted-foreground">Reading your saved numbers.</p>
+          <p className="text-sm text-muted-foreground"><Trans context="treasury sync">Reading your saved numbers.</Trans></p>
         ) : load === "failed" && !view ? (
           <div className="space-y-2 text-sm text-muted-foreground">
-            <p>Your saved numbers did not load.</p>
-            <button type="button" onClick={readSaved} className="min-h-[44px] rounded-full border border-border px-4 text-sm font-medium text-foreground">Try again</button>
+            <p><Trans>Your saved numbers did not load.</Trans></p>
+            <button type="button" onClick={readSaved} className="min-h-[44px] rounded-full border border-border px-4 text-sm font-medium text-foreground"><Trans context="treasury sync">Try again</Trans></button>
           </div>
         ) : !view ? (
-          <p className="text-sm text-muted-foreground">Not synced yet. Press Sync to read every source.</p>
+          <p className="text-sm text-muted-foreground"><Trans>Not synced yet. Press Sync to read every source.</Trans></p>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Last synced {instant(view.syncedAt)}</p>
+              <p className="text-xs text-muted-foreground"><Trans context="treasury sync">Last synced {syncedAt}</Trans></p>
               <ul className="space-y-1 rounded-xl border border-border p-3">
                 {(["village", "chain", "sera"] as const).map((s) => (
                   <SourceLine key={s} name={s} state={view.sources[s].state} readAt={view.sources[s].readAt} syncedAt={view.syncedAt} />
@@ -289,7 +309,7 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
             </div>
 
             {view.tokens.length > 0 && (
-              <section aria-label="Tokens, by source" className="space-y-2">
+              <section aria-label={t({ message: "Tokens, by source", context: "treasury sync" })} className="space-y-2">
                 {view.tokens.map((t) => (
                   <div key={t.slug} className={`rounded-lg border p-3 ${t.disagree ? "border-l-4 border-amber-400" : "border-border"}`}>
                     <p className="font-medium text-card-foreground">{t.name}</p>
@@ -305,17 +325,17 @@ export default function TreasurySync({ tracks }: { tracks: TrackRow[] }) {
               </section>
             )}
 
-            {view.cash.length > 0 && (
+            {view.cash.length > 0 && owedWords && (
               <p className="text-sm text-card-foreground">
-                Cash still owed to you, from this village's records: {view.cash.map((c) => formatMoney(c.owedMinor, c.currency)).join(", ")}
+                <Trans>Cash still owed to you, from this village's records: {owedWords}</Trans>
               </p>
             )}
 
             {view.invoices.length > 0 && (
-              <section aria-label="Invoices, by source" className="space-y-2">
+              <section aria-label={t({ message: "Invoices, by source", context: "treasury sync" })} className="space-y-2">
                 {view.invoices.map((i) => (
                   <div key={i.ref} className={`rounded-lg border p-3 ${i.disagree ? "border-l-4 border-amber-400" : "border-border"}`}>
-                    <p className="font-medium text-card-foreground">Invoice {i.ref}</p>
+                    <p className="font-medium text-card-foreground"><InvoiceName ref_={i.ref} /></p>
                     <Pair label={SOURCE_SHORT_WORDS.village} value={`${formatMoney(i.villageMinor, i.currency)}, ${INVOICE_STATUS_WORDS[i.status as InvoiceStatus] ?? i.status}`} />
                     <Pair
                       label={SOURCE_SHORT_WORDS.sera}

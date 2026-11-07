@@ -35,6 +35,7 @@ import * as api from "./moonApi";
 import type { MyMoonData } from "./moonApi";
 import { Amount, ERROR, INPUT, LABEL, MUTED, SMALL_BTN, Section, useRoomView } from "./moonUi";
 import { authToken } from "@/lib/gameApi";
+import { Trans } from "@lingui/react/macro";
 import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 
 /** The member's invoice tracks and whether a send emails Sera's inbox (invoice rails). Reloads when `key` changes. */
@@ -151,6 +152,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
   useEffect(() => setNumber(inv?.memberNumber ?? ""), [inv?.memberNumber]);
   const rails = useInvoiceRails(`${inv?.id ?? ""}:${inv?.status ?? ""}`);
   const myTrack = inv?.id ? rails.tracks.find((t) => t.invoiceId === inv.id) ?? null : null;
+  const seraInbox = rails.seraInbox;
 
   if (!data.invoiceNeeded) return data.noTermsLine ? <p className={MUTED}>{data.noTermsLine}</p> : null;
 
@@ -266,7 +268,7 @@ export default function InvoicePanel({ data, cycleId, editable, reload }: { data
               <label className={LABEL}>{MOON_WORDS.memberNumber}<input value={number} maxLength={40} onChange={(e) => setNumber(e.target.value)} className={INPUT} /></label>
               {route === "local_contractor" ? <label className={LABEL}>{MOON_WORDS.externalKey}<input inputMode="numeric" value={key} maxLength={64} onChange={(e) => setKey(e.target.value)} className={INPUT} /></label> : null}
               {inv.sendRefusal ? <p className={MUTED}>{inv.sendRefusal}</p> : null}
-              {rails.seraInbox ? <p className="m-0 text-sm text-foreground" data-testid="emails-sera">Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <span className="break-all font-medium text-foreground">{rails.seraInbox}</span>. It names you by your village name and code name. Your legal name and address stay private.</p> : null}
+              {seraInbox ? <p className="m-0 text-sm text-foreground" data-testid="emails-sera"><Trans>Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <span className="break-all font-medium text-foreground">{seraInbox}</span>. It names you by your village name and code name. Your legal name and address stay private.</Trans></p> : null}
               <button type="button" className={`${SMALL_BTN} self-start`} disabled={busy || ackPending || !number.trim() || !rails.loaded} onClick={send}>{MOON_WORDS.sendInvoice}</button>
             </div>
           ) : null}

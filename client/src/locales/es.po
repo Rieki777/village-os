@@ -7,6 +7,30 @@ msgstr ""
 "X-Generator: @lingui/cli\n"
 "Language: es\n"
 
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Differs"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Your numbers, from every source"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Your invoices"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Every invoice, sent to paid"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Paid {paidOn}"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
@@ -18,11 +42,37 @@ msgstr "Abrir menú"
 #~ msgid "Sign in"
 #~ msgstr "Iniciar sesión"
 
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Chain: {there}."
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "First seen {seen}."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Cash still owed to you, from this village's records: {owedWords}"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgid "Sera records that name no invoice here"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
 msgid "Close menu"
 msgstr "Cerrar menú"
+
+#: client/src/components/TreasurySync.tsx
+msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -30,10 +80,24 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Iniciar sesión"
 
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoices, by source"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "This village's records: {here}."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Open menu"
 #~ msgstr "Abrir menú"
+
+#: client/src/components/myMoon/InvoicePanel.tsx
+msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -43,6 +107,28 @@ msgstr "Cerrar sesión en todos los dispositivos"
 
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "No invoice has been sent yet."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Not synced yet. Press Sync to read every source."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoice {ref}"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Your saved numbers did not load."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -60,11 +146,45 @@ msgstr "Cuenta de {firstName}"
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr ""
 
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Tokens, by source"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Try again"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Last synced {syncedAt}"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
 msgid "Sign in or join"
 msgstr "Iniciar sesión o unirse"
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Reading the invoice tracks."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Reading your saved numbers."
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -87,10 +207,20 @@ msgstr "Sitio principal"
 #~ msgid "Main Site"
 #~ msgstr "Sitio principal"
 
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Sera: {there}."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Cuenta de {firstName}"
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy

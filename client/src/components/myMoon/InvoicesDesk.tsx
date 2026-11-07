@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FLAG_WORDS, SERA_STATUS_WORDS, groupDecimal, type FlagKind, type SeraInvoiceStatus } from "@shared/invoiceTrack";
 import { formatMoney } from "@shared/money";
+import { Trans } from "@lingui/react/macro";
 import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 import {
   INVOICE_STATUS_WORDS,
@@ -191,24 +192,31 @@ export function flagFigure(kind: FlagKind, raw: string): string {
 }
 
 export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId: string | null) => string }) {
+  const flagCount = data.flags.length;
   return (
     <div className="flex flex-col gap-4" data-testid="invoice-rails">
       {data.flags.length > 0 ? (
         <section aria-labelledby="rails-flags" className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-          <h4 id="rails-flags" className="m-0 text-sm font-semibold text-foreground">Sources that disagree ({data.flags.length})</h4>
+          <h4 id="rails-flags" className="m-0 text-sm font-semibold text-foreground"><Trans context="invoice desk">Sources that disagree ({flagCount})</Trans></h4>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-foreground">
-            {data.flags.map((f) => (
+            {data.flags.map((f) => {
+              const here = flagFigure(f.kind, f.village);
+              const there = flagFigure(f.kind, f.other);
+              const seen = new Date(f.firstSeenAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+              return (
               <li key={f.id} className="break-words">
-                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. This village's records: {flagFigure(f.kind, f.village)}.{" "}
-                {f.kind === "chain_differs" ? "Chain" : "Sera"}: {flagFigure(f.kind, f.other)}. First seen {new Date(f.firstSeenAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}.
+                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. <Trans context="invoice desk">This village's records: {here}.</Trans>{" "}
+                {f.kind === "chain_differs" ? <Trans context="invoice desk">Chain: {there}.</Trans> : <Trans context="invoice desk">Sera: {there}.</Trans>}{" "}
+                <Trans context="invoice desk">First seen {seen}.</Trans>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       ) : null}
       {data.unmatched.length > 0 ? (
         <section aria-labelledby="rails-unmatched" className="flex flex-col gap-1 text-sm text-foreground">
-          <h4 id="rails-unmatched" className="m-0 text-sm font-semibold">Sera records that name no invoice here</h4>
+          <h4 id="rails-unmatched" className="m-0 text-sm font-semibold"><Trans>Sera records that name no invoice here</Trans></h4>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {data.unmatched.map((u) => (
               <li key={u.seraId} className="break-words text-muted-foreground">
@@ -219,8 +227,8 @@ export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId:
         </section>
       ) : null}
       <section aria-labelledby="rails-tracks" className="flex flex-col gap-2">
-        <h4 id="rails-tracks" className="m-0 text-sm font-semibold text-foreground">Every invoice, sent to paid</h4>
-        {data.tracks.length === 0 ? <p className={MUTED}>No invoice has been sent yet.</p> : null}
+        <h4 id="rails-tracks" className="m-0 text-sm font-semibold text-foreground"><Trans context="invoice desk">Every invoice, sent to paid</Trans></h4>
+        {data.tracks.length === 0 ? <p className={MUTED}><Trans context="invoice desk">No invoice has been sent yet.</Trans></p> : null}
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {data.tracks.map((t) => (
             <li key={t.invoiceId} className="rounded-lg border border-border p-3">
@@ -267,8 +275,8 @@ function InvoicesDeskLoader({ password }: { password: string }) {
     <>
       <InvoicesDeskView data={data} init={init} reload={load} />
       {rails === "failed" ? (
-        <p role="alert" className={ERROR}>The invoice tracks and the disagreements did not load. Close and open again in a moment.</p>
-      ) : rails ? <RailsPanel data={rails} nameOf={nameOf} /> : <p className={MUTED}>Reading the invoice tracks.</p>}
+        <p role="alert" className={ERROR}><Trans>The invoice tracks and the disagreements did not load. Close and open again in a moment.</Trans></p>
+      ) : rails ? <RailsPanel data={rails} nameOf={nameOf} /> : <p className={MUTED}><Trans context="invoice desk">Reading the invoice tracks.</Trans></p>}
     </>
   );
 }
