@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
+import { linguiMacros } from "./client/src/i18n/linguiMacros";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -50,7 +51,7 @@ export default defineConfig({
   // anywhere in this codebase's own .tsx files - vite's plugin is the only
   // reason that has ever worked). Costs server tests nothing: esbuild only
   // reaches for it on a `.tsx`/`.jsx` file.
-  plugins: [react()],
+  plugins: [linguiMacros(), react()],
   /*
    * The same aliases vite.config.ts builds with. Without them a client module
    * that imports `@shared/...` typechecks (tsconfig paths) and builds (vite)

@@ -1456,7 +1456,7 @@ export async function autoSettleExpired(
   closeBallot: (
     pool: Pool,
     input: { ballotId: string; closedBy: string; outcomeNote: string; closerMayCloseEarly: boolean },
-  ) => Promise<{ ok: boolean; outcome?: "passed" | "failed" | "no_quorum"; ballot?: BallotRow; error?: string }>,
+  ) => Promise<{ ok: boolean; outcome?: "passed" | "failed" | "no_quorum" | "no_quorum_rerun"; ballot?: BallotRow; error?: string }>,
   at: Date = new Date(),
 ): Promise<AutoSettleReport> {
   const ids = await openBallotIdsPastClose(deps.pool, at);
@@ -1477,6 +1477,15 @@ export async function autoSettleExpired(
       });
       if (!result.ok || !result.ballot || !result.outcome) {
         notes.push(`${b.title}: ${result.error ?? "could not be closed"}`);
+        continue;
+      }
+      /*
+       * THE QUORUM FALLBACK ASKED AGAIN (0334): nothing was decided, so the
+       * close routes NOWHERE. The subject waits as its vote left it, and the
+       * re-run's own close, on a later tick, is what settles it.
+       */
+      if (result.outcome === "no_quorum_rerun") {
+        closed += 1;
         continue;
       }
       const routing = await routeOutcome(deps, result.ballot, result.outcome, AUTO_CLOSE_NOTE, "governance", itemKinds);
