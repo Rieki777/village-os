@@ -2090,6 +2090,6 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 
 - A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
 
-## The invoice rails and the treasury sync (0329, 2026-11-06)
+## The invoice rails and the treasury sync (0335, 2026-11-06)
 
 - To have a sent invoice emailed to Sera, an admin or the `cash.pay` holder sets **Sera's inbox** in Admin, End-of-moon review settings, Village settings (moon-review setting `seraInbox`, blank on the platform, so nothing is emailed until a village names one). The daily `treasury-sync` job needs no setup: it retries emails the provider refused, reads Sera's `list_invoices` once Saberra offers it (until then the Sera source reads "Sera does not report invoices yet"), and re-syncs every member with an invoice.

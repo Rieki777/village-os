@@ -1,4 +1,4 @@
--- 0329: an invoice is tracked from sending to payment, and the treasury card syncs (invoice rails, Rye 2026-11-06).
+-- 0335: an invoice is tracked from sending to payment, and the treasury card syncs (invoice rails, Rye 2026-11-06).
 --
 -- Four new tables and nothing else, so the previous release ignores them.
 -- No row is seeded and nothing is backfilled: the track's sent, approved and

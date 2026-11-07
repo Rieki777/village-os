@@ -1,5 +1,5 @@
 /**
- * The invoice rails' four tables (0329): the email to the Sera inbox, Sera's
+ * The invoice rails' four tables (0335): the email to the Sera inbox, Sera's
  * own invoice records, each member's last reconciled treasury view, and the
  * disagreements a sync found. Raw SQL, every write keyed so a retry is a no-op.
  *

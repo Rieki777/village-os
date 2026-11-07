@@ -606,7 +606,7 @@ founding seat and can hand it over like any other steward power. The seeded Trea
 too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
 once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
 
-**The invoice rails and the treasury sync (0329, Rye 2026-11-06) read this record and never write
+**The invoice rails and the treasury sync (0335, Rye 2026-11-06) read this record and never write
 it.** A member's own "Send for approval" also emails the invoice, with a PDF and its bill ref in the
 subject, to the village's Sera inbox when the moon-review setting `seraInbox` names one (blank on
 the platform, so nothing is emailed by default). The copy that leaves names the member by village
