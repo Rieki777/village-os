@@ -263,6 +263,13 @@ export async function paidReferenceOf(db: Queryable, cashOwedIds: readonly strin
   return refs.size === 1 ? (Array.from(refs)[0] ?? null) : null;
 }
 
+/** Who marked an invoice's rows paid, when one person marked them all. For a live label only. */
+export async function paidByOf(db: Queryable, cashOwedIds: readonly string[]): Promise<string | null> {
+  if (cashOwedIds.length === 0) return null;
+  const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `paid_by` AS `by` FROM `cash_owed` WHERE `id` IN (?) AND `state` = 'paid'", [cashOwedIds]);
+  return rows.length === 1 && rows[0].by != null ? String(rows[0].by) : null;
+}
+
 // ── Reading moon_invoices for the rails (ids only; the row shape is moonRecaps') ──
 
 /** A member's invoices that are not void, newest first, capped. */

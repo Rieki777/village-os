@@ -24,6 +24,7 @@ import { registerJob } from "../lib/scheduler";
 import { retryUnsentInvoiceMail, type InvoiceMailDeps } from "../lib/invoiceMail";
 import { readSeraInvoices, type SeraReadOutcome } from "../lib/seraInvoices";
 import { invoiceTracksFor, syncTreasury, type TreasuryDeps, type TreasuryView } from "../lib/holdingsReconcile";
+import { actorLabel } from "../../shared/invoiceTrack";
 import { membersWithInvoices, openFlags, syncViewOf, unmatchedSeraReports } from "../repos/invoiceRails";
 import crypto from "node:crypto";
 import type { Pool } from "mysql2/promise";
@@ -46,6 +47,9 @@ export const TREASURY_SYNC_EVERY_MS = 24 * 60 * 60 * 1000;
 export const SYNC_LIMIT = { max: 1, windowMs: 60_000 } as const;
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit" | "members"> & {
+  /** The roles whose definition carries a power, and who sits in which (`rolesCarrying`, `loadRoleHolders`, server/index.ts). */
+  rolesCarrying: (capability: string) => Array<{ id: string; name: string }>;
+  roleHolders: () => Array<{ roleId: string; userId: string }>;
   treasury: TreasuryDeps;
   mail: InvoiceMailDeps;
   /** The member's live invoice as the member reads it, for the daily mail retry. */
@@ -54,6 +58,9 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLi
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, guardCapability, overLimit, treasury, members: directory } = deps;
+  /** "Treasury (Rick)": read from the roster now, for a live view only, never stored (Rye, 2026-10-30). */
+  const labelOf = async (actorUserId: string): Promise<string | null> =>
+    actorLabel(deps.rolesCarrying("cash.pay"), deps.roleHolders(), actorUserId, (await directory.byId(actorUserId).catch(() => null))?.name ?? null);
   const audit = (text: string, actorUserId: string | null) =>
     recordEvent(getPool(), { kind: "audit", text, actorUserId, actorKind: actorUserId ? "human" : "system", entityType: "treasury", entityRef: actorUserId ?? undefined, audience: "admin" });
 
@@ -76,7 +83,7 @@ export function register(app: Express, deps: Deps): void {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required" });
     // Where a send emails the invoice, so the member reads the address before the press and can see a wrong one.
-    const [tracks, inbox] = await Promise.all([invoiceTracksFor(getPool(), String(user.id)), deps.mail.seraInbox().catch(() => null)]);
+    const [tracks, inbox] = await Promise.all([invoiceTracksFor(getPool(), String(user.id), labelOf), deps.mail.seraInbox().catch(() => null)]);
     res.json({ tracks, emailsSera: !!inbox, seraInbox: inbox ?? null });
   });
 
@@ -111,7 +118,7 @@ export function register(app: Express, deps: Deps): void {
     const nameOf = new Map(named.map((n) => [n.userId, n.name]));
     // The legal name, for the bank transfer only: this door is the Treasurer's (`cash.pay`) and admins'.
     const legal = new Map(await Promise.all(members.map(async (m) => [m, (await payRouteOf(pool, m).catch(() => null))?.legalName ?? null] as const)));
-    const tracks = (await Promise.all(members.map(async (m) => (await invoiceTracksFor(pool, m)).map((t) => ({ ...t, userId: m, memberName: nameOf.get(m) ?? null, legalName: legal.get(m) ?? null }))))).flat();
+    const tracks = (await Promise.all(members.map(async (m) => (await invoiceTracksFor(pool, m, labelOf)).map((t) => ({ ...t, userId: m, memberName: nameOf.get(m) ?? null, legalName: legal.get(m) ?? null }))))).flat();
     const [flags, unmatched] = await Promise.all([openFlags(pool), unmatchedSeraReports(pool)]);
     res.json({
       tracks,

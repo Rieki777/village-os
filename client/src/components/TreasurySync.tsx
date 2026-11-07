@@ -109,7 +109,7 @@ export function InvoiceTrack({ row, own = false }: { row: TrackRow; own?: boolea
             {s.done && (
               <p className="text-xs text-muted-foreground">
                 {when(s.at)}
-                {s.by ? `, by ${own && s.by === "member" ? "you" : TRACK_ACTOR_WORDS[s.by]}` : ""}
+                {s.by ? `, by ${own && s.by === "member" ? "you" : s.actorLabel ?? TRACK_ACTOR_WORDS[s.by]}` : ""}
                 {s.note ? `. Bank reference ${s.note}` : ""}
               </p>
             )}

@@ -362,3 +362,21 @@ export function storedPayFor(
   const tokens = paidTokens({ voice, payTokens: r.payTokens.filter((t) => t.token !== model.tokens.equity) });
   return { valueMinor: r.totalMinor, valueTokens: tokens, cashMinor: r.cashMinor, earnedEquityOwed: owed };
 }
+
+// ── P4, the retro top-up (Rye's pick, 2026-11-06) ───────────────────────────
+
+/**
+ * Why a retro top-up cannot be proposed, or null. After delivery, any member
+ * may propose to RAISE a set figure, and the village decides by its existing
+ * vote; a top-up never lowers a figure. Lowering one is a different proposal
+ * (C12), and the refusal names it. The outcome, in words, is required: a top-up
+ * says what the work achieved beyond what was expected.
+ */
+export function topUpProblem(currentMinor: number | null, proposedMinor: number, outcome: string): string | null {
+  if (currentMinor === null) return "This work has no figure set yet. Set one first, then a top-up can raise it.";
+  if (!(Number.isFinite(proposedMinor) && proposedMinor > currentMinor)) {
+    return "A top-up only raises a figure. To lower one, propose a different figure to the village in an org draft.";
+  }
+  if (!String(outcome ?? "").trim()) return "Say what the work achieved beyond what was expected.";
+  return null;
+}

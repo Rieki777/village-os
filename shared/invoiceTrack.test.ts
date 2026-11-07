@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  actorLabel,
   compareDecimal,
+  withActorLabels,
   groupDecimal,
   invoiceSubject,
   matchSeraReport,
@@ -228,5 +230,28 @@ describe("after the UX pass", () => {
     expect(groupDecimal("-1234567.5")).toBe("-1,234,567.5");
     expect(groupDecimal("12345678901234567890.123456789012345678")).toBe("12,345,678,901,234,567,890.123456789012345678");
     expect(groupDecimal("999")).toBe("999");
+  });
+});
+
+describe("who acted, as Role (FirstName), in live signed-in views only (Rye 2026-10-30)", () => {
+  const roles = [{ id: "treasury", name: "Treasury" }, { id: "finance", name: "Finance" }];
+  const seats = [{ roleId: "treasury", userId: "u-rick" }, { roleId: "finance", userId: "u-ana" }];
+  it("names the role carrying the power that the acting person holds, then their first name", () => {
+    expect(actorLabel(roles, seats, "u-rick", "Rick Moss")).toBe("Treasury (Rick)");
+    expect(actorLabel(roles, seats, "u-ana", "Ana Example")).toBe("Finance (Ana)");
+  });
+  it("is null for someone holding none of those roles (an admin), so the role words stand", () => {
+    expect(actorLabel(roles, seats, "u-admin", "Admin Person")).toBeNull();
+    expect(actorLabel(roles, seats, null, "x")).toBeNull();
+  });
+  it("never prints an email-shaped name", () => {
+    expect(actorLabel(roles, seats, "u-rick", "rick@example.org")).toBe("Treasury");
+  });
+  it("labels the approved and paid steps from who approved and who marked it paid", () => {
+    const steps = trackOf({ invoice: inv({ status: "paid", approvedAt: "2026-11-07T09:00:00.000Z", paidOn: "2026-11-09" }), mail: null, report: null });
+    const labelled = withActorLabels(steps, { approved: "Finance (Ana)", paid: "Treasury (Rick)" });
+    expect(labelled[2].actorLabel).toBe("Finance (Ana)");
+    expect(labelled[3].actorLabel).toBe("Treasury (Rick)");
+    expect(labelled[0].actorLabel).toBeUndefined();
   });
 });

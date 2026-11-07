@@ -23,10 +23,10 @@
  * and the chain's figures are shown beside it and flagged when they differ.
  */
 import type { Pool } from "mysql2/promise";
-import { reconcile, trackOf, type FlagKind, type ReconciledView, type TrackStep } from "../../shared/invoiceTrack";
+import { reconcile, trackOf, withActorLabels, type FlagKind, type ReconciledView, type TrackStep } from "../../shared/invoiceTrack";
 import { billRef, type InvoiceStatus } from "../../shared/moonRecap";
 import { invoicesByIds } from "../repos/moonRecaps";
-import { invoiceIdsWithSeraReportsOf, liveInvoiceIdsOf, mailForInvoices, paidReferenceOf, saveSyncView, seraReportsForInvoices, syncViewOf, writeFlags } from "../repos/invoiceRails";
+import { invoiceIdsWithSeraReportsOf, liveInvoiceIdsOf, mailForInvoices, paidByOf, paidReferenceOf, saveSyncView, seraReportsForInvoices, syncViewOf, writeFlags } from "../repos/invoiceRails";
 import { linesOf } from "./moonRecap";
 import { readSeraInvoices, type SeraInvoiceClient, type SeraReadOutcome } from "./seraInvoices";
 
@@ -68,8 +68,14 @@ export interface TreasuryDeps {
   newId(): string;
 }
 
-/** The track of every live invoice of one member, newest first. */
-export async function invoiceTracksFor(pool: Pool, userId: string): Promise<InvoiceTrackRow[]> {
+/**
+ * The track of every live invoice of one member, newest first.
+ *
+ * `labelOf` names who acted as "Role (FirstName)" (Rye, 2026-10-30). Only a
+ * door answering a signed-in reader passes it, at read time; the sync view
+ * this file saves is built without it, so no stored copy carries a name.
+ */
+export async function invoiceTracksFor(pool: Pool, userId: string, labelOf?: (actorUserId: string) => Promise<string | null>): Promise<InvoiceTrackRow[]> {
   const invoices = await invoicesByIds(pool, await liveInvoiceIdsOf(pool, userId));
   const ids = invoices.map((i) => i.id);
   const [mail, reports] = await Promise.all([mailForInvoices(pool, ids), seraReportsForInvoices(pool, ids)]);
@@ -80,10 +86,18 @@ export async function invoiceTracksFor(pool: Pool, userId: string): Promise<Invo
     const lastSent = [...sent].reverse().find((m) => m.status === "sent") ?? sent[sent.length - 1] ?? null;
     // `seraReportsForInvoices` answers newest first: the track reads Sera's latest word.
     const report = reports.find((r) => r.matchedInvoiceId === i.id) ?? null;
-    const paidReference = i.status === "paid" ? await paidReferenceOf(pool, linesOf(i).map((l) => l.cashOwedId).filter((x): x is string => !!x)) : null;
+    const cashIds = linesOf(i).map((l) => l.cashOwedId).filter((x): x is string => !!x);
+    const paidReference = i.status === "paid" ? await paidReferenceOf(pool, cashIds) : null;
+    const track = trackOf({ invoice: { ref, status: i.status, sentAt: i.sentAt, approvedAt: i.approvedAt, paidOn: i.paidOn }, mail: lastSent ? { queuedAt: lastSent.queuedAt, sentAt: lastSent.sentAt } : null, report, paidReference });
+    const paidBy = labelOf && i.status === "paid" ? await paidByOf(pool, cashIds) : null;
     rows.push({
       invoiceId: i.id, ref, cycleId: i.cycleId, status: i.status, currency: i.currency, totalMinor: i.totalMinor,
-      track: trackOf({ invoice: { ref, status: i.status, sentAt: i.sentAt, approvedAt: i.approvedAt, paidOn: i.paidOn }, mail: lastSent ? { queuedAt: lastSent.queuedAt, sentAt: lastSent.sentAt } : null, report, paidReference }),
+      track: labelOf
+        ? withActorLabels(track, {
+            approved: i.approvedBy ? await labelOf(i.approvedBy).catch(() => null) : null,
+            paid: paidBy ? await labelOf(paidBy).catch(() => null) : null,
+          })
+        : track,
     });
   }
   return rows;
