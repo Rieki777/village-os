@@ -26,6 +26,8 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
+import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1048,6 +1050,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.proposals_per_member_per_cycle",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Mechanics proposals per member per cycle",
     description:
@@ -1064,6 +1069,9 @@ export const VARIABLES: VariableDef[] = [
     // governance.hypha_threshold's did. This gate stands in front of the
     // binding vote wherever the binding vote happens, so it says that.
     key: "governance.proposal_support_threshold",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Supporters before a proposal can go to the vote",
     description:
@@ -1240,6 +1248,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.change_cooldown_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Cooldown after a governed rule change",
     description:
@@ -1249,6 +1260,38 @@ export const VARIABLES: VariableDef[] = [
     min: 0,
     max: 365,
     unit: "days",
+  },
+  {
+    // Rye, 2026-11-06: the cap rises from 12 to 22 and each village may move
+    // it by vote. The floor and the ceiling live in shared/changeSetCap.ts,
+    // which the validator reads too, so the two can never disagree.
+    key: CHANGE_SET_CAP_KEY,
+    category: "Governance",
+    label: "Changes one proposal may carry",
+    criticality: "structural",
+    description:
+      `The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. ${CHANGE_SET_CAP_MIN} to ${CHANGE_SET_CAP_MAX}.`,
+    type: "integer",
+    default: String(CHANGE_SET_CAP_DEFAULT),
+    min: CHANGE_SET_CAP_MIN,
+    max: CHANGE_SET_CAP_MAX,
+    unit: "changes",
+  },
+  {
+    // Change requests (Rye, 2026-11-06; spec C7, R20). A ceiling on
+    // flooding: commenting on and supporting other change requests is never
+    // limited. Meta, so a trial can never lift it for a moon.
+    key: GATHERING_LIMIT_KEY,
+    category: "Governance",
+    label: "Change requests one member may gather at once",
+    criticality: "structural",
+    description:
+      "How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.",
+    type: "integer",
+    default: String(GATHERING_LIMIT_DEFAULT),
+    min: 1,
+    max: 50,
+    unit: "change requests",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────
@@ -1481,6 +1524,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.vote_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "How long a ballot stays open",
     description:
