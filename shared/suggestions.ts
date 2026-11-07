@@ -93,6 +93,12 @@ export const SUGGESTION_ROUTE: Record<Capability, SuggestionRoute> = {
   "moon.approve_alone": "holders",
   "moon.approve_own": "holders",
   "power.assign": "holders",
+  "operator.accounts": "holders",
+  "operator.config": "holders",
+  // No control behind this key may be named by a suggestion: a suggestion is
+  // stored as a readable draft, and a secret is write-only.
+  "operator.secrets": "holders",
+  "operator.recover": "holders",
 };
 
 export interface RouteInput {
