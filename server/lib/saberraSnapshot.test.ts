@@ -39,6 +39,8 @@ const state = vi.hoisted(() => ({
   sessionThrows: false,
   /** When true, storing the facts throws: a failure after the service answered. */
   factsFail: false,
+  /** How long opening a session takes, so a run's start and its landing fall in different seconds. */
+  slowMs: 0,
   /** A row deleted just before the next read of rows by seq, the way a prune racing a read would. */
   pruneOnRead: null as number | null,
 }));
@@ -87,6 +89,7 @@ vi.mock("./secrets", () => ({
 
 vi.mock("./saberraClient", () => ({
   openSession: async () => {
+    if (state.slowMs) await new Promise((r) => setTimeout(r, state.slowMs));
     if (state.sessionThrows) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
     return state.session;
   },
@@ -197,6 +200,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     state.sessionThrows = false;
     state.factsFail = false;
     state.pruneOnRead = null;
+    state.slowMs = 0;
     await pool.query("DELETE FROM saberra_snapshots WHERE seq > 0"); // module-review-ok: fixture SQL, each test starts from no snapshot
     await writeSyncLogDocument(pool, { runs: [], landedFingerprint: null });
   });
@@ -616,6 +620,21 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       expect(fact).toEqual([["2027-01-01", "2026-12-01"]]);
     });
   });
+
+  it("A LANDING RUN'S READ IS KEPT AFTER ITS LANDING, so no batch it landed is newer than its own read (for review K6)", async () => {
+    serviceHolds("after");
+    state.session = "snap-after";
+    // The run starts, waits on the service past a second boundary, then reads and lands.
+    state.slowMs = 2_100;
+    expect((await syncByHand(pool)).status).toBe(200);
+    const [[landed]] = (await pool.query( // module-review-ok: fixture SQL, the newest arrival of the batch this run landed
+      "SELECT UNIX_TIMESTAMP(MAX(received_at)) AS at FROM external_proposals WHERE batch_id = 'sync-snap-after'",
+    )) as unknown as [Array<{ at: number | string | null }>];
+    expect(landed!.at).not.toBeNull();
+    const kept = Date.parse((await newest()).takenAt) / 1000;
+    // "Last checked" is the end of the read: never earlier than what the read landed.
+    expect(kept).toBeGreaterThanOrEqual(Number(landed!.at));
+  }, 15_000);
 
   it("A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC: the proposals still land", async () => {
     serviceHolds("fails");
