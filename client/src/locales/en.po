@@ -7,37 +7,121 @@ msgstr ""
 "X-Generator: @lingui/cli\n"
 "Language: en\n"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Kind of work"
+msgstr "Kind of work"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Say why"
+#~ msgstr "Say why"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Reason"
+msgstr "Reason"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Pick a reason"
+msgstr "Pick a reason"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Open menu"
 msgstr "Open menu"
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Wide range"
+msgstr "Wide range"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in"
 #~ msgstr "Sign in"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Hide how this was worked out"
+msgstr "Hide how this was worked out"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Show the suggestion"
+msgstr "Show the suggestion"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Say why"
+msgstr "Say why"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Estimated effort for the moon, in hours"
+msgstr "Estimated effort for the moon, in hours"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Close menu"
 msgstr "Close menu"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
+msgstr "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Work out this role's pay with the valuation engine"
+msgstr "Work out this role's pay with the valuation engine"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Set this role's pay"
+#~ msgstr "Set this role's pay"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Kind of work"
+#~ msgstr "Kind of work"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Open menu"
 #~ msgstr "Open menu"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "The figure you set"
+#~ msgstr "The figure you set"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Or as much as"
+#~ msgstr "Or as much as"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Saved"
+#~ msgstr "Saved"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Your figure"
+#~ msgstr "Your figure"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Paid as {paid}."
+msgstr "Paid as {paid}."
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr "Vote on it again here"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Medium range"
+msgstr "Medium range"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Skip to content"
@@ -52,23 +136,123 @@ msgstr "Your account, {firstName}"
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Saved. The role's pay is set."
+msgstr "Saved. The role's pay is set."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This figure is outside the suggestion's band, so pick a reason."
+msgstr "This figure is outside the suggestion's band, so pick a reason."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
+msgstr "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Hide the valuation engine"
+msgstr "Hide the valuation engine"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
+msgstr "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgctxt "role pay"
+msgid "Opening…"
+msgstr "Opening…"
+
+#. placeholder {0}: money(s.range.lowTotalMinor)
+#. placeholder {1}: money(s.range.highTotalMinor)
+#. placeholder {2}: widthWords[s.range.width]
+#. placeholder {3}: s.range.why.join(", ")
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Likely {0} to {1}. {2}: {3}."
+msgstr "Likely {0} to {1}. {2}: {3}."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "My own figure"
+#~ msgstr "My own figure"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Reading the village's pay settings…"
+msgstr "Reading the village's pay settings…"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "A note (optional)"
+#~ msgstr "A note (optional)"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
+msgstr "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Your figure"
+msgstr "Your figure"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign in or join"
 msgstr "Sign in or join"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "The figure you set"
+msgstr "The figure you set"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is inside the suggestion's band, so your word sets it."
+msgstr "This is inside the suggestion's band, so your word sets it."
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Reward"
+msgstr "Reward"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Could be as little as"
+msgstr "Could be as little as"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
 #~ msgstr "Sign out everywhere"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "My own figure"
+msgstr "My own figure"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Main Site"
 msgstr "Main Site"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Set this role's pay"
+msgstr "Set this role's pay"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Or as much as"
+msgstr "Or as much as"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Pick a reason"
+#~ msgstr "Pick a reason"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Narrow range"
+msgstr "Narrow range"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Reason"
+#~ msgstr "Reason"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Main Site"
@@ -78,11 +262,58 @@ msgstr "Main Site"
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Your account, {firstName}"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Saved"
+msgstr "Saved"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Responsibility"
+#~ msgstr "Responsibility"
+
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Use the suggestion, {0}"
+msgstr "Use the suggestion, {0}"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "A note (optional)"
+msgstr "A note (optional)"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Skip to content"
 msgstr "Skip to content"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure first, before you see the suggestion (optional)"
+msgstr "Your own figure first, before you see the suggestion (optional)"
+
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Use the suggestion, {0}"
+#~ msgstr "Use the suggestion, {0}"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "How this was worked out"
+msgstr "How this was worked out"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in or join"
 #~ msgstr "Sign in or join"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+#~ msgid "Show the suggestion"
+#~ msgstr "Show the suggestion"
+
+#. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure was {0}."
+msgstr "Your own figure was {0}."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Responsibility"
+msgstr "Responsibility"
