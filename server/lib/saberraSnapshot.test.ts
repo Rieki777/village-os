@@ -39,6 +39,8 @@ const state = vi.hoisted(() => ({
   sessionThrows: false,
   /** When true, storing the facts throws: a failure after the service answered. */
   factsFail: false,
+  /** When true, the age prune leaves carried kinds alone, so the carry's own rule is what is seen. */
+  keepCarried: false,
   /** How long opening a session takes, so a run's start and its landing fall in different seconds. */
   slowMs: 0,
   /** A row deleted just before the next read of rows by seq, the way a prune racing a read would. */
@@ -66,6 +68,7 @@ vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
       if (state.snapshotFails) throw Object.assign(new Error("Invalid JSON text"), { code: "ER_INVALID_JSON_TEXT" });
       return real.insertSnapshot(...args);
     },
+    pruneCarriedOlderThan: async (...args: Parameters<typeof real.pruneCarriedOlderThan>) => (state.keepCarried ? 0 : real.pruneCarriedOlderThan(...args)),
     snapshotsBySeq: async (...args: Parameters<typeof real.snapshotsBySeq>) => {
       if (state.pruneOnRead !== null) {
         const seq = state.pruneOnRead;
@@ -201,6 +204,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     state.factsFail = false;
     state.pruneOnRead = null;
     state.slowMs = 0;
+    state.keepCarried = false;
     await pool.query("DELETE FROM saberra_snapshots WHERE seq > 0"); // module-review-ok: fixture SQL, each test starts from no snapshot
     await writeSyncLogDocument(pool, { runs: [], landedFingerprint: null });
   });
@@ -589,6 +593,21 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(after.flatMap((r) => [...r.snapshot.circles.records, ...r.snapshot.roles.records])).toEqual([]);
     expect(JSON.stringify(after)).not.toContain("Jane");
   }, 60_000);
+
+  it("NEVER CARRIES A KIND WHOSE LAST WHOLE READ IS PAST THE AGE, before any prune runs (review N1)", async () => {
+    const DAY = 86_400_000;
+    serviceHolds("stale");
+    const records = (state.read.role as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "role" as const }));
+    const failed = { asked: ["circle", "role"], failed: ["circle", "role"], truncated: [], records: [] };
+    await writeSnapshot(pool, { asked: ["circle", "role"], failed: [], truncated: [], records }, "scheduled", new Date(Date.now() - 59 * DAY));
+    await writeSnapshot(pool, failed, "scheduled", new Date(Date.now() - 2 * DAY));
+    // The control: a day inside the age, still carried.
+    expect((await newest()).roles.records).toHaveLength(1);
+    // Past the age: the next attempt carries nothing, with the prune of carried kinds switched off.
+    state.keepCarried = true;
+    await writeSnapshot(pool, failed, "scheduled", new Date(Date.now() + 2 * DAY));
+    expect((await newest()).roles).toEqual({ read: "failed", records: [] });
+  });
 
   it("THIRTY ATTEMPTS THE SERVICE NEVER ANSWERED NEVER PRUNE THE LAST FULL CHECK (review C6)", async () => {
     serviceHolds("outage");
