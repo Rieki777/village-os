@@ -53,13 +53,22 @@ function recordOf(r: SnapshotRecord): SnapshotRecord {
     const { match: _dropped, ...rest } = r;
     return rest;
   }
-  const given = m.agreed && typeof m.agreed === "object" && !Array.isArray(m.agreed) ? (m.agreed as Record<string, unknown>) : {};
+  const objectOf = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia };
+  // What both sides held, as hashes (review N3): text only.
+  const held: Partial<Record<AgreedSlot, string>> = {};
+  for (const s of SLOTS) {
+    const v = objectOf(m.held)[s];
+    if (typeof v === "string") held[s] = v;
+  }
+  if (Object.keys(held).length) match.held = held;
+  // A row kept before held the words, or true: still read, never written now.
   const agreed: Partial<Record<AgreedSlot, string | true>> = {};
   for (const s of SLOTS) {
-    const v = given[s];
+    const v = objectOf(m.agreed)[s];
     if (v === true || typeof v === "string") agreed[s] = v;
   }
-  const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia, agreed };
+  if (Object.keys(agreed).length) match.agreed = agreed;
   // The pay the service held when ours was last in step: a hash, kept only as text.
   if (typeof m.pay === "string") match.pay = m.pay;
   return { ...r, match };

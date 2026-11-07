@@ -114,7 +114,7 @@ vi.mock("./identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1
 
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { seatIdFor } from "../../shared/structurePlan";
-import type { Snapshot } from "../../shared/seraDifferences";
+import { valueHash, type Snapshot } from "../../shared/seraDifferences";
 import { landProposal, markProposalDecided, proposalsInBatch } from "./externalProposals";
 import { pollOnce, syncByHand } from "./saberraSync";
 import { SNAPSHOT_KEEP, TEXT_KEEP, writeSnapshot } from "./saberraSnapshot";
@@ -478,12 +478,19 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
   });
 
   it("A STORED MATCH READS BACK WHOLE, the pay it carries included, and a malformed one reads as none", async () => {
-    const whole = { ourId: "role-1", via: "earlier", agreed: { name: true, aim: "Holds the water.", circle: "land" }, pay: "0123456789abcdef" };
+    const whole = {
+      ourId: "role-1",
+      via: "earlier",
+      held: { name: "aaaaaaaaaaaaaaaa", aim: "bbbbbbbbbbbbbbbb", circle: "land" },
+      // A row kept before review N3 held the words: still read back.
+      agreed: { name: true, aim: "Holds the water.", circle: "land" },
+      pay: "0123456789abcdef",
+    };
     const records = [
       { id: pageId("rt-1"), fields: { "Role Name": "One" }, match: whole },
       { id: pageId("rt-2"), fields: { "Role Name": "Two" }, match: null },
       { id: pageId("rt-3"), fields: { "Role Name": "Three" }, match: { ourId: "role-3", via: "guess", agreed: {} } },
-      { id: pageId("rt-4"), fields: { "Role Name": "Four" }, match: { ourId: "role-4", via: "name", agreed: { name: 7, aim: true }, pay: 12 } },
+      { id: pageId("rt-4"), fields: { "Role Name": "Four" }, match: { ourId: "role-4", via: "name", held: { name: 5, aim: "cccccccccccccccc" }, agreed: { name: 7, aim: true }, pay: 12 } },
     ];
     await insertSnapshot(pool, new Date(), { trigger: "by-hand", circles: { read: "empty", records: [] }, roles: { read: "whole", records: records as never } });
     const back = (await newest()).roles.records;
@@ -492,7 +499,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     // A way nobody matches by is no match at all: the record reads as one kept before matches were stored.
     expect("match" in back[2]!).toBe(false);
     // What is not text or true is left out, and so is a pay that is not text.
-    expect(back[3]!.match).toEqual({ ourId: "role-4", via: "name", agreed: { aim: true } });
+    expect(back[3]!.match).toEqual({ ourId: "role-4", via: "name", held: { aim: "cccccccccccccccc" }, agreed: { aim: true } });
   });
 
   it("A RENAME HERE BETWEEN TWO SYNCS IS OURS AHEAD: each read is kept with its match as it was made then (review C2)", async () => {
@@ -521,10 +528,11 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       ["rename", "oursAhead", "c2-water"],
     ]);
     // What the first read was kept with, and the second: the match made then, and what both sides held.
-    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", agreed: { name: true } });
-    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", agreed: { name: true, aim: true, circle: "c2-land" } });
+    const held = { name: valueHash("c2 water steward"), aim: valueHash("Holds the water."), circle: "c2-land" };
+    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") } });
+    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", held });
     const second = await newest();
-    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", agreed: { name: true, aim: true, circle: "c2-land" } });
+    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", held });
   });
 
   it("THE SERVICE NOT ANSWERING IS KEPT AS A READ, both kinds failed and carried, so the list says when it last tried (review C6)", async () => {

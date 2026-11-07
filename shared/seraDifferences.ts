@@ -106,11 +106,18 @@ export interface SnapshotMatch {
   ourId: string;
   via: MatchVia;
   /**
-   * The value both sides last held for each compared field, normalised: the
-   * base for a field the history gives none (review C2). Set where they agree
-   * at this read and carried from the read before where they do not, so it
-   * outlives the reads it was seen in. `true` is the service's own value in
-   * this record, kept once; a circle is our circle's id.
+   * What both sides last held for each compared field (review C2): the base
+   * for a field the history gives none. A hash of the normalised value, a
+   * name's folded to lower case, and never the words (review N3); for a
+   * role's circle, our circle's id. Set where they agree at this read and
+   * carried from the read before where they do not, so it outlives the reads
+   * it was seen in.
+   */
+  held?: Partial<Record<AgreedSlot, string>>;
+  /**
+   * Rows kept before review N3 held the words here instead, or `true` for the
+   * service's own value in the record. Read, so such a row still reads; never
+   * written now.
    */
   agreed?: Partial<Record<AgreedSlot, string | true>>;
   /**
@@ -242,8 +249,13 @@ export const LANES: readonly Lane[] = ["facts", "lowRisk", "decision"];
  */
 export type DifferenceState = "suggestion" | "conflict" | "oursAhead";
 
-/** What both sides agreed on last, or "unknown" when nothing traceable says. */
-export type DifferenceBase = "unknown" | { value: string | null };
+/**
+ * What both sides agreed on last, or "unknown" when nothing traceable says.
+ * `hash` is a value both held whose words are not kept (review N3): it is
+ * compared by its hash, and shown as the words of whichever side still holds
+ * it, when one does.
+ */
+export type DifferenceBase = "unknown" | { value: string | null } | { hash: string };
 
 /** `earlier`: by the page id it answered to in an earlier read, or in the history. */
 export type MatchVia = "link" | "pageId" | "earlier" | "name" | "alias";
@@ -799,12 +811,21 @@ function newestStampOf(snapshots: readonly Snapshot[], kind: "circles" | "roles"
 const slotField = (kind: "circles" | "roles", slot: AgreedSlot): string | null =>
   slot === "aim" ? F.body : slot === "name" ? (kind === "circles" ? F.circleName : F.roleName) : null;
 
-/** The value a stored match says both sides last held for a slot, or null when it says nothing. */
-function agreedValue(rec: SnapshotRecord, kind: "circles" | "roles", slot: AgreedSlot, norm: Normaliser): string | null {
-  const v = rec.match?.agreed?.[slot];
-  if (typeof v === "string") return v;
+/**
+ * What a stored match says both sides last held for a slot, or null when it
+ * says nothing: a hash (a circle's our id), or the words a row kept before
+ * review N3 held.
+ */
+function heldBase(rec: SnapshotRecord, kind: "circles" | "roles", slot: AgreedSlot, norm: Normaliser): DifferenceBase | null {
+  const m = rec.match;
+  if (!m) return null;
+  const h = m.held?.[slot];
+  if (typeof h === "string") return slot === "circle" ? { value: h } : { hash: h };
+  const v = m.agreed?.[slot];
+  if (typeof v === "string") return { value: v };
   const field = slotField(kind, slot);
-  return v === true && field !== null ? textOf(rec, field, norm) : null;
+  const text = v === true && field !== null ? textOf(rec, field, norm) : null;
+  return text === null ? null : { value: text };
 }
 
 /**
@@ -823,8 +844,8 @@ function agreedBase(
   for (const s of snapshots) {
     const rec = (s?.[kind]?.records ?? []).find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pk);
     if (!rec || rec.match?.ourId !== ourId) continue;
-    const value = agreedValue(rec, kind, slot, norm);
-    if (value !== null) return { value };
+    const held = heldBase(rec, kind, slot, norm);
+    if (held !== null) return held;
   }
   return null;
 }
@@ -839,7 +860,7 @@ function agreedBase(
  * It is unknown, so it is flagged and never applies by itself or in bulk.
  */
 function tracedUpToCase(traced: DifferenceBase | undefined, sera: string | null): DifferenceBase | undefined {
-  if (!traced || traced === "unknown" || traced.value === null || sera === null || traced.value === sera) return traced;
+  if (!traced || traced === "unknown" || !("value" in traced) || traced.value === null || sera === null || traced.value === sera) return traced;
   return traced.value.toLowerCase() === sera.toLowerCase() ? "unknown" : traced;
 }
 
@@ -851,16 +872,28 @@ function baseOr(traced: DifferenceBase | undefined, agreed: () => DifferenceBase
 
 // ── The three ways ──────────────────────────────────────────────────────────
 
-type Same = (a: string | null, b: string | null) => boolean;
-const exactly: Same = (a, b) => a === b;
+/** What a value is compared by: a hash of it (R6), so a base known by its hash alone compares too (review N3). */
+type Key = (v: string | null) => string;
+const exactKey: Key = (v) => valueHash(v);
 /** Two names are one name when only their capitals differ, the rule matching by name already keeps: no rename. */
-const sameName: Same = (a, b) => a === b || (a !== null && b !== null && fold(a) === fold(b));
+const nameKey: Key = (v) => valueHash(v === null ? null : fold(v));
+const keyFor = (slot: AgreedSlot): Key => (slot === "name" ? nameKey : exactKey);
+const sameName = (a: string | null, b: string | null): boolean => nameKey(a) === nameKey(b);
+const baseKey = (b: Exclude<DifferenceBase, "unknown">, key: Key): string => ("hash" in b ? b.hash : key(b.value));
+
+/** A base known by its hash, shown as the words of whichever side still holds it, when one does. */
+function shownBase(base: DifferenceBase, sera: string | null, ours: string | null, key: Key): DifferenceBase {
+  if (base === "unknown" || !("hash" in base)) return base;
+  if (base.hash === key(sera)) return { value: sera };
+  if (base.hash === key(ours)) return { value: ours };
+  return base;
+}
 
 /** A field's state, or null when there is nothing to say (absent at the service, or both the same). */
-function threeWay(sera: string | null, ours: string | null, base: DifferenceBase, same: Same = exactly): DifferenceState | null {
-  if (sera === null || same(sera, ours)) return null;
-  if (base === "unknown" || same(base.value, ours)) return "suggestion";
-  return same(base.value, sera) ? "oursAhead" : "conflict";
+function threeWay(sera: string | null, ours: string | null, base: DifferenceBase, key: Key = exactKey): DifferenceState | null {
+  if (sera === null || key(sera) === key(ours)) return null;
+  if (base === "unknown" || baseKey(base, key) === key(ours)) return "suggestion";
+  return baseKey(base, key) === key(sera) ? "oursAhead" : "conflict";
 }
 
 /**
@@ -878,7 +911,8 @@ function presenceState(sera: Presence, ours: Presence, base: Presence | undefine
 /** A move compares the SET of the service's circles with the one circle a role sits in here (R7). */
 function moveState(seraKeys: readonly string[], ours: string | null, base: DifferenceBase): DifferenceState | null {
   if (seraKeys.length === 0 || (ours !== null && seraKeys.includes(ours))) return null;
-  if (base === "unknown") return "suggestion";
+  // A circle's base is our circle's id, never a hash.
+  if (base === "unknown" || !("value" in base)) return "suggestion";
   if (base.value !== null && seraKeys.includes(base.value)) return "oursAhead";
   return base.value === ours ? "suggestion" : "conflict";
 }
@@ -1114,23 +1148,29 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
   const { latest, norm, circleById, roleById, circleMatch, roleMatch, chart } = p;
   const older = input.snapshots.slice(1);
   const dayBefore = readADayBefore(input.snapshots, Date.parse(latest.takenAt));
-  /** One slot: `true` when both sides hold the service's value now, else what an older read carried, if anything. */
-  const slot = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, s: AgreedSlot, sera: string | null, agreesNow: boolean, now: string | true) => {
-    if (agreesNow) return now;
+  /**
+   * One slot: what both sides hold now when they agree, else what an older
+   * read carried, if anything. Always a hash, a name's folded, and for a
+   * circle our circle's id: the words never travel on (review N3).
+   */
+  const slot = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, s: AgreedSlot, now: string | null) => {
+    if (now !== null) return s === "circle" ? now : keyFor(s)(now);
     const carried = agreedBase(older, kind, pageKey(rec.id), ourId, s, norm);
-    if (!carried || carried === "unknown" || carried.value === null) return undefined;
-    return s !== "circle" && carried.value === sera ? true : carried.value;
+    if (!carried || carried === "unknown") return undefined;
+    if ("hash" in carried) return carried.hash;
+    if (carried.value === null) return undefined;
+    return s === "circle" ? carried.value : keyFor(s)(carried.value);
   };
-  const agreedOf = (entries: Array<[AgreedSlot, string | true | undefined]>) =>
-    Object.fromEntries(entries.filter((e): e is [AgreedSlot, string | true] => e[1] !== undefined)) as Partial<Record<AgreedSlot, string | true>>;
+  const heldOf = (entries: Array<[AgreedSlot, string | undefined]>) =>
+    Object.fromEntries(entries.filter((e): e is [AgreedSlot, string] => e[1] !== undefined)) as Partial<Record<AgreedSlot, string>>;
 
   const circleStamp = (rec: SnapshotRecord): SnapshotMatch | null => {
     const m = circleMatch.byPage.get(pageKey(rec.id));
     const live = m ? circleById.get(m.ourId) : undefined;
     if (!m || !live) return null;
     const name = textOf(rec, F.circleName, norm);
-    const nameNow = name !== null && sameName(name, norm.plain(live.name));
-    return { ourId: live.id, via: m.via, agreed: agreedOf([["name", slot("circles", rec, live.id, "name", name, nameNow, true)]]) };
+    const nameNow = name !== null && sameName(name, norm.plain(live.name)) ? name : null;
+    return { ourId: live.id, via: m.via, held: heldOf([["name", slot("circles", rec, live.id, "name", nameNow)]]) };
   };
   const roleStamp = (rec: SnapshotRecord): SnapshotMatch | null => {
     const m = roleMatch.byPage.get(pageKey(rec.id));
@@ -1142,10 +1182,10 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
     const out: SnapshotMatch = {
       ourId: live.id,
       via: m.via,
-      agreed: agreedOf([
-        ["name", slot("roles", rec, live.id, "name", name, name !== null && sameName(name, norm.plain(live.name)), true)],
-        ["aim", slot("roles", rec, live.id, "aim", aim, aim !== null && aim === norm.prose(live.aim), true)],
-        ["circle", slot("roles", rec, live.id, "circle", null, inCircle, live.circleId ?? "")],
+      held: heldOf([
+        ["name", slot("roles", rec, live.id, "name", name !== null && sameName(name, norm.plain(live.name)) ? name : null)],
+        ["aim", slot("roles", rec, live.id, "aim", aim !== null && aim === norm.prose(live.aim) ? aim : null)],
+        ["circle", slot("roles", rec, live.id, "circle", inCircle ? live.circleId : null)],
       ]),
     };
     // Pay set here: the service's pay when ours was last in step, carried while it stays set. The
@@ -1258,9 +1298,9 @@ export function differences(input: DifferencesInput): Difference[] {
     // While the service's name still names our circle, by its name or an alias, it is no
     // rename (review C3); one matched by a link or an older read may carry a new one.
     if (name === null || !circlesNamed(name, liveCircles).includes(live.id)) {
-      const nameBase = baseOr(base?.name, agreed("circles", rec, live.id, "name"));
       const ourName = norm.plain(live.name);
-      const renamed = threeWay(name, ourName, nameBase, sameName);
+      const nameBase = shownBase(baseOr(base?.name, agreed("circles", rec, live.id, "name")), name, ourName, nameKey);
+      const renamed = threeWay(name, ourName, nameBase, nameKey);
       if (renamed) {
         drafts.push({
           kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, ours: ourName, oursAsStored: live.name, base: nameBase,
@@ -1326,9 +1366,9 @@ export function differences(input: DifferencesInput): Difference[] {
       });
     };
 
-    const nameBase = baseOr(base?.name, agreed("roles", rec, live.id, "name"));
     const ourName = norm.plain(live.name);
-    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, sameName), [F.roleName], { stored: live.name });
+    const nameBase = shownBase(baseOr(base?.name, agreed("roles", rec, live.id, "name")), name, ourName, nameKey);
+    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, nameKey), [F.roleName], { stored: live.name });
 
     const keys = placed.refs.map((r) => r.key).sort();
     const circleBase = baseOr(base?.circleId, agreed("roles", rec, live.id, "circle"));
@@ -1343,8 +1383,8 @@ export function differences(input: DifferencesInput): Difference[] {
     });
 
     const aim = textOf(rec, F.body, norm);
-    const aimBase = baseOr(tracedUpToCase(base?.aim, aim), agreed("roles", rec, live.id, "aim"));
     const ourAim = norm.prose(live.aim);
+    const aimBase = shownBase(baseOr(tracedUpToCase(base?.aim, aim), agreed("roles", rec, live.id, "aim")), aim, ourAim, exactKey);
     field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body], { stored: live.aim });
 
     // Pay is information: its base is never known, so it is never taken in bulk (R23).
