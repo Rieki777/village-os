@@ -46,7 +46,9 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
     register(app, {
       authedUser: (async (req: express.Request) => (req.header("x-user") ? { id: req.header("x-user"), role: "member" } : null)) as never,
       getPool: () => pool,
-      members: { byId: async (id: string) => ({ id, name: id === "u1" ? "Ana" : "Someone" }) } as never,
+      members: { byId: async (id: string) => ({ id, name: id === "u1" ? "Ana" : id === "rick" ? "Rick Moss" : "Someone" }) } as never,
+      rolesCarrying: () => [{ id: "treasury", name: "Treasury" }],
+      roleHolders: () => [{ roleId: "treasury", userId: "rick" }],
       guardCapability: (async (req: express.Request, res: express.Response) => {
         if (treasurers.has(String(req.header("x-user")))) return true;
         res.status(req.header("x-user") ? 403 : 401).json({ error: "cash_pay_required" });
@@ -125,5 +127,18 @@ describe.skipIf(!testDbConfigured())("the invoice rails' doors: the caller's own
     await postTo("/api/me/treasury/sync", "u2");
     await postTo("/api/me/treasury/sync", "u3");
     expect(seraClientCalls).toBe(1);
+  });
+
+  it("names who approved as Role (FirstName) on the live doors, and stores no name in the sync view", async () => {
+    await pool.query("UPDATE `moon_invoices` SET `status` = 'approved', `approved_at` = '2026-11-07 09:00:00', `approved_by` = 'rick' WHERE `id` = 'mv-1'"); // module-review-ok: a test fixture on the scratch schema
+    const mine = await (await get("/api/me/invoice-track", "u1")).json();
+    expect(mine.tracks[0].track[2]).toMatchObject({ step: "approved", done: true, actorLabel: "Treasury (Rick)" });
+    const desk = await (await get("/api/cash-owed/invoice-track", "treasurer-1")).json();
+    expect(desk.tracks[0].track[2].actorLabel).toBe("Treasury (Rick)");
+    expect((await postTo("/api/me/treasury/sync", "u1")).status).toBe(200);
+    const [rows] = await pool.query<any[]>("SELECT `view_json` FROM `treasury_sync_views`"); // module-review-ok: a test fixture on the scratch schema
+    expect(rows.length).toBe(1);
+    expect(String(rows[0].view_json)).toContain("us-llc-0007");
+    expect(String(rows[0].view_json)).not.toContain("Rick");
   });
 });
