@@ -953,7 +953,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   // The Treasurer's door to a role's pay, PUT /api/org/roles/:id/pay, lives in
-  // server/routes/valuation.ts (0332): it sets the figure beside the engine's suggestion.
+  // server/routes/valuation.ts (0336): it sets the figure beside the engine's suggestion.
 
   app.post("/api/admin/org/roles/:id/holders", async (req, res) => {
     // 0098: `org.seat`. Deciding who sits in the village's seats is the

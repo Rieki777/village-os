@@ -1,4 +1,4 @@
--- 0332: the valuation engine keeps its model, and every figure set with it keeps its working.
+-- 0336 (claimed as 0332, renumbered before it reached main or any village): the valuation engine keeps its model, and every figure set with it keeps its working.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 2026-11-06: "Role pay is set by both the treasurer and the role/valuation

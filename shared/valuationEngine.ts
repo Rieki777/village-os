@@ -116,6 +116,15 @@ export interface PayeeSuggestion {
   receipt: { folded: ReceiptLine[]; unfolded: ReceiptLine[] };
   paidAs: PaidAs[];
   levers: Lever[];
+  /** Present on a contract-price suggestion (P1, `shared/valuationContract.ts`). */
+  contract?: {
+    deliverable: string;
+    acceptance: string | null;
+    /** The effort-based figure, worked beside the contract as a reference. Never paid. */
+    reference: { totalMinor: number; lowTotalMinor: number; highTotalMinor: number } | null;
+    /** The contract's base is under minimum wage for the estimated effort (II.10). A warning, never a refusal. */
+    belowFloor: boolean;
+  };
 }
 
 /** A refusal names where it is fixed (IV.8), so nothing is a dead end (0.4). */
