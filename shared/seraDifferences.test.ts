@@ -1227,6 +1227,29 @@ describe("second review C5: a steward's capitals at accept are never taken for t
     const [changed] = differences(input({ snapshots: said("Water Steward", "Keeps the wells and the pumps clear."), live, accepted }));
     expect(changed).toMatchObject({ state: "suggestion", base: { value: "Keeps The Wells Clear." }, autoEligible: true, bulkEligible: true });
   });
+
+  it("A CIRCLE'S NAME FIXED BY CAPITALS AT ACCEPT IS NO RENAME, and nothing about it is bulk-taken (probe 6, C5 for circles)", () => {
+    const C = pid(121);
+    const R2 = pid(122);
+    const r2 = roleIdOf(R2);
+    const published: AcceptedChange[] = [
+      { op: "create_circle", orgRoleId: "circle:land-stewardship", payload: { name: "Land Stewardship" }, from: { pageId: C, name: "Land Stewardship" } },
+      {
+        op: "create_seat", orgRoleId: r2, payload: { name: "Water Steward", aim: "Keeps The Wells Clear.", circleId: "land-stewardship" },
+        from: { pageId: R2, name: "Water Steward", aim: "Keeps The Wells Clear.", circleName: "Land Stewardship" },
+      },
+    ];
+    const here = { circles: [liveCircle("land-stewardship", "Land Stewardship")], roles: [liveRole(r2, "Water Steward", "land-stewardship", { aim: "Keeps The Wells Clear." })] };
+    // The service still sends its own capitals, for the circle and for the role in it.
+    const sent = (n: number) => snapshot([circleRec(C, "land stewardship")], [roleRec(R2, "water steward", [C], { fields: { Body: "keeps the wells clear." } })], n);
+    const stamped: Snapshot[] = [];
+    for (const n of [1, 2]) stamped.unshift(stampMatches(input({ snapshots: [sent(n), ...stamped], live: here, accepted: published }))!);
+    for (const snapshots of [stamped, [sent(2), sent(1)]]) {
+      const list = differences(input({ snapshots, live: here, accepted: published }));
+      expect(list.filter((d) => d.kind === "rename")).toEqual([]);
+      expect(list.filter((d) => d.bulkEligible || d.autoEligible)).toEqual([]);
+    }
+  });
 });
 
 describe("second review K2: a stored match never sticks to a role retired here", () => {
