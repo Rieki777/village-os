@@ -120,5 +120,12 @@ describe("the test-pool timezone ratchet", () => {
     expect(r.status).toBe(0);
     // The denominators print, so a zero is readable as a measurement.
     expect(r.stdout).toContain("test files scanned");
+    // AT it, and not merely under it (readiness R209). Exit 0 alone held for a
+    // hand-raised baseline too, which is the shape #600 caught in another
+    // ratchet. A tree that has fallen below lowers the file with
+    // --update-baseline; a file above the tree was raised by hand.
+    const j = spawnSync(process.execPath, [SCRIPT, "--json"], { encoding: "utf8" });
+    const { total, baseline } = JSON.parse(j.stdout) as { total: number; baseline: number };
+    expect(total, `the tree measures ${total} unpinned and the committed baseline says ${baseline}`).toBe(baseline);
   });
 });
