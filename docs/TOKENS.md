@@ -74,7 +74,7 @@ Earned ownership. It accrues here from whichever rules the village turns on, and
 | Members may send it | no, because equity is never handed between members |
 | Can carry a price | no, a price is posted in credit tokens |
 
-**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay what the proposal names on `proposal.accepted` to the claimant, up to 1 a moon; what the quest names on `quest.completed` to the claimant, up to 1 a moon; what the role names on `role.cycle` to the holder, up to 1 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:equity-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay what the proposal names on `proposal.accepted` to the claimant; what the quest names on `quest.completed` to the claimant; what the role names on `role.cycle` to the holder. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** Settlement pays each seat what its role names of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
@@ -320,9 +320,9 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 | `role.cycle` | `gratitude` | 20 | none, work is paid in full | holder | no, seeded off |
 | `proposal.accepted` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | none, work is paid in full | claimant | yes |
-| `proposal.accepted` | `earned-equity` | 1 | none, work is paid in full | claimant | no, seeded off |
-| `quest.completed` | `earned-equity` | 1 | none, work is paid in full | claimant | no, seeded off |
-| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | no, seeded off |
+| `proposal.accepted` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `quest.completed` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | yes |
 
 A confirmed quest mints no recognition: a steward's consent is a yes and moves no Gratitude (Rye, 2026-10-21), and Gratitude is only ever sent from one member to another. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
 

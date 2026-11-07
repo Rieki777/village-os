@@ -405,9 +405,9 @@ The mint rules a fresh village is seeded with:
 | `role.cycle` | `gratitude` | 20 | none, work is paid in full | holder | **no** |
 | `proposal.accepted` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | none, work is paid in full | claimant | yes |
-| `proposal.accepted` | `earned-equity` | 1 | none, work is paid in full | claimant | **no** |
-| `quest.completed` | `earned-equity` | 1 | none, work is paid in full | claimant | **no** |
-| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | **no** |
+| `proposal.accepted` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `quest.completed` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | yes |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
