@@ -90,6 +90,24 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} gatherings are choosing a time.",
     celebrate: false,
   },
+  /*
+   * Change requests (Rye, 2026-11-06). `change_request_review` asks a holder
+   * of a power the changes touch to look, like a code owner;
+   * `change_request` tells a member about a note, an answer or an edit on a
+   * change request they wrote or wrote in.
+   */
+  change_request_review: {
+    group: "decisions",
+    blurb: "A change request touches what your role looks after. Ask, raise a concern or an objection, suggest an edit, or say you can live with it.",
+    many: "{n} change requests are asking for your review.",
+    celebrate: false,
+  },
+  change_request: {
+    group: "decisions",
+    blurb: "Something new on a change request you are part of. Open it to read and answer.",
+    many: "{n} updates on change requests you are part of.",
+    celebrate: false,
+  },
   ballot_closing: {
     group: "decisions",
     blurb: "The window is closing and your vote is still owed. Quorum is measured against everyone on the roll.",

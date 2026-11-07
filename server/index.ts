@@ -24835,7 +24835,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerQuorumFallbackRoutes(app, { authedUser, isAdmin, getPool, notify });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
-  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges });
+  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges, liveHoldersOf, notify, cycleStart: () => new Date(currentCycle().startsAt), proposalsOpenedSince: (id, since) => proposalsOpenedSince(getPool(), id, since) });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
   registerMoonSettlementRoutes(app, {
