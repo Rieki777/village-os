@@ -1338,6 +1338,58 @@ describe("second review K1: the newer base wins, the history's or what both side
     const [d] = differences(input({ snapshots: [read(2, "Newest words."), ...kept], live: live("New words."), accepted: later }));
     expect(d).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "New words." } });
   });
+
+  /** A publish of the service's words, traced; with a draft id as a read of the history gives one, or without as a hand-built one. */
+  const pub = (aim: string, draftId?: string): AcceptedChange => ({
+    op: "update_seat", orgRoleId: rid, payload: { name: "Cook", aim }, from: { pageId: R, name: "Cook", aim }, ...(draftId ? { draftId } : {}),
+  });
+  const stamp = (kept: Snapshot[], s: Snapshot, l: DifferencesInput["live"], accepted: AcceptedChange[]) => [stampMatches(input({ snapshots: [s, ...kept], live: l, accepted }))!, ...kept];
+
+  it("THE SAME VALUE PUBLISHED AGAIN IS STILL A NEWER PUBLISH, so it outranks what both held before it (probe 8 K1-a, review R3-4)", () => {
+    for (const [one, two] of [[undefined, undefined], ["d-1", "d-2"]] as const) {
+      const once = [pub("A.", one)];
+      // Both held A; the service changed to B and a person copied it; then the service went back to A.
+      let kept = stamp([], read(1, "A."), live("A."), once);
+      kept = stamp(kept, read(2, "B."), live("B."), once);
+      kept = stamp(kept, read(3, "A."), live("B."), once);
+      // The village publishes A again from it: ours is A.
+      const twice = [pub("A.", one), pub("A.", two)];
+      expect(differences(input({ snapshots: kept, live: live("A."), accepted: twice })), `${one}`).toEqual([]);
+      // The service moves on to C before the next read: a suggestion against the A just published.
+      const moved = stamp(kept, read(4, "C."), live("A."), twice);
+      const [d] = differences(input({ snapshots: moved, live: live("A."), accepted: twice }));
+      expect(d, `${one}`).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "A." } });
+      // K1-a': ours edited back to B meanwhile: both moved, a conflict.
+      const edited = stamp(kept, read(4, "C."), live("B."), twice);
+      expect(differences(input({ snapshots: edited, live: live("B."), accepted: twice })).map((x) => x.state), `${one}`).toEqual(["conflict"]);
+    }
+  });
+
+  it("A READ KEPT WITH THE OLDER VALUE MARK STILL READS THE OLD WAY (review R3-4)", () => {
+    // As round 2 kept it: what both held, under a hash of the history's value.
+    const asKept = (n: number, aim: string, mark: string): Snapshot => {
+      const s = read(n, aim);
+      return { ...s, roles: { ...s.roles, records: [{ ...s.roles.records[0], match: { ourId: rid, via: "pageId", held: { aim: valueHash(aim) }, traced: { aim: mark } } }] } };
+    };
+    // Both held "New words." while the history said "Old words.": held is newer, so ours going back is ours ahead (F).
+    const rows = [asKept(2, "New words.", valueHash("Old words.")), asKept(1, "Old words.", valueHash("Old words."))];
+    expect(differences(input({ snapshots: rows, live: live("Old words."), accepted: published })).map((d) => [d.kind, d.state])).toEqual([["textField", "oursAhead"]]);
+    // The control: a value mark the history no longer gives loses to the history, as before.
+    const stale = [asKept(2, "New words.", valueHash("Other words.")), asKept(1, "Old words.", valueHash("Other words."))];
+    expect(differences(input({ snapshots: stale, live: live("Old words."), accepted: published })).map((d) => [d.kind, d.state])).toEqual([["textField", "suggestion"]]);
+  });
+
+  it("PUBLISH, BOTH AGREE, PUBLISH AGAIN: the newest publish is the base (probe 8 K1-b)", () => {
+    let kept = stamp([], read(1, "A."), live("A."), [pub("A.", "d-1")]);
+    kept = stamp(kept, read(2, "B."), live("B."), [pub("A.", "d-1"), pub("B.", "d-2")]);
+    const three = [pub("A.", "d-1"), pub("B.", "d-2"), pub("C.", "d-3")];
+    // C published, and a person changed ours to Y before the next read: ours ahead.
+    kept = stamp(kept, read(3, "C."), live("Y."), three);
+    expect(differences(input({ snapshots: kept, live: live("Y."), accepted: three })).map((x) => [x.kind, x.state])).toEqual([["textField", "oursAhead"]]);
+    // Ours back to C, the service on to D: a suggestion.
+    kept = stamp(kept, read(4, "D."), live("C."), three);
+    expect(differences(input({ snapshots: kept, live: live("C."), accepted: three })).map((x) => [x.kind, x.state])).toEqual([["textField", "suggestion"]]);
+  });
 });
 
 describe("second review N3: a stored match keeps a hash of what both sides held, never the words", () => {
@@ -1449,11 +1501,11 @@ describe("second review C2: a rename here never turns what was matched into some
     keep(read(1), chart("Land"));
     // What both sides held: a hash of each, a name's folded, and our circle's id (review N3).
     // A circle made here has no history: its mark says so (review K1).
-    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "name", held: { name: valueHash("land") }, traced: { name: "none" } });
+    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "name", held: { name: valueHash("land") }, traced: { name: `by:${valueHash("none")}` } });
     expect(kept[0].roles.records[0].match).toMatchObject({ ourId: roleIdOf(R1), via: "pageId", held: { name: valueHash("role 0"), circle: "land" } });
     // Renamed here, then thirty more reads: the read that saw both agree is long gone.
     for (let i = 0; i < 30; i += 1) keep(read(2), chart("Land & Ecology"));
-    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "earlier", held: { name: valueHash("land") }, traced: { name: "none" } });
+    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "earlier", held: { name: valueHash("land") }, traced: { name: `by:${valueHash("none")}` } });
     const list = differences(input({ snapshots: kept, live: chart("Land & Ecology"), accepted }));
     expect(list.map((d) => [d.kind, d.state, d.base])).toEqual([["rename", "oursAhead", { value: "Land" }]]);
     // The service renames its circle since: a suggestion against the name both held.

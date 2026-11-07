@@ -560,8 +560,9 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     // What the first read was kept with, and the second: the match made then, and what both sides held.
     const held = { name: valueHash("c2 water steward"), aim: valueHash("Holds the water."), circle: "c2-land" };
     // Made here, so no history: each mark says so (review K1).
-    const traced = { name: "none", aim: "none", circle: "none" };
-    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") }, traced: { name: "none" } });
+    const none = `by:${valueHash("none")}`;
+    const traced = { name: none, aim: none, circle: none };
+    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") }, traced: { name: none } });
     expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", held, traced });
     const second = await newest();
     expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", held, traced });
