@@ -486,6 +486,7 @@ import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { blankFlatRoleMint } from "./lib/flatRoleMint";
+import { enableEarnedEquityRules } from "./lib/earnedEquityRules";
 import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
@@ -924,7 +925,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
-import { retireContentCopy } from "./lib/retiredContentCopy";
+import { GRATITUDE_PAY_COPY_RETIRED, retireContentCopy } from "./lib/retiredContentCopy";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -1944,6 +1945,7 @@ async function ensureDataFiles() {
   await runOnce("canonicalize-regen-units", canonicalizeRegenUnits);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
+  await runOnce("retire-gratitude-pay-copy-2026-11-01", async () => { const c = contentRepo.get(); if (c && typeof c === "object" && retireContentCopy(c, GRATITUDE_PAY_COPY_RETIRED)) await contentRepo.put(c); }); // Rye, 2026-11-01: Gratitude names only the recognition token
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
   // The ladder's default sentences went neutral: a village that already holds its page words keeps its path and stage words.
@@ -4898,6 +4900,7 @@ async function startServer() {
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
   await runOnce("flat-role-mint-off-2026-11-01", () => blankFlatRoleMint(getPool()).then(() => undefined)); // Rye, 2026-11-01: no flat role mint, from the next cycle
+  await runOnce("earned-equity-rules-on-2026-11-05", () => enableEarnedEquityRules(getPool()).then(() => undefined)); // Rye, 2026-11-05: on and blank, meaning set in Admin
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
