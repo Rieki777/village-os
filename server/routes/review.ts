@@ -110,7 +110,7 @@ import { payLineProblem, questPayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput } from "../../shared/workValue";
 import { register as registerStructureReview } from "./structureReview";
-import { circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
+import { archivedRefusal, circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
 
 type Deps = Pick<
   AppDeps,
@@ -429,6 +429,11 @@ export function register(app: Express, deps: Deps): void {
     if (!org.length) {
       return { ok: true, draftId: null, seats: 0, blocked: 0, blockedLines: [], noted: notes.length, ignored: [] };
     }
+    // What the source archived is never created from here (D1, 2026-11-06):
+    // this path reads no status, so it goes to the structure review, which
+    // lists archived records apart. Checked before anything is written.
+    const archived = archivedRefusal(org.map((p) => ({ id: p.id, kind: p.kind, payload: (edits[p.id] ?? p.payload) as Record<string, unknown> })));
+    if (archived) return { ok: false, error: archived };
 
     const first = org[0];
     const firstPayload = edits[first.id] ?? first.payload;
