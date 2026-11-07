@@ -35,6 +35,10 @@ msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
 
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "Vote on it again here"
+msgstr "Vote on it again here"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
@@ -43,6 +47,10 @@ msgstr "Sign out everywhere"
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Your account, {firstName}"
+
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "This asks again after <0>a vote too few of us answered</0>."
+msgstr "This asks again after <0>a vote too few of us answered</0>."
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
