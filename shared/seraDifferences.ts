@@ -199,6 +199,12 @@ export interface AcceptedChange {
   payload: Record<string, unknown> | null;
   /** What the service said for this subject, or null when no untouched proposal says. Null is left out of the base. */
   from: SeraOriginal | null;
+  /**
+   * The draft it was published in. Which publish set a field is what a stored
+   * match marks the history by (review R3-4); without one, its place in the
+   * history stands in.
+   */
+  draftId?: string;
 }
 
 /** A published change before it is traced. */
@@ -537,7 +543,7 @@ export function traceAccepted(changes: readonly PublishedChange[], proposals: re
     if (!p.original) continue;
     byDraft.set(p.draftId, [...(byDraft.get(p.draftId) ?? []), p]);
   }
-  return changes.map((c) => ({ op: c.op, orgRoleId: c.orgRoleId, payload: c.payload, from: traceOne(c, byDraft.get(c.draftId) ?? []) }));
+  return changes.map((c) => ({ op: c.op, orgRoleId: c.orgRoleId, payload: c.payload, from: traceOne(c, byDraft.get(c.draftId) ?? []), draftId: c.draftId }));
 }
 
 function traceOne(c: PublishedChange, props: readonly AcceptedProposal[]): SeraOriginal | null {
@@ -573,6 +579,8 @@ interface Base {
   aim?: DifferenceBase;
   presence?: Presence;
   pageId?: string;
+  /** Which traced change last set each field: its draft, or its place in the history (review R3-4). */
+  by?: Partial<Record<"name" | "aim" | "circleId", string>>;
 }
 
 /**
@@ -591,16 +599,29 @@ function basesFrom(accepted: readonly AcceptedChange[], circles: readonly LiveCi
     if (id === null && name === null) return { value: null };
     return id !== null && name !== null && circlesNamed(name, circles).includes(id) ? { value: id } : "unknown";
   };
-  for (const c of accepted) {
+  for (let i = 0; i < accepted.length; i += 1) {
+    const c = accepted[i];
     if (!c || typeof c.orgRoleId !== "string" || !c.from) continue;
     const p = c.payload && typeof c.payload === "object" ? c.payload : {};
     const from = c.from;
+    // Which publish this is: a second publish of the same value is still a newer one (review R3-4).
+    const which = typeof c.draftId === "string" && c.draftId !== "" ? `draft:${c.draftId}` : `at:${i}`;
     if (c.op === "create_seat" || c.op === "update_seat") {
       const b = roles.get(c.orgRoleId) ?? {};
+      const by = (b.by ??= {});
       const creates = c.op === "create_seat";
-      if (creates || has(p, "name")) b.name = agreed(norm.plain(p.name), norm.plain(from.name ?? null));
-      if (creates || has(p, "aim")) b.aim = agreed(norm.prose(p.aim), norm.prose(from.aim ?? null));
-      if (creates || has(p, "circleId")) b.circleId = circleAgreed(p.circleId, from.circleName ?? null);
+      if (creates || has(p, "name")) {
+        b.name = agreed(norm.plain(p.name), norm.plain(from.name ?? null));
+        by.name = which;
+      }
+      if (creates || has(p, "aim")) {
+        b.aim = agreed(norm.prose(p.aim), norm.prose(from.aim ?? null));
+        by.aim = which;
+      }
+      if (creates || has(p, "circleId")) {
+        b.circleId = circleAgreed(p.circleId, from.circleName ?? null);
+        by.circleId = which;
+      }
       b.presence = "live";
       if (from.pageId) b.pageId = from.pageId;
       roles.set(c.orgRoleId, b);
@@ -608,6 +629,7 @@ function basesFrom(accepted: readonly AcceptedChange[], circles: readonly LiveCi
       const id = c.orgRoleId.startsWith("circle:") ? c.orgRoleId.slice("circle:".length) : c.orgRoleId;
       const b = circleBases.get(id) ?? {};
       b.name = agreed(norm.plain(p.name), norm.plain(from.name ?? null));
+      (b.by ??= {}).name = which;
       b.presence = "live";
       if (from.pageId) b.pageId = from.pageId;
       circleBases.set(id, b);
@@ -884,20 +906,38 @@ function heldFor(
   return null;
 }
 
-/** A mark of the history's base for a field, as it stands: moved by any change published to it (review K1). */
+/**
+ * How rows kept before review R3-4 marked the history: by the value of its
+ * base. A second publish of the same value did not move it.
+ */
 const tracedMark = (b: DifferenceBase | undefined): string =>
   b === undefined ? "none" : b === "unknown" ? "unknown" : "hash" in b ? b.hash : valueHash(b.value);
 
 /**
- * The newer of the two bases (review K1). What both sides held was read after
- * everything published by then, so it is the newer one while the history's
- * base has not moved since; a change published after it makes the history
- * newer. With only one, that one; with neither, unknown. A read kept before
- * this carried no mark, and the history wins over it, as it did.
+ * The mark of the history for a field as it stands (review K1, R3-4): which
+ * traced change last set it, so any publish moves it, the same value
+ * published again included. "by:" tells it from a row's older value mark.
  */
-function newerBase(traced: DifferenceBase | undefined, raw: DifferenceBase | undefined, held: { base: DifferenceBase; traced?: string } | null): DifferenceBase {
+const historyMark = (b: Base | undefined, field: "name" | "aim" | "circleId"): string => `by:${valueHash(b?.by?.[field] ?? "none")}`;
+
+/**
+ * The newer of the two bases (review K1). What both sides held was read after
+ * everything published by then, so it is the newer one while the history has
+ * not moved since; a change published after it makes the history newer. With
+ * only one, that one; with neither, unknown. A read kept with the older value
+ * mark is compared the old way; one kept with no mark loses to the history,
+ * as it did.
+ */
+function newerBase(
+  traced: DifferenceBase | undefined,
+  raw: DifferenceBase | undefined,
+  mark: string,
+  held: { base: DifferenceBase; traced?: string } | null,
+): DifferenceBase {
   const known = traced !== undefined && traced !== "unknown";
-  if (held && (!known || held.traced === tracedMark(raw))) return held.base;
+  const was = held?.traced;
+  const unmoved = was === undefined ? false : was.startsWith("by:") ? was === mark : was === tracedMark(raw);
+  if (held && (!known || unmoved)) return held.base;
   if (known) return traced;
   return held?.base ?? "unknown";
 }
@@ -1212,10 +1252,10 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
     ourId: string,
     s: AgreedSlot,
     now: string | null,
-    history: DifferenceBase | undefined,
+    mark: string,
   ): { held: string; traced?: string } | undefined => {
-    // Agreeing now: held under the history's base as it stands at this read (review K1).
-    if (now !== null) return { held: s === "circle" ? now : keyFor(s)(now), traced: tracedMark(history) };
+    // Agreeing now: held under the history's mark as it stands at this read (review K1, R3-4).
+    if (now !== null) return { held: s === "circle" ? now : keyFor(s)(now), traced: mark };
     const carried = heldFor(older, kind, pageKey(rec.id), ourId, s, norm);
     if (!carried || carried.base === "unknown") return undefined;
     const b = carried.base;
@@ -1241,7 +1281,7 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
     const name = textOf(rec, F.circleName, norm);
     const nameNow = name !== null && sameName(name, norm.plain(live.name)) ? name : null;
     const history = bases.circles.get(live.id);
-    return { ourId: live.id, via: m.via, ...heldOf([["name", slot("circles", rec, live.id, "name", nameNow, history?.name)]]) };
+    return { ourId: live.id, via: m.via, ...heldOf([["name", slot("circles", rec, live.id, "name", nameNow, historyMark(history, "name"))]]) };
   };
   const roleStamp = (rec: SnapshotRecord): SnapshotMatch | null => {
     const m = roleMatch.byPage.get(pageKey(rec.id));
@@ -1255,21 +1295,22 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
       ourId: live.id,
       via: m.via,
       ...heldOf([
-        ["name", slot("roles", rec, live.id, "name", name !== null && sameName(name, norm.plain(live.name)) ? name : null, history?.name)],
-        ["aim", slot("roles", rec, live.id, "aim", aim !== null && aim === norm.prose(live.aim) ? aim : null, history?.aim)],
-        ["circle", slot("roles", rec, live.id, "circle", inCircle ? live.circleId : null, history?.circleId)],
+        ["name", slot("roles", rec, live.id, "name", name !== null && sameName(name, norm.plain(live.name)) ? name : null, historyMark(history, "name"))],
+        ["aim", slot("roles", rec, live.id, "aim", aim !== null && aim === norm.prose(live.aim) ? aim : null, historyMark(history, "aim"))],
+        ["circle", slot("roles", rec, live.id, "circle", inCircle ? live.circleId : null, historyMark(history, "circleId"))],
       ]),
     };
     // Pay set here: the service's pay when ours was last in step, carried while ours stays as it was.
-    // Ours changed since the read before: a person set it, having seen the service's pay at that read,
-    // so that read's pay is in step now (review K3). The first time, the read a day before stands in,
-    // the rule a row kept before this one is read by.
+    // Ours changed since the read before, or was not set at all then: a person set it, having seen the
+    // service's pay at that read, so that read's pay is in step now (review K3, R3-1). Only with no
+    // stored match for the role at all does the read a day before stand in, the rule a row kept
+    // before matches were stored is read by.
     if (live.paySet) {
       const before = newestStampOf(older, "roles", pageKey(rec.id), live.id);
       const kept = before?.match;
       const prior = dayBefore?.roles?.records?.find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pageKey(rec.id));
       if (kept?.pay !== undefined && (kept.ourPay === undefined || kept.ourPay === live.payHash)) out.pay = kept.pay;
-      else if (kept?.pay !== undefined && before) out.pay = valueHash(payOf(before, norm)?.key ?? null);
+      else if (before) out.pay = valueHash(payOf(before, norm)?.key ?? null);
       else out.pay = valueHash(prior ? (payOf(prior, norm)?.key ?? null) : (payOf(rec, norm)?.key ?? null));
       if (live.payHash !== undefined) out.ourPay = live.payHash;
     }
@@ -1294,10 +1335,18 @@ export function differences(input: DifferencesInput): Difference[] {
   /**
    * A field's base: the newer of the history's and what both sides last held
    * (review C2, K1). `traced` is the history's as compared, `raw` as it was
-   * traced, which is what its mark is made from.
+   * traced (what an older value mark was made from), `history` the base it
+   * came from (what the mark of which publish set it is read from).
    */
-  const baseFor = (kind: "circles" | "roles", rec: SnapshotRecord, ourId: string, slot: AgreedSlot, traced: DifferenceBase | undefined, raw = traced) =>
-    newerBase(traced, raw, heldFor(input.snapshots, kind, pageKey(rec.id), ourId, slot, norm));
+  const baseFor = (
+    kind: "circles" | "roles",
+    rec: SnapshotRecord,
+    ourId: string,
+    slot: AgreedSlot,
+    history: Base | undefined,
+    traced: DifferenceBase | undefined,
+    raw = traced,
+  ) => newerBase(traced, raw, historyMark(history, slot === "circle" ? "circleId" : slot), heldFor(input.snapshots, kind, pageKey(rec.id), ourId, slot, norm));
   const keyed = (list: readonly SnapshotRecord[] | undefined) => new Map(dedupe(list ?? []).map((r) => [pageKey(r.id), r]));
   const seenBefore = { circles: keyed(previous?.circles.records), roles: keyed(previous?.roles.records) };
   const aDayAgo = { circles: keyed(dayBefore?.circles.records), roles: keyed(dayBefore?.roles.records) };
@@ -1381,7 +1430,7 @@ export function differences(input: DifferencesInput): Difference[] {
     // rename (review C3); one matched by a link or an older read may carry a new one.
     if (name === null || !circlesNamed(name, liveCircles).includes(live.id)) {
       const ourName = norm.plain(live.name);
-      const nameBase = shownBase(baseFor("circles", rec, live.id, "name", base?.name), name, ourName, nameKey);
+      const nameBase = shownBase(baseFor("circles", rec, live.id, "name", base, base?.name), name, ourName, nameKey);
       const renamed = threeWay(name, ourName, nameBase, nameKey);
       if (renamed) {
         drafts.push({
@@ -1449,11 +1498,11 @@ export function differences(input: DifferencesInput): Difference[] {
     };
 
     const ourName = norm.plain(live.name);
-    const nameBase = shownBase(baseFor("roles", rec, live.id, "name", base?.name), name, ourName, nameKey);
+    const nameBase = shownBase(baseFor("roles", rec, live.id, "name", base, base?.name), name, ourName, nameKey);
     field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, nameKey), [F.roleName], { stored: live.name });
 
     const keys = placed.refs.map((r) => r.key).sort();
-    const circleBase = baseFor("roles", rec, live.id, "circle", base?.circleId);
+    const circleBase = baseFor("roles", rec, live.id, "circle", base, base?.circleId);
     const away = placed.refs.find((r) => !r.here);
     const moveFlags = [
       ...(away ? [flag("circleNotHere", { circle: away.name })] : []),
@@ -1466,7 +1515,7 @@ export function differences(input: DifferencesInput): Difference[] {
 
     const aim = textOf(rec, F.body, norm);
     const ourAim = norm.prose(live.aim);
-    const aimBase = shownBase(baseFor("roles", rec, live.id, "aim", tracedUpToCase(base?.aim, aim), base?.aim), aim, ourAim, exactKey);
+    const aimBase = shownBase(baseFor("roles", rec, live.id, "aim", base, tracedUpToCase(base?.aim, aim), base?.aim), aim, ourAim, exactKey);
     field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body], { stored: live.aim });
 
     // Pay is information: its base is never known, so it is never taken in bulk (R23).
@@ -1476,8 +1525,11 @@ export function differences(input: DifferencesInput): Difference[] {
       const was = prior ? (payOf(prior, norm)?.key ?? null) : undefined;
       // With pay set here, against the pay the stored match carries: it shows until a person
       // settles it, never only for a day. A row kept before matches were stored keeps the day.
-      const stamp = newestStampOf(input.snapshots, "roles", pk, live.id)?.match;
-      const inStep = stamp?.pay;
+      const stamped = newestStampOf(input.snapshots, "roles", pk, live.id);
+      const stamp = stamped?.match;
+      // A stored match with no pay: none was set here at that read, so ours was set after it, in
+      // step with what it showed (review R3-1). The read a day before only with no stored match.
+      const inStep = stamp?.pay ?? (stamped ? valueHash(payOf(stamped, norm)?.key ?? null) : undefined);
       // Pay set here changed since the newest read: a person settled what that read showed (review K3).
       const settledHere = inStep !== undefined && stamp?.ourPay !== undefined && live.payHash !== undefined && stamp.ourPay !== live.payHash;
       const moved = settledHere ? false : inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;
