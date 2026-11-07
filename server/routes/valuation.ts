@@ -1,5 +1,5 @@
 /**
- * THE VALUATION ENGINE'S ROUTES (0332): the model, a suggestion, and setting a
+ * THE VALUATION ENGINE'S ROUTES (0336): the model, a suggestion, and setting a
  * role's pay with the Treasurer AND the algorithm (Rye, 2026-11-06).
  *
  *   GET  /api/valuation/model              every signed-in member reads the model (constitution I.3)
