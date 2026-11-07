@@ -1069,6 +1069,8 @@ export const META_SETTING_KEYS: readonly string[] = [
   "governance.change_set_cap",
   // How many change requests one member may gather (spec R20).
   "governance.change_requests_gathering_per_member",
+  // How long a change request is reviewed (spec R20).
+  "governance.change_request_review_days",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */
