@@ -125,6 +125,18 @@ export interface EvaluateInput {
    * ballot in a village that has seated nobody for a non-human being.
    */
   quorum?: QuorumArithmetic;
+  /**
+   * THE QUORUM FALLBACK'S SECOND MISS (Rye, 2026-11-06): a re-run that misses
+   * quorum is decided by a simple majority of the votes cast. More yes than no
+   * carries it, a tie fails, an abstention takes no side. Used ONLY for a
+   * re-run's close (`missDecidedByMajority`, shared/quorumFallback.ts). Absent
+   * means a missed quorum is `no_quorum`, exactly as before.
+   *
+   * It replaces the quorum bar and the unity bar, and nothing else: a head
+   * floor and a standing consent objection still fail it closed, because those
+   * are what the subject's own sentence says, not how many turned up.
+   */
+  majorityOfCast?: boolean;
 }
 
 /** Heads on a frozen roll: how many answered which way, and how many seats. */
@@ -177,7 +189,8 @@ export function evaluateBallot(input: EvaluateInput): BallotOutcome {
   const quorum = input.quorum
     ? quorumPctOn(input.quorum)
     : quorumPctOf(input.tallies, input.totalWeight, abstain);
-  if (quorum < input.quorumPct) return "no_quorum";
+  const missed = quorum < input.quorumPct;
+  if (missed && !input.majorityOfCast) return "no_quorum";
   /*
    * THE HEAD FLOOR, CHECKED IN THE ENGINE AND NOWHERE ELSE.
    *
@@ -196,9 +209,9 @@ export function evaluateBallot(input: EvaluateInput): BallotOutcome {
     if (!input.heads) return "failed";
     if (input.heads.yesHeads < needYes) return "failed";
   }
-  if (input.method === "consent") {
-    return (input.openObjections ?? 0) === 0 ? "passed" : "failed";
-  }
+  if (input.method === "consent" && (input.openObjections ?? 0) > 0) return "failed";
+  if (missed) return input.tallies.yesW > input.tallies.noW ? "passed" : "failed";
+  if (input.method === "consent") return "passed";
   const unity = unityPctOf(input.tallies);
   if (input.method === "majority") return unity > 50 ? "passed" : "failed";
   if (input.method === "consensus") {
