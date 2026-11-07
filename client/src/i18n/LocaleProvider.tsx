@@ -37,10 +37,21 @@ type LocaleContextValue = {
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
+/**
+ * Outside a provider (a component test renders the header on its own) the
+ * language is whatever the global instance holds, English by default, and a
+ * choice is only remembered in this browser. The app always has a provider.
+ */
+const OUTSIDE_PROVIDER: LocaleContextValue = {
+  get locale() {
+    return i18n.locale || SOURCE_LOCALE;
+  },
+  setLocale: (tag) => rememberChoice(tag),
+  supported: offeredLocaleTags(),
+};
+
 export function useLocale(): LocaleContextValue {
-  const ctx = useContext(LocaleContext);
-  if (!ctx) throw new Error("useLocale outside <LocaleProvider>");
-  return ctx;
+  return useContext(LocaleContext) ?? OUTSIDE_PROVIDER;
 }
 
 function browserLanguages(): string[] {
@@ -65,6 +76,7 @@ export function LocaleProvider({
   fetchCatalog = fetchCatalogFromServer,
   timeoutMs = 1500,
   fallback = null,
+  onChoose,
 }: {
   children: ReactNode;
   sources?: LocaleSources;
@@ -72,6 +84,8 @@ export function LocaleProvider({
   timeoutMs?: number;
   /** Shown while the first catalog loads, up to `timeoutMs` (never English text: R32). */
   fallback?: ReactNode;
+  /** Called when someone picks a language (null: follow the browser), e.g. to save it to a member's profile. */
+  onChoose?: (tag: string | null) => void;
 }) {
   const supported = useMemo(() => offeredLocaleTags(import.meta.env.DEV), []);
   const browser = useMemo(() => sources.browser ?? browserLanguages(), [sources.browser]);
@@ -133,6 +147,9 @@ export function LocaleProvider({
   );
 
   useEffect(() => {
+    // A member's saved choice is mirrored into this browser, so the next cold
+    // start (and the server's first byte) is already in their language.
+    if (sources.saved) rememberChoice(sources.saved);
     load(choose(sources.saved ?? storedText("local", LOCALE_STORAGE_KEY)), true);
     // A member's saved choice arriving after sign-in re-runs this.
   }, [choose, load, sources.saved]);
@@ -151,9 +168,10 @@ export function LocaleProvider({
   const setLocale = useCallback(
     (tag: string | null) => {
       rememberChoice(tag);
+      onChoose?.(tag);
       load(choose(tag), false);
     },
-    [choose, load],
+    [choose, load, onChoose],
   );
 
   const value = useMemo(() => ({ locale, setLocale, supported }), [locale, setLocale, supported]);

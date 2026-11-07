@@ -211,6 +211,7 @@ import { exportMemberJournal, register as registerJournalRoutes } from "./routes
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { register as registerI18nRoutes } from "./routes/i18n";
+import { setShellLang, shellLocale } from "./lib/i18nShell";
 import { register as registerSessionCardRoutes } from "./routes/sessionCard";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
@@ -18217,7 +18218,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
-  registerI18nRoutes(app, { catalogDir: path.resolve(__dirname, ...(process.env.NODE_ENV === "production" ? [] : ["..", "dist"]), "i18n"), pseudoAllowed: () => process.env.NODE_ENV !== "production" });
+  registerI18nRoutes(app, { catalogDir: path.resolve(__dirname, ...(process.env.NODE_ENV === "production" ? [] : ["..", "dist"]), "i18n"), pseudoAllowed: () => process.env.NODE_ENV !== "production", authedUser, members, overLimit });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
   registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
@@ -18562,6 +18563,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       season: seasonState(),
       ...brochureConfig(),
       site: siteWords(contentRepo.get() ?? null, m),
+      defaultLocale: String(stringVar("village.default_locale")), // the language a visitor gets when the browser names none we offer (spec i18n US3)
     });
   });
 
@@ -26304,7 +26306,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       meta.image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
       meta.imageSize = { width: OG_WIDTH, height: OG_HEIGHT };
     }
-    const html = spliceMeta(shell, meta);
+    const html = withShellLocale(spliceMeta(shell, meta), req, res);
     // index.html is never cached hard here: a member holding a stale shell
     // asks for a bundle hash that no longer exists, which is a white screen.
     res.type("html").set("Cache-Control", "no-cache").send(html);
@@ -26321,8 +26323,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
     const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null, !brochurePageServed(req.path));
-    res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
+    res.type("html").set("Cache-Control", "no-cache").send(withShellLocale(spliceMeta(shellWithTheme(shell, getBrand), meta), req, res));
   });
+
+  /** `<html lang dir>` for this visitor (spec i18n R16): the cookie, their browser, the village default. */
+  function withShellLocale(html: string, req: express.Request, res: express.Response): string {
+    res.vary("Cookie").vary("Accept-Language");
+    return setShellLang(html, shellLocale({ cookie: req.headers.cookie, acceptLanguage: req.headers["accept-language"], villageDefault: String(stringVar("village.default_locale")) }));
+  }
 
   // Terminal error handler. Express 5 forwards a rejected handler promise
   // here by itself, on every verb. JSON, because every consumer is the SPA.

@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 199 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 200 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 221 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-248 dials in 36 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 32 choice, 38 text, 1 longtext.
+249 dials in 37 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 33 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ Each dial also says WHEN a change lands. 221 of them as soon as it is saved, and
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
 | Live Sessions | 2 | 2 | 0 |
+| Language | 1 | 1 | 0 |
 
 ## Every dial by name
 
@@ -331,6 +332,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
+| Default language | `village.default_locale` | Language | choice | `en` | the whole village |
 
 ## Membership
 
@@ -4442,6 +4444,29 @@ The length a new live session starts with when whoever opens it names none. The 
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+
+## Language
+
+1 dial. 1 for the whole village.
+
+### Default language
+
+The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.default_locale` |
+| Type | choice, one of a fixed list |
+| Default | `en` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `en` English.
+- `es` Español.
 
 ## What this file is made from
 

@@ -49,7 +49,7 @@ const arg = (name) => {
  * Files whose messages every reviewed language must translate. Each extraction
  * PR adds its files here once their Spanish is in (spec plan §1.7).
  */
-export const REVIEWED_SCOPE = ["client/src/components/Layout.tsx"];
+export const REVIEWED_SCOPE = ["client/src/components/Layout.tsx", "client/src/i18n/LanguagePicker.tsx"];
 
 const TAG = /<\/?(\d+)\s*\/?>/g;
 

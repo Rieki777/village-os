@@ -37,6 +37,12 @@ msgctxt "site header"
 msgid "Open menu"
 msgstr "Abrir menú"
 
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Search languages"
+msgstr "Buscar idiomas"
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign in"
@@ -73,6 +79,12 @@ msgstr "Cerrar menú"
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Choose a language"
+msgstr "Elegir un idioma"
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -114,9 +126,21 @@ msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
 msgstr ""
 
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Translated automatically"
+msgstr "Traducción automática"
+
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
 msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Language: {current} ({code})"
+msgstr "Idioma: {current} ({code})"
 
 #: client/src/components/TreasurySync.tsx
 msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
@@ -135,6 +159,12 @@ msgstr ""
 #, fuzzy
 #~ msgid "Skip to content"
 #~ msgstr "Ir al contenido"
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Close"
+msgstr "Cerrar"
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -160,6 +190,12 @@ msgstr ""
 msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Now in {announced}"
+msgstr "Ahora en {announced}"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -216,6 +252,18 @@ msgstr ""
 #, fuzzy
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Cuenta de {firstName}"
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Use my browser's language"
+msgstr "Usar el idioma del navegador"
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "No language matches"
+msgstr "Ningún idioma coincide"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
