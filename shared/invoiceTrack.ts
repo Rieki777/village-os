@@ -25,6 +25,7 @@
  *     could not be read is "not read", never zero.
  */
 import type { InvoiceStatus } from "./moonRecap";
+import { roleWithHolders } from "./roleHolderLabel";
 
 // ── The reference in the email ───────────────────────────────────────────────
 
@@ -63,6 +64,12 @@ export interface TrackStep {
    * or void. The steps after it will not happen for this invoice.
    */
   stopped?: "returned" | "void" | null;
+  /**
+   * Who acted, as "Role (FirstName)" (Rye, 2026-10-30), for a LIVE view to a
+   * signed-in reader. Read from the roster when the view is answered and never
+   * stored: the saved sync view and anything sent to Sera carry none.
+   */
+  actorLabel?: string | null;
 }
 
 export interface TrackInput {
@@ -400,4 +407,25 @@ export function groupDecimal(s: string): string {
   const m = /^(-?)(\d+)(\.\d+)?$/.exec(s);
   if (!m) return s;
   return `${m[1]}${m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ",")}${m[3] ?? ""}`;
+}
+
+/**
+ * The role carrying the power that the acting person holds, with their first
+ * name: "Treasury (Rick)". Null when they hold none of those roles (an admin
+ * acting through the panel), so the role words stand.
+ */
+export function actorLabel(
+  roles: ReadonlyArray<{ id: string; name: string }>,
+  seats: ReadonlyArray<{ roleId: string; userId: string }>,
+  actorUserId: string | null,
+  actorName: string | null,
+): string | null {
+  if (!actorUserId) return null;
+  const role = roles.find((r) => seats.some((s) => s.roleId === r.id && String(s.userId) === String(actorUserId)));
+  return role ? roleWithHolders(role.name, [actorName]) : null;
+}
+
+/** The approved and paid steps carrying who acted; the others unchanged. */
+export function withActorLabels(track: readonly TrackStep[], labels: { approved: string | null; paid: string | null }): TrackStep[] {
+  return track.map((s) => (s.step === "approved" && s.done ? { ...s, actorLabel: labels.approved } : s.step === "paid" && s.done ? { ...s, actorLabel: labels.paid } : s));
 }
