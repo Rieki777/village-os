@@ -180,8 +180,16 @@ export const TYPE_CAPABILITY_REFUSALS: Partial<
    * to include it silently, in a commit about something else. This is the
    * line that does not move when that one does.
    */
+  /*
+   * `member.superVouch` left this list on 2026-11-06. Rye: the keys nothing
+   * could hand over become passable ONLY by a highest-tier village vote, and
+   * the grant route raises a grant of it to that tier
+   * (server/lib/capabilityRegistry.ts, HIGHEST_TIER_GRANTS). At that bar the
+   * whole village decides who may admit outright, which answers the capture
+   * this list exists for. The two keys that make the electorate itself stay.
+   */
   power_grant: {
-    keys: ["ballot.vote", "member.vouch", "member.superVouch"],
+    keys: ["ballot.vote", "member.vouch"],
     why:
       "A role is a set of people, so voting this one onto a role and then seating people in it " +
       "would be a few members choosing who else gets a say. Who votes here is a rule of the game, " +

@@ -606,6 +606,24 @@ founding seat and can hand it over like any other steward power. The seeded Trea
 too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
 once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
 
+**The invoice rails and the treasury sync (0335, Rye 2026-11-06) read this record and never write
+it.** A member's own "Send for approval" also emails the invoice, with a PDF and its bill ref in the
+subject, to the village's Sera inbox when the moon-review setting `seraInbox` names one (blank on
+the platform, so nothing is emailed by default). The copy that leaves names the member by village
+name and bridge code-name; the legal name on the pay route never leaves the village (Rye,
+2026-11-06). While two or more people hold `cash.pay` or `steward.veto`, a new inbox address waits
+for a second of them to confirm it, and every member is told the new address when it applies;
+clearing the inbox applies at once, since it only stops mail (C7, Rye 2026-11-06). Each invoice carries one track: sent, received by
+Sera, approved, paid. Sent, approved and paid are read off `moon_invoices` and the transfer note the
+transfers door writes, so nothing is copied and nothing can count twice; received is read only off
+Sera's own typed record. The Sync on the member's Cash card reconciles three sources, each shown with
+when it was last read: the ledger and `cash_owed` here, the Base chain (`readOnchainBalance`), and
+Sera's invoice records. A difference is flagged to the `cash.pay` holder and never averaged, and a
+flag closes only when a later sync reads both sides fresh and no longer sees it. Finance approval
+and the Treasurer's transfer stay the only writes to `cash_owed`: a sync writes no ledger row, no
+balance and no cash row, which `server/lib/holdingsReconcile.test.ts` checks over every statement it
+sends.
+
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
 row holds an account id and an amount, never a name, so an erased member reads as the tombstone
 everywhere else does.

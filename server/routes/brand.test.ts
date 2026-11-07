@@ -80,6 +80,15 @@ describe("the village's currency is set at launch", () => {
     expect(stored.project.fiatCurrency).toBe("USD");
   });
 
+  it("points the admin at the one door left after launch: a vote at the highest tier (Rye, 2026-11-06)", async () => {
+    launchedAt = "2026-10-01T00:00:00.000Z";
+    const r = await put({ fiatCurrency: "CRC" });
+    expect(r.status).toBe(409);
+    expect(r.body.error).toContain("highest tier");
+    expect(r.body.proposeInstead).toBe("brand_field");
+    expect(r.body.field).toBe("project.fiatCurrency");
+  });
+
   it("still saves the rest of the section after launch, the same currency included", async () => {
     launchedAt = "2026-10-01T00:00:00.000Z";
     expect((await put({ name: "Hearth Village", fiatCurrency: "usd" })).status).toBe(200);

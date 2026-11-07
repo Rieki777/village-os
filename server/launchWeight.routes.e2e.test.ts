@@ -38,6 +38,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -612,12 +613,50 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     expect(brand.json?.brand?.project?.tagline).toBe("Where the two rivers meet");
   });
 
-  it("control: a vote may not move the currency the village launched with", async () => {
+  it("control: a currency vote names the code as the admin route stores it", async () => {
     const made = await call("POST", "/api/game/mechanics/proposals", {
-      body: { title: "Change currency", rationale: "A test of the lock.", changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" }] },
+      body: { title: "Change currency", rationale: "A test of the code.", changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "crc" }] },
     });
     expect(made.status).toBe(400);
-    expect(JSON.stringify(made.json)).toContain("set at launch");
+    expect(JSON.stringify(made.json)).toContain("three letter code");
+  });
+
+  it("the village changes its currency by a vote at the highest tier, and the admin door stays locked (Rye, 2026-11-06)", async () => {
+    // Wren proposes, so the founder's proposals this cycle stay under the
+    // village's ceiling for the tests after this one.
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      token: wrenToken,
+      body: {
+        title: "Count in colones",
+        rationale: "Everything we pay and sell is priced in colones, so the village should count in them.",
+        changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "CRC" }],
+      },
+    });
+    expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      token: wrenToken,
+      body: { purposeAlignment: "The village counts its pay, its prices and its dues in the money its members actually use." },
+    });
+    expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+    // The tagline vote above opened at the village's own routine bar. This one
+    // carries the constitutional floor.
+    expect(opened.json?.ballot?.unityPct, "unity at the highest tier").toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.unityPct);
+    expect(opened.json?.ballot?.quorumPct, "quorum at the highest tier").toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.quorumPct);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, wrenToken, idaToken]) expect((await vote(ballotId, t, "yes")).status).toBe(200);
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Everyone agreed to count in colones." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    expect((await call("POST", "/api/admin/cycles/close", { body: {} })).status).toBe(200);
+    const brand = await call("GET", "/api/admin/brand");
+    expect(brand.json?.brand?.project?.fiatCurrency).toBe("CRC");
+
+    // The lock still holds at the admin door, and names the door that is open.
+    const admin = await call("PUT", "/api/admin/brand", { body: { project: { fiatCurrency: "USD" } } });
+    expect(admin.status, JSON.stringify(admin.json)).toBe(409);
+    expect(admin.json?.proposeInstead).toBe("brand_field");
+    expect((await call("GET", "/api/admin/brand")).json?.brand?.project?.fiatCurrency).toBe("CRC");
   });
 
   it("refuses that admin a pause of governance, which nothing could turn back on (R156)", async () => {

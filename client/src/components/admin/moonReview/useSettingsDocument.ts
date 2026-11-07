@@ -15,7 +15,7 @@ export type DocState<T> =
   | { kind: "loading" }
   | { kind: "off" }
   | { kind: "refused"; text: string }
-  | { kind: "ready"; doc: T; gaps: Array<{ key: string; words: string }> };
+  | { kind: "ready"; doc: T; gaps: Array<{ key: string; words: string }>; pendingSeraInbox?: { address: string; proposedBy: string; proposedAt: string } | null };
 
 export function useSettingsDocument<T>(path: "payers" | "settings" | "rhythm", password: string) {
   const [state, setState] = useState<DocState<T>>({ kind: "loading" });
@@ -27,7 +27,7 @@ export function useSettingsDocument<T>(path: "payers" | "settings" | "rhythm", p
     if (status === 404) return setState({ kind: "off" });
     if (status === 401 || status === 403) return setState({ kind: "refused", text: typeof body?.message === "string" && body.message ? body.message : ADMIN_WORDS.noKey });
     if (status >= 300) return setState({ kind: "refused", text: refusal(body, ADMIN_WORDS.loadFailed) });
-    setState({ kind: "ready", doc: body.document as T, gaps: Array.isArray(body.gaps) ? body.gaps : [] });
+    setState({ kind: "ready", doc: body.document as T, gaps: Array.isArray(body.gaps) ? body.gaps : [], pendingSeraInbox: body.pendingSeraInbox ?? null });
   };
 
   const load = useCallback(async () => {
@@ -66,7 +66,20 @@ export function useSettingsDocument<T>(path: "payers" | "settings" | "rhythm", p
     }
   };
 
-  return { state, save, saving, message };
+  /** A waiting change of Sera's inbox, confirmed or cancelled by a second signer (C7). */
+  const decideInbox = async (what: "confirm" | "cancel"): Promise<void> => {
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/moon-review/settings/sera-inbox/${what}`, { method: "POST", headers: authHeaders(password) });
+      const body = await res.json().catch(() => ({}));
+      setMessage(res.ok ? { ok: true, text: what === "confirm" ? ADMIN_WORDS.settings.seraInboxConfirmed : ADMIN_WORDS.settings.seraInboxCancelled } : { ok: false, text: refusal(body, ADMIN_WORDS.loadFailed) });
+    } catch {
+      setMessage({ ok: false, text: ADMIN_WORDS.loadFailed });
+    }
+    await load();
+  };
+
+  return { state, save, saving, message, decideInbox };
 }
 
 /** Comma or line separated words into a clean list. */

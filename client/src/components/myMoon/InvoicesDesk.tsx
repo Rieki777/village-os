@@ -16,7 +16,12 @@
  * permission: a refusal from the server draws its sentence.
  */
 import { useCallback, useEffect, useState } from "react";
+import { FLAG_WORDS, SERA_STATUS_WORDS, groupDecimal, type FlagKind, type SeraInvoiceStatus } from "@shared/invoiceTrack";
+import { formatMoney } from "@shared/money";
+import { Trans } from "@lingui/react/macro";
+import { InvoiceTrack, type TrackRow } from "../TreasurySync";
 import {
+  INVOICE_STATUS_WORDS,
   LINE_BASIS_WORDS,
   MOON_WORDS,
   MY_MOON_WORDS,
@@ -165,6 +170,81 @@ export function InvoicesDeskView({ data, init, reload }: { data: QueueData; init
   );
 }
 
+/** What `GET /api/cash-owed/invoice-track` answers (invoice rails). */
+export interface RailsData {
+  tracks: Array<TrackRow & { userId: string; memberName: string | null; legalName?: string | null }>;
+  flags: Array<{ id: string; userId: string | null; memberName: string | null; kind: FlagKind; subject: string; village: string; other: string; firstSeenAt: string }>;
+  unmatched: Array<{ seraId: string; reference: string | null; currency: string; amountMinor: number; status: SeraInvoiceStatus; receivedAt: string }>;
+}
+
+/**
+ * Every live invoice from sent to paid, and every disagreement a sync found,
+ * for the Treasurer. A difference is shown as both figures, never resolved
+ * here: the village's own approval and the bank transfer stay the record.
+ */
+/** A flag's stored figure in words: money formatted, statuses named, token amounts grouped. */
+export function flagFigure(kind: FlagKind, raw: string): string {
+  const money = /^(-?\d+) ([A-Z]{3})$/.exec(raw);
+  if (kind === "sera_amount_differs" && money) return formatMoney(Number(money[1]), money[2]);
+  if (kind === "sera_status_differs") return (INVOICE_STATUS_WORDS as Record<string, string>)[raw] ?? (SERA_STATUS_WORDS as Record<string, string>)[raw] ?? raw;
+  if (kind === "chain_differs") return groupDecimal(raw);
+  return raw;
+}
+
+export function RailsPanel({ data, nameOf }: { data: RailsData; nameOf: (userId: string | null) => string }) {
+  const flagCount = data.flags.length;
+  return (
+    <div className="flex flex-col gap-4" data-testid="invoice-rails">
+      {data.flags.length > 0 ? (
+        <section aria-labelledby="rails-flags" className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <h4 id="rails-flags" className="m-0 text-sm font-semibold text-foreground"><Trans context="invoice desk">Sources that disagree ({flagCount})</Trans></h4>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm text-foreground">
+            {data.flags.map((f) => {
+              const here = flagFigure(f.kind, f.village);
+              const there = flagFigure(f.kind, f.other);
+              const seen = new Date(f.firstSeenAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+              return (
+              <li key={f.id} className="break-words">
+                {FLAG_WORDS[f.kind]}: {f.subject}{f.userId ? `, ${f.memberName ?? nameOf(f.userId)}` : ""}. <Trans context="invoice desk">This village's records: {here}.</Trans>{" "}
+                {f.kind === "chain_differs" ? <Trans context="invoice desk">Chain: {there}.</Trans> : <Trans context="invoice desk">Sera: {there}.</Trans>}{" "}
+                <Trans context="invoice desk">First seen {seen}.</Trans>
+              </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+      {data.unmatched.length > 0 ? (
+        <section aria-labelledby="rails-unmatched" className="flex flex-col gap-1 text-sm text-foreground">
+          <h4 id="rails-unmatched" className="m-0 text-sm font-semibold"><Trans>Sera records that name no invoice here</Trans></h4>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {data.unmatched.map((u) => (
+              <li key={u.seraId} className="break-words text-muted-foreground">
+                {u.reference ?? "No reference"}: <Amount minor={u.amountMinor} currency={u.currency} />, {SERA_STATUS_WORDS[u.status]}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <section aria-labelledby="rails-tracks" className="flex flex-col gap-2">
+        <h4 id="rails-tracks" className="m-0 text-sm font-semibold text-foreground"><Trans context="invoice desk">Every invoice, sent to paid</Trans></h4>
+        {data.tracks.length === 0 ? <p className={MUTED}><Trans context="invoice desk">No invoice has been sent yet.</Trans></p> : null}
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {data.tracks.map((t) => (
+            <li key={t.invoiceId} className="rounded-lg border border-border p-3">
+              <p className="m-0 flex flex-wrap justify-between gap-2 text-sm font-medium text-foreground">
+                <span className="break-words">{t.memberName ?? nameOf(t.userId)}{t.legalName ? ` (legal name ${t.legalName}, for the transfer)` : ""}, {t.ref}</span>
+                <Amount minor={t.totalMinor} currency={t.currency} />
+              </p>
+              <InvoiceTrack row={t} />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
 /** The loader, with the admin desk's session header. Draws the refusal's sentence, never a code. */
 function InvoicesDeskLoader({ password }: { password: string }) {
   const [data, setData] = useState<QueueData | null>(null);
@@ -181,9 +261,24 @@ function InvoicesDeskLoader({ password }: { password: string }) {
     }
   }, [password]);
   useEffect(() => { void load(); }, [load]);
+  const [rails, setRails] = useState<RailsData | "failed" | null>(null);
+  useEffect(() => {
+    fetch("/api/cash-owed/invoice-track", { headers: { Authorization: `Bearer ${password}` } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => setRails(d && Array.isArray(d.tracks) ? (d as RailsData) : "failed"))
+      .catch(() => setRails("failed"));
+  }, [password, data]);
   if (error) return <p role="alert" className={ERROR}>{error}</p>;
   if (!data) return <p className={MUTED}>{QUEUE_WORDS.loading}</p>;
-  return <InvoicesDeskView data={data} init={init} reload={load} />;
+  const nameOf = (userId: string | null) => data.rows.find((r) => r.userId === userId)?.name ?? "a member";
+  return (
+    <>
+      <InvoicesDeskView data={data} init={init} reload={load} />
+      {rails === "failed" ? (
+        <p role="alert" className={ERROR}><Trans>The invoice tracks and the disagreements did not load. Close and open again in a moment.</Trans></p>
+      ) : rails ? <RailsPanel data={rails} nameOf={nameOf} /> : <p className={MUTED}><Trans context="invoice desk">Reading the invoice tracks.</Trans></p>}
+    </>
+  );
 }
 
 /** The Invoices view on the desk: closed until opened, so the desk reads no queue it was not asked for. */
