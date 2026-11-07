@@ -70,6 +70,13 @@ import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
 import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
+import {
+  changeSetCapFrom,
+  CHANGE_SET_CAP_DEFAULT,
+  CHANGE_SET_CAP_KEY,
+  CHANGE_SET_CAP_MAX,
+  CHANGE_SET_CAP_MIN,
+} from "../../shared/changeSetCap";
 
 /**
  * -- WHAT A CHANGE SET IS MADE OF, AFTER Q9 ----------------------------------
@@ -505,13 +512,25 @@ export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<Change
   "brand_field",
 ]);
 
-/** The cap a change set may not pass. A proposal is read before it is voted on. */
-export const CHANGE_SET_CAP = 12;
+/**
+ * The cap a change set may not pass when the caller names none. A proposal is
+ * read before it is voted on. It is the village's dial now
+ * (`governance.change_set_cap`, Rye 2026-11-06), so each route passes the
+ * village's value as `changeSetCap`; the floor and the ceiling are in
+ * shared/changeSetCap.ts and hold whatever is passed.
+ */
+export const CHANGE_SET_CAP = CHANGE_SET_CAP_DEFAULT;
+export { changeSetCapFrom, CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN };
 
 /** How votes are weighed. These land only as a mode switch, never as a plain dial. */
 export const WEIGHING_KEYS: ReadonlySet<string> = new Set(["governance.weight_mode", "governance.weight_token"]);
 
 export interface ValidateChangeSetOptions {
+  /**
+   * The village's `governance.change_set_cap`. Absent means the default (22).
+   * Held inside the code's floor and ceiling whatever is passed.
+   */
+  changeSetCap?: number;
   /** Override what this build can execute. Defaults to `EXECUTABLE_ITEM_KINDS`. */
   executableKinds?: ReadonlySet<ChangeItemKind>;
   /**
@@ -558,9 +577,10 @@ export async function validateChangeSet(
   if (!Array.isArray(changes) || changes.length === 0) {
     return { problems: [{ key: "*", problem: "A proposal must change at least one dial" }], normalized, items: [] };
   }
-  if (changes.length > CHANGE_SET_CAP) {
+  const cap = changeSetCapFrom(options?.changeSetCap ?? CHANGE_SET_CAP_DEFAULT);
+  if (changes.length > cap) {
     return {
-      problems: [{ key: "*", problem: `A proposal may move at most ${CHANGE_SET_CAP} dials. Split a larger rebalance into readable steps` }],
+      problems: [{ key: "*", problem: `A proposal may carry at most ${cap} changes in this village. Split a larger rebalance into readable steps` }],
       normalized,
       items: [],
     };

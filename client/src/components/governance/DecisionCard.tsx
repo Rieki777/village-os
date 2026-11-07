@@ -29,6 +29,7 @@ const CLOSED_WORD: Record<string, string> = {
   passed: "Carried",
   failed: "Did not carry",
   no_quorum: "Too few spoke",
+  no_quorum_rerun: "Asked again",
   withdrawn: "Withdrawn",
 };
 

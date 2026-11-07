@@ -149,6 +149,8 @@ export async function completionVoteFor(
  */
 function voteStateOf(status: BallotRow["status"]): VoteComponent["state"] {
   if (status === "open") return "open";
+  // 0334: asked again on a linked re-run, so the vote is still running.
+  if (status === "no_quorum_rerun") return "open";
   if (status === "withdrawn") return "withdrawn";
   if (status === "no_quorum") return "no_quorum";
   if (status === "passed") return "said_yes";
