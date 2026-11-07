@@ -698,7 +698,7 @@ import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemp
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { register as registerVillageExportRoutes } from "./routes/villageExport";
-import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
@@ -1967,6 +1967,7 @@ async function ensureDataFiles() {
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
   await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
   await runOnce("moon-review-keys-2026-11-03", () => grantMoonReviewKeys(rolesRepo, MOON_REVIEW_GRANTS).then(() => undefined)); // decisions 18 and 19
+  await runOnce("role-pay-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, ROLE_PAY_GRANTS, "role.pay on the Treasury role (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("steward-circle-role-powers-2026-11-05", () => grantMoonReviewKeys(rolesRepo, STEWARD_CIRCLE_GRANTS, "Steward Circle's role and adoption powers (Rye, 2026-11-01)").then(() => undefined));
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
@@ -3073,7 +3074,7 @@ const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(
  * founder seated in a live role, is closed to it. Money and approvals are a
  * person's.
  */
-const AGENT_NEVER_KEYS = ["cash.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
+const AGENT_NEVER_KEYS = ["cash.pay", "role.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
 
 async function capabilityCtx(user: any) {
   // An agent account holds no power from a role or a badge, whichever writer
