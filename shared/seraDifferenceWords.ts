@@ -70,7 +70,9 @@ function paySentence(d: Difference, agent: string): string {
   const first = what ? `${agent} lists ${possessive(d.subject.name)} pay as ${what}` : `${agent} lists pay for ${d.subject.name}`;
   const said = standing ? `${first}, ${standing}.` : `${first}.`;
   if (d.ours === "none") return `${said} This village has no pay set for it.`;
-  return `${said} It changed since the read before, and pay is already set here.`;
+  // The rule that found it (review K3): a read kept before matches compares with the read a day before.
+  if (p.since === "dayBefore") return `${said} It changed since the read a day before, and pay is already set here.`;
+  return `${said} ${agent} changed it after pay was last set here.`;
 }
 
 function presenceSentence(d: Difference, agent: string, ctx: SentenceContext): string {

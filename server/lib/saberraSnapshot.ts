@@ -57,9 +57,11 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { SyncTrigger } from "../../shared/saberraSyncLog";
+import { canonicalJson } from "../../shared/canonicalJson";
 import {
   stampMatches,
   traceAccepted,
+  valueHash,
   type AcceptedChange,
   type DifferencesInput,
   type Snapshot,
@@ -74,6 +76,7 @@ import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
 import { idShapeOk, labelOf, normaliseId, pageIdOf, plainText, relationRefs } from "./saberraRelations";
+import { listOrgRoles } from "./orgChart";
 import { liveChart } from "./structureReview";
 import { rosterRows } from "../repos/peopleRoster";
 import { insertSnapshot, pruneCarriedOlderThan, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
@@ -237,8 +240,24 @@ const MODULE_ID = "saberra";
 
 /** The live chart as the differences read it: circles in chart order, and each role with whether pay is set here, never its figure. */
 export async function liveForDifferences(pool: Pool): Promise<DifferencesInput["live"]> {
-  const [circles, paid] = await Promise.all([circlesForDifferences(pool), rolesWithPaySet(pool)]);
+  const [circles, paid, roles] = await Promise.all([circlesForDifferences(pool), rolesWithPaySet(pool), listOrgRoles(pool)]);
   const live = await liveChart(pool, circles);
+  // What pay is set here, as a hash and never the figure: a change here settles the service's pay (review K3).
+  const payHash = new Map(
+    roles.map((r) => [
+      r.id,
+      valueHash(
+        canonicalJson({
+          value: r.valueMinor ?? null,
+          valueCurrency: r.valueCurrency ?? null,
+          tokens: r.valueTokens ?? null,
+          cash: r.cashMinor ?? null,
+          cashCurrency: r.cashCurrency ?? null,
+          terms: r.termsOffer ?? null,
+        }),
+      ),
+    ]),
+  );
   return {
     circles: live.circles.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases, status: c.status, isExample: c.isExample })),
     roles: live.seats.map((s) => ({
@@ -250,6 +269,7 @@ export async function liveForDifferences(pool: Pool): Promise<DifferencesInput["
       holders: s.holders,
       aim: s.words?.aim ?? null,
       paySet: paid.has(s.id),
+      ...(paid.has(s.id) && payHash.has(s.id) ? { payHash: payHash.get(s.id) } : {}),
     })),
   };
 }

@@ -78,6 +78,7 @@ function recordOf(r: SnapshotRecord): SnapshotRecord {
   if (Object.keys(agreed).length) match.agreed = agreed;
   // The pay the service held when ours was last in step: a hash, kept only as text.
   if (typeof m.pay === "string") match.pay = m.pay;
+  if (typeof m.ourPay === "string") match.ourPay = m.ourPay;
   return { ...r, match };
 }
 

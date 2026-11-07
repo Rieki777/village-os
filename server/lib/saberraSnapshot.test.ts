@@ -477,6 +477,35 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(row!.snapshot).toMatchObject({ trigger: "scheduled", roles: { read: "whole" }, circles: { read: "whole" } });
   });
 
+  it("A CHANGE TO PAY HERE SETTLES THE SERVICE'S CHANGED PAY, read off the live chart (review K3)", async () => {
+    const land = pageId("pay-land");
+    const cook = pageId("pay-cook");
+    const id = seatIdFor(cook, "unused");
+    await pool.query("INSERT IGNORE INTO circles (id, name, status) VALUES ('pay-land', 'pay Land', 'active')"); // module-review-ok: fixture SQL, the live circle
+    await pool.query( // module-review-ok: fixture SQL, a role with cash pay set here
+      "INSERT INTO org_roles (id, circle_id, name, seats, active, cash_minor, cash_currency) VALUES (?, 'pay-land', 'pay Cook', 1, 1, 100000, 'USD')",
+      [id],
+    );
+    const sends = (usd: number) => {
+      state.read = {
+        circle: [{ id: land, fields: { "Circle Name": "pay Land", Status: "Active" } }],
+        role: [{ id: cook, fields: { "Role Name": "pay Cook", Circle: [land], Status: "Active", "Compensation Model": "Stipend", "Compensation Target (Monthly)": usd } }],
+        role_assignment: [],
+      };
+    };
+    const pay = async () => (await readDifferences(pool)).list.filter((d) => d.kind === "pay" && d.subject.ourId === id).map((d) => d.state);
+    sends(1000);
+    await syncByHand(pool);
+    sends(1200);
+    await syncByHand(pool);
+    expect(await pay()).toEqual(["conflict"]);
+    // The Treasurer sets ours: settled at once, and after the next read too.
+    await pool.query("UPDATE org_roles SET cash_minor = 120000 WHERE id = ?", [id]); // module-review-ok: fixture SQL, pay changed here
+    expect(await pay()).toEqual([]);
+    await syncByHand(pool);
+    expect(await pay()).toEqual([]);
+  });
+
   it("A STORED MATCH READS BACK WHOLE, the pay it carries included, and a malformed one reads as none", async () => {
     const whole = {
       ourId: "role-1",

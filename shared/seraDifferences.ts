@@ -134,6 +134,8 @@ export interface SnapshotMatch {
    * the figure itself.
    */
   pay?: string;
+  /** With `pay`: the hash of the pay set here at this read, so a change here since restarts it (review K3). */
+  ourPay?: string;
 }
 
 export interface SnapshotKind {
@@ -171,6 +173,11 @@ export interface LiveRoleIn {
   aim: string | null;
   /** Whether this village has set any pay on the role. Never its figure. */
   paySet?: boolean;
+  /**
+   * A hash of the pay set here (value, cash, tokens, terms), never the figure:
+   * a change here is a person settling the service's pay (review K3).
+   */
+  payHash?: string;
 }
 
 /**
@@ -1246,12 +1253,18 @@ export function stampMatches(input: DifferencesInput): Snapshot | null {
         ["circle", slot("roles", rec, live.id, "circle", inCircle ? live.circleId : null, history?.circleId)],
       ]),
     };
-    // Pay set here: the service's pay when ours was last in step, carried while it stays set. The
-    // first time, the read a day before stands in, the rule a row kept before this one is read by.
+    // Pay set here: the service's pay when ours was last in step, carried while ours stays as it was.
+    // Ours changed since the read before: a person set it, having seen the service's pay at that read,
+    // so that read's pay is in step now (review K3). The first time, the read a day before stands in,
+    // the rule a row kept before this one is read by.
     if (live.paySet) {
-      const carried = newestStampOf(older, "roles", pageKey(rec.id), live.id)?.match?.pay;
+      const before = newestStampOf(older, "roles", pageKey(rec.id), live.id);
+      const kept = before?.match;
       const prior = dayBefore?.roles?.records?.find((r) => !!r && typeof r.id === "string" && pageKey(r.id) === pageKey(rec.id));
-      out.pay = carried ?? valueHash(prior ? (payOf(prior, norm)?.key ?? null) : (payOf(rec, norm)?.key ?? null));
+      if (kept?.pay !== undefined && (kept.ourPay === undefined || kept.ourPay === live.payHash)) out.pay = kept.pay;
+      else if (kept?.pay !== undefined && before) out.pay = valueHash(payOf(before, norm)?.key ?? null);
+      else out.pay = valueHash(prior ? (payOf(prior, norm)?.key ?? null) : (payOf(rec, norm)?.key ?? null));
+      if (live.payHash !== undefined) out.ourPay = live.payHash;
     }
     return out;
   };
@@ -1456,9 +1469,14 @@ export function differences(input: DifferencesInput): Difference[] {
       const was = prior ? (payOf(prior, norm)?.key ?? null) : undefined;
       // With pay set here, against the pay the stored match carries: it shows until a person
       // settles it, never only for a day. A row kept before matches were stored keeps the day.
-      const inStep = newestStampOf(input.snapshots, "roles", pk, live.id)?.match?.pay;
-      const moved = inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;
+      const stamp = newestStampOf(input.snapshots, "roles", pk, live.id)?.match;
+      const inStep = stamp?.pay;
+      // Pay set here changed since the newest read: a person settled what that read showed (review K3).
+      const settledHere = inStep !== undefined && stamp?.ourPay !== undefined && live.payHash !== undefined && stamp.ourPay !== live.payHash;
+      const moved = settledHere ? false : inStep !== undefined ? inStep !== valueHash(pay.key) : was !== undefined && was !== pay.key;
       const payState: DifferenceState | null = !live.paySet ? "suggestion" : moved ? "conflict" : null;
+      // Which rule said so, for its words: since pay was set here, or since the read a day before.
+      pay.params.since = inStep !== undefined ? "set" : "dayBefore";
       field("pay", "pay", "pay", pay.key, live.paySet ? "set" : "none", "unknown", payState, [F.payTerms], { params: pay.params });
     }
 

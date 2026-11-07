@@ -1178,6 +1178,32 @@ describe("second review: pay never leaves the list undecided", () => {
     const old = [at(0, 1200), at(24, 1500), ...later(48, 30, 1500)].reverse().slice(0, 30);
     expect(differences(input({ snapshots: old, live, accepted, asOf: old[0].takenAt }))).toEqual([]);
   });
+
+  it("A CHANGE TO PAY HERE SETTLES IT, and its words say what is true (probe 6 P, review K3)", () => {
+    // Our pay as set here, by its hash: the list never reads the figure.
+    const ours = (hash: string) => ({ circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { paySet: true, payHash: hash })] });
+    const keep = (reads: Snapshot[], l: DifferencesInput["live"], from: Snapshot[] = []) => {
+      let kept = from;
+      for (const s of reads) kept = [stampMatches(input({ snapshots: [s, ...kept], live: l, accepted }))!, ...kept].slice(0, 30);
+      return kept;
+    };
+    const changed = keep([at(0, 1000), at(6, 1200)], ours("h-1000"));
+    const [d] = differences(input({ snapshots: changed, live: ours("h-1000"), accepted }));
+    expect(d).toMatchObject({ kind: "pay", state: "conflict" });
+    const said = differenceSentence(d, "Sera");
+    expect(said).toContain("Sera changed it after pay was last set here.");
+    expect(said).not.toContain("since the read before");
+    // The Treasurer sets ours to match: settled at once, before any read.
+    expect(differences(input({ snapshots: changed, live: ours("h-1200"), accepted }))).toEqual([]);
+    // And three days of reads later.
+    expect(differences(input({ snapshots: keep(later(12, 12, 1200), ours("h-1200"), changed), live: ours("h-1200"), accepted }))).toEqual([]);
+    // The control: nobody changed pay here, so twelve reads later it still waits, with the same words.
+    const waiting = differences(input({ snapshots: keep(later(12, 12, 1200), ours("h-1000"), changed), live: ours("h-1000"), accepted }));
+    expect(waiting.map((x) => [x.kind, x.state])).toEqual([["pay", "conflict"]]);
+    // A read kept before matches were stored says what its rule says: since the read a day before.
+    const [day] = differences(input({ snapshots: [at(30, 1200), at(0, 1000)], live: ours("h-1000"), accepted, asOf: at(30, 1200).takenAt }));
+    expect(differenceSentence(day, "Sera")).toContain("It changed since the read a day before, and pay is already set here.");
+  });
 });
 
 describe("second review C5: a steward's capitals at accept are never taken for the service's words", () => {
