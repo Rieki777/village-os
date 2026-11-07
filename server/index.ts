@@ -229,6 +229,8 @@ import { earnedEquityMeaningWritten } from "./lib/valuationStore";
 import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
 import { register as registerMoonReviewSettingsRoutes } from "./routes/moonReviewSettings";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
+import { register as registerInvoiceRailsRoutes, invoiceRailsDeps } from "./routes/invoiceRails";
+import { emailInvoiceToSera } from "./lib/invoiceMail";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
@@ -18240,9 +18242,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s }); // 0336
-  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
-  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
+  const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
+  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
+  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, notify, inboxSigners: async () => [...(await liveHoldersOf("cash.pay")), ...(await liveHoldersOf("steward.veto"))] }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
+  registerInvoiceRailsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, ...invoiceRails });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
