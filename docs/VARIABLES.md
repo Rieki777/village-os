@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 199 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 200 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 221 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-248 dials in 36 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
+249 dials in 36 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 32 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 221 of them as soon as it is saved, and
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
-| Governance | 50 | 44 | 6 |
+| Governance | 51 | 45 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -189,6 +189,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The most voting weight one member can carry | `governance.weight_cap_pct` | Governance | percentage | `20` | the founder or an admin |
 | Unity needed to pass | `governance.unity_pct` | Governance | percentage | `80` | the whole village |
 | Quorum needed to count | `governance.quorum_pct` | Governance | percentage | `20` | the whole village |
+| Ask again when too few vote | `governance.quorum_fallback` | Governance | choice | `off` | the whole village |
 | How long a ballot stays open | `governance.vote_days` | Governance | integer | `7` | the whole village |
 | How long a consent window stays open | `governance.consent_window_days` | Governance | integer | `7` | the whole village |
 | How village-wide ballots decide | `governance.default_method` | Governance | choice | `custom` | the whole village |
@@ -1665,7 +1666,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-50 dials. 44 for the whole village, 6 for the founder or an admin.
+51 dials. 45 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1729,7 +1730,7 @@ How many game-rule change proposals one member may open per cycle. A ceiling on 
 | Counted in | per cycle |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Supporters before a proposal can go to the vote
 
@@ -1744,7 +1745,7 @@ How many members must support a mechanics proposal in-game before it can be take
 | Counted in | supporters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Governance hub URL
 
@@ -1888,7 +1889,7 @@ After a dial is changed by a passed proposal, this many days must pass before a 
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Changes one proposal may carry
 
@@ -2183,6 +2184,25 @@ The share of the electorate's total voting weight that must show up, counting ab
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
 
+### Ask again when too few vote
+
+Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.quorum_fallback` |
+| Type | choice, one of a fixed list |
+| Default | `off` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+What it may be set to:
+
+- `off` Off. A ballot that misses quorum ends as it closes.
+- `on` On. A ballot that misses quorum is asked again once, at half the quorum.
+
 ### How long a ballot stays open
 
 Days between a ballot opening and its votes locking. Votes can be changed freely until then. The clock closes the ballot when the window ends and the village's own engine reads the result, so nobody chooses the moment. A change to the Game then waits again, for the window a steward can stop it in.
@@ -2196,7 +2216,7 @@ Days between a ballot opening and its votes locking. Votes can be changed freely
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How long a consent window stays open
 

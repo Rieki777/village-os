@@ -1056,6 +1056,13 @@ export const META_SETTING_KEYS: readonly string[] = [
   // same power as moving the bar.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // When and how often a proposal may reach the vote (change requests C17;
+  // Rye, 2026-11-06: "great go with all suggestions"). A cheap trial of any
+  // of these could empty the review or the vote just before a big change.
+  "governance.proposal_support_threshold",
+  "governance.proposals_per_member_per_cycle",
+  "governance.change_cooldown_days",
+  "governance.vote_days",
   // How many changes one proposal may carry (Rye, 2026-11-06). It shapes
   // every other proposal, so a cheap trial of it would be a moon in which
   // larger bundles go up at a bar nobody agreed to.
@@ -1335,6 +1342,10 @@ export function consecutiveNoQuorum(closes: readonly { status: string }[]): numb
   for (const row of closes) {
     const status = String(row.status ?? "");
     if (status === "open") continue;
+    // A first ballot the quorum fallback asked again (0334). It and its re-run
+    // are ONE miss, so the first is skipped and the re-run alone counts, which
+    // means the fallback never makes a subject end sooner.
+    if (status === "no_quorum_rerun") continue;
     if (status !== "no_quorum") break;
     n += 1;
   }
