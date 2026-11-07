@@ -88,6 +88,7 @@ let solToken = "";
 let solId = "";
 /** Tam holds nothing. The control. */
 let tamId = "";
+let tamToken = "";
 
 interface Answer { status: number; json: any }
 
@@ -197,6 +198,7 @@ beforeAll(async () => {
   solToken = sol.token; solId = sol.id;
   const tam = await register("Tam Orr", "tam");
   tamId = tam.id;
+  tamToken = tam.token;
   for (const id of [solId, tamId]) {
     const r = await call("PUT", `/api/admin/players/${id}/stage`, { body: { stageId: "member" } });
     expect(r.status, `${id} reaches member`).toBe(200);
@@ -550,5 +552,90 @@ describe.skipIf(!DB_CONFIGURED)("a seat vote across the season's turn is measure
     expect(opened.status, JSON.stringify(opened.json)).toBe(200);
     expect(String(opened.json?.ballot?.docMarkdown)).toContain(`Until the season ends on ${followingEndsOn}`);
     expect((await frozenTerm(String(opened.json?.ballot?.id))).seasonId).toBe("following");
+  });
+});
+
+/*
+ * THE QUORUM FALLBACK'S FAILSAFE (Rye, 2026-11-06): a steward OR an admin may
+ * switch `governance.quorum_fallback` ON at any time, and every switch is
+ * recorded (an audit event) and announced (a village feed line). Tam is the
+ * ordinary member and is refused; Sol is the steward this file seated; the
+ * administrator is the bootstrap account. OFF is not this door's, for anyone.
+ *
+ * The dial lives in an in-process cache, so between the steward's switch and
+ * the admin's the row is cleared underneath and the server comes back up, the
+ * same two-boot arrangement this file's header explains.
+ */
+describe.skipIf(!DB_CONFIGURED)("a steward or an admin can switch the quorum fallback on, and nobody else", () => {
+  const KEY = "governance.quorum_fallback";
+  const FAILSAFE = "/api/governance/quorum-fallback/failsafe";
+
+  const dialRow = async (): Promise<string | null> => {
+    const [rows] = await pool.query<any[]>("SELECT value FROM game_variables WHERE config_key = ?", [KEY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    return rows[0] ? String(rows[0].value) : null;
+  };
+  const lines = async (actorId: string): Promise<Array<{ kind: string; text: string; audience: string }>> => {
+    const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      "SELECT kind, text, audience FROM health_events WHERE entity_type = 'variable' AND entity_ref = ? AND actor_user_id = ? ORDER BY at, id",
+      [KEY, actorId],
+    );
+    return rows.map((r) => ({ kind: String(r.kind), text: String(r.text), audience: String(r.audience) }));
+  };
+
+  it("starts off, and refuses an ordinary member, writing nothing", async () => {
+    expect(await dialRow()).toBeNull();
+    const r = await call("POST", FAILSAFE, { token: tamToken, body: { value: "on" } });
+    expect(r.status, JSON.stringify(r.json)).toBe(403);
+    expect(String(r.json?.error)).toContain("for a steward or an admin");
+    expect(await dialRow()).toBeNull();
+    expect(await lines(tamId)).toEqual([]);
+  });
+
+  it("refuses OFF even from the steward, and names the village's door", async () => {
+    const r = await call("POST", FAILSAFE, { token: solToken, body: { value: "off" } });
+    expect(r.status).toBe(409);
+    expect(String(r.json?.error)).toContain("village's to decide");
+  });
+
+  it("lets the steward switch it on, with one audit event and one feed line", async () => {
+    const r = await call("POST", FAILSAFE, { token: solToken, body: { value: "on" } });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json?.changed).toBe(true);
+    expect(r.json?.by).toBe("steward");
+    expect(await dialRow()).toBe("on");
+    expect(await lines(solId)).toEqual([
+      { kind: "audit", text: "quorum-fallback:on:steward:failsafe", audience: "admin" },
+      { kind: "governance", text: expect.stringMatching(/^A steward switched the quorum fallback on\./), audience: "public" },
+    ]);
+  });
+
+  it("says a second press switched nothing, and records nothing", async () => {
+    const r = await call("POST", FAILSAFE, { token: solToken, body: { value: "on" } });
+    expect(r.status).toBe(200);
+    expect(r.json?.changed).toBe(false);
+    expect(await lines(solId)).toHaveLength(2);
+  });
+
+  it("will not take the dial through the admin variables route, either way", async () => {
+    for (const value of ["off", "on"]) {
+      const r = await call("PUT", `/api/admin/variables/${KEY}`, { body: { value } });
+      expect(r.status, JSON.stringify(r.json)).toBe(409);
+      expect(String(r.json?.error)).toContain("its own door");
+    }
+    expect(await dialRow()).toBe("on");
+  });
+
+  it("lets an admin switch it on, with one audit event and one feed line", async () => {
+    await stop();
+    await pool.query("DELETE FROM game_variables WHERE config_key = ?", [KEY]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    await boot();
+    const r = await call("POST", FAILSAFE, { body: { value: "on" } });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json?.by).toBe("admin");
+    expect(await dialRow()).toBe("on");
+    expect(await lines(adminId)).toEqual([
+      { kind: "audit", text: "quorum-fallback:on:admin:failsafe", audience: "admin" },
+      { kind: "governance", text: expect.stringMatching(/^An admin switched the quorum fallback on\./), audience: "public" },
+    ]);
   });
 });
