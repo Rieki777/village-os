@@ -13,9 +13,8 @@
  * as a zero (II.13).
  */
 import { useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { wholeMoney, type PayeeSuggestion } from "@shared/valuationEngine";
-
-const WIDTH_WORDS = { narrow: "Narrow range", medium: "Medium range", wide: "Wide range" } as const;
 
 export default function ValuationReceipt({
   suggestion,
@@ -30,6 +29,8 @@ export default function ValuationReceipt({
   setLine?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useLingui();
+  const widthWords = { narrow: t({ message: "Narrow range", context: "valuation receipt" }), medium: t({ message: "Medium range", context: "valuation receipt" }), wide: t({ message: "Wide range", context: "valuation receipt" }) } as const;
   const s = suggestion;
   const money = (m: number) => wholeMoney(m, currency);
   const paid = s.paidAs
@@ -39,21 +40,21 @@ export default function ValuationReceipt({
   return (
     <div data-valuation-receipt className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold">Reward</span>
+        <span className="font-semibold"><Trans context="valuation receipt">Reward</Trans></span>
         <span className="font-semibold tabular-nums">{money(s.expected.totalMinor)}</span>
       </div>
       {setLine && <p className="mt-1 text-foreground">{setLine}</p>}
       <p className="mt-1 text-muted-foreground">
-        Likely {money(s.range.lowTotalMinor)} to {money(s.range.highTotalMinor)}. {WIDTH_WORDS[s.range.width]}: {s.range.why.join(", ")}.
+        <Trans>Likely {money(s.range.lowTotalMinor)} to {money(s.range.highTotalMinor)}. {widthWords[s.range.width]}: {s.range.why.join(", ")}.</Trans>
       </p>
-      {paid && <p className="mt-1 text-muted-foreground">Paid as {paid}.</p>}
+      {paid && <p className="mt-1 text-muted-foreground"><Trans context="valuation receipt">Paid as {paid}.</Trans></p>}
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="mt-1 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
       >
-        {open ? "Hide how this was worked out" : "How this was worked out"}
+        {open ? t`Hide how this was worked out` : t`How this was worked out`}
       </button>
       {open && (
         <dl className="mt-1 divide-y divide-gray-100">
