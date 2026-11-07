@@ -1178,6 +1178,32 @@ describe("second review: pay never leaves the list undecided", () => {
     const old = [at(0, 1200), at(24, 1500), ...later(48, 30, 1500)].reverse().slice(0, 30);
     expect(differences(input({ snapshots: old, live, accepted, asOf: old[0].takenAt }))).toEqual([]);
   });
+
+  it("A CHANGE TO PAY HERE SETTLES IT, and its words say what is true (probe 6 P, review K3)", () => {
+    // Our pay as set here, by its hash: the list never reads the figure.
+    const ours = (hash: string) => ({ circles: [LAND_HERE], roles: [liveRole(kid, "Kitchen", "land", { paySet: true, payHash: hash })] });
+    const keep = (reads: Snapshot[], l: DifferencesInput["live"], from: Snapshot[] = []) => {
+      let kept = from;
+      for (const s of reads) kept = [stampMatches(input({ snapshots: [s, ...kept], live: l, accepted }))!, ...kept].slice(0, 30);
+      return kept;
+    };
+    const changed = keep([at(0, 1000), at(6, 1200)], ours("h-1000"));
+    const [d] = differences(input({ snapshots: changed, live: ours("h-1000"), accepted }));
+    expect(d).toMatchObject({ kind: "pay", state: "conflict" });
+    const said = differenceSentence(d, "Sera");
+    expect(said).toContain("Sera changed it after pay was last set here.");
+    expect(said).not.toContain("since the read before");
+    // The Treasurer sets ours to match: settled at once, before any read.
+    expect(differences(input({ snapshots: changed, live: ours("h-1200"), accepted }))).toEqual([]);
+    // And three days of reads later.
+    expect(differences(input({ snapshots: keep(later(12, 12, 1200), ours("h-1200"), changed), live: ours("h-1200"), accepted }))).toEqual([]);
+    // The control: nobody changed pay here, so twelve reads later it still waits, with the same words.
+    const waiting = differences(input({ snapshots: keep(later(12, 12, 1200), ours("h-1000"), changed), live: ours("h-1000"), accepted }));
+    expect(waiting.map((x) => [x.kind, x.state])).toEqual([["pay", "conflict"]]);
+    // A read kept before matches were stored says what its rule says: since the read a day before.
+    const [day] = differences(input({ snapshots: [at(30, 1200), at(0, 1000)], live: ours("h-1000"), accepted, asOf: at(30, 1200).takenAt }));
+    expect(differenceSentence(day, "Sera")).toContain("It changed since the read a day before, and pay is already set here.");
+  });
 });
 
 describe("second review C5: a steward's capitals at accept are never taken for the service's words", () => {
@@ -1200,6 +1226,129 @@ describe("second review C5: a steward's capitals at accept are never taken for t
     // The control: words the service changed past capitals are a suggestion on the known base.
     const [changed] = differences(input({ snapshots: said("Water Steward", "Keeps the wells and the pumps clear."), live, accepted }));
     expect(changed).toMatchObject({ state: "suggestion", base: { value: "Keeps The Wells Clear." }, autoEligible: true, bulkEligible: true });
+  });
+
+  it("A CIRCLE'S NAME FIXED BY CAPITALS AT ACCEPT IS NO RENAME, and nothing about it is bulk-taken (probe 6, C5 for circles)", () => {
+    const C = pid(121);
+    const R2 = pid(122);
+    const r2 = roleIdOf(R2);
+    const published: AcceptedChange[] = [
+      { op: "create_circle", orgRoleId: "circle:land-stewardship", payload: { name: "Land Stewardship" }, from: { pageId: C, name: "Land Stewardship" } },
+      {
+        op: "create_seat", orgRoleId: r2, payload: { name: "Water Steward", aim: "Keeps The Wells Clear.", circleId: "land-stewardship" },
+        from: { pageId: R2, name: "Water Steward", aim: "Keeps The Wells Clear.", circleName: "Land Stewardship" },
+      },
+    ];
+    const here = { circles: [liveCircle("land-stewardship", "Land Stewardship")], roles: [liveRole(r2, "Water Steward", "land-stewardship", { aim: "Keeps The Wells Clear." })] };
+    // The service still sends its own capitals, for the circle and for the role in it.
+    const sent = (n: number) => snapshot([circleRec(C, "land stewardship")], [roleRec(R2, "water steward", [C], { fields: { Body: "keeps the wells clear." } })], n);
+    const stamped: Snapshot[] = [];
+    for (const n of [1, 2]) stamped.unshift(stampMatches(input({ snapshots: [sent(n), ...stamped], live: here, accepted: published }))!);
+    for (const snapshots of [stamped, [sent(2), sent(1)]]) {
+      const list = differences(input({ snapshots, live: here, accepted: published }));
+      expect(list.filter((d) => d.kind === "rename")).toEqual([]);
+      expect(list.filter((d) => d.bulkEligible || d.autoEligible)).toEqual([]);
+    }
+  });
+});
+
+describe("second review K2: a stored match never sticks to a role retired here", () => {
+  it("THE OLD COOK RETIRED AND A NEW COOK MADE: the service's Cook is compared with the new one (probe 5 S)", () => {
+    const R = pid(170);
+    const read = (n: number) => snapshot([circleRec(LAND, "Land")], [roleRec(R, "Cook", [LAND], { fields: { Body: "Feeds us." } })], n);
+    const before = { circles: [LAND_HERE], roles: [liveRole("cook-old", "Cook", "land", { aim: "Feeds us." })] };
+    const retired = liveRole("cook-old", "Cook", "land", { active: false, aim: "Feeds us." });
+    const after = { circles: [LAND_HERE], roles: [retired, liveRole("cook-new", "Cook", "land", { aim: "Cooks." })] };
+    let kept = [stampMatches(input({ snapshots: [read(1)], live: before }))!];
+    kept = [stampMatches(input({ snapshots: [read(2), ...kept], live: after }))!, ...kept];
+    expect(kept[0].roles.records[0].match?.ourId).toBe("cook-new");
+    const list = differences(input({ snapshots: kept, live: after }));
+    expect(list.map((d) => [d.kind, d.field, d.subject.ourId])).toEqual([["textField", "aim", "cook-new"]]);
+    // The control: with no live role of that name, the stored match holds, and the retirement is ours ahead.
+    const alone = { circles: [LAND_HERE], roles: [retired] };
+    expect(differences(input({ snapshots: kept.slice(1), live: alone })).map((d) => [d.kind, d.state, d.subject.ourId])).toEqual([["roleAdd", "oursAhead", "cook-old"]]);
+  });
+});
+
+describe("second review K1: the newer base wins, the history's or what both sides last held", () => {
+  const R = pid(160);
+  const rid = roleIdOf(R);
+  const published = [created(rid, { name: "Cook", circleId: "land", aim: "Old words." }, R)];
+  const read = (n: number, aim: string, name = "Cook", circle = LAND) =>
+    snapshot([circleRec(LAND, "Land"), circleRec(WATER, "Water")], [roleRec(R, name, [circle], { fields: { Body: aim } })], n);
+  const live = (aim: string, name = "Cook", circle = "land") => ({ circles: [LAND_HERE, WATER_HERE], roles: [liveRole(rid, name, circle, { aim })] });
+  /** Each read stamped against the chart and the history as they stood then, newest first. */
+  const chain = (steps: Array<[Snapshot, DifferencesInput["live"]]>, accepted: AcceptedChange[] = published) => {
+    let kept: Snapshot[] = [];
+    for (const [s, l] of steps) kept = [stampMatches(input({ snapshots: [s, ...kept], live: l, accepted }))!, ...kept];
+    return kept;
+  };
+
+  it("BOTH AGREED ON NEWER WORDS, THEN OURS WENT BACK: ours ahead, never an automatic suggestion (probe 5 F)", () => {
+    // Published "Old words."; the service changed them and a person copied that by hand.
+    const kept = chain([[read(1, "Old words."), live("Old words.")], [read(2, "New words."), live("New words.")]]);
+    const list = differences(input({ snapshots: kept, live: live("Old words."), accepted: published }));
+    expect(list.map((d) => [d.kind, d.state, d.base])).toEqual([["textField", "oursAhead", { value: "New words." }]]);
+    expect(list[0]).toMatchObject({ autoEligible: false, bulkEligible: false });
+    // The same for a name, and for a circle.
+    const named = chain([[read(1, "Old words."), live("Old words.")], [read(2, "Old words.", "Head Cook"), live("Old words.", "Head Cook")]]);
+    expect(differences(input({ snapshots: named, live: live("Old words."), accepted: published })).map((d) => [d.kind, d.state])).toEqual([["rename", "oursAhead"]]);
+    const moved = chain([[read(1, "Old words."), live("Old words.")], [read(2, "Old words.", "Cook", WATER), live("Old words.", "Cook", "water")]]);
+    expect(differences(input({ snapshots: moved, live: live("Old words."), accepted: published })).map((d) => [d.kind, d.state])).toEqual([["roleMove", "oursAhead"]]);
+  });
+
+  it("BOTH AGREED, THEN THE SERVICE MOVED ON: a suggestion against what both held, never a conflict (probe 5 F2')", () => {
+    const kept = chain([
+      [read(1, "Old words."), live("Old words.")],
+      [read(2, "New words."), live("New words.")],
+      [read(3, "Newest words."), live("New words.")],
+    ]);
+    const [d] = differences(input({ snapshots: kept, live: live("New words."), accepted: published }));
+    expect(d).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "New words." } });
+  });
+
+  it("A CHANGE PUBLISHED AFTER BOTH AGREED MAKES THE HISTORY THE NEWER BASE", () => {
+    // Both held "Old words."; then the village published the service's "New words." from a proposal.
+    const kept = chain([[read(1, "Old words."), live("Old words.")]]);
+    const later: AcceptedChange[] = [...published, { op: "update_seat", orgRoleId: rid, payload: { aim: "New words." }, from: { pageId: R, aim: "New words." } }];
+    const [d] = differences(input({ snapshots: [read(2, "Newest words."), ...kept], live: live("New words."), accepted: later }));
+    expect(d).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "New words." } });
+  });
+});
+
+describe("second review N3: a stored match keeps a hash of what both sides held, never the words", () => {
+  const W = pid(150);
+  const read = (body: string, n: number) => snapshot([circleRec(LAND, "Land")], [roleRec(W, "Water Steward", [LAND], { fields: { Body: body } })], n);
+  const live = (aim: string) => ({ circles: [LAND_HERE], roles: [liveRole("our-water", "Water Steward", "land", { aim })] });
+
+  it("CARRIES WHAT BOTH SIDES HELD AS A HASH, so the words leave with the read they came in", () => {
+    let kept: Snapshot[] = [];
+    const keep = (s: Snapshot, l: DifferencesInput["live"]) => {
+      kept = [stampMatches(input({ snapshots: [s, ...kept], live: l }))!, ...kept];
+    };
+    keep(read("Holds the water.", 1), live("Holds the water."));
+    // The service changes its words and ours stay: what both held is carried into the newer read.
+    keep(read("Holds the wells.", 2), live("Holds the water."));
+    const stored = JSON.stringify(kept[0].roles.records[0].match);
+    expect(stored).not.toContain("Holds the water");
+    expect(stored).not.toMatch(/water steward/i);
+    // And it is still the base: the service's change is a suggestion against what both held.
+    const [d] = differences(input({ snapshots: kept, live: live("Holds the water.") }));
+    expect(d).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "Holds the water." } });
+  });
+
+  it("A ROW KEPT BEFORE THIS, HOLDING THE WORDS, STILL READS, and the next read keeps only their hash", () => {
+    const old = read("Holds the wells.", 2);
+    const legacy: Snapshot = {
+      ...old,
+      roles: { ...old.roles, records: [{ ...old.roles.records[0], match: { ourId: "our-water", via: "name", agreed: { name: true, aim: "Holds the water.", circle: "land" } } }] },
+    };
+    const [d] = differences(input({ snapshots: [legacy], live: live("Holds the water.") }));
+    expect(d).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "Holds the water." } });
+    const next = stampMatches(input({ snapshots: [read("Holds the wells.", 3), legacy], live: live("Holds the water.") }))!;
+    expect(JSON.stringify(next.roles.records[0].match)).not.toContain("Holds the water");
+    const [after] = differences(input({ snapshots: [next, legacy], live: live("Holds the water.") }));
+    expect(after).toMatchObject({ kind: "textField", state: "suggestion", base: { value: "Holds the water." } });
   });
 });
 
@@ -1274,16 +1423,19 @@ describe("second review C2: a rename here never turns what was matched into some
       kept = [stampMatches(input({ snapshots: [s, ...kept], live, accepted }))!, ...kept].slice(0, 30);
     };
     keep(read(1), chart("Land"));
-    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "name", agreed: { name: true } });
-    expect(kept[0].roles.records[0].match).toEqual({ ourId: roleIdOf(R1), via: "pageId", agreed: { name: true, circle: "land" } });
+    // What both sides held: a hash of each, a name's folded, and our circle's id (review N3).
+    // A circle made here has no history: its mark says so (review K1).
+    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "name", held: { name: valueHash("land") }, traced: { name: "none" } });
+    expect(kept[0].roles.records[0].match).toMatchObject({ ourId: roleIdOf(R1), via: "pageId", held: { name: valueHash("role 0"), circle: "land" } });
     // Renamed here, then thirty more reads: the read that saw both agree is long gone.
     for (let i = 0; i < 30; i += 1) keep(read(2), chart("Land & Ecology"));
-    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "earlier", agreed: { name: true } });
+    expect(kept[0].circles.records[0].match).toEqual({ ourId: "land", via: "earlier", held: { name: valueHash("land") }, traced: { name: "none" } });
     const list = differences(input({ snapshots: kept, live: chart("Land & Ecology"), accepted }));
     expect(list.map((d) => [d.kind, d.state, d.base])).toEqual([["rename", "oursAhead", { value: "Land" }]]);
     // The service renames its circle since: a suggestion against the name both held.
     keep(snapshot([circleRec(C, "Land Stewardship")], [roleRec(R1, "Role 0", [C]), roleRec(R2, "Role 1", [C])], 3), chart("Land & Ecology"));
     const after = differences(input({ snapshots: kept, live: chart("Land & Ecology"), accepted }));
-    expect(after.map((d) => [d.kind, d.state, d.sera, d.base])).toEqual([["rename", "conflict", "Land Stewardship", { value: "Land" }]]);
+    // Neither side holds "Land" now, and its words are not kept (review N3): the base is its hash.
+    expect(after.map((d) => [d.kind, d.state, d.sera, d.base])).toEqual([["rename", "conflict", "Land Stewardship", { hash: valueHash("land") }]]);
   });
 });

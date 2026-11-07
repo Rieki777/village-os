@@ -10,7 +10,7 @@
  * must keep working.
  */
 import { describe, expect, it } from "vitest";
-import { idShapeOk, labelOf, looksLikeAnId, normaliseId, plainText, resolveRelation, shapeOf } from "./saberraRelations";
+import { idShapeOk, labelOf, looksLikeAnId, normaliseId, pageIdOf, plainText, relationRefs, resolveRelation, shapeOf } from "./saberraRelations";
 
 const LAND = "3ed0a88e-f36a-8104-80fa-cd2bfe15c001";
 const MONEY = "3ed0a88e-f36a-8104-80fa-cd2bfe15c002";
@@ -78,6 +78,29 @@ describe("a record id, by its shape (R10)", () => {
     expect(idShapeOk("Water Steward")).toBe(false);
     expect(idShapeOk("a".repeat(65))).toBe(false);
     expect(idShapeOk("")).toBe(false);
+  });
+
+  it("KEEPS ONLY THE PAGE ID WHEN A PAGE TITLE COMES BEFORE IT, dashed or not, so no id carries a title (review #5)", () => {
+    const hex = "1a2b3c4d111122223333444455556666";
+    // The tail of a page address: the title, then the id, with and without the id's own dashes.
+    expect(pageIdOf(`Jane-Example-Helper-${hex}`)).toBe(hex);
+    expect(pageIdOf("Jane-Example-Helper-1a2b3c4d-1111-2222-3333-444455556666")).toBe(hex);
+    expect(pageIdOf("Jane_Example_1A2B3C4D111122223333444455556666")).toBe(hex);
+    // Each still passes the shape test as sent, which is the hole.
+    expect(idShapeOk(`Jane-Example-Helper-${hex}`)).toBe(true);
+    // The controls: an id alone stays as it was sent, and so does an id with no page id in it.
+    expect(pageIdOf(hex)).toBe(hex);
+    expect(pageIdOf("1a2b3c4d-1111-2222-3333-444455556666")).toBe("1a2b3c4d-1111-2222-3333-444455556666");
+    expect(pageIdOf(" r-1 ")).toBe("r-1");
+    expect(pageIdOf(`ab${hex}`)).toBe(`ab${hex}`);
+  });
+
+  it("READS A RELATION'S POINTER THE SAME WAY: a titled id is the page id, never a name (review #5)", () => {
+    const hex = "1a2b3c4d111122223333444455556666";
+    expect(relationRefs([`Land-and-Ecology-${hex}`])).toEqual([{ id: hex, name: null }]);
+    expect(relationRefs([{ id: "Land-and-Ecology-1a2b3c4d-1111-2222-3333-444455556666" }])).toEqual([{ id: hex, name: null }]);
+    // The control: a plain name is still a name.
+    expect(relationRefs(["Land and Ecology"])).toEqual([{ id: null, name: "Land and Ecology" }]);
   });
 });
 

@@ -57,9 +57,11 @@
  */
 import type { Pool } from "mysql2/promise";
 import type { SyncTrigger } from "../../shared/saberraSyncLog";
+import { canonicalJson } from "../../shared/canonicalJson";
 import {
   stampMatches,
   traceAccepted,
+  valueHash,
   type AcceptedChange,
   type DifferencesInput,
   type Snapshot,
@@ -73,10 +75,11 @@ import { dedupeKeyFor } from "./externalProposals";
 import { nameCheckFor, type NameCheck } from "./saberraNames";
 import type { VendorRecord } from "./saberraProposals";
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
-import { idShapeOk, labelOf, normaliseId, plainText, relationRefs } from "./saberraRelations";
+import { idShapeOk, labelOf, normaliseId, pageIdOf, plainText, relationRefs } from "./saberraRelations";
+import { listOrgRoles } from "./orgChart";
 import { liveChart } from "./structureReview";
 import { rosterRows } from "../repos/peopleRoster";
-import { insertSnapshot, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
+import { insertSnapshot, pruneCarriedOlderThan, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
 import { acceptedProposalsFor, circlesForDifferences, publishedFromModule, rolesWithPaySet } from "../repos/seraDifferences";
 
 /** How many reads are kept. R4 needs two whole ones; the rest are history. */
@@ -89,9 +92,17 @@ export const SNAPSHOT_KEEP = 30;
  */
 export const SNAPSHOT_MAX_AGE_DAYS = 60;
 
-/** Delete every stored read older than the age, the newest included. Says how many went. */
-export function pruneByAge(pool: Pool, now: Date = new Date()): Promise<number> {
-  return pruneSnapshotsOlderThan(pool, new Date(now.getTime() - SNAPSHOT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000));
+const MAX_AGE_MS = SNAPSHOT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Delete every stored read older than the age, the newest included, and every
+ * carried kind whose own whole read is older than that, from the rows that
+ * carry it (review N1): a row taken yesterday carrying a read from 61 days ago
+ * holds that read no longer. Says how many reads went.
+ */
+export async function pruneByAge(pool: Pool, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - MAX_AGE_MS);
+  return (await pruneSnapshotsOlderThan(pool, cutoff)) + (await pruneCarriedOlderThan(pool, cutoff));
 }
 
 /** The longest text kept whole, in code points. Anything longer is clipped, named, and never compared. */
@@ -185,7 +196,8 @@ export function snapshotRecord(kind: SaberraRecordKind, rec: VendorRecord, check
     }
     fields[field] = v;
   }
-  const out: SnapshotRecord = { id: rec.id.trim(), fields };
+  // The page id alone, never a title cut with it (review #5).
+  const out: SnapshotRecord = { id: pageIdOf(rec.id), fields };
   if (rec.editedAt) out.editedAt = rec.editedAt;
   if (named.length) out.namesAMember = named.sort();
   if (swapped.length) out.swapped = swapped.sort();
@@ -228,8 +240,24 @@ const MODULE_ID = "saberra";
 
 /** The live chart as the differences read it: circles in chart order, and each role with whether pay is set here, never its figure. */
 export async function liveForDifferences(pool: Pool): Promise<DifferencesInput["live"]> {
-  const [circles, paid] = await Promise.all([circlesForDifferences(pool), rolesWithPaySet(pool)]);
+  const [circles, paid, roles] = await Promise.all([circlesForDifferences(pool), rolesWithPaySet(pool), listOrgRoles(pool)]);
   const live = await liveChart(pool, circles);
+  // What pay is set here, as a hash and never the figure: a change here settles the service's pay (review K3).
+  const payHash = new Map(
+    roles.map((r) => [
+      r.id,
+      valueHash(
+        canonicalJson({
+          value: r.valueMinor ?? null,
+          valueCurrency: r.valueCurrency ?? null,
+          tokens: r.valueTokens ?? null,
+          cash: r.cashMinor ?? null,
+          cashCurrency: r.cashCurrency ?? null,
+          terms: r.termsOffer ?? null,
+        }),
+      ),
+    ]),
+  );
   return {
     circles: live.circles.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases, status: c.status, isExample: c.isExample })),
     roles: live.seats.map((s) => ({
@@ -241,6 +269,7 @@ export async function liveForDifferences(pool: Pool): Promise<DifferencesInput["
       holders: s.holders,
       aim: s.words?.aim ?? null,
       paySet: paid.has(s.id),
+      ...(paid.has(s.id) && payHash.has(s.id) ? { payHash: payHash.get(s.id) } : {}),
     })),
   };
 }
@@ -287,6 +316,26 @@ async function withMatches(pool: Pool, read: Snapshot, older: readonly Snapshot[
 }
 
 /**
+ * A kind not read whole keeps the read before's records (R5), each with when
+ * it was last read whole, carried unchanged (review N1). A record whose whole
+ * read is past the age is never carried: the kind then holds nothing, and the
+ * page says it has no read. A row kept before this carried no time: its
+ * source is the newest whole read of the kind among the rows read here, or
+ * failing that the row itself, the most that can honestly be said of it.
+ */
+function carriedForward(previous: Snapshot | null, key: "circles" | "roles", older: readonly Snapshot[], at: Date): SnapshotRecord[] {
+  if (!previous) return [];
+  const prior = previous[key];
+  const source = prior.read === "whole" ? previous.takenAt : (older.find((s) => s[key].read === "whole")?.takenAt ?? previous.takenAt);
+  return prior.records
+    .map((r) => ({ ...r, readAt: r.readAt ?? source }))
+    .filter((r) => {
+      const t = Date.parse(r.readAt);
+      return Number.isFinite(t) && t >= at.getTime() - MAX_AGE_MS;
+    });
+}
+
+/**
  * Keep one read: each kind whole, or carried from the snapshot before, each
  * record with its match as made now, then delete everything older than the
  * newest `SNAPSHOT_KEEP`. Says which row it wrote and how each kind came out.
@@ -305,10 +354,12 @@ export async function writeSnapshot(
     // An id is an id (R10): a record with an address for one is never kept.
     const fresh = dedupe(read.records.filter((r) => r.kind === kind && idShapeOk(r.id)).map((r) => snapshotRecord(kind, r, check)));
     const state = readOf(kind, read, fresh);
-    kept[key] = state === "whole" ? { read: state, records: fresh } : { read: state, records: previous?.[key].records ?? [] };
+    kept[key] = state === "whole" ? { read: state, records: fresh } : { read: state, records: carriedForward(previous, key, older, at) };
   }
   const stamped = await withMatches(pool, { takenAt: at.toISOString(), trigger, circles: kept.circles, roles: kept.roles }, older, check);
   const seq = await insertSnapshot(pool, at, { trigger, circles: stamped.circles, roles: stamped.roles });
   await pruneSnapshots(pool, SNAPSHOT_KEEP);
+  // By age too, on every read, so nothing outlives the age when the daily job does not run (review N6).
+  await pruneByAge(pool, at);
   return { seq, circles: kept.circles.read, roles: kept.roles.read };
 }

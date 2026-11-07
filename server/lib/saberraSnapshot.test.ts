@@ -39,6 +39,10 @@ const state = vi.hoisted(() => ({
   sessionThrows: false,
   /** When true, storing the facts throws: a failure after the service answered. */
   factsFail: false,
+  /** When true, the age prune leaves carried kinds alone, so the carry's own rule is what is seen. */
+  keepCarried: false,
+  /** How long opening a session takes, so a run's start and its landing fall in different seconds. */
+  slowMs: 0,
   /** A row deleted just before the next read of rows by seq, the way a prune racing a read would. */
   pruneOnRead: null as number | null,
 }));
@@ -64,6 +68,7 @@ vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
       if (state.snapshotFails) throw Object.assign(new Error("Invalid JSON text"), { code: "ER_INVALID_JSON_TEXT" });
       return real.insertSnapshot(...args);
     },
+    pruneCarriedOlderThan: async (...args: Parameters<typeof real.pruneCarriedOlderThan>) => (state.keepCarried ? 0 : real.pruneCarriedOlderThan(...args)),
     snapshotsBySeq: async (...args: Parameters<typeof real.snapshotsBySeq>) => {
       if (state.pruneOnRead !== null) {
         const seq = state.pruneOnRead;
@@ -87,6 +92,7 @@ vi.mock("./secrets", () => ({
 
 vi.mock("./saberraClient", () => ({
   openSession: async () => {
+    if (state.slowMs) await new Promise((r) => setTimeout(r, state.slowMs));
     if (state.sessionThrows) throw Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
     return state.session;
   },
@@ -108,7 +114,7 @@ vi.mock("./identity", () => ({ instanceIdentity: () => ({ instanceId: "village-1
 
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { seatIdFor } from "../../shared/structurePlan";
-import type { Snapshot } from "../../shared/seraDifferences";
+import { valueHash, type Snapshot } from "../../shared/seraDifferences";
 import { landProposal, markProposalDecided, proposalsInBatch } from "./externalProposals";
 import { pollOnce, syncByHand } from "./saberraSync";
 import { SNAPSHOT_KEEP, TEXT_KEEP, writeSnapshot } from "./saberraSnapshot";
@@ -197,6 +203,8 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     state.sessionThrows = false;
     state.factsFail = false;
     state.pruneOnRead = null;
+    state.slowMs = 0;
+    state.keepCarried = false;
     await pool.query("DELETE FROM saberra_snapshots WHERE seq > 0"); // module-review-ok: fixture SQL, each test starts from no snapshot
     await writeSyncLogDocument(pool, { runs: [], landedFingerprint: null });
   });
@@ -297,6 +305,25 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(after.circles.records[0]!.namesAMember).toBeUndefined();
   });
 
+  it("KEEPS ONLY THE PAGE ID OF AN ID THAT ENDS A PAGE ADDRESS, dashed or not, so no stored id carries a title (review #5)", async () => {
+    const { land } = serviceHolds("tail");
+    const hex = pageId("tail-titled");
+    const dashed = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    const other = pageId("tail-other");
+    (state.read.role as unknown[]).push(
+      { id: `Jane-Example-Helper-${dashed}`, fields: { "Role Name": "Helper", Circle: [`Land-Circle-${land}`], Status: "Active" } },
+      { id: `Secret-Plan-${other}`, fields: { "Role Name": "Planner", Status: "Active" } },
+    );
+    expect((await syncByHand(pool)).status).toBe(200);
+    const s = await newest();
+    expect(s.roles.records.map((r) => r.id)).toEqual(expect.arrayContaining([hex, other]));
+    expect(s.roles.records.find((r) => r.id === hex)!.fields.Circle).toEqual([{ id: land }]);
+    const stored = JSON.stringify(s);
+    for (const title of ["Jane-Example", "Helper-", "Secret-Plan", "Land-Circle"]) expect(stored).not.toContain(title);
+    // What the sync landed carries the page id too, never the title.
+    expect(JSON.stringify(await proposalsInBatch(pool, "sync-snap-1"))).not.toContain("Jane-Example");
+  });
+
   it("DROPS A RECORD WHOSE ID IS AN ADDRESS, and counts it in the sync's report (R10)", async () => {
     const { water } = serviceHolds("ids");
     // The service sends a second role with its page ADDRESS where the id belongs: the title rides in it.
@@ -337,6 +364,8 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     serviceHolds("carry");
     await syncByHand(pool);
     const first = await newest();
+    // Carried as they were, each saying when it was read whole (review N1).
+    const carriedFirst = first.circles.records.map((r) => ({ ...r, readAt: first.takenAt }));
 
     const press = async () => {
       // The roles change every time, so each row shows the whole kind moved on.
@@ -348,7 +377,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     let s = await newest();
     expect([s.circles.read, s.roles.read]).toEqual(["failed", "whole"]);
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
     expect(s.roles.records[0]!.fields["Role Name"]).not.toBe(first.roles.records[0]!.fields["Role Name"]);
 
     state.fail = {};
@@ -356,14 +385,14 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     s = await newest();
     expect(s.circles.read).toBe("cut-short");
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     state.endless = {};
     state.read.circle = [];
     await syncByHand(pool);
     s = await newest();
     expect(s.circles.read).toBe("empty");
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     // A schema that offers roles and not circles: the circles were never asked for.
     serviceHolds("carry");
@@ -371,7 +400,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     await syncByHand(pool);
     s = await newest();
     expect([s.circles.read, s.roles.read]).toEqual(["not-asked", "whole"]);
-    expect(s.circles.records).toEqual(first.circles.records);
+    expect(s.circles.records).toEqual(carriedFirst);
 
     // The control: a whole read of the kind replaces it.
     state.tools = [];
@@ -448,13 +477,50 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     expect(row!.snapshot).toMatchObject({ trigger: "scheduled", roles: { read: "whole" }, circles: { read: "whole" } });
   });
 
+  it("A CHANGE TO PAY HERE SETTLES THE SERVICE'S CHANGED PAY, read off the live chart (review K3)", async () => {
+    const land = pageId("pay-land");
+    const cook = pageId("pay-cook");
+    const id = seatIdFor(cook, "unused");
+    await pool.query("INSERT IGNORE INTO circles (id, name, status) VALUES ('pay-land', 'pay Land', 'active')"); // module-review-ok: fixture SQL, the live circle
+    await pool.query( // module-review-ok: fixture SQL, a role with cash pay set here
+      "INSERT INTO org_roles (id, circle_id, name, seats, active, cash_minor, cash_currency) VALUES (?, 'pay-land', 'pay Cook', 1, 1, 100000, 'USD')",
+      [id],
+    );
+    const sends = (usd: number) => {
+      state.read = {
+        circle: [{ id: land, fields: { "Circle Name": "pay Land", Status: "Active" } }],
+        role: [{ id: cook, fields: { "Role Name": "pay Cook", Circle: [land], Status: "Active", "Compensation Model": "Stipend", "Compensation Target (Monthly)": usd } }],
+        role_assignment: [],
+      };
+    };
+    const pay = async () => (await readDifferences(pool)).list.filter((d) => d.kind === "pay" && d.subject.ourId === id).map((d) => d.state);
+    sends(1000);
+    await syncByHand(pool);
+    sends(1200);
+    await syncByHand(pool);
+    expect(await pay()).toEqual(["conflict"]);
+    // The Treasurer sets ours: settled at once, and after the next read too.
+    await pool.query("UPDATE org_roles SET cash_minor = 120000 WHERE id = ?", [id]); // module-review-ok: fixture SQL, pay changed here
+    expect(await pay()).toEqual([]);
+    await syncByHand(pool);
+    expect(await pay()).toEqual([]);
+  });
+
   it("A STORED MATCH READS BACK WHOLE, the pay it carries included, and a malformed one reads as none", async () => {
-    const whole = { ourId: "role-1", via: "earlier", agreed: { name: true, aim: "Holds the water.", circle: "land" }, pay: "0123456789abcdef" };
+    const whole = {
+      ourId: "role-1",
+      via: "earlier",
+      held: { name: "aaaaaaaaaaaaaaaa", aim: "bbbbbbbbbbbbbbbb", circle: "land" },
+      traced: { name: "none", aim: "dddddddddddddddd" },
+      // A row kept before review N3 held the words: still read back.
+      agreed: { name: true, aim: "Holds the water.", circle: "land" },
+      pay: "0123456789abcdef",
+    };
     const records = [
       { id: pageId("rt-1"), fields: { "Role Name": "One" }, match: whole },
       { id: pageId("rt-2"), fields: { "Role Name": "Two" }, match: null },
       { id: pageId("rt-3"), fields: { "Role Name": "Three" }, match: { ourId: "role-3", via: "guess", agreed: {} } },
-      { id: pageId("rt-4"), fields: { "Role Name": "Four" }, match: { ourId: "role-4", via: "name", agreed: { name: 7, aim: true }, pay: 12 } },
+      { id: pageId("rt-4"), fields: { "Role Name": "Four" }, match: { ourId: "role-4", via: "name", held: { name: 5, aim: "cccccccccccccccc" }, agreed: { name: 7, aim: true }, pay: 12 } },
     ];
     await insertSnapshot(pool, new Date(), { trigger: "by-hand", circles: { read: "empty", records: [] }, roles: { read: "whole", records: records as never } });
     const back = (await newest()).roles.records;
@@ -463,7 +529,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     // A way nobody matches by is no match at all: the record reads as one kept before matches were stored.
     expect("match" in back[2]!).toBe(false);
     // What is not text or true is left out, and so is a pay that is not text.
-    expect(back[3]!.match).toEqual({ ourId: "role-4", via: "name", agreed: { aim: true } });
+    expect(back[3]!.match).toEqual({ ourId: "role-4", via: "name", held: { aim: "cccccccccccccccc" }, agreed: { aim: true } });
   });
 
   it("A RENAME HERE BETWEEN TWO SYNCS IS OURS AHEAD: each read is kept with its match as it was made then (review C2)", async () => {
@@ -492,10 +558,13 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       ["rename", "oursAhead", "c2-water"],
     ]);
     // What the first read was kept with, and the second: the match made then, and what both sides held.
-    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", agreed: { name: true } });
-    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", agreed: { name: true, aim: true, circle: "c2-land" } });
+    const held = { name: valueHash("c2 water steward"), aim: valueHash("Holds the water."), circle: "c2-land" };
+    // Made here, so no history: each mark says so (review K1).
+    const traced = { name: "none", aim: "none", circle: "none" };
+    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") }, traced: { name: "none" } });
+    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", held, traced });
     const second = await newest();
-    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", agreed: { name: true, aim: true, circle: "c2-land" } });
+    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", held, traced });
   });
 
   it("THE SERVICE NOT ANSWERING IS KEPT AS A READ, both kinds failed and carried, so the list says when it last tried (review C6)", async () => {
@@ -536,6 +605,48 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     const [top, under] = await recentSnapshots(pool, 2);
     expect([top!.snapshot.circles.read, top!.snapshot.roles.read]).toEqual(["whole", "whole"]);
     expect(under!.snapshot.circles.read).toBe("failed");
+  });
+
+  it("A DAILY SCHEDULE AGAINST A DEAD SERVICE FOR 61 DAYS ENDS WITH NO CARRIED RECORDS: a kind ages from its last whole read (review N1, N6)", async () => {
+    const DAY = 86_400_000;
+    const start = Date.now() - 61 * DAY;
+    const { water } = serviceHolds("dead");
+    // The last whole read, 61 days ago, through the same writer every sync uses.
+    const records = [
+      ...(state.read.circle as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "circle" as const })),
+      ...(state.read.role as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "role" as const })),
+    ];
+    await writeSnapshot(pool, { asked: ["circle", "role"], failed: [], truncated: [], records }, "scheduled", new Date(start));
+    // Then the schedule, every day, and the service never answers.
+    state.session = null;
+    for (let day = 1; day <= 59; day += 1) await pollOnce(pool, () => start + day * DAY);
+    // Day 59: still carried, and each carried record says when it was read whole, never when it was carried.
+    const rows = (await recentSnapshots(pool, 100)).map((r) => r.snapshot);
+    const whole = rows.find((s) => s.roles.read === "whole")!;
+    const carried = rows.filter((s) => s.roles.read !== "whole").flatMap((s) => [...s.circles.records, ...s.roles.records]);
+    expect(carried.some((r) => r.id === water)).toBe(true);
+    expect(new Set(carried.map((r) => r.readAt))).toEqual(new Set([whole.takenAt]));
+    for (let day = 60; day <= 61; day += 1) await pollOnce(pool, () => start + day * DAY);
+    // Day 61: the read is past the age, so no row holds it, carried or whole.
+    const after = await recentSnapshots(pool, 100);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after.flatMap((r) => [...r.snapshot.circles.records, ...r.snapshot.roles.records])).toEqual([]);
+    expect(JSON.stringify(after)).not.toContain("Jane");
+  }, 60_000);
+
+  it("NEVER CARRIES A KIND WHOSE LAST WHOLE READ IS PAST THE AGE, before any prune runs (review N1)", async () => {
+    const DAY = 86_400_000;
+    serviceHolds("stale");
+    const records = (state.read.role as Array<{ id: string; fields: Record<string, unknown> }>).map((r) => ({ ...r, kind: "role" as const }));
+    const failed = { asked: ["circle", "role"], failed: ["circle", "role"], truncated: [], records: [] };
+    await writeSnapshot(pool, { asked: ["circle", "role"], failed: [], truncated: [], records }, "scheduled", new Date(Date.now() - 59 * DAY));
+    await writeSnapshot(pool, failed, "scheduled", new Date(Date.now() - 2 * DAY));
+    // The control: a day inside the age, still carried.
+    expect((await newest()).roles.records).toHaveLength(1);
+    // Past the age: the next attempt carries nothing, with the prune of carried kinds switched off.
+    state.keepCarried = true;
+    await writeSnapshot(pool, failed, "scheduled", new Date(Date.now() + 2 * DAY));
+    expect((await newest()).roles).toEqual({ read: "failed", records: [] });
   });
 
   it("THIRTY ATTEMPTS THE SERVICE NEVER ANSWERED NEVER PRUNE THE LAST FULL CHECK (review C6)", async () => {
@@ -597,6 +708,21 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       expect(fact).toEqual([["2027-01-01", "2026-12-01"]]);
     });
   });
+
+  it("A LANDING RUN'S READ IS KEPT AFTER ITS LANDING, so no batch it landed is newer than its own read (for review K6)", async () => {
+    serviceHolds("after");
+    state.session = "snap-after";
+    // The run starts, waits on the service past a second boundary, then reads and lands.
+    state.slowMs = 2_100;
+    expect((await syncByHand(pool)).status).toBe(200);
+    const [[landed]] = (await pool.query( // module-review-ok: fixture SQL, the newest arrival of the batch this run landed
+      "SELECT UNIX_TIMESTAMP(MAX(received_at)) AS at FROM external_proposals WHERE batch_id = 'sync-snap-after'",
+    )) as unknown as [Array<{ at: number | string | null }>];
+    expect(landed!.at).not.toBeNull();
+    const kept = Date.parse((await newest()).takenAt) / 1000;
+    // "Last checked" is the end of the read: never earlier than what the read landed.
+    expect(kept).toBeGreaterThanOrEqual(Number(landed!.at));
+  }, 15_000);
 
   it("A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC: the proposals still land", async () => {
     serviceHolds("fails");

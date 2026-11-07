@@ -53,15 +53,32 @@ function recordOf(r: SnapshotRecord): SnapshotRecord {
     const { match: _dropped, ...rest } = r;
     return rest;
   }
-  const given = m.agreed && typeof m.agreed === "object" && !Array.isArray(m.agreed) ? (m.agreed as Record<string, unknown>) : {};
+  const objectOf = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia };
+  // What both sides held, as hashes (review N3): text only.
+  const held: Partial<Record<AgreedSlot, string>> = {};
+  for (const s of SLOTS) {
+    const v = objectOf(m.held)[s];
+    if (typeof v === "string") held[s] = v;
+  }
+  if (Object.keys(held).length) match.held = held;
+  // The mark of the history's base each was held under (review K1): text only.
+  const traced: Partial<Record<AgreedSlot, string>> = {};
+  for (const s of SLOTS) {
+    const v = objectOf(m.traced)[s];
+    if (typeof v === "string") traced[s] = v;
+  }
+  if (Object.keys(traced).length) match.traced = traced;
+  // A row kept before held the words, or true: still read, never written now.
   const agreed: Partial<Record<AgreedSlot, string | true>> = {};
   for (const s of SLOTS) {
-    const v = given[s];
+    const v = objectOf(m.agreed)[s];
     if (v === true || typeof v === "string") agreed[s] = v;
   }
-  const match: SnapshotMatch = { ourId: m.ourId, via: m.via as MatchVia, agreed };
+  if (Object.keys(agreed).length) match.agreed = agreed;
   // The pay the service held when ours was last in step: a hash, kept only as text.
   if (typeof m.pay === "string") match.pay = m.pay;
+  if (typeof m.ourPay === "string") match.ourPay = m.ourPay;
   return { ...r, match };
 }
 
@@ -180,4 +197,41 @@ export async function pruneSnapshotsOlderThan(pool: Pool, cutoff: Date): Promise
     Math.floor(cutoff.getTime() / 1000),
   ]);
   return Number(res.affectedRows ?? 0);
+}
+
+/**
+ * Take, out of every row that carries a kind it did not read whole, the
+ * records whose own whole read was taken before `cutoff` (review N1). A row
+ * carries what an older read said, and is newer than that read, so the age
+ * prune by `taken_at` alone never reached it. A carried record whose time
+ * cannot be read goes too; one kept before records carried a time stays,
+ * because its age cannot be told. Says how many carried kinds were cut.
+ */
+export async function pruneCarriedOlderThan(pool: Pool, cutoff: Date): Promise<number> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT seq, circles_read, circles, roles_read, roles FROM saberra_snapshots WHERE circles_read <> 'whole' OR roles_read <> 'whole'",
+  );
+  const line = cutoff.getTime();
+  const young = (r: unknown): boolean => {
+    if (!r || typeof r !== "object" || !("readAt" in r)) return true;
+    const t = Date.parse(String((r as { readAt: unknown }).readAt));
+    return Number.isFinite(t) && t >= line;
+  };
+  let cut = 0;
+  for (const r of rows) {
+    const sets: string[] = [];
+    const args: unknown[] = [];
+    for (const [read, column] of [["circles_read", "circles"], ["roles_read", "roles"]] as const) {
+      if (r[read] === "whole") continue;
+      const list = jsonOf(r[column]);
+      if (!Array.isArray(list) || list.length === 0) continue;
+      const kept = list.filter(young);
+      if (kept.length === list.length) continue;
+      sets.push(`${column} = ?`);
+      args.push(JSON.stringify(kept));
+      cut += 1;
+    }
+    if (sets.length) await pool.query<ResultSetHeader>(`UPDATE saberra_snapshots SET ${sets.join(", ")} WHERE seq = ?`, [...args, Number(r.seq)]);
+  }
+  return cut;
 }
