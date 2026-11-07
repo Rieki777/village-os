@@ -53,6 +53,10 @@ msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Cerrar sesión en todos los dispositivos"
 
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "Vote on it again here"
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
@@ -81,6 +85,10 @@ msgstr "Cerrar"
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Cuenta de {firstName}"
+
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "This asks again after <0>a vote too few of us answered</0>."
+msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy

@@ -45,6 +45,10 @@ msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
 
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "Vote on it again here"
+msgstr "Vote on it again here"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Translated automatically"
@@ -68,6 +72,10 @@ msgstr "Close"
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Your account, {firstName}"
+
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "This asks again after <0>a vote too few of us answered</0>."
+msgstr "This asks again after <0>a vote too few of us answered</0>."
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
