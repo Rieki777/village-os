@@ -583,7 +583,7 @@ export default function Review() {
             <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
               What an outside service has proposed about this village. Nothing here is true yet. Read it,
               change anything you want, and accept what the village agrees with. What you accept goes into
-              a draft you can preview and undo.
+              a draft you preview before it goes live.
             </p>
           )}
         </div>
