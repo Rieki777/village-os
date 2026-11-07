@@ -647,7 +647,8 @@ function settle(out: Matching, tentative: Map<string, Array<{ pk: string; via: M
  * whatever its name says now. One whose name still names that subject is
  * matched by name or alias, as it was then (review C3): only a name that moved
  * since is a match under an older name, and only that one is checked for a
- * rename.
+ * rename. One whose subject was retired here and whose name now names exactly
+ * one live subject goes to that one by name instead (`replaced`, review K2).
  */
 function matchEarlier(
   out: Matching,
@@ -655,13 +656,14 @@ function matchEarlier(
   earlier: ReadonlyMap<string, Match>,
   exists: (id: string) => boolean,
   byName: (rec: SnapshotRecord, ourId: string) => MatchVia | null,
+  replaced: (rec: SnapshotRecord, ourId: string) => boolean = () => false,
 ): void {
   const taken = new Set(Array.from(out.byPage.values()).map((m) => m.ourId));
   for (const rec of records) {
     const pk = pageKey(rec.id);
     if (out.byPage.has(pk)) continue;
     const ourId = earlier.get(pk)?.ourId;
-    if (!ourId || !exists(ourId)) continue;
+    if (!ourId || !exists(ourId) || replaced(rec, ourId)) continue;
     out.claimed.add(ourId);
     if (taken.has(ourId)) {
       out.wasOurs.set(pk, ourId);
@@ -691,10 +693,26 @@ function matchRoles(
     const hit = seatIdsFor(rec.id).find((id) => byId.has(id));
     if (hit) out.byPage.set(pk, { ourId: hit, via: "pageId" });
   }
-  matchEarlier(out, records, earlier, (id) => byId.has(id), (rec, ourId) => {
+  // A role retired here, whose name now names exactly one live role: that one, by the
+  // active-first rule name matching keeps below (review K2).
+  const replaced = (rec: SnapshotRecord, ourId: string): boolean => {
+    if (byId.get(ourId)?.active !== false) return false;
     const name = textOf(rec, F.roleName, norm);
-    return name !== null && seatNameKey(name) === seatNameKey(byId.get(ourId)?.name) ? "name" : null;
-  });
+    if (name === null) return false;
+    const key = seatNameKey(name);
+    return roles.filter((r) => r.active && seatNameKey(r.name) === key).length === 1;
+  };
+  matchEarlier(
+    out,
+    records,
+    earlier,
+    (id) => byId.has(id),
+    (rec, ourId) => {
+      const name = textOf(rec, F.roleName, norm);
+      return name !== null && seatNameKey(name) === seatNameKey(byId.get(ourId)?.name) ? "name" : null;
+    },
+    replaced,
+  );
   const taken = new Set(Array.from(out.byPage.values()).map((m) => m.ourId));
   const tentative = new Map<string, Array<{ pk: string; via: MatchVia }>>();
   for (const rec of records) {

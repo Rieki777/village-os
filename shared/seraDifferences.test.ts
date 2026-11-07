@@ -1203,6 +1203,24 @@ describe("second review C5: a steward's capitals at accept are never taken for t
   });
 });
 
+describe("second review K2: a stored match never sticks to a role retired here", () => {
+  it("THE OLD COOK RETIRED AND A NEW COOK MADE: the service's Cook is compared with the new one (probe 5 S)", () => {
+    const R = pid(170);
+    const read = (n: number) => snapshot([circleRec(LAND, "Land")], [roleRec(R, "Cook", [LAND], { fields: { Body: "Feeds us." } })], n);
+    const before = { circles: [LAND_HERE], roles: [liveRole("cook-old", "Cook", "land", { aim: "Feeds us." })] };
+    const retired = liveRole("cook-old", "Cook", "land", { active: false, aim: "Feeds us." });
+    const after = { circles: [LAND_HERE], roles: [retired, liveRole("cook-new", "Cook", "land", { aim: "Cooks." })] };
+    let kept = [stampMatches(input({ snapshots: [read(1)], live: before }))!];
+    kept = [stampMatches(input({ snapshots: [read(2), ...kept], live: after }))!, ...kept];
+    expect(kept[0].roles.records[0].match?.ourId).toBe("cook-new");
+    const list = differences(input({ snapshots: kept, live: after }));
+    expect(list.map((d) => [d.kind, d.field, d.subject.ourId])).toEqual([["textField", "aim", "cook-new"]]);
+    // The control: with no live role of that name, the stored match holds, and the retirement is ours ahead.
+    const alone = { circles: [LAND_HERE], roles: [retired] };
+    expect(differences(input({ snapshots: kept.slice(1), live: alone })).map((d) => [d.kind, d.state, d.subject.ourId])).toEqual([["roleAdd", "oursAhead", "cook-old"]]);
+  });
+});
+
 describe("second review K1: the newer base wins, the history's or what both sides last held", () => {
   const R = pid(160);
   const rid = roleIdOf(R);
