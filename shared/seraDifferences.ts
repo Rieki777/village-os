@@ -1187,6 +1187,13 @@ function prepare(input: DifferencesInput): Prepared | null {
  * of the list never re-matches an older read against a chart renamed since: a
  * rename here is ours ahead, and a change at the service after both agreed is
  * a suggestion against the value they agreed on. Null with no read.
+ *
+ * What this cannot reach (review K4): a rename here made before the first read
+ * kept with its matches. That read matches against a chart already renamed,
+ * finds nothing by name, and keeps the record as an addition, and every read
+ * after carries it so. PR C's link table (R1) resolves it, a stored link set by
+ * a person. There is no backfill at deploy on purpose: a write at deploy time
+ * needs Rye's own yes.
  */
 export function stampMatches(input: DifferencesInput): Snapshot | null {
   const p = prepare(input);
