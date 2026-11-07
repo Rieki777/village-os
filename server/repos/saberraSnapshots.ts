@@ -1,10 +1,10 @@
 /**
- * `saberra_snapshots` (0331): the newest whole reads of the outside service's
+ * `saberra_snapshots` (0337): the newest whole reads of the outside service's
  * circles and roles, one row per read, newest kept and the rest deleted.
  *
  * The rows are written by server/lib/saberraSnapshot.ts under the sync's lock
  * and read by the differences routes. What a row may hold, and why it never
- * holds a page address or a member's name, is in that file and in 0331.
+ * holds a page address or a member's name, is in that file and in 0337.
  *
  * `taken_at` is read back with UNIX_TIMESTAMP, so the host's offset can never
  * shift it (the TIMESTAMP trap the test pools are pinned against).

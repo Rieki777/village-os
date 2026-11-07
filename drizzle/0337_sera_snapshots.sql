@@ -1,4 +1,4 @@
--- 0331: what the outside governance service holds, kept whole after each read.
+-- 0337: what the outside governance service holds, kept whole after each read.
 --
 -- The structure review compares the service's chart with this village's live
 -- chart. A proposal batch cannot do that: it is upserted, it never forgets a
