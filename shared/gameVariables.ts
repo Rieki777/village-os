@@ -1050,6 +1050,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.proposals_per_member_per_cycle",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Mechanics proposals per member per cycle",
     description:
@@ -1066,6 +1069,9 @@ export const VARIABLES: VariableDef[] = [
     // governance.hypha_threshold's did. This gate stands in front of the
     // binding vote wherever the binding vote happens, so it says that.
     key: "governance.proposal_support_threshold",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Supporters before a proposal can go to the vote",
     description:
@@ -1242,6 +1248,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.change_cooldown_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Cooldown after a governed rule change",
     description:
@@ -1529,8 +1538,29 @@ export const VARIABLES: VariableDef[] = [
     max: 100,
     unit: "%",
   },
+  // THE QUORUM FALLBACK (Rye, 2026-11-06; shared/quorumFallback.ts). Ring 2,
+  // one setting for every decision type. A steward or an admin may also switch
+  // it ON as a failsafe (POST /api/governance/quorum-fallback/failsafe); OFF is
+  // the village's ordinary vote on this dial and nothing else.
+  {
+    key: "governance.quorum_fallback",
+    category: "Governance",
+    label: "Ask again when too few vote",
+    criticality: "structural",
+    description:
+      "Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.",
+    type: "choice",
+    default: "off",
+    choices: [
+      { value: "off", label: "Off", hint: "A ballot that misses quorum ends as it closes." },
+      { value: "on", label: "On", hint: "A ballot that misses quorum is asked again once, at half the quorum." },
+    ],
+  },
   {
     key: "governance.vote_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "How long a ballot stays open",
     description:

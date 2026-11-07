@@ -761,7 +761,8 @@ describe("trials and the natural tier", () => {
   it("answers a setting's own tier with no discount", () => {
     expect(naturalTierFor("governance.weight_mode")).toBe("constitutional");
     expect(naturalTierFor(TIER_SETTING_KEYS.structural.quorum)).toBe("constitutional");
-    expect(naturalTierFor("governance.vote_days")).toBe("routine");
+    expect(naturalTierFor("governance.sensing_days")).toBe("routine");
+    expect(naturalTierFor("governance.vote_days")).toBe("structural");
   });
 
   it("answers routine for a key the registry has never heard of, the way pricing already does", () => {
@@ -803,7 +804,7 @@ describe("trials and the natural tier", () => {
   });
 
   it("allows a trial of a dial that prices nothing", () => {
-    expect(trialProblem([{ kind: "dial", key: "governance.vote_days", to: "9" }])).toBeNull();
+    expect(trialProblem([{ kind: "dial", key: "governance.sensing_days", to: "9" }])).toBeNull();
     expect(trialProblem([])).toBeNull();
   });
 });

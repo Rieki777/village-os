@@ -94,7 +94,7 @@ The village's own money. It is what the cycle pool shares out when a moon closes
 | Members may send it | yes |
 | Can carry a price | yes, and spending it lands in `sys:treasury` |
 
-**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant, up to 250 a moon; what the role names on `role.cycle` to the holder, up to 250 a moon; 25 on `proposal.accepted` to the claimant, up to 250 a moon. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:cycle-pool`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 25 on `quest.completed` to the claimant; what the role names on `role.cycle` to the holder; 25 on `proposal.accepted` to the claimant. It is the default answer to the `gratitude.pool_token` dial, so a closing moon releases it out of `sys:cycle-pool`, which is an administrator's deliberate act rather than a scheduled job. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** A closing moon shares out as many of this token as the `gratitude.pool_per_cycle` dial says (default 1000, and 0 turns the pool off), split between members in proportion to the recognition each received that moon. Shares round down, and the remainder stays in the pool. Settlement pays each seat what its role names of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
@@ -155,7 +155,7 @@ Earned say. It accrues here as work is confirmed and seats are held, and a membe
 | Can carry a price | no, a price is posted in credit tokens |
 | Name | `Village Voice` unless the seed is given another. The slug stays `village-voice` either way |
 
-**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant, up to 100 a moon; what the role names on `role.cycle` to the holder, up to 200 a moon; 10 on `proposal.accepted` to the claimant, up to 100 a moon. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
+**Who can issue it, and how.** Every unit comes out of `sys:voice-mint`, and that account's negative balance is this token's issued supply. A mint rule can pay it, and a fresh village is seeded to pay 10 on `quest.completed` to the claimant; what the role names on `role.cycle` to the holder; 10 on `proposal.accepted` to the claimant. No token at all can be issued before the village's launch vote carries. The gate sits on the ledger account's `faucet` column, so it covers every faucet including one added later (`server/lib/gameStart.ts`).
 
 **What happens at cycle close.** Settlement pays each seat what its role names of it. A re-run pays nothing twice: each mint is keyed on the moon, the seat and the holder.
 
@@ -313,16 +313,16 @@ What a fresh village is actually seeded to pay today, read from `server/lib/econ
 
 | Trigger | Token | Amount | Ceiling a moon | Paid to | On today |
 | --- | --- | --- | --- | --- | --- |
-| `quest.completed` | `village-voice` | 10 | 100 | claimant | yes |
-| `quest.completed` | `credits` | 25 | 250 | claimant | yes |
-| `role.cycle` | `village-voice` | read from the work | 200 | holder | yes |
-| `role.cycle` | `credits` | read from the work | 250 | holder | yes |
-| `role.cycle` | `gratitude` | 20 | 100 | holder | no, seeded off |
-| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
-| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
-| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
-| `quest.completed` | `earned-equity` | 1 | 1 | claimant | no, seeded off |
-| `role.cycle` | `earned-equity` | read from the work | 1 | holder | no, seeded off |
+| `quest.completed` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
+| `quest.completed` | `credits` | 25 | none, work is paid in full | claimant | yes |
+| `role.cycle` | `village-voice` | read from the work | none, work is paid in full | holder | yes |
+| `role.cycle` | `credits` | read from the work | none, work is paid in full | holder | yes |
+| `role.cycle` | `gratitude` | 20 | none, work is paid in full | holder | no, seeded off |
+| `proposal.accepted` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | none, work is paid in full | claimant | yes |
+| `proposal.accepted` | `earned-equity` | 1 | none, work is paid in full | claimant | no, seeded off |
+| `quest.completed` | `earned-equity` | 1 | none, work is paid in full | claimant | no, seeded off |
+| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | no, seeded off |
 
 A confirmed quest mints no recognition: a steward's consent is a yes and moves no Gratitude (Rye, 2026-10-21), and Gratitude is only ever sent from one member to another. A contribution pays nothing at all: `POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that added a caller-supplied amount straight onto a member's balance was removed.
 
@@ -373,6 +373,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "role.cycle",
           "amount": 20,
           "ceiling": 100,
+          "ceilingBinds": false,
           "recipient": "holder",
           "enabled": false
         }
@@ -401,6 +402,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "proposal.accepted",
           "amount": 1,
           "ceiling": 1,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": false
         },
@@ -408,6 +410,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "quest.completed",
           "amount": 1,
           "ceiling": 1,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": false
         },
@@ -415,6 +418,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "role.cycle",
           "amount": null,
           "ceiling": 1,
+          "ceilingBinds": false,
           "recipient": "holder",
           "enabled": false
         }
@@ -443,6 +447,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "quest.completed",
           "amount": 25,
           "ceiling": 250,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": true
         },
@@ -450,6 +455,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "role.cycle",
           "amount": null,
           "ceiling": 250,
+          "ceilingBinds": false,
           "recipient": "holder",
           "enabled": true
         },
@@ -457,6 +463,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "proposal.accepted",
           "amount": 25,
           "ceiling": 250,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": true
         }
@@ -525,6 +532,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "quest.completed",
           "amount": 10,
           "ceiling": 100,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": true
         },
@@ -532,6 +540,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "role.cycle",
           "amount": null,
           "ceiling": 200,
+          "ceilingBinds": false,
           "recipient": "holder",
           "enabled": true
         },
@@ -539,6 +548,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
           "trigger": "proposal.accepted",
           "amount": 10,
           "ceiling": 100,
+          "ceilingBinds": false,
           "recipient": "claimant",
           "enabled": true
         }
@@ -666,6 +676,7 @@ The generator reads these and fails loudly if any of them moves:
 - `server/lib/exit.ts`
 - `server/lib/voiceClaim.ts`
 - `shared/gameVariables.ts`
+- `shared/workValue.ts`
 
 It also walks every `.ts` file under `server/` looking for a token registered at first start. Each one has to sit inside a function named `ensure…Token`, and a call anywhere else stops the build asking which kind it is. That is what stops a new module registering a token the document never mentions.
 

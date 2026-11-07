@@ -82,6 +82,19 @@ import { numberVar, stringVar } from "./variables";
 import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type ProposalTiming } from "../../shared/governanceKinds";
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
+// 0334: the quorum fallback, a missed quorum asked again once (Rye, 2026-11-06).
+import {
+  QUORUM_FALLBACK_EXEMPT,
+  QUORUM_FALLBACK_KEY,
+  majorityDecisionLine,
+  missDecidedByMajority,
+  missOpensRerun,
+  quorumFallbackOn,
+  rerunDurationDays,
+  rerunOutcomeNote,
+  rerunQuorumPct,
+} from "../../shared/quorumFallback";
+import { closeAndOpenQuorumRerun } from "../repos/ballotReruns";
 // 0219: the judgement line the proposer writes, and which subjects carry one.
 import { normaliseAlignment } from "../../shared/governingPurpose";
 import { purposeAlignmentRefusal } from "./governingPurpose";
@@ -115,7 +128,19 @@ export interface BallotRow {
   openedBy: string;
   opensAt: string;
   closesAt: string;
-  status: "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+  /**
+   * `no_quorum_rerun` (0334) is a first ballot the quorum fallback asked again:
+   * closed, and NOT an outcome. The subject's answer is its re-run's.
+   */
+  status: "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
+  /**
+   * 0334, PRESENT ONLY WHEN TRUE. The quorum fallback was on when this ballot
+   * opened, frozen like the dials. Absent, never `false`, so a village with the
+   * dial off serves every ballot byte for byte as before the column existed.
+   */
+  quorumFallback?: true;
+  /** 0334, PRESENT ONLY ON A RE-RUN: the first ballot it asks again. */
+  rerunOf?: string;
   /** Dispatcher lane, 0172: the timing FROZEN at open, like the dials. */
   timing: ProposalTiming;
   /**
@@ -190,7 +215,46 @@ export function rowToBallot(r: RowDataPacket): BallotRow {
     closedBy: r.closed_by ?? null,
     closedAt: r.closed_at === null || r.closed_at === undefined ? null : iso(r.closed_at),
     createdAt: iso(r.created_at),
+    ...(Number(r.quorum_fallback) === 1 ? { quorumFallback: true as const } : {}),
+    ...(r.rerun_of ? { rerunOf: String(r.rerun_of) } : {}),
   };
+}
+
+/**
+ * A status as words inside a sentence. The four old statuses read exactly as
+ * they always did (`no_quorum` is "no quorum"); a ballot asked again says so.
+ */
+export function statusWords(status: BallotRow["status"]): string {
+  return status === "no_quorum_rerun" ? "closed and open again on a re-run" : status.replace("_", " ");
+}
+
+/**
+ * WHAT THE QUORUM FALLBACK DID AT A CLOSE, told to whoever registered to hear.
+ *
+ * `server/index.ts` registers one listener at boot, the `setSubjectCloserCheck`
+ * shape, and it writes the village feed line, the audit event and the roll's
+ * notice. The close calls it from one place for both closing paths (the human
+ * close route and the clock), so neither can forget to announce. A build with
+ * nothing registered announces nothing and closes exactly the same.
+ */
+export type QuorumFallbackEvent =
+  | { kind: "rerun_opened"; first: BallotRow; rerun: BallotRow; days: number; closedBy: string }
+  | { kind: "decided_by_majority"; ballot: BallotRow; outcome: "passed" | "failed"; closedBy: string };
+
+let quorumFallbackListener: ((e: QuorumFallbackEvent) => Promise<void>) | null = null;
+
+export function setQuorumFallbackListener(fn: ((e: QuorumFallbackEvent) => Promise<void>) | null): void {
+  quorumFallbackListener = fn;
+}
+
+/** Never throws: an announcement that failed must not fail the close it reports. */
+async function tellQuorumFallback(e: QuorumFallbackEvent): Promise<void> {
+  if (!quorumFallbackListener) return;
+  try {
+    await quorumFallbackListener(e);
+  } catch (err) {
+    console.error("[governance] announcing a quorum fallback failed (the close stands)", err);
+  }
 }
 
 export async function ballotById(pool: Pool, id: string): Promise<BallotRow | null> {
@@ -274,6 +338,12 @@ export interface OpenBallotInput {
    * Read the gate below for why it is checked HERE.
    */
   purposeAlignment?: string | null;
+  /**
+   * THE QUORUM FALLBACK, FROZEN AT OPEN (0334). Absent reads the village's
+   * `governance.quorum_fallback` dial now, which is what every route wants;
+   * a test may hand it in. The Birthing never carries it.
+   */
+  quorumFallback?: boolean;
   /**
    * WINDOWS LANE (19E): what this opening carries, for the window gate below.
    *
@@ -401,14 +471,17 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
   });
   if (closed) return { ok: false, error: closed };
   const closesAt = span.closesAt;
+  const fallbackFrozen =
+    !QUORUM_FALLBACK_EXEMPT.has(input.subjectType) &&
+    (input.quorumFallback ?? quorumFallbackOn(stringVar(QUORUM_FALLBACK_KEY)));
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     await conn.query( // module-review-ok: the ballot tables' one enumerable home (the intents.ts pattern; no cache sits above them)
       "INSERT INTO ballots (id, subject_type, subject_ref, open_key, title, doc_markdown, method, " +
         "weight_mode, weight_token, unity_pct, quorum_pct, total_weight, electorate_count, opened_by, " +
-        "opens_at, closes_at, timing, purpose_alignment, status) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, ?, ?, 'open')",
+        "opens_at, closes_at, timing, purpose_alignment, quorum_fallback, status) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, ?, ?, ?, 'open')",
       [
         id,
         input.subjectType,
@@ -433,6 +506,7 @@ export async function openBallot(pool: Pool, input: OpenBallotInput): Promise<Op
          * different facts and the column has to keep them apart.
          */
         normaliseAlignment(input.purposeAlignment) || null,
+        fallbackFrozen ? 1 : 0,
       ],
     );
     for (const e of electorate) {
@@ -672,7 +746,7 @@ export async function castVote(
   const ballot = await ballotById(pool, ballotId);
   if (!ballot) return { ok: false, error: "No such ballot" };
   if (ballot.status !== "open") {
-    return { ok: false, error: `This ballot is ${ballot.status.replace("_", " ")}. Voting ended when it closed` };
+    return { ok: false, error: `This ballot is ${statusWords(ballot.status)}. Voting ended when it closed` };
   }
   // One clock. `closes_at` is written from this process in `openBallot`, so
   // this subtraction is two readings of the same clock and holds on a database
@@ -923,7 +997,12 @@ export interface CloseBallotInput {
 export type CloseBallotResult =
   | {
       ok: true;
-      outcome: BallotOutcome;
+      /**
+       * `no_quorum_rerun` (0334) means this close decided NOTHING: the quorum
+       * fallback asked the question again on `quorumRerun`, and no caller may
+       * route it to a subject's closer.
+       */
+      outcome: BallotOutcome | "no_quorum_rerun";
       ballot: BallotRow;
       tallies: BallotTallies;
       unity: number;
@@ -938,6 +1017,10 @@ export type CloseBallotResult =
        * three-misses rule, present only on a close that missed quorum.
        */
       quorumMiss?: QuorumMissReading;
+      /** 0334, present only when this close opened a re-run: the re-run. */
+      quorumRerun?: BallotRow;
+      /** 0334, present only when a re-run's second miss was decided by the votes cast. */
+      decidedByMajorityOfCast?: true;
     }
   | { ok: false; error: string; alreadyClosed?: BallotRow };
 
@@ -961,7 +1044,7 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
   const ballot = await ballotById(pool, input.ballotId);
   if (!ballot) return { ok: false, error: "No such ballot" };
   if (ballot.status !== "open") {
-    return { ok: false, error: `This ballot is already ${ballot.status.replace("_", " ")}`, alreadyClosed: ballot };
+    return { ok: false, error: `This ballot is already ${statusWords(ballot.status)}`, alreadyClosed: ballot };
   }
   // Same one clock as `castVote` (see `openBallot`). This flag decides who may
   // close and whether a consent ballot may pass, so an offset here would hand
@@ -994,7 +1077,7 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
    * arithmetic is byte for byte what it was.
    */
   const quorumFacts = await quorumFactsFor(pool, ballot, subjectRules.abstainPolicy);
-  const outcome = evaluateBallot({
+  const evaluation = {
     method: ballot.method,
     unityPct: ballot.unityPct,
     quorumPct: ballot.quorumPct,
@@ -1005,7 +1088,16 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
     minYesHeads: subjectRules.minYesHeads,
     heads,
     quorum: quorumFacts.reduced ? quorumFacts.arithmetic : undefined,
-  });
+  };
+  const reading = evaluateBallot(evaluation);
+  /*
+   * THE QUORUM FALLBACK'S SECOND MISS (0334). A re-run that misses quorum is
+   * decided by a simple majority of the votes cast, read by the same engine
+   * with one flag. Every other ballot's outcome is the reading above, so a
+   * village with the dial off is byte for byte what it was.
+   */
+  const byMajority = reading === "no_quorum" && missDecidedByMajority(fallbackFactsOf(ballot));
+  const outcome = byMajority ? evaluateBallot({ ...evaluation, majorityOfCast: true }) : reading;
   if (!expired && outcome === "passed") {
     /*
      * A BALLOT PASSES WHEN ITS WINDOW ENDS AND NEVER BEFORE (dispatcher lane).
@@ -1026,16 +1118,45 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
           : "A ballot passes when its window ends and not before. The clock closes it, so nobody chooses the moment",
     };
   }
+  /*
+   * THE QUORUM FALLBACK'S FIRST MISS (0334). The first ballot closes as asked
+   * again and its re-run opens, in one transaction, on the same subject: same
+   * method, unity, roll and duration, half the quorum. The subject is never
+   * told, because nothing was decided; its re-run's close is what settles it.
+   */
+  if (outcome === "no_quorum" && missOpensRerun(fallbackFactsOf(ballot))) {
+    return openQuorumRerun(pool, ballot, note, input.closedBy, {
+      tallies,
+      unity: unityPctOf(tallies),
+      quorum: quorumFacts.reduced
+        ? quorumPctOn(quorumFacts.arithmetic)
+        : quorumPctOf(tallies, ballot.totalWeight, subjectRules.abstainPolicy),
+      quorumBase: quorumFacts.base,
+    });
+  }
+  const decidedNote = byMajority
+    ? `${note}
+
+${majorityDecisionLine(outcome === "passed" ? "passed" : "failed", tallies.yesW, tallies.noW)}`.slice(0, 4000)
+    : note;
   const [result] = await pool.query<any>(
     "UPDATE ballots SET status=?, outcome_note=?, closed_by=?, closed_at=NOW(), open_key=CONCAT(open_key, ':', id) " +
       "WHERE id=? AND status='open'",
-    [outcome, note, input.closedBy, ballot.id],
+    [outcome, decidedNote, input.closedBy, ballot.id],
   );
   if (Number(result.affectedRows) === 0) {
     const current = await ballotById(pool, ballot.id);
     return { ok: false, error: "Someone else closed this ballot first", alreadyClosed: current ?? undefined };
   }
   const closed = await ballotById(pool, ballot.id);
+  if (byMajority && closed) {
+    await tellQuorumFallback({
+      kind: "decided_by_majority",
+      ballot: closed,
+      outcome: outcome === "passed" ? "passed" : "failed",
+      closedBy: input.closedBy,
+    });
+  }
   /*
    * THRESHOLDS LANE (19F, 20.11). The three-misses rule needs the count AFTER
    * this close is on the record, so it is read here and never before the
@@ -1064,7 +1185,50 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
       : quorumPctOf(tallies, ballot.totalWeight, subjectRules.abstainPolicy),
     quorumBase: quorumFacts.base,
     quorumMiss,
+    ...(byMajority ? { decidedByMajorityOfCast: true as const } : {}),
   };
+}
+
+/** The three facts the fallback's rules read off a ballot. */
+function fallbackFactsOf(b: BallotRow): { subjectType: string; quorumFallback: boolean; rerunOf: string | null } {
+  return { subjectType: b.subjectType, quorumFallback: b.quorumFallback === true, rerunOf: b.rerunOf ?? null };
+}
+
+/**
+ * Close a first ballot as asked again and open its re-run (0334). The SQL is
+ * one transaction in `server/repos/ballotReruns.ts`; this half decides the
+ * re-run's numbers and tells the listener.
+ */
+async function openQuorumRerun(
+  pool: Pool,
+  first: BallotRow,
+  note: string,
+  closedBy: string,
+  read: { tallies: BallotTallies; unity: number; quorum: number; quorumBase: QuorumBase },
+): Promise<CloseBallotResult> {
+  const days = rerunDurationDays(first.opensAt, first.closesAt);
+  const quorumPct = rerunQuorumPct(first.quorumPct);
+  const span = ballotWindow(days);
+  const rerunId = `bal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const done = await closeAndOpenQuorumRerun(pool, {
+    firstId: first.id,
+    rerunId,
+    openKey: `${first.subjectType}:${first.subjectRef}`,
+    outcomeNote: rerunOutcomeNote(note, quorumPct, days).slice(0, 4000),
+    closedBy,
+    rerunQuorumPct: quorumPct,
+    opensAt: span.opensAt,
+    closesAt: span.closesAt,
+  });
+  if (!done) {
+    const current = await ballotById(pool, first.id);
+    return { ok: false, error: "Someone else closed this ballot first", alreadyClosed: current ?? undefined };
+  }
+  const closed = await ballotById(pool, first.id);
+  const rerun = await ballotById(pool, rerunId);
+  if (!closed || !rerun) throw new Error(`quorum re-run ${rerunId} of ${first.id} vanished inside its own open`);
+  await tellQuorumFallback({ kind: "rerun_opened", first: closed, rerun, days, closedBy });
+  return { ok: true, outcome: "no_quorum_rerun", ballot: closed, ...read, quorumRerun: rerun };
 }
 
 /**
@@ -1164,7 +1328,7 @@ export async function withdrawBallot(pool: Pool, input: WithdrawBallotInput): Pr
   if (ballot.status !== "open") {
     return {
       ok: false,
-      error: `This ballot is already ${ballot.status.replace("_", " ")}, so there is nothing to call off`,
+      error: `This ballot is already ${statusWords(ballot.status)}, so there is nothing to call off`,
       alreadyClosed: ballot,
     };
   }
@@ -1240,7 +1404,7 @@ export async function uncastDelegatedVote(
       removed: 0,
       eligible: false,
       delegationEnded: false,
-      error: `This ballot is ${ballot.status.replace("_", " ")}. Votes are on the record once it closes`,
+      error: `This ballot is ${statusWords(ballot.status)}. Votes are on the record once it closes`,
     };
   }
   // One clock, the same subtraction castVote makes.
