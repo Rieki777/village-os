@@ -72,7 +72,7 @@ const OUTCOME: Record<
     chip: "bg-stone-600 text-white",
     law: false,
   },
-  // 0328: never an outcome. The question is open again on a linked re-run.
+  // 0334: never an outcome. The question is open again on a linked re-run.
   no_quorum_rerun: {
     word: "Open again, half the quorum",
     icon: MinusCircle,
@@ -195,7 +195,7 @@ export default function DecisionOutcome({
           <p className="mt-3 text-lg text-stone-700">This closed without a sentence on it.</p>
         )}
 
-        {/* 0328: the two ballots of a quorum re-run point at each other. */}
+        {/* 0334: the two ballots of a quorum re-run point at each other. */}
         {ballot.status === "no_quorum_rerun" && ballot.rerunId && (
           <p className="mt-3 text-sm font-semibold text-stone-800">
             <Link href={`/decisions/${ballot.rerunId}`} className="text-teal-deep hover:underline">

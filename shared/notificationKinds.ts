@@ -128,7 +128,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} votes closed with too few answering to settle them.",
     celebrate: false,
   },
-  // The quorum fallback (0328): too few answered, so the same question is open
+  // The quorum fallback (0334): too few answered, so the same question is open
   // again on a linked ballot. Its own kind, because nothing was decided and the
   // member is being asked to vote, which `ballot_no_quorum` does not ask.
   ballot_rerun_opened: {

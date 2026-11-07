@@ -289,7 +289,7 @@ export default function Decision() {
     const answer = await closeBallot(params.id!, outcomeNote);
     if (answer.ok) {
       setJustClosed(answer.data);
-      // 0328: a close the quorum fallback turned into a re-run carries its id.
+      // 0334: a close the quorum fallback turned into a re-run carries its id.
       setBallot(answer.data.rerunBallotId ? { ...answer.data.ballot, rerunId: answer.data.rerunBallotId } : answer.data.ballot);
       setClosing(false);
     } else {

@@ -48,7 +48,7 @@ export function ballotReturn(catalyst: string): BallotReturnReading {
       line: "Too few of the village voted for that ballot to settle anything. This stands where it stood, holding its supporters and every word of it, and it can go to a vote again.",
       tip: "A vote settles something only when enough of the village answers it. Too few did, so that ballot decided nothing and this went back where it was. Going again means a new vote, frozen fresh on the day it opens.",
     },
-    // 0328: the proposal's ballot moves to the re-run as it opens, so this is
+    // 0334: the proposal's ballot moves to the re-run as it opens, so this is
     // the instant between; the re-run's own status is what a card shows.
     no_quorum_rerun: {
       chip: "asked again",

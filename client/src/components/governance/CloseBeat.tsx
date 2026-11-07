@@ -107,10 +107,10 @@ export default function CloseBeat({
     totalWeight: ballot.totalWeight,
     tallies: ballot.tallies,
     openObjections: standingObjections,
-    // 0328: a re-run's second miss is decided by the votes cast, as the close is.
+    // 0334: a re-run's second miss is decided by the votes cast, as the close is.
     majorityOfCast: !!ballot.quorumFallback && !!ballot.rerunOf,
   });
-  // 0328: a first ballot that misses with the fallback on is asked again.
+  // 0334: a first ballot that misses with the fallback on is asked again.
   const asksAgain = outcome === "no_quorum" && !!ballot.quorumFallback && !ballot.rerunOf;
   const words = asksAgain ? RERUN_WORDS : (ballot.binding ? OUTCOME_WORDS : ADVISORY_WORDS)[outcome];
 

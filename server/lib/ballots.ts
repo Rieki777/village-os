@@ -82,7 +82,7 @@ import { numberVar, stringVar } from "./variables";
 import { defaultTimingFor, kindOfSubject, noCloserRefusal, timingOf, type ProposalTiming } from "../../shared/governanceKinds";
 // Windows lane: the open path is gated, and only the open path (19E).
 import { openingRefusal } from "./governanceWindows";
-// 0328: the quorum fallback, a missed quorum asked again once (Rye, 2026-11-06).
+// 0334: the quorum fallback, a missed quorum asked again once (Rye, 2026-11-06).
 import {
   QUORUM_FALLBACK_EXEMPT,
   QUORUM_FALLBACK_KEY,
@@ -129,17 +129,17 @@ export interface BallotRow {
   opensAt: string;
   closesAt: string;
   /**
-   * `no_quorum_rerun` (0328) is a first ballot the quorum fallback asked again:
+   * `no_quorum_rerun` (0334) is a first ballot the quorum fallback asked again:
    * closed, and NOT an outcome. The subject's answer is its re-run's.
    */
   status: "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
   /**
-   * 0328, PRESENT ONLY WHEN TRUE. The quorum fallback was on when this ballot
+   * 0334, PRESENT ONLY WHEN TRUE. The quorum fallback was on when this ballot
    * opened, frozen like the dials. Absent, never `false`, so a village with the
    * dial off serves every ballot byte for byte as before the column existed.
    */
   quorumFallback?: true;
-  /** 0328, PRESENT ONLY ON A RE-RUN: the first ballot it asks again. */
+  /** 0334, PRESENT ONLY ON A RE-RUN: the first ballot it asks again. */
   rerunOf?: string;
   /** Dispatcher lane, 0172: the timing FROZEN at open, like the dials. */
   timing: ProposalTiming;
@@ -339,7 +339,7 @@ export interface OpenBallotInput {
    */
   purposeAlignment?: string | null;
   /**
-   * THE QUORUM FALLBACK, FROZEN AT OPEN (0328). Absent reads the village's
+   * THE QUORUM FALLBACK, FROZEN AT OPEN (0334). Absent reads the village's
    * `governance.quorum_fallback` dial now, which is what every route wants;
    * a test may hand it in. The Birthing never carries it.
    */
@@ -998,7 +998,7 @@ export type CloseBallotResult =
   | {
       ok: true;
       /**
-       * `no_quorum_rerun` (0328) means this close decided NOTHING: the quorum
+       * `no_quorum_rerun` (0334) means this close decided NOTHING: the quorum
        * fallback asked the question again on `quorumRerun`, and no caller may
        * route it to a subject's closer.
        */
@@ -1017,9 +1017,9 @@ export type CloseBallotResult =
        * three-misses rule, present only on a close that missed quorum.
        */
       quorumMiss?: QuorumMissReading;
-      /** 0328, present only when this close opened a re-run: the re-run. */
+      /** 0334, present only when this close opened a re-run: the re-run. */
       quorumRerun?: BallotRow;
-      /** 0328, present only when a re-run's second miss was decided by the votes cast. */
+      /** 0334, present only when a re-run's second miss was decided by the votes cast. */
       decidedByMajorityOfCast?: true;
     }
   | { ok: false; error: string; alreadyClosed?: BallotRow };
@@ -1091,7 +1091,7 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
   };
   const reading = evaluateBallot(evaluation);
   /*
-   * THE QUORUM FALLBACK'S SECOND MISS (0328). A re-run that misses quorum is
+   * THE QUORUM FALLBACK'S SECOND MISS (0334). A re-run that misses quorum is
    * decided by a simple majority of the votes cast, read by the same engine
    * with one flag. Every other ballot's outcome is the reading above, so a
    * village with the dial off is byte for byte what it was.
@@ -1119,7 +1119,7 @@ export async function closeBallot(pool: Pool, input: CloseBallotInput): Promise<
     };
   }
   /*
-   * THE QUORUM FALLBACK'S FIRST MISS (0328). The first ballot closes as asked
+   * THE QUORUM FALLBACK'S FIRST MISS (0334). The first ballot closes as asked
    * again and its re-run opens, in one transaction, on the same subject: same
    * method, unity, roll and duration, half the quorum. The subject is never
    * told, because nothing was decided; its re-run's close is what settles it.
@@ -1195,7 +1195,7 @@ function fallbackFactsOf(b: BallotRow): { subjectType: string; quorumFallback: b
 }
 
 /**
- * Close a first ballot as asked again and open its re-run (0328). The SQL is
+ * Close a first ballot as asked again and open its re-run (0334). The SQL is
  * one transaction in `server/repos/ballotReruns.ts`; this half decides the
  * re-run's numbers and tells the listener.
  */

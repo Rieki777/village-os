@@ -99,11 +99,11 @@ export interface Ballot {
   opensAt: string;
   closesAt: string;
   status: "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
-  /** 0328: present only when the quorum fallback was on as this ballot opened. */
+  /** 0334: present only when the quorum fallback was on as this ballot opened. */
   quorumFallback?: true;
-  /** 0328: present only on a re-run, the first ballot it asks again. */
+  /** 0334: present only on a re-run, the first ballot it asks again. */
   rerunOf?: string;
-  /** 0328: present only on a first ballot that was asked again, its re-run. */
+  /** 0334: present only on a first ballot that was asked again, its re-run. */
   rerunId?: string | null;
   outcomeNote: string | null;
   closedBy: string | null;
@@ -533,7 +533,7 @@ export const ruleObjection = (id: string, objectionId: string, ruling: string, n
 export interface CloseResult {
   success: true;
   outcome: "passed" | "failed" | "no_quorum" | "no_quorum_rerun";
-  /** 0328: the re-run the quorum fallback opened, when it did. */
+  /** 0334: the re-run the quorum fallback opened, when it did. */
   rerunBallotId?: string | null;
   unity: number;
   quorum: number;

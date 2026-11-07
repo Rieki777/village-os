@@ -202,7 +202,7 @@ const carry = async (
     closerMayCloseEarly: false,
   });
   if (!closed.ok) throw new Error(`close refused: ${closed.error}`);
-  // These fixtures never turn the quorum fallback on (0328), so no close here is a re-run.
+  // These fixtures never turn the quorum fallback on (0334), so no close here is a re-run.
   if (closed.outcome === "no_quorum_rerun") throw new Error("a close here opened a quorum re-run");
   return { ...closed, outcome: closed.outcome };
 };

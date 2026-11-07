@@ -1,4 +1,4 @@
--- 0328: a vote too few of us answered is asked again, once, at half the bar.
+-- 0334: a vote too few of us answered is asked again, once, at half the bar.
 --
 -- Rye, 2026-11-06, answering the quorum fallback note: a village with no
 -- stewards decides everything by ballot, and a ballot that misses quorum

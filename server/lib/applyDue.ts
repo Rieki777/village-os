@@ -1480,7 +1480,7 @@ export async function autoSettleExpired(
         continue;
       }
       /*
-       * THE QUORUM FALLBACK ASKED AGAIN (0328): nothing was decided, so the
+       * THE QUORUM FALLBACK ASKED AGAIN (0334): nothing was decided, so the
        * close routes NOWHERE. The subject waits as its vote left it, and the
        * re-run's own close, on a later tick, is what settles it.
        */

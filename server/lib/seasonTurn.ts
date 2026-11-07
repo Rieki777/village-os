@@ -61,7 +61,7 @@ export async function runSeasonTurn(deps: SeasonTurnDeps): Promise<string> {
   for (const app of voting) {
     const latest = ballots.get(app.id);
     if (!latest || latest.status === "open") continue;
-    // 0328: a first ballot the quorum fallback asked again decided nothing.
+    // 0334: a first ballot the quorum fallback asked again decided nothing.
     // Its re-run is the latest the moment it opens; this guards the instant.
     if (latest.status === "no_quorum_rerun") continue;
     const b = await ballotById(pool, latest.id);

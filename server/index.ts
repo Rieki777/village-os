@@ -2977,7 +2977,7 @@ const recordMechanicsChange = (
   note?: string | null,
 ): Promise<void> =>
   recordMechanicsChangeRow(getPool(), key, result, actorUserId, source, proposalRef, note).then(() =>
-    // 0328: every switch of the quorum fallback, by anyone, is recorded and announced.
+    // 0334: every switch of the quorum fallback, by anyone, is recorded and announced.
     key === QUORUM_FALLBACK_KEY
       ? announceQuorumFallbackSwitch(getPool(), { previous: result.previous, value: result.value, by: source === "governance" ? "village" : "admin", actorUserId })
       : undefined,
@@ -20292,7 +20292,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         });
       }
     }
-    // 0328: ON is the failsafe door's, OFF is the village's vote (Rye, 2026-11-06).
+    // 0334: ON is the failsafe door's, OFF is the village's vote (Rye, 2026-11-06).
     if (req.params.key === QUORUM_FALLBACK_KEY) return res.status(409).json({ error: QUORUM_FALLBACK_ADMIN_ROUTE, proposeInstead: true });
     const raw = req.body?.value;
     if (raw === undefined || raw === null) return res.status(400).json({ error: "A value is required" });
@@ -22781,7 +22781,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       opensAt: b.opensAt,
       closesAt: b.closesAt,
       status: b.status,
-      // 0328: present only when true or set, so a village with the quorum
+      // 0334: present only when true or set, so a village with the quorum
       // fallback off serves every ballot exactly as it did before.
       ...(b.quorumFallback ? { quorumFallback: true } : {}),
       ...(b.rerunOf ? { rerunOf: b.rerunOf } : {}),
@@ -23250,7 +23250,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const readsRoll = !!viewer && (payload.myWeight !== null || (await isAdmin(req)) || hasCapability("ballot.vote", await capabilityCtx(viewer)));
     res.json(ballotForViewer(readsRoll ? viewer : null, {
       ...payload,
-      // 0328: a first ballot the quorum fallback asked again points at its re-run.
+      // 0334: a first ballot the quorum fallback asked again points at its re-run.
       ...(b.status === "no_quorum_rerun" ? { rerunId: chain.find((p) => p.rerunOf === b.id)?.id ?? null } : {}),
       appliedKeys,
       priorAttempts: chain
@@ -23520,7 +23520,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
     }
     /*
-     * THE QUORUM FALLBACK ASKED AGAIN (0328). Nothing was decided, so nothing
+     * THE QUORUM FALLBACK ASKED AGAIN (0334). Nothing was decided, so nothing
      * routes and no outcome is told: the listener registered beside the
      * subject table already wrote the feed line, the audit event and the
      * roll's notice that the question is open again.

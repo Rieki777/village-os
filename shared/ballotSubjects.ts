@@ -1340,7 +1340,7 @@ export function consecutiveNoQuorum(closes: readonly { status: string }[]): numb
   for (const row of closes) {
     const status = String(row.status ?? "");
     if (status === "open") continue;
-    // A first ballot the quorum fallback asked again (0328). It and its re-run
+    // A first ballot the quorum fallback asked again (0334). It and its re-run
     // are ONE miss, so the first is skipped and the re-run alone counts, which
     // means the fallback never makes a subject end sooner.
     if (status === "no_quorum_rerun") continue;
