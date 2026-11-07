@@ -67,6 +67,7 @@ import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
+  highestTierGrant,
   NOT_YET_WIRED,
   POWERS,
   powersForReading,
@@ -24192,7 +24193,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const cap = capability as Capability;
     const refused = typeRefusesCapability("power_grant", capability);
     if (refused) return res.status(409).json({ error: refused });
-    if (TRANSFERABLE[cap] !== true) {
+    // Rye, 2026-11-06: five keys the village never holds still move onto a
+    // role, at the village's highest tier only (HIGHEST_TIER_GRANTS).
+    const highestOnly = highestTierGrant(cap);
+    if (TRANSFERABLE[cap] !== true && !highestOnly) {
       // 0103: the same two reasons the transfer route tells apart, told apart
       // here for the same reason.
       const heldBack = WIRED_BUT_HELD_BACK[capability];
@@ -24203,7 +24207,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
             `It names something a member does for themselves, or plumbing the deployment has to keep reachable.`,
       });
     }
-    const entry = POWERS.find((p) => p.capability === cap);
+    const entry = POWERS.find((p) => p.capability === cap) ?? highestOnly;
     if (!entry) {
       return res.status(409).json({
         error: `Nothing in the product asks for "${capability}" yet, so there is no power here to give anybody.`,
@@ -24249,10 +24253,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const method: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-    const dials = dialsForMethod(method, {
+    const ordinaryDials = dialsForMethod(method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
+    const dials = highestOnly
+      ? raiseDials(ordinaryDials, highestTierBar(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))))
+      : ordinaryDials;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -24278,9 +24285,17 @@ Send an empty drafts array when you are still listening. A role payload is {name
         ? `${role.name ?? roleId} would be the first role in this village to carry this one. No other role grants it today.`
         : "",
       "",
-      `## What this is a step toward`,
-      "",
-      `A role has to already carry a power before the village can vote to hold it, because a holder that cannot act is not a holder. If this carries, the village can go on to ask to hold this one, and it can also leave it here. Both are whole answers.`,
+      ...(highestOnly
+        ? [
+            `## Why the bar is the highest one`,
+            "",
+            `This is one of the powers the village never holds itself, and it moves onto a role only by the whole village, so it is decided at the village's highest tier.`,
+          ]
+        : [
+            `## What this is a step toward`,
+            "",
+            `A role has to already carry a power before the village can vote to hold it, because a holder that cannot act is not a holder. If this carries, the village can go on to ask to hold this one, and it can also leave it here. Both are whole answers.`,
+          ]),
       "",
       `## Why this role`,
       "",

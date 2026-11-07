@@ -49,6 +49,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { waitForHealth } from "./db/e2eBoot";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -449,12 +450,13 @@ describe.skipIf(!DB_CONFIGURED)("what the runway deliberately cannot do", () => 
      *
      * What this case still has to pin is the OTHER half: a key that names
      * something a member does for themselves is refused whatever happens to
-     * the wiring. `map.edit` is that shape. Keeping a private draft of the
-     * land is a personal act with nobody to hand it to, and a row saying the
-     * village holds it would be a category error with a lockout attached.
+     * the wiring. `companion.use` is that shape: talking to your own
+     * companion is a personal act with nobody to hand it to. This case named
+     * `map.edit` until Rye's ruling of 2026-11-06 made that key movable onto a
+     * role at the village's highest tier (the last describe in this file).
      */
     const r = await call("POST", "/api/governance/power-grants", {
-      token: wrenToken, body: { ...good, capability: "map.edit" },
+      token: wrenToken, body: { ...good, capability: "companion.use" },
     });
     expect(r.status).toBe(409);
     expect(String(r.json?.error)).toContain("not a power the village can take on");
@@ -837,5 +839,73 @@ describe.skipIf(!DB_CONFIGURED)("STEP THREE: the village hands it back, still wi
       },
     });
     expect(again.status, JSON.stringify(again.json)).toBe(200);
+  });
+});
+
+/*
+ * RYE, 2026-11-06: "EVERYTHING can change with the highest village vote", and
+ * on the five keys nothing could hand over: they become passable, ONLY by a
+ * highest-tier village vote. The recap approvals, the land editor and the
+ * super-vouch could reach a role only through a seed or an admin, so a village
+ * whose groups lost them had no way to give them back. A grant of any of the
+ * five now opens, at the highest tier and never on the ordinary dials.
+ */
+describe.skipIf(!DB_CONFIGURED)("the five held-back keys move onto a role only at the village's highest tier", () => {
+  const FIVE = ["moon.approve", "moon.approve_alone", "moon.approve_own", "map.edit", "member.superVouch"] as const;
+  const top = TIER_FLOORS.constitutional;
+  const opened: Record<string, string> = {};
+
+  it("opens a grant of each one, decided at the highest tier", async () => {
+    const listed = (await call("GET", "/api/roles")).json;
+    const roles: any[] = Array.isArray(listed) ? listed : listed?.roles ?? [];
+    for (const capability of FIVE) {
+      // The seed already gives some groups some of these, so ask for a role that lacks this one.
+      const role = roles.find((r) => !r.isExample && !((r.capabilities ?? []) as string[]).includes(capability));
+      expect(role, `a village role without ${capability}`).toBeTruthy();
+      const r = await call("POST", "/api/governance/power-grants", {
+        token: wrenToken,
+        body: {
+          capability,
+          roleId: String(role.id),
+          reason: "The stewards already do this work in practice, and the whole village agreed at the gathering to ask.",
+        },
+      });
+      expect(r.status, `${capability}: ${JSON.stringify(r.json)}`).toBe(200);
+      const id = String(r.json?.ballot?.id ?? "");
+      opened[capability] = id;
+      const ballot = (await call("GET", `/api/governance/ballots/${id}`, { token: wrenToken })).json;
+      expect(ballot.unityPct, `${capability}: unity at the highest tier`).toBeGreaterThanOrEqual(top.unityPct);
+      expect(ballot.quorumPct, `${capability}: quorum at the highest tier`).toBeGreaterThanOrEqual(top.quorumPct);
+      expect(String(ballot.docMarkdown)).toContain("decided at the village's highest tier");
+    }
+  });
+
+  it("control: an ordinary grant still runs on the village's ordinary dials", async () => {
+    const [rows] = await pool.query<any[]>( // module-review-ok: the e2e harness reading its own scratch schema
+      "SELECT id FROM ballots WHERE subject_type = 'power_grant' AND subject_ref = 'library.keep@steward-circle' ORDER BY created_at LIMIT 1",
+    );
+    const first = (await call("GET", `/api/governance/ballots/${String(rows[0].id)}`, { token: wrenToken })).json;
+    expect(first.unityPct < top.unityPct || first.quorumPct < top.quorumPct, JSON.stringify({ unity: first.unityPct, quorum: first.quorumPct })).toBe(true);
+    expect(String(first.docMarkdown)).not.toContain("highest tier");
+  });
+
+  it("control: the two keys that make an electorate stay refused", async () => {
+    for (const capability of ["ballot.vote", "member.vouch"]) {
+      const r = await call("POST", "/api/governance/power-grants", {
+        token: wrenToken,
+        body: { capability, roleId: "steward-circle", reason: "The stewards already do this work in practice, and the whole village agreed at the gathering to ask." },
+      });
+      expect(r.status, capability).toBe(409);
+      expect(String(r.json?.error)).toContain("choosing who else gets a say");
+    }
+  });
+
+  it("IT CARRIES, and the role can approve the moon's recap work", async () => {
+    const closed = await carry(opened["moon.approve"], "The stewards approve the moon's recap work from today.");
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    const asked = (await call("GET", `/api/governance/ballots/${opened["moon.approve"]}`, { token: wrenToken })).json;
+    expect(await roleCapabilities(String(asked.subjectRef).split("@")[1])).toContain("moon.approve");
+    // A grant is never a handover: the village holds nothing new.
+    expect((await holdingRows()).some((h) => h.capability === "moon.approve")).toBe(false);
   });
 });
