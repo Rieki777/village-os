@@ -28,7 +28,8 @@ import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import type { WorkInputs } from "../../shared/valuation";
 import { suggestValuation, type PayeeSuggestion } from "../../shared/valuationEngine";
-import { calibrate, combineSetting, settingRecord, storedPayFor, widenRange, type InputChange } from "../../shared/valuationSetting";
+import { calibrate, combineSetting, settingRecord, storedPayFor, topUpProblem, widenRange, type InputChange } from "../../shared/valuationSetting";
+import { addChange, createDraft } from "../lib/orgDrafts";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> & {
   /** Who holds a power through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
@@ -104,6 +105,26 @@ export function register(app: Express, deps: Deps): void {
     return { problem: null, pay };
   };
 
+  /**
+   * Open an org draft carrying a role's pay (B3: a draft may carry it), so the
+   * village decides it through the draft's own put-to-village vote, at that
+   * door's own tier and rules. Returns the draft id, or a problem.
+   */
+  const openRolePayDraft = async (role: { id: string; name: string }, figure: number, eeHeld: boolean, by: string, title: string): Promise<{ draftId: string } | { problem: string }> => {
+    const { problem, pay } = await rolePayFor(figure, undefined, eeHeld);
+    if (problem) return { problem };
+    const made = await createDraft(getPool(), { title: title.slice(0, 180), createdBy: by, sourceKind: "human", sourceModuleId: null, openCap: null });
+    if (!made.ok) return { problem: made.error };
+    const added = await addChange(getPool(), made.id, {
+      op: "update_seat",
+      orgRoleId: role.id,
+      payload: { valueMinor: pay.valueMinor, valueTokens: pay.valueTokens, cashMinor: pay.cashMinor },
+    });
+    if (!added.ok) return { problem: added.error };
+    return { draftId: made.id };
+  };
+  const putToVillage = (draftId: string) => `/api/org/drafts/${draftId}/put-to-village`;
+
   /** Write a set figure onto the role. Returns a problem, or null. */
   const writeRolePay = async (roleId: string, figure: number, cashPct: number | undefined, eeHeld: boolean): Promise<string | null> => {
     const { problem, pay } = await rolePayFor(figure, cashPct, eeHeld);
@@ -164,6 +185,13 @@ export function register(app: Express, deps: Deps): void {
       const problem = await writeRolePay(role.id, figure, cashPct, first.expected.earnedEquityHeld > 0);
       if (problem) return res.status(400).json({ error: problem });
     }
+    // With no second signer, the village decides: the draft is opened now, so the vote path is one press away (0.4).
+    let draftId: string | null = null;
+    if (decision.needs === "vote") {
+      const opened = await openRolePayDraft(role, figure, first.expected.earnedEquityHeld > 0, String(actor.id), `Pay for ${role.name}`);
+      if ("problem" in opened) return res.status(400).json({ error: opened.problem });
+      draftId = opened.draftId;
+    }
     const rec = settingRecord({ workKind: "role", workId: 0, category: `role:${inputs.lines[0]?.band ?? "none"}`, first, set: { totalMinor: figure }, ctx, opts, at: new Date().toISOString() });
     const state = decision.needs === "none" ? "set" : decision.needs === "second" ? "awaiting_second" : "awaiting_vote";
     const settingId = await writeSetting(getPool(), rec, { workRef: role.id, state, modelVersion: model.version, currency: model.currency, inputs, suggestion: first, payeeIds, setterId: String(actor.id) });
@@ -181,9 +209,49 @@ export function register(app: Express, deps: Deps): void {
       state,
       decision,
       suggestion: first,
-      ...(decision.needs === "vote" ? { proposeInstead: ROLE_PAY_VOTE_PATH } : {}),
+      ...(decision.needs === "vote" ? { proposeInstead: ROLE_PAY_VOTE_PATH, draftId, putToVillage: putToVillage(draftId!) } : {}),
       ...(decision.needs === "second" ? { voteAfterDays: decision.voteAfterDays, proposeInstead: ROLE_PAY_VOTE_PATH } : {}),
     });
+  });
+
+  /*
+   * P4, THE RETRO TOP-UP (Rye's pick, 2026-11-06). After delivery any member may
+   * propose to RAISE a role's set figure, never lower it; the village decides
+   * through the existing vote path and tier: an org draft carrying the raise,
+   * put to the village. Nothing is written to the role here, and the original
+   * record is untouched: the raise is its own record and its own draft.
+   */
+  app.post("/api/org/roles/:id/pay/top-up", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (await overLimit(`valuation-top-up:${user.id}`, 10, 60 * 60 * 1000)) return res.status(429).json({ error: "Too many top-ups proposed in an hour. Try again shortly." });
+    const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
+    if (!role) return res.status(404).json({ error: "Role not found" });
+    if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const proposed = Number(req.body?.totalMinor);
+    const outcome = String(req.body?.outcome ?? "").trim().slice(0, 500);
+    const current = (role as { valueMinor?: number | null }).valueMinor ?? null;
+    const problem = topUpProblem(current, proposed, outcome);
+    if (problem) return res.status(409).json({ error: problem, proposeInstead: ROLE_PAY_VOTE_PATH });
+    const ee = eeMeaningWritten();
+    const opened = await openRolePayDraft(role, proposed, !ee, String(user.id), `A top-up for ${role.name}: ${outcome}`);
+    if ("problem" in opened) return res.status(400).json({ error: opened.problem });
+    const latest = (await settingsForWork(getPool(), "role", role.id)).find((s) => s.state === "set");
+    if (latest) {
+      const payeeIds = (await listOrgAssignments(getPool())).filter((a) => a.orgRoleId === role.id && a.userId).map((a) => String(a.userId));
+      const rec = settingRecord({
+        workKind: "role",
+        workId: 0,
+        category: latest.category,
+        first: latest.suggestion,
+        set: { totalMinor: proposed },
+        ctx: { setterId: String(user.id), payeeIds, secondSigners: [], setterSetPayOf: [] },
+        opts: { reason: "Retro top-up", note: outcome },
+        at: new Date().toISOString(),
+      });
+      await writeSetting(getPool(), rec, { workRef: role.id, state: "awaiting_vote", modelVersion: latest.modelVersion, currency: latest.currency, inputs: latest.inputs, suggestion: latest.suggestion, payeeIds, setterId: String(user.id) });
+    }
+    res.json({ success: true, draftId: opened.draftId, putToVillage: putToVillage(opened.draftId) });
   });
 
   app.get("/api/org/roles/:id/pay/settings", async (req, res) => {
