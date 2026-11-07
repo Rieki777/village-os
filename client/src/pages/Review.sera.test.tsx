@@ -17,7 +17,7 @@
  * `Layout` is a passthrough, as in Review.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
 
@@ -75,10 +75,17 @@ const LIST = {
   heldBatches: ["sync-abc"],
 };
 
-function serve(r: { queue: Answer; claims?: Answer; count?: Answer; list?: Answer; guide?: Answer; powers?: Answer }) {
+function serve(r: { queue: Answer; claims?: Answer; count?: Answer; list?: Answer; guide?: Answer; powers?: Answer; afterSync?: { queue: Answer; list: Answer } }) {
+  let synced = false;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) => {
+    vi.fn(async (url: string, init?: { method?: string }) => {
+      if (String(url) === "/api/saberra/sync" && init?.method === "POST") {
+        synced = true;
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      if (synced && r.afterSync && String(url) === "/api/review/queue") return { ok: true, status: 200, json: async () => r.afterSync!.queue[1] };
+      if (synced && r.afterSync && String(url) === "/api/saberra/differences") return { ok: true, status: 200, json: async () => r.afterSync!.list[1] };
       const path = String(url);
       const [status, body]: Answer = path.startsWith("/api/admin/quest-claims/owed")
         ? [200, []]
@@ -160,6 +167,23 @@ describe("the service's old batches, once the list holds them", () => {
     expect(await screen.findByText("The list of changes did not load")).toBeTruthy();
     expect(screen.queryByText(/now listed above/)).toBeNull();
     expect(screen.getAllByRole("button", { name: /^Accept all/ })).toHaveLength(2);
+  });
+});
+
+describe("Check again (R3-2)", () => {
+  it("reads the queue again after the sync, so a moved batch never comes back unfolded with Accept", async () => {
+    const failedList = { ...LIST, lastReadWhole: false, reads: { circles: "failed", roles: "failed" } };
+    // The sync moved the waiting proposals into its own batch, which the newest read holds.
+    const moved = { ...QUEUE, batches: [{ ...QUEUE.batches[0], batchId: "sync-new" }, QUEUE.batches[1]] };
+    const afterList = { ...LIST, lastReadAt: "2026-11-06T16:05:00.000Z", heldBatches: ["sync-new"] };
+    serve({ queue: [200, QUEUE], list: [200, failedList], afterSync: { queue: [200, moved], list: [200, afterList] } });
+    renderReview();
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(screen.getByText("Earlier Sera arrivals, now listed above")).toBeTruthy());
+    const fold = screen.getByText("Earlier Sera arrivals, now listed above").closest("details") as HTMLElement;
+    expect(within(fold).getByRole("link", { name: "Review it as one structure change" }).getAttribute("href")).toBe("/review/structure/sync-new");
+    // Only the other module's batch keeps its Accept all.
+    expect(screen.getAllByRole("button", { name: /^Accept all/ })).toHaveLength(1);
   });
 });
 

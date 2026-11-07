@@ -464,10 +464,12 @@ describe("the read states", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
     await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toMatch(/Sera answered at \d\d:\d\d\./));
     cleanup();
-    serve({ list: [200, failed], sync: [409, { error: "A sync is already running. Its report appears under Sync now when it finishes." }] });
+    serve({ list: [200, failed], sync: [409, { error: "A sync is already running. Its report appears under Sync now when it finishes.", state: "busy" }] });
     show();
     fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
-    await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toContain("A sync is already running."));
+    // The words are true on this page: there is no Sync now here (R3-2).
+    await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toContain("A sync is already running. Try again in a minute."));
+    expect(document.body.textContent).not.toContain("Sync now");
   });
 
   it("names the one kind that did not come through, and never empties the list for it", async () => {

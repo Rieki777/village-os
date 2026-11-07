@@ -30,9 +30,9 @@ vi.mock("../lib/modules", () => ({
   effectiveLifecycle: () => "preview",
 }));
 
-import { register, SNAPSHOT_AGE_JOB } from "./saberra";
+import { ageOutStoredReads, register, SNAPSHOT_AGE_JOB } from "./saberra";
 import { registeredJobs } from "../lib/scheduler";
-import { batchLinks, holderNamesByRole, listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
+import { batchLinks, heldPageIdsOf, holderNamesByRole, listAnswer, type DifferencesRead } from "../lib/seraDifferencesRead";
 import type { Difference } from "../../shared/seraDifferences";
 
 const LAND = "0".repeat(31) + "1";
@@ -301,6 +301,18 @@ describe("which arrival holds each difference (C7, S1)", () => {
     expect(out.held).toEqual(["old"]);
     expect(batchLinks([], batches, ["aaaa1111", "bbbb2222"], null).held).toEqual([]);
   });
+  it("HOLDS ONLY WHAT THE NEWEST READ READ ITSELF, never a record it carried from the read before (R3-3)", () => {
+    const snap = {
+      takenAt: "2026-11-06T10:00:00.000Z", trigger: "scheduled",
+      circles: { read: "whole", records: [{ id: "cccc-3333", fields: {} }] },
+      // Roles failed part way: what the row holds for them was carried.
+      roles: { read: "cut-short", records: [{ id: "aaaa1111", fields: {}, readAt: "2026-11-05T10:00:00.000Z" }] },
+    };
+    expect(heldPageIdsOf(snap as never)).toEqual(["cccc3333"]);
+    // A carried record inside a kind read whole is not held either.
+    const mixed = { ...snap, roles: { read: "whole", records: [{ id: "bbbb2222", fields: {} }, { id: "aaaa1111", fields: {}, readAt: "2026-11-05T10:00:00.000Z" }] } };
+    expect(heldPageIdsOf(mixed as never)).toEqual(["cccc3333", "bbbb2222"]);
+  });
   it("NAMES NO HOLDER WHOSE TERM HAS LAPSED (N5)", () => {
     const roster = [{ id: "u-ana", name: "Ana Moss" }, { id: "u-bo", name: "Bo Reyes" }];
     const seatings = [
@@ -312,6 +324,15 @@ describe("which arrival holds each difference (C7, S1)", () => {
 });
 
 describe("stored reads age out", () => {
+  it("FORGETS THE CACHED LIST WHEN THE AGE JOB CUTS ANYTHING, since a cut leaves every seq as it was (R3-5)", async () => {
+    let forgot = 0;
+    const forget = () => { forgot += 1; };
+    expect(await ageOutStoredReads(pool as never, async () => 2, forget)).toContain("removed 2");
+    expect(forgot).toBe(1);
+    await ageOutStoredReads(pool as never, async () => 0, forget);
+    expect(forgot).toBe(1);
+  });
+
   it("REGISTERS A DAILY JOB that ages stored reads out, whatever the schedule or the module (R27)", () => {
     expect(registeredJobs()).toContainEqual({ name: SNAPSHOT_AGE_JOB, everyMs: 24 * 60 * 60 * 1000 });
   });

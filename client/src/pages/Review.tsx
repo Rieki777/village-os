@@ -588,7 +588,7 @@ export default function Review() {
           )}
         </div>
 
-        <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} />
+        <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} onReload={load} />
         {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
         <div className="max-w-4xl space-y-6">
 

@@ -333,9 +333,12 @@ function SeraList({
   pay,
   draftOpen,
   onRetry,
+  onReload,
 }: {
   list: ListAnswer;
   pay: Door | null;
+  /** The page's whole read, queue included, after a sync. */
+  onReload?: () => Promise<void>;
   draftOpen: boolean;
   onRetry: () => Promise<void>;
 }) {
@@ -402,8 +405,11 @@ function SeraList({
     if (!r) return setAsked("Could not reach the server.");
     const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
     if (r.status === 502) setAsked(`${agent} still didn't answer at ${at}.`);
+    // The server's busy sentence points at the admin panel's Sync now; this page says what is true here (R3-2).
+    else if (r.status === 409 && (body as { state?: unknown } | null)?.state === "busy") setAsked("A sync is already running. Try again in a minute.");
     else if (!r.ok) setAsked(typeof body?.error === "string" ? body.error : `The check did not run (${r.status}).`);
-    await onRetry();
+    // The whole page reads again: a sync moves waiting proposals, so the queue must follow (R3-2).
+    await (onReload ?? onRetry)();
     if (r.ok) setAsked(`answered:${at}`);
   };
 
@@ -748,8 +754,10 @@ export default function SeraDifferences({
   read,
   draftOpen,
   onRetry,
+  onReload,
 }: {
   read: SeraRead;
+  onReload?: () => Promise<void>;
   draftOpen: boolean;
   onRetry: () => Promise<void>;
 }) {
@@ -768,7 +776,7 @@ export default function SeraDifferences({
       </section>
     );
   }
-  return <SeraList list={read.list} pay={read.count.paySetBy} draftOpen={draftOpen} onRetry={onRetry} />;
+  return <SeraList list={read.list} pay={read.count.paySetBy} draftOpen={draftOpen} onRetry={onRetry} onReload={onReload} />;
 }
 
 /**
@@ -843,15 +851,18 @@ export function SeraTop({
   sera,
   queue,
   witness,
+  onReload,
 }: {
   sera: SeraOnReview;
+  /** The page's whole read, so a sync's moved batches show at once. */
+  onReload?: () => Promise<void>;
   queue: { batches?: QueueBatch[]; openDrafts?: unknown[] } | null;
   witness: number;
 }) {
   return (
     <>
       <SeraSummaryLine read={sera.read} witness={witness} />
-      <SeraDifferences read={sera.read} draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} />
+      <SeraDifferences read={sera.read} draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} onReload={onReload} />
     </>
   );
 }

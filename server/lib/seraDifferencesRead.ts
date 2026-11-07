@@ -54,6 +54,7 @@ import {
   differences,
   type Difference,
   type DifferenceCount,
+  type Snapshot,
   type SnapshotRead,
 } from "../../shared/seraDifferences";
 import { differenceSentence, flagWords, openInUrl, openInWords, shownFlags, sourceWords } from "../../shared/seraDifferenceWords";
@@ -79,6 +80,17 @@ export interface DifferencesRead {
   holders: Record<string, string[]>;
   /** Every page id the newest read holds, as one key: an arrival is held in the list when all of its are here. */
   heldPageIds: string[];
+}
+
+/**
+ * The page ids a read READ ITSELF (review R3-3): a kind read whole, and in it
+ * no record carried from the read before (`readAt`). A record a failed or cut
+ * kind carried is the older read's, so an arrival landed from that run is not
+ * held by this one.
+ */
+export function heldPageIdsOf(top: Snapshot): string[] {
+  const own = (k: Snapshot["circles"]) => (k.read === "whole" ? k.records.filter((r) => !r.readAt) : []);
+  return [...own(top.circles), ...own(top.roles)].map((r) => pageKey(r.id));
 }
 
 /** One waiting proposal that changes the chart, from the service, as the list reads it. */
@@ -213,7 +225,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now(), laps
       lastWhole: { circles: wholeAt("circlesRead"), roles: wholeAt("rolesRead") },
       circleOrder: liveIn.circles.map((c) => c.id),
       holders,
-      heldPageIds: top ? [...top.circles.records, ...top.roles.records].map((r) => pageKey(r.id)) : [],
+      heldPageIds: top ? heldPageIdsOf(top) : [],
     };
     // An answer from part of its rows is given once and never kept.
     if (whole) cached = { key, value };

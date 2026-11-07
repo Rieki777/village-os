@@ -89,7 +89,7 @@ import { linkableMember, memberLinks, memberName, unlinkMember } from "../repos/
 import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
 import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
 import { clearReview } from "../repos/seraLinkReviews";
-import { countAnswer, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
+import { countAnswer, forgetCachedDifferences, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
 import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
 import { doorsNow, type Deciders } from "../lib/seraDoors";
 import { waitingChartProposals } from "../repos/seraDifferences";
@@ -116,6 +116,21 @@ const DIFFERENCES_LIST_PER_MINUTE = 60;
 const TOO_MANY = { error: "That is a lot of checks in a minute. Wait a moment and look again." };
 
 const MODULE_ID = "saberra";
+/**
+ * The daily age-out. A cut of carried records changes rows without changing
+ * their seq, which the cached list keys on, so the cache is forgotten whenever
+ * anything was cut (review R3-5).
+ */
+export async function ageOutStoredReads(
+  pool: Parameters<typeof pruneByAge>[0],
+  prune: (pool: Parameters<typeof pruneByAge>[0]) => Promise<number> = (p) => pruneByAge(p),
+  forget: () => void = forgetCachedDifferences,
+): Promise<string> {
+  const n = await prune(pool);
+  if (n > 0) forget();
+  return `removed ${n} stored read(s) past ${SNAPSHOT_MAX_AGE_DAYS} days`;
+}
+
 /** The daily job that ages stored reads out (spec R27). */
 export const SNAPSHOT_AGE_JOB = "saberra-snapshot-age";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -139,7 +154,7 @@ export function register(app: Express, deps: Deps): void {
   registerJob(POLL_JOB, TICK_MS, () => pollOnce(getPool()));
   // Stored reads age out daily whatever the schedule or the module, so a name
   // stored as sent cannot outlive an erasure (spec R27).
-  registerJob(SNAPSHOT_AGE_JOB, DAY_MS, async () => `removed ${await pruneByAge(getPool())} stored read(s) past ${SNAPSHOT_MAX_AGE_DAYS} days`);
+  registerJob(SNAPSHOT_AGE_JOB, DAY_MS, () => ageOutStoredReads(getPool()));
 
   /** What a steward needs before pressing anything. */
   app.get("/api/saberra/status", async (req, res) => {
