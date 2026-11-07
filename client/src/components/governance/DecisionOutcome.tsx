@@ -21,6 +21,7 @@
  * for a reader with no animation at all.
  */
 import { CheckCircle2, CircleSlash, MinusCircle } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { Link } from "wouter";
 import { Celebration } from "@/components/natural";
 import { pctText, weightText } from "./voteBars";
@@ -199,17 +200,19 @@ export default function DecisionOutcome({
         {ballot.status === "no_quorum_rerun" && ballot.rerunId && (
           <p className="mt-3 text-sm font-semibold text-stone-800">
             <Link href={`/decisions/${ballot.rerunId}`} className="text-teal-deep hover:underline">
-              Vote on it again here
+              <Trans>Vote on it again here</Trans>
             </Link>
           </p>
         )}
         {ballot.rerunOf && (
           <p className="mt-3 text-sm text-stone-700">
-            This asks again after{" "}
-            <Link href={`/decisions/${ballot.rerunOf}`} className="text-teal-deep hover:underline">
-              a vote too few of us answered
-            </Link>
-            .
+            <Trans>
+              This asks again after{" "}
+              <Link href={`/decisions/${ballot.rerunOf}`} className="text-teal-deep hover:underline">
+                a vote too few of us answered
+              </Link>
+              .
+            </Trans>
           </p>
         )}
 
