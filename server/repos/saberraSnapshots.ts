@@ -62,6 +62,13 @@ function recordOf(r: SnapshotRecord): SnapshotRecord {
     if (typeof v === "string") held[s] = v;
   }
   if (Object.keys(held).length) match.held = held;
+  // The mark of the history's base each was held under (review K1): text only.
+  const traced: Partial<Record<AgreedSlot, string>> = {};
+  for (const s of SLOTS) {
+    const v = objectOf(m.traced)[s];
+    if (typeof v === "string") traced[s] = v;
+  }
+  if (Object.keys(traced).length) match.traced = traced;
   // A row kept before held the words, or true: still read, never written now.
   const agreed: Partial<Record<AgreedSlot, string | true>> = {};
   for (const s of SLOTS) {

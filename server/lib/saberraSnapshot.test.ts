@@ -482,6 +482,7 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
       ourId: "role-1",
       via: "earlier",
       held: { name: "aaaaaaaaaaaaaaaa", aim: "bbbbbbbbbbbbbbbb", circle: "land" },
+      traced: { name: "none", aim: "dddddddddddddddd" },
       // A row kept before review N3 held the words: still read back.
       agreed: { name: true, aim: "Holds the water.", circle: "land" },
       pay: "0123456789abcdef",
@@ -529,10 +530,12 @@ describe.skipIf(!configured)("the snapshot a sync keeps", () => {
     ]);
     // What the first read was kept with, and the second: the match made then, and what both sides held.
     const held = { name: valueHash("c2 water steward"), aim: valueHash("Holds the water."), circle: "c2-land" };
-    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") } });
-    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", held });
+    // Made here, so no history: each mark says so (review K1).
+    const traced = { name: "none", aim: "none", circle: "none" };
+    expect(first.circles.records[0]!.match).toEqual({ ourId: "c2-land", via: "name", held: { name: valueHash("c2 land") }, traced: { name: "none" } });
+    expect(first.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "name", held, traced });
     const second = await newest();
-    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", held });
+    expect(second.roles.records[0]!.match).toEqual({ ourId: "c2-water", via: "earlier", held, traced });
   });
 
   it("THE SERVICE NOT ANSWERING IS KEPT AS A READ, both kinds failed and carried, so the list says when it last tried (review C6)", async () => {
