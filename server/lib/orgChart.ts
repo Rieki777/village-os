@@ -1042,7 +1042,8 @@ export type OrgRoleValueEdit = {
   cashCurrency?: string | null;
 };
 
-function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
+/** The SET clauses and arguments for a role's value, list and cash: the one writer, also used by an org draft's publish. */
+export function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
   if (!v) return;
   if (v.valueMinor !== undefined) {
     const set = v.valueMinor !== null && !!v.valueCurrency;

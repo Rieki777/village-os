@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchLocale, resolveLocale } from "./resolveLocale";
+import { matchLocale, resolveLocale } from "./i18nResolve";
 
 const SUPPORTED = ["en", "es", "ar", "he", "pt-BR", "pt-PT", "zh-Hans", "zh-Hant", "sr", "fr", "nb"];
 

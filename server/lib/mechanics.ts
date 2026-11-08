@@ -69,7 +69,7 @@ import {
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
-import { brandChangeKey, brandFieldValue, brandVoteProblem } from "../../shared/brandVote";
+import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
 import {
   changeSetCapFrom,
   CHANGE_SET_CAP_DEFAULT,
@@ -214,6 +214,14 @@ export function pricingOf(item: ChangeItem): { subject: string; criticality: Cri
   if (item.kind === "dial") {
     const def = VARIABLES_BY_KEY[item.key];
     return { subject, criticality: def ? criticalityOf(def) : "routine" };
+  }
+  /*
+   * A BRAND FIELD IS PRICED BY THE FIELD, like a dial. A name or a colour is
+   * routine; the currency code every amount is counted in moves only at the
+   * highest tier (Rye, 2026-11-06, `brandFieldTier` in shared/brandVote.ts).
+   */
+  if (item.kind === "brand_field") {
+    return { subject, criticality: criticalityOfItems([CRITICALITY_FOR_ITEM_KIND.brand_field, brandFieldTier(item.field)]) };
   }
   const named = thresholdsForSubject(subject);
   /*
@@ -1038,6 +1046,11 @@ export function proposalMarkdown(p: {
     const def = VARIABLES_BY_KEY[c.key];
     if (def && applyTimingOf(def) === "cycle-close") {
       lines.push(`| ↳ takes effect at the next cycle close, never mid-cycle | | |`);
+    }
+    // What the village is agreeing to when it moves its currency, read before
+    // anyone votes (Rye, 2026-11-06). The ledger carries the same sentence.
+    if (c.key === brandChangeKey(BRAND_CURRENCY_FIELD)) {
+      lines.push(`| ↳ ${currencyChangeSentence(c.from, c.to)} | | |`);
     }
   }
   lines.push(
