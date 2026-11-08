@@ -75,6 +75,7 @@ const SETTINGS: contract.MoonReviewSettings = {
   taxForms: [{ key: "form-a", label: "Form A" }, { key: "form-b", label: "Form B" }],
   taxFormRoutes: ["abroad", "nomad"],
   holds: [{ taxFormKey: "form-b", workCountry: "YY", note: "Form B holders who worked in YY." }],
+  seraInbox: null,
 };
 
 function terms(over: Partial<TermsInForce> = {}): TermsInForce {

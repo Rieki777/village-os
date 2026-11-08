@@ -15,6 +15,7 @@
  * enough for the platform's own rules to have changed underneath it.
  */
 import { ALL_CAPABILITIES, type Capability } from "./capabilities";
+import { ADMIN_EDIT_CONTROLS, isAdminEditControl, type AdminEditControlId } from "./suggestions";
 
 export const DRAFT_KINDS = ["role", "circle"] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
@@ -30,8 +31,26 @@ export type DraftKind = (typeof DRAFT_KINDS)[number];
 export const MEMBER_DRAFT_KINDS = ["event_rsvp"] as const;
 export type MemberDraftKind = (typeof MEMBER_DRAFT_KINDS)[number];
 
-/** Every kind `validateDraftPayload` knows, admin and member together. */
-export const ALL_DRAFT_KINDS: readonly string[] = [...DRAFT_KINDS, ...MEMBER_DRAFT_KINDS];
+/**
+ * A MEMBER'S SUGGESTED EDIT to an admin control (ROLE_POWERS_DESIGN.md §4.5),
+ * reviewed by the live holders of the control's power or decided by a village
+ * ballot (shared/suggestions.ts says which). Kept out of DRAFT_KINDS for the
+ * reason MEMBER_DRAFT_KINDS is: the assistant's accept route creates a role or
+ * a circle from whatever DRAFT_KINDS admits, and an `admin_edit` there would
+ * be read as a circle. It shares the `assistant_drafts` table, and the
+ * assistant's queue reads leave this kind out (server/lib/drafts.ts).
+ */
+export const SUGGESTION_DRAFT_KINDS = ["admin_edit"] as const;
+export type SuggestionDraftKind = (typeof SUGGESTION_DRAFT_KINDS)[number];
+
+/** What making one of these does, in the words the suggester reads before they send it. */
+export const SUGGESTION_KIND_CONSEQUENCE: Record<SuggestionDraftKind, string> = {
+  admin_edit:
+    "suggest a change to an admin control, which changes nothing until a holder of its power accepts it or the village votes it in",
+};
+
+/** Every kind `validateDraftPayload` knows, admin, member and suggestion together. */
+export const ALL_DRAFT_KINDS: readonly string[] = [...DRAFT_KINDS, ...MEMBER_DRAFT_KINDS, ...SUGGESTION_DRAFT_KINDS];
 
 export interface RolePayload {
   name: string;
@@ -68,15 +87,32 @@ export interface EventRsvpPayload {
   occurrenceKey?: string | null;
 }
 
-export type DraftPayload = RolePayload | CirclePayload | EventRsvpPayload;
+/**
+ * A suggested edit: the control, the payload its direct route would take, the
+ * power that route asks for, and the version of the thing it edits, so an
+ * Accept after the target moved is refused and shows the difference.
+ * `base` is the target as the suggester saw it, for that difference.
+ */
+export interface AdminEditPayload {
+  control: AdminEditControlId;
+  capability: Capability;
+  version: string;
+  base: unknown;
+  payload: unknown;
+}
 
-const ALLOWED_KEYS: Record<DraftKind | MemberDraftKind, string[]> = {
+export type DraftPayload = RolePayload | CirclePayload | EventRsvpPayload | AdminEditPayload;
+
+type AnyDraftKind = DraftKind | MemberDraftKind | SuggestionDraftKind;
+
+const ALLOWED_KEYS: Record<AnyDraftKind, string[]> = {
   role: ["name", "description", "capabilities", "minStage", "sortOrder"],
   circle: ["name", "purpose", "parentCircleId", "status"],
   event_rsvp: ["eventId", "status", "occurrenceKey"],
+  admin_edit: ["control", "capability", "version", "base", "payload"],
 };
 
-function shapeErrors(kind: DraftKind | MemberDraftKind, payload: unknown): string | null {
+function shapeErrors(kind: AnyDraftKind, payload: unknown): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "payload must be an object";
   // Unknown keys are refused, so a model that invents a field gets told, and a
   // future column cannot be written by a payload that predates the review UI.
@@ -94,10 +130,19 @@ function text(value: unknown, field: string, min: number, max: number): string |
 /** Validate a payload for its kind. Returns a human sentence, or null. */
 export function validateDraftPayload(kind: string, payload: unknown): string | null {
   if (!ALL_DRAFT_KINDS.includes(kind)) return `unknown draft kind: ${String(kind)}`;
-  const k = kind as DraftKind | MemberDraftKind;
+  const k = kind as AnyDraftKind;
   const shape = shapeErrors(k, payload);
   if (shape) return shape;
   const p = payload as Record<string, unknown>;
+
+  if (k === "admin_edit") {
+    if (!isAdminEditControl(p.control)) return `control must be one of: ${Object.keys(ADMIN_EDIT_CONTROLS).join(", ")}`;
+    const needs = ADMIN_EDIT_CONTROLS[p.control].capability;
+    if (p.capability !== needs) return `this control's power is ${needs}`;
+    if (typeof p.version !== "string" || !p.version.trim() || p.version.length > 64) return "version must name the version the suggestion was made on";
+    if (p.payload === undefined) return "payload must carry the change";
+    return null;
+  }
 
   if (k === "event_rsvp") {
     if (typeof p.eventId !== "string" || !p.eventId.trim() || p.eventId.length > 64) return "eventId must be a gathering id";

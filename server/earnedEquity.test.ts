@@ -246,25 +246,26 @@ describe.skipIf(!configured)("earned equity, claimed toward Hypha", () => {
     await bothBooksBalance();
   });
 
-  it("is seeded three rules, all switched off, so a village decides what pays it", async () => {
+  it("is seeded three rules, on and blank, so a piece of work decides what pays it", async () => {
     await seedEconomy(pool, "local");
     const [rows] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
       "SELECT `id`, `trigger`, `amount`, `ceiling`, `recipient`, `enabled` FROM `mint_rules` " +
         "WHERE `token_slug` = ? ORDER BY `trigger`",
       [EARNED_EQUITY],
     );
-    // An accepted proposal is work too (Rye, 2026-10-23), so it gets an Earned
-    // Equity rule beside the quest's and the role's, off like them.
-    // The role's is blank: no flat role mint (Rye, 2026-11-01), so a role pays
-    // Earned Equity only from its own list once a village turns this on.
+    // Rye, 2026-11-05: Earned Equity means what each village says it means, set
+    // in Admin, and its rules are enabled with the amount blank. Blank pays
+    // nothing flat: only a quest, role or proposal that names an amount pays it,
+    // and none may name it until the village has written its meaning.
     expect(rows.map((r) => ({ ...r, amount: r.amount === null ? null : Number(r.amount), ceiling: Number(r.ceiling) }))).toEqual([
-      { id: "rule-proposal.accepted-earned-equity", trigger: "proposal.accepted", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
-      { id: "rule-quest.completed-earned-equity", trigger: "quest.completed", amount: 1, ceiling: 1, recipient: "claimant", enabled: 0 },
-      { id: "rule-role.cycle-earned-equity", trigger: "role.cycle", amount: null, ceiling: 1, recipient: "holder", enabled: 0 },
+      { id: "rule-proposal.accepted-earned-equity", trigger: "proposal.accepted", amount: null, ceiling: 1, recipient: "claimant", enabled: 1 },
+      { id: "rule-quest.completed-earned-equity", trigger: "quest.completed", amount: null, ceiling: 1, recipient: "claimant", enabled: 1 },
+      { id: "rule-role.cycle-earned-equity", trigger: "role.cycle", amount: null, ceiling: 1, recipient: "holder", enabled: 1 },
     ]);
-    // Off means the engine never reads them.
+    // On, so the engine reads them, and blank, so nothing is paid from them alone.
     for (const trigger of ["proposal.accepted", "quest.completed", "role.cycle"]) {
-      expect((await rulesFor(pool, trigger)).some((r) => r.tokenSlug === EARNED_EQUITY)).toBe(false);
+      const ee = (await rulesFor(pool, trigger)).find((r) => r.tokenSlug === EARNED_EQUITY);
+      expect(ee?.amount, trigger).toBeNull();
     }
   });
 

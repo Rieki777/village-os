@@ -245,6 +245,16 @@ describe("moduleCatalog", () => {
      *                           inside them, reading the land's own latitude.
      *                           A list is a village's own words, never a
      *                           platform guess a village must correct.
+     *
+     * Judged on 2026-11-06, by the i18n lane:
+     *
+     *   village.default_locale  matched on "locale". The language a visitor
+     *                           sees only when their browser names none the
+     *                           platform offers: a member's own choice and the
+     *                           browser's languages both come first, so English
+     *                           is a neutral answer under any sky, and a village
+     *                           moves it by the dial or a vote (internal spec
+     *                           i18n, US3).
      */
     expect(hits).toEqual([
       "calendar.cross_quarters",
@@ -273,6 +283,7 @@ describe("moduleCatalog", () => {
       "redemption.max_per_request",
       "redemption.min_amount",
       "stay.autopay_post_hour",
+      "village.default_locale",
     ]);
   });
 

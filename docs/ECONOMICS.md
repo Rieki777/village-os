@@ -405,9 +405,9 @@ The mint rules a fresh village is seeded with:
 | `role.cycle` | `gratitude` | 20 | none, work is paid in full | holder | **no** |
 | `proposal.accepted` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
 | `proposal.accepted` | `credits` | 25 | none, work is paid in full | claimant | yes |
-| `proposal.accepted` | `earned-equity` | 1 | none, work is paid in full | claimant | **no** |
-| `quest.completed` | `earned-equity` | 1 | none, work is paid in full | claimant | **no** |
-| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | **no** |
+| `proposal.accepted` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `quest.completed` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | yes |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
@@ -523,13 +523,16 @@ and no rule change: the flat rules go on paying the quests nobody has valued yet
 
 **Earned Equity means what each village says it means (Rye, 2026-11-05).** Its meaning is
 "unique project to project, SET IN ADMIN per village": the token's meaning field (Admin, Tokens;
-0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`).
+0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`). Its three
+rules are seeded on with the amount blank (`enableEarnedEquityRules` queued the same on running
+villages from the next cycle), so it pays only what a quest, role or proposal names, and
 `payLineProblem` refuses any piece of work that names it until the village has written what it
-is a share of.
+is a share of. A blank Earned Equity rule no role names is the ordinary state and is not
+reported as a rule that paid nobody.
 
 **An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
 Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
-Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
+Village Voice and 25 Village Credits, Earned Equity on and blank), through `quoteWorkPay`, by
 `payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
 recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
 sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle
@@ -605,6 +608,24 @@ well"). It is in the founding stewards' handover set, so a village that launches
 founding seat and can hand it over like any other steward power. The seeded Treasury role grants it
 too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
 once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
+
+**The invoice rails and the treasury sync (0335, Rye 2026-11-06) read this record and never write
+it.** A member's own "Send for approval" also emails the invoice, with a PDF and its bill ref in the
+subject, to the village's Sera inbox when the moon-review setting `seraInbox` names one (blank on
+the platform, so nothing is emailed by default). The copy that leaves names the member by village
+name and bridge code-name; the legal name on the pay route never leaves the village (Rye,
+2026-11-06). While two or more people hold `cash.pay` or `steward.veto`, a new inbox address waits
+for a second of them to confirm it, and every member is told the new address when it applies;
+clearing the inbox applies at once, since it only stops mail (C7, Rye 2026-11-06). Each invoice carries one track: sent, received by
+Sera, approved, paid. Sent, approved and paid are read off `moon_invoices` and the transfer note the
+transfers door writes, so nothing is copied and nothing can count twice; received is read only off
+Sera's own typed record. The Sync on the member's Cash card reconciles three sources, each shown with
+when it was last read: the ledger and `cash_owed` here, the Base chain (`readOnchainBalance`), and
+Sera's invoice records. A difference is flagged to the `cash.pay` holder and never averaged, and a
+flag closes only when a later sync reads both sides fresh and no longer sees it. Finance approval
+and the Treasurer's transfer stay the only writes to `cash_owed`: a sync writes no ledger row, no
+balance and no cash row, which `server/lib/holdingsReconcile.test.ts` checks over every statement it
+sends.
 
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
 row holds an account id and an amount, never a name, so an erased member reads as the tombstone
@@ -2585,6 +2606,20 @@ never off the burn: the tokens destroyed are the tokens asked for, in full, and 
 posting is derived from any of these figures. A token with no rate is a real state,
 and while any money cap is set a request that cannot be valued is refused instead
 of passing unmeasured.
+
+**2026-11-05: the three money ceilings fail closed (Rye's decision 3; his yes came
+on 2026-11-06).** `redemption.max_per_request`, `redemption.max_per_member_per_cycle`
+and `redemption.max_village_per_cycle` ship blank, and blank is no ceiling. A
+ceiling of 0 is zero: nobody redeems past it, and it counts as a money cap that is
+set, so a request that cannot be valued is refused under it. `optionalNumberVar` in
+`server/lib/variables.ts` reads a blank ceiling as null, and `moneyCapsSet` in
+`server/lib/redemption.ts` counts a 0 as set. `requestRedemption` in
+`server/lib/redemptionStore.ts` takes its range lock over the cycle's village asks
+only when the village ceiling is set, 0 included. Until this a 0 meant no ceiling, so the once-only boot step
+`redemption-ceilings-blank-2026-11-05` (`server/lib/redemptionCeilings.ts`) turns a
+stored 0 into blank on a running village and writes one `platform` row to the
+mechanics ledger for each. The ceilings are read at the ask and never stored on a
+request (0213 keeps the rate, the fees and the currency), so no open request changes.
 
 **2026-09-15: who confirms is derived, and a village with no steward votes.**
 `redemption.confirmed_by` is retired. The ask counts who holds `redemption.confirm`

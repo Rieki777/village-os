@@ -1038,11 +1038,16 @@ export interface MoonReviewSettings {
   /** The routes that need a valid tax form on the expected payment date. */
   taxFormRoutes: PayRoute[];
   holds: HoldRule[];
+  /**
+   * The village's Sera inbox: where a sent invoice is emailed, with its PDF and
+   * its reference in the subject (invoice rails). Null sends nothing.
+   */
+  seraInbox: string | null;
 }
 
 /** Platform defaults: EMPTY. A fresh install names no country, no form and no acknowledgement. */
 export const EMPTY_SETTINGS: MoonReviewSettings = {
-  hostCountry: null, hostVatRateBp: null, hostRateSource: null, hostCurrency: null, pilotAck: null, taxForms: [], taxFormRoutes: [], holds: [],
+  hostCountry: null, hostVatRateBp: null, hostRateSource: null, hostCurrency: null, pilotAck: null, taxForms: [], taxFormRoutes: [], holds: [], seraInbox: null,
 };
 
 const TAX_FORM_KEY = /^[A-Za-z0-9-]{1,8}$/;
@@ -1093,7 +1098,9 @@ export function parseMoonReviewSettings(raw: unknown): Parsed<MoonReviewSettings
     if (!taxForms.some((f) => f.key === taxFormKey) || !COUNTRY_RE.test(workCountry) || !note) return { ok: false, field: "holds", error: "Each hold names a listed tax form, a two-letter country and a note." };
     holds.push({ taxFormKey, workCountry, note });
   }
-  return { ok: true, value: { hostCountry, hostVatRateBp: vat, hostRateSource: source.value, hostCurrency: currency, pilotAck, taxForms, taxFormRoutes: Array.from(new Set(taxFormRoutes)), holds } };
+  const inbox = typeof raw.seraInbox === "string" ? raw.seraInbox.trim() : "";
+  if (inbox && (inbox.length > 254 || !EMAIL_RE.test(inbox))) return { ok: false, field: "seraInbox", error: "Sera's inbox is one email address." };
+  return { ok: true, value: { hostCountry, hostVatRateBp: vat, hostRateSource: source.value, hostCurrency: currency, pilotAck, taxForms, taxFormRoutes: Array.from(new Set(taxFormRoutes)), holds, seraInbox: inbox || null } };
 }
 
 /** Old and new values for every settings field a `PUT` changed, for the event note. */
@@ -3181,7 +3188,7 @@ export const MY_MOON_WORDS = {
   sent: "Sent.",
   routeHeading: "Your pay route",
   routeChoice: "Where you live and work, and your status",
-  legalName: "Your legal name",
+  legalName: "Your legal name (private: only you, the Treasurer and admins see it, and it never goes to Sera)",
   address: "Your address",
   currency: "Currency",
   statusValidUntil: "My status is valid until",
@@ -3287,6 +3294,13 @@ export const ADMIN_WORDS = {
     hostMissing: "Name the host country. The route and attestation words say \"the host country\" until you do.",
     vat: "VAT rate, as a percent",
     rateSource: "Where the exchange rate comes from",
+    seraInbox: "Sera's inbox (email address)",
+    seraInboxHint: "A sent invoice is emailed here with its PDF. Leave it empty to send nothing. While two or more people hold cash.pay or the steward veto, a new address waits for a second of them to confirm it, and every member is told the new address.",
+    seraInboxPending: (address: string) => `A new Sera inbox is waiting for a second holder to confirm it: ${address}. Until then invoices still go to the current one.`,
+    seraInboxConfirm: "Confirm the new inbox",
+    seraInboxCancel: "Cancel the change",
+    seraInboxConfirmed: "The new Sera inbox is in place, and every member has been told.",
+    seraInboxCancelled: "The change to Sera's inbox was cancelled.",
     currency: "Host currency (three-letter code)",
     ackText: "Pilot acknowledgement",
     ackVersion: "Its version",
