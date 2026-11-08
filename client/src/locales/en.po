@@ -12,6 +12,48 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr "Differs"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Concern"
+msgstr "Concern"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "save a change"
+msgid "Save"
+msgstr "Save"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Nothing is being weighed right now."
+msgstr "Nothing is being weighed right now."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "In review"
+msgstr "In review"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "What harm could this do to the village, or what would it stop us doing?"
+msgstr "What harm could this do to the village, or what would it stop us doing?"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of an answer box"
+msgid "Your answer"
+msgstr "Your answer"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "Decided"
+msgstr "Decided"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Nobody has written yet."
+msgstr "Nobody has written yet."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "starting a change request"
+msgid "Starting…"
+msgstr "Starting…"
+
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
@@ -26,6 +68,11 @@ msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
 msgstr "Every invoice, sent to paid"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "send a note"
+msgid "Send"
+msgstr "Send"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Paid {paidOn}"
@@ -36,10 +83,63 @@ msgctxt "site header"
 msgid "Open menu"
 msgstr "Open menu"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value of a setting once changed"
+msgid "After"
+msgstr "After"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
+msgstr "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "Started by {author}"
+#~ msgstr "Started by {author}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a suggested edit that adds a change"
+msgid "Add: {proposedTo}"
+msgstr "Add: {proposedTo}"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "the reason for a suggestion"
+msgid "Why"
+msgstr "Why"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "page heading"
+msgid "Change requests"
+msgstr "Change requests"
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "That was refused."
+#~ msgstr "That was refused."
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a suggestion being sent"
+msgid "Sending…"
+msgstr "Sending…"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "In the vote"
+msgstr "In the vote"
+
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the new value of a setting"
+msgid "New value"
+msgstr "New value"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Search languages"
 msgstr "Search languages"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Taken in"
+msgstr "Taken in"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in"
@@ -50,22 +150,129 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr "Chain: {there}."
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "Start a change request"
+msgstr "Start a change request"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "accept a suggested edit"
+msgid "Take it in"
+msgstr "Take it in"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Editing a change starts the review again."
+msgstr "Editing a change starts the review again."
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a suggestion was sent"
+msgid "Suggested."
+msgstr "Suggested."
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
 msgstr "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "A worry you cannot point to yet."
+msgstr "A worry you cannot point to yet."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Can live with it"
+msgstr "Can live with it"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "That did not load."
+msgstr "That did not load."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Edit the name or the why"
+msgstr "Edit the name or the why"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "delete a change request"
+msgid "Delete"
+msgstr "Delete"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the suggest form"
+msgid "Suggest a change"
+msgstr "Suggest a change"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
 
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "Add: {proposedTo}"
+#~ msgstr "Add: {proposedTo}"
+
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
 msgstr "Cash still owed to you, from this village's records: {owedWords}"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "retry a failed read"
+msgid "Try again"
+msgstr "Try again"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Delete this change request? This cannot be undone."
+msgstr "Delete this change request? This cannot be undone."
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "Sera records that name no invoice here"
 msgstr "Sera records that name no invoice here"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Object"
+msgstr "Object"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Respond to this change request"
+msgstr "Respond to this change request"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of an objection box"
+msgid "The harm you see"
+msgstr "The harm you see"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "Your change requests"
+msgstr "Your change requests"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Ask a question"
+msgstr "Ask a question"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a note about every change"
+msgid "The whole request"
+msgstr "The whole request"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a change request you started"
+msgid "Yours"
+msgstr "Yours"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "screen reader name of one change"
+msgid "{label}, from {before} to {after}"
+msgstr "{label}, from {before} to {after}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "when the review time ends"
+msgid "Waits until {until}"
+msgstr "Waits until {until}"
+
+#: client/src/components/modules/SuggestDial.tsx
+#~ msgid "Change {label}"
+#~ msgstr "Change {label}"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -75,6 +282,23 @@ msgstr "Close menu"
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr "One of your numbers differs between sources. The Treasurer has been shown it."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Counts for this version. An edit asks again."
+msgstr "Counts for this version. An edit asks again."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "answer a note in a review"
+msgid "Answer"
+msgstr "Answer"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "You have none yet. Gather several changes here and the village votes on them together."
+msgstr "You have none yet. Gather several changes here and the village votes on them together."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "The village can ask, raise concerns and objections, and suggest edits. The people whose roles look after these settings are asked to look."
+msgstr "The village can ask, raise concerns and objections, and suggest edits. The people whose roles look after these settings are asked to look."
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -86,15 +310,53 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the reader started this change request"
+msgid "You started this"
+msgstr "You started this"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "decline a suggested edit"
+msgid "Turn it down"
+msgstr "Turn it down"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "Gathering"
+msgstr "Gathering"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
 msgstr "Invoices, by source"
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "Moved into a change request of its own."
+msgstr "Moved into a change request of its own."
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "This village's records: {here}."
 msgstr "This village's records: {here}."
+
+#. placeholder {0}: c.changes
+#: client/src/pages/ChangeRequests.tsx
+msgid "{0, plural, one {# change} other {# changes}}"
+msgstr "{0, plural, one {# change} other {# changes}}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Why not, in one line"
+msgstr "Why not, in one line"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Answer"
+msgstr "Answer"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the reason for a change request"
+msgid "Why"
+msgstr "Why"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Open menu"
@@ -104,10 +366,59 @@ msgstr "This village's records: {here}."
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value of a setting today"
+msgid "Now"
+msgstr "Now"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Everyone in the village can read what you write here."
+msgstr "Everyone in the village can read what you write here."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a request the server refused"
+msgid "That was refused."
+msgstr "That was refused."
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "Step {n} of 4: {words}"
+#~ msgstr "Step {n} of 4: {words}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "who answered a note"
+msgid "{by} answered"
+msgstr "{by} answered"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Objections answered"
+msgstr "Objections answered"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Sign in to see what your village is weighing."
+msgstr "Sign in to see what your village is weighing."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Give it a name and say why. Then add the changes, from here or from any setting with a Suggest button."
+msgstr "Give it a name and say why. Then add the changes, from here or from any setting with a Suggest button."
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "({count} of at most {cap})"
+msgstr "({count} of at most {cap})"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "link back to the list"
+msgid "All change requests"
+msgstr "All change requests"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Step {n} of 4: {words}. Review ends {ends}"
+msgstr "Step {n} of 4: {words}. Review ends {ends}"
 
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
@@ -117,6 +428,20 @@ msgstr "Vote on it again here"
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
 msgstr "No invoice has been sent yet."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Suggest an edit"
+msgstr "Suggest an edit"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a switch setting"
+msgid "Off"
+msgstr "Off"
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "{label}, from {before} to {after}"
+#~ msgstr "{label}, from {before} to {after}"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -132,9 +457,19 @@ msgctxt "language picker"
 msgid "Language: {current} ({code})"
 msgstr "Language: {current} ({code})"
 
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgid "That did not go through. Try again in a moment."
+msgstr "That did not go through. Try again in a moment."
+
 #: client/src/components/TreasurySync.tsx
 msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
 msgstr "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Turned down"
+msgstr "Turned down"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -145,14 +480,54 @@ msgstr "Invoice {ref}"
 msgid "Your saved numbers did not load."
 msgstr "Your saved numbers did not load."
 
+#. placeholder {0}: cr.review.consents
+#: client/src/pages/ChangeRequests.tsx
+msgid "{0, plural, one {# person can live with this version.} other {# people can live with this version.}}"
+msgstr "{0, plural, one {# person can live with this version.} other {# people can live with this version.}}"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "The suggestion was refused."
+msgstr "The suggestion was refused."
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the proposal just made"
+msgid "See your proposal"
+msgstr "See your proposal"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Set by the village"
+msgstr "Set by the village"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Share a concern"
+msgstr "Share a concern"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Ready for the village to review?"
+msgstr "Ready for the village to review?"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Close"
 msgstr "Close"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "The village votes on this change by itself."
+msgstr "The village votes on this change by itself."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "start a change request"
+msgid "Start it"
+msgstr "Start it"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
+msgstr "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -163,10 +538,41 @@ msgstr "Your account, {firstName}"
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "Take this change out."
+msgstr "Take this change out."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "pick a change to edit"
+msgid "Choose a change"
+msgstr "Choose a change"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr "Tokens, by source"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Time to review"
+msgstr "Time to review"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "A different value for one of the changes. The author may take it in."
+msgstr "A different value for one of the changes. The author may take it in."
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "You started this"
+#~ msgstr "You started this"
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "{by} answered"
+#~ msgstr "{by} answered"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the list of changes"
+msgid "The changes"
+msgstr "The changes"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -178,15 +584,86 @@ msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr "Last synced {syncedAt}"
 
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "Change it to: {proposedTo}"
+#~ msgstr "Change it to: {proposedTo}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
+msgstr "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
+
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "close a form without saving"
+msgid "Not now"
+msgstr "Not now"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Now in {announced}"
 msgstr "Now in {announced}"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "open a change request for review"
+msgid "Open for review"
+msgstr "Open for review"
+
+#: client/src/components/modules/SuggestDial.tsx
+#~ msgid "Add to {targetTitle}"
+#~ msgstr "Add to {targetTitle}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the review feed"
+msgid "The review"
+msgstr "The review"
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
 msgstr "Sources that disagree ({flagCount})"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "In review across the village"
+msgstr "In review across the village"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "remove one change"
+msgid "Remove"
+msgstr "Remove"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value a member suggests"
+msgid "Your value"
+msgstr "Your value"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of a suggested edit's reason"
+msgid "Why (optional)"
+msgstr "Why (optional)"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "send one suggestion to a vote alone"
+msgid "Send it on its own"
+msgstr "Send it on its own"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Changes"
+msgstr "Changes"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Move to its own change request"
+msgstr "Move to its own change request"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Add to a new change request"
+msgstr "Add to a new change request"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "add a suggestion to a change request"
+msgid "Add to {targetTitle}"
+msgstr "Add to {targetTitle}"
 
 #: client/src/components/TreasurySync.tsx
 msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
@@ -202,23 +679,99 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr "Reading the invoice tracks."
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the checklist"
+msgid "Before the vote"
+msgstr "Before the vote"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a setting whose value is hidden"
+msgid "Kept private"
+msgstr "Kept private"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Question"
+msgstr "Question"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
 msgstr "Reading your saved numbers."
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a change was saved"
+msgid "Saved."
+msgstr "Saved."
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
 #~ msgstr "Sign out everywhere"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "pick a change request to add to"
+msgid "Which change request"
+msgstr "Which change request"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Main Site"
 msgstr "Main Site"
 
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a switch setting"
+msgid "On"
+msgstr "On"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Anyone here can suggest a change. The village decides."
+msgstr "Anyone here can suggest a change. The village decides."
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "who started a change request"
+msgid "Started by {author}"
+msgstr "Started by {author}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a setting with no value"
+msgid "not set"
+msgstr "not set"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the change request just added to"
+msgid "Open it"
+msgstr "Open it"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the name of a change request"
+msgid "Name"
+msgstr "Name"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "That change request could not be started."
+msgstr "That change request could not be started."
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "heading over a module's settings"
+msgid "Its settings"
+msgstr "Its settings"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a suggested edit that changes a value"
+msgid "Change it to: {proposedTo}"
+msgstr "Change it to: {proposedTo}"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Gather it with other changes and send them to one vote."
+msgstr "Gather it with other changes and send them to one vote."
+
+#: client/src/pages/ChangeRequests.tsx
+#~ msgid "Waits until {until}"
+#~ msgstr "Waits until {until}"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Main Site"
@@ -238,10 +791,30 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Use my browser's language"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of a note box"
+msgid "Your words"
+msgstr "Your words"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Answered"
+msgstr "Answered"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "No language matches"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "I can live with this"
+msgstr "I can live with this"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "which step a change request is on"
+msgid "Step {n} of 4: {words}"
+msgstr "Step {n} of 4: {words}"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -253,6 +826,45 @@ msgctxt "site header"
 msgid "Skip to content"
 msgstr "Skip to content"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Suggested edit"
+msgstr "Suggested edit"
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Something you want to understand before you decide."
+msgstr "Something you want to understand before you decide."
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in or join"
 #~ msgstr "Sign in or join"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "start a new change request"
+msgid "A new change request"
+msgstr "A new change request"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a page loading"
+msgid "Loading…"
+msgstr "Loading…"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "pick which change a note is about"
+msgid "Which change?"
+msgstr "Which change?"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "default title of a suggestion"
+msgid "Change {label}"
+msgstr "Change {label}"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Objection"
+msgstr "Objection"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "edit one change"
+msgid "Edit"
+msgstr "Edit"
