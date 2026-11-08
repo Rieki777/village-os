@@ -28,7 +28,7 @@
  * Pure: no clock, no pool. Who holds which power is the server's to work out
  * through the one gate; this file is handed the member ids.
  */
-import { ENGINE_DEFAULTS, paidTokens, rewardFromTotal, type EngineDials, type ValuationModel } from "./valuation";
+import { ENGINE_DEFAULTS, paidTokens, rewardFromTotal, voiceFor, type EngineDials, type ValuationModel } from "./valuation";
 import type { TokenAmount } from "./workValue";
 import type { PayeeSuggestion, RangeWidth } from "./valuationEngine";
 
@@ -358,7 +358,7 @@ export function storedPayFor(
   const r = rewardFromTotal(model, totalMinor, { cashPct: opts.cashPct });
   if (!opts.eeHeld) return { valueMinor: r.totalMinor, valueTokens: paidTokens(r), cashMinor: r.cashMinor, earnedEquityOwed: 0 };
   const owed = r.equityUnits;
-  const voice = { token: r.voice.token, amount: Math.floor(((r.totalMinor - owed * 100) / 100) * model.voicePerUnit + 1e-9) };
+  const voice = { token: r.voice.token, amount: voiceFor(model, r.totalMinor - owed * 100) };
   const tokens = paidTokens({ voice, payTokens: r.payTokens.filter((t) => t.token !== model.tokens.equity) });
   return { valueMinor: r.totalMinor, valueTokens: tokens, cashMinor: r.cashMinor, earnedEquityOwed: owed };
 }
