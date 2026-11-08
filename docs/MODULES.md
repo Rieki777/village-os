@@ -476,7 +476,7 @@ The living org chart: circles, the roles that orbit them, who holds each role, w
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
 | Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
-| What a village plants | nothing beyond the platform's own layers |
+| What a village plants | `satellite-imagery-key` |
 | What it needs from you | Draw one circle (`content`, `before-enable`) |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
@@ -864,7 +864,7 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 49 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fifteen modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 50 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fifteen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |

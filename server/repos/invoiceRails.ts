@@ -1,0 +1,308 @@
+/**
+ * The invoice rails' four tables (0335): the email to the Sera inbox, Sera's
+ * own invoice records, each member's last reconciled treasury view, and the
+ * disagreements a sync found. Raw SQL, every write keyed so a retry is a no-op.
+ *
+ * Nothing here writes the ledger, the token balances or cash owed: the sync is
+ * read-only by construction, and server/lib/holdingsReconcile.test.ts holds it to
+ * that over every statement this file can send.
+ */
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { SeraInvoice, SyncFlag } from "../../shared/invoiceTrack";
+
+type Queryable = Pool | PoolConnection;
+
+// ── invoice_mail ─────────────────────────────────────────────────────────────
+
+export type MailStatus = "queued" | "sending" | "sent" | "failed";
+
+export interface InvoiceMailRow {
+  id: string;
+  invoiceId: string;
+  invoiceRef: string;
+  userId: string;
+  contentHash: string;
+  toEmail: string;
+  status: MailStatus;
+  messageId: string | null;
+  attempts: number;
+  queuedAt: string;
+  sentAt: string | null;
+}
+
+const toMail = (r: RowDataPacket): InvoiceMailRow => ({
+  id: String(r.id), invoiceId: String(r.invoice_id), invoiceRef: String(r.invoice_ref), userId: String(r.user_id), contentHash: String(r.content_hash),
+  toEmail: String(r.to_email), status: String(r.status) as MailStatus, messageId: r.message_id == null ? null : String(r.message_id),
+  attempts: Number(r.attempts), queuedAt: String(r.queued_at), sentAt: r.sent_at == null ? null : String(r.sent_at),
+});
+
+/** Every email for these invoices, oldest first. */
+export async function mailForInvoices(db: Queryable, invoiceIds: readonly string[]): Promise<InvoiceMailRow[]> {
+  if (invoiceIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `invoice_mail` WHERE `invoice_id` IN (?) ORDER BY `queued_at`, `id`", [invoiceIds]);
+  return rows.map(toMail);
+}
+
+export async function mailForRef(db: Queryable, ref: string): Promise<InvoiceMailRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `invoice_mail` WHERE `invoice_ref` = ? ORDER BY `queued_at`, `id`", [ref]);
+  return rows.map(toMail);
+}
+
+/** One row per (reference, content). Answers false when that row already exists. */
+export async function insertMail(db: Queryable, m: Omit<InvoiceMailRow, "status" | "messageId" | "sentAt" | "attempts">): Promise<boolean> {
+  const [res] = await db.query<ResultSetHeader>(
+    "INSERT IGNORE INTO `invoice_mail` (`id`, `invoice_id`, `invoice_ref`, `user_id`, `content_hash`, `to_email`, `status`, `message_id`, `attempts`, `queued_at`, `sent_at`) " +
+      "VALUES (?,?,?,?,?,?,'queued',NULL,0,?,NULL)",
+    [m.id, m.invoiceId, m.invoiceRef, m.userId, m.contentHash, m.toEmail, m.queuedAt],
+  );
+  return res.affectedRows === 1;
+}
+
+/** The most attempts a row ever gets, the member's presses and the retry together. */
+export const MAIL_ATTEMPT_CAP = 3;
+
+/**
+ * Takes the next attempt on a row that has not gone out, marking it
+ * `sending` so neither a second press nor the retry can take it meanwhile. Answers the attempt number, or 0 when it was sent or lost the race. */
+export async function claimMailAttempt(db: Queryable, id: string, seenAttempts: number): Promise<number> {
+  const [res] = await db.query<ResultSetHeader>(
+    "UPDATE `invoice_mail` SET `attempts` = `attempts` + 1, `status` = 'sending' WHERE `id` = ? AND `status` IN ('queued', 'failed') AND `attempts` = ? AND `attempts` < ?",
+    [id, seenAttempts, MAIL_ATTEMPT_CAP],
+  );
+  return res.affectedRows === 1 ? seenAttempts + 1 : 0;
+}
+
+export async function settleMail(db: Queryable, id: string, r: { status: MailStatus; messageId: string | null; sentAt: string | null }): Promise<void> {
+  await db.query("UPDATE `invoice_mail` SET `status` = ?, `message_id` = ?, `sent_at` = ? WHERE `id` = ? AND `status` <> 'sent'", [r.status, r.messageId, r.sentAt, id]);
+}
+
+/**
+ * Rows the provider refused, for the daily retry, capped. A `queued` row is
+ * left: its send may have been taken and not yet settled, and sending it
+ * again could deliver the same invoice twice.
+ */
+export async function unsentMail(db: Queryable, maxAttempts: number, limit: number): Promise<InvoiceMailRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT * FROM `invoice_mail` WHERE `status` = 'failed' AND `attempts` < ? ORDER BY `queued_at` LIMIT ?",
+    [maxAttempts, limit],
+  );
+  return rows.map(toMail);
+}
+
+// ── sera_invoice_reports ─────────────────────────────────────────────────────
+
+export type MatchState = "matched" | "unmatched" | "ambiguous";
+
+export interface SeraReportRow extends SeraInvoice {
+  matchState: MatchState;
+  matchedInvoiceId: string | null;
+  matchBy: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+const toReport = (r: RowDataPacket): SeraReportRow => ({
+  id: String(r.sera_id), reference: r.reference == null ? null : String(r.reference), member: r.member_code == null ? null : String(r.member_code),
+  moon: r.moon == null ? null : String(r.moon), currency: String(r.currency), amountMinor: Number(r.amount_minor),
+  status: String(r.status) as SeraInvoice["status"], receivedAt: String(r.received_at), statusAt: String(r.status_at), changedAt: String(r.changed_at),
+  matchState: String(r.match_state) as MatchState, matchedInvoiceId: r.matched_invoice_id == null ? null : String(r.matched_invoice_id),
+  matchBy: r.match_by == null ? null : String(r.match_by), firstSeenAt: String(r.first_seen_at), lastSeenAt: String(r.last_seen_at),
+});
+
+/**
+ * One Sera record, written or refreshed by Sera's id. A record once matched
+ * keeps its match while its reference and code-name stay the same: a later
+ * read can update Sera's status and amount (which the sync then compares). A
+ * changed reference or code-name takes the new match the caller computed.
+ */
+export async function upsertSeraReport(db: Queryable, r: SeraInvoice, match: { state: MatchState; invoiceId: string | null; by: string | null }, seenAt: string): Promise<void> {
+  await db.query(
+    "INSERT INTO `sera_invoice_reports` (`sera_id`, `reference`, `member_code`, `moon`, `currency`, `amount_minor`, `status`, `received_at`, `status_at`, `changed_at`, " +
+      "`match_state`, `matched_invoice_id`, `match_by`, `first_seen_at`, `last_seen_at`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) " +
+      // MySQL assigns left to right, so the match is decided first, against the
+      // reference and code-name still stored: a record whose reference or member
+      // changed is matched again, never kept on the old invoice.
+      "ON DUPLICATE KEY UPDATE " +
+      "`match_by` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `match_by`, VALUES(`match_by`)), " +
+      "`matched_invoice_id` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `matched_invoice_id`, VALUES(`matched_invoice_id`)), " +
+      "`match_state` = IF(`match_state` = 'matched' AND `reference` <=> VALUES(`reference`) AND `member_code` <=> VALUES(`member_code`), `match_state`, VALUES(`match_state`)), " +
+      "`reference` = VALUES(`reference`), `member_code` = VALUES(`member_code`), `moon` = VALUES(`moon`), `currency` = VALUES(`currency`), " +
+      "`amount_minor` = VALUES(`amount_minor`), `status` = VALUES(`status`), `status_at` = VALUES(`status_at`), `changed_at` = VALUES(`changed_at`), " +
+      "`last_seen_at` = VALUES(`last_seen_at`)",
+    [r.id, r.reference, r.member, r.moon, r.currency, r.amountMinor, r.status, r.receivedAt, r.statusAt, r.changedAt, match.state, match.invoiceId, match.by, seenAt, seenAt],
+  );
+}
+
+export async function seraReportsForInvoices(db: Queryable, invoiceIds: readonly string[]): Promise<SeraReportRow[]> {
+  if (invoiceIds.length === 0) return [];
+  // Newest change first: a caller reading one record per invoice reads the latest.
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `sera_invoice_reports` WHERE `matched_invoice_id` IN (?) ORDER BY `changed_at` DESC, `sera_id`", [invoiceIds]);
+  return rows.map(toReport);
+}
+
+export async function unmatchedSeraReports(db: Queryable, limit = 200): Promise<SeraReportRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `sera_invoice_reports` WHERE `match_state` <> 'matched' ORDER BY `received_at` DESC LIMIT ?", [limit]);
+  return rows.map(toReport);
+}
+
+/** The newest `changed_at` seen, for the next read's `since`. */
+export async function seraReportsSince(db: Queryable): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT MAX(`changed_at`) AS `at` FROM `sera_invoice_reports`");
+  return rows[0]?.at == null ? null : String(rows[0].at);
+}
+
+// ── treasury_sync_views ──────────────────────────────────────────────────────
+
+export async function syncViewOf(db: Queryable, userId: string): Promise<{ view: unknown; syncedAt: string; trigger: string } | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `treasury_sync_views` WHERE `user_id` = ?", [userId]);
+  const r = rows[0];
+  if (!r) return null;
+  try {
+    return { view: JSON.parse(String(r.view_json)), syncedAt: String(r.synced_at), trigger: String(r.sync_trigger) };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSyncView(db: Queryable, userId: string, view: unknown, syncedAt: string, trigger: string): Promise<void> {
+  await db.query(
+    "INSERT INTO `treasury_sync_views` (`user_id`, `view_json`, `synced_at`, `sync_trigger`) VALUES (?,?,?,?) " +
+      "ON DUPLICATE KEY UPDATE `view_json` = VALUES(`view_json`), `synced_at` = VALUES(`synced_at`), `sync_trigger` = VALUES(`sync_trigger`)",
+    [userId, JSON.stringify(view), syncedAt, trigger],
+  );
+}
+
+// ── treasury_sync_flags ──────────────────────────────────────────────────────
+
+export interface FlagRow {
+  id: string;
+  dedupeKey: string;
+  userId: string | null;
+  kind: string;
+  subject: string;
+  village: string;
+  other: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+}
+
+const toFlag = (r: RowDataPacket): FlagRow => ({
+  id: String(r.id), dedupeKey: String(r.dedupe_key), userId: r.user_id == null ? null : String(r.user_id), kind: String(r.kind), subject: String(r.subject),
+  village: String(r.village_value), other: String(r.other_value), firstSeenAt: String(r.first_seen_at), lastSeenAt: String(r.last_seen_at),
+  resolvedAt: r.resolved_at == null ? null : String(r.resolved_at),
+});
+
+/** The key a flag is stored under: the member's id first, so two members' equal differences stay two flags. */
+export const storedFlagKey = (userId: string | null, f: Pick<SyncFlag, "dedupeKey">) => `${userId ?? "-"}:${f.dedupeKey}`.slice(0, 191);
+
+/**
+ * Writes the flags one sync saw for one member (or for the village, userId
+ * null): a new difference is one new row, a seen one is touched, a reopened
+ * one is opened again. Every OPEN flag of that owner and those kinds the sync
+ * did not see is marked resolved, and kept.
+ */
+export async function writeFlags(
+  db: Queryable,
+  userId: string | null,
+  compared: ReadonlyArray<{ kind: string; subjects: readonly string[] }>,
+  flags: readonly SyncFlag[],
+  at: string,
+  newId: () => string,
+): Promise<void> {
+  const keys: string[] = [];
+  for (const f of flags) {
+    const key = storedFlagKey(userId, f);
+    keys.push(key);
+    await db.query(
+      "INSERT INTO `treasury_sync_flags` (`id`, `dedupe_key`, `user_id`, `kind`, `subject`, `village_value`, `other_value`, `first_seen_at`, `last_seen_at`, `resolved_at`) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,NULL) ON DUPLICATE KEY UPDATE `last_seen_at` = VALUES(`last_seen_at`), `resolved_at` = NULL",
+      [newId(), key, userId, f.kind, f.subject.slice(0, 120), f.village.slice(0, 100), f.other.slice(0, 100), at, at],
+    );
+  }
+  // Only a subject this sync compared on a fresh read of both sides may close
+  // a flag: a token or invoice it could not compare keeps its flag open.
+  const owner = userId === null ? "`user_id` IS NULL" : "`user_id` = ?";
+  for (const c of compared) {
+    if (c.subjects.length === 0) continue;
+    const params: unknown[] = userId === null ? [at, c.kind, c.subjects] : [at, userId, c.kind, c.subjects];
+    let sql = `UPDATE \`treasury_sync_flags\` SET \`resolved_at\` = ? WHERE ${owner} AND \`kind\` = ? AND \`subject\` IN (?) AND \`resolved_at\` IS NULL`;
+    if (keys.length) {
+      sql += " AND `dedupe_key` NOT IN (?)";
+      params.push(keys);
+    }
+    await db.query(sql, params);
+  }
+}
+
+export async function resolveFlag(db: Queryable, storedKey: string, at: string): Promise<void> {
+  await db.query("UPDATE `treasury_sync_flags` SET `resolved_at` = ? WHERE `dedupe_key` = ? AND `resolved_at` IS NULL", [at, storedKey]);
+}
+
+export async function openFlags(db: Queryable, limit = 500): Promise<FlagRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `treasury_sync_flags` WHERE `resolved_at` IS NULL ORDER BY `first_seen_at` DESC LIMIT ?", [limit]);
+  return rows.map(toFlag);
+}
+
+export async function openFlagsFor(db: Queryable, userId: string): Promise<FlagRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `treasury_sync_flags` WHERE `user_id` = ? AND `resolved_at` IS NULL ORDER BY `first_seen_at` DESC", [userId]);
+  return rows.map(toFlag);
+}
+
+// ── The cash-owed rows an invoice's payment wrote, for its reference ─────────
+
+/**
+ * The bank reference of the transfer that paid an invoice's rows, read back
+ * out of the note the transfers door writes (`cashTransferNote`,
+ * shared/cashOwed.ts), when every row carries the same one.
+ */
+export async function paidReferenceOf(db: Queryable, cashOwedIds: readonly string[]): Promise<string | null> {
+  if (cashOwedIds.length === 0) return null;
+  const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `paid_note` AS `note` FROM `cash_owed` WHERE `id` IN (?) AND `state` = 'paid'", [cashOwedIds]);
+  const refs = new Set(rows.map((r) => /Reference: (.+)$/.exec(String(r.note ?? ""))?.[1]?.trim() ?? null));
+  return refs.size === 1 ? (Array.from(refs)[0] ?? null) : null;
+}
+
+/** Who marked an invoice's rows paid, when one person marked them all. For a live label only. */
+export async function paidByOf(db: Queryable, cashOwedIds: readonly string[]): Promise<string | null> {
+  if (cashOwedIds.length === 0) return null;
+  const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `paid_by` AS `by` FROM `cash_owed` WHERE `id` IN (?) AND `state` = 'paid'", [cashOwedIds]);
+  return rows.length === 1 && rows[0].by != null ? String(rows[0].by) : null;
+}
+
+// ── Reading moon_invoices for the rails (ids only; the row shape is moonRecaps') ──
+
+/** A member's invoices that are not void, newest first, capped. */
+export async function liveInvoiceIdsOf(db: Queryable, userId: string, limit = 24): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `id` FROM `moon_invoices` WHERE `user_id` = ? AND `status` <> 'void' ORDER BY `cycle_id` DESC, `revision` DESC LIMIT ?",
+    [userId, limit],
+  );
+  return rows.map((r) => String(r.id));
+}
+
+/** The invoice a reference names: `<payer key>-<sequence>`, the shape `billRef` writes. */
+export async function invoiceIdByRef(db: Queryable, ref: string): Promise<string | null> {
+  const m = /^(.+)-(\d{1,9})$/.exec(ref);
+  if (!m) return null;
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `id` FROM `moon_invoices` WHERE `payer_key` = ? AND `bill_ref_seq` = ? ORDER BY `revision` DESC LIMIT 1",
+    [m[1], Number(m[2])],
+  );
+  return rows[0] ? String(rows[0].id) : null;
+}
+
+/** Every member with an invoice that is not void, for the daily sync. */
+export async function membersWithInvoices(db: Queryable, limit = 2000): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT DISTINCT `user_id` FROM `moon_invoices` WHERE `status` <> 'void' LIMIT ?", [limit]);
+  return rows.map((r) => String(r.user_id));
+}
+
+/** Every invoice of a member that a Sera record is attached to, void ones included: Sera paying a void invoice is a difference. */
+export async function invoiceIdsWithSeraReportsOf(db: Queryable, userId: string): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT DISTINCT r.`matched_invoice_id` AS `id` FROM `sera_invoice_reports` r JOIN `moon_invoices` i ON i.`id` = r.`matched_invoice_id` WHERE i.`user_id` = ? LIMIT 500",
+    [userId],
+  );
+  return rows.map((r) => String(r.id));
+}

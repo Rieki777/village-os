@@ -123,6 +123,16 @@ export interface VariableDef {
   /** For `choice`: the allowed values and how to label them. */
   choices?: Array<{ value: string; label: string; hint?: string }>;
   unit?: string;
+  /**
+   * WHAT A BLANK NUMBER MEANS, for a number dial that may be left blank, in a
+   * few words ("no ceiling"). Absent, blank is not an answer of its own and
+   * reads as 0. Present, blank and 0 are different answers, and the dial is
+   * read with `optionalNumberVar` (server/lib/variables.ts), which returns
+   * null for blank. Redemption's money ceilings are why (Rye, 2026-11-05):
+   * caps fail closed, so 0 must mean zero, and "no ceiling" needs its own
+   * spelling.
+   */
+  blank?: string;
   /** Ring override. Absent = derived by ringOf() from category/key rules. */
   ring?: VariableRing;
   /** Apply-timing override. Absent = derived by applyTimingOf(). */
@@ -611,9 +621,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most in one redemption, in money",
     description:
-      "The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.",
+      "The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -622,9 +633,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most one member may redeem per cycle, in money",
     description:
-      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.",
+      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -643,9 +655,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most the village will redeem per cycle, in money",
     description:
-      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.",
+      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -2902,6 +2915,33 @@ export const VARIABLES: VariableDef[] = [
     max: 200,
     unit: "entries",
   },
+  /*
+   * WHERE THE LAND'S SATELLITE PICTURE COMES FROM (readiness R171). This was
+   * the host variable SATELLITE_PROVIDER alone, so a founder on a hosted
+   * village could not choose one. Blank defers to that variable, so a village
+   * that set it there keeps it. Each keyed provider's key has its own slot in
+   * Admin, Integrations (server/lib/satellite.ts, `keySlot`), and the licence
+   * reading for each lives beside it there. The choices are the providers that
+   * file knows, in its order; satellite.test.ts holds the two lists together.
+   */
+  {
+    key: "village.satellite_provider",
+    category: "Village",
+    label: "Where the land's satellite picture comes from",
+    description:
+      "Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.",
+    type: "choice",
+    default: "",
+    choices: [
+      { value: "", label: "Left to the host", hint: "Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground." },
+      { value: "village-upload", label: "The village's own aerial photograph", hint: "No provider and no key: an admin uploads the picture." },
+      { value: "esri-open", label: "Esri World Imagery, no key", hint: "Kept on the village's own volume." },
+      { value: "sentinel2", label: "Copernicus Sentinel-2", hint: "Needs the address of a Sentinel-2 WMS service." },
+      { value: "mapbox", label: "Mapbox Static Images", hint: "Needs a Mapbox token." },
+      { value: "google", label: "Google Maps Static", hint: "Needs a Google Maps Static API key." },
+      { value: "esri", label: "Esri World Imagery", hint: "Needs an ArcGIS API key." },
+    ],
+  },
   {
     // WHERE THIS VILLAGE STARTS COUNTING ITS OWN MOONS.
     //
@@ -3590,6 +3630,29 @@ const UNLOCK_DEFS: VariableDef[] = (Object.entries(STAGE_UNLOCKS) as Array<[stri
 );
 
 VARIABLES.push(...STAGE_MULTIPLIER_DEFS, ...STAGE_QUEST_DEFS, ...UNLOCK_DEFS);
+
+/**
+ * The village's default language (internal spec i18n, US3; C8). Used only when
+ * a visitor's browser names no language Village OS offers: a member's own
+ * choice and the browser's languages both come first. Open ring, so every
+ * member sees it and may propose a change, and a vote can move it (I.3, 0.1).
+ * Each choice is labelled in its own language.
+ */
+VARIABLES.push({
+  key: "village.default_locale",
+  category: "Language",
+  label: "Default language",
+  description:
+    "The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.",
+  type: "choice",
+  default: "en",
+  // Literal so the generated docs can read them; shared/i18nDefaultLocale.test.ts
+  // holds them equal to the offered languages, each named in its own language.
+  choices: [
+    { value: "en", label: "English" },
+    { value: "es", label: "Español" },
+  ],
+});
 
 /** Lookup by key, for validation and defaults. */
 export const VARIABLES_BY_KEY: Record<string, VariableDef> = Object.fromEntries(

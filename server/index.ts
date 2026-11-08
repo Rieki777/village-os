@@ -67,6 +67,7 @@ import { investorPacketEmail } from "./lib/investorPacketMail";
 import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import {
+  highestTierGrant,
   NOT_YET_WIRED,
   POWERS,
   powersForReading,
@@ -74,6 +75,7 @@ import {
   type PowerHolder,
 } from "./lib/capabilityRegistry";
 import { allVariables, boolVar, loadVariables, numberVar, rawValue, setVariable, storedOverride, stringVar, wireVariableGuard } from "./lib/variables";
+import { blankZeroRedemptionCeilings } from "./lib/redemptionCeilings";
 import { memberJoined } from "./lib/arrival";
 import { climbLadder, freezeStandingAboveTheDoor, questsThatCarriedPastTheDoor, type LadderStage } from "./lib/admission";
 import { adminGateWasConsulted, markAdminGate } from "./lib/adminGate";
@@ -111,6 +113,7 @@ import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
 import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
@@ -209,6 +212,7 @@ import { exportMemberJournal, register as registerJournalRoutes } from "./routes
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { register as registerI18nRoutes } from "./routes/i18n";
+import { setShellLang, shellLocale } from "./lib/i18nShell";
 import { register as registerSessionCardRoutes } from "./routes/sessionCard";
 import { exportMemberSessions, register as registerLiveSessionsRoutes } from "./routes/liveSessions";
 import { register as registerSessionTasksRoutes } from "./routes/sessionTasks";
@@ -222,9 +226,13 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerValuationRoutes } from "./routes/valuation";
+import { earnedEquityMeaningWritten } from "./lib/valuationStore";
 import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
 import { register as registerMoonReviewSettingsRoutes } from "./routes/moonReviewSettings";
 import { register as registerOwnHoldingsRoutes } from "./routes/ownHoldings";
+import { register as registerInvoiceRailsRoutes, invoiceRailsDeps } from "./routes/invoiceRails";
+import { emailInvoiceToSera } from "./lib/invoiceMail";
 import { register as registerRewardMomentRoutes } from "./routes/rewardMoment";
 import { claimsAnnouncedHere } from "./lib/rewardMoment";
 import { feedOrigin as feedOriginOf, feedUidHost } from "./lib/feedOrigin";
@@ -251,7 +259,8 @@ import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
 import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
 import { register as registerCommsEventRoutes } from "./routes/commsEvents";
-import { resolveGoogleConfig } from "./lib/oauthGoogle";
+import { googleCredentialEnv, resolveGoogleConfig } from "./lib/oauthGoogle";
+import { satelliteKeyCards } from "./lib/satellite";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
   decodeToken,
@@ -479,7 +488,8 @@ import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { blankFlatRoleMint } from "./lib/flatRoleMint";
-import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
+import { enableEarnedEquityRules } from "./lib/earnedEquityRules";
+import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim, usableVoiceSecret, voiceSecretWriteRefusal } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
 import { starterTrainingModules } from "./lib/trainingStarter";
@@ -698,7 +708,7 @@ import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemp
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { register as registerVillageExportRoutes } from "./routes/villageExport";
-import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
@@ -721,7 +731,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, BASE_RPC_CARD, ROOT_SLOT_CARDS,
+  allSecretStatuses, BASE_RPC_CARD, ERROR_WEBHOOK_CARD, GOOGLE_CARDS, HYPHA_VOICE_CARD, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -917,7 +927,7 @@ import { latestSettlementRefusals } from "./repos/settlementBallots";
 import { CYCLE_SETTLEMENT } from "../shared/moonSettlement";
 import { memberMoonFlows, moonOneCycle, withVillageMoons } from "./lib/villageMoon";
 import { precompressedAssets } from "./lib/precompressedAssets";
-import { retireContentCopy } from "./lib/retiredContentCopy";
+import { GRATITUDE_PAY_COPY_RETIRED, retireContentCopy } from "./lib/retiredContentCopy";
 
 const BCRYPT_SALT_ROUNDS = 10;
 
@@ -1937,6 +1947,7 @@ async function ensureDataFiles() {
   await runOnce("canonicalize-regen-units", canonicalizeRegenUnits);
   await runOnce("retire-legacy-peg-copy", retireLegacyPegCopy);
   await runOnce("retire-blended-token-copy", retireBlendedTokenCopy);
+  await runOnce("retire-gratitude-pay-copy-2026-11-01", async () => { const c = contentRepo.get(); if (c && typeof c === "object" && retireContentCopy(c, GRATITUDE_PAY_COPY_RETIRED)) await contentRepo.put(c); }); // Rye, 2026-11-01: Gratitude names only the recognition token
   await runOnce("blank-seeded-dues-note-2026-10-22", blankSeededDuesNote);
   await runOnce("keep-used-command-centre-plan-2026-10-22", () => keepFirstPlanIfUsed(journeyRepo).then(() => undefined));
   // The ladder's default sentences went neutral: a village that already holds its page words keeps its path and stage words.
@@ -1967,7 +1978,9 @@ async function ensureDataFiles() {
   await runOnce("comms-address-book-backfill-2026-10", async () => { await backfillContacts({ getPool, members, submissions: submissionsRepo }); }); // Village Comms 5.3: grants nothing
   await runOnce("cash-pay-to-treasury-2026-10-30", () => grantCashPayToTreasury(rolesRepo).then(() => undefined)); // Rye, 2026-10-30
   await runOnce("moon-review-keys-2026-11-03", () => grantMoonReviewKeys(rolesRepo, MOON_REVIEW_GRANTS).then(() => undefined)); // decisions 18 and 19
+  await runOnce("role-pay-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, ROLE_PAY_GRANTS, "role.pay on the Treasury role (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("steward-circle-role-powers-2026-11-05", () => grantMoonReviewKeys(rolesRepo, STEWARD_CIRCLE_GRANTS, "Steward Circle's role and adoption powers (Rye, 2026-11-01)").then(() => undefined));
+  await runOnce("redemption-ceilings-blank-2026-11-05", () => blankZeroRedemptionCeilings(getPool()).then((keys) => { if (keys.length) console.log(`[redemption] a stored 0 ceiling became blank, which is no ceiling: ${keys.join(", ")}`); })); // Rye, 2026-11-05: 0 now means zero
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -3073,7 +3086,7 @@ const rolesCarrying = (capability: string) => rolesCarryingCapability(loadRoles(
  * founder seated in a live role, is closed to it. Money and approvals are a
  * person's.
  */
-const AGENT_NEVER_KEYS = ["cash.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
+const AGENT_NEVER_KEYS = ["cash.pay", "role.pay", "moon.approve", "moon.approve_alone", "moon.approve_own", "steward.veto"] as const;
 
 async function capabilityCtx(user: any) {
   // An agent account holds no power from a role or a badge, whichever writer
@@ -3955,7 +3968,7 @@ function deploymentOrigin(): string {
  * FRONTEND_URL and never the observed origin: see the note in oauthGoogle.ts.
  */
 const googleSignInAvailability = () =>
-  resolveGoogleConfig(process.env, String(process.env.FRONTEND_URL ?? ""));
+  resolveGoogleConfig(googleCredentialEnv(), String(process.env.FRONTEND_URL ?? "")); // the client pair from Admin, Integrations first (R171)
 /** Exit and delete: a password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
 const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verifyPassword, googleAvailable: () => googleSignInAvailability().available, members: { update: (id, mutate) => members.update(id, mutate) } });
 
@@ -4890,6 +4903,7 @@ async function startServer() {
   await seedEconomy(getPool(), villageId());
   await loadTokenRegistry(getPool());
   await runOnce("flat-role-mint-off-2026-11-01", () => blankFlatRoleMint(getPool()).then(() => undefined)); // Rye, 2026-11-01: no flat role mint, from the next cycle
+  await runOnce("earned-equity-rules-on-2026-11-05", () => enableEarnedEquityRules(getPool()).then(() => undefined)); // Rye, 2026-11-05: on and blank, meaning set in Admin
   // Suggested class tags on work that already exists, so a fresh village does
   // not meet five classes that appear to open nothing. Only rows where
   // `archetypes IS NULL` are touched, so a tag a human confirmed or cleared is
@@ -6414,7 +6428,7 @@ async function startServer() {
       return res.status(429).json({ error: "too many webhook deliveries; retry shortly" });
     }
 
-    const secret = String(process.env.HYPHA_VOICE_WEBHOOK_SECRET ?? "").trim();
+    const secret = usableVoiceSecret(); // typed into Admin first, the host variable second (R171); "" when the check refuses it
     if (!secret) return res.status(503).json({ error: "this village has no claim receiver configured" });
 
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
@@ -17186,7 +17200,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, HYPHA_VOICE_CARD, ...GOOGLE_CARDS, ERROR_WEBHOOK_CARD, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {
@@ -17220,7 +17234,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   }
 
   function integrationCards(): IntegrationCard[] {
-    const platform: IntegrationCard[] = PLATFORM_CARDS.map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true }));
+    const platform: IntegrationCard[] = [...PLATFORM_CARDS, ...satelliteKeyCards()].map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true })); // R171: the chosen imagery provider's key card
     const listings: IntegrationCard[] = vendorModules().flatMap((m): IntegrationCard[] => {
       const support = supportRoute(m);
       const base = {
@@ -17315,6 +17329,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     // value: "" clears the admin-typed key (env fallback, if any, resumes).
+    const voiceRefusal = voiceSecretWriteRefusal(key, value); if (voiceRefusal) return res.status(409).json({ error: voiceRefusal }); // R171: the voice secret's boot check, held at the write
     const asked = await plantingDoor(key, value, actor); if (asked) return res.status(202).json(asked); // after launch a keystone waits for a co-sign (server/routes/plantingRequests.ts)
     await putSecret(getPool(), key, value, actor);
     void recordEvent(getPool(), {
@@ -18210,7 +18225,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
   registerGuideChoiceRoutes(app, { authedUser, members, overLimit, villageGuideName: () => String(getWorkWithUs().assistantName ?? "") });
-  registerI18nRoutes(app, { catalogDir: path.resolve(__dirname, ...(process.env.NODE_ENV === "production" ? [] : ["..", "dist"]), "i18n"), pseudoAllowed: () => process.env.NODE_ENV !== "production" });
+  registerI18nRoutes(app, { catalogDir: path.resolve(__dirname, ...(process.env.NODE_ENV === "production" ? [] : ["..", "dist"]), "i18n"), pseudoAllowed: () => process.env.NODE_ENV !== "production", authedUser, members, overLimit });
   registerCompanionRoutes(app, { authedUser, guardCapability, overLimit, members, getPool, village: () => ({ name: mergedConfig().project.name, guideName: guidePromptName(getWorkWithUs().assistantName), timeZone: getSeasonConfig().timezone }) });
   registerMemberAskRoutes(app, { authedUser, getPool, members, notify, overLimit, firstName });
   registerLiveSessionsRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, notify, notifyAdmins, circlesRepo, lapseContext, seasonState, notifyDeps, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName });
@@ -18234,9 +18249,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
-  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
-  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
+  registerValuationRoutes(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s }); // 0336
+  const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
+  registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
+  registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, notify, inboxSigners: async () => [...(await liveHoldersOf("cash.pay")), ...(await liveHoldersOf("steward.veto"))] }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
   registerOwnHoldingsRoutes(app, { authedUser, getPool });
+  registerInvoiceRailsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, rolesCarrying, roleHolders: loadRoleHolders, ...invoiceRails });
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
@@ -18552,6 +18570,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       season: seasonState(),
       ...brochureConfig(),
       site: siteWords(contentRepo.get() ?? null, m),
+      defaultLocale: String(stringVar("village.default_locale")), // the language a visitor gets when the browser names none we offer (spec i18n US3)
     });
   });
 
@@ -22525,6 +22544,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
   /**
@@ -24188,7 +24208,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const cap = capability as Capability;
     const refused = typeRefusesCapability("power_grant", capability);
     if (refused) return res.status(409).json({ error: refused });
-    if (TRANSFERABLE[cap] !== true) {
+    // Rye, 2026-11-06: five keys the village never holds still move onto a
+    // role, at the village's highest tier only (HIGHEST_TIER_GRANTS).
+    const highestOnly = highestTierGrant(cap);
+    if (TRANSFERABLE[cap] !== true && !highestOnly) {
       // 0103: the same two reasons the transfer route tells apart, told apart
       // here for the same reason.
       const heldBack = WIRED_BUT_HELD_BACK[capability];
@@ -24199,7 +24222,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
             `It names something a member does for themselves, or plumbing the deployment has to keep reachable.`,
       });
     }
-    const entry = POWERS.find((p) => p.capability === cap);
+    const entry = POWERS.find((p) => p.capability === cap) ?? highestOnly;
     if (!entry) {
       return res.status(409).json({
         error: `Nothing in the product asks for "${capability}" yet, so there is no power here to give anybody.`,
@@ -24245,10 +24268,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const method: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-    const dials = dialsForMethod(method, {
+    const ordinaryDials = dialsForMethod(method, {
       unityPct: Math.max(0, numberVar("governance.unity_pct")),
       quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
     });
+    const dials = highestOnly
+      ? raiseDials(ordinaryDials, highestTierBar(thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key))))
+      : ordinaryDials;
     const snapshot = weightModeNow();
     if (snapshot.mode === "token") {
       const problem = weightTokenProblem(snapshot.token ?? "");
@@ -24274,9 +24300,17 @@ Send an empty drafts array when you are still listening. A role payload is {name
         ? `${role.name ?? roleId} would be the first role in this village to carry this one. No other role grants it today.`
         : "",
       "",
-      `## What this is a step toward`,
-      "",
-      `A role has to already carry a power before the village can vote to hold it, because a holder that cannot act is not a holder. If this carries, the village can go on to ask to hold this one, and it can also leave it here. Both are whole answers.`,
+      ...(highestOnly
+        ? [
+            `## Why the bar is the highest one`,
+            "",
+            `This is one of the powers the village never holds itself, and it moves onto a role only by the whole village, so it is decided at the village's highest tier.`,
+          ]
+        : [
+            `## What this is a step toward`,
+            "",
+            `A role has to already carry a power before the village can vote to hold it, because a holder that cannot act is not a holder. If this carries, the village can go on to ask to hold this one, and it can also leave it here. Both are whole answers.`,
+          ]),
       "",
       `## Why this role`,
       "",
@@ -26279,7 +26313,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       meta.image = origin ? `${origin}/api/og/quest/${encodeURIComponent(quest.id)}` : "";
       meta.imageSize = { width: OG_WIDTH, height: OG_HEIGHT };
     }
-    const html = spliceMeta(shell, meta);
+    const html = withShellLocale(spliceMeta(shell, meta), req, res);
     // index.html is never cached hard here: a member holding a stale shell
     // asks for a bundle hash that no longer exists, which is a white screen.
     res.type("html").set("Cache-Control", "no-cache").send(html);
@@ -26296,8 +26330,14 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(500).send(`Server error: could not serve index.html from ${indexPath}`);
     }
     const meta = sitePageMeta(req.path, requestOrigin(req), mergedConfig(), contentRepo.get() ?? null, !brochurePageServed(req.path));
-    res.type("html").set("Cache-Control", "no-cache").send(spliceMeta(shellWithTheme(shell, getBrand), meta));
+    res.type("html").set("Cache-Control", "no-cache").send(withShellLocale(spliceMeta(shellWithTheme(shell, getBrand), meta), req, res));
   });
+
+  /** `<html lang dir>` for this visitor (spec i18n R16): the cookie, their browser, the village default. */
+  function withShellLocale(html: string, req: express.Request, res: express.Response): string {
+    res.vary("Cookie").vary("Accept-Language");
+    return setShellLang(html, shellLocale({ cookie: req.headers.cookie, acceptLanguage: req.headers["accept-language"], villageDefault: String(stringVar("village.default_locale")) }));
+  }
 
   // Terminal error handler. Express 5 forwards a rejected handler promise
   // here by itself, on every verb. JSON, because every consumer is the SPA.

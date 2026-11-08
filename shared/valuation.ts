@@ -209,6 +209,16 @@ const versionWords = (v: number): string => (v === 0 ? "platform default (no vil
 const moneyIn = (currency: string) => (minor: number): string => formatMoney(minor, currency);
 const signed = (money: (m: number) => string, minor: number): string => (minor < 0 ? `−${money(-minor)}` : `+${money(minor)}`);
 
+/**
+ * Voice for an amount paid, in minor units: everything paid times the village's
+ * Voice per unit, held to the hundredth below. Voice carries two decimals
+ * (constitution II.28), so a village that scales Voice down (Rye, 2026-11-08:
+ * 1 Voice per 1,000 colones) is never rounded to a whole Voice it did not pay.
+ */
+export function voiceFor(model: ValuationModel, paidMinor: number): number {
+  return Math.floor((Math.max(0, paidMinor) / 100) * model.voicePerUnit * 100 + 1e-7) / 100;
+}
+
 /** The total reward as a multiple of the base price: 2.1 on the default (base + 100% Earned Equity + 10% Credits). */
 export function rewardMultiple(model: ValuationModel): number {
   return hundredths((100 + model.reward.equityMatchPct + model.reward.creditsBonusPct) / 100);
@@ -259,7 +269,7 @@ function payOut(
   const cashUnits = Math.ceil(cashMinor / 100 - 1e-9);
   const credits = Math.max(0, baseUnits - cashUnits) + bonusUnits;
   const totalMinor = cashMinor + (credits + equityUnits) * 100;
-  const voice = { token: model.tokens.voice, amount: down((totalMinor / 100) * model.voicePerUnit) };
+  const voice = { token: model.tokens.voice, amount: voiceFor(model, totalMinor) };
   const lines: ValuationLine[] = [
     { key: "cash", label: "Cash", working: cashWorking, result: money(cashMinor) },
     {

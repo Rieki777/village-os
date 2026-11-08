@@ -39,6 +39,7 @@ import {
   type PayeePrice,
   type ValuationModel,
   type WorkInputs,
+  voiceFor,
 } from "./valuation";
 import { exponentOf } from "./money";
 
@@ -179,7 +180,7 @@ export function suggestValuation(model: ValuationModel, work: WorkInputs, ctx: E
     const held = ctx.eeMeaningWritten ? 0 : p.equityUnits;
     const credits = p.payTokens.find((t) => t.token === model.tokens.credits)?.amount ?? 0;
     const paidNowMinor = p.totalMinor - held * 100;
-    const voice = Math.floor((paidNowMinor / 100) * model.voicePerUnit + 1e-9);
+    const voice = voiceFor(model, paidNowMinor);
 
     // The range: the total at the person's own low and high estimates, or the single-estimate spread.
     const why: string[] = [];

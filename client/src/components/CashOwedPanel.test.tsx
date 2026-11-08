@@ -41,7 +41,8 @@ describe("the cash card", () => {
   it("renders nothing for a member owed nothing, and never asks for the books", async () => {
     const calls = routes({ "GET /api/me/cash-owed": { entries: [], mayPay: false } });
     const { container } = render(<CashOwedPanel />);
-    await waitFor(() => expect(calls.length).toBe(1));
+    // The cash rows and the invoice track (invoice rails); never the books.
+    await waitFor(() => expect(calls.length).toBe(2));
     expect(container.innerHTML).toBe("");
     expect(calls.some((c) => c.url === "/api/cash-owed/queue")).toBe(false);
     expect(container.querySelector('a[href="/cash-payouts"]')).toBeNull();
