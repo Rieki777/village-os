@@ -14,15 +14,48 @@ import type { Plugin } from "vite";
  * form, using the same compiler, here in Node. The browser then never needs
  * a compiler: catalogs from the server arrive compiled too.
  *
- * The match is the macro's exact output shape: a 6-character id followed by a
- * double-quoted message. A message that does not compile fails the build and
- * names its id, the same strictness the catalog build applies to translations.
+ * The match is the macro's exact output shape: a 6-character id, then, for the
+ * JSX macros (`<Trans>`, `<Plural>`), any `values` and `components` blocks,
+ * then the message, double-quoted or single-quoted (the macro single-quotes a
+ * message that holds a double quote). Matching only id-then-message missed
+ * every `<Trans>` with a placeholder, which then rendered raw ("{name}") in
+ * English; found 2026-11-08 on the Funding rounds page. A message that does
+ * not compile fails the build and names its id, the same strictness the
+ * catalog build applies to translations.
  */
-const DESCRIPTOR = /(\bid:\s*"[A-Za-z0-9_-]{6}",\s*message:\s*)("(?:[^"\\\n]|\\.)*")/g;
+/** A brace block nested up to five deep: enough for `values` and the JSX inside `components`. */
+const BLOCK = [1, 2, 3, 4].reduce((inner) => String.raw`\{(?:[^{}]|${inner})*\}`, String.raw`\{[^{}]*\}`);
+const DESCRIPTOR = new RegExp(
+  String.raw`(\bid:\s*"[A-Za-z0-9_-]{6}",(?:\s*(?:values|components):\s*${BLOCK},)*\s*message:\s*)("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')`,
+  "g",
+);
+
+/** The text a JS string literal holds, double- or single-quoted, escapes kept. */
+function literalText(literal: string): string {
+  if (literal.startsWith('"')) return JSON.parse(literal) as string;
+  // Single-quoted: walk it once, unescaping `\'` and escaping a bare `"` for JSON.
+  let json = "";
+  const body = literal.slice(1, -1);
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "\\" && body[i + 1] === "'") {
+      json += "'";
+      i++;
+    } else if (c === "\\") {
+      json += c + (body[i + 1] ?? "");
+      i++;
+    } else if (c === '"') {
+      json += '\\"';
+    } else {
+      json += c;
+    }
+  }
+  return JSON.parse(`"${json}"`) as string;
+}
 
 export function precompileMessages(code: string): string {
   return code.replace(DESCRIPTOR, (_m, head: string, literal: string) => {
-    const message = JSON.parse(literal) as string;
+    const message = literalText(literal);
     let compiled;
     try {
       compiled = compileMessageOrThrow(message);
