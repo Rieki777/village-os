@@ -113,6 +113,7 @@ import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
@@ -22545,6 +22546,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
