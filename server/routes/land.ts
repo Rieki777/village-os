@@ -562,7 +562,7 @@ export function register(app: Express, deps: Deps): void {
     if (!status.ready) {
       return res.status(409).json({
         error: "provider-not-ready",
-        message: `${status.provider.label} is selected and ${status.missingEnv} is not set, so there is no key to call it with.`,
+        message: `${status.provider.label} is selected and its key is not set, in Admin, Integrations or as ${status.missingEnv} on the host, so there is no key to call it with.`,
       });
     }
 
