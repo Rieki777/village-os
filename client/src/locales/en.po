@@ -12,6 +12,21 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr "Differs"
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
+msgstr "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Co-sign the new key"
+msgstr "Co-sign the new key"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Village signing key"
+msgstr "Village signing key"
+
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
@@ -50,14 +65,29 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr "Chain: {there}."
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Type \"{confirmWith}\" to confirm."
+msgstr "Type \"{confirmWith}\" to confirm."
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
 msgstr "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The key was not replaced"
+msgstr "The key was not replaced"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Sending..."
+msgstr "Sending..."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
@@ -66,6 +96,21 @@ msgstr "Cash still owed to you, from this village's records: {owedWords}"
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "Sera records that name no invoice here"
 msgstr "Sera records that name no invoice here"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The key is stored unsealed, so it travels in every database dump. Set VILLAGE_SECRETS_KEY and restart to seal it in place; that keeps the same key."
+msgstr "The key is stored unsealed, so it travels in every database dump. Set VILLAGE_SECRETS_KEY and restart to seal it in place; that keeps the same key."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "an unknown date"
+msgstr "an unknown date"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "an unknown time"
+msgstr "an unknown time"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -86,6 +131,11 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Withdraw the request"
+msgstr "Withdraw the request"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
@@ -96,6 +146,11 @@ msgctxt "invoice desk"
 msgid "This village's records: {here}."
 msgstr "This village's records: {here}."
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Type the confirmation"
+msgstr "Type the confirmation"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Open menu"
 #~ msgstr "Open menu"
@@ -104,14 +159,39 @@ msgstr "This village's records: {here}."
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
+msgstr "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Asked for a co-sign. Another admin replaces the key from this card."
+msgstr "Asked for a co-sign. Another admin replaces the key from this card."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Keep this key"
+msgstr "Keep this key"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Withdrawn. The village keeps its key."
+msgstr "Withdrawn. The village keeps its key."
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr "Vote on it again here"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Make a new key"
+msgstr "Make a new key"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -126,6 +206,11 @@ msgstr "Translated automatically"
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
 msgstr "Not synced yet. Press Sync to read every source."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
+msgstr "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -159,14 +244,34 @@ msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Your account, {firstName}"
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Ask for a new key"
+msgstr "Ask for a new key"
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Replace the key"
+msgstr "Replace the key"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr "Tokens, by source"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
+msgstr "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "This deployment cannot open the key, so those pages answer 503. A restore under a different VILLAGE_SECRETS_KEY does this. If the old value is gone for good, make a new key here."
+msgstr "This deployment cannot open the key, so those pages answer 503. A restore under a different VILLAGE_SECRETS_KEY does this. If the old value is gone for good, make a new key here."
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -202,6 +307,11 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr "Reading the invoice tracks."
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Declined. The village keeps its key."
+msgstr "Declined. The village keeps its key."
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
@@ -215,6 +325,11 @@ msgstr "Reading your saved numbers."
 msgctxt "site header"
 msgid "Main Site"
 msgstr "Main Site"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Nothing was declined"
+msgstr "Nothing was declined"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
@@ -238,10 +353,25 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Use my browser's language"
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The village now signs with key {newKid}"
+msgstr "The village now signs with key {newKid}"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "No language matches"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The village has launched, so another admin co-signs before the key is replaced."
+msgstr "The village has launched, so another admin co-signs before the key is replaced."
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Decline"
+msgstr "Decline"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -256,3 +386,8 @@ msgstr "Skip to content"
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in or join"
 #~ msgstr "Sign in or join"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Co-sign and replace"
+msgstr "Co-sign and replace"
