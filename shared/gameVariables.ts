@@ -26,6 +26,8 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
+import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -121,6 +123,16 @@ export interface VariableDef {
   /** For `choice`: the allowed values and how to label them. */
   choices?: Array<{ value: string; label: string; hint?: string }>;
   unit?: string;
+  /**
+   * WHAT A BLANK NUMBER MEANS, for a number dial that may be left blank, in a
+   * few words ("no ceiling"). Absent, blank is not an answer of its own and
+   * reads as 0. Present, blank and 0 are different answers, and the dial is
+   * read with `optionalNumberVar` (server/lib/variables.ts), which returns
+   * null for blank. Redemption's money ceilings are why (Rye, 2026-11-05):
+   * caps fail closed, so 0 must mean zero, and "no ceiling" needs its own
+   * spelling.
+   */
+  blank?: string;
   /** Ring override. Absent = derived by ringOf() from category/key rules. */
   ring?: VariableRing;
   /** Apply-timing override. Absent = derived by applyTimingOf(). */
@@ -609,9 +621,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most in one redemption, in money",
     description:
-      "The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.",
+      "The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -620,9 +633,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most one member may redeem per cycle, in money",
     description:
-      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.",
+      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -641,9 +655,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most the village will redeem per cycle, in money",
     description:
-      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.",
+      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -1048,6 +1063,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.proposals_per_member_per_cycle",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Mechanics proposals per member per cycle",
     description:
@@ -1064,6 +1082,9 @@ export const VARIABLES: VariableDef[] = [
     // governance.hypha_threshold's did. This gate stands in front of the
     // binding vote wherever the binding vote happens, so it says that.
     key: "governance.proposal_support_threshold",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Supporters before a proposal can go to the vote",
     description:
@@ -1240,6 +1261,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.change_cooldown_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Cooldown after a governed rule change",
     description:
@@ -1249,6 +1273,38 @@ export const VARIABLES: VariableDef[] = [
     min: 0,
     max: 365,
     unit: "days",
+  },
+  {
+    // Rye, 2026-11-06: the cap rises from 12 to 22 and each village may move
+    // it by vote. The floor and the ceiling live in shared/changeSetCap.ts,
+    // which the validator reads too, so the two can never disagree.
+    key: CHANGE_SET_CAP_KEY,
+    category: "Governance",
+    label: "Changes one proposal may carry",
+    criticality: "structural",
+    description:
+      `The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. ${CHANGE_SET_CAP_MIN} to ${CHANGE_SET_CAP_MAX}.`,
+    type: "integer",
+    default: String(CHANGE_SET_CAP_DEFAULT),
+    min: CHANGE_SET_CAP_MIN,
+    max: CHANGE_SET_CAP_MAX,
+    unit: "changes",
+  },
+  {
+    // Change requests (Rye, 2026-11-06; spec C7, R20). A ceiling on
+    // flooding: commenting on and supporting other change requests is never
+    // limited. Meta, so a trial can never lift it for a moon.
+    key: GATHERING_LIMIT_KEY,
+    category: "Governance",
+    label: "Change requests one member may gather at once",
+    criticality: "structural",
+    description:
+      "How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.",
+    type: "integer",
+    default: String(GATHERING_LIMIT_DEFAULT),
+    min: 1,
+    max: 50,
+    unit: "change requests",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────
@@ -1479,8 +1535,29 @@ export const VARIABLES: VariableDef[] = [
     max: 100,
     unit: "%",
   },
+  // THE QUORUM FALLBACK (Rye, 2026-11-06; shared/quorumFallback.ts). Ring 2,
+  // one setting for every decision type. A steward or an admin may also switch
+  // it ON as a failsafe (POST /api/governance/quorum-fallback/failsafe); OFF is
+  // the village's ordinary vote on this dial and nothing else.
+  {
+    key: "governance.quorum_fallback",
+    category: "Governance",
+    label: "Ask again when too few vote",
+    criticality: "structural",
+    description:
+      "Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.",
+    type: "choice",
+    default: "off",
+    choices: [
+      { value: "off", label: "Off", hint: "A ballot that misses quorum ends as it closes." },
+      { value: "on", label: "On", hint: "A ballot that misses quorum is asked again once, at half the quorum." },
+    ],
+  },
   {
     key: "governance.vote_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "How long a ballot stays open",
     description:
@@ -3526,6 +3603,29 @@ const UNLOCK_DEFS: VariableDef[] = (Object.entries(STAGE_UNLOCKS) as Array<[stri
 );
 
 VARIABLES.push(...STAGE_MULTIPLIER_DEFS, ...STAGE_QUEST_DEFS, ...UNLOCK_DEFS);
+
+/**
+ * The village's default language (internal spec i18n, US3; C8). Used only when
+ * a visitor's browser names no language Village OS offers: a member's own
+ * choice and the browser's languages both come first. Open ring, so every
+ * member sees it and may propose a change, and a vote can move it (I.3, 0.1).
+ * Each choice is labelled in its own language.
+ */
+VARIABLES.push({
+  key: "village.default_locale",
+  category: "Language",
+  label: "Default language",
+  description:
+    "The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.",
+  type: "choice",
+  default: "en",
+  // Literal so the generated docs can read them; shared/i18nDefaultLocale.test.ts
+  // holds them equal to the offered languages, each named in its own language.
+  choices: [
+    { value: "en", label: "English" },
+    { value: "es", label: "Español" },
+  ],
+});
 
 /** Lookup by key, for validation and defaults. */
 export const VARIABLES_BY_KEY: Record<string, VariableDef> = Object.fromEntries(

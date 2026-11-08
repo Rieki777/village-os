@@ -147,6 +147,11 @@ export interface LaunchStatus {
    * (R74); the checklist gates the question, never the answer.
    */
   readyToLaunch: boolean;
+  /**
+   * Blocking rows still open that the launch vote may carry (`carriedByVote`).
+   * Counted in `blockingOpen`, and left out of `readyToLaunch`.
+   */
+  carriedOpen: Array<{ id: string; title: string }>;
   launchedAt: string | null;
   launchedBy: string | null;
   /** The ballot that carried, on a village that launched by its own vote. */
@@ -423,11 +428,15 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
 
   const blockingOpen = items.filter((i) => i.severity === "blocking" && i.state !== "ok").length;
   const recommendedOpen = items.filter((i) => i.severity === "recommended" && i.state !== "ok").length;
+  const carriedOpen = items
+    .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.carriedByVote === true)
+    .map((i) => ({ id: i.id, title: i.title }));
   return {
     items,
     blockingOpen,
     recommendedOpen,
-    readyToLaunch: blockingOpen === 0,
+    readyToLaunch: blockingOpen - carriedOpen.length === 0,
+    carriedOpen,
     launchedAt: state.launchedAt,
     launchedBy: state.launchedBy,
     launchedByBallotId: state.launchedByBallotId ?? null,
@@ -653,7 +662,7 @@ export async function launchVoteBlocked(
   }
   if (!status.readyToLaunch) {
     const open = status.items
-      .filter((i) => i.severity === "blocking" && i.state !== "ok")
+      .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.carriedByVote !== true)
       .map((i) => i.title);
     return {
       error: `${open.length} item(s) on the journey still block the launch vote.`,

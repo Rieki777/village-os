@@ -148,6 +148,13 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect((await call("GET", "/api/admin/org-roles/ops-lead/power-groups")).json?.roleIds).toEqual(["founders-circle"]);
   });
 
+  it("the roles shelf counts and names the seat-granted holder, as the gate and the admin roster do (R161)", async () => {
+    const shelf = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(shelf) ? shelf : shelf?.roles ?? []).find((g: any) => g.id === "founders-circle");
+    expect(founders.holders.map((h: any) => h.userId), "Sam sits in Founders Circle through the Ops Lead seat").toContain(sam.id);
+    expect(founders.holderCount).toBe(Number(await holderCount("founders-circle")));
+  });
+
   it("writes the link to the admin trail", async () => {
     const [rows] = await pool.query<any[]>("SELECT text FROM health_events WHERE kind = 'audit' AND entity_type = 'org_role' AND entity_ref = 'ops-lead'"); // module-review-ok: the e2e harness reading its own scratch schema
     expect(rows.map((r: any) => r.text)).toContain("org_role:groups:ops-lead:+founders-circle:-none");
@@ -158,6 +165,9 @@ describe.skipIf(!DB_CONFIGURED)("0322: holding a seat grants its Power groups", 
     expect(ended.status, ended.text).toBeLessThan(300);
     expect(await held("org.seat", sam.token)).toBe(false);
     expect(await opensPanel(sam.token)).toBe(false);
+    const shelf = (await call("GET", "/api/roles")).json;
+    const founders = (Array.isArray(shelf) ? shelf : shelf?.roles ?? []).find((g: any) => g.id === "founders-circle");
+    expect(founders.holders.map((h: any) => h.userId), "an ended seating holds nothing on the shelf either").not.toContain(sam.id);
   });
 
   it("unlinking leaves the seat carrying nothing", async () => {
@@ -260,5 +270,34 @@ describe.skipIf(!DB_CONFIGURED)("the members' powers page names who holds a powe
     expect(story.suggestionsGoTo).toBe("holders");
     expect(page.json.powers.map((p: any) => p.capability)).toContain("power.assign");
     expect(page.json.families.map((f: any) => f.id)).toContain("structure");
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("operator powers: a holder reaches an admin route, and no admin loses one", () => {
+  let cy = { id: "", token: "" };
+  const purpose = (token: string) => call("PUT", "/api/admin/purpose", { statement: "" }, token);
+
+  it("control: a member without the power is refused the admin route", async () => {
+    const r = await call("POST", "/api/auth/register", { name: "Cy Storyteller", email: "cy-operator@example.test", password: PW, paths: ["resident"] }, "");
+    expect(r.status, r.text).toBe(200);
+    cy = { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    expect((await call("PUT", `/api/admin/players/${cy.id}/stage`, { stageId: "member" })).status).toBe(200);
+    expect((await purpose(cy.token)).status).toBe(401);
+  });
+
+  it("holding story.tell through a group opens the purpose route, and nothing beside it", async () => {
+    const g = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "proposal.open", "story.tell"], grantedEscalations: ["story.tell"] });
+    expect(g.status, g.text).toBe(200);
+    expect((await call("POST", "/api/admin/roles/practitioners/holders", { userId: cy.id, action: "add" })).status).toBe(200);
+    // Past the gate: an empty statement is the route's own 400, never the gate's 401.
+    expect((await purpose(cy.token)).status).toBe(400);
+    expect((await call("PUT", "/api/admin/settings", {}, cy.token)).status).toBe(401);
+    expect((await call("POST", "/api/admin/launch/confirm", {}, cy.token)).status).toBe(401);
+  });
+
+  it("the founder still reaches the route, even once the village holds its power", async () => {
+    await pool.query("INSERT INTO capability_holding (capability, holder_role_id, note) VALUES ('story.tell', 'practitioners', 'e2e')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect((await purpose(founderToken)).status).toBe(400);
+    expect((await call("GET", "/api/admin/players")).status).toBe(200);
   });
 });

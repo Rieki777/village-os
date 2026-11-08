@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
+import { GOVERNANCE_PAUSE_STRANDS,
   AFTER_LAUNCH_ON,
   alsoNeedsLine,
   libraryViewer,
@@ -72,6 +72,25 @@ describe("the switch verdict", () => {
       ok: true, announce: true,
     });
     expect(switchVerdict({ launched: true, admin: false, holder: false, from: "public", to: "off" }).ok).toBe(false);
+  });
+});
+
+describe("the module the vote runs on (R156)", () => {
+  const pauseGov = (anyHolder: boolean) =>
+    switchVerdict({ launched: true, admin: true, holder: false, from: "members", to: "off", moduleId: "governance", anyHolder });
+
+  it("refuses an admin's pause of governance after launch while nobody holds module.switch, because nothing could turn it back on", () => {
+    expect(pauseGov(false)).toEqual({ ok: false, status: 403, error: GOVERNANCE_PAUSE_STRANDS });
+  });
+
+  it("allows it when a live holder could turn it back on, and leaves every other module's valve alone", () => {
+    expect(pauseGov(true)).toEqual({ ok: true, announce: true });
+    expect(switchVerdict({ launched: true, admin: true, holder: false, from: "members", to: "off", moduleId: "forum", anyHolder: false })).toEqual({ ok: true, announce: true });
+  });
+
+  it("does not touch the time before launch, or the holder", () => {
+    expect(switchVerdict({ launched: false, admin: true, holder: false, from: "members", to: "off", moduleId: "governance", anyHolder: false }).ok).toBe(true);
+    expect(switchVerdict({ launched: true, admin: false, holder: true, from: "members", to: "off", moduleId: "governance", anyHolder: true }).ok).toBe(true);
   });
 });
 

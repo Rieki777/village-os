@@ -411,6 +411,7 @@ export function planStructure(
 
   const liveByName = new Map<string, PlanLiveSeat>();
   for (const s of seatsLive) liveByName.set(seatNameKey(s.name), s);
+  const liveById = new Map<string, PlanLiveSeat>(seatsLive.map((s) => [s.id, s]));
   const liveSeatIds = new Set(liveSeats.map((s) => s.id));
 
   const seats: PlanSeat[] = [];
@@ -427,8 +428,17 @@ export function planStructure(
       : [p.payload];
     read.seats.forEach((seat, index) => {
       const name = typeof seat.payload.name === "string" ? seat.payload.name : "";
-      const live = name ? liveByName.get(seatNameKey(name)) : undefined;
       const sent = rawList[index] ?? {};
+      const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
+      /*
+       * ITS OWN ID FIRST, then its name (D2, 2026-11-06). A role this village
+       * published from the source keeps an id made from the source's page id,
+       * so when the source sends it again the id IS this role, even if the
+       * village has renamed it since. It used to be matched by name only and
+       * then reported as an id collision with itself, so "update" could never
+       * pass for any role a sync had already made.
+       */
+      const live = liveById.get(id) ?? (name ? liveByName.get(seatNameKey(name)) : undefined);
       const statusLabel = sourceStatusLabel(sent.sourceStatus);
       const sourceStatus = sourceStatusOf(statusLabel);
       const sentCircle = text(sent.circleName) ?? text(sent.circle_name) ?? text(sent.circle);
@@ -443,11 +453,12 @@ export function planStructure(
         });
         return;
       }
-      const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
       const circleId = typeof seat.payload.circleId === "string" && seat.payload.circleId ? seat.payload.circleId : null;
       let problem: string | null = null;
       if (name.trim() === "") problem = "This role came with no name";
-      else if (liveSeatIds.has(id)) problem = `A role with the id "${id}" already exists`;
+      // A collision is ANOTHER record holding the id: a rested role, or one this
+      // seat did not match. Its own live self is not one.
+      else if (liveSeatIds.has(id) && live?.id !== id) problem = `A role with the id "${id}" already exists`;
       seats.push({
         key: `${p.id}#${index}`,
         proposalId: p.id,
@@ -473,6 +484,30 @@ export function planStructure(
   }
 
   return { circles, seats, live: { circles: circlesLive, seats: seatsLive }, notes, archived };
+}
+
+/**
+ * The sentence that refuses accepting a chart batch outside the structure
+ * review when anything in it is archived at its source, or null when nothing
+ * is (D1, 2026-11-06).
+ *
+ * The /review accept builds circles and roles with no reading of the source's
+ * status, so an Archived circle accepted there was created: three weeks of
+ * archived circles waited in production on 2026-10-31. The structure review is
+ * the one place that keeps archived records out of the change and lists them
+ * apart, so this sends the steward there, and reads "archived" with
+ * `planStructure`'s own rule rather than a second copy of it.
+ */
+export function archivedRefusal(proposals: readonly PlanProposal[]): string | null {
+  const archived = planStructure(proposals, [], []).archived;
+  if (archived.length === 0) return null;
+  const tail = "Review the batch as one structure change, where archived records are listed apart.";
+  const quoted = archived.map((a) => (a.name ? `"${a.name}"` : "one with no name"));
+  if (archived.length === 1) {
+    return `${quoted[0]} is archived where it came from, so accepting it here would bring it back. ${tail}`;
+  }
+  const shown = quoted.slice(0, 3).join(", ") + (quoted.length > 3 ? ` and ${quoted.length - 3} more` : "");
+  return `${archived.length} of these are archived where they came from (${shown}), so accepting them here would bring them back. ${tail}`;
 }
 
 // ── The steward's decisions ─────────────────────────────────────────────

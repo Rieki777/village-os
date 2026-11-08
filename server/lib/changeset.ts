@@ -96,7 +96,7 @@ import { setWeight, weightChangeProblem, weightTokenProblem } from "./governance
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
-import { brandFieldValue, brandVoteProblem, withBrandField } from "../../shared/brandVote";
+import { BRAND_CURRENCY_FIELD, brandFieldValue, brandVoteProblem, currencyChangeSentence, withBrandField } from "../../shared/brandVote";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
@@ -352,7 +352,10 @@ export async function validateElements(
         kind,
         oldValue: before,
         newValue: String(item.to),
-        sentence: `the village's ${field} changes from "${before}" to "${String(item.to)}"`,
+        sentence:
+          field === BRAND_CURRENCY_FIELD
+            ? currencyChangeSentence(before, String(item.to))
+            : `the village's ${field} changes from "${before}" to "${String(item.to)}"`,
       });
       continue;
     }
