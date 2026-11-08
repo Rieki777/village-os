@@ -306,13 +306,16 @@ the exact hole both lockouts fell into. Two variables close it:
 
 ## 6a. Google sign-in, which ReGen Civics can host for you
 
-Two ways to switch this on. Both set the same three variables, and the code
-does not know or care which you used.
+Two ways to switch this on. Both give you the same two values, the client ID
+and its secret, and the code does not know or care which you used. Paste them
+under Admin, Integrations (the two Google sign-in cards), or set them on the host
+as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; Admin wins when both are set.
+The callback address comes from `FRONTEND_URL` on the host.
 
 **Ask ReGen Civics for the shared credentials (start here).** We hold one
 Google client with every incubator village's callback address registered on it.
 Send us your village's domain, and we send back a `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET` to paste into Railway. Your Google Cloud Console work is
+`GOOGLE_CLIENT_SECRET` to paste under Admin, Integrations. Your Google Cloud Console work is
 zero. Two things to know while you use them: the Google consent screen will say
 **ReGen Civics** rather than your village's name, and the secret is shared with
 the other incubator villages, so it is right for a village being designed and

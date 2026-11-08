@@ -592,13 +592,13 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
     name: "GOOGLE_CLIENT_ID",
     need: "optional",
     breaks: "The sign-in page shows no Google button. Email and password still work.",
-    where: "Railway",
+    where: "Railway, or Admin, Integrations",
   },
   {
     name: "GOOGLE_CLIENT_SECRET",
     need: "optional",
     breaks: "The same, and both are needed together.",
-    where: "Railway",
+    where: "Railway, or Admin, Integrations",
   },
   {
     name: "STRIPE_SECRET_KEY",
@@ -624,7 +624,7 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
     name: "ERROR_WEBHOOK_URL",
     need: "optional",
     breaks: "Crashes still alert admins in the app; nothing reaches an outside channel.",
-    where: "Railway",
+    where: "Railway, or Admin, Integrations",
   },
 ];
 

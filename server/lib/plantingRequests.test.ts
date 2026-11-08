@@ -24,10 +24,14 @@ const BEN = { id: "u-ben", name: "Ben" };
 const STRIPE = "sk_live_cosign_value_ab12";
 
 describe("which keys wait for a co-sign", () => {
-  it("the six keystone slots in the village's own store, and only after launch", () => {
+  it("the eight keystone slots in the village's own store, and only after launch", () => {
     expect([...COSIGN_SLOTS.keys()].sort()).toEqual([
       "assistant_api_key",
       "dns_zone_token",
+      // Google sign-in's pair, since it has store slots (readiness R171): its
+      // seed is a keystone, so after launch a typed pair waits for a co-sign.
+      "google_client_id",
+      "google_client_secret",
       "railway_project_token",
       "resend_api_key",
       "stripe_secret_key",
@@ -35,6 +39,7 @@ describe("which keys wait for a co-sign", () => {
     ]);
     expect(needsCosign("stripe_secret_key", "after-launch")).toBe(true);
     expect(needsCosign("stripe_secret_key", "before-launch")).toBe(false);
+    expect(needsCosign("google_client_secret", "after-launch")).toBe(true);
     // An ordinary seed never waits.
     expect(needsCosign("resend_webhook_secret", "after-launch")).toBe(false);
   });
