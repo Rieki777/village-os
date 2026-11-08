@@ -107,6 +107,11 @@ const BASE_SECRET_KEYS = [
   "assistant_api_key",
   "riverside_webhook_secret",
   "governance_hub_secret",
+  // The Hypha voice-claim receiver's signing secret (readiness R171). It was
+  // env-only so the boot check could refuse a short or borrowed value; that
+  // check now runs at the write too (server/lib/voiceClaim.ts,
+  // `voiceSecretWriteRefusal`), so a founder without the host can set it.
+  "hypha_voice_webhook_secret",
   "basescan_api_key",
   // The Base RPC endpoint. A dedicated one carries its provider key in the
   // address, so it is a credential, and it used to be the plain game variable
@@ -155,6 +160,7 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   assistant_api_key: "ANTHROPIC_API_KEY",
   riverside_webhook_secret: "RIVERSIDE_WEBHOOK_SECRET",
   governance_hub_secret: "GOVERNANCE_HUB_SECRET",
+  hypha_voice_webhook_secret: "HYPHA_VOICE_WEBHOOK_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   basescan_api_key: "BASESCAN_API_KEY",
   base_rpc_url: "BASE_RPC_URL",
   railway_project_token: null,
@@ -193,6 +199,19 @@ export const BASE_RPC_CARD: { key: BaseSecretKey; title: string; unlocks: string
   unlocks: "Where token balances and the Hypha Bridge read Base. Blank reads the free public node, which is enough to start. A dedicated endpoint carries its key in the address, which is why it is kept here, sealed. An Alchemy endpoint also lets the Hypha Bridge list your token contracts with no second key.",
   getAt: "dashboard.alchemy.com → your app → Base Mainnet endpoint, or any Base provider",
   placeholder: "https://base-mainnet.g.alchemy.com/v2/…",
+};
+
+/**
+ * The Integrations card for the Hypha voice-claim secret, listed beside the
+ * hub's (readiness R171). Here beside its slot, like the Base RPC card, so the
+ * copy that says a copied value is refused sits next to the slot it guards.
+ */
+export const HYPHA_VOICE_CARD: { key: BaseSecretKey; title: string; unlocks: string; getAt: string; placeholder: string } = {
+  key: "hypha_voice_webhook_secret",
+  title: "Hypha voice claims",
+  unlocks: "How a member's claim on voice is confirmed once their Hypha vote lands. Needed once Game Mechanics names a Hypha space. Until it is set, the claim receiver answers 503 and claims wait. At least 32 characters, used for nothing else: a value any other callback secret holds is refused.",
+  getAt: "Make one with openssl rand -hex 32, then give the same value to whatever sends the claim results",
+  placeholder: "64 hex characters of its own",
 };
 
 /**

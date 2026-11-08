@@ -734,7 +734,10 @@ confirmation arrives at a receiver signed with `HYPHA_VOICE_WEBHOOK_SECRET`, and
 the check that guards it (`checkVoiceSecret`) refuses a value shared with any
 other secret the village holds, the session key and the callback secrets typed
 into Admin, Integrations included (readiness R171): anything able to sign that
-other callback could otherwise confirm a claim on value.
+other callback could otherwise confirm a claim on value. The secret itself has a
+slot under Admin, Integrations too, so a founder without the host can set it: the
+same check runs when it is saved, and a callback secret that copies it is refused
+there as well (`voiceSecretWriteRefusal`).
 
 ### Earned equity crosses the same bridge (0266)
 
