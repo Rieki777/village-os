@@ -624,7 +624,7 @@ export const GO_LIVE_ENV: readonly GoLiveEnvVar[] = [
     name: "ERROR_WEBHOOK_URL",
     need: "optional",
     breaks: "Crashes still alert admins in the app; nothing reaches an outside channel.",
-    where: "Railway",
+    where: "Railway, or Admin, Integrations",
   },
 ];
 
