@@ -4064,6 +4064,25 @@ exactly what they were written to stop, so R5 is a ruling that reopens a hole
 somebody closed on purpose, and it needs the founder's word about what it may
 reopen and what it may not.
 
+**2026-11-08: the founder's word arrived, and it keeps those three functions.**
+Rye answered through the master coordinator: Voice comes from value at the
+village model's `voicePerUnit`; a donation earns Voice at that rate, an
+investment buys equity at face value and earns Voice at a tenth of it, and
+nothing else earns Voice, not dues, shop goods, stays nor credit packs. Voice
+stays off the exchange, so `tradingProblem`, `weightTokenListingProblem` and
+`weightTokenProblem` do not change. Money reaches Voice only through a gift the
+Treasurer records, never through a purchase.
+
+The first piece is a read. `workEarnedVoice` (`server/lib/voiceProvenance.ts`)
+answers how much of a member's Voice came from work, so a ballot can count only
+that and Funding rounds can keep money and backing Voice out of pot ballots. It
+is the member's balance times the share of Voice minted to them from work
+sources (an allow-list in `shared/voiceFromMoney.ts`: a source nobody named is
+never work), each source net of its own clawbacks. To net a clawback against
+the posting it undoes, `originalKeyOf` in `server/lib/ledger.ts` is now
+exported; what it does is unchanged. Decay takes the same share of every
+holder, which is why a share of the balance is the right count.
+
 ---
 
 ## 17. Crowdpooling, and where the boundary falls
