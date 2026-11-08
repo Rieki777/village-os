@@ -368,6 +368,84 @@ describe.skipIf(!DB_CONFIGURED)("the village signing key, replaced from Admin (R
   });
 });
 
+describe.skipIf(!DB_CONFIGURED)("after launch, a new signing key takes two admins (the coordinator, 2026-11-08)", () => {
+  // Rye's two-signature rule, as for keystone keys: whenever two or more people
+  // can sign, the first press asks and a different admin's press replaces it.
+  const PW = "SecondSigner123!";
+  let bo = { id: "", token: "" };
+  let mo = { id: "", token: "" };
+  let launchBefore: string | null = null;
+  const confirm = { confirm: "make a new key" };
+  const kidNow = async () => String((await call("GET", "/api/admin/identity/signing-key")).json?.kid ?? "");
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    const join = async (name: string, email: string) => {
+      const r = await call("POST", "/api/auth/register", { name, email, password: PW, paths: ["resident"] }, "");
+      expect(r.status, r.text).toBe(200);
+      return { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    };
+    bo = await join("Bo Second", `bo-second-${PORT}@example.test`);
+    mo = await join("Mo Member", `mo-member-${PORT}@example.test`);
+    const promoted = await call("PUT", `/api/admin/users/${bo.id}/role`, { role: "admin", addressUnprovedOk: true });
+    expect(promoted.status, promoted.text).toBe(200);
+    // The village stands on the far side of its launch vote, the co-sign's own test of launch.
+    const [rows] = await pool.query<any[]>("SELECT value FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: the e2e harness reading its own scratch schema
+    launchBefore = rows[0] ? (typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value)) : null;
+    const launched = { ...(launchBefore ? JSON.parse(launchBefore) : {}), launchedByBallotId: "fixture-launch-ballot" };
+    await pool.query( // module-review-ok: the e2e harness setting its own scratch schema's launch state
+      "INSERT INTO app_config (config_key, value) VALUES ('launch-state', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [JSON.stringify(launched)],
+    );
+  });
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED || !pool) return;
+    if (launchBefore === null) await pool.query("DELETE FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: the e2e harness restoring its own scratch schema
+    else await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'launch-state'", [launchBefore]); // module-review-ok: the e2e harness restoring its own scratch schema
+    if (bo.id) await call("PUT", `/api/admin/users/${bo.id}/role`, { role: "member" });
+  });
+
+  it("the first press asks and replaces nothing; the asker cannot be the second; another admin's press replaces it", async () => {
+    const before = await kidNow();
+    const asked = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(asked.status, asked.text).toBe(202);
+    expect(asked.json?.pending?.mine).toBe(true);
+    expect(await kidNow(), "nothing moved on the ask").toBe(before);
+    const shown = await call("GET", "/api/admin/identity/signing-key", undefined, bo.token);
+    expect(shown.json).toMatchObject({ twoSign: true, pending: { id: asked.json.pending.id, mine: false } });
+    const [ask] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND dedupe_key LIKE 'signing-key-cosign:%'", [bo.id]); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(Number(ask[0]?.n), "the other admin was asked").toBe(1);
+
+    const again = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(again.status, again.text).toBe(202);
+    expect(again.json?.pending?.id, "the same request, still waiting").toBe(asked.json.pending.id);
+    expect(await kidNow(), "the asker is never the second signature").toBe(before);
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate", confirm, mo.token)).status, "a member is no signer").toBe(401);
+
+    const signed = await call("POST", "/api/admin/identity/signing-key/rotate", confirm, bo.token);
+    expect(signed.status, signed.text).toBe(200);
+    expect(signed.json).toMatchObject({ ok: true, previousKid: before, cosignedBy: bo.id });
+    expect(await kidNow()).toBe(signed.json.kid);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json?.pending, "the request is done with").toBeNull();
+    const [audit] = await pool.query<any[]>("SELECT text FROM health_events WHERE text LIKE 'identity:signing-key:rotated%co-signed by%'"); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(audit.length, "the record names both").toBe(1);
+  });
+
+  it("a declined request replaces nothing, and its asker is told", async () => {
+    const before = await kidNow();
+    const asked = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(asked.status, asked.text).toBe(202);
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, mo.token)).status).toBe(401);
+    const declined = await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, bo.token);
+    expect(declined.status, declined.text).toBe(200);
+    expect(declined.json).toMatchObject({ ok: true, withdrawn: false });
+    expect(await kidNow()).toBe(before);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json?.pending).toBeNull();
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, bo.token)).status, "nothing left to decline").toBe(404);
+  });
+});
+
 describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)", () => {
   // One hub listener serves many villages, so a delivery about somebody
   // else's space can arrive correctly signed. With a space id recorded, a

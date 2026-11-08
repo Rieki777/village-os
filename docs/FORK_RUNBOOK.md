@@ -1691,6 +1691,13 @@ code. Where a step needs a technical helper, that is called out.
    variable is missing or malformed, since a new private half is never stored
    in the clear. The same card offers it when the key reads unreadable, which
    is what a restore under a different `VILLAGE_SECRETS_KEY` leaves.
+   After launch it takes two people whenever two can sign, as keystone keys
+   do: the first admin's press asks, every other admin with their own login
+   is told, and a different admin co-signs from the same card (or declines).
+   An unsigned request lapses after `platform.cosign_expiry_hours`. With only
+   one admin able to sign, they replace it at once and the audit line says
+   they were alone. In an incident, have the second admin ready before you
+   press.
 5. **Passwords.** Ask a technical helper to check how many accounts are
    still on the legacy hash (`passwordHash` not starting with `$2`, a plain
    64-character hex string). Any account in that state has a password that

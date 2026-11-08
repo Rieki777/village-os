@@ -66,3 +66,47 @@ describe("the village signing key card", () => {
     expect(JSON.parse(post.init.body)).toEqual({ confirm: "make a new key" });
   });
 });
+
+describe("after launch, two admins (the coordinator, 2026-11-08)", () => {
+  const REQUEST = { id: "rotate-1", requestedByName: "Ann Admin", requestedAt: "2026-11-08T10:00:00.000Z", expiresAt: "2026-11-11T10:00:00.000Z" };
+
+  it("names the press an ask, and says another admin co-signs", async () => {
+    const calls = stubFetch({ ...KEY, atRest: "sealed", twoSign: true, pending: null }, { ok: true, body: { asked: true, message: "Asked for a co-sign." } });
+    const user = userEvent.setup();
+    render(<SigningKeyCard password="t" />);
+    await user.click(await screen.findByRole("button", { name: "Make a new key" }));
+    expect(screen.getByText(/another admin co-signs before the key is replaced/i)).toBeTruthy();
+    await user.type(screen.getByLabelText("Type the confirmation"), "make a new key");
+    await user.click(screen.getByRole("button", { name: "Ask for a new key" }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.init.method === "POST")!.url).toContain("/admin/identity/signing-key/rotate");
+  });
+
+  it("shows the asker their request waiting, with no second press, and a withdraw", async () => {
+    const calls = stubFetch({ ...KEY, atRest: "sealed", twoSign: true, pending: { ...REQUEST, mine: true } }, { ok: true, body: { ok: true, withdrawn: true } });
+    const user = userEvent.setup();
+    render(<SigningKeyCard password="t" />);
+    await waitFor(() => expect(screen.getByText(/You asked for a new key/)).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Make a new key" }), "the asker is never the second signature").toBeNull();
+    await user.click(screen.getByRole("button", { name: "Withdraw the request" }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === "POST")).toBe(true));
+    expect(calls.find((c) => c.init.method === "POST")!.url).toContain("/admin/identity/signing-key/rotate/decline");
+  });
+
+  it("offers another admin the co-sign behind the same confirmation, and a decline", async () => {
+    const calls = stubFetch({ ...KEY, atRest: "sealed", twoSign: true, pending: { ...REQUEST, mine: false } });
+    const user = userEvent.setup();
+    render(<SigningKeyCard password="t" />);
+    await waitFor(() => expect(screen.getByText(/Ann Admin asked for a new key/)).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Co-sign the new key" }));
+    const cosign = screen.getByRole("button", { name: "Co-sign and replace" }) as HTMLButtonElement;
+    expect(cosign.disabled, "nothing typed, nothing to press").toBe(true);
+    await user.type(screen.getByLabelText("Type the confirmation"), "make a new key");
+    await user.click(cosign);
+    await waitFor(() => expect(calls.some((c) => c.init.method === "POST")).toBe(true));
+    const post = calls.find((c) => c.init.method === "POST")!;
+    expect(post.url).toMatch(/\/admin\/identity\/signing-key\/rotate$/);
+    expect(JSON.parse(post.init.body)).toEqual({ confirm: "make a new key" });
+  });
+});
