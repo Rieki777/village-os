@@ -20,7 +20,7 @@ function collect() {
   const handlers = new Map<string, Handler>();
   const mounted: string[] = [];
   const record = (method: string) => (p: string, handler: Handler) => handlers.set(`${method} ${p}`, handler);
-  return { app: { get: record("GET"), put: record("PUT"), use: (p: string) => mounted.push(p) } as any, handlers, mounted };
+  return { app: { get: record("GET"), put: record("PUT"), post: record("POST"), use: (p: string) => mounted.push(p) } as any, handlers, mounted };
 }
 
 function makeRes() {
@@ -44,6 +44,9 @@ const call = async (handlers: Map<string, Handler>, key: string, req: any = {}) 
 const deps = (pool: any, holdsKey: () => boolean) => ({
   authedUser: async () => ({ id: "u-fin" }),
   getPool: () => pool,
+  members: { all: async () => [] } as any,
+  notify: async () => ({}) as any,
+  inboxSigners: async () => [] as string[],
   overLimit: async () => false,
   guardCapability: async (_req: any, res: any) => {
     if (holdsKey()) return true;
@@ -131,5 +134,41 @@ describe.skipIf(!configured)("the settings doors against a real schema", () => {
     expect(r.status).toBe(200);
     expect((await events("rhythm_changed"))[0].note.map((x: any) => x.field)).toEqual(["sendHour", "guideUrl", "cycles.lunar-000333"]);
     expect((await call(c.handlers, "PUT /api/moon-review/rhythm", { body: { document: { guideUrl: "http://example.org" } } })).status).toBe(400);
+  });
+});
+
+describe.skipIf(!configured)("a settings save that changes Sera's inbox waits for a second signer (C7)", () => {
+  let db: TestDb;
+  let pool: mysql.Pool;
+  let c: ReturnType<typeof collect>;
+  let who = "u-fin";
+  const told: string[] = [];
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the S5 harness pool against the scratch schema
+    c = collect();
+    register(c.app, {
+      ...deps(pool, () => true),
+      authedUser: async () => ({ id: who }),
+      members: { all: async () => [{ id: "m1" }, { id: "m2" }] } as any,
+      notify: async (n: { userId: string }) => { told.push(n.userId); return {} as any; },
+      inboxSigners: async () => ["u-fin", "u-steward"],
+    });
+  });
+  afterAll(async () => { await pool?.end(); await db?.drop(); });
+
+  it("keeps the old inbox, shows the waiting one, and applies it only on a second signer's confirm", async () => {
+    const saved = await call(c.handlers, "PUT /api/moon-review/settings", { body: { document: { seraInbox: "new@example.test" } } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.document.seraInbox).toBeNull();
+    expect(saved.body.pendingSeraInbox).toMatchObject({ address: "new@example.test", proposedBy: "u-fin" });
+    expect((await call(c.handlers, "POST /api/moon-review/settings/sera-inbox/confirm")).status).toBe(409);
+    expect(told).toEqual([]);
+    who = "u-steward";
+    const ok = await call(c.handlers, "POST /api/moon-review/settings/sera-inbox/confirm");
+    expect(ok.status).toBe(200);
+    expect((await call(c.handlers, "GET /api/moon-review/settings")).body).toMatchObject({ document: { seraInbox: "new@example.test" }, pendingSeraInbox: null });
+    expect(told.sort()).toEqual(["m1", "m2"]);
   });
 });

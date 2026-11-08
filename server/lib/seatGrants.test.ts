@@ -99,6 +99,30 @@ describe("bridgedHoldings: holding a seat grants its linked groups", () => {
     expect(out[0].termEndsAt).toBe("2027-01-01T00:00:00.000Z");
     expect(holdingHasLapsed(out[0], NOW)).toBe(false);
   });
+
+  it("the bridge and holdingHasLapsed flip at the same instant, so a reader filtering bridged rows agrees with the gate (R161)", () => {
+    // The pages members read (/api/village/powers, /api/roles) filter
+    // loadPowerHoldings() with holdingHasLapsed, and the gate reads the same
+    // rows through the bridge. Both test the seating's own timestamp with <=,
+    // so they must agree a millisecond before, at, and after the end.
+    const end = new Date("2026-11-05T12:00:00Z");
+    for (const offset of [-1, 0, 1]) {
+      const now = new Date(end.getTime() + offset);
+      const out = bridgedHoldings(snap({ seatings: [seating({ termEndsAt: end })] }), { ...ctx, now });
+      expect(out.length === 1, `the bridge at ${offset}ms`).toBe(!holdingHasLapsed({ termEndsAt: end.toISOString() }, now));
+      for (const h of out) expect(holdingHasLapsed(h, now), `a bridged row at ${offset}ms`).toBe(false);
+    }
+  });
+
+  it("a season lapse is the bridge's to decide, because a bridged row carries no date for it (R161)", () => {
+    // holdingHasLapsed sees only a term. A seating from a season that has
+    // turned has none, so on its own it would read as live; the bridge drops
+    // it before any reader filters, which is why the pages read
+    // loadPowerHoldings() and never a hand-built list of seat rows.
+    const turned = seating({ seasonId: "s1", termEndsAt: null });
+    expect(holdingHasLapsed({ termEndsAt: turned.termEndsAt }, NOW), "the term test alone cannot see a season turn").toBe(false);
+    expect(bridgedHoldings(snap({ seatings: [turned] }), ctx)).toEqual([]);
+  });
 });
 
 describe("effectiveHoldings: one answer for every reader", () => {

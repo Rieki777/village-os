@@ -42,7 +42,7 @@ import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { roleHoldersNow } from "../repos/pathLadders";
-import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatingsChanged, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatingsChanged, seatState, valueSets, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
 import { moveWords, placementOf } from "./circlePlacement";
@@ -55,6 +55,9 @@ import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHa
 import { applyCircleWords, captureCircleWords, previewCircleWords, revertCircleWords } from "./circleWordsDraft";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS, ROLE_CCOS_WORDS, accountabilitiesProblem, payloadAccountabilitiesProblem } from "../../shared/roleCcos";
 import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse";
+import { carriesRolePay, DRAFT_PAY_KEYS, draftPayEdit, draftPayProblem } from "./draftRolePay";
+import { rolePayRules } from "./workPay";
+import type { MintRule } from "./economy";
 
 export type DraftOp =
   | "create_seat"
@@ -825,6 +828,8 @@ export async function previewDraft(
 /** The seats and circles a preview checks a draft against, read once. */
 export interface PreviewContext {
   roles: any[];
+  /** The village's role.cycle rules, so a draft's role pay is checked as the admin door checks it. Optional for a context built by hand. */
+  payRules?: MintRule[];
   circleIds: Set<string>;
   /** Every circle and where it sits, for a move_circle line (0208). */
   circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean; status?: string }>;
@@ -865,6 +870,7 @@ export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<P
     circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)),
     circles: all,
     heldSeatIds: await readHeldSeatIds(pool),
+    payRules: await rolePayRules(pool),
   };
 }
 
@@ -1195,13 +1201,16 @@ export function previewLoadedDraft(
         // with fewer keeps loading and can still be edited elsewhere.
         if (!blocked) blocked = roleCcosProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
+        // The role's pay (0.4: the vote path the valuation engine names must be able to carry it).
+        if (!blocked) blocked = draftPayProblem(c.payload, context.payRules, draft.sourceKind !== "human");
+        if (carriesRolePay(c.payload)) reads = `Edit ${name} and its pay`;
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
         // `accountabilities` is written by its own branch in `applyChange`
         // and is a real change: the card's "What you can count on me for"
         // proposal carries nothing else, and this used to block it.
-        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities");
+        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k));
         if (!blocked && touched.length === 0) {
           blocked = "This names no field this village can change on a role";
         }
@@ -1437,7 +1446,7 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
   return row ?? null;
@@ -1729,6 +1738,8 @@ async function applyChange(
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));
   }
+  // The role's pay, checked again against the village's rules and stamped in its currency.
+  valueSets(await draftPayEdit(conn, p, who.machine), sets, args);
   if (!sets.length) return null;
   args.push(c.orgRoleId);
   await conn.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
@@ -1872,6 +1883,8 @@ export async function revertDraft(
         // 0274: the CCOS words, on the same rule again. A draft published
         // before 0274 captured none of the seven, and leaves them alone.
         const hadCcos = "exists_while" in b ? 1 : 0;
+        // The role's pay, on the same rule: a draft published before pay rode drafts captured none, and leaves it alone.
+        const hadPay = "value_minor" in b ? 1 : 0;
         const asJson = (v: unknown) => (v === null || v === undefined ? null : typeof v === "string" ? v : JSON.stringify(v));
         const ccosBack = ROLE_CCOS_FIELDS.flatMap((f) => {
           const col = ROLE_CCOS_COLUMNS[f];
@@ -1895,14 +1908,22 @@ export async function revertDraft(
              signs_stretched = CASE WHEN ? = 1 THEN ? ELSE signs_stretched END,
              flows_back = CASE WHEN ? = 1 THEN ? ELSE flows_back END,
              step_back = CASE WHEN ? = 1 THEN ? ELSE step_back END,
-             time_commitment = CASE WHEN ? = 1 THEN ? ELSE time_commitment END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+             time_commitment = CASE WHEN ? = 1 THEN ? ELSE time_commitment END,
+             value_minor = CASE WHEN ? = 1 THEN ? ELSE value_minor END,
+             value_currency = CASE WHEN ? = 1 THEN ? ELSE value_currency END,
+             value_tokens = CASE WHEN ? = 1 THEN ? ELSE value_tokens END,
+             cash_minor = CASE WHEN ? = 1 THEN ? ELSE cash_minor END,
+             cash_currency = CASE WHEN ? = 1 THEN ? ELSE cash_currency END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
             b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
             hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
             hadTerms, b.terms_offer_by ?? null,
             hadWords, asJson(b.bring_me), hadWords, asJson(b.not_mine), hadWords, b.runbook ?? null,
-            ...ccosBack, c.orgRoleId],
+            ...ccosBack,
+            hadPay, b.value_minor ?? null, hadPay, b.value_currency ?? null, hadPay, asJson(b.value_tokens),
+            hadPay, b.cash_minor ?? null, hadPay, b.cash_currency ?? null,
+            c.orgRoleId],
         );
       }
     }

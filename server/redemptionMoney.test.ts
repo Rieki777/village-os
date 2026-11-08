@@ -14,10 +14,12 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  moneyCapsSet,
   redemptionMoneyRefusal,
   redemptionQuote,
   resolveRedemptionRate,
   setRateAboveExchange,
+  type MoneyAsk,
   type RedemptionRate,
 } from "./lib/redemption";
 
@@ -150,16 +152,17 @@ describe("what the member receives", () => {
 });
 
 describe("the caps, in the member's own words", () => {
-  const base = {
+  // Null is a blank dial, which is no ceiling (Rye, 2026-11-05).
+  const base: MoneyAsk = {
     valued: true,
     capsSet: true,
     grossMinor: 10000,
     minMinor: 0,
-    maxPerRequestMinor: 0,
+    maxPerRequestMinor: null,
     memberSoFarMinor: 0,
-    memberCapMinor: 0,
+    memberCapMinor: null,
     villageSoFarMinor: 0,
-    villageCapMinor: 0,
+    villageCapMinor: null,
     grossText: "$100.00",
     minText: "$0.00",
     maxText: "$0.00",
@@ -208,6 +211,25 @@ describe("the caps, in the member's own words", () => {
    * otherwise the only requests that escape the village's limit are the ones
    * nobody could price.
    */
+  /*
+   * CAPS FAIL CLOSED (Rye, 2026-11-05). A ceiling of 0 is a ceiling of zero,
+   * the platform's rule everywhere else, and it used to mean "no ceiling" here.
+   */
+  it("reads a ceiling of 0 as zero, so a request of any worth is refused", () => {
+    expect(redemptionMoneyRefusal({ ...base, maxPerRequestMinor: 0 })).toContain("The most one redemption may be worth here is");
+    expect(redemptionMoneyRefusal({ ...base, memberCapMinor: 0 })).toContain("left to redeem this moon");
+    expect(redemptionMoneyRefusal({ ...base, villageCapMinor: 0 })).toContain("This village has");
+  });
+
+  it("counts a ceiling of 0 as a limit that is set, and a blank one as none", () => {
+    const none = { minMinor: 0, maxPerRequestMinor: null, memberCapMinor: null, villageCapMinor: null };
+    expect(moneyCapsSet(none)).toBe(false);
+    expect(moneyCapsSet({ ...none, maxPerRequestMinor: 0 })).toBe(true);
+    expect(moneyCapsSet({ ...none, memberCapMinor: 0 })).toBe(true);
+    expect(moneyCapsSet({ ...none, villageCapMinor: 0 })).toBe(true);
+    expect(moneyCapsSet({ ...none, minMinor: 100 })).toBe(true);
+  });
+
   it("refuses an unvalued request while a cap is set, and allows it when none is", () => {
     expect(redemptionMoneyRefusal({ ...base, valued: false, capsSet: true, grossMinor: 0 })).toContain(
       "no rate for this token",

@@ -21,7 +21,7 @@
  *
  * Renders nothing at all for a member who is owed nothing and keeps no books.
  */
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { HandCoins } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { formatMoney } from "@shared/money";
@@ -33,6 +33,10 @@ import {
   type CashOwedEntry,
   type CashQueueEntry,
 } from "@shared/cashOwed";
+import type { TrackRow } from "./TreasurySync";
+
+/** The invoice track and the Sync (invoice rails), its own chunk: it reads the moon review's words. */
+const TreasurySync = lazy(() => import("./TreasurySync"));
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -49,8 +53,13 @@ export default function CashOwedPanel() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tracks, setTracks] = useState<TrackRow[]>([]);
 
   const load = () => {
+    fetch("/api/me/invoice-track", { headers: headers() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setTracks(Array.isArray(d?.tracks) ? d.tracks : []))
+      .catch(() => setTracks([]));
     fetch("/api/me/cash-owed", { headers: headers() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
@@ -117,7 +126,7 @@ export default function CashOwedPanel() {
   const mine = entries ?? [];
   const paidYears = cashYearsPaid(mine);
   const keepsBooks = !!queue;
-  if (mine.length === 0 && !keepsBooks) return null;
+  if (mine.length === 0 && !keepsBooks && tracks.length === 0) return null;
 
   return (
     <div id="cash-owed" className="scroll-mt-24 rounded-2xl bg-card p-6 shadow-lg sm:p-8 space-y-5">
@@ -134,6 +143,12 @@ export default function CashOwedPanel() {
 
       {notice && <p className="text-sm text-foreground">{notice}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+
+      {(mine.length > 0 || tracks.length > 0) && (
+        <Suspense fallback={null}>
+          <TreasurySync tracks={tracks} />
+        </Suspense>
+      )}
 
       {mine.length > 0 && (
         <section aria-labelledby="cash-mine" className="space-y-3">

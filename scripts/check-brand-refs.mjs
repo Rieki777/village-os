@@ -36,6 +36,7 @@
  *   node scripts/check-brand-refs.mjs                          # the gate
  *   node scripts/check-brand-refs.mjs --update-baseline         # only ever downward, per file
  *   node scripts/check-brand-refs.mjs --update-baseline --force # allow a deliberate raise
+ *   node scripts/check-brand-refs.mjs --baseline <path>         # read or write another baseline (its self-test)
  */
 import fs from "fs";
 import path from "path";
@@ -43,7 +44,13 @@ import { stripComments } from "./brand-strip.mjs";
 import { dropIgnored } from "./git-subjects.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"), "..");
-const BASELINE_PATH = path.join(ROOT, "scripts", "brand-refs-baseline.json");
+// `--baseline <path>` points the ratchet at another file, so its self-test
+// (ratchet-gates-go-red.test.mjs) can drive it red without touching the
+// committed one. The same flag the image, module-docs and test-pool ratchets take.
+const baselineArg = process.argv.indexOf("--baseline");
+const BASELINE_PATH = baselineArg !== -1 && process.argv[baselineArg + 1]
+  ? path.resolve(process.argv[baselineArg + 1])
+  : path.join(ROOT, "scripts", "brand-refs-baseline.json");
 
 /** Forks extend this with their own village's terms. */
 const BANNED = [
