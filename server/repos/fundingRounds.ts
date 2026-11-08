@@ -1,5 +1,5 @@
 /**
- * Every statement against the Funding rounds tables (drizzle/0333) and the
+ * Every statement against the Funding rounds tables (drizzle/0338) and the
  * interaction record it introduced.
  *
  * Raw SQL, one place: the lib and the routes never query these tables
@@ -149,7 +149,7 @@ export interface NewPot {
 
 export async function insertPot(db: Queryable, p: NewPot): Promise<void> {
   await db.query(
-    "INSERT INTO `funding_pots` (`id`, `name`, `purpose`, `kind`, `unit_kind`, `unit_code`, `holder_role_id`, `circle_id`, `structure_key`, `clock`, `decider`, `weight_cap_pct`, `counted_voice`, `status`, `created_by`) VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, 'people', 25, 'work_only', 'open', ?)",
+    "INSERT INTO `funding_pots` (`id`, `name`, `purpose`, `kind`, `unit_kind`, `unit_code`, `holder_role_id`, `circle_id`, `structure_key`, `clock`, `decider`, `weight_cap_pct`, `counted_voice`, `status`, `created_by`) VALUES (?, ?, ?, 'season', ?, ?, ?, ?, ?, ?, 'power', 25, 'work_only', 'open', ?)",
     [p.id, p.name, p.purpose, p.unitKind, p.unitCode, p.holderRoleId, p.circleId, p.structureKey, p.clock, p.createdBy],
   );
 }

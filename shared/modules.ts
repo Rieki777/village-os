@@ -1462,7 +1462,7 @@ export const MODULES: ModuleDef[] = [
     ],
     tier: "included",
     // An idea names its author, kept even when the idea is shown without a
-    // name, and the interaction record names the member who acted (0333).
+    // name, and the interaction record names the member who acted (0338).
     dataClass: "member-pii",
     group: "coordinate",
     setup: "none",

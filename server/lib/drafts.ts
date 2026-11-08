@@ -215,15 +215,22 @@ export async function proposeDraft(
 
 export async function draftById(pool: Pool, id: string): Promise<DraftRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>("SELECT * FROM assistant_drafts WHERE id = ?", [id]);
-  return rows[0] ? toDraft(rows[0]) : null;
+  return rows[0] && isAssistantKind(rows[0]) ? toDraft(rows[0]) : null;
 }
+
+/**
+ * The table also holds members' suggested edits (`admin_edit`,
+ * server/repos/adminSuggestions.ts). The assistant's queue and its accept
+ * route never see those: the accept would read one as a circle.
+ */
+const isAssistantKind = (r: RowDataPacket): boolean => (DRAFT_KINDS as readonly string[]).includes(String(r.kind));
 
 export async function draftQueue(pool: Pool, status: DraftRow["status"] = "proposed"): Promise<DraftRow[]> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM assistant_drafts WHERE status = ? ORDER BY proposed_at DESC LIMIT 200",
     [status],
   );
-  return rows.map(toDraft);
+  return rows.filter(isAssistantKind).map(toDraft);
 }
 
 /** Record the human's decision. The domain write itself is the caller's job,

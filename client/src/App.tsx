@@ -14,6 +14,7 @@ import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
 import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
+import { LocaleRoot } from "@/i18n/LocaleRoot";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -452,6 +453,8 @@ function App() {
       <MotionConfig reducedMotion="user">
       <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
+        {/* The visitor's language, before any page renders (internal spec i18n, US1). */}
+        <LocaleRoot fallback={<PageLoading />}>
         <ModuleProvider>
           <TooltipProvider>
             <Toaster />
@@ -465,6 +468,7 @@ function App() {
           </TooltipProvider>
 
         </ModuleProvider>
+        </LocaleRoot>
         </AuthProvider>
       </LazyMotion>
       </MotionConfig>

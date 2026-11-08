@@ -46,6 +46,7 @@
       "forum.post",
       "exchange.manage",
       "cash.pay",
+      "role.pay",
       "pot.steward"
     ],
     "minStage": "member",

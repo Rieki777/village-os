@@ -133,6 +133,14 @@ export const STEWARD_CIRCLE_GRANTS = [
 ] as const;
 
 /**
+ * `role.pay` reaches a running village's Treasury power group once (Rye,
+ * 2026-11-06: "Role pay is set by both the treasurer and the role/valuation
+ * algorithm"). The seed carries it for a new village. Same generic grant, same
+ * rule: a village that later takes it off keeps it off.
+ */
+export const ROLE_PAY_GRANTS = [{ capability: "role.pay", roleIds: [TREASURY_ROLE_ID] }] as const;
+
+/**
  * A funding pot is a power held by the Treasurer by default (Rye, 2026-11-06,
  * relayed: "a whole pot is a power held by the Treasurer by default"). The
  * seed gives `pot.steward` to the Treasury role of a new village; a village

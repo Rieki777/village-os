@@ -1,4 +1,4 @@
--- 0333: Funding rounds. The village chooses which proposed quests to fund
+-- 0338: Funding rounds. The village chooses which proposed quests to fund
 -- within a pot (Rye, 2026-11-06, relayed by the master coordinator).
 --
 -- A pot is money set aside for the village to decide on, in any unit: a
@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS `funding_pots` (
   -- The pot's home on the map, as its creator chose it.
   `structure_key` varchar(128) NULL,
   `clock` enum('lunar','seasonal','fixed') NOT NULL DEFAULT 'seasonal',
-  -- Which count decides. 'people' until the counted-Voice guardrails land.
-  `decider` enum('power','people') NOT NULL DEFAULT 'people',
+  -- Which count decides. Voice ('power') from day one, with the people's
+  -- count and the divergence shown beside it (Rye, 2026-11-08).
+  `decider` enum('power','people') NOT NULL DEFAULT 'power',
   `weight_cap_pct` int NOT NULL DEFAULT 25,
   `counted_voice` enum('work_only','all') NOT NULL DEFAULT 'work_only',
   `status` enum('open','paused','closed') NOT NULL DEFAULT 'open',

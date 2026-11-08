@@ -42,7 +42,7 @@ export function powerInPlainWords(capability: string): PowerInPlainWords {
  * the veto that stops a carried decision, the money, the module switch and
  * the village's dials.
  */
-export const MATURE_ONLY: readonly Capability[] = ["steward.veto", "cash.pay", "exchange.manage", "module.switch", "dial.set"];
+export const MATURE_ONLY: readonly Capability[] = ["steward.veto", "cash.pay", "role.pay", "exchange.manage", "module.switch", "dial.set"];
 
 export function isMatureOnly(capability: string): boolean {
   return (MATURE_ONLY as readonly string[]).includes(capability);

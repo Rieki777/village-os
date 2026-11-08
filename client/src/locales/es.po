@@ -1,0 +1,626 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-11-06 11:16-0800\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: es\n"
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Differs"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Your numbers, from every source"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Funding rounds"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Your invoices"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Every invoice, sent to paid"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "A short name"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Paid {paidOn}"
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Open menu"
+msgstr "Abrir menú"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Pot"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Share this idea"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Open a round for ideas"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Your idea is shared. Others can comment on it in its thread."
+msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Search languages"
+msgstr "Buscar idiomas"
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Open a pot"
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Sign in"
+#~ msgstr "Iniciar sesión"
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Chain: {there}."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Name"
+#~ msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Pot"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "First seen {seen}."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Open the round"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Who might do it?"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Roughly what would it cost, in {unit}?"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "That did not save. Try again."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "{count, plural, one {# idea so far.} other {# ideas so far.}}"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Cash still owed to you, from this village's records: {owedWords}"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgid "Sera records that name no invoice here"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "A pot"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "When shaping starts (leave empty to keep the round in Seed)"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Talk about it"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Opening the round"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Open the pot"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Rough cost:"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "The pot is open."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "A rough idea is enough. Each member may share {allowance} in this round."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Who it helps:"
+#~ msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Close menu"
+msgstr "Cerrar menú"
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Rough cost:"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Who might do it?"
+#~ msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Yours"
+msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Choose a language"
+msgstr "Elegir un idioma"
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "From {author}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "The round is open for ideas."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Back to funding rounds"
+#~ msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoices, by source"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Yours, shared without your name"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Share or read ideas"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "This village's records: {here}."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Name"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Open the pot"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Who would it help?"
+#~ msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Open menu"
+#~ msgstr "Abrir menú"
+
+#: client/src/components/myMoon/InvoicePanel.tsx
+msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "What it is for"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Opening funding rounds"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Talk about it"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Share or read ideas"
+#~ msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Sign out everywhere"
+msgstr "Cerrar sesión en todos los dispositivos"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Reading the rounds"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "From {author}"
+#~ msgstr ""
+
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "Vote on it again here"
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "No invoice has been sent yet."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Funding rounds"
+#~ msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Translated automatically"
+msgstr "Traducción automática"
+
+#: client/src/components/TreasurySync.tsx
+msgid "Not synced yet. Press Sync to read every source."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "A pot"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "{potName}. {line}."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Who might do it:"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Open the round"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Sharing"
+msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Language: {current} ({code})"
+msgstr "Idioma: {current} ({code})"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Currency code, such as CRC"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoice {ref}"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Your saved numbers did not load."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Open a pot"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Share an idea"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "You hold the village's funding pots, so you can open a pot and a round."
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Skip to content"
+#~ msgstr "Ir al contenido"
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Close"
+msgstr "Cerrar"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "{potName}. {line}."
+#~ msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Your account, {firstName}"
+msgstr "Cuenta de {firstName}"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Open a round for ideas"
+#~ msgstr ""
+
+#: client/src/components/governance/DecisionOutcome.tsx
+msgid "This asks again after <0>a vote too few of us answered</0>."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "For the pot's holder"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Tokens, by source"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Share an idea"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "This round could not be found."
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Try again"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Last synced {syncedAt}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Yours"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Reading the rounds"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "The rough cost must be a number."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Sharing"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "A short name"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Opening funding rounds"
+#~ msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Now in {announced}"
+msgstr "Ahora en {announced}"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Your idea was not shared. Try again."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "What it is for"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "No ideas yet. The first one can be yours."
+msgstr ""
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "What would you do?"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Sign in or join"
+msgstr "Iniciar sesión o unirse"
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Reading the invoice tracks."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Opening the round"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Back to funding rounds"
+msgstr ""
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Reading your saved numbers."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Choose together which quests the season funds, within a pot."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Who would it help?"
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Sign out everywhere"
+#~ msgstr "Cerrar sesión en todos los dispositivos"
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Main Site"
+msgstr "Sitio principal"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Round stages"
+#~ msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Close menu"
+#~ msgstr "Cerrar menú"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "The rounds could not be read just now. Try again in a moment."
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Main Site"
+#~ msgstr "Sitio principal"
+
+#: client/src/components/myMoon/InvoicesDesk.tsx
+msgctxt "invoice desk"
+msgid "Sera: {there}."
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Your account, {firstName}"
+#~ msgstr "Cuenta de {firstName}"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Round name, such as the season it funds"
+msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "Use my browser's language"
+msgstr "Usar el idioma del navegador"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Who might do it:"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "{count, plural, one {# idea so far} other {# ideas so far}}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Share this idea"
+#~ msgstr ""
+
+#: client/src/i18n/LanguagePicker.tsx
+#, fuzzy
+msgctxt "language picker"
+msgid "No language matches"
+msgstr "Ningún idioma coincide"
+
+#: client/src/components/TreasurySync.tsx
+msgctxt "treasury sync"
+msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
+msgstr ""
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+msgctxt "site header"
+msgid "Skip to content"
+msgstr "Ir al contenido"
+
+#: client/src/components/Layout.tsx
+#, fuzzy
+#~ msgid "Sign in or join"
+#~ msgstr "Iniciar sesión o unirse"
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Round stages"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Who it helps:"
+msgstr ""

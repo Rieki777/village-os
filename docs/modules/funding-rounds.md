@@ -5,7 +5,7 @@ Provenance: platform
 > Registry id `funding-rounds`. The count is `shared/equalShares.ts`; the stages and the idea shape are
 > `shared/fundingRounds.ts`. Routes in `server/routes/fundingRounds.ts`; the rules in
 > `server/lib/fundingRounds.ts`; every statement in `server/repos/fundingRounds.ts`; the schema in
-> `drizzle/0333_the_village_chooses_which_quests_to_fund.sql`.
+> `drizzle/0338_the_village_chooses_which_quests_to_fund.sql`.
 
 **The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape
 them into quests, and tick every one they would fund. The count runs two ways on the same ticks: by Voice, and

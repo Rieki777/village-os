@@ -138,7 +138,7 @@ describe.skipIf(!configured)("funding rounds against a real schema", () => {
     expect((await call(handlers, "POST /api/funding-rounds/pots", { body: { name: "Village pot", unitCode: "colones" } })).status).toBe(400);
     const made = await call(handlers, "POST /api/funding-rounds/pots", { body: { name: "Village pot", unitCode: "CRC", clock: "seasonal" } });
     expect(made.status).toBe(201);
-    expect(made.body.pot).toMatchObject({ unit: "CRC", unitKind: "currency", clock: "seasonal", decider: "people", balanceMinor: 0, freeMinor: 0 });
+    expect(made.body.pot).toMatchObject({ unit: "CRC", unitKind: "currency", clock: "seasonal", decider: "power", balanceMinor: 0, freeMinor: 0 });
     potId = made.body.pot.id;
     const token = await call(handlers, "POST /api/funding-rounds/pots", { body: { name: "Credits pot", unitKind: "token", unitCode: "credits" } });
     expect(token.body.pot).toMatchObject({ unit: "credits", unitKind: "token" });

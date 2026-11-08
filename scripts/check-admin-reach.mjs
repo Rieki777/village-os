@@ -112,6 +112,19 @@ const ALLOWED = {
     "Waiting on the same screen as POST /api/admin/site-pull, and on the rights checkbox that screen has to render. Delete this line when the screen lands.",
   "POST /api/admin/resources/budgets/:id/bonus":
     "The unspent-cap bonus. It cannot succeed on this build and a control for it would be a button that can only ever refuse: a bonus needs the village to have voted a circle's work complete, that vote's subject is a COMMITMENT RECORD, and no table in this schema stores one (measured across a migrated schema, server/lib/circleBonusGate.ts). The reading beside it, GET on the same path, is reachable and says exactly that. Delete this line when a village has somewhere to write down what a circle takes on.",
+  /*
+   * SUGGEST-TO-EDIT (ROLE_POWERS_DESIGN.md §4.5), server slice first, the way
+   * site-pull shipped above: the doors, the routing rule and the closer were
+   * built and tested apart from the "Suggest this change" button and the
+   * review queue's screen, which are the next slice. Delete all five lines
+   * when that screen lands.
+   */
+  "POST /api/admin/suggestions":
+    "Suggest-to-edit, server slice. The admin panel's \"Suggest this change\" button is the next slice. Delete this line when it lands.",
+  "POST /api/admin/suggestions/:id/accept": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
+  "POST /api/admin/suggestions/:id/decline": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
+  "POST /api/admin/suggestions/:id/send-to-vote": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
+  "POST /api/admin/suggestions/:id/raise": "Suggest-to-edit, the suggester's own list, next slice. Delete this line when it lands.",
 };
 
 /**

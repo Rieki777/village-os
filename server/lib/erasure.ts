@@ -1566,7 +1566,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * Funding rounds (0333): the member's interaction rows on anonymous ideas
+       * Funding rounds (0338): the member's interaction rows on anonymous ideas
        * are deleted and the rest de-attributed; their ticks go; ideas still in
        * seed are deleted, and ideas already on a round's record stay, shown as
        * "a member", so a decided round keeps what it decided.
@@ -2245,6 +2245,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "funding-rounds-after-tombstone",
   "member-tasks-after-tombstone",
   "quest-crews-after-tombstone",
   "quest-claims-after-tombstone",

@@ -10,9 +10,14 @@
  *
  * Behind the `funding-rounds` module and a session. An anonymous idea's
  * author never reaches this page: the server sends "a member" in its place.
+ *
+ * Every string goes through Lingui (`<Trans>`, `t`, `<Plural>`), so Spanish
+ * and every other language can translate it; values sit in variables first so
+ * each placeholder has a name.
  */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useRoute } from "wouter";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
@@ -56,21 +61,30 @@ interface Idea {
   threadId: string | null;
 }
 
-const STAGE_WORD: Record<RoundStage, string> = {
-  seed: "Seed",
-  grow: "Grow",
-  choose: "Choose",
-  harvest: "Harvest",
-  closed: "Closed",
-};
+type T = ReturnType<typeof useLingui>["t"];
 
-const STAGE_LINE: Record<RoundStage, string> = {
-  seed: "Ideas welcome",
-  grow: "Ideas are being shaped into quests",
-  choose: "Choosing which quests to fund",
-  harvest: "The village has chosen",
-  closed: "This round is closed",
-};
+function stageWord(t: T, stage: RoundStage): string {
+  const words: Record<RoundStage, string> = {
+    seed: t({ message: "Seed", context: "funding round stage" }),
+    grow: t({ message: "Grow", context: "funding round stage" }),
+    choose: t({ message: "Choose", context: "funding round stage" }),
+    harvest: t({ message: "Harvest", context: "funding round stage" }),
+    closed: t({ message: "Closed", context: "funding round stage" }),
+  };
+  return words[stage];
+}
+
+function stageLine(t: T, stage: RoundStage, endsAt: string | null): string {
+  const day = endsAt ? new Date(endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : null;
+  const lines: Record<RoundStage, string> = {
+    seed: day ? t`Ideas welcome until ${day}` : t`Ideas welcome until the pot's holder sets the next stage`,
+    grow: day ? t`Ideas are being shaped into quests until ${day}` : t`Ideas are being shaped into quests`,
+    choose: day ? t`Choosing which quests to fund until ${day}` : t`Choosing which quests to fund`,
+    harvest: t`The village has chosen`,
+    closed: t`This round is closed`,
+  };
+  return lines[stage];
+}
 
 /** How many minor units one whole unit holds, for a currency; a token counts whole. */
 function minorDigits(unitKind: Pot["unitKind"], unit: string): number {
@@ -94,11 +108,6 @@ function amount(minor: number, pot: Pick<Pot, "unitKind" | "unit">): string {
   return `${minor.toLocaleString()} ${pot.unit}`;
 }
 
-function when(iso: string | null): string {
-  if (!iso) return "until the pot's holder sets the next stage";
-  return `until ${new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long" })}`;
-}
-
 async function readJson(res: Response): Promise<any> {
   try {
     return await res.json();
@@ -107,14 +116,18 @@ async function readJson(res: Response): Promise<any> {
   }
 }
 
+/** A server refusal a member can act on is a sentence; a code is not shown. */
+const sentenceOf = (body: any): string | null => (typeof body?.error === "string" && /\s/.test(body.error) ? body.error : null);
+
 const FIELD = "mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground";
 const LABEL = "block text-sm font-medium text-foreground";
 
 function StageRail({ stage }: { stage: RoundStage }) {
+  const { t } = useLingui();
   const shown = ROUND_STAGES.filter((s) => s !== "closed");
   const at = shown.indexOf(stage as (typeof shown)[number]);
   return (
-    <ol aria-label="Round stages" className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+    <ol aria-label={t({ message: "Round stages", context: "funding rounds" })} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
       {shown.map((s, i) => (
         <li key={s} className="flex items-center gap-2">
           <span
@@ -127,7 +140,7 @@ function StageRail({ stage }: { stage: RoundStage }) {
                   : "rounded-full border border-border px-3 py-1 text-muted-foreground"
             }
           >
-            {STAGE_WORD[s]}
+            {stageWord(t, s)}
           </span>
           {i < shown.length - 1 && <span aria-hidden className="text-muted-foreground">·</span>}
         </li>
@@ -137,6 +150,7 @@ function StageRail({ stage }: { stage: RoundStage }) {
 }
 
 function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: () => void }) {
+  const { t } = useLingui();
   const [title, setTitle] = useState("");
   const [what, setWhat] = useState("");
   const [whoHelps, setWhoHelps] = useState("");
@@ -146,13 +160,15 @@ function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: 
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const allowance = round.ideasPerMember;
+  const unit = pot.unit;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setProblem(null);
     const whole = cost.trim() === "" ? null : Number(cost.replace(/[\s,]/g, ""));
     if (whole != null && (!Number.isFinite(whole) || whole < 0)) {
-      setProblem("The rough cost must be a number.");
+      setProblem(t`The rough cost must be a number.`);
       return;
     }
     setBusy(true);
@@ -171,7 +187,7 @@ function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: 
       });
       const body = await readJson(res);
       if (!res.ok) {
-        setProblem(typeof body.error === "string" && /\s/.test(body.error) ? body.error : "Your idea was not shared. Try again.");
+        setProblem(sentenceOf(body) ?? t`Your idea was not shared. Try again.`);
         return;
       }
       setTitle("");
@@ -190,29 +206,29 @@ function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: 
   return (
     <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-5" aria-labelledby="share-idea">
       <h2 id="share-idea" className="font-display text-xl font-semibold text-foreground">
-        Share an idea
+        <Trans context="funding rounds">Share an idea</Trans>
       </h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        A rough idea is enough. Each member may share {round.ideasPerMember} in this round.
+        <Trans>A rough idea is enough. Each member may share {allowance} in this round.</Trans>
       </p>
       <label className={`${LABEL} mt-4`}>
-        A short name
+        <Trans context="funding rounds">A short name</Trans>
         <input className={FIELD} value={title} maxLength={IDEA_LIMITS.title} onChange={(e) => setTitle(e.target.value)} required />
       </label>
       <label className={`${LABEL} mt-3`}>
-        What would you do?
+        <Trans>What would you do?</Trans>
         <textarea className={FIELD} rows={4} value={what} maxLength={IDEA_LIMITS.what} onChange={(e) => setWhat(e.target.value)} required />
       </label>
       <label className={`${LABEL} mt-3`}>
-        Who would it help?
+        <Trans context="funding rounds">Who would it help?</Trans>
         <textarea className={FIELD} rows={2} value={whoHelps} maxLength={IDEA_LIMITS.whoHelps} onChange={(e) => setWhoHelps(e.target.value)} />
       </label>
       <label className={`${LABEL} mt-3`}>
-        Roughly what would it cost, in {pot.unit}?
+        <Trans>Roughly what would it cost, in {unit}?</Trans>
         <input className={FIELD} inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
       </label>
       <label className={`${LABEL} mt-3`}>
-        Who might do it?
+        <Trans context="funding rounds">Who might do it?</Trans>
         <input className={FIELD} value={whoMight} maxLength={IDEA_LIMITS.whoMight} onChange={(e) => setWhoMight(e.target.value)} />
       </label>
       {round.anonymousOffered && (
@@ -220,8 +236,10 @@ function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: 
           <label className="flex items-start gap-2 text-sm text-foreground">
             <input type="checkbox" className="mt-1" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
             <span>
-              Share it without my name. It shows as "a member" everywhere, and its forum thread is posted for you. In a small
-              village people may still guess who wrote it.
+              <Trans>
+                Share it without my name. It shows as "a member" everywhere, and its forum thread is posted for you. In a small
+                village people may still guess who wrote it.
+              </Trans>
             </span>
           </label>
         </div>
@@ -233,43 +251,59 @@ function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: 
       )}
       {done && !problem && (
         <p role="status" className="mt-3 text-sm text-foreground">
-          Your idea is shared. Others can comment on it in its thread.
+          <Trans>Your idea is shared. Others can comment on it in its thread.</Trans>
         </p>
       )}
       <button type="submit" className={`${BTN_PRIMARY} mt-4`} disabled={busy}>
-        {busy ? "Sharing" : "Share this idea"}
+        {busy ? <Trans context="funding rounds">Sharing</Trans> : <Trans context="funding rounds">Share this idea</Trans>}
       </button>
     </form>
   );
 }
 
 function IdeaCard({ idea, pot }: { idea: Idea; pot: Pot }) {
+  const author = idea.byline.text;
+  const cost = idea.roughCostMinor != null ? amount(idea.roughCostMinor, pot) : null;
   return (
     <li className="rounded-2xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-display text-lg font-semibold text-foreground">{idea.title}</h3>
         <span className="text-sm text-muted-foreground">
-          {idea.mine ? (idea.byline.kind === "anonymous" ? "Yours, shared without your name" : "Yours") : `From ${idea.byline.text}`}
+          {idea.mine ? (
+            idea.byline.kind === "anonymous" ? (
+              <Trans>Yours, shared without your name</Trans>
+            ) : (
+              <Trans context="funding rounds">Yours</Trans>
+            )
+          ) : (
+            <Trans context="funding rounds">From {author}</Trans>
+          )}
         </span>
       </div>
       <p className="mt-2 whitespace-pre-line text-sm text-foreground">{idea.what}</p>
-      {(idea.whoHelps || idea.roughCostMinor != null || idea.whoMight) && (
+      {(idea.whoHelps || cost || idea.whoMight) && (
         <dl className="mt-3 grid gap-1 text-sm">
           {idea.whoHelps && (
             <div>
-              <dt className="inline font-medium text-foreground">Who it helps: </dt>
+              <dt className="inline font-medium text-foreground">
+                <Trans context="funding rounds">Who it helps:</Trans>{" "}
+              </dt>
               <dd className="inline text-foreground">{idea.whoHelps}</dd>
             </div>
           )}
-          {idea.roughCostMinor != null && (
+          {cost && (
             <div>
-              <dt className="inline font-medium text-foreground">Rough cost: </dt>
-              <dd className="inline text-foreground">{amount(idea.roughCostMinor, pot)}</dd>
+              <dt className="inline font-medium text-foreground">
+                <Trans context="funding rounds">Rough cost:</Trans>{" "}
+              </dt>
+              <dd className="inline text-foreground">{cost}</dd>
             </div>
           )}
           {idea.whoMight && (
             <div>
-              <dt className="inline font-medium text-foreground">Who might do it: </dt>
+              <dt className="inline font-medium text-foreground">
+                <Trans context="funding rounds">Who might do it:</Trans>{" "}
+              </dt>
               <dd className="inline text-foreground">{idea.whoMight}</dd>
             </div>
           )}
@@ -277,7 +311,7 @@ function IdeaCard({ idea, pot }: { idea: Idea; pot: Pot }) {
       )}
       {idea.threadId && (
         <Link href={`/forum/${idea.threadId}`} className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline">
-          Talk about it
+          <Trans context="funding rounds">Talk about it</Trans>
         </Link>
       )}
     </li>
@@ -285,6 +319,7 @@ function IdeaCard({ idea, pot }: { idea: Idea; pot: Pot }) {
 }
 
 function RoundPage({ id }: { id: string }) {
+  const { t } = useLingui();
   const [data, setData] = useState<{ round: Round; pot: Pot; ideas: Idea[] } | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -304,9 +339,11 @@ function RoundPage({ id }: { id: string }) {
   if (missing) {
     return (
       <div className="container max-w-3xl py-10">
-        <p className="text-foreground">This round could not be found.</p>
+        <p className="text-foreground">
+          <Trans>This round could not be found.</Trans>
+        </p>
         <Link href="/funding-rounds" className="mt-2 inline-block text-primary underline-offset-4 hover:underline">
-          Back to funding rounds
+          <Trans context="funding rounds">Back to funding rounds</Trans>
         </Link>
       </div>
     );
@@ -314,21 +351,26 @@ function RoundPage({ id }: { id: string }) {
   if (!data) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <BreathingLoader label="Opening the round" />
+        <BreathingLoader label={t({ message: "Opening the round", context: "funding rounds" })} />
       </div>
     );
   }
   const { round, pot, ideas } = data;
+  const potName = pot.name;
+  const line = stageLine(t, round.stage, round.stageEndsAt);
+  const count = ideas.length;
   return (
     <>
       <section className="bg-gradient-to-b from-teal-deep/5 to-background py-8 md:py-12">
         <div className="container max-w-3xl">
           <Link href="/funding-rounds" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
-            Funding rounds
+            <Trans context="funding rounds">Funding rounds</Trans>
           </Link>
           <h1 className="mt-1 font-display text-4xl font-bold text-foreground">{round.title}</h1>
           <p className="mt-2 text-muted-foreground">
-            {pot.name}. {STAGE_LINE[round.stage]}, {when(round.stageEndsAt)}.
+            <Trans context="funding rounds">
+              {potName}. {line}.
+            </Trans>
           </p>
           <StageRail stage={round.stage} />
         </div>
@@ -337,10 +379,12 @@ function RoundPage({ id }: { id: string }) {
         {round.acceptsIdeas && <IdeaForm round={round} pot={pot} onShared={load} />}
         <section aria-labelledby="ideas-heading">
           <h2 id="ideas-heading" className="font-display text-xl font-semibold text-foreground">
-            {ideas.length === 1 ? "1 idea so far" : `${ideas.length} ideas so far`}
+            <Plural value={count} one="# idea so far" other="# ideas so far" />
           </h2>
-          {ideas.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">No ideas yet. The first one can be yours.</p>
+          {count === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              <Trans>No ideas yet. The first one can be yours.</Trans>
+            </p>
           ) : (
             <ul className="mt-3 grid gap-3">
               {ideas.map((i) => (
@@ -355,6 +399,7 @@ function RoundPage({ id }: { id: string }) {
 }
 
 function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void }) {
+  const { t } = useLingui();
   const [potName, setPotName] = useState("");
   const [unit, setUnit] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -370,7 +415,7 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
     try {
       const res = await gameFetch(path, { method: "POST", body: JSON.stringify(body) });
       const out = await readJson(res);
-      setMessage(res.ok ? ok : typeof out.error === "string" && /\s/.test(out.error) ? out.error : "That did not save. Try again.");
+      setMessage(res.ok ? ok : (sentenceOf(out) ?? t`That did not save. Try again.`));
       if (res.ok) onChanged();
       return res.ok;
     } finally {
@@ -381,35 +426,39 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
   return (
     <section aria-labelledby="steward-heading" className="rounded-2xl border border-dashed border-border p-5">
       <h2 id="steward-heading" className="font-display text-xl font-semibold text-foreground">
-        For the pot's holder
+        <Trans>For the pot's holder</Trans>
       </h2>
-      <p className="mt-1 text-sm text-muted-foreground">You hold the village's funding pots, so you can open a pot and a round.</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        <Trans>You hold the village's funding pots, so you can open a pot and a round.</Trans>
+      </p>
       <form
         className="mt-4 grid gap-3"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (await send("/api/funding-rounds/pots", { name: potName, unitCode: unit.trim().toUpperCase(), unitKind: "currency", purpose }, "The pot is open.")) {
+          if (await send("/api/funding-rounds/pots", { name: potName, unitCode: unit.trim().toUpperCase(), unitKind: "currency", purpose }, t`The pot is open.`)) {
             setPotName("");
             setUnit("");
             setPurpose("");
           }
         }}
       >
-        <h3 className="text-base font-semibold text-foreground">Open a pot</h3>
+        <h3 className="text-base font-semibold text-foreground">
+          <Trans context="funding rounds">Open a pot</Trans>
+        </h3>
         <label className={LABEL}>
-          Name
+          <Trans context="funding rounds">Name</Trans>
           <input className={FIELD} value={potName} onChange={(e) => setPotName(e.target.value)} required />
         </label>
         <label className={LABEL}>
-          Currency code, such as CRC
+          <Trans>Currency code, such as CRC</Trans>
           <input className={FIELD} value={unit} maxLength={3} onChange={(e) => setUnit(e.target.value)} required />
         </label>
         <label className={LABEL}>
-          What it is for
+          <Trans context="funding rounds">What it is for</Trans>
           <textarea className={FIELD} rows={2} value={purpose} onChange={(e) => setPurpose(e.target.value)} />
         </label>
         <button type="submit" className={BTN_SECONDARY} disabled={busy}>
-          Open the pot
+          <Trans context="funding rounds">Open the pot</Trans>
         </button>
       </form>
       {pots.length > 0 && (
@@ -419,15 +468,17 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
             e.preventDefault();
             const chosen = potId || pots[0].id;
             const body = { title: roundTitle, growAt: growAt ? new Date(growAt).toISOString() : null };
-            if (await send(`/api/funding-rounds/pots/${chosen}/rounds`, body, "The round is open for ideas.")) {
+            if (await send(`/api/funding-rounds/pots/${chosen}/rounds`, body, t`The round is open for ideas.`)) {
               setRoundTitle("");
               setGrowAt("");
             }
           }}
         >
-          <h3 className="text-base font-semibold text-foreground">Open a round for ideas</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            <Trans context="funding rounds">Open a round for ideas</Trans>
+          </h3>
           <label className={LABEL}>
-            Pot
+            <Trans context="funding rounds">Pot</Trans>
             <select className={FIELD} value={potId || pots[0].id} onChange={(e) => setPotId(e.target.value)}>
               {pots.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -437,15 +488,15 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
             </select>
           </label>
           <label className={LABEL}>
-            Round name, such as the season it funds
+            <Trans>Round name, such as the season it funds</Trans>
             <input className={FIELD} value={roundTitle} onChange={(e) => setRoundTitle(e.target.value)} required />
           </label>
           <label className={LABEL}>
-            When shaping starts (leave empty to keep the round in Seed)
+            <Trans>When shaping starts (leave empty to keep the round in Seed)</Trans>
             <input type="date" className={FIELD} value={growAt} onChange={(e) => setGrowAt(e.target.value)} />
           </label>
           <button type="submit" className={BTN_SECONDARY} disabled={busy}>
-            Open the round
+            <Trans context="funding rounds">Open the round</Trans>
           </button>
         </form>
       )}
@@ -458,7 +509,30 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
   );
 }
 
+function RoundCard({ round, potName }: { round: Round; potName: string }) {
+  const { t } = useLingui();
+  const line = stageLine(t, round.stage, round.stageEndsAt);
+  const count = round.ideaCount;
+  return (
+    <li className="rounded-2xl border border-border bg-card p-5">
+      <Link href={`/funding-rounds/${round.id}`} className="font-display text-xl font-semibold text-foreground underline-offset-4 hover:underline">
+        {round.title}
+      </Link>
+      <p className="mt-1 text-sm text-muted-foreground">
+        <Trans context="funding rounds">
+          {potName}. {line}.
+        </Trans>{" "}
+        <Plural value={count} one="# idea so far." other="# ideas so far." />
+      </p>
+      <Link href={`/funding-rounds/${round.id}`} className={`${BTN_QUIET} mt-3 inline-flex`}>
+        {round.acceptsIdeas ? <Trans context="funding rounds">Share or read ideas</Trans> : <Trans context="funding rounds">Open the round</Trans>}
+      </Link>
+    </li>
+  );
+}
+
 function Overview() {
+  const { t } = useLingui();
   const [data, setData] = useState<{ pots: Pot[]; rounds: Round[]; canSteward: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -476,40 +550,40 @@ function Overview() {
   }, [load]);
 
   const open = (data?.rounds ?? []).filter((r) => r.stage !== "closed");
-  const potOf = (id: string) => data?.pots.find((p) => p.id === id);
+  const aPot = t({ message: "A pot", context: "funding rounds" });
+  const potName = (id: string) => data?.pots.find((p) => p.id === id)?.name ?? aPot;
   return (
     <>
       <section className="bg-gradient-to-b from-teal-deep/5 to-background py-8 md:py-12">
         <div className="container max-w-3xl">
-          <h1 className="font-display text-4xl font-bold text-foreground">Funding rounds</h1>
-          <p className="mt-2 text-muted-foreground">Choose together which quests the season funds, within a pot.</p>
+          <h1 className="font-display text-4xl font-bold text-foreground">
+            <Trans context="funding rounds">Funding rounds</Trans>
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            <Trans>Choose together which quests the season funds, within a pot.</Trans>
+          </p>
         </div>
       </section>
       <div className="container grid max-w-3xl gap-6 pb-16">
-        {failed && <p className="text-foreground">The rounds could not be read just now. Try again in a moment.</p>}
+        {failed && (
+          <p className="text-foreground">
+            <Trans>The rounds could not be read just now. Try again in a moment.</Trans>
+          </p>
+        )}
         {!data && !failed && (
           <div className="flex min-h-[30vh] items-center justify-center">
-            <BreathingLoader label="Reading the rounds" />
+            <BreathingLoader label={t({ message: "Reading the rounds", context: "funding rounds" })} />
           </div>
         )}
         {data && open.length === 0 && (
-          <p className="text-foreground">No round is open yet. When the pot's holder opens one, ideas are welcome here.</p>
+          <p className="text-foreground">
+            <Trans>No round is open yet. When the pot's holder opens one, ideas are welcome here.</Trans>
+          </p>
         )}
         {open.length > 0 && (
           <ul className="grid gap-3">
             {open.map((r) => (
-              <li key={r.id} className="rounded-2xl border border-border bg-card p-5">
-                <Link href={`/funding-rounds/${r.id}`} className="font-display text-xl font-semibold text-foreground underline-offset-4 hover:underline">
-                  {r.title}
-                </Link>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {potOf(r.potId)?.name ?? "A pot"}. {STAGE_LINE[r.stage]}, {when(r.stageEndsAt)}.{" "}
-                  {r.ideaCount === 1 ? "1 idea so far." : `${r.ideaCount} ideas so far.`}
-                </p>
-                <Link href={`/funding-rounds/${r.id}`} className={`${BTN_QUIET} mt-3 inline-flex`}>
-                  {r.acceptsIdeas ? "Share or read ideas" : "Open the round"}
-                </Link>
-              </li>
+              <RoundCard key={r.id} round={r} potName={potName(r.potId)} />
             ))}
           </ul>
         )}
@@ -520,21 +594,23 @@ function Overview() {
 }
 
 export default function FundingRounds() {
+  const { t } = useLingui();
   const { user } = useAuth();
   const modules = useModules();
   const [isRound, params] = useRoute("/funding-rounds/:id");
   const on = (modules.modules ?? []).some((m) => m.id === "funding-rounds" && m.lifecycle !== "off");
+  const name = t({ message: "Funding rounds", context: "funding rounds" });
 
   if (!modules.loaded) {
     return (
       <Layout>
         <div className="flex min-h-[50vh] items-center justify-center">
-          <BreathingLoader label="Opening funding rounds" />
+          <BreathingLoader label={t({ message: "Opening funding rounds", context: "funding rounds" })} />
         </div>
       </Layout>
     );
   }
-  if (!on) return <ModuleGate moduleId="funding-rounds" name="Funding rounds" />;
-  if (!user) return <SignInToSee moduleId="funding-rounds" name="Funding rounds" />;
+  if (!on) return <ModuleGate moduleId="funding-rounds" name={name} />;
+  if (!user) return <SignInToSee moduleId="funding-rounds" name={name} />;
   return <Layout>{isRound && params?.id ? <RoundPage id={params.id} /> : <Overview />}</Layout>;
 }
