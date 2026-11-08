@@ -97,6 +97,15 @@ export const AFTER_LAUNCH_ON =
   "Since the launch, turning a module on is the village's call. Propose it and the village decides, or ask whoever looks after modules here.";
 
 /**
+ * Said to an admin who tries to pause or turn off governance after launch while
+ * nobody holds `module.switch` live (R156). A change set may never move
+ * governance (NEVER_BY_CHANGESET), and a vote runs on governance, so with no
+ * holder nothing could ever turn it back on.
+ */
+export const GOVERNANCE_PAUSE_STRANDS =
+  "Nobody holds the power to switch modules, so if governance went quiet nothing could turn it back on: the vote that would do it runs on governance. The village can hand that power to a role by vote first.";
+
+/**
  * May this actor move this module from `from` to `to`?
  *
  * Before launch: admins and founders, as it has always been.
@@ -111,6 +120,10 @@ export function switchVerdict(input: {
   holder: boolean;
   from: ModuleLifecycle;
   to: ModuleLifecycle;
+  /** The module being switched. Needed only for the governance case below. */
+  moduleId?: string;
+  /** Somebody, anybody, holds `module.switch` live right now. */
+  anyHolder?: boolean;
 }): SwitchVerdict {
   const { launched, admin, holder, from, to } = input;
   if (!launched) {
@@ -121,6 +134,10 @@ export function switchVerdict(input: {
   if (holder) return { ok: true, announce };
   if (!admin) return { ok: false, status: 401, error: "auth_required" };
   if (widens(from, to)) return { ok: false, status: 403, error: AFTER_LAUNCH_ON, proposeInstead: true };
+  // The valve stays shut on the module the vote runs on when nobody could open it again (R156).
+  if (input.moduleId && NEVER_BY_CHANGESET.has(input.moduleId) && !input.anyHolder) {
+    return { ok: false, status: 403, error: GOVERNANCE_PAUSE_STRANDS };
+  }
   return { ok: true, announce };
 }
 

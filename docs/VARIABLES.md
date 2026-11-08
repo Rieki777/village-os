@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 196 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 200 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 218 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-245 dials in 36 categories. 145 carry a minimum and a maximum. By type: 108 integer, 19 decimal, 19 percentage, 29 boolean, 31 choice, 38 text, 1 longtext.
+249 dials in 37 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 33 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 218 of them as soon as it is saved, and
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
 | Quests | 2 | 2 | 0 |
-| Governance | 47 | 41 | 6 |
+| Governance | 50 | 44 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -76,6 +76,7 @@ Each dial also says WHEN a change lands. 218 of them as soon as it is saved, and
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
 | Live Sessions | 2 | 2 | 0 |
+| Language | 1 | 1 | 0 |
 
 ## Every dial by name
 
@@ -110,10 +111,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Fee taken from the payment | `redemption.fee_pct` | Ledger | percentage | `0` | the founder or an admin |
 | Fixed fee taken from the payment | `redemption.fee_fixed` | Ledger | decimal | `0` | the founder or an admin |
 | Smallest redemption, in money | `redemption.min_amount` | Ledger | decimal | `0` | the whole village |
-| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | `0` | the whole village |
-| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | blank, which is no ceiling | the whole village |
+| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
-| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | Earned equity needed before a member can claim | `economy.equity_claim_threshold` | The Mint | integer | `1` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
@@ -169,6 +170,8 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a change waits when every steward already said yes | `governance.consent_notice_hours` | Governance | integer | `24` | the whole village |
 | Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
+| Changes one proposal may carry | `governance.change_set_cap` | Governance | integer | `22` | the whole village |
+| Change requests one member may gather at once | `governance.change_requests_gathering_per_member` | Governance | integer | `5` | the whole village |
 | When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
 | When a change to what the village mints can go to the vote | `governance.window_mint_rule` | Governance | text | `always_open` | the whole village |
 | When a change to how votes are counted can go to the vote | `governance.window_governance_mode` | Governance | text | `always_open` | the whole village |
@@ -186,6 +189,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | The most voting weight one member can carry | `governance.weight_cap_pct` | Governance | percentage | `20` | the founder or an admin |
 | Unity needed to pass | `governance.unity_pct` | Governance | percentage | `80` | the whole village |
 | Quorum needed to count | `governance.quorum_pct` | Governance | percentage | `20` | the whole village |
+| Ask again when too few vote | `governance.quorum_fallback` | Governance | choice | `off` | the whole village |
 | How long a ballot stays open | `governance.vote_days` | Governance | integer | `7` | the whole village |
 | How long a consent window stays open | `governance.consent_window_days` | Governance | integer | `7` | the whole village |
 | How village-wide ballots decide | `governance.default_method` | Governance | choice | `custom` | the whole village |
@@ -328,6 +332,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
+| Default language | `village.default_locale` | Language | choice | `en` | the whole village |
 
 ## Membership
 
@@ -748,28 +753,30 @@ The least a member may ask to redeem at once, counted in the redemption's own cu
 
 ### Most in one redemption, in money
 
-The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
+The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_request` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Most one member may redeem per cycle, in money
 
-Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.
+Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_member_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -790,14 +797,15 @@ The village's own words for what happens after a member asks: who to speak to, w
 
 ### Most the village will redeem per cycle, in money
 
-Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.
+Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_village_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -1662,7 +1670,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-47 dials. 41 for the whole village, 6 for the founder or an admin.
+50 dials. 44 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1726,7 +1734,7 @@ How many game-rule change proposals one member may open per cycle. A ceiling on 
 | Counted in | per cycle |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Supporters before a proposal can go to the vote
 
@@ -1741,7 +1749,7 @@ How many members must support a mechanics proposal in-game before it can be take
 | Counted in | supporters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Governance hub URL
 
@@ -1885,7 +1893,37 @@ After a dial is changed by a passed proposal, this many days must pass before a 
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Changes one proposal may carry
+
+The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. 1 to 50.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_set_cap` |
+| Type | integer, a whole number |
+| Default | `22` |
+| Range | 1 to 50 |
+| Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Change requests one member may gather at once
+
+How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_requests_gathering_per_member` |
+| Type | integer, a whole number |
+| Default | `5` |
+| Range | 1 to 50 |
+| Counted in | change requests |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### When a change to the Game Mechanics can go to the vote
 
@@ -2135,6 +2173,25 @@ The share of the electorate's total voting weight that must show up, counting ab
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
 
+### Ask again when too few vote
+
+Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.quorum_fallback` |
+| Type | choice, one of a fixed list |
+| Default | `off` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+What it may be set to:
+
+- `off` Off. A ballot that misses quorum ends as it closes.
+- `on` On. A ballot that misses quorum is asked again once, at half the quorum.
+
 ### How long a ballot stays open
 
 Days between a ballot opening and its votes locking. Votes can be changed freely until then. The clock closes the ballot when the window ends and the village's own engine reads the result, so nobody chooses the moment. A change to the Game then waits again, for the window a steward can stop it in.
@@ -2148,7 +2205,7 @@ Days between a ballot opening and its votes locking. Votes can be changed freely
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How long a consent window stays open
 
@@ -4391,12 +4448,37 @@ The length a new live session starts with when whoever opens it names none. The 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+## Language
+
+1 dial. 1 for the whole village.
+
+### Default language
+
+The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.default_locale` |
+| Type | choice, one of a fixed list |
+| Default | `en` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `en` English.
+- `es` Español.
+
 ## What this file is made from
 
 The generator reads these and fails loudly if any of them moves:
 
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
+- `shared/changeRequestLimits.ts`
+- `shared/changeSetCap.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`

@@ -132,6 +132,14 @@ export const STEWARD_CIRCLE_GRANTS = [
   { capability: "proposal.decide", roleIds: ["steward-circle"] },
 ] as const;
 
+/**
+ * `role.pay` reaches a running village's Treasury power group once (Rye,
+ * 2026-11-06: "Role pay is set by both the treasurer and the role/valuation
+ * algorithm"). The seed carries it for a new village. Same generic grant, same
+ * rule: a village that later takes it off keeps it off.
+ */
+export const ROLE_PAY_GRANTS = [{ capability: "role.pay", roleIds: [TREASURY_ROLE_ID] }] as const;
+
 /** The two grants, as decisions 18 and 19 name them. */
 export const MOON_REVIEW_GRANTS = [
   { capability: APPROVE_ALONE_CAPABILITY, roleIds: APPROVE_ALONE_GROUPS },
