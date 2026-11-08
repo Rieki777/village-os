@@ -45,6 +45,7 @@ describe.skipIf(!configured)("change_requests, change_request_items", () => {
   });
 
   beforeEach(async () => {
+    await pool.query("DELETE FROM change_request_notes");
     await pool.query("DELETE FROM change_request_items");
     await pool.query("DELETE FROM change_requests");
   });
@@ -87,9 +88,11 @@ describe.skipIf(!configured)("change_requests, change_request_items", () => {
     expect((await store.byId("cr-1"))!.revision).toBe(2);
   });
 
-  it("refuses to edit or delete a change request that has left gathering", async () => {
+  it("refuses to edit or delete a change request in the vote, and to delete one in review", async () => {
     await store.create({ id: "cr-1", authorUserId: "u-ana", title: "Garden hours", why: "Winter.", changes: [dial("9")] });
     await pool.query("UPDATE change_requests SET state = 'in_review' WHERE id = 'cr-1'");
+    expect(await store.remove("cr-1", 1)).toBe(false);
+    await pool.query("UPDATE change_requests SET state = 'voting' WHERE id = 'cr-1'");
     expect(await store.revise("cr-1", 1, { title: "x" })).toBe(false);
     expect(await store.remove("cr-1", 1)).toBe(false);
     expect(await store.byId("cr-1")).not.toBeNull();
@@ -112,5 +115,38 @@ describe.skipIf(!configured)("change_requests, change_request_items", () => {
     expect(await store.byId("cr-1")).toBeNull();
     const [left] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM change_request_items");
     expect(Number(left[0].n)).toBe(0);
+  });
+
+  it("opens review once, remembers the review length, and still lets the author revise in review", async () => {
+    await store.create({ id: "cr-1", authorUserId: "u-ana", title: "a", why: "a", changes: [dial("9")] });
+    expect(await store.openReview("cr-1", 2, 3)).toBe(false);
+    expect(await store.openReview("cr-1", 1, 3)).toBe(true);
+    expect(await store.openReview("cr-1", 1, 3)).toBe(false);
+    const open = (await store.byId("cr-1"))!;
+    expect(open).toMatchObject({ state: "in_review", reviewDaysAtOpen: 3 });
+    expect(open.reviewOpenedAt).not.toBeNull();
+    await pool.query("UPDATE change_requests SET review_opened_at = '2026-01-01 00:00:00' WHERE id = 'cr-1'");
+    expect(await store.revise("cr-1", 1, { title: "b" })).toBe(true);
+    expect((await store.byId("cr-1"))!.reviewOpenedAt).toContain("2026-01-01");
+    expect(await store.revise("cr-1", 2, { changes: [dial("10")] })).toBe(true);
+    expect((await store.byId("cr-1"))!.reviewOpenedAt).not.toContain("2026-01-01");
+  });
+
+  it("takes notes only while in review, settles each once, and counts openings", async () => {
+    await store.create({ id: "cr-1", authorUserId: "u-ana", title: "a", why: "a", changes: [dial("9")] });
+    const note = { id: "n-1", changeRequestId: "cr-1", revision: 1, kind: "objection" as const, authorUserId: "u-sol", body: "It harms the kitchen." };
+    expect(await store.addNote(note)).toBe(false);
+    await store.openReview("cr-1", 1, 3);
+    expect(await store.addNote(note)).toBe(true);
+    expect(await store.addNote({ id: "n-2", changeRequestId: "cr-1", revision: 1, kind: "edit", authorUserId: "u-sol", position: 0, body: "Five.", proposedItem: { op: "replace", position: 0, change: { key: "governance.vote_days", to: "5" } } })).toBe(true);
+    expect(await store.addNote({ id: "n-3", changeRequestId: "cr-1", revision: 1, kind: "system", authorUserId: "u-ana", body: "opened for review" })).toBe(true);
+    const notes = await store.notesOf("cr-1");
+    expect(notes.map((n) => [n.id, n.kind, n.outcome])).toEqual([["n-1", "objection", "open"], ["n-2", "edit", "open"], ["n-3", "system", "open"]]);
+    expect(notes[1].proposedItem).toEqual({ op: "replace", position: 0, change: { key: "governance.vote_days", to: "5" } });
+    expect(await store.settleNote("n-1", "answered")).toBe(true);
+    expect(await store.settleNote("n-1", "answered")).toBe(false);
+    expect(await store.openedForReviewSince("u-ana", new Date("2000-01-01"))).toBe(1);
+    await pool.query("UPDATE change_requests SET state = 'voting' WHERE id = 'cr-1'");
+    expect(await store.addNote({ ...note, id: "n-4" })).toBe(false);
   });
 });
