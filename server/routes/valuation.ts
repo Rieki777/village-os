@@ -94,15 +94,26 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /** What a figure stores on the role, or the reason a pay line cannot be stored (the admin door's own check). */
+  /*
+   * NO VOICE LINE BEFORE THE VILLAGE ADOPTS ITS OWN SCALE (economics lane,
+   * 2026-11-08). The platform default model pays 1 Voice per currency unit, so a
+   * role set at 200,000 colones on a village that never adopted a model would
+   * store 200,000 Voice, and the role.cycle Voice rule (enabled, amount blank)
+   * pays whatever the role names. Rye set Amora's scale at 1 Voice per 1,000
+   * colones; until a village saves a model of its own (version 0 is the platform
+   * default), every write path here stores no Voice line, and says so.
+   */
   const rolePayFor = async (figure: number, cashPct: number | undefined, eeHeld: boolean) => {
     const model = await currentModel(getPool(), currency());
-    const pay = storedPayFor(model, figure, { cashPct, eeHeld });
+    const stored = storedPayFor(model, figure, { cashPct, eeHeld });
+    const voiceHeld = model.version === 0;
+    const pay = voiceHeld ? { ...stored, valueTokens: stored.valueTokens.filter((t) => t.token !== model.tokens.voice) } : stored;
     const rules = await rolePayRules(getPool());
     for (const t of pay.valueTokens) {
       const problem = payLineCheck(rules, t.token);
-      if (problem) return { problem, pay };
+      if (problem) return { problem, pay, voiceHeld };
     }
-    return { problem: null, pay };
+    return { problem: null, pay, voiceHeld };
   };
 
   /**
@@ -236,6 +247,7 @@ export function register(app: Express, deps: Deps): void {
     const ee = eeMeaningWritten();
     const opened = await openRolePayDraft(role, proposed, !ee, String(user.id), `A top-up for ${role.name}: ${outcome}`);
     if ("problem" in opened) return res.status(400).json({ error: opened.problem });
+    const voiceHeld = (await currentModel(getPool(), currency())).version === 0;
     const latest = (await settingsForWork(getPool(), "role", role.id)).find((s) => s.state === "set");
     if (latest) {
       const payeeIds = (await listOrgAssignments(getPool())).filter((a) => a.orgRoleId === role.id && a.userId).map((a) => String(a.userId));
@@ -251,7 +263,12 @@ export function register(app: Express, deps: Deps): void {
       });
       await writeSetting(getPool(), rec, { workRef: role.id, state: "awaiting_vote", modelVersion: latest.modelVersion, currency: latest.currency, inputs: latest.inputs, suggestion: latest.suggestion, payeeIds, setterId: String(user.id) });
     }
-    res.json({ success: true, draftId: opened.draftId, putToVillage: putToVillage(opened.draftId) });
+    res.json({
+      success: true,
+      draftId: opened.draftId,
+      putToVillage: putToVillage(opened.draftId),
+      ...(voiceHeld ? { voiceHeld: true, voiceNote: "Voice starts when the village adopts its own pay settings." } : {}),
+    });
   });
 
   app.get("/api/org/roles/:id/pay/settings", async (req, res) => {
