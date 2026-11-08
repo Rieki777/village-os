@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { gameFetch } from "@/lib/gameApi";
 
 const BASE = "/api/governance/village-export";
@@ -23,6 +24,7 @@ async function errorOf(res: Response, fallback: string): Promise<string> {
 }
 
 export function AskForExport() {
+  const { t } = useLingui();
   const [stewards, setStewards] = useState<Array<{ userId: string; label: string }> | null>(null);
   const [open, setOpen] = useState(false);
   const [steward, setSteward] = useState("");
@@ -41,10 +43,10 @@ export function AskForExport() {
     setError("");
     try {
       const res = await gameFetch(`${BASE}/put-to-village`, { method: "POST", body: JSON.stringify({ stewardUserId: steward, reason }) });
-      if (!res.ok) throw new Error(await errorOf(res, "The vote did not open"));
+      if (!res.ok) throw new Error(await errorOf(res, t`The vote did not open`));
       setOpened(String((await res.json()).ballot?.id ?? ""));
     } catch (e: any) {
-      setError(e?.message ?? "The vote did not open");
+      setError(e?.message ?? t`The vote did not open`);
     }
     setBusy(false);
   };
@@ -52,35 +54,39 @@ export function AskForExport() {
   if (opened) {
     return (
       <p className="text-sm text-stone-700">
-        The vote is open. <Link href={`/decisions/${opened}`} className="underline">Read it and vote</Link>.
+        <Trans>
+          The vote is open. <Link href={`/decisions/${opened}`} className="underline">Read it and vote</Link>.
+        </Trans>
       </p>
     );
   }
   if (!open) {
     return (
       <button type="button" onClick={() => setOpen(true)} className="text-sm text-stone-600 underline">
-        Ask the village for one copy of its database
+        <Trans>Ask the village for one copy of its database</Trans>
       </button>
     );
   }
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
       <p className="text-sm text-stone-700">
-        The copy holds every member's data. If the village carries this at its highest bar, the steward you name may
-        download it once, and every member is told when they do.
+        <Trans>
+          The copy holds every member's data. If the village carries this at its highest bar, the steward you name may
+          download it once, and every member is told when they do.
+        </Trans>
       </p>
       <label className="block text-sm text-stone-700">
-        The steward who receives it
+        <Trans>The steward who receives it</Trans>
         <select value={steward} onChange={(e) => setSteward(e.target.value)} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm">
-          <option value="">Choose a sitting steward</option>
+          <option value="">{t`Choose a sitting steward`}</option>
           {(stewards ?? []).map((s) => (
             <option key={s.userId} value={s.userId}>{s.label}</option>
           ))}
         </select>
       </label>
-      {stewards && stewards.length === 0 && <p className="text-xs text-amber-700">No steward is sitting now, so there is nobody to name.</p>}
+      {stewards && stewards.length === 0 && <p className="text-xs text-amber-700"><Trans>No steward is sitting now, so there is nobody to name.</Trans></p>}
       <label className="block text-sm text-stone-700">
-        Why the village needs it
+        <Trans>Why the village needs it</Trans>
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-1.5 text-sm" />
       </label>
       {error && <p className="text-xs text-red-700">{error}</p>}
@@ -91,9 +97,9 @@ export function AskForExport() {
           onClick={ask}
           className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
         >
-          {busy ? "Opening..." : "Ask the village"}
+          {busy ? t({ message: "Opening...", context: "database export" }) : t({ message: "Ask the village", context: "database export" })}
         </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-500">Not now</button>
+        <button type="button" onClick={() => setOpen(false)} className="text-sm text-stone-500"><Trans context="database export">Not now</Trans></button>
       </div>
     </div>
   );
@@ -107,6 +113,7 @@ interface Standing {
 }
 
 export function ExportDelivery({ ballotId }: { ballotId: string }) {
+  const { t } = useLingui();
   const [standing, setStanding] = useState<Standing | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -122,7 +129,7 @@ export function ExportDelivery({ ballotId }: { ballotId: string }) {
     setError("");
     try {
       const res = await gameFetch(`${BASE}/${ballotId}/download`);
-      if (!res.ok) throw new Error(await errorOf(res, "The copy did not download"));
+      if (!res.ok) throw new Error(await errorOf(res, t`The copy did not download`));
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
@@ -130,7 +137,7 @@ export function ExportDelivery({ ballotId }: { ballotId: string }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e?.message ?? "The copy did not download");
+      setError(e?.message ?? t`The copy did not download`);
     }
     setBusy(false);
     load();
@@ -138,25 +145,27 @@ export function ExportDelivery({ ballotId }: { ballotId: string }) {
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-2">
-      <p className="text-sm font-medium text-stone-900">One copy of the village's database</p>
+      <p className="text-sm font-medium text-stone-900"><Trans>One copy of the village's database</Trans></p>
       {when ? (
-        <p className="text-sm text-stone-700">It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote.</p>
+        <p className="text-sm text-stone-700"><Trans>It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote.</Trans></p>
       ) : standing.forYou ? (
         standing.stewardLive ? (
           <>
             <p className="text-sm text-stone-700">
-              The village authorised this copy for you. You can download it once; every member is told when you do. Keep the
-              file where only you can reach it.
+              <Trans>
+                The village authorised this copy for you. You can download it once; every member is told when you do. Keep the
+                file where only you can reach it.
+              </Trans>
             </p>
             <button type="button" disabled={busy} onClick={download} className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm text-white disabled:opacity-40">
-              {busy ? "Downloading..." : "Download the copy"}
+              {busy ? t({ message: "Downloading...", context: "database export" }) : t({ message: "Download the copy", context: "database export" })}
             </button>
           </>
         ) : (
-          <p className="text-sm text-amber-700">You do not hold the steward role now, so this copy cannot be delivered. It stays unused.</p>
+          <p className="text-sm text-amber-700"><Trans>You do not hold the steward role now, so this copy cannot be delivered. It stays unused.</Trans></p>
         )
       ) : (
-        <p className="text-sm text-stone-700">The village authorised one copy for the steward this vote names. It has not been downloaded yet.</p>
+        <p className="text-sm text-stone-700"><Trans>The village authorised one copy for the steward this vote names. It has not been downloaded yet.</Trans></p>
       )}
       {error && <p className="text-xs text-red-700">{error}</p>}
     </div>
