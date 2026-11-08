@@ -2915,6 +2915,33 @@ export const VARIABLES: VariableDef[] = [
     max: 200,
     unit: "entries",
   },
+  /*
+   * WHERE THE LAND'S SATELLITE PICTURE COMES FROM (readiness R171). This was
+   * the host variable SATELLITE_PROVIDER alone, so a founder on a hosted
+   * village could not choose one. Blank defers to that variable, so a village
+   * that set it there keeps it. Each keyed provider's key has its own slot in
+   * Admin, Integrations (server/lib/satellite.ts, `keySlot`), and the licence
+   * reading for each lives beside it there. The choices are the providers that
+   * file knows, in its order; satellite.test.ts holds the two lists together.
+   */
+  {
+    key: "village.satellite_provider",
+    category: "Village",
+    label: "Where the land's satellite picture comes from",
+    description:
+      "Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.",
+    type: "choice",
+    default: "",
+    choices: [
+      { value: "", label: "Left to the host", hint: "Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground." },
+      { value: "village-upload", label: "The village's own aerial photograph", hint: "No provider and no key: an admin uploads the picture." },
+      { value: "esri-open", label: "Esri World Imagery, no key", hint: "Kept on the village's own volume." },
+      { value: "sentinel2", label: "Copernicus Sentinel-2", hint: "Needs the address of a Sentinel-2 WMS service." },
+      { value: "mapbox", label: "Mapbox Static Images", hint: "Needs a Mapbox token." },
+      { value: "google", label: "Google Maps Static", hint: "Needs a Google Maps Static API key." },
+      { value: "esri", label: "Esri World Imagery", hint: "Needs an ArcGIS API key." },
+    ],
+  },
   {
     // WHERE THIS VILLAGE STARTS COUNTING ITS OWN MOONS.
     //

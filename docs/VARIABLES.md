@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 200 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 201 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 223 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-249 dials in 37 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 33 choice, 38 text, 1 longtext.
+250 dials in 37 categories. 147 carry a minimum and a maximum. By type: 110 integer, 19 decimal, 19 percentage, 29 boolean, 34 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -66,7 +66,7 @@ Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and
 | Exchange | 5 | 5 | 0 |
 | Library | 9 | 9 | 0 |
 | Payments | 4 | 4 | 0 |
-| Village | 2 | 1 | 1 |
+| Village | 3 | 2 | 1 |
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
 | Platform | 3 | 0 | 3 |
@@ -299,6 +299,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Annual purchase limit per member (USD) | `payments.purchase_limit_annual_usd` | Payments | integer | `10000` | the whole village |
 | Largest checkout donation | `payments.donation_max_usd` | Payments | integer | `50000` | the whole village |
 | Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
+| Where the land's satellite picture comes from | `village.satellite_provider` | Village | choice | blank | the whole village |
 | The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
 | Alert when a metric moves this much | `health.alert_change_pct` | Health | integer | `40` | the whole village |
 | Featured badges per member | `badges.max_featured` | Badges | integer | `3` | the whole village |
@@ -3872,7 +3873,7 @@ The ceiling on a single choose-your-amount donation checkout. Anything above it 
 
 ## Village
 
-2 dials. 1 for the whole village, 1 for the founder or an admin.
+3 dials. 2 for the whole village, 1 for the founder or an admin.
 
 ### Village Pulse length
 
@@ -3888,6 +3889,30 @@ How many recent happenings the public activity feed shows. Nothing is deleted; t
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+
+### Where the land's satellite picture comes from
+
+Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.satellite_provider` |
+| Type | choice, one of a fixed list |
+| Default | blank |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `` Left to the host. Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground.
+- `village-upload` The village's own aerial photograph. No provider and no key: an admin uploads the picture.
+- `esri-open` Esri World Imagery, no key. Kept on the village's own volume.
+- `sentinel2` Copernicus Sentinel-2. Needs the address of a Sentinel-2 WMS service.
+- `mapbox` Mapbox Static Images. Needs a Mapbox token.
+- `google` Google Maps Static. Needs a Google Maps Static API key.
+- `esri` Esri World Imagery. Needs an ArcGIS API key.
 
 ### The date this village counts Moon 1 from
 

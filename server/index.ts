@@ -260,6 +260,7 @@ import { register as registerCommsRoutes } from "./routes/comms";
 import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
 import { register as registerCommsEventRoutes } from "./routes/commsEvents";
 import { googleCredentialEnv, resolveGoogleConfig } from "./lib/oauthGoogle";
+import { satelliteKeyCards } from "./lib/satellite";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
   decodeToken,
@@ -17233,7 +17234,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   }
 
   function integrationCards(): IntegrationCard[] {
-    const platform: IntegrationCard[] = PLATFORM_CARDS.map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true }));
+    const platform: IntegrationCard[] = [...PLATFORM_CARDS, ...satelliteKeyCards()].map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true })); // R171: the chosen imagery provider's key card
     const listings: IntegrationCard[] = vendorModules().flatMap((m): IntegrationCard[] => {
       const support = supportRoute(m);
       const base = {

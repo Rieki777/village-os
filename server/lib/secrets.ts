@@ -121,6 +121,14 @@ const BASE_SECRET_KEYS = [
   // incoming-webhook address carries its token in the path, like the Base RPC
   // endpoint below, so it is sealed here, with ERROR_WEBHOOK_URL as fallback.
   "error_webhook_url",
+  // The satellite imagery providers' keys, one slot per keyed provider
+  // (readiness R171), each falling back to that provider's own host variable
+  // (`keyEnv` in server/lib/satellite.ts, which names its slot as `keySlot`).
+  // Integrations shows only the chosen provider's card, and any still holding a key.
+  "satellite_sentinel_wms_url",
+  "satellite_mapbox_token",
+  "satellite_google_maps_key",
+  "satellite_esri_api_key",
   "basescan_api_key",
   // The Base RPC endpoint. A dedicated one carries its provider key in the
   // address, so it is a credential, and it used to be the plain game variable
@@ -173,6 +181,10 @@ const BASE_ENV_FALLBACK: Record<BaseSecretKey, string | null> = {
   google_client_id: "GOOGLE_CLIENT_ID",
   google_client_secret: "GOOGLE_CLIENT_SECRET", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   error_webhook_url: "ERROR_WEBHOOK_URL",
+  satellite_sentinel_wms_url: "SENTINEL_WMS_URL",
+  satellite_mapbox_token: "MAPBOX_TOKEN", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
+  satellite_google_maps_key: "GOOGLE_MAPS_STATIC_KEY", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
+  satellite_esri_api_key: "ESRI_API_KEY", // module-review-ok: the NAME of the env var this slot falls back to, as the runbook documents it, never a value
   basescan_api_key: "BASESCAN_API_KEY",
   base_rpc_url: "BASE_RPC_URL",
   railway_project_token: null,
