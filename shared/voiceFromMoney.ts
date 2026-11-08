@@ -65,11 +65,17 @@ export function voiceSourceKind(source: string): VoiceSourceKind {
   return "unclassified";
 }
 
-/** Floor a Voice amount to Voice's own decimals. The epsilon keeps 2.30 from reading as 2.29. */
+/**
+ * Floor a Voice amount to Voice's own decimals. The epsilon keeps 2.30 from
+ * reading as 2.29. It is 1e-7, the same as the valuation engine's `voiceFor`
+ * (#981), so a figure the engine stores and the Voice a payment posts agree to
+ * the hundredth; an amount in minor units times any scale is never within
+ * 1e-7 of the next hundredth unless float error put it there.
+ */
 export function floorVoice(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
   const per = minorPerWhole(VOICE_DECIMALS);
-  return Math.floor(amount * per + 1e-9) / per;
+  return Math.floor(amount * per + 1e-7) / per;
 }
 
 /**

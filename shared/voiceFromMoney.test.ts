@@ -82,6 +82,13 @@ describe("what never earns", () => {
     expect(floorVoice(0.07)).toBe(0.07);
     expect(floorVoice(1.009)).toBe(1);
   });
+
+  it("agrees with the valuation engine's own pins: 71,820 is 71.82 and 42,500 is 42.50", () => {
+    // The engine's minor units, divided the way its callers will: 7,182,000 minor is 71,820.
+    expect(workVoiceFromPaid(7_182_000 / 100, PER_THOUSAND)).toBe(71.82);
+    expect(workVoiceFromPaid(42_500, PER_THOUSAND)).toBe(42.5);
+    expect(workVoiceFromPaid(999, PER_THOUSAND)).toBe(0.99);
+  });
 });
 
 describe("which Voice is work", () => {
