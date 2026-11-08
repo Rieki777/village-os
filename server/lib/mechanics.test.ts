@@ -181,6 +181,32 @@ describe("the proposal document", () => {
     expect(md).toContain("takes effect at the next cycle close");
   });
 
+  it("a currency vote tells the voter, before they vote, that nothing is converted (Rye, 2026-11-06)", () => {
+    const md = proposalMarkdown({
+      id: "gmp-test-currency",
+      title: "Count in yen",
+      rationale: "r",
+      changeSet: [{ key: "brand:project.fiatCurrency", from: "CRC", to: "JPY", kind: "brand_field", field: "project.fiatCurrency" }],
+      villageName: "V",
+      proposerName: "P",
+      supports: 0,
+      createdAt: "2026-07-31T00:00:00.000Z",
+    });
+    expect(md).toContain("| ↳ the village's currency changes from CRC to JPY. Nothing already recorded is converted");
+    expect(md).toContain("100 times larger");
+    const name = proposalMarkdown({
+      id: "gmp-test-name",
+      title: "Rename",
+      rationale: "r",
+      changeSet: [{ key: "brand:project.name", from: "A", to: "B", kind: "brand_field", field: "project.name" }],
+      villageName: "V",
+      proposerName: "P",
+      supports: 0,
+      createdAt: "2026-07-31T00:00:00.000Z",
+    });
+    expect(name, "control: a rename carries no currency line").not.toContain("Nothing already recorded is converted");
+  });
+
   it("display values read like the game, not like storage", () => {
     expect(displayChangeValue("gratitude.require_message", "true")).toBe("On");
     expect(displayChangeValue("governance.voice_weighting", "equal")).toBe("One person, one voice");
@@ -437,6 +463,17 @@ describe("typed change items", () => {
     expect(pricingOf({ kind: "dial", key: "not.a.dial", to: "1" }).criticality).toBe("routine");
   });
 
+  it("prices a brand change by its field: a name is routine, the currency code is the highest tier (Rye, 2026-11-06)", () => {
+    expect(pricingOf({ kind: "brand_field", field: "project.name", to: "Larkfield" })).toEqual({
+      subject: "mechanics",
+      criticality: "routine",
+    });
+    expect(pricingOf({ kind: "brand_field", field: "project.fiatCurrency", to: "USD" })).toEqual({
+      subject: "mechanics",
+      criticality: "constitutional",
+    });
+  });
+
   it("prices a mode switch at the constitutional subject", () => {
     expect(pricingOf({ kind: "mode_switch", to: "equal" })).toEqual({
       subject: GOVERNANCE_MODE,
@@ -461,6 +498,22 @@ describe("typed change items", () => {
 describe("what a whole change set costs", () => {
   const village = { unityPct: 80, quorumPct: 20 };
   const registry = thresholdSettingsFrom(() => 0);
+
+  it("asks the constitutional bar of a bundle that moves the currency, however small the rest of it is", () => {
+    const priced = priceChangeSet(
+      [
+        { kind: "brand_field", field: "project.tagline", to: "Where the two rivers meet" },
+        { kind: "brand_field", field: "project.fiatCurrency", to: "USD" },
+      ],
+      "custom",
+      village,
+      registry,
+    );
+    expect(priced.criticality).toBe("constitutional");
+    expect(priced.dials).toEqual(TIER_FLOORS.constitutional);
+    const nameOnly = priceChangeSet([{ kind: "brand_field", field: "project.tagline", to: "x" }], "custom", village, registry);
+    expect(nameOnly.criticality, "control: the same set without the currency").toBe("routine");
+  });
 
   it("leaves an ordinary set of routine dials exactly where it was", () => {
     const priced = priceChangeSet([{ key: "gratitude.base_budget", to: "150" }], "custom", village, registry);
@@ -580,7 +633,10 @@ describe("which kinds this build will take to a vote", () => {
     const ok = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.name", to: "Larkfield" } as ChangeItem], effective, 0, undefined, { brandOf });
     expect(ok.problems).toEqual([]);
     expect(ok.normalized).toEqual([{ key: "brand:project.name", from: "Larksfield", to: "Larkfield", kind: "brand_field", field: "project.name" }]);
-    for (const [field, to] of [["project.fiatCurrency", "USD"], ["project.apiKey", "x"], ["project.nope", "x"], ["project.name", "Larksfield"]]) {
+    const currency = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" } as ChangeItem], effective, 0, undefined, { brandOf });
+    expect(currency.problems, "the currency goes to a vote too (Rye, 2026-11-06)").toEqual([]);
+    expect(currency.normalized).toEqual([{ key: "brand:project.fiatCurrency", from: "EUR", to: "USD", kind: "brand_field", field: "project.fiatCurrency" }]);
+    for (const [field, to] of [["project.fiatCurrency", "usd"], ["project.fiatCurrency", "EUR"], ["project.apiKey", "x"], ["project.nope", "x"], ["project.name", "Larksfield"]]) {
       const refused = await validateChangeSet(noPool, [{ kind: "brand_field", field, to } as ChangeItem], effective, 0, undefined, { brandOf });
       expect(refused.problems.length, `${field} -> ${to}`).toBe(1);
       expect(refused.normalized).toEqual([]);

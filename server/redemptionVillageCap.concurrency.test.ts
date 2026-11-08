@@ -88,8 +88,9 @@ describe.skipIf(!configured)("the village-wide cap, under two asks at once", () 
     }),
     processText: "",
     minMinor: 0,
-    maxPerRequestMinor: 0,
-    memberCapMinor: 0,
+    // Blank, which is no ceiling (Rye, 2026-11-05: 0 is a ceiling of zero).
+    maxPerRequestMinor: null,
+    memberCapMinor: null,
     villageCapMinor,
     feePct: 0,
     feeFixed: 0,
