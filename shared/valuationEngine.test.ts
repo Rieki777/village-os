@@ -282,3 +282,22 @@ describe("the engine's own dials", () => {
     expect(wide.band.highMinor).toBe(Math.round(1566800 * 1.2));
   });
 });
+
+describe("Voice at the village's own scale (Rye, 2026-11-08: 1 Voice per 1,000 colones)", () => {
+  const SCALED = { ...CRC, voicePerUnit: 0.001 };
+
+  it("reads voicePerUnit live and keeps Voice's two decimals, never rounding a small Voice to whole units (II.28)", () => {
+    const p = lead(suggestValuation(SCALED, FENCE, MEANING));
+    // ₡15,668 of reward at 1 Voice per ₡1,000 is 15.668, held to the hundredth below.
+    expect(p.expected.voice).toBe(15.66);
+    expect(p.paidAs.find((t) => t.token === CRC.tokens.voice)).toEqual({ token: CRC.tokens.voice, amount: 15.66 });
+  });
+
+  it("leaves the reward itself unchanged: the scale moves Voice only", () => {
+    expect(lead(suggestValuation(SCALED, FENCE, MEANING)).expected.totalMinor).toBe(lead(suggestValuation(CRC, FENCE, MEANING)).expected.totalMinor);
+  });
+
+  it("still pays whole Voice at 1 per unit", () => {
+    expect(lead(suggestValuation(CRC, FENCE, MEANING)).expected.voice).toBe(15668);
+  });
+});
