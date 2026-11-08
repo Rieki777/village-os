@@ -90,6 +90,11 @@ msgstr ""
 #~ msgid "Name"
 #~ msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "The village has chosen"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
 msgstr ""
@@ -131,6 +136,11 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Choose"
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -178,6 +188,15 @@ msgstr ""
 #~ msgid "Who it helps:"
 #~ msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "This round is closed"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "This round is closed"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
@@ -224,7 +243,16 @@ msgid "The round is open for ideas."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Harvest"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 #~ msgid "Back to funding rounds"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Choosing which quests to fund"
 #~ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -252,6 +280,10 @@ msgid "Name"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+#~ msgid "Ideas welcome until the pot's holder sets the next stage"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Open the pot"
 msgstr ""
@@ -275,6 +307,11 @@ msgid "What it is for"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Ideas welcome until {day}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Opening funding rounds"
 msgstr ""
@@ -282,6 +319,11 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Talk about it"
 #~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Closed"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Share or read ideas"
@@ -301,9 +343,18 @@ msgstr "Cerrar sesión en todos los dispositivos"
 #~ msgid "From {author}"
 #~ msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Ideas are being shaped into quests until {day}"
+msgstr ""
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Ideas are being shaped into quests"
+#~ msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -332,6 +383,11 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "{potName}. {line}."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Choosing which quests to fund until {day}"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -370,6 +426,11 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Your saved numbers did not load."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Grow"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -417,9 +478,18 @@ msgstr ""
 msgid "For the pot's holder"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "The village has chosen"
+#~ msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Ideas are being shaped into quests"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -509,6 +579,11 @@ msgid "Reading the invoice tracks."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Ideas welcome until the pot's holder sets the next stage"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Opening the round"
 msgstr ""
@@ -547,6 +622,10 @@ msgstr "Sitio principal"
 #~ msgid "Round stages"
 #~ msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Ideas welcome until {day}"
+#~ msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Close menu"
@@ -555,6 +634,14 @@ msgstr "Sitio principal"
 #: client/src/pages/FundingRounds.tsx
 msgid "The rounds could not be read just now. Try again in a moment."
 msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Ideas are being shaped into quests until {day}"
+#~ msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Choosing which quests to fund until {day}"
+#~ msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -602,6 +689,16 @@ msgstr "Ningún idioma coincide"
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Choosing which quests to fund"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding round stage"
+msgid "Seed"
 msgstr ""
 
 #: client/src/components/Layout.tsx

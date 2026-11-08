@@ -61,29 +61,35 @@ interface Idea {
   threadId: string | null;
 }
 
-type T = ReturnType<typeof useLingui>["t"];
-
-function stageWord(t: T, stage: RoundStage): string {
-  const words: Record<RoundStage, string> = {
-    seed: t({ message: "Seed", context: "funding round stage" }),
-    grow: t({ message: "Grow", context: "funding round stage" }),
-    choose: t({ message: "Choose", context: "funding round stage" }),
-    harvest: t({ message: "Harvest", context: "funding round stage" }),
-    closed: t({ message: "Closed", context: "funding round stage" }),
+/**
+ * The stage words, as a hook. The Lingui macro only transforms a `t` taken
+ * from `useLingui()` in the same scope; a `t` passed in as an argument is left
+ * as a plain call and renders nothing (found on this page, 2026-11-08).
+ */
+function useStageText() {
+  const { t } = useLingui();
+  const word = (stage: RoundStage): string => {
+    const words: Record<RoundStage, string> = {
+      seed: t({ message: "Seed", context: "funding round stage" }),
+      grow: t({ message: "Grow", context: "funding round stage" }),
+      choose: t({ message: "Choose", context: "funding round stage" }),
+      harvest: t({ message: "Harvest", context: "funding round stage" }),
+      closed: t({ message: "Closed", context: "funding round stage" }),
+    };
+    return words[stage];
   };
-  return words[stage];
-}
-
-function stageLine(t: T, stage: RoundStage, endsAt: string | null): string {
-  const day = endsAt ? new Date(endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : null;
-  const lines: Record<RoundStage, string> = {
-    seed: day ? t`Ideas welcome until ${day}` : t`Ideas welcome until the pot's holder sets the next stage`,
-    grow: day ? t`Ideas are being shaped into quests until ${day}` : t`Ideas are being shaped into quests`,
-    choose: day ? t`Choosing which quests to fund until ${day}` : t`Choosing which quests to fund`,
-    harvest: t`The village has chosen`,
-    closed: t`This round is closed`,
+  const line = (stage: RoundStage, endsAt: string | null): string => {
+    const day = endsAt ? new Date(endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : null;
+    const lines: Record<RoundStage, string> = {
+      seed: day ? t({ message: `Ideas welcome until ${day}`, context: "funding round stage" }) : t({ message: `Ideas welcome until the pot's holder sets the next stage`, context: "funding round stage" }),
+      grow: day ? t({ message: `Ideas are being shaped into quests until ${day}`, context: "funding round stage" }) : t({ message: `Ideas are being shaped into quests`, context: "funding round stage" }),
+      choose: day ? t({ message: `Choosing which quests to fund until ${day}`, context: "funding round stage" }) : t({ message: `Choosing which quests to fund`, context: "funding round stage" }),
+      harvest: t({ message: `The village has chosen`, context: "funding round stage" }),
+      closed: t({ message: `This round is closed`, context: "funding round stage" }),
+    };
+    return lines[stage];
   };
-  return lines[stage];
+  return { word, line };
 }
 
 /** How many minor units one whole unit holds, for a currency; a token counts whole. */
@@ -124,6 +130,7 @@ const LABEL = "block text-sm font-medium text-foreground";
 
 function StageRail({ stage }: { stage: RoundStage }) {
   const { t } = useLingui();
+  const text = useStageText();
   const shown = ROUND_STAGES.filter((s) => s !== "closed");
   const at = shown.indexOf(stage as (typeof shown)[number]);
   return (
@@ -140,7 +147,7 @@ function StageRail({ stage }: { stage: RoundStage }) {
                   : "rounded-full border border-border px-3 py-1 text-muted-foreground"
             }
           >
-            {stageWord(t, s)}
+            {text.word(s)}
           </span>
           {i < shown.length - 1 && <span aria-hidden className="text-muted-foreground">·</span>}
         </li>
@@ -320,6 +327,7 @@ function IdeaCard({ idea, pot }: { idea: Idea; pot: Pot }) {
 
 function RoundPage({ id }: { id: string }) {
   const { t } = useLingui();
+  const stageText = useStageText();
   const [data, setData] = useState<{ round: Round; pot: Pot; ideas: Idea[] } | null>(null);
   const [missing, setMissing] = useState(false);
 
@@ -357,7 +365,7 @@ function RoundPage({ id }: { id: string }) {
   }
   const { round, pot, ideas } = data;
   const potName = pot.name;
-  const line = stageLine(t, round.stage, round.stageEndsAt);
+  const line = stageText.line(round.stage, round.stageEndsAt);
   const count = ideas.length;
   return (
     <>
@@ -510,8 +518,8 @@ function StewardPanel({ pots, onChanged }: { pots: Pot[]; onChanged: () => void 
 }
 
 function RoundCard({ round, potName }: { round: Round; potName: string }) {
-  const { t } = useLingui();
-  const line = stageLine(t, round.stage, round.stageEndsAt);
+  const stageText = useStageText();
+  const line = stageText.line(round.stage, round.stageEndsAt);
   const count = round.ideaCount;
   return (
     <li className="rounded-2xl border border-border bg-card p-5">
