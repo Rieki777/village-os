@@ -33,3 +33,18 @@ export function offeredLocaleTags(withPseudo = false): string[] {
 export function tierOf(tag: string, withPseudo = false): LocaleTier | null {
   return [...LOCALES, ...(withPseudo ? PSEUDO_LOCALES : [])].find((l) => l.tag === tag)?.tier ?? null;
 }
+
+/**
+ * A language's own name for itself ("Español", "العربية"), from Intl, first
+ * letter capitalised the way that language capitalises it. The tag when Intl
+ * has no name for it.
+ */
+export function autonym(tag: string): string {
+  try {
+    const name = new Intl.DisplayNames([tag], { type: "language" }).of(tag);
+    if (!name || name === tag) return tag;
+    return name.charAt(0).toLocaleUpperCase(tag) + name.slice(1);
+  } catch {
+    return tag;
+  }
+}

@@ -20,7 +20,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Express } from "express";
-import { LOCALES, PSEUDO_LOCALES, tierOf } from "@shared/i18nLocales";
+import type { AppDeps } from "../lib/appDeps";
+import { LOCALES, PSEUDO_LOCALES, offeredLocaleTags, tierOf } from "@shared/i18nLocales";
 import { directionOf } from "@shared/i18nDirection";
 
 type Catalog = { locale: string; version: string; messages: Record<string, unknown>; unreviewed: string[] };
@@ -30,7 +31,11 @@ type Deps = {
   catalogDir: string;
   /** Pseudo locales are for the overflow sweep, never for members. */
   pseudoAllowed: () => boolean;
-};
+} & Partial<Pick<AppDeps, "authedUser" | "overLimit" | "members">>;
+
+const HOUR_MS = 60 * 60 * 1000;
+/** Saves one member may make in an hour. Someone comparing languages switches often. */
+const LOCALE_SAVES_PER_HOUR = 60;
 
 const EMPTY_VERSION = "none";
 
@@ -79,5 +84,36 @@ export function register(app: Express, deps: Deps): void {
     }));
     res.setHeader("Cache-Control", "public, max-age=300");
     res.json({ locales: list });
+  });
+
+  const { authedUser, members, overLimit } = deps;
+  if (!authedUser || !members || !overLimit) return;
+
+  /**
+   * A member's language, saved in their preferences (users.prefs.locale) so it
+   * follows them to every device. JSON on purpose: no migration, and erasure
+   * already resets preferences whole. An empty value clears it, and the
+   * browser's own languages apply again.
+   */
+  app.put("/api/profile/locale", async (req, res) => {
+    const me = await authedUser(req);
+    if (!me) return res.status(401).json({ error: "auth_required" });
+    const raw = req.body?.locale;
+    const offered = offeredLocaleTags();
+    const tag = typeof raw === "string" ? raw.trim() : null;
+    if (tag === null || (tag !== "" && !offered.includes(tag))) {
+      return res.status(400).json({ error: `Choose one of: ${offered.join(", ")}.` });
+    }
+    if (await overLimit(`locale-choice:${me.id}`, LOCALE_SAVES_PER_HOUR, HOUR_MS)) {
+      return res.status(429).json({ error: "That's a lot of switching. Try again in a little while." });
+    }
+    const updated = await members.update(me.id, (u: any) => {
+      const prefs = { ...(u.prefs ?? {}) };
+      if (tag) prefs.locale = tag;
+      else delete prefs.locale;
+      u.prefs = prefs;
+    });
+    if (!updated) return res.status(404).json({ error: "User not found" });
+    res.json({ locale: (updated.prefs?.locale as string | undefined) ?? null });
   });
 }

@@ -42,6 +42,7 @@ import { pageVarsFrom, type PageVarSource } from "../../shared/pageContent/vars"
 import { setVillageVars, saveVillagePaths, storedVillagePaths, villagePathWords } from "../lib/villagePaths";
 import { storableVillagePaths, villagePathsProblems } from "../../shared/villagePaths";
 import { contentVersion } from "../../shared/pageContent/resolve";
+import { registerAdminEditControl } from "../lib/adminSuggestions";
 
 export { loadVillagePaths, servedPathWords, stageName } from "../lib/villagePaths";
 
@@ -72,13 +73,34 @@ export function register(app: Express, deps: Deps): void {
 
   app.put("/api/admin/village-paths", async (req, res) => {
     if (!(await guardCapability(req, res, "story.tell"))) return;
-    const problems = villagePathsProblems(req.body);
-    if (problems.length) return res.status(400).json({ error: problems[0], problems });
-    const was = req.get?.("x-content-was");
-    if (was && was !== contentVersion(storedVillagePaths())) {
-      return res.status(409).json({ error: "These words changed since this page was opened. Reload it to see them, then make your change again." });
-    }
-    await saveVillagePaths(storableVillagePaths(req.body));
+    const r = await applyVillagePathsEdit(req.body, req.get?.("x-content-was"));
+    if (!r.ok) return res.status(r.status).json(r.body);
     res.json(view());
   });
+
+  // A member's suggested edit to these words is accepted through the same
+  // write (server/lib/adminSuggestions.ts), after the reviewer met the gate.
+  registerAdminEditControl("village_paths", {
+    read: () => ({ value: storedVillagePaths(), version: contentVersion(storedVillagePaths()) }),
+    problem: (payload) => villagePathsProblems(payload)[0] ?? null,
+    apply: (payload, was) => applyVillagePathsEdit(payload, was),
+  });
+}
+
+/**
+ * THE WRITE, for the route and for an accepted suggestion alike: checked
+ * against `villagePathsProblems`, refused when the stored words moved since
+ * `was`, then saved. The caller has already asked the gate.
+ */
+export async function applyVillagePathsEdit(
+  body: unknown,
+  was: string | undefined,
+): Promise<{ ok: true } | { ok: false; status: number; body: Record<string, unknown> }> {
+  const problems = villagePathsProblems(body);
+  if (problems.length) return { ok: false, status: 400, body: { error: problems[0], problems } };
+  if (was && was !== contentVersion(storedVillagePaths())) {
+    return { ok: false, status: 409, body: { error: "These words changed since this page was opened. Reload it to see them, then make your change again." } };
+  }
+  await saveVillagePaths(storableVillagePaths(body));
+  return { ok: true };
 }

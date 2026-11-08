@@ -28,21 +28,41 @@
  * Pure: no clock, no pool. Who holds which power is the server's to work out
  * through the one gate; this file is handed the member ids.
  */
-import { ENGINE_DEFAULTS, type EngineDials } from "./valuation";
+import { ENGINE_DEFAULTS, paidTokens, rewardFromTotal, type EngineDials, type ValuationModel } from "./valuation";
+import type { TokenAmount } from "./workValue";
 import type { PayeeSuggestion, RangeWidth } from "./valuationEngine";
+
+/**
+ * Why a setter set a figure away from the suggestion (spec 3.5, research 03 §4.2).
+ * A short list so people pick honestly; "Other" asks for words. A village may
+ * change the list by the same doors as any dial.
+ */
+export const REASON_CODES: readonly string[] = [
+  "The effort estimate was off",
+  "The skill needed is higher or lower",
+  "The local going rate is different",
+  "Urgency or short notice",
+  "Community benefit the estimate misses",
+  "The cash budget this cycle",
+  "Fairness with similar work",
+  "Other",
+];
 
 /** Days a figure outside the band waits for its second signer before it goes to the village vote by itself (spec 3.4). */
 export const SECOND_SIGN_DAYS = 7;
 
+/** A member's id, as the server holds it. */
+export type MemberId = string | number;
+
 /** Who is setting, who the work pays, and who could sign second. */
 export interface SettingContext {
-  setterId: number;
+  setterId: MemberId;
   /** Everyone this work pays. */
-  payeeIds: number[];
+  payeeIds: MemberId[];
   /** Holders of the setting power (role.pay for roles, quest.approve for quests) or of steward.veto, live now. */
-  secondSigners: number[];
+  secondSigners: MemberId[];
   /** Members whose own pay this setter set this season: they may not sign the setter's figure (no swapping). */
-  setterSetPayOf: number[];
+  setterSetPayOf: MemberId[];
 }
 
 /** One input the setter changed after the proposer's were frozen. */
@@ -71,7 +91,7 @@ export interface SettingDecision {
   gapPct: number;
   needs: SignNeed;
   /** Who may sign second. Empty when the village votes. */
-  signers: number[];
+  signers: MemberId[];
   /** Present when a second signer is asked: after this many days, the village vote. */
   voteAfterDays?: number;
   /** What the setter still has to give. */
@@ -120,9 +140,9 @@ export interface SettingRecord {
   note: string | null;
   ownNumberFirst: number | null;
   inputChanges: InputChange[];
-  setterId: number;
+  setterId: MemberId;
   /** Filled when the second signer signs; null for a word-alone or voted figure. */
-  signerId: number | null;
+  signerId: MemberId | null;
   conflicted: boolean;
   /** Earned Equity was owed, not paid, when this was set: never pooled with paid records. */
   eeHeld: boolean;
@@ -137,7 +157,7 @@ export function settingRecord(p: {
   set: { totalMinor: number };
   ctx: SettingContext;
   opts?: SettingOptions;
-  signerId?: number | null;
+  signerId?: MemberId | null;
   at: string;
 }): SettingRecord {
   const opts = p.opts ?? {};
@@ -318,4 +338,45 @@ export function settleDeficit(
     return { choice: picked, deficitUnits, cashNowMinor, cashOwedLaterMinor: 0, credits: paid.credits - deficitUnits, earnedEquity: paid.earnedEquity + deficitUnits };
   }
   return { choice: picked, deficitUnits, cashNowMinor, cashOwedLaterMinor: deficitUnits * 100, credits: paid.credits - deficitUnits, earnedEquity: paid.earnedEquity };
+}
+
+// ── A set figure, as the work stores it ─────────────────────────────────────
+
+/**
+ * What a work stores once a figure is set: the figure shared out by Rye's rule
+ * (`rewardFromTotal`: the base, the Earned Equity match and the Credits bonus,
+ * as for any whole reward, II.9), with the cycle's cash share out of the base.
+ * While Earned Equity is owed (its meaning unwritten, #892) its line is left
+ * off and Voice counts only what is paid (II.8); the setting record keeps what
+ * is owed.
+ */
+export function storedPayFor(
+  model: ValuationModel,
+  totalMinor: number,
+  opts: { cashPct?: number; eeHeld: boolean },
+): { valueMinor: number; valueTokens: TokenAmount[]; cashMinor: number | null; earnedEquityOwed: number } {
+  const r = rewardFromTotal(model, totalMinor, { cashPct: opts.cashPct });
+  if (!opts.eeHeld) return { valueMinor: r.totalMinor, valueTokens: paidTokens(r), cashMinor: r.cashMinor, earnedEquityOwed: 0 };
+  const owed = r.equityUnits;
+  const voice = { token: r.voice.token, amount: Math.floor(((r.totalMinor - owed * 100) / 100) * model.voicePerUnit + 1e-9) };
+  const tokens = paidTokens({ voice, payTokens: r.payTokens.filter((t) => t.token !== model.tokens.equity) });
+  return { valueMinor: r.totalMinor, valueTokens: tokens, cashMinor: r.cashMinor, earnedEquityOwed: owed };
+}
+
+// ── P4, the retro top-up (Rye's pick, 2026-11-06) ───────────────────────────
+
+/**
+ * Why a retro top-up cannot be proposed, or null. After delivery, any member
+ * may propose to RAISE a set figure, and the village decides by its existing
+ * vote; a top-up never lowers a figure. Lowering one is a different proposal
+ * (C12), and the refusal names it. The outcome, in words, is required: a top-up
+ * says what the work achieved beyond what was expected.
+ */
+export function topUpProblem(currentMinor: number | null, proposedMinor: number, outcome: string): string | null {
+  if (currentMinor === null) return "This work has no figure set yet. Set one first, then a top-up can raise it.";
+  if (!(Number.isFinite(proposedMinor) && proposedMinor > currentMinor)) {
+    return "A top-up only raises a figure. To lower one, propose a different figure to the village in an org draft.";
+  }
+  if (!String(outcome ?? "").trim()) return "Say what the work achieved beyond what was expected.";
+  return null;
 }

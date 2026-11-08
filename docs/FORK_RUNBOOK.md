@@ -1279,6 +1279,7 @@ the seeded roles whose descriptions already claimed the work
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
 | `cash.pay` | Treasury (founder ruling, 2026-10-30; also in the founding stewards' handover set) |
+| `role.pay` | Treasury (founder ruling, 2026-11-06: role pay is set by the Treasurer and the valuation engine; mature-only in the handover) |
 | `org.declare` | Founders Circle |
 | `org.seat`, `org.decide` | Founders Circle (founder ruling, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
@@ -1298,6 +1299,10 @@ else on that role. The power is new, so no village can have taken it off on
 purpose. Nothing to provision. Look for `the Treasury role now grants cash.pay`
 in the boot log. A village with no Treasury role gets no line, and its admins
 and founding stewards still hold the power.
+
+`role.pay` reaches a running village the same way: the `role-pay-to-treasury-2026-11-06` runOnce
+(`ROLE_PAY_GRANTS` through `grantMoonReviewKeys`, `server/lib/starterRoles.ts`) adds it to the `treasury`
+role once. Nothing to provision. Look for `role.pay on the Treasury role` in the boot log.
 
 - Seeds: the frozen `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.
@@ -2089,3 +2094,7 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
 
 - A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
+
+## The invoice rails and the treasury sync (0335, 2026-11-06)
+
+- To have a sent invoice emailed to Sera, an admin or the `cash.pay` holder sets **Sera's inbox** in Admin, End-of-moon review settings, Village settings (moon-review setting `seraInbox`, blank on the platform, so nothing is emailed until a village names one). The daily `treasury-sync` job needs no setup: it retries emails the provider refused, reads Sera's `list_invoices` once Saberra offers it (until then the Sera source reads "Sera does not report invoices yet"), and re-syncs every member with an invoice.

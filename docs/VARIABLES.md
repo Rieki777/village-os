@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 200 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 201 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 223 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-249 dials in 36 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 32 choice, 38 text, 1 longtext.
+250 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 33 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ Each dial also says WHEN a change lands. 222 of them as soon as it is saved, and
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
 | Live Sessions | 2 | 2 | 0 |
+| Language | 1 | 1 | 0 |
 
 ## Every dial by name
 
@@ -110,10 +111,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Fee taken from the payment | `redemption.fee_pct` | Ledger | percentage | `0` | the founder or an admin |
 | Fixed fee taken from the payment | `redemption.fee_fixed` | Ledger | decimal | `0` | the founder or an admin |
 | Smallest redemption, in money | `redemption.min_amount` | Ledger | decimal | `0` | the whole village |
-| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | `0` | the whole village |
-| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | blank, which is no ceiling | the whole village |
+| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
-| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | Earned equity needed before a member can claim | `economy.equity_claim_threshold` | The Mint | integer | `1` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
@@ -332,6 +333,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
+| Default language | `village.default_locale` | Language | choice | `en` | the whole village |
 
 ## Membership
 
@@ -752,28 +754,30 @@ The least a member may ask to redeem at once, counted in the redemption's own cu
 
 ### Most in one redemption, in money
 
-The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
+The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_request` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Most one member may redeem per cycle, in money
 
-Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.
+Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_member_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -794,14 +798,15 @@ The village's own words for what happens after a member asks: who to speak to, w
 
 ### Most the village will redeem per cycle, in money
 
-Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.
+Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_village_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -4458,6 +4463,29 @@ The length a new live session starts with when whoever opens it names none. The 
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
+
+## Language
+
+1 dial. 1 for the whole village.
+
+### Default language
+
+The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.default_locale` |
+| Type | choice, one of a fixed list |
+| Default | `en` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `en` English.
+- `es` Español.
 
 ## What this file is made from
 
