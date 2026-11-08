@@ -84,7 +84,9 @@ describe("the member draft kind", () => {
   it("is a sibling of DRAFT_KINDS, never a member of it", () => {
     expect(DRAFT_KINDS).toEqual(["role", "circle"]);
     expect(MEMBER_DRAFT_KINDS).toEqual(["event_rsvp"]);
-    expect(ALL_DRAFT_KINDS).toEqual(["role", "circle", "event_rsvp"]);
+    // `admin_edit` is a member's suggested edit (shared/suggestions.ts), a third sibling.
+    expect(ALL_DRAFT_KINDS).toEqual(["role", "circle", "event_rsvp", "admin_edit"]);
+    expect(checkDraft({ kind: "admin_edit", payload: {}, proposerHolds: [] }).ok).toBe(false);
   });
 
   it("validates an event_rsvp payload", () => {

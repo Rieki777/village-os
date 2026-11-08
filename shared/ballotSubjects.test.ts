@@ -808,7 +808,7 @@ describe("meta settings", () => {
   });
 
   it("leaves an ordinary dial alone", () => {
-    expect(isMetaSetting("governance.vote_days")).toBe(false);
+    expect(isMetaSetting("governance.sensing_days")).toBe(false);
     expect(isMetaSetting("gratitude.pool")).toBe(false);
   });
 
@@ -823,12 +823,12 @@ describe("meta settings", () => {
 
   it("refuses a bundle that hides one pricing dial among ordinary ones", () => {
     expect(
-      metaSettingTrialRefusal(["governance.vote_days", "governance.unity_pct", "governance.sensing_days"]),
+      metaSettingTrialRefusal(["governance.sensing_days", "governance.unity_pct"]),
     ).toContain("governance.unity_pct");
   });
 
   it("allows a trial of a dial that prices nothing", () => {
-    expect(metaSettingTrialRefusal(["governance.vote_days"])).toBeNull();
+    expect(metaSettingTrialRefusal(["governance.sensing_days"])).toBeNull();
     expect(metaSettingTrialRefusal([])).toBeNull();
   });
 });

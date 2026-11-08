@@ -52,6 +52,7 @@ import path from "path";
 import ts from "typescript";
 import { CODE_RULES, addedLineNumbers, scanFileLines } from "./contribution-scan.mjs";
 import { BURNDOWN_CEILING, runBurndown } from "./sql-burndown.mjs";
+import { newDependencyProblems } from "./dependency-allowlist.mjs";
 
 const ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"),
@@ -521,21 +522,17 @@ if (wantDiff) {
     if (files.includes("package.json")) {
       const before = fileAtBase(diffBase, "package.json");
       const afterRaw = fs.readFileSync(path.join(ROOT, "package.json"), "utf8");
-      let added = [];
+      let problems = null;
       try {
-        const a = JSON.parse(before ?? "{}");
-        const b = JSON.parse(afterRaw);
-        const keys = (o) => Object.keys({ ...(o.dependencies ?? {}), ...(o.devDependencies ?? {}) });
-        const had = new Set(keys(a));
-        added = keys(b).filter((k) => !had.has(k));
+        problems = newDependencyProblems(JSON.parse(before ?? "{}"), JSON.parse(afterRaw));
       } catch {
         bad("parse package.json at both ends of the diff");
       }
-      if (added.length) {
-        for (const dep of added) console.log(`    adds dependency: ${dep}`);
-        bad(`no new dependencies (${added.length} added)`);
-      } else {
-        ok("no new dependencies");
+      if (problems && problems.length) {
+        for (const p of problems) console.log(`    ${p}`);
+        bad(`no new dependencies outside the allow-list (${problems.length} problem(s))`);
+      } else if (problems) {
+        ok("no new dependencies outside the allow-list (scripts/dependency-allowlist.mjs)");
       }
     } else {
       ok("package.json unchanged, so no new dependencies");
