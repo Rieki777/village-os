@@ -29,8 +29,11 @@ import {
   fetchAndCache,
   fetchImageBytes,
   providerById,
+  satelliteKeyCards,
   type Fetcher,
 } from "./satellite";
+import { envNameFor, SECRET_KEYS } from "./secrets";
+import { VARIABLES } from "../../shared/gameVariables";
 import { pixelsFor, MAX_IMAGE_PIXELS, MIN_IMAGE_PIXELS } from "./satellite";
 import {
   COARSER_ATTEMPTS,
@@ -213,6 +216,56 @@ describe("configuration, and the village that configured nothing", () => {
   it("treats a whitespace-only key as absent", () => {
     const status = configuredProvider({ SATELLITE_PROVIDER: "mapbox", MAPBOX_TOKEN: "   " });
     expect(status.ready).toBe(false);
+  });
+});
+
+/*
+ * THE VILLAGE CHOOSES ITS PROVIDER, AND HOLDS ITS KEY (readiness R171). A
+ * founder on a hosted village holds Admin and not the host, and both used to be
+ * host variables. The choice is a dial now (`village.satellite_provider`) and
+ * each key has a store slot; the host variables stay as the fallback.
+ */
+describe("the provider the village chose, and the key it holds (R171)", () => {
+  it("takes the village's own choice over the host's", () => {
+    const status = configuredProvider({ SATELLITE_PROVIDER: "mapbox", MAPBOX_TOKEN: "tok" }, { provider: "esri-open" });
+    expect(status.provider?.id).toBe("esri-open");
+    expect(status.ready).toBe(true);
+  });
+
+  it("falls back to the host's choice when the village chose nothing", () => {
+    const status = configuredProvider({ SATELLITE_PROVIDER: "mapbox", MAPBOX_TOKEN: "tok" }, { provider: "" });
+    expect(status.provider?.id).toBe("mapbox");
+    expect(status.key).toBe("tok");
+  });
+
+  it("names the dial as what is missing when neither home chose one", () => {
+    expect(configuredProvider({}, { provider: "" }).missingEnv).toBe("SATELLITE_PROVIDER");
+  });
+
+  it("gives every keyed provider a store slot whose host fallback is its own variable", () => {
+    for (const p of PROVIDERS) {
+      if (!p.keyEnv) {
+        expect(p.keySlot, p.id).toBeNull();
+        continue;
+      }
+      expect(p.keySlot, p.id).toBeTruthy();
+      expect(SECRET_KEYS, p.id).toContain(p.keySlot);
+      expect(envNameFor(p.keySlot!), p.id).toBe(p.keyEnv);
+    }
+  });
+
+  it("offers exactly the providers this file knows, and a blank that defers to the host", () => {
+    const dial = VARIABLES.find((v) => v.key === "village.satellite_provider");
+    expect(dial?.type).toBe("choice");
+    expect(dial?.default).toBe("");
+    expect(dial!.choices!.map((c) => c.value)).toEqual(["", ...PROVIDERS.map((p) => p.id)]);
+  });
+
+  it("shows the chosen provider's key card, and no card for a provider nobody chose", () => {
+    // An empty environment, so a SATELLITE_PROVIDER in a developer's own .env cannot move this.
+    expect(satelliteKeyCards({ provider: "mapbox" }, {}).map((c) => c.key)).toEqual(["satellite_mapbox_token"]);
+    expect(satelliteKeyCards({ provider: "esri-open" }, {}), "a keyless provider needs no card").toEqual([]);
+    expect(satelliteKeyCards({ provider: "" }, {})).toEqual([]);
   });
 });
 

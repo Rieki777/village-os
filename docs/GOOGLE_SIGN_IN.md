@@ -90,8 +90,10 @@ Three things it will not do, each on purpose:
    `/api/auth/google/callback` on the end. `https://www.your-village.example`
    and `https://your-village.example` are two different addresses to Google.
    If members reach your village at both, register both.
-5. Copy the client ID and client secret into your deployment's environment as
-   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and restart.
+5. Paste the client ID and client secret into the two Google sign-in cards
+   under Admin, Integrations. Google turns on with no restart. Or set them on
+   the host as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` and restart; a
+   value typed into Admin wins over the host's (readiness R171).
 
 ## Why each village registers its own client
 

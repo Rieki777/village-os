@@ -21,6 +21,7 @@
  * Boots dist/index.js against a throwaway schema like every routes suite, and
  * skips loudly without TEST_DATABASE_URL.
  */
+import { createHmac } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -124,6 +125,7 @@ beforeAll(async () => {
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       BASE_RPC_URL: "",
       GOVERNANCE_HUB_SECRET: HUB_SECRET,
+      HYPHA_VOICE_WEBHOOK_SECRET: "", // R171: this suite sets the voice secret through Admin, Integrations
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -331,6 +333,85 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     const row = (feed.json as any[]).find((h) => h.key === "abuse.investor_docs_per_ip_hourly" && h.to === "51");
     expect(row, feed.text.slice(0, 400)).toBeTruthy();
     expect(row.withheld).toBe(false);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the Hypha voice secret, typed into Admin, Integrations (R171)", () => {
+  // A founder on a hosted village holds Admin and not the host. The boot check
+  // that kept this secret env-only now runs at the write, in both directions.
+  const VOICE = "hypha_voice_webhook_secret";
+  const OTHER = "riverside_webhook_secret";
+  const OWN = "a1".repeat(32);
+  const put = (key: string, value: string) => call("PUT", `/api/admin/integrations/${key}`, { value });
+  const status = async (key: string) => ((await call("GET", "/api/admin/integrations")).json?.secrets as any[]).find((s) => s.key === key);
+  /** A delivery naming no claim: one that verifies stops at "no claim named", before anything settles. */
+  const deliver = async (secret: string) => {
+    const body = JSON.stringify({ status: "confirmed" });
+    const res = await fetch(`${BASE}/api/webhooks/hypha-voice`, { // module-review-ok: the test client dialing the server under test on localhost
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-hypha-signature": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}` },
+      body,
+    });
+    return { status: res.status, text: await res.text() };
+  };
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED) return;
+    for (const key of [VOICE, OTHER]) await put(key, "");
+  });
+
+  it("has a card, and the receiver has nothing to verify against until it is set", async () => {
+    const integ = await call("GET", "/api/admin/integrations");
+    expect(integ.status, integ.text).toBe(200);
+    expect((integ.json?.cards as any[]).some((c) => c.key === VOICE), "the voice secret has a card").toBe(true);
+    expect(await status(VOICE)).toMatchObject({ configured: false, source: "none" });
+    expect((await deliver(OWN)).status).toBe(503);
+  });
+
+  it("refuses a short value and a copied one at the write, and stores neither", async () => {
+    const short = await put(VOICE, "hunter2");
+    expect(short.status, short.text).toBe(409);
+    expect(short.json?.error).toMatch(/too short/);
+    expect((await put(OTHER, OWN)).status).toBe(200);
+    const copied = await put(VOICE, OWN);
+    expect(copied.status, copied.text).toBe(409);
+    expect(copied.json?.error).toMatch(/matches another secret/);
+    expect(await status(VOICE)).toMatchObject({ configured: false });
+    expect((await put(OTHER, "")).status).toBe(200);
+  });
+
+  it("takes a value of its own, sealed, and a delivery signed with it verifies", async () => {
+    const saved = await put(VOICE, OWN);
+    expect(saved.status, saved.text).toBe(200);
+    expect(await status(VOICE)).toMatchObject({ configured: true, source: "admin", atRest: "sealed" });
+    expect((await deliver("b2".repeat(32))).status, "the control: any other secret is a bad signature").toBe(401);
+    const signed = await deliver(OWN);
+    expect(signed.status, signed.text).toBe(400);
+    expect(signed.text).toContain("no claim named");
+  });
+
+  it("refuses another callback secret that copies it", async () => {
+    const copied = await put(OTHER, OWN);
+    expect(copied.status, copied.text).toBe(409);
+    expect(copied.json?.error).toMatch(/Hypha voice secret/);
+    expect((await put(OTHER, "c3".repeat(32))).status, "the control: a value of its own saves").toBe(200);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("a satellite provider chosen on the dial shows its key card (R171)", () => {
+  const cardKeys = async () => ((await call("GET", "/api/admin/integrations")).json?.cards as any[]).map((c) => c.key);
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "" });
+  });
+
+  it("has no satellite card while no provider is chosen, and the chosen provider's once one is", async () => {
+    expect(await cardKeys(), "the control: nothing chosen, no card").not.toContain("satellite_mapbox_token");
+    const chose = await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "mapbox" });
+    expect(chose.status, chose.text).toBe(200);
+    expect(await cardKeys()).toContain("satellite_mapbox_token");
+    expect(await cardKeys(), "only the chosen provider's").not.toContain("satellite_esri_api_key");
   });
 });
 

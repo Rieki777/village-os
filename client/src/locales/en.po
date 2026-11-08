@@ -22,6 +22,11 @@ msgctxt "save a change"
 msgid "Save"
 msgstr "Save"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Kind of work"
+msgstr "Kind of work"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Nothing is being weighed right now."
 msgstr "Nothing is being weighed right now."
@@ -30,6 +35,16 @@ msgstr "Nothing is being weighed right now."
 msgctxt "change request step"
 msgid "In review"
 msgstr "In review"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Reason"
+msgstr "Reason"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Pick a reason"
+msgstr "Pick a reason"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "What harm could this do to the village, or what would it stop us doing?"
@@ -92,9 +107,10 @@ msgstr "After"
 msgid "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
 msgstr "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
 
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "Started by {author}"
-#~ msgstr "Started by {author}"
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Wide range"
+msgstr "Wide range"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that adds a change"
@@ -110,10 +126,6 @@ msgstr "Why"
 msgctxt "page heading"
 msgid "Change requests"
 msgstr "Change requests"
-
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "That was refused."
-#~ msgstr "That was refused."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a suggestion being sent"
@@ -164,6 +176,10 @@ msgstr "Take it in"
 msgid "Editing a change starts the review again."
 msgstr "Editing a change starts the review again."
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Hide how this was worked out"
+msgstr "Hide how this was worked out"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a suggestion was sent"
 msgid "Suggested."
@@ -205,10 +221,6 @@ msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
 
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "Add: {proposedTo}"
-#~ msgstr "Add: {proposedTo}"
-
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
 msgstr "Cash still owed to you, from this village's records: {owedWords}"
@@ -226,6 +238,11 @@ msgstr "Delete this change request? This cannot be undone."
 msgid "Sera records that name no invoice here"
 msgstr "Sera records that name no invoice here"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Show the suggestion"
+msgstr "Show the suggestion"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "Object"
@@ -239,6 +256,11 @@ msgstr "Respond to this change request"
 msgctxt "label of an objection box"
 msgid "The harm you see"
 msgstr "The harm you see"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Say why"
+msgstr "Say why"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading on the change requests page"
@@ -270,9 +292,9 @@ msgctxt "when the review time ends"
 msgid "Waits until {until}"
 msgstr "Waits until {until}"
 
-#: client/src/components/modules/SuggestDial.tsx
-#~ msgid "Change {label}"
-#~ msgstr "Change {label}"
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Estimated effort for the moon, in hours"
+msgstr "Estimated effort for the moon, in hours"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -286,6 +308,10 @@ msgstr "One of your numbers differs between sources. The Treasurer has been show
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
+msgstr "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "answer a note in a review"
@@ -309,6 +335,10 @@ msgstr "Choose a language"
 msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Work out this role's pay with the valuation engine"
+msgstr "Work out this role's pay with the valuation engine"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reader started this change request"
@@ -381,10 +411,6 @@ msgid "That was refused."
 msgstr "That was refused."
 
 #: client/src/pages/ChangeRequests.tsx
-#~ msgid "Step {n} of 4: {words}"
-#~ msgstr "Step {n} of 4: {words}"
-
-#: client/src/pages/ChangeRequests.tsx
 msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr "{by} answered"
@@ -416,6 +442,11 @@ msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Paid as {paid}."
+msgstr "Paid as {paid}."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Step {n} of 4: {words}. Review ends {ends}"
 msgstr "Step {n} of 4: {words}. Review ends {ends}"
@@ -439,14 +470,15 @@ msgctxt "a switch setting"
 msgid "Off"
 msgstr "Off"
 
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "{label}, from {before} to {after}"
-#~ msgstr "{label}, from {before} to {after}"
-
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Translated automatically"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Medium range"
+msgstr "Medium range"
 
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
@@ -557,17 +589,34 @@ msgctxt "change request checklist"
 msgid "Time to review"
 msgstr "Time to review"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Saved. The role's pay is set."
+msgstr "Saved. The role's pay is set."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "A different value for one of the changes. The author may take it in."
 msgstr "A different value for one of the changes. The author may take it in."
 
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "You started this"
-#~ msgstr "You started this"
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This figure is outside the suggestion's band, so pick a reason."
+msgstr "This figure is outside the suggestion's band, so pick a reason."
 
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "{by} answered"
-#~ msgstr "{by} answered"
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
+msgstr "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Hide the valuation engine"
+msgstr "Hide the valuation engine"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
+msgstr "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgctxt "role pay"
+msgid "Opening…"
+msgstr "Opening…"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the list of changes"
@@ -579,14 +628,18 @@ msgctxt "treasury sync"
 msgid "Try again"
 msgstr "Try again"
 
+#. placeholder {0}: money(s.range.lowTotalMinor)
+#. placeholder {1}: money(s.range.highTotalMinor)
+#. placeholder {2}: widthWords[s.range.width]
+#. placeholder {3}: s.range.why.join(", ")
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Likely {0} to {1}. {2}: {3}."
+msgstr "Likely {0} to {1}. {2}: {3}."
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr "Last synced {syncedAt}"
-
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "Change it to: {proposedTo}"
-#~ msgstr "Change it to: {proposedTo}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
@@ -598,6 +651,10 @@ msgctxt "close a form without saving"
 msgid "Not now"
 msgstr "Not now"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Reading the village's pay settings…"
+msgstr "Reading the village's pay settings…"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Now in {announced}"
@@ -607,10 +664,6 @@ msgstr "Now in {announced}"
 msgctxt "open a change request for review"
 msgid "Open for review"
 msgstr "Open for review"
-
-#: client/src/components/modules/SuggestDial.tsx
-#~ msgid "Add to {targetTitle}"
-#~ msgstr "Add to {targetTitle}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the review feed"
@@ -656,6 +709,15 @@ msgstr "Changes"
 msgid "Move to its own change request"
 msgstr "Move to its own change request"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
+msgstr "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Your figure"
+msgstr "Your figure"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Add to a new change request"
 msgstr "Add to a new change request"
@@ -679,6 +741,11 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr "Reading the invoice tracks."
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "The figure you set"
+msgstr "The figure you set"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the checklist"
 msgid "Before the vote"
@@ -694,6 +761,10 @@ msgctxt "change request note kind"
 msgid "Question"
 msgstr "Question"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is inside the suggestion's band, so your word sets it."
+msgstr "This is inside the suggestion's band, so your word sets it."
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
@@ -704,9 +775,23 @@ msgctxt "a change was saved"
 msgid "Saved."
 msgstr "Saved."
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Reward"
+msgstr "Reward"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Could be as little as"
+msgstr "Could be as little as"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
 #~ msgstr "Sign out everywhere"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "My own figure"
+msgstr "My own figure"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "pick a change request to add to"
@@ -747,6 +832,16 @@ msgctxt "the name of a change request"
 msgid "Name"
 msgstr "Name"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Set this role's pay"
+msgstr "Set this role's pay"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Or as much as"
+msgstr "Or as much as"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
@@ -754,6 +849,11 @@ msgstr "Name"
 #: client/src/pages/ChangeRequests.tsx
 msgid "That change request could not be started."
 msgstr "That change request could not be started."
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Narrow range"
+msgstr "Narrow range"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "heading over a module's settings"
@@ -768,10 +868,6 @@ msgstr "Change it to: {proposedTo}"
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Gather it with other changes and send them to one vote."
 msgstr "Gather it with other changes and send them to one vote."
-
-#: client/src/pages/ChangeRequests.tsx
-#~ msgid "Waits until {until}"
-#~ msgstr "Waits until {until}"
 
 #: client/src/components/Layout.tsx
 #~ msgid "Main Site"
@@ -790,6 +886,11 @@ msgstr "Sera: {there}."
 msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Use my browser's language"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Saved"
+msgstr "Saved"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of a note box"
@@ -811,10 +912,21 @@ msgctxt "review response"
 msgid "I can live with this"
 msgstr "I can live with this"
 
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Use the suggestion, {0}"
+msgstr "Use the suggestion, {0}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "which step a change request is on"
 msgid "Step {n} of 4: {words}"
 msgstr "Step {n} of 4: {words}"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "A note (optional)"
+msgstr "A note (optional)"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -825,6 +937,14 @@ msgstr "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 msgctxt "site header"
 msgid "Skip to content"
 msgstr "Skip to content"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure first, before you see the suggestion (optional)"
+msgstr "Your own figure first, before you see the suggestion (optional)"
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "How this was worked out"
+msgstr "How this was worked out"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
@@ -858,6 +978,16 @@ msgstr "Which change?"
 msgctxt "default title of a suggestion"
 msgid "Change {label}"
 msgstr "Change {label}"
+
+#. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure was {0}."
+msgstr "Your own figure was {0}."
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Responsibility"
+msgstr "Responsibility"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"

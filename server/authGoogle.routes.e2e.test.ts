@@ -70,6 +70,8 @@ let bareDb: TestDb | undefined;
 let dataDir = "";
 let bareDataDir = "";
 const logs: string[] = [];
+/** The bare village's founder, once the bootstrap case below has let them in. */
+let bareFounderToken = "";
 
 /**
  * What the stand-in will answer next. A test sets this, then drives the
@@ -212,6 +214,8 @@ beforeAll(async () => {
       FRONTEND_URL: BARE_BASE,
       GOOGLE_CLIENT_ID: "",
       GOOGLE_CLIENT_SECRET: "",
+      // R171: the founder types the Google pair into Admin, Integrations, which seals it.
+      VILLAGE_SECRETS_KEY: "4d".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -366,8 +370,51 @@ describe.skipIf(!DB_CONFIGURED)("a village with no Google credentials degrades h
     const setBody = await set.json();
     expect(set.status, JSON.stringify(setBody)).toBe(200);
     expect(setBody.user.role).toBe("founder");
+    bareFounderToken = String(setBody.token ?? "");
     const [rows] = await bareDb!.conn.query<any[]>("SELECT email_verified_at FROM users WHERE id = ?", [planted.user.id]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     expect(rows[0].email_verified_at, "redeeming the mailed claim link did not record the proof").not.toBeNull();
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("a founder without the host turns Google sign-in on from Admin, Integrations (R171)", () => {
+  // A hosted founder holds Admin and not the host. The pair used to be read
+  // from the environment alone, so turning Google on meant the platform team.
+  const STORED_ID = "stored-client-id.apps.googleusercontent.com";
+  const put = (key: string, value: string) =>
+    fetch(`${BARE_BASE}/api/admin/integrations/${key}`, { // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${bareFounderToken}` },
+      body: JSON.stringify({ value }),
+    });
+  const methods = async () => (await fetch(`${BARE_BASE}/api/auth/methods`)).json(); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+
+  it("has a card for each half of the pair", async () => {
+    expect(bareFounderToken, "the bootstrap case above let the founder in").toBeTruthy();
+    const integ = await fetch(`${BARE_BASE}/api/admin/integrations`, { headers: { Authorization: `Bearer ${bareFounderToken}` } }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    expect(integ.status).toBe(200);
+    const keys = ((await integ.json()).cards as any[]).map((c) => c.key);
+    expect(keys).toEqual(expect.arrayContaining(["google_client_id", "google_client_secret"]));
+  });
+
+  it("stays off with one half, and names only the half still missing", async () => {
+    expect((await put("google_client_id", STORED_ID)).status).toBe(200);
+    expect(await methods()).toMatchObject({ google: false, missing: ["GOOGLE_CLIENT_SECRET"] });
+  });
+
+  it("turns on with both, with no restart, and sends members to Google with the stored client", async () => {
+    expect((await put("google_client_secret", "stored-client-secret")).status).toBe(200);
+    expect(await methods()).toEqual({ password: true, google: true, inviteOnly: false });
+    const start = await fetch(`${BARE_BASE}/api/auth/google/start`, { redirect: "manual" }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+    expect(start.status).toBe(302);
+    const location = new URL(String(start.headers.get("location")));
+    expect(location.searchParams.get("client_id")).toBe(STORED_ID);
+    expect(location.searchParams.get("redirect_uri")).toBe(`${BARE_BASE}/api/auth/google/callback`);
+  });
+
+  it("goes back to off when a half is cleared", async () => {
+    expect((await put("google_client_secret", "")).status).toBe(200);
+    expect(await methods()).toMatchObject({ google: false, missing: ["GOOGLE_CLIENT_SECRET"] });
+    expect((await put("google_client_id", "")).status).toBe(200);
   });
 });
 

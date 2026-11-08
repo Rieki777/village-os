@@ -19,7 +19,7 @@
  *
  * Pure: no clock, no pool.
  */
-import { ENGINE_DEFAULTS, priceWork, rewardFromTotal, type ValuationModel, type WorkInputs } from "./valuation";
+import { ENGINE_DEFAULTS, priceWork, rewardFromTotal, voiceFor, type ValuationModel, type WorkInputs } from "./valuation";
 import { suggestValuation, wholeMoney, type EngineContext, type PayeeSuggestion, type Suggestion, type Warning } from "./valuationEngine";
 
 export interface ContractInputs {
@@ -53,7 +53,7 @@ export function suggestContract(model: ValuationModel, c: ContractInputs, ctx: E
   const r = rewardFromTotal(model, c.priceMinor, { cashPct });
   const held = ctx.eeMeaningWritten ? 0 : r.equityUnits;
   const credits = r.payTokens.find((t) => t.token === model.tokens.credits)?.amount ?? 0;
-  const voice = Math.floor(((r.totalMinor - held * 100) / 100) * model.voicePerUnit + 1e-9);
+  const voice = voiceFor(model, r.totalMinor - held * 100);
   const belowFloor = r.baseUnits * 100 < labourMinor;
   const dials = { ...ENGINE_DEFAULTS, ...(model.engine ?? {}) };
   const money = (m: number) => wholeMoney(m, model.currency);
