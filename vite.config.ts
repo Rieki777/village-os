@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { linguiMacros } from "./client/src/i18n/linguiMacros";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
@@ -271,7 +272,7 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
+  plugins: [linguiMacros(), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

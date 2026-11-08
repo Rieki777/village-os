@@ -272,3 +272,32 @@ describe.skipIf(!DB_CONFIGURED)("the members' powers page names who holds a powe
     expect(page.json.families.map((f: any) => f.id)).toContain("structure");
   });
 });
+
+describe.skipIf(!DB_CONFIGURED)("operator powers: a holder reaches an admin route, and no admin loses one", () => {
+  let cy = { id: "", token: "" };
+  const purpose = (token: string) => call("PUT", "/api/admin/purpose", { statement: "" }, token);
+
+  it("control: a member without the power is refused the admin route", async () => {
+    const r = await call("POST", "/api/auth/register", { name: "Cy Storyteller", email: "cy-operator@example.test", password: PW, paths: ["resident"] }, "");
+    expect(r.status, r.text).toBe(200);
+    cy = { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    expect((await call("PUT", `/api/admin/players/${cy.id}/stage`, { stageId: "member" })).status).toBe(200);
+    expect((await purpose(cy.token)).status).toBe(401);
+  });
+
+  it("holding story.tell through a group opens the purpose route, and nothing beside it", async () => {
+    const g = await call("PUT", "/api/admin/roles/practitioners/capabilities", { capabilities: ["forum.post", "proposal.open", "story.tell"], grantedEscalations: ["story.tell"] });
+    expect(g.status, g.text).toBe(200);
+    expect((await call("POST", "/api/admin/roles/practitioners/holders", { userId: cy.id, action: "add" })).status).toBe(200);
+    // Past the gate: an empty statement is the route's own 400, never the gate's 401.
+    expect((await purpose(cy.token)).status).toBe(400);
+    expect((await call("PUT", "/api/admin/settings", {}, cy.token)).status).toBe(401);
+    expect((await call("POST", "/api/admin/launch/confirm", {}, cy.token)).status).toBe(401);
+  });
+
+  it("the founder still reaches the route, even once the village holds its power", async () => {
+    await pool.query("INSERT INTO capability_holding (capability, holder_role_id, note) VALUES ('story.tell', 'practitioners', 'e2e')"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+    expect((await purpose(founderToken)).status).toBe(400);
+    expect((await call("GET", "/api/admin/players")).status).toBe(200);
+  });
+});

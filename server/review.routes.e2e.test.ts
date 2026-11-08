@@ -658,6 +658,39 @@ describe.skipIf(!DB_CONFIGURED)("a steward who is not an admin", () => {
     const [[seat]] = await pool.query<any[]>("SELECT circle_id FROM org_roles WHERE name = 'Regeneration Lead'"); // module-review-ok: reading back the scratch schema this suite provisioned
     expect(seat?.circle_id).toBe("regenerative-development");
   });
+
+  it("NEVER CREATES WHAT THE SOURCE ARCHIVED from here, one at a time or as a batch, and writes nothing (D1)", async () => {
+    // This accept reads no status, so an Archived circle accepted here was
+    // created. Thirteen such circles waited in production on 2026-10-31.
+    const ARCH = "batch-saberra-archived";
+    const old = await landProposal(pool, {
+      villageId: "v1",
+      moduleId: "saberra",
+      batchId: ARCH,
+      kind: "circle.proposed",
+      sourceRef: "rec-circle-old-kitchen",
+      payload: { "Circle Name": "Old Kitchen", Status: "Archived", vendorRecordId: "rec-circle-old-kitchen" },
+    });
+    expect(old.ok, JSON.stringify(old)).toBe(true);
+    const oldId = old.ok ? old.id : "";
+    const draftsBefore = (await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_drafts"))[0][0].n; // module-review-ok: reading back the scratch schema this suite provisioned
+
+    const one = await call("POST", `/api/review/proposals/${oldId}/accept`, {}, kiraToken);
+    expect(one.status, one.text).toBe(409);
+    expect(one.json.error).toBe(
+      '"Old Kitchen" is archived where it came from, so accepting it here would bring it back. Review the batch as one structure change, where archived records are listed apart.',
+    );
+    const all = await call("POST", `/api/review/batches/${ARCH}/accept`, {}, kiraToken);
+    expect(all.status, all.text).toBe(409);
+
+    // Nothing written: no draft, no circle, and the proposal still waits.
+    const draftsAfter = (await pool.query<any[]>("SELECT COUNT(*) AS n FROM org_drafts"))[0][0].n; // module-review-ok: reading back the scratch schema this suite provisioned
+    expect(Number(draftsAfter)).toBe(Number(draftsBefore));
+    const [made] = await pool.query<any[]>("SELECT id FROM circles WHERE name = 'Old Kitchen'"); // module-review-ok: reading back the scratch schema this suite provisioned
+    expect(made).toEqual([]);
+    const [[still]] = await pool.query<any[]>("SELECT status FROM external_proposals WHERE id = ?", [oldId]); // module-review-ok: reading back the scratch schema this suite provisioned
+    expect(still?.status).toBe("proposed");
+  });
 });
 
 /*
