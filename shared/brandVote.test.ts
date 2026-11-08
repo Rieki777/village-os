@@ -1,10 +1,10 @@
 /**
  * What a village vote may change in the brand (Rye, 2026-11-06: "EVERYTHING
  * can change with the highest village vote"), and what it never may: a secret,
- * the currency locked at launch, a key that does not exist.
+ * a key that does not exist. The currency code moves only at the highest tier.
  */
 import { describe, expect, it } from "vitest";
-import { BRAND_VOTE_MAX, brandFieldValue, brandVoteProblem, parseBrandField, withBrandField } from "./brandVote";
+import { BRAND_VOTE_MAX, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence, parseBrandField, withBrandField } from "./brandVote";
 
 const brand = {
   project: { name: "Larksfield", tagline: "A village by the river", fiatCurrency: "EUR" },
@@ -30,8 +30,33 @@ describe("which brand fields a vote may change", () => {
     expect(brandVoteProblem({ theme: { webhookUrl: "" } }, "theme.webhookUrl", "x")).toContain("credential");
   });
 
-  it("keeps the currency code locked, and the map skin to its own writer", () => {
-    expect(brandVoteProblem(brand, "project.fiatCurrency", "USD")).toContain("set at launch");
+  it("lets a vote change the currency code, at the highest tier only (Rye, 2026-11-06)", () => {
+    expect(brandVoteProblem(brand, "project.fiatCurrency", "USD")).toBeNull();
+    expect(brandFieldTier("project.fiatCurrency")).toBe("constitutional");
+    expect(brandFieldTier(" project.fiatCurrency ")).toBe("constitutional");
+    expect(brandFieldTier("project.name")).toBe("routine");
+    expect(brandFieldTier("currency.name"), "the currency's WORD is an ordinary name").toBe("routine");
+  });
+
+  it("takes the currency only as the code the admin route stores, and never blank", () => {
+    for (const to of ["", "usd", " USD", "USD ", "US", "USDX", "US1", "€"]) {
+      expect(brandVoteProblem(brand, "project.fiatCurrency", to), JSON.stringify(to)).toContain("three letter code");
+    }
+    // A village that launched without naming one can still be given one by vote.
+    expect(brandVoteProblem({ project: { name: "Larksfield" } }, "project.fiatCurrency", "CRC")).toBeNull();
+  });
+
+  it("says on the ballot that nothing is converted, and by how much amounts move between decimal places", () => {
+    const same = currencyChangeSentence("EUR", "USD");
+    expect(same).toContain("from EUR to USD");
+    expect(same).toContain("Nothing already recorded is converted");
+    expect(same).not.toContain("times");
+    expect(currencyChangeSentence("CRC", "JPY")).toContain("JPY counts 0 decimal places where CRC counts 2, so each of those amounts reads 100 times larger");
+    expect(currencyChangeSentence("JPY", "USD")).toContain("100 times smaller");
+    expect(currencyChangeSentence("", "CRC")).toContain("changes to CRC");
+  });
+
+  it("keeps the map skin to its own writer", () => {
     expect(brandVoteProblem(brand, "skin.water", "#00ff00")).not.toBeNull();
   });
 

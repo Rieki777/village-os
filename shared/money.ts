@@ -27,11 +27,11 @@ export function exponentOf(currency: string): number {
 }
 
 /** Minor units -> "CHF 12.50" / "$12.50", falling back to "12.5 XXX". */
-function plainFormat(amountMinor: number, currency: string): string {
+function plainFormat(amountMinor: number, currency: string, locale = "en"): string {
   const digits = exponentOf(currency);
   const major = amountMinor / Math.pow(10, digits);
   try {
-    return new Intl.NumberFormat("en", { style: "currency", currency }).format(major);
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(major);
   } catch {
     return `${major} ${currency}`;
   }
@@ -90,11 +90,17 @@ export function formatMoney(
   amountMinor: number,
   currency: string,
   display?: { currency: string; rate: number | null },
+  /**
+   * The reader's locale, for how the figure is WRITTEN ("₡12,50" in es-CR,
+   * "CRC 12.50" in en). It never changes which currency is shown. English by
+   * default, so the server and every existing caller read as before.
+   */
+  locale = "en",
 ): string {
   if (!display || display.currency === currency || display.rate === null || !Number.isFinite(display.rate) || display.rate <= 0) {
-    return plainFormat(amountMinor, currency);
+    return plainFormat(amountMinor, currency, locale);
   }
-  return plainFormat(convertMinor(amountMinor, currency, display.currency, display.rate), display.currency);
+  return plainFormat(convertMinor(amountMinor, currency, display.currency, display.rate), display.currency, locale);
 }
 
 /**

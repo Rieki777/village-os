@@ -104,6 +104,7 @@ export interface VariableDef {
   max?: number;
   choices?: Array<{ value: string; label: string; hint?: string }>;
   unit?: string;
+  blank?: string;
   ring?: VariableRing;
   applyTiming?: VariableApplyTiming;
   criticality?: Criticality;
@@ -277,6 +278,16 @@ await check("a type outside VariableType is refused", async () => {
 
 await check("a min above its max is refused", async () => {
   await refuses({ variables: [{ ...DIAL, min: 10, max: 1 }] }, /min above its max/);
+});
+
+await check("a blank number is rendered with what it means, and only a number may say", async () => {
+  await withRegistry({ variables: [{ ...DIAL, default: "", blank: "no ceiling" }] }, async (root) => {
+    const text = await generate(root);
+    assert.ok(text.includes("| Default | blank, which is no ceiling |"));
+    assert.ok(text.includes("| Left blank | no ceiling, and 0 is the number zero |"));
+  });
+  await refuses({ variables: [{ ...DIAL, blank: "   " }] }, /says what blank means in no words/);
+  await refuses({ variables: [{ ...DIAL, type: "text", blank: "nothing" }] }, /is not a number/);
 });
 
 await check("A NEW FIELD ON VariableDef STOPS THE BUILD instead of going unmentioned", async () => {
