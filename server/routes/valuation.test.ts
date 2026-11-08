@@ -19,7 +19,7 @@
 import mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
-import { createOrgRole, listOrgRoles, seatHolder } from "../lib/orgChart";
+import { createOrgRole, listOrgRoles, seatHolder, updateOrgRole } from "../lib/orgChart";
 import { saveModelVersion } from "../lib/valuationStore";
 import { modelForVillage } from "../../shared/valuationEngine";
 import type { ValuationModel } from "../../shared/valuation";
@@ -271,6 +271,28 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
       expect((await topUp(id, { totalMinor: expectedTotal * 3, outcome: "  " })).body.error).toMatch(/achieved/);
       actor = null;
       expect((await topUp(id, { totalMinor: expectedTotal * 3, outcome: "x" })).status).toBe(401);
+    });
+  });
+
+  describe("no Voice line before the village adopts its own scale (economics lane, 2026-11-08)", () => {
+    it("opens a top-up draft with no Voice while the village is still on the platform default model", async () => {
+      const id = await makeRole();
+      await updateOrgRole(pool, id, {}, { valueMinor: 20000000, valueCurrency: "CRC" });
+      await pool.query("DELETE FROM `valuation_models`"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      as("member-9");
+      const out = await call("POST /api/org/roles/:id/pay/top-up", { params: { id }, body: { totalMinor: 30000000, outcome: "Carried the harvest" } });
+      expect(out.status, JSON.stringify(out.body)).toBe(200);
+      const draft: any = await getDraft(pool, out.body.draftId);
+      const tokens = draft.changes[0].payload.valueTokens as Array<{ token: string }>;
+      expect(tokens.some((t) => t.token === MODEL.tokens.voice)).toBe(false);
+      expect(out.body.voiceHeld).toBe(true);
+    });
+
+    it("carries the Voice line once the village has adopted a model of its own", async () => {
+      const id = await makeRole();
+      expect((await setPay(id, expectedTotal)).body.state).toBe("set");
+      const role = await roleOf(id);
+      expect(role.valueTokens.some((t: { token: string }) => t.token === MODEL.tokens.voice)).toBe(true);
     });
   });
 });
