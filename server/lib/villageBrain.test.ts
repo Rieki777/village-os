@@ -10,10 +10,14 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import { BRIEF_SECTIONS, MINIMUM_BRIEF } from "../../shared/villageBrief";
 import {
+  STRANGER_READABLE_SECTIONS,
+  briefAudienceFromBody,
+  briefRowsForViewer,
   capMarkdown,
   decisionOccurredAt,
   decisionToRecord,
   estimateTokens,
+  memberCanvasAnswers,
   renderIndexMarkdown,
   renderSectionMarkdown,
   slugify,
@@ -67,6 +71,69 @@ describe("the brain never leaves the fork", () => {
   });
 });
 
+describe("the canvas export reads the brief through one fenced reader (plan 5.6)", () => {
+  /** Block and line comments out, strings left in, so a header naming a reader cannot trip the sweep. */
+  const code = (rel: string) =>
+    fs
+      .readFileSync(path.join(__dirname, "..", "..", rel), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+
+  it("notebookExport.ts imports memberCanvasAnswers from the brain and nothing else", () => {
+    const src = code("server/lib/notebookExport.ts");
+    const fromBrain = Array.from(src.matchAll(/import\s*\{([^}]*)\}\s*from\s*"\.\/villageBrain"/g)).map((m) => m[1].split(",").map((s) => s.trim()).filter(Boolean));
+    expect(fromBrain, "notebookExport.ts must import from ./villageBrain exactly once").toHaveLength(1);
+    expect(fromBrain[0]).toEqual(["memberCanvasAnswers"]);
+    // Nor may it reach the brief another way: a second import path, or the tables themselves.
+    const readers = ["village_brief", "village_record", "village_brief_revisions", "briefAll", "briefGet", "recordSummaries", "briefIndexForPrompt", "briefForPublicPrompt", "renderSectionMarkdown", "brainEtag"];
+    for (const token of readers) {
+      expect(src, `notebookExport.ts must not touch ${token}`).not.toContain(token);
+    }
+    expect(src).toContain("memberCanvasAnswers(pool)");
+  });
+
+  /**
+   * A pool that IGNORES the WHERE: every village_brief query gets every row
+   * back, admin audience included. It records the SQL it was sent, so the
+   * test can also say the query asked for the member audience.
+   */
+  function leakyPool(rows: Array<Record<string, unknown>>) {
+    const sent: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        sent.push(sql);
+        return [rows];
+      },
+    };
+    return { pool: pool as unknown as Parameters<typeof memberCanvasAnswers>[0], sent };
+  }
+
+  const row = (section: string, audience: "admin" | "member", body: string) => ({
+    id: `brief-${section}`, section, title: section, body, audience, source: "admin", status: "confirmed",
+    confirmed_by: "x", confirmed_at: new Date(), revision: 1, updated_at: new Date(),
+  });
+
+  it("never hands on an admin-audience row, even from a pool that returns one", async () => {
+    const { pool, sent } = leakyPool([
+      row("aims", "member", "MEMBER-AIMS"),
+      row("vision", "admin", "ADMIN-VISION"),
+      row("decisions", "admin", "ADMIN-DECISIONS"),
+      row("economy", "admin", "ADMIN-ECONOMY"),
+      row("people", "member", "PEOPLE-EVEN-OPENED"),
+      row("legal", "member", "LEGAL-EVEN-OPENED"),
+    ]);
+    const answers = await memberCanvasAnswers(pool);
+    const all = JSON.stringify(answers);
+    expect(all).toContain("MEMBER-AIMS");
+    for (const kept of ["ADMIN-VISION", "ADMIN-DECISIONS", "ADMIN-ECONOMY", "PEOPLE-EVEN-OPENED", "LEGAL-EVEN-OPENED"]) {
+      expect(all, kept).not.toContain(kept);
+    }
+    // And the query itself asked for member rows only: the first of the two locks.
+    expect(sent.filter((s) => s.includes("village_brief"))).toHaveLength(1);
+    expect(sent[0]).toContain("audience = 'member'");
+  });
+});
+
 describe("the section registry", () => {
   it("names a minimum viable brain of exactly three sections", () => {
     // A first session targets these and stops. A founder must be able to leave
@@ -91,6 +158,58 @@ describe("the section registry", () => {
 
   it("has unique ids", () => {
     expect(new Set(BRIEF_SECTIONS.map((s) => s.id)).size).toBe(BRIEF_SECTIONS.length);
+  });
+});
+
+describe("what may ever reach a stranger", () => {
+  // Pinned as a literal on purpose. Widening this list is how a village's dues
+  // or its decision-makers reach the public guide, so it should take an edit
+  // here that a reviewer reads, and never happen as a side effect of adding a
+  // section to the registry.
+  it("is exactly the four sections a village says to anybody", () => {
+    expect([...STRANGER_READABLE_SECTIONS].sort()).toEqual(["aims", "language", "values", "vision"]);
+  });
+
+  it("names only sections that exist, so a rename cannot quietly empty the public guide", () => {
+    // Widened to string: the allowlist is a set of strings, and BRIEF_SECTIONS
+    // ids became literals (BriefSectionId) when the canvas sections joined them.
+    const ids = new Set<string>(BRIEF_SECTIONS.map((s) => s.id));
+    for (const id of STRANGER_READABLE_SECTIONS) expect(ids.has(id), `${id} is not a brief section`).toBe(true);
+  });
+
+  it("names only sections that default to members, so the two lists cannot disagree on a fresh fork", () => {
+    const byId = Object.fromEntries(BRIEF_SECTIONS.map((s) => [s.id, s.audience]));
+    for (const id of STRANGER_READABLE_SECTIONS) expect(byId[id], id).toBe("member");
+  });
+});
+
+describe("briefAudienceFromBody", () => {
+  it("accepts both directions, so an admin can close what they opened", () => {
+    expect(briefAudienceFromBody("member")).toBe("member");
+    expect(briefAudienceFromBody("admin")).toBe("admin");
+  });
+
+  it("reads anything else as leave it alone, never as a widening", () => {
+    for (const v of [undefined, null, "", "public", "Member", "ADMIN", 1, true, {}, ["member"]]) {
+      expect(briefAudienceFromBody(v), JSON.stringify(v)).toBeUndefined();
+    }
+  });
+});
+
+describe("briefRowsForViewer", () => {
+  // Every section as a member-audience row: what the member query returns
+  // once the canvas has opened all of them.
+  const opened = BRIEF_SECTIONS.map((s) => brief({ id: `brief-${s.id}`, section: s.id, audience: "member" }));
+
+  it("hands a signed-in account the village has not admitted the allowlist and nothing else", () => {
+    const seen = briefRowsForViewer(opened, { admin: false, member: false }).map((r) => r.section).sort();
+    expect(seen, "an unadmitted account read a section a stranger may not").toEqual([...STRANGER_READABLE_SECTIONS].sort());
+    for (const id of ["economy", "decisions", "membership"]) expect(seen).not.toContain(id);
+  });
+
+  it("hands a member and an admin exactly the rows their audience query returned", () => {
+    expect(briefRowsForViewer(opened, { admin: false, member: true })).toEqual(opened);
+    expect(briefRowsForViewer(opened, { admin: true, member: false })).toEqual(opened);
   });
 });
 

@@ -1,5 +1,5 @@
--- 0359: a difference from the outside service is answered, and the old queue says why it went.
--- 0359, as the integrator assigned (it was 0350, renumbered while waiting to land).
+-- 0361: a difference from the outside service is answered, and the old queue says why it went.
+-- 0361, as the integrator assigned (it was 0350, then 0359; the canvas took 0357 to 0359 while this waited to land).
 --
 -- WHAT THIS IS FOR.
 -- The review page lists the ways the outside service's chart and the live chart

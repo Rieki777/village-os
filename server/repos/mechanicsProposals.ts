@@ -51,6 +51,33 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
+/** A new proposal row, as `openMechanicsProposal` (server/lib/mechanicsPropose.ts) files it. */
+export interface NewMechanicsProposal {
+  id: string;
+  title: string;
+  rationale: string;
+  /** The normalised change set, stored as JSON and never rewritten afterwards. */
+  changeSet: unknown;
+  proposerUserId: string;
+  status: "open" | "draft";
+  timing: string;
+  supersedesProposalId: string | null;
+}
+
+/**
+ * THE ONE INSERT. It moved here from the `POST /api/game/mechanics/proposals`
+ * handler in server/index.ts (2026-09-28) when that handler became a function
+ * the canvas adopt door also calls, so the statement lives where this file's
+ * header says the next one goes. The column list and the values are the ones
+ * the handler wrote.
+ */
+export async function insertMechanicsProposal(pool: Pool, p: NewMechanicsProposal): Promise<void> {
+  await pool.query(
+    "INSERT INTO mechanics_proposals (id, title, rationale, change_set, proposer_user_id, status, timing, supersedes_proposal_id) VALUES (?,?,?,?,?,?,?,?)",
+    [p.id, p.title, p.rationale, JSON.stringify(p.changeSet), p.proposerUserId, p.status, p.timing, p.supersedesProposalId],
+  );
+}
+
 /**
  * The two columns the supersede walk actually reads back.
  *

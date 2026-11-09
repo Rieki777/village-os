@@ -28,7 +28,10 @@ import type { ReactNode } from "react";
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "u-rye", name: "Rye", role: "admin" }, loading: false }),
 }));
-vi.mock("@/modules/ModuleProvider", () => ({
+// The real module but for the catalog, so `moduleIsOn` (the launch guide reads
+// it for the canvas) answers from the list below and the canvas reads off.
+vi.mock("@/modules/ModuleProvider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/ModuleProvider")>()),
   useModules: () => ({ modules: [{ id: "events", lifecycle: "public" }], loaded: true, failed: false }),
   useModuleOn: () => true,
 }));

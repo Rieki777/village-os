@@ -226,6 +226,8 @@ import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
+import { forgetNotebookForMember } from "../repos/villageDocuments";
+import { DEPARTED_MEMBER_NAME } from "../../shared/memberFirstName";
 import {
   abandonErasure,
   beginErasure,
@@ -296,7 +298,7 @@ export interface SweepResult {
   stayed?: boolean;
 }
 
-const ANON = "A departed member";
+const ANON = DEPARTED_MEMBER_NAME;
 
 /** What a scrubbed key of a submission reads as. */
 const REMOVED = "[removed at member's request]";
@@ -557,10 +559,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // De-attribution is not enough: the TEXT restates the person. A
-      // restorative intake notification carries "A private intake from <their
-      // full name>" in the title and up to 2000 characters of their message in
-      // the body, and nulling the actor id leaves every word of that in the
-      // steward's inbox. Their own bell goes; every row naming them to
+      // restorative intake notification carries "<their full name> wrote:"
+      // and up to 2000 characters of their message in the body
+      // (server/lib/restorativeIntake.ts), and nulling the actor id leaves
+      // every word of that in the steward's inbox. Their own bell goes; every row naming them to
       // somebody else, found by its actor or, for rows the admin producers
       // wrote with no actor, by the record its key was built from, loses its
       // words, and its emailed copies go blank first (server/repos/noticesNaming.ts).
@@ -1709,6 +1711,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * THE MEMBER'S OWN NOTEBOOK (0359, plan 5.5): every document they kept
+       * private, with its stored bytes, and their own list of picked
+       * resources. A document the village's pen ADOPTED stays, because it is
+       * the village's material now; its owner reads as "a departed member"
+       * through the tombstone. The village's own picks (user_id '') are never
+       * a member's and are never touched.
+       *
+       * AFTER THE TOMBSTONE, for the reason the step above gives: adding a
+       * document is a write any signed-in session can make, so the deletion
+       * comes after the last moment the member could make one.
+       */
+      name: "notebook-after-tombstone",
+      run: async () => {
+        await forgetNotebookForMember(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again, as the last step that deletes the
       // member's own data. Two steps follow it on purpose and touch none:
@@ -2278,6 +2298,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
+  "notebook-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

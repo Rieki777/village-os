@@ -105,9 +105,9 @@ describe("the minimum length refuses a plausible non-answer", () => {
 });
 
 describe("the judgement line, and the subjects that carry one", () => {
-  it("is required on the five subjects that change how the village works", () => {
+  it("is required on the six subjects that change how the village works", () => {
     expect([...PURPOSE_ALIGNMENT_SUBJECTS].sort()).toEqual(
-      ["gps_change", "mechanics", "power_grant", "power_return", "power_transfer"],
+      ["conflict_agreement", "gps_change", "mechanics", "power_grant", "power_return", "power_transfer"],
     );
     expect(GPS_CHANGE).toBe("gps_change");
   });
