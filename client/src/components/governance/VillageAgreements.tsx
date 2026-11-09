@@ -10,8 +10,8 @@
  *
  * Members only, as the route is (a visitor asks nothing, and an account the
  * route refuses sees nothing), and only while governance is on. It states the
- * review date as a date; nothing reminds anybody when it comes yet, and the
- * page does not say otherwise.
+ * review date as a date; on that date the `agreement-review` job reminds every
+ * present member (server/lib/agreements.ts, D10b).
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";

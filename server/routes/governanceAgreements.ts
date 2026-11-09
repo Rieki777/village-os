@@ -19,13 +19,21 @@
  * village as a practice vote through exactly that door. The vote is conducted
  * the way `POST /api/governance/purpose-changes` conducts one: the village's
  * own method and dials through `thresholdsFor`, its own weights, its own
- * electorate, frozen at the open. An agreement asks nothing of its own above
- * the village's bar, so it carries no floor in `SUBJECT_THRESHOLDS`.
+ * electorate, frozen at the open. An agreement binds the whole village until
+ * its review date, so `SUBJECT_THRESHOLDS` prices it at the STRUCTURAL tier on
+ * `custom` (D8, 2026-11-09): `thresholdsFor` raises the village's dials to the
+ * village's own structural setting and fixes the method, so the bar is the one
+ * a change to how the village is organised asks.
  *
  * ── ONE AGREEMENT, ONE VOTE ────────────────────────────────────────────────
  *
  * Each agreement is its own subject (`agreement:<id>`), so the village can
- * weigh two agreements at once. The words go beside the ballot in their own
+ * weigh two agreements at once, from two members. ONE OPEN AGREEMENT VOTE PER
+ * MEMBER (D9, 2026-11-09), the advisory route's bell rule: a vote rings the
+ * whole frozen roll at its open and its close, so the count of open votes a
+ * member started on this subject is read first (`openBallotCountBy`,
+ * server/repos/openBallotCounts.ts) and a second is refused with 409 in a
+ * sentence that names the way past. The words go beside the ballot in their own
  * document (server/lib/agreements.ts) and never back out of the markdown. If
  * that write fails the vote is called off before anybody casts one, the way
  * the purpose change does it.
@@ -35,11 +43,13 @@
  */
 import crypto from "node:crypto";
 import type { Express } from "express";
+import type { Pool } from "mysql2/promise";
 import type { AppDeps } from "../lib/appDeps";
 import { numberVar, stringVar } from "../lib/variables";
 import { openBallot, withdrawBallot } from "../lib/ballots";
 import { decisionLink, notifyRollRows } from "../lib/ballotNotices";
-import { listAgreements, recordAgreement } from "../lib/agreements";
+import { listAgreements, recordAgreement, runAgreementReviews, type AgreementReviewDeps } from "../lib/agreements";
+import { openBallotCountBy } from "../repos/openBallotCounts";
 import { hasCapability } from "../../shared/capabilities";
 import { AGREEMENT, agreementDoc, parseAgreement, type StoredAgreement } from "../../shared/agreements";
 import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
@@ -70,8 +80,16 @@ type Deps = Pick<
 export const AGREEMENT_OPEN_REFUSAL =
   "Putting an agreement to the whole village takes the power to open votes, and your account does not hold it yet. A member who holds that power can carry this agreement to the village for you.";
 
+/**
+ * What a member with an agreement vote still open is told when they put a
+ * second one forward (D9). It names the way past: the open vote closing, or
+ * its opener withdrawing it from its decision page.
+ */
+export const AGREEMENT_ONE_OPEN_REFUSAL =
+  "You already have an agreement before the village. Let that vote close, or withdraw it from its decision page, and then put this one forward.";
+
 /** The village's own date, `YYYY-MM-DD`, for the review date's floor. */
-function todayIn(timeZone: string, now = new Date()): string {
+export function todayIn(timeZone: string, now = new Date()): string {
   let p: ReturnType<typeof civilParts>;
   try {
     p = civilParts(now, timeZone);
@@ -80,6 +98,28 @@ function todayIn(timeZone: string, now = new Date()): string {
   }
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+}
+
+/**
+ * The `agreement-review` job's body (server/index.ts), here so the host keeps
+ * one line: the stored agreements, the village's own date, and the sweep
+ * (`runAgreementReviews`, server/lib/agreements.ts). Returns the job's note.
+ */
+export async function agreementReviewSweep(input: {
+  pool: Pool;
+  timeZone: string;
+  members: AgreementReviewDeps["members"];
+  isPresent: AgreementReviewDeps["isPresent"];
+  notify: AgreementReviewDeps["notify"];
+}): Promise<string | undefined> {
+  const r = await runAgreementReviews({
+    agreements: await listAgreements(input.pool),
+    today: todayIn(input.timeZone),
+    members: input.members,
+    isPresent: input.isPresent,
+    notify: input.notify,
+  });
+  return r.due ? `${r.told} member(s) told that ${r.due} agreement(s) reached the review date` : undefined;
 }
 
 /** An agreement as a member reads it: the words and the scope, never who proposed it. */
@@ -126,6 +166,9 @@ export function register(app: Express, deps: Deps): void {
     if (!parsed.ok) return res.status(400).json({ error: parsed.error });
     const a = parsed.agreement;
     const pool = getPool();
+    if ((await openBallotCountBy(pool, AGREEMENT, String(user.id))) > 0) {
+      return res.status(409).json({ error: AGREEMENT_ONE_OPEN_REFUSAL });
+    }
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
     const dials = thresholdsFor(

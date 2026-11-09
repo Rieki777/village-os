@@ -107,6 +107,7 @@ import {
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 import { ADOPTING_POWER, ROLE_APPLICATION } from "./seatApplications";
 
@@ -288,6 +289,7 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
   [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
+  [AGREEMENT]: "Adopting a village agreement",
   [ORG_DRAFT]: "Changing the village's circles and roles",
 };
 
