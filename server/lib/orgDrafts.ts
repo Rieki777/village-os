@@ -239,6 +239,8 @@ export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: str
     const payload = parse(r.payload);
     if (!payload || String(payload.chosenBy ?? "") !== userId) continue;
     payload.chosenBy = null;
+    // Names nobody, and keeps the held-role check on this retirement.
+    payload.chosenByDeparted = true;
     await rewriteDraftChangePeople(pool, String(r.id), JSON.stringify(payload), r.before_json === null || r.before_json === undefined ? null : typeof r.before_json === "string" ? r.before_json : JSON.stringify(r.before_json));
     touched += 1;
   }
@@ -1248,7 +1250,10 @@ export function previewLoadedDraft(
         // A steward retiring the old chart never unseats anybody (0243). Read
         // at preview, and so again inside the publish transaction, so a seating
         // made after the accept still holds the seat.
-        if (!blocked && stewardChose(c) && context.heldSeatIds?.has(c.orgRoleId)) {
+        // A chooser erasure took off (chosenByDeparted) still counts as a
+        // person's choice here, so the held-role check keeps running (PR C
+        // review, security re-check).
+        if (!blocked && (stewardChose(c) || c.payload?.chosenByDeparted === true) && context.heldSeatIds?.has(c.orgRoleId)) {
           blocked = "Somebody holds this role. Give them a role in the new chart before it is retired";
         }
       }

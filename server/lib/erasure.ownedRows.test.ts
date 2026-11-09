@@ -845,10 +845,11 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     await anonymizeMember(pool, leaver, "admin-1", deps());
 
     const rows = await q("SELECT id, payload FROM org_draft_changes WHERE id LIKE 'own-rest-%' ORDER BY id");
-    expect(rows.map((r) => [r.id, (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload).chosenBy])).toEqual([
-      ["own-rest-1", null],
-      ["own-rest-2", null],
-      ["own-rest-3", "own-rest-ash"],
+    const pay = (r: any) => (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload);
+    expect(rows.map((r) => [r.id, pay(r).chosenBy, pay(r).chosenByDeparted ?? false])).toEqual([
+      ["own-rest-1", null, true],
+      ["own-rest-2", null, true],
+      ["own-rest-3", "own-rest-ash", false],
     ]);
   });
 
