@@ -61,6 +61,10 @@ import {
   OPEN_NAME_MAX,
   OPEN_WORDS,
   parseOpenProposal,
+  OPEN_GLOBAL_HOURLY,
+  ipBucket,
+  limiterAddressKey,
+  safeGreeting,
 } from "../../shared/openProposals";
 import type { AppDeps } from "../lib/appDeps";
 import { post } from "../lib/comms/postOffice";
@@ -107,7 +111,8 @@ const WENT: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["
 
 const hashOf = (token: string): string => crypto.createHash("sha256").update(token).digest("hex");
 const newToken = (): string => crypto.randomBytes(24).toString("base64url");
-const firstNameOf = (name: string): string | null => name.trim().split(/\s+/)[0] || null;
+/** The greeting's name: a stranger typed it, so only a plain name is repeated (shared/openProposals.ts, safeGreeting). */
+const firstNameOf = (name: string): string | null => safeGreeting(name);
 
 export function register(app: Express, deps: Deps): void {
   const { getPool, overLimit, clientIp, guardCapability, authedUser, deploymentOrigin, projectName, escapeHtml } = deps;
@@ -210,7 +215,7 @@ export function register(app: Express, deps: Deps): void {
     const body = req.body ?? {};
     // Honeypot: a hidden field only a bot fills. Pretend it went, keep nothing.
     if (body.hp) return res.json({ sent: true });
-    if (await overLimit(`open-proposal:ip:${clientIp(req)}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     const d = await door(body.link);
     if (!d.open) return res.status(403).json({ error: OPEN_WORDS.closed });
     const mode = (await settings()).term;
@@ -224,7 +229,9 @@ export function register(app: Express, deps: Deps): void {
     // The term is the village's, set here and never taken from the form.
     const proposal = { ...parsed.value.body, ...(t.term ? { term: t.term } : {}) };
     const emailKey = emailKeyOf(email);
-    if (await overLimit(`open-proposal:email:${emailKey}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    // The last gate before an email goes: the village's overall hourly cap on confirmations.
+    if (await overLimit("open-proposal:global", OPEN_GLOBAL_HOURLY, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
 
     const pool = getPool();
     const id = `op-${crypto.randomBytes(10).toString("hex")}`;
@@ -362,11 +369,13 @@ export function register(app: Express, deps: Deps): void {
 export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
   const deleted = await store.deleteUnconfirmedBefore(pool, new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000));
   const cutoff = new Date(at.getTime() - OPEN_ANONYMISE_DAYS * 24 * 60 * 60_000);
+  // Confirmed, and nobody decided it in 90 days: closed as withdrawn, and the name and address go now (red team, 9 Nov).
+  const expired = await store.expireUndecidedBefore(pool, cutoff, at);
   let anonymised = await store.anonymiseDecidedBefore(pool, cutoff, at);
   for (const p of await store.adoptedDecidedBefore(pool, cutoff)) {
     const invite = await inviteById(pool, openInviteId(p.id));
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
-  return `${deleted} unconfirmed deleted, ${anonymised} anonymised`;
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised`;
 }

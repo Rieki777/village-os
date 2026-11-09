@@ -37,6 +37,49 @@ export const OPEN_WHY_MAX = 1200;
 export const OPEN_AIM_MAX = 300;
 /** How long a confirmation link works, and how long an unconfirmed proposal is kept. */
 export const OPEN_CONFIRM_HOURS = 48;
+
+/**
+ * THE GATES A PUBLIC FORM NEEDS WHEN A ROLE IS SHARED WIDELY (red team, 9 Nov
+ * 2026: "the village can be made to email any address you name, at scale").
+ * Every confirmation is an email the village sends to an address a stranger
+ * typed, so the caps are on what reaches inboxes:
+ *   - an overall hourly cap, whatever the connections and addresses;
+ *   - the per-address cap counts an address without its "+tag", so
+ *     victim+1@, victim+2@ ... share one allowance;
+ *   - the per-connection cap counts an IPv6 address by its /64, the block
+ *     one household or one server is handed.
+ */
+export const OPEN_GLOBAL_HOURLY = 60;
+
+/** The address as the per-address cap counts it: folded, without a "+tag". */
+export function limiterAddressKey(emailKey: string): string {
+  const at = emailKey.lastIndexOf("@");
+  if (at <= 0) return emailKey;
+  const local = emailKey.slice(0, at).split("+")[0] || emailKey.slice(0, at);
+  return `${local}${emailKey.slice(at)}`;
+}
+
+/** The connection as the per-connection cap counts it: IPv4 as is, IPv6 by its /64. */
+export function ipBucket(ip: string): string {
+  const raw = String(ip ?? "").trim().toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(raw);
+  if (mapped) return mapped[1];
+  if (!raw.includes(":")) return raw;
+  const [head, tail = ""] = raw.split("::");
+  const h = head ? head.split(":") : [];
+  const t = raw.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = raw.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => (parseInt(g || "0", 16) || 0).toString(16)).join(":")}::/64`;
+}
+
+/** Letters in any script (Unicode classes, so the pattern is built at runtime), apostrophes and hyphens. */
+const GREETING = new RegExp("^[\\p{L}\\p{M}'\\u2019-]{1,40}$", "u");
+
+/** A first name safe to greet with: letters (any script), apostrophes and hyphens, never a link or an address. */
+export function safeGreeting(name: string): string | null {
+  const first = String(name ?? "").trim().split(/\s+/)[0] ?? "";
+  return GREETING.test(first) ? first : null;
+}
 /**
  * How long a declined or withdrawn proposal keeps its name and address, and an
  * adopted one whose invitation nobody used (open proposals part B), counted
