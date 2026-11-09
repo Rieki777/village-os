@@ -20,9 +20,12 @@ import {
   SUGGESTION_RAISE_AFTER_DAYS,
   SUGGESTION_ROUTE,
   declineReasonProblem,
+  effectiveSuggestionRoutes,
   mayRaiseToBallot,
   routeSuggestion,
+  storableSuggestionRoutes,
   suggestionDiff,
+  suggestionRoutesProblems,
 } from "./suggestions";
 import {
   ALL_DRAFT_KINDS,
@@ -75,10 +78,45 @@ describe("routeSuggestion", () => {
 });
 
 describe("the admin controls a suggestion may name", () => {
-  it("starts with one wired control, the paths and stages words, behind story.tell", () => {
-    expect(Object.keys(ADMIN_EDIT_CONTROLS)).toEqual(["village_paths"]);
+  it("wires the paths and stages words behind story.tell, and the suggestion dial behind power.assign", () => {
+    expect(Object.keys(ADMIN_EDIT_CONTROLS)).toEqual(["village_paths", "suggestion_routes"]);
     expect(ADMIN_EDIT_CONTROLS.village_paths.capability).toBe("story.tell");
     expect(ADMIN_EDIT_CONTROLS.village_paths.passesPowers).toBe(false);
+    expect(ADMIN_EDIT_CONTROLS.suggestion_routes.capability).toBe("power.assign");
+    expect(ADMIN_EDIT_CONTROLS.suggestion_routes.passesPowers).toBe(false);
+  });
+});
+
+describe("the dial's table", () => {
+  it("accepts any known power sent to holders or a ballot, and refuses everything else by name", () => {
+    expect(suggestionRoutesProblems({ routes: { "library.keep": "ballot", "story.tell": "holders" } })).toEqual([]);
+    expect(suggestionRoutesProblems({ routes: {} })).toEqual([]);
+    expect(suggestionRoutesProblems(null)).toHaveLength(1);
+    expect(suggestionRoutesProblems({ routes: [] })).toHaveLength(1);
+    expect(suggestionRoutesProblems({ routes: {}, extra: 1 })[0]).toContain("extra");
+    expect(suggestionRoutesProblems({ routes: { "made.up": "ballot" } })[0]).toContain("made.up");
+    expect(suggestionRoutesProblems({ routes: { "library.keep": "admins" } })[0]).toContain("library.keep");
+  });
+
+  it("never lets the steward's veto go to holders", () => {
+    expect(suggestionRoutesProblems({ routes: { "steward.veto": "holders" } })[0]).toContain("veto");
+    expect(suggestionRoutesProblems({ routes: { "steward.veto": "ballot" } })).toEqual([]);
+  });
+
+  it("stores only the entries that differ from the platform default", () => {
+    expect(storableSuggestionRoutes({ routes: { "library.keep": "ballot", "story.tell": "holders", "steward.veto": "ballot" } })).toEqual({
+      routes: { "library.keep": "ballot" },
+    });
+  });
+
+  it("lays the stored entries over the default, ignores what it cannot read, and keeps the veto at a ballot", () => {
+    const table = effectiveSuggestionRoutes({ routes: { "library.keep": "ballot", "gone.away": "ballot", "event.manage": "nobody", "steward.veto": "holders" } });
+    expect(Object.keys(table).sort()).toEqual([...ALL_CAPABILITIES].sort());
+    expect(table["library.keep"]).toBe("ballot");
+    expect(table["event.manage"]).toBe("holders");
+    expect(table["steward.veto"]).toBe("ballot");
+    expect((table as Record<string, string>)["gone.away"]).toBeUndefined();
+    expect(effectiveSuggestionRoutes(undefined)).toEqual(SUGGESTION_ROUTE);
   });
 });
 
