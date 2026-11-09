@@ -484,7 +484,7 @@ import {
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
-import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
+import { addCharacter, avatarFor, listArchetypes, openNowCounts, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
@@ -19332,7 +19332,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
+    const list = await listArchetypes(getPool(), villageId());
+    const open = await openNowCounts(getPool(), list.map((a) => a.key)).catch(() => null); // the cards still draw without a count
+    res.json(list.map((a) => (open ? { ...a, openNow: open.byKey[a.key] ?? 0, openToAll: open.untagged } : a)));
   });
 
   // ── The Player Profile ────────────────────────────────────────────────────

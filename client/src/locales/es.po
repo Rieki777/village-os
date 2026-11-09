@@ -22,6 +22,12 @@ msgctxt "save a change"
 msgid "Save"
 msgstr ""
 
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, link to every role"
+msgid "see every role"
+msgstr "ver todos los roles"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Kind of work"
@@ -439,6 +445,24 @@ msgctxt "the reader started this change request"
 msgid "You started this"
 msgstr ""
 
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, role ideas the village does not have yet"
+msgid "Roles this character could open. Propose one and the village decides:"
+msgstr "Roles que este personaje podría abrir. Propón uno y la aldea decide:"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, open roles tagged for no character"
+msgid "Also open in the village, for anyone:"
+msgstr "También abiertos en la aldea, para cualquiera:"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, apply for one open role"
+msgid "Apply for {name}"
+msgstr "Postúlate a {name}"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Withdraw the request"
@@ -453,6 +477,12 @@ msgstr ""
 msgctxt "change request step"
 msgid "Gathering"
 msgstr ""
+
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card section heading"
+msgid "Roles open now"
+msgstr "Roles abiertos ahora"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -730,6 +760,12 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr ""
 
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, joins two links"
+msgid "or"
+msgstr "o"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr ""
@@ -892,6 +928,12 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr ""
 
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, nothing open right now"
+msgid "No role is open right now."
+msgstr "Ahora no hay ningún rol abierto."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Changes"
@@ -1050,6 +1092,12 @@ msgctxt "role pay"
 msgid "Set this role's pay"
 msgstr ""
 
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, open the role proposal"
+msgid "Propose a new role"
+msgstr "Proponer un rol nuevo"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Or as much as"
@@ -1059,6 +1107,11 @@ msgstr ""
 #, fuzzy
 #~ msgid "Close menu"
 #~ msgstr "Cerrar menú"
+
+#: client/src/components/characters/OpenNowBadge.tsx
+#, fuzzy
+msgid "{n, plural, one {# role open now} other {# roles open now}}"
+msgstr "{n, plural, one {# rol abierto ahora} other {# roles abiertos ahora}}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "That change request could not be started."
@@ -1134,6 +1187,12 @@ msgstr "Ningún idioma coincide"
 msgctxt "review response"
 msgid "I can live with this"
 msgstr ""
+
+#: client/src/components/characters/RolesOpenNow.tsx
+#, fuzzy
+msgctxt "character card, link to the quest board"
+msgid "Try a quest on the board"
+msgstr "Prueba una misión del tablero"
 
 #. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
