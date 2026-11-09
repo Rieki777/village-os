@@ -115,6 +115,7 @@ import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./route
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
 import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
+import { register as registerSuggestionRouteDial, loadSuggestionRoutes } from "./routes/suggestionRoutes"; // where suggestions on each power go, turned by power.assign (4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
 import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
@@ -1561,7 +1562,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()), loadSuggestionRoutes(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -22555,6 +22556,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerSuggestionRouteDial(app, { authedUser, capabilityCtx, liveHoldersOf, getPool });
 
 
   /**
