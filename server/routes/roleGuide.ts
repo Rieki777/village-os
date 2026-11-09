@@ -41,10 +41,11 @@ import { docFromBody } from "@shared/roleCardApply";
 import { readRoleCard, writeRoleCard } from "@shared/roleCardText";
 import { MAX_PROPOSAL_ROLES } from "@shared/roleProposals";
 import { guideStateFor } from "./guideChoice";
+import { register as registerRoleDiscover } from "./roleDiscover";
 import { guidePromptName } from "@shared/guideName";
 import type { GuideAnswer, RoleGuideStep } from "@shared/roleGuide";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | "members" | "seasonState"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | "members" | "seasonState" | "guardCapability"> & {
   lapse: () => LapseContext;
   villageGuideName: () => string;
   villageName: () => string;
@@ -92,6 +93,9 @@ async function noteUsage(pool: Pool, call: AssistantResult, userId: string): Pro
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse, villageGuideName, villageName } = deps;
+
+  // The draft board's discover step (mapping and "Ask the guide") rides on this mount, so server/index.ts gains no line.
+  registerRoleDiscover(app, { authedUser, getPool, clientIp, overLimit, guardCapability: deps.guardCapability, villageGuideName, villageName });
 
   const goalsOf = (seasonId: string | null): string[] => {
     const s = (seasonState().seasons ?? []).find((x: any) => x && String(x.id) === seasonId);
