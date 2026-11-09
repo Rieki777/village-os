@@ -830,6 +830,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     await line("bl-own-2", "own-bd-ash", "own-bd-ash");
     await line("bl-own-3", "own-bd-ash", leaver.id);
     await q("INSERT INTO budget_syncs (id, source, `by`, by_as, ok) VALUES ('bs-own-1', 'upload', ?, 'Treasury', 1), ('bs-own-2', 'upload', 'own-bd-ash', 'Treasury', 1)", [leaver.id]);
+    await q("INSERT INTO budget_period_notes (period_key, note, changed_by, changed_as) VALUES ('2026-11', 'Read this moon slowly', ?, 'Treasury'), ('2026-12', 'Ash wrote this one', 'own-bd-ash', 'Treasury')", [leaver.id]);
 
     await anonymizeMember(pool, leaver, "admin-1", deps());
 
@@ -841,6 +842,10 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     expect(await q("SELECT id, `by`, by_as FROM budget_syncs WHERE id LIKE 'bs-own-%' ORDER BY id")).toEqual([
       { id: "bs-own-1", by: null, by_as: "Treasury" },
       { id: "bs-own-2", by: "own-bd-ash", by_as: "Treasury" },
+    ]);
+    expect(await q("SELECT period_key, note, changed_by, changed_as FROM budget_period_notes ORDER BY period_key"), "a period note stays, without the leaver's id").toEqual([
+      { period_key: "2026-11", note: "Read this moon slowly", changed_by: null, changed_as: "Treasury" },
+      { period_key: "2026-12", note: "Ash wrote this one", changed_by: "own-bd-ash", changed_as: "Treasury" },
     ]);
     expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
   });

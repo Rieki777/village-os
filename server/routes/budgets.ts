@@ -10,6 +10,14 @@
  *   POST  /api/admin/budgets/lines/:id/restore     and back
  *   POST  /api/admin/budgets/lines/:id/lock-rate   a person locks a rate on a line in another currency (spec 5a)
  *   POST  /api/admin/budgets/lock-rates            the same for many lines: preview, then confirm the preview
+ *   GET   /api/budgets/ahead?from=&count=          every member reads 1 to 12 moons ahead (R30)
+ *   PUT   /api/admin/budgets/notes/:period         a note on how to read a period, through the same door (R32)
+ *
+ * PROVENANCE (R29). An upload may name itself ("November budget sheet") and
+ * link its sheet over https. The read names the newest import per source and
+ * dates each header figure by the newest change that fed it; the link goes
+ * only to the door and to `cash.pay` holders, because a private sheet's
+ * address is not every member's to open.
  *
  * A LOCKED RATE (spec 5a, option b; Rye, 9 Nov). `{ use: "provider" }` locks
  * the newest stored daily rate, read here on the server through
@@ -50,9 +58,13 @@ import { markAdminGate } from "../lib/adminGate";
 import { registerAdminEditControl, type Refusal } from "../lib/adminSuggestions";
 import {
   BY_VILLAGE_VOTE,
+  budgetAhead,
+  budgetCircleNames,
   budgetLines,
   budgetRateDrift,
   cashBudgetLeft,
+  periodNote,
+  setPeriodNote,
   configureBudgets,
   importBudgetLines,
   latestSyncs,
@@ -67,7 +79,7 @@ import { leftTheVillage } from "../lib/formerMember";
 import { holderOnlyDecision } from "../lib/holderOnly";
 import { listOrgAssignments } from "../lib/orgChart";
 import { launchedByVote } from "../lib/orgDraftDecide";
-import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, inVillageCurrency, lineShareOfMoon, moonPeriod, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
+import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, inVillageCurrency, lineShareOfMoon, moonPeriod, moonPlan, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
 import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import { formatMoney } from "../../shared/money";
 import { currentCycle } from "../lib/gratitude-cycles";
@@ -202,7 +214,11 @@ export function register(app: Express, deps: Deps): void {
    * what the door would answer; a confirm needs the door, and is refused on a
    * payee conflict.
    */
-  async function run(req: any, res: any, build: (body: any) => { source: "upload" | "manual"; lines: ImportRow[]; scope: ImportScope | null } | { problem: string }) {
+  async function run(
+    req: any,
+    res: any,
+    build: (body: any) => { source: "upload" | "manual"; lines: ImportRow[]; scope: ImportScope | null; sourceLabel?: string | null; sourceLink?: string | null } | { problem: string },
+  ) {
     markAdminGate(req); // a gate is consulted here: the default-deny under /api/admin needs to hear it
     const who = await member(req, res);
     if (!who) return;
@@ -223,6 +239,8 @@ export function register(app: Express, deps: Deps): void {
       byAs: door.ok ? door.byAs : null,
       dryRun: true,
       format: formatOf(body.format),
+      sourceLabel: built.sourceLabel ?? null,
+      sourceLink: built.sourceLink ?? null,
     };
     const preview = await importBudgetLines(getPool(), input);
     if (!preview.ok) return res.status(preview.status).json(preview);
@@ -254,7 +272,8 @@ export function register(app: Express, deps: Deps): void {
       if (!lines || !lines.length) return { problem: "Send the rows to import." };
       if (lines.length > IMPORT_ROWS_MAX) return { problem: `One import carries at most ${IMPORT_ROWS_MAX} lines. Split the sheet by period and import each part.` };
       const scope: ImportScope | null = body.scope && typeof body.scope === "object" ? { periods: rowsOfText(body.scope.periods), circles: circlesOf(body.scope.circles), whole: body.scope.whole === true } : null;
-      return { source: "upload", lines: lines.map(one), scope };
+      const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 600) : null);
+      return { source: "upload", lines: lines.map(one), scope, sourceLabel: text(body.sourceLabel), sourceLink: text(body.sourceLink) };
     }),
   );
 
@@ -330,6 +349,17 @@ export function register(app: Express, deps: Deps): void {
     // Who locked a rate is named by the role they hold it through, never by account (R25).
     const lockedAs = (userId: string | null | undefined): string | null => (userId ? actingAs(String(userId)) : null);
     const drift = (await budgetRateDrift(pool)).filter((d) => touching.some((l) => l.id === d.id));
+    // Who keeps the budget, or pays cash, may open the sheet an import came from (R29).
+    const mayReadLink = door.ok || mayReadCash;
+    const syncs = (await latestSyncs(pool)).map((s) => ({ ...s, sourceLink: mayReadLink ? s.sourceLink : null }));
+    // Each header figure is dated by the newest change that fed it (R29).
+    const fedPlanned = figure ? figure.working.lines.map((w) => all.find((l) => l.id === w.id)?.changedAt ?? null).filter((x): x is string => !!x).sort().pop() ?? null : null;
+    const fedCommitted = figure?.working.committed.asOf ?? null;
+    const left = [fedPlanned, fedCommitted].filter((x): x is string => !!x).sort().pop() ?? null;
+    // Where it goes (R31): the moon's plan per circle, village-wide lines as their own entry.
+    const names = await budgetCircleNames(pool);
+    const byCircle = moonPlan(all, span, village || null).byCircle.map((c) => ({ circleId: c.circleId, circleName: c.circleId ? names.get(c.circleId) ?? null : null, byCategory: c.byCategory, totalMinor: c.totalMinor }));
+    const note = await periodNote(pool, moonId);
     res.json({
       moon: span,
       villageCurrency: village || null,
@@ -348,10 +378,46 @@ export function register(app: Express, deps: Deps): void {
       drift,
       driftWarning: drift.some((d) => d.overThreshold),
       sourceTotals,
-      syncs: await latestSyncs(pool),
+      syncs,
+      asOf: { planned: fedPlanned, committed: fedCommitted, left },
+      byCircle,
+      note: note ? { periodKey: note.periodKey, note: note.note, changedAt: note.changedAt, changedAs: note.changedAs } : null,
       mayReadCash,
       door: door.ok ? { mayWrite: true, via: door.via } : { mayWrite: false, code: door.body.code, message: door.body.error, suggest: door.body.suggest ?? null },
     });
+  });
+
+  // ── Moons ahead (R30) ─────────────────────────────────────────────────────
+
+  app.get("/api/budgets/ahead", async (req, res) => {
+    const who = await member(req, res);
+    if (!who) return;
+    const raw = String(req.query?.count ?? "6");
+    const count = /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
+    if (!(count >= 1 && count <= 12)) return res.status(400).json({ error: "bad_count", message: "Ask for 1 to 12 moons ahead." });
+    const from = typeof req.query?.from === "string" && req.query.from ? String(req.query.from) : currentCycle().id;
+    const ahead = await budgetAhead(getPool(), from, count);
+    if (!ahead) return res.status(400).json({ error: "bad_moon", message: "Name the first moon by its id, like the one the moon review shows." });
+    res.json(ahead);
+  });
+
+  // ── How to read a period (R32) ────────────────────────────────────────────
+
+  app.put("/api/admin/budgets/notes/:period", async (req, res) => {
+    markAdminGate(req); // a gate is consulted here: the default-deny under /api/admin needs to hear it
+    const who = await member(req, res);
+    if (!who) return;
+    if (await overLimit(`budget-write:${String(who.user.id)}`, WRITES_PER_WINDOW, WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many", message: "That is a lot of budget changes in a few minutes. Wait a little and try again." });
+    }
+    const door = await budgetDoor(who.user, who.ctx);
+    if (!door.ok) {
+      const { suggest: _suggest, ...body } = door.body;
+      return res.status(door.status).json(body);
+    }
+    const out = await setPeriodNote(getPool(), { period: String(req.params.period), note: typeof req.body?.note === "string" ? req.body.note : "", by: String(who.user.id), byAs: door.byAs });
+    if (!out.ok) return res.status(out.status).json({ error: out.code, message: out.message });
+    res.json(out);
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────

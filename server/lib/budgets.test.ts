@@ -30,7 +30,11 @@ import {
   latestSyncs,
   registerBudgetSource,
   budgetSource,
+  budgetAhead,
   budgetRateDrift,
+  cashSetThisMoonUnowedNotYetAgreed,
+  periodNote,
+  setPeriodNote,
   resetBudgetEnv,
   type ImportInput,
   type ImportRow,
@@ -90,7 +94,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates", "budget_period_notes"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     configureBudgets({
       currency: () => "CRC",
@@ -348,20 +352,26 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     await owe("c-prop", cashKeys.proposal("sub-1"), "proposal", 50);
     await owe("c-usd", cashKeys.quest("claim-3"), "quest", 9999, "USD");
     const f = (await cashBudgetLeft(pool, MOON))!;
-    expect(f.working.committed).toEqual({ roleMinor: 1000, questMinor: 300, proposalMinor: 50, settingsMinor: 0, materialsMinor: 4000, otherCurrencyRows: 1 });
+    expect(f.working.committed).toEqual({ roleMinor: 1000, questMinor: 300, proposalMinor: 50, settingsMinor: 0, materialsMinor: 4000, otherCurrencyRows: 1, asOf: expect.any(String), settingsCurrencyIgnored: null });
     expect(f.committedMinor).toBe(1350);
     expect(f.leftMinor).toBe(1_000_000 - 1350);
   });
 
-  it("reads the injected reader for cash set this moon with no cash_owed row yet, and stubs it to 0", async () => {
+  it("reads the injected reader for cash set this moon with no cash_owed row yet, stubs it to 0 rows in the village currency, and never sums another currency", async () => {
     await confirm({ lines: [row({ planned: "10,000" })] });
+    expect(await cashSetThisMoonUnowedNotYetAgreed(pool, MOON), "the agreed shape, stubbed").toEqual({ minor: 0, currency: "CRC", rows: 0 });
     expect((await cashBudgetLeft(pool, MOON))!.working.committed.settingsMinor, "the stub answers 0 today").toBe(0);
     const asked: string[] = [];
-    configureBudgets({ committedFromSettings: async (_db, moonId) => (asked.push(moonId), { minor: 7000 }) });
+    configureBudgets({ cashSetThisMoonUnowed: async (_pool, moonId) => (asked.push(moonId), { minor: 7000, currency: "CRC", rows: 2 }) });
     const f = (await cashBudgetLeft(pool, MOON))!;
     expect(asked).toEqual([MOON]);
     expect(f.working.committed.settingsMinor).toBe(7000);
     expect(f.committedMinor).toBe(7000);
+    configureBudgets({ cashSetThisMoonUnowed: async () => ({ minor: 7000, currency: "USD", rows: 2 }) });
+    const g = (await cashBudgetLeft(pool, MOON))!;
+    expect(g.working.committed.settingsMinor, "another currency is left out").toBe(0);
+    expect(g.working.committed.settingsCurrencyIgnored).toEqual({ currency: "USD", minor: 7000, rows: 2 });
+    expect(g.committedMinor).toBe(0);
   });
 
   it("lets the village's own line drop the library's in its category and moon, and pro-rates a longer line by days", async () => {
@@ -482,6 +492,60 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     const drift = await budgetRateDrift(pool);
     expect(drift).toEqual([expect.objectContaining({ id, lockedMinor: 60_000_000, todayRate: 530, todayMinor: 63_600_000, pct: 6, overThreshold: true })]);
     expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "drift never moves the figure").toBe(before);
+  });
+
+  // ── Provenance, moons ahead and period notes (spec v0.3, R29 to R32) ──────
+
+  it("stores each import's source label and https link, refuses a label that names a member or a link that is not https, and reads the newest per source", async () => {
+    const named = await upload([row()], { sourceLabel: "Wren Halloway's sheet" });
+    expect(named.refused.map((r) => [r.row, r.cell, r.reason])).toEqual([[0, "source_label", "name_full_name"]]);
+    const confirmNamed = await upload([row()], { sourceLabel: "Wren Halloway's sheet", dryRun: false, revision: named.revision });
+    expect(confirmNamed).toMatchObject({ ok: false, status: 400, code: "source_refused", written: false });
+    for (const link of ["http://sheets.example.test/x", "javascript:alert(1)", "https://user:pw@sheets.example.test/x", "not a link"]) {
+      expect((await upload([row()], { sourceLink: link })).refused.map((r) => r.cell), link).toEqual(["source_link"]);
+    }
+    expect((await upload([row()], { sourceLabel: "x".repeat(121) })).refused.map((r) => r.cell)).toEqual(["source_label"]);
+    await confirm({ lines: [row()], sourceLabel: "November budget sheet", sourceLink: "https://sheets.example.test/november" });
+    const syncs = await latestSyncs(pool);
+    expect(syncs).toEqual([expect.objectContaining({ source: "upload", ok: true, sourceLabel: "November budget sheet", sourceLink: "https://sheets.example.test/november" })]);
+    expect((await q("SELECT source_label, source_link FROM budget_syncs WHERE ok = 1"))[0]).toEqual({ source_label: "November budget sheet", source_link: "https://sheets.example.test/november" });
+  });
+
+  it("dates each part of the figure by the newest change that fed it", async () => {
+    await confirm({ lines: [row()] });
+    await insertCashOwedRow(pool, { id: "co-asof", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-ana"), userId: "u-ana", workKind: "role", workRef: "r", workTitle: "r", amountMinor: 10, currency: "CRC" });
+    const f = (await cashBudgetLeft(pool, MOON))!;
+    const changed = (await q("SELECT changed_at FROM budget_lines"))[0].changed_at as Date;
+    const owed = (await q("SELECT owed_at FROM cash_owed WHERE id = 'co-asof'"))[0].owed_at as Date;
+    expect(f.working.committed.asOf).toBe(owed.toISOString());
+    const ahead = await budgetAhead(pool, MOON, 1);
+    expect(ahead.moons[0].plannedAsOf).toBe(changed.toISOString());
+  });
+
+  it("reads moons ahead: planned per category per moon from the lines that count, the total, and committed only for the current moon", async () => {
+    const next = boundsForNumber(NOW.cycleNumber + 1).id;
+    await confirm({ lines: [row({ planned: "100" }), row({ label: "Materials next moon", period: next, category: "materials", planned: "40" }), row({ label: "Draft", category: "other", planned: "1" })] });
+    await q("UPDATE budget_lines SET status = 'draft' WHERE label = 'Draft'");
+    await insertCashOwedRow(pool, { id: "co-ahead", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-ana"), userId: "u-ana", workKind: "role", workRef: "r", workTitle: "r", amountMinor: 700, currency: "CRC" });
+    const a = await budgetAhead(pool, MOON, 3);
+    expect(a.moons.map((m) => m.moonId)).toEqual([MOON, next, boundsForNumber(NOW.cycleNumber + 2).id]);
+    expect(a.moons[0]).toMatchObject({ byCategory: { role_pay: 10_000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 10_000, committedMinor: 700 });
+    expect(a.moons[1]).toMatchObject({ byCategory: { role_pay: 0, quest_pay: 0, materials: 4000, other: 0 }, totalMinor: 4000, committedMinor: null });
+    expect(a.moons[2]).toMatchObject({ totalMinor: 0, committedMinor: null, plannedAsOf: null });
+    expect(a.currentMoonId).toBe(MOON);
+  });
+
+  it("keeps one note per period, checked for names and at most 1000 characters, de-attributable and recorded", async () => {
+    expect(await periodNote(pool, MOON)).toBeNull();
+    expect(await setPeriodNote(pool, { period: MOON, note: "Ask Wren Halloway", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: false, code: "name_full_name" });
+    expect(await setPeriodNote(pool, { period: MOON, note: "Anabel says so", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: false, code: "names_held" });
+    expect(await setPeriodNote(pool, { period: MOON, note: "x".repeat(1001), by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: false, code: "too_long" });
+    expect(await setPeriodNote(pool, { period: "next spring", note: "A note", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: false, code: "period" });
+    expect(await setPeriodNote(pool, { period: MOON, note: "  The harvest pays out late this moon.  ", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: true });
+    expect(await periodNote(pool, MOON)).toMatchObject({ periodKey: MOON, note: "The harvest pays out late this moon.", changedAs: "Treasury", changedBy: "u-treasurer" });
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = ?", [`budget:note:${MOON}`]))[0].n).toBe(1), { timeout: 3000 });
+    expect(await setPeriodNote(pool, { period: MOON, note: "", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: true });
+    expect(await periodNote(pool, MOON), "an empty note clears it").toBeNull();
   });
 
   it("refuses more than 2000 rows in one import", async () => {

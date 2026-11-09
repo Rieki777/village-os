@@ -199,7 +199,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"] };
     villageHeld = [];
@@ -384,6 +384,60 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect(read.body.drift).toEqual([expect.objectContaining({ id: a, lockedMinor: 60_000_000, todayMinor: 63_600_000, pct: 6, overThreshold: true })]);
     expect(read.body.driftWarning).toBe(true);
     expect(JSON.stringify(read.body), "no account id leaves").not.toContain("u-hana");
+  });
+
+  // ── Provenance, moons ahead, where it goes and period notes (v0.3, R29 to R32) ──
+
+  it("names the newest import per source with its label, shows its link only to the door and cash.pay holders, and dates each header figure", async () => {
+    const body = { lines: [ROW], format: FORMAT, sourceLabel: "November budget sheet", sourceLink: "https://sheets.example.test/november" };
+    const p = await call("POST", "/api/admin/budgets/import", "u-hana", body);
+    expect((await call("POST", "/api/admin/budgets/import", "u-hana", { ...body, dryRun: false, revision: p.body.revision })).status).toBe(200);
+    const member = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(member.body.syncs).toEqual([expect.objectContaining({ source: "upload", sourceLabel: "November budget sheet", sourceLink: null })]);
+    expect(JSON.stringify(member.body), "a private sheet's address is not every member's to open").not.toContain("sheets.example.test");
+    expect(member.body.asOf.planned).toEqual(expect.any(String));
+    expect(member.body.asOf.committed).toBeNull();
+    expect(member.body.asOf.left).toBe(member.body.asOf.planned);
+    for (const who of ["u-cass", "u-hana"]) {
+      const read = await call("GET", "/api/budgets", who, {}, {}, { moon: MOON });
+      expect(read.body.syncs[0].sourceLink, who).toBe("https://sheets.example.test/november");
+    }
+  });
+
+  it("shows every member the moon's planned amount per circle, village-wide lines as their own entry", async () => {
+    await importAs("u-hugo", [ROW, { ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener", planned: "50,000" }, { ...ROW, label: "Garden tools", circle: "Garden", category: "materials", planned: "1,000" }]);
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.byCircle).toEqual([
+      { circleId: null, circleName: null, byCategory: { role_pay: 10_000_000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 10_000_000 },
+      { circleId: "c-garden", circleName: "Garden", byCategory: { role_pay: 5_000_000, quest_pay: 0, materials: 100_000, other: 0 }, totalMinor: 5_100_000 },
+    ]);
+  });
+
+  it("reads one to twelve moons ahead for every member, committed only for the current moon", async () => {
+    await importAs("u-hana");
+    const a = await call("GET", "/api/budgets/ahead", "u-sam", {}, {}, { from: MOON, count: "3" });
+    expect(a.status).toBe(200);
+    expect(a.body.moons).toHaveLength(3);
+    expect(a.body.moons[0]).toMatchObject({ moonId: MOON, totalMinor: 10_000_000, committedMinor: 0 });
+    expect(a.body.moons[1].committedMinor).toBeNull();
+    for (const count of ["0", "13", "two"]) expect((await call("GET", "/api/budgets/ahead", "u-sam", {}, {}, { from: MOON, count })).status, count).toBe(400);
+    expect((await call("GET", "/api/budgets/ahead", "u-sam", {}, {}, { from: "next week", count: "3" })).status).toBe(400);
+    expect((await call("GET", "/api/budgets/ahead", "u-gil", {}, {}, { from: MOON, count: "3" })).status).toBe(403);
+    expect((await call("GET", "/api/budgets/ahead", null, {}, {}, { from: MOON, count: "3" })).status).toBe(401);
+  });
+
+  it("keeps a note per period through the same door, checked for names, read by every member by role and never by account", async () => {
+    const path = "/api/admin/budgets/notes/:period";
+    expect((await call("PUT", path, "u-sam", { note: "Late harvest" }, { period: MOON })).status, "the R21 door").toBe(403);
+    expect((await call("PUT", path, "u-hana", { note: "Write to sam@example.test" }, { period: MOON })).status).toBe(400);
+    const ok = await call("PUT", path, "u-hana", { note: "The harvest pays out late this moon." }, { period: MOON });
+    expect(ok.status).toBe(200);
+    expect(ok.gated).toBe(true);
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.note).toEqual({ periodKey: MOON, note: "The harvest pays out late this moon.", changedAt: expect.any(String), changedAs: "Treasury" });
+    const ahead = await call("GET", "/api/budgets/ahead", "u-sam", {}, {}, { from: MOON, count: "1" });
+    expect(ahead.body.moons[0].note).toMatchObject({ note: "The harvest pays out late this moon.", changedAs: "Treasury" });
+    expect(JSON.stringify(read.body) + JSON.stringify(ahead.body)).not.toContain("u-hana");
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────

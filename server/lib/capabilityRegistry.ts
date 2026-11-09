@@ -197,6 +197,7 @@ export const POWERS: readonly PowerEntry[] = [
       "/api/admin/budgets/lines/:id/restore",
       "/api/admin/budgets/lines/:id/lock-rate",
       "/api/admin/budgets/lock-rates",
+      "/api/admin/budgets/notes/:period",
     ],
   },
   {

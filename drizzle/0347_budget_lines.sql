@@ -1,4 +1,4 @@
--- 0347: a village writes down its cash budget, line by line, and every import of it.
+-- 0347: a village writes down its cash budget, line by line, every import of it, and a note per period.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can
@@ -44,10 +44,18 @@
 -- `budget_syncs`, ONE ROW PER IMPORT, whatever its source: who, when, through
 -- which role, over what scope, and what it added, changed, withdrew and
 -- refused. "Last synced" reads the newest row per source. `by` is de-attributed
--- on erasure like `changed_by`.
+-- on erasure like `changed_by`. `source_label` names what was imported in the
+-- holder's words ("November budget sheet"), checked for names like every
+-- budget word; `source_link` is an optional https address of that sheet, which
+-- only the people who keep the budget and those who pay cash ever read back.
+--
+-- `budget_period_notes`, HOW TO READ A PERIOD: one note per period key,
+-- written by the people who keep the budget and read by every member.
+-- `changed_by` is de-attributed on erasure; `changed_as` names a role and
+-- stays.
 --
 -- EXPAND ONLY, AND THE ROLLBACK HOLDS.
--- Two new tables. Nothing the previous release reads or writes changes, so it
+-- Three new tables. Nothing the previous release reads or writes changes, so it
 -- keeps working if it is put back over a migrated database. The UNIQUE key is on
 -- a new table only. No SQL function is called here.
 
@@ -106,7 +114,19 @@ CREATE TABLE IF NOT EXISTS `budget_syncs` (
   `refused` int NOT NULL DEFAULT 0,
   `ok` tinyint(1) NOT NULL DEFAULT 0,
   `error` varchar(500) NULL,
+  `source_label` varchar(120) NULL,
+  `source_link` varchar(500) NULL,
   PRIMARY KEY (`id`),
   KEY `budget_syncs_source_at` (`source`, `at`),
   KEY `budget_syncs_by` (`by`)
+);
+
+CREATE TABLE IF NOT EXISTS `budget_period_notes` (
+  `period_key` varchar(64) NOT NULL,
+  `note` varchar(1000) NOT NULL,
+  `changed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `changed_by` varchar(64) NULL,
+  `changed_as` varchar(120) NULL,
+  PRIMARY KEY (`period_key`),
+  KEY `budget_period_notes_changed_by` (`changed_by`)
 );

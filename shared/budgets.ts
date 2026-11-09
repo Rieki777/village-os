@@ -476,9 +476,17 @@ export interface CommittedParts {
   materialsMinor: number;
   /** Rows in another currency, which the figure cannot add. */
   otherCurrencyRows: number;
+  /** The newest `owed_at` among the rows the committed figure counts: its "as of" (R29). */
+  asOf?: string | null;
+  /**
+   * Cash set this moon with no `cash_owed` row yet, answered in a currency that
+   * is not the village's: left out of the figure, never summed across
+   * currencies, and named here so the working says why.
+   */
+  settingsCurrencyIgnored?: { currency: string; minor: number; rows: number } | null;
 }
 
-export const NO_COMMITMENTS: CommittedParts = { roleMinor: 0, questMinor: 0, proposalMinor: 0, settingsMinor: 0, materialsMinor: 0, otherCurrencyRows: 0 };
+export const NO_COMMITMENTS: CommittedParts = { roleMinor: 0, questMinor: 0, proposalMinor: 0, settingsMinor: 0, materialsMinor: 0, otherCurrencyRows: 0, asOf: null, settingsCurrencyIgnored: null };
 
 export interface FigureWorkingLine {
   id: string;
@@ -563,6 +571,49 @@ export function budgetFigure(
     revision,
     working: { moon, lines: workingLines, dropped, notCounted, committed },
   };
+}
+
+const zeroByCategory = (): Record<BudgetCategory, number> => ({ role_pay: 0, quest_pay: 0, materials: 0, other: 0 });
+
+/** One moon's plan: every category, every circle, from the lines that count (R30, R31). */
+export interface MoonPlan {
+  moonId: string;
+  byCategory: Record<BudgetCategory, number>;
+  /** Role pay and quest pay: the planned part of the moon's cash figure (R7). */
+  cashPlannedMinor: number;
+  /** Every category together. */
+  totalMinor: number;
+  /** Per circle, village-wide lines first as their own entry (circle null), then by circle id. */
+  byCircle: Array<{ circleId: string | null; byCategory: Record<BudgetCategory, number>; totalMinor: number }>;
+  /** The lines that gave this moon something, for its "as of" (R29). */
+  lineIds: string[];
+}
+
+/**
+ * WHAT A MOON PLANS, by category and by circle (R30, R31): the lines that
+ * count (R7, R8), precedence by moon and scope (R4), converted at a locked
+ * rate and pro-rated after conversion. The same arithmetic the figure uses,
+ * so its role pay and quest pay are the figure's planned amount.
+ */
+export function moonPlan(lines: readonly FigureLine[], moon: MoonSpan, villageCurrency: string | null): MoonPlan {
+  const out: MoonPlan = { moonId: moon.id, byCategory: zeroByCategory(), cashPlannedMinor: 0, totalMinor: 0, byCircle: [], lineIds: [] };
+  if (!villageCurrency) return out;
+  const counting = lines.filter((l) => sharedDays(l, moon) > 0 && whyNotCounted(l, villageCurrency) === null);
+  const circles = new Map<string, MoonPlan["byCircle"][number]>();
+  for (const l of precedence(counting).kept) {
+    const minor = lineShareOfMoon({ ...l, plannedMinor: inVillageCurrency(l, villageCurrency)! }, moon).countedMinor;
+    if (minor > 0) out.lineIds.push(l.id);
+    out.byCategory[l.category] += minor;
+    const key = l.circleId ?? "";
+    const c = circles.get(key) ?? { circleId: l.circleId, byCategory: zeroByCategory(), totalMinor: 0 };
+    c.byCategory[l.category] += minor;
+    c.totalMinor += minor;
+    circles.set(key, c);
+  }
+  out.cashPlannedMinor = CASH_CATEGORIES.reduce((n, c) => n + out.byCategory[c], 0);
+  out.totalMinor = BUDGET_CATEGORIES.reduce((n, c) => n + out.byCategory[c], 0);
+  out.byCircle = Array.from(circles.values()).sort((a, b) => (a.circleId === null ? -1 : b.circleId === null ? 1 : a.circleId < b.circleId ? -1 : 1));
+  return out;
 }
 
 /**

@@ -44,6 +44,7 @@ import {
   isBudgetSource,
   isFormulaCell,
   moonPeriod,
+  moonPlan,
   rateDrift,
   rateUnits,
   readAmount,
@@ -57,8 +58,10 @@ import {
   type BudgetSource,
   type CashBudgetLeft,
   type CommittedParts,
+  committedTotal,
   type FigureLine,
   type LineStatus,
+  type MoonPlan,
   type NumberFormatChoice,
   type PeriodEnv,
   type PeriodKind,
@@ -87,16 +90,19 @@ export { BY_VILLAGE_VOTE };
  * THE CASH ON WORK SET THIS MOON THAT HAS NO `cash_owed` ROW YET (R7, the
  * third committed part). INJECTABLE, AND STUBBED TO 0 TODAY.
  *
- * The valuation lane owns the records this reads (its setting records, 0336),
- * and the interface is being agreed with it. Until it lands, the default
- * answers 0 and says so by its name, and the figure's working shows the part
- * as 0. The valuation lane replaces it with `configureBudgets({
- * committedFromSettings })` at boot, and `budgets.test.ts` pins that the hook
- * is what the figure reads.
+ * The valuation lane owns the records this reads, and the interface is agreed
+ * (9 Nov): `cashSetThisMoonUnowed(pool, moonId)` exported from
+ * server/lib/valuationStore.ts, over new `cash_minor`, `budget_revision` and
+ * `moon_id` columns on `valuation_settings`, in that lane's next pull request.
+ * It is not on main yet, so the default below answers 0 rows in the village's
+ * currency and says so by its name. Wiring it later is one line at boot:
+ * `configureBudgets({ cashSetThisMoonUnowed })`. `budgets.test.ts` pins that
+ * the figure reads the hook, and that an answer in another currency is left
+ * out and flagged, never summed.
  */
-export type CommittedFromSettings = (db: Pool | PoolConnection, moonId: string) => Promise<{ minor: number }>;
+export type CashSetThisMoonUnowed = (pool: Pool, moonId: string) => Promise<{ minor: number; currency: string; rows: number }>;
 
-export const committedFromSettingsNotYetAgreed: CommittedFromSettings = async () => ({ minor: 0 });
+export const cashSetThisMoonUnowedNotYetAgreed: CashSetThisMoonUnowed = async () => ({ minor: 0, currency: env.currency(), rows: 0 });
 
 export interface BudgetEnv {
   /** The village's currency as configured, "" when it is not set (R8: then nothing counts). */
@@ -105,7 +111,7 @@ export interface BudgetEnv {
   seasons(): readonly SeasonLike[];
   /** The moon a write's share before and after is shown for (R10). */
   currentMoonId(): string;
-  committedFromSettings: CommittedFromSettings;
+  cashSetThisMoonUnowed: CashSetThisMoonUnowed;
   /**
    * The base still to set this moon, for the share in percent (R10). The
    * valuation lane owns it too; null until handed in, and then the preview
@@ -119,7 +125,7 @@ const DEFAULT_ENV: BudgetEnv = {
   timezone: () => villageTimezone(),
   seasons: () => [],
   currentMoonId: () => currentCycle().id,
-  committedFromSettings: committedFromSettingsNotYetAgreed,
+  cashSetThisMoonUnowed: cashSetThisMoonUnowedNotYetAgreed,
   baseToSet: async () => null,
 };
 
@@ -891,7 +897,7 @@ function moonInstants(moonId: string): { startsAt: Date; endsAt: Date } | null {
  * carried as money owed is a role row keyed on the moon it is carried to, so
  * it lands there by the same decode.
  */
-export async function committedFor(db: Pool | PoolConnection, moonId: string, e: BudgetEnv = env): Promise<CommittedParts> {
+export async function committedFor(db: Pool | PoolConnection, moonId: string, e: BudgetEnv = env, pool: Pool = db as Pool): Promise<CommittedParts> {
   const at = moonInstants(moonId);
   if (!at) return { ...NO_COMMITMENTS };
   const out: CommittedParts = { ...NO_COMMITMENTS };
@@ -903,16 +909,38 @@ export async function committedFor(db: Pool | PoolConnection, moonId: string, e:
       out.otherCurrencyRows += 1;
       continue;
     }
+    const fed = () => {
+      const at = r.owed_at ? new Date(r.owed_at).toISOString() : null;
+      if (at && (!out.asOf || at > out.asOf)) out.asOf = at;
+    };
     if (r.work_kind === "role") {
       const k = decodeRoleKey(String(r.occurrence_key));
       if (!k || k.cycle !== moonId) continue;
       if (k.allowance) out.materialsMinor += amount;
-      else out.roleMinor += amount;
-    } else if (r.work_kind === "quest") out.questMinor += amount;
-    else if (r.work_kind === "proposal") out.proposalMinor += amount;
+      else {
+        out.roleMinor += amount;
+        fed();
+      }
+    } else if (r.work_kind === "quest") {
+      out.questMinor += amount;
+      fed();
+    } else if (r.work_kind === "proposal") {
+      out.proposalMinor += amount;
+      fed();
+    }
   }
-  const set = await e.committedFromSettings(db, moonId);
-  out.settingsMinor = Math.max(0, Math.floor(Number(set?.minor) || 0));
+  // TODO(spec R7): a deficit carried as money owed counts in the moon it is
+  // carried TO. Role rows already land there by their cycle key; the carried
+  // rows will name their target moon in a field the valuation lane is agreeing
+  // with invoice-rails, and this read follows that field once it exists.
+  const set = await e.cashSetThisMoonUnowed(pool, moonId);
+  const setMinor = Math.max(0, Math.floor(Number(set?.minor) || 0));
+  if (setMinor > 0 && String(set?.currency ?? "").toUpperCase() !== village) {
+    // Never summed across currencies: left out, and the working says so.
+    out.settingsCurrencyIgnored = { currency: String(set?.currency ?? ""), minor: setMinor, rows: Number(set?.rows) || 0 };
+  } else {
+    out.settingsMinor = setMinor;
+  }
   return out;
 }
 
@@ -938,6 +966,12 @@ export async function cashBudgetLeft(pool: Pool, moonId: string, over: Partial<B
   return figureFor(lines, moonId, await committedFor(pool, moonId, e), e);
 }
 
+/** Each circle's name by id, for the moon's plan per circle (R31). */
+export async function budgetCircleNames(pool: Pool): Promise<Map<string, string>> {
+  const { circles } = await repo.budgetChartRows(pool);
+  return new Map(circles.map((c) => [String(c.id), String(c.name ?? "")]));
+}
+
 /** Every line, as stored, for the read route. */
 export async function budgetLines(pool: Pool): Promise<StoredLine[]> {
   return (await repo.budgetLineRows(pool)).map(rowToLine);
@@ -947,7 +981,7 @@ export async function budgetLines(pool: Pool): Promise<StoredLine[]> {
  * The newest import per source (R5). Two imports in the same second tie on
  * `at`, so the id breaks the tie: ids lead with the time they were made.
  */
-export async function latestSyncs(pool: Pool): Promise<Array<{ source: string; at: string; ok: boolean; lines: number }>> {
+export async function latestSyncs(pool: Pool): Promise<Array<{ source: string; at: string; ok: boolean; lines: number; sourceLabel: string | null; sourceLink: string | null }>> {
   const newest = new Map<string, RowDataPacket>();
   for (const r of await repo.latestBudgetSyncs(pool)) {
     const seen = newest.get(String(r.source));
@@ -955,7 +989,7 @@ export async function latestSyncs(pool: Pool): Promise<Array<{ source: string; a
   }
   return Array.from(newest.values())
     .sort((a, b) => (String(a.source) < String(b.source) ? -1 : 1))
-    .map((r) => ({ source: String(r.source), at: iso(r.at)!, ok: Number(r.ok) === 1, lines: Number(r.lines) }));
+    .map((r) => ({ source: String(r.source), at: iso(r.at)!, ok: Number(r.ok) === 1, lines: Number(r.lines), sourceLabel: str(r.source_label), sourceLink: str(r.source_link) }));
 }
 
 /** An id that sorts in the order it was made: the time in base 36, then a random tail. */
@@ -977,6 +1011,37 @@ export interface ImportInput {
   /** An accepted suggestion names the state it was made on instead (R22). */
   stateRevision?: string | null;
   format?: NumberFormatChoice;
+  /** What this import is, in the holder's words, like "November budget sheet" (R29). Checked for names. */
+  sourceLabel?: string | null;
+  /** An optional https address of the sheet (R29). Read back only by the door and cash.pay holders. */
+  sourceLink?: string | null;
+}
+
+/** An import's own words about itself (R29): its label, at most 120 characters and checked for names, and an https link. */
+function sourceProblems(input: ImportInput, names: NameCheck): { refused: Refused[]; held: Held[]; label: string | null; link: string | null } {
+  const refused: Refused[] = [];
+  const held: Held[] = [];
+  const label = clean(input.sourceLabel) || null;
+  if (label) {
+    if (Array.from(label).length > LABEL_MAX) refused.push({ row: 0, cell: "source_label", reason: "source_label", message: `Keep the name of what you imported to ${LABEL_MAX} characters.` });
+    const find = names(label);
+    if (find?.kind === "refused") refused.push({ row: 0, cell: "source_label", reason: `name_${find.what}`, message: nameFindWords(find) });
+    else if (find?.kind === "held") held.push({ row: 0, cell: "source_label", message: nameFindWords(find) });
+  }
+  const raw = String(input.sourceLink ?? "").trim();
+  let link: string | null = null;
+  if (raw) {
+    let ok = false;
+    try {
+      const u = new URL(raw);
+      ok = u.protocol === "https:" && !u.username && !u.password && raw.length <= 500;
+    } catch {
+      ok = false;
+    }
+    if (ok) link = raw;
+    else refused.push({ row: 0, cell: "source_link", reason: "source_link", message: "A link to the sheet starts with https://, carries no password, and is at most 500 characters." });
+  }
+  return { refused, held, label, link };
 }
 
 export interface PreviewLine {
@@ -1011,7 +1076,7 @@ export interface ImportResult {
   ok: boolean;
   /** 200 for a preview or a write, 400 for an import that cannot be confirmed as sent, 409 for a stale or busy one. */
   status: 200 | 400 | 409;
-  code: null | "stale" | "names_held" | "too_many_rows" | "revision_required" | "bad_source" | "busy";
+  code: null | "stale" | "names_held" | "source_refused" | "too_many_rows" | "revision_required" | "bad_source" | "busy";
   message: string | null;
   written: boolean;
   revision: string;
@@ -1067,6 +1132,8 @@ const planDigest = (plan: ImportPlan) =>
 
 interface Prepared {
   village: string;
+  sourceLabel: string | null;
+  sourceLink: string | null;
   existing: StoredLine[];
   plan: ImportPlan;
   after: StoredLine[];
@@ -1076,7 +1143,7 @@ interface Prepared {
   shareAfter: ShareState;
 }
 
-async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetEnv): Promise<Prepared> {
+async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetEnv, pool: Pool = db as Pool): Promise<Prepared> {
   const existing = (await repo.budgetLineRows(db)).map(rowToLine);
   const chartRows = await repo.budgetChartRows(db);
   const chart: BudgetChart = {
@@ -1100,14 +1167,19 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     today,
     rates,
   });
+  const own = sourceProblems(input, names);
+  plan.refused.unshift(...own.refused);
+  plan.held.unshift(...own.held);
   const after = applyPlan(existing, plan.writes);
   plan.flags.push(...overlapFlags(after, plan.writes, villageCurrency));
   const moonId = e.currentMoonId();
-  const committed = await committedFor(db, moonId, e);
+  const committed = await committedFor(db, moonId, e, pool);
   const base = await e.baseToSet(db, moonId);
   const state = stateRevision(existing);
   return {
     village: villageCurrency,
+    sourceLabel: own.label,
+    sourceLink: own.link,
     existing,
     plan,
     after,
@@ -1189,7 +1261,7 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     locked = await repo.takeBudgetLock(conn, 10);
     if (!locked) return refusal(409, "busy", "Somebody else is changing the budget right now. Preview again in a moment.");
     await conn.beginTransaction();
-    const p = await prepare(conn, input, e);
+    const p = await prepare(conn, input, e, pool);
     const stale = input.revision ? input.revision !== p.revision : input.stateRevision !== p.stateRevision;
     const sync = (ok: boolean, error: string | null): repo.BudgetSyncRow => ({
       id: timeOrderedId("bsync"),
@@ -1205,11 +1277,18 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
       refused: p.plan.refused.length + p.plan.held.length,
       ok,
       error,
+      sourceLabel: p.sourceLabel,
+      sourceLink: p.sourceLink,
     });
     if (stale) {
       await repo.insertBudgetSync(conn, sync(false, "stale"));
       await conn.commit();
       return refusal(409, "stale", "The budget changed since this preview. Read the fresh preview, then confirm again.", p);
+    }
+    if (p.plan.refused.some((r) => r.row === 0)) {
+      await repo.insertBudgetSync(conn, sync(false, "source_refused"));
+      await conn.commit();
+      return refusal(400, "source_refused", "The import's own name, link or scope cannot be used as written. Fix it, then preview again.", p);
     }
     if (p.plan.held.length) {
       await repo.insertBudgetSync(conn, sync(false, "names_held"));
@@ -1253,6 +1332,99 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     if (locked) await repo.releaseBudgetLock(conn).catch(() => undefined);
     conn.release();
   }
+}
+
+// ── Moons ahead (R30) and period notes (R32) ────────────────────────────────
+
+export interface PeriodNote {
+  periodKey: string;
+  note: string;
+  changedAt: string | null;
+  /** An account id. The read route names `changedAs` and never this. */
+  changedBy: string | null;
+  changedAs: string | null;
+}
+
+const noteOf = (r: RowDataPacket): PeriodNote => ({ periodKey: String(r.period_key), note: String(r.note), changedAt: iso(r.changed_at), changedBy: str(r.changed_by), changedAs: str(r.changed_as) });
+
+/** The longest period note (R32). */
+export const PERIOD_NOTE_MAX = 1000;
+
+export async function periodNote(pool: Pool, periodKey: string): Promise<PeriodNote | null> {
+  const [r] = await repo.periodNoteRows(pool, [periodKey]);
+  return r ? noteOf(r) : null;
+}
+
+/**
+ * HOW TO READ A PERIOD (R32): one note per period, checked for names like
+ * every budget word (R15), at most 1000 characters, recorded. An empty note
+ * clears it. The caller has already passed the R21 door.
+ */
+export async function setPeriodNote(
+  pool: Pool,
+  input: { period: string; note: string; by: string | null; byAs: string | null },
+): Promise<{ ok: true; periodKey: string; cleared: boolean } | { ok: false; status: 400; code: string; message: string }> {
+  const p = resolvePeriod(input.period, periodEnvOf(env));
+  if (!p.ok) return { ok: false, status: 400, code: "period", message: p.message };
+  const note = String(input.note ?? "").normalize("NFC").trim();
+  if (Array.from(note).length > PERIOD_NOTE_MAX) return { ok: false, status: 400, code: "too_long", message: `Keep the note to ${PERIOD_NOTE_MAX} characters.` };
+  if (note) {
+    const find = budgetNameCheck(await rosterRows(pool))(note);
+    if (find?.kind === "refused") return { ok: false, status: 400, code: `name_${find.what}`, message: nameFindWords(find) };
+    if (find?.kind === "held") return { ok: false, status: 400, code: "names_held", message: nameFindWords(find) };
+    await repo.upsertPeriodNote(pool, { periodKey: p.period.key, note, changedBy: input.by, changedAs: input.byAs });
+  } else {
+    await repo.deletePeriodNote(pool, p.period.key);
+  }
+  void recordEvent(pool, { kind: "audit", text: `budget:note:${p.period.key}`, actorUserId: input.by, entityType: "budget_period_note", entityRef: p.period.key, audience: "admin" });
+  return { ok: true, periodKey: p.period.key, cleared: !note };
+}
+
+export interface AheadMoon extends MoonPlan {
+  startsOn: string;
+  endsOn: string;
+  days: number;
+  /** Committed only for the current moon; null for every other (R30). */
+  committedMinor: number | null;
+  /** The newest change to a line that gave this moon something (R29). */
+  plannedAsOf: string | null;
+  note: Omit<PeriodNote, "changedBy"> | null;
+}
+
+/**
+ * MOONS AHEAD (R30): from one moon, `count` moons on (1 to 12), each with what
+ * it plans per category and in all, by circle, from the lines that count,
+ * and committed only for the current moon. Null for a moon id no clock reads.
+ */
+export async function budgetAhead(pool: Pool, fromMoonId: string, count: number, over: Partial<BudgetEnv> = {}): Promise<{ currentMoonId: string; villageCurrency: string | null; moons: AheadMoon[] } | null> {
+  const e = { ...env, ...over };
+  const parsed = parseId(fromMoonId);
+  if (!parsed || parsed.cycleNumber === null || parsed.clock === "legacy_month") return null;
+  const n = Math.max(1, Math.min(12, Math.floor(count)));
+  const lines = (await repo.budgetLineRows(pool)).map(rowToLine);
+  const changedAt = new Map(lines.map((l) => [l.id, l.changedAt]));
+  const village = e.currency().toUpperCase() || null;
+  const current = e.currentMoonId();
+  const ids = Array.from({ length: n }, (_, i) => boundsForNumber(parsed.cycleNumber! + i).id);
+  const notes = new Map((await repo.periodNoteRows(pool, ids)).map((r) => [String(r.period_key), noteOf(r)]));
+  const moons: AheadMoon[] = [];
+  for (const id of ids) {
+    const m = moonPeriod(id, e.timezone());
+    if (!m) continue;
+    const plan = moonPlan(lines, { id, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days }, village);
+    const plannedAsOf = plan.lineIds.map((x) => changedAt.get(x) ?? null).filter((x): x is string => !!x).sort().pop() ?? null;
+    const note = notes.get(id);
+    moons.push({
+      ...plan,
+      startsOn: m.startsOn,
+      endsOn: m.endsOn,
+      days: m.days,
+      committedMinor: id === current ? committedTotal(await committedFor(pool, id, e)) : null,
+      plannedAsOf,
+      note: note ? { periodKey: note.periodKey, note: note.note, changedAt: note.changedAt, changedAs: note.changedAs } : null,
+    });
+  }
+  return { currentMoonId: current, villageCurrency: village, moons };
 }
 
 // ── Stored rates, read on the server (spec 5a) ──────────────────────────────

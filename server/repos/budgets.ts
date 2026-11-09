@@ -111,15 +111,18 @@ export interface BudgetSyncRow {
   refused: number;
   ok: boolean;
   error: string | null;
+  /** What was imported, in the holder's words, and an optional https address of it (R29). */
+  sourceLabel: string | null;
+  sourceLink: string | null;
 }
 
 export async function insertBudgetSync(db: Db, r: BudgetSyncRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
-    "INSERT INTO `budget_syncs` (`id`, `source`, `at`, `by`, `by_as`, `scope`, `whole`, `lines`, `added`, `changed`, `withdrawn`, `refused`, `ok`, `error`) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO `budget_syncs` (`id`, `source`, `at`, `by`, `by_as`, `scope`, `whole`, `lines`, `added`, `changed`, `withdrawn`, `refused`, `ok`, `error`, `source_label`, `source_link`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       r.id, r.source, new Date(), r.by, r.byAs, r.scope === undefined ? null : JSON.stringify(r.scope), r.whole ? 1 : 0,
-      r.lines, r.added, r.changed, r.withdrawn, r.refused, r.ok ? 1 : 0, r.error,
+      r.lines, r.added, r.changed, r.withdrawn, r.refused, r.ok ? 1 : 0, r.error, r.sourceLabel, r.sourceLink,
     ],
   );
   return res;
@@ -192,6 +195,30 @@ export async function forgetBudgetAttributionOf(db: Db, userId: string): Promise
   await db.query("UPDATE `budget_lines` SET `changed_by` = NULL WHERE `changed_by` = ?", [userId]);
   await db.query("UPDATE `budget_lines` SET `fx_locked_by` = NULL WHERE `fx_locked_by` = ?", [userId]);
   await db.query("UPDATE `budget_syncs` SET `by` = NULL WHERE `by` = ?", [userId]);
+  await db.query("UPDATE `budget_period_notes` SET `changed_by` = NULL WHERE `changed_by` = ?", [userId]);
+}
+
+/** The notes for these period keys (R32). */
+export async function periodNoteRows(db: Db, keys: readonly string[]): Promise<RowDataPacket[]> {
+  if (!keys.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `budget_period_notes` WHERE `period_key` IN (?)", [keys]);
+  return rows;
+}
+
+/** Write one period's note whole, or replace it. */
+export async function upsertPeriodNote(db: Db, r: { periodKey: string; note: string; changedBy: string | null; changedAs: string | null }): Promise<ResultSetHeader> {
+  const [res] = await db.query<ResultSetHeader>(
+    "INSERT INTO `budget_period_notes` (`period_key`, `note`, `changed_at`, `changed_by`, `changed_as`) VALUES (?, ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE `note` = VALUES(`note`), `changed_at` = VALUES(`changed_at`), `changed_by` = VALUES(`changed_by`), `changed_as` = VALUES(`changed_as`)",
+    [r.periodKey, r.note, new Date(), r.changedBy, r.changedAs],
+  );
+  return res;
+}
+
+/** Clear one period's note: an empty note is no note. */
+export async function deletePeriodNote(db: Db, periodKey: string): Promise<ResultSetHeader> {
+  const [res] = await db.query<ResultSetHeader>("DELETE FROM `budget_period_notes` WHERE `period_key` = ?", [periodKey]);
+  return res;
 }
 
 /**

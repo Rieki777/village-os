@@ -9,10 +9,12 @@ import { describe, expect, it } from "vitest";
 import {
   budgetFigure,
   convertAtRate,
+  inVillageCurrency,
   isFormulaCell,
   lineShareOfMoon,
   moonCashTerms,
   moonPeriod,
+  moonPlan,
   NO_COMMITMENTS,
   precedence,
   rateDrift,
@@ -337,3 +339,67 @@ describe("a rate a person locks on a line (spec 5a, option b; R8)", () => {
 function addDaysForTest(day: string, n: number): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 }
+
+describe("the moon's plan by category and by circle, and moons ahead (R30, R31)", () => {
+  const m = moonAt("2026-11-15T12:00:00Z");
+  const moonLine = (over: Partial<FigureLine> = {}) => line({ periodKind: "moon", periodKey: m.id, startsOn: m.startsOn, endsOn: m.endsOn, ...over });
+
+  it("sums the lines that count per category and per circle, village-wide lines as their own entry, after precedence and conversion", () => {
+    const p = moonPlan(
+      [
+        moonLine({ id: "a", plannedMinor: 1000 }),
+        moonLine({ id: "b", circleId: "c-garden", plannedMinor: 500 }),
+        moonLine({ id: "c", circleId: "c-garden", category: "materials", plannedMinor: 200 }),
+        moonLine({ id: "d", circleId: "c-kitchen", category: "quest_pay", currency: "USD", plannedMinor: 10, fxRate: "500" }),
+        moonLine({ id: "e", source: "sera", adoptedAt: "2026-11-01", plannedMinor: 9999 }),
+        moonLine({ id: "f", status: "draft", plannedMinor: 7777 }),
+      ],
+      m,
+      "CRC",
+    );
+    expect(p.byCategory).toEqual({ role_pay: 1500, quest_pay: 5000, materials: 200, other: 0 });
+    expect(p.cashPlannedMinor).toBe(6500);
+    expect(p.totalMinor).toBe(6700);
+    expect(p.byCircle).toEqual([
+      { circleId: null, byCategory: { role_pay: 1000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 1000 },
+      { circleId: "c-garden", byCategory: { role_pay: 500, quest_pay: 0, materials: 200, other: 0 }, totalMinor: 700 },
+      { circleId: "c-kitchen", byCategory: { role_pay: 0, quest_pay: 5000, materials: 0, other: 0 }, totalMinor: 5000 },
+    ]);
+    expect(moonPlan([moonLine()], m, "").totalMinor, "no village currency, nothing counts").toBe(0);
+  });
+
+  it("never plans more across many moons than the lines hold, and agrees with the moon's figure (a property test of the multi-moon read)", () => {
+    let seed = 991_1109;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    const first = LUNAR_CLOCK.boundsFor(new Date("2026-01-15T00:00:00Z")).cycleNumber;
+    const moons: MoonSpan[] = [];
+    for (let n = first - 1; n < first + 26; n++) {
+      const id = `lunar-${String(n).padStart(6, "0")}`;
+      const p = moonPeriod(id, ENV.timezone)!;
+      moons.push({ id, startsOn: p.startsOn, endsOn: p.endsOn, days: p.days });
+    }
+    const cats = ["role_pay", "quest_pay", "materials", "other"] as const;
+    for (let i = 0; i < 200; i++) {
+      const lines: FigureLine[] = [];
+      for (let k = 0; k < 4; k++) {
+        const off = Math.floor(rand() * 500);
+        const len = 1 + Math.floor(rand() * 300);
+        const usd = rand() < 0.3;
+        lines.push(line({
+          id: `l-${i}-${k}`,
+          category: cats[Math.floor(rand() * 4)],
+          circleId: rand() < 0.5 ? null : "c-x",
+          startsOn: new Date(Date.UTC(2026, 0, 1 + off)).toISOString().slice(0, 10),
+          endsOn: new Date(Date.UTC(2026, 0, off + len)).toISOString().slice(0, 10),
+          plannedMinor: Math.floor(rand() * 5_000_000),
+          currency: usd ? "USD" : "CRC",
+          fxRate: usd ? "512.34567891" : null,
+        }));
+      }
+      const held = lines.reduce((n, l) => n + inVillageCurrency(l, "CRC")!, 0);
+      const plans = moons.map((mo) => moonPlan(lines, mo, "CRC"));
+      expect(plans.reduce((n, p) => n + p.totalMinor, 0), `lines set ${i}`).toBeLessThanOrEqual(held);
+      moons.forEach((mo, j) => expect(plans[j].cashPlannedMinor).toBe(budgetFigure(lines, mo, "CRC", NO_COMMITMENTS, "r")?.plannedMinor ?? 0));
+    }
+  });
+});
