@@ -53,7 +53,7 @@
 import { adminRequestDecision, type AgentAdminPathsDoc } from "../../shared/agentAdmin";
 import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import { echoHash, type AgentScope } from "./agentTokens";
-import { TIER_B_TOOLS } from "./agentMcpTierB";
+import { INBOX_TOOLS, TIER_B_TOOLS } from "./agentMcpTierB";
 
 /** The protocol revisions this server speaks, newest first. */
 // 2025-03-26 is not offered: it predates the resource metadata a 401 points at, which is how a connector finds the sign-in.
@@ -574,6 +574,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     },
   },
   ...TIER_B_TOOLS,
+  ...INBOX_TOOLS,
   ...SERA_TOOL_DEFS.map((d): ToolDef => ({
     name: d.name,
     scope: "sera.undoable",

@@ -349,3 +349,58 @@ describe("admin_request reads of applicant data wait on the Anchor's switch", ()
     expect(d.result.isError).toBe(false);
   });
 });
+
+describe("the approval inbox tools (part A)", () => {
+  const INBOX: Array<{ tool: string; scope: AgentScope; args: Record<string, unknown>; path: string }> = [
+    { tool: "propose_setting", scope: "settings.propose", args: { target: "variable", key: "org.start_after_open", value: "14" }, path: "/api/agent-proposals/setting" },
+    { tool: "propose_listing", scope: "listing.propose", args: { only: ["r1"] }, path: "/api/agent-proposals/listing" },
+    { tool: "propose_page_copy", scope: "pages.propose", args: { section: "home", content: { headline: "Welcome back" } }, path: "/api/agent-proposals/page-copy" },
+    { tool: "propose_map_publish", scope: "map.propose", args: { note: "Added the orchard" }, path: "/api/agent-proposals/map-publish" },
+  ];
+  const ALL_SCOPES: AgentScope[] = ["moon.read", "tasks.write", "moon.write", "moon.review", "admin", "sera.undoable", "roles.read", "roles.propose", "letters.draft", "applicants.read", "onboarding.write", "settings.propose", "listing.propose", "pages.propose", "map.propose"];
+
+  for (const w of INBOX) {
+    it(`${w.tool} is listed only under ${w.scope}`, () => {
+      expect(toolsFor([w.scope]).map((t) => t.name)).toEqual([w.tool]);
+      for (const s of ALL_SCOPES.filter((x) => x !== w.scope)) expect(toolsFor([s]).map((t) => t.name)).not.toContain(w.tool);
+    });
+    it(`${w.tool} asks first, then files once through the proposals route and no other`, async () => {
+      const h = holder();
+      const first = payload(await ask(rpc(w.tool, w.args), [w.scope], h.ctx));
+      expect(first.confirmRequired).toBe(true);
+      expect(h.calls).toEqual([]);
+      const second = payload(await ask(rpc(w.tool, { ...w.args, confirmToken: first.confirmToken }), [w.scope], h.ctx));
+      expect(second.written).toBe(true);
+      expect(h.calls.map((c) => `${c.method} ${c.path}`)).toEqual([`POST ${w.path}`]);
+    });
+  }
+
+  it("refuses money, secrets, erasure, invites and power at the tool, before any token or route", async () => {
+    const bad: Array<[string, AgentScope, Record<string, unknown>]> = [
+      ["propose_setting", "settings.propose", { target: "variable", key: "payments.purchase_limit", value: "9" }],
+      ["propose_setting", "settings.propose", { target: "variable", key: "integration.api_key", value: "x" }],
+      ["propose_setting", "settings.propose", { target: "variable", key: "membership.invite_only", value: "false" }],
+      ["propose_setting", "settings.propose", { target: "module", id: "member-erasure", lifecycle: "public" }],
+      ["propose_setting", "settings.propose", { target: "variable", key: "governance.steward_veto", value: "on" }],
+      ["propose_page_copy", "pages.propose", { section: "treasury", content: { a: 1 } }],
+    ];
+    for (const [tool, scope, args] of bad) {
+      const h = holder();
+      const r = await ask(rpc(tool, args), [scope], h.ctx);
+      expect(r.result.isError, JSON.stringify(args)).toBe(true);
+      expect(payload(r).detail.code).toBe("never_proposable");
+      expect(payload(r).confirmToken).toBeUndefined();
+      expect(h.calls).toEqual([]);
+    }
+  });
+
+  it("holds no tool that decides: the approval routes are not named by any tool, and admin_request cannot reach them", () => {
+    for (const t of MCP_TOOLS) for (const r of t.routes) expect(r).not.toMatch(/approval-inbox/);
+    for (const m of ["GET", "POST", "PUT"]) {
+      for (const p of ["/api/approval-inbox", "/api/approval-inbox/prop_1/approve", "/api/approval-inbox/approve-batch"]) {
+        const doc: AgentAdminPathsDoc = { paths: [{ method: m as any, path: p.replace("prop_1", ":id"), confirm: "agent", label: "x" }] };
+        expect(adminRequestDecision(m, p, doc, "agent-1", { applicantDataOpen: true }), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+      }
+    }
+  });
+});
