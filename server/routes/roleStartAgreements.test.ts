@@ -265,6 +265,15 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       calendar: () => ({ ...calendar(), currentSeasonId: seasonId }),
       now: () => at,
     });
+  /*
+   * THE NEXT TURN, A MINUTE ON: inside the hour the brief promises, and past the
+   * second `starts_at` is rounded to. `seat_applications.starts_at` is a DATETIME
+   * with no fraction, so MySQL 8 (CI) ROUNDS an adoption at :30.6 up to :31, and a
+   * turn run in that same second finds nothing due yet (CI, 9 Nov 2026, on this
+   * file's "changed words" case; a MariaDB box truncates, so it passed locally).
+   * The hourly turn never runs inside that second.
+   */
+  const soon = () => new Date(Date.now() + 60_000);
   const moonMode = async <T,>(fn: () => Promise<T>): Promise<T> => {
     expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" }, FOUNDER.id)).status).toBe(200);
     try {
@@ -295,17 +304,17 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
 
         // One of two: still nobody seated, and the shorter list is said once.
         await alignAgreement(who.id);
-        await turn(new Date());
+        await turn(soon());
         expect(await seatedIn(who.id)).toEqual([]);
         expect(state.notices.filter((x) => x.userId === who.id && x.title === START_WORDS.title(1))).toHaveLength(1);
         // An hourly retry says nothing new: the same key, which notify (unique dedupe_key) writes once.
-        await turn(new Date());
+        await turn(soon());
         const keys = new Set(state.notices.filter((x) => x.userId === who.id && x.title === START_WORDS.title(1)).map((x) => x.dedupeKey));
         expect(keys.size).toBe(1);
 
         // Both: the next turn starts the role.
         await alignLetter(who.id);
-        await turn(new Date());
+        await turn(soon());
         expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
       });
     });
@@ -356,6 +365,19 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
     });
   });
 
+  it("CONTROL for the minute: starts_at keeps whole seconds, so a turn a minute on finds it due on either engine", async () => {
+    // A DATETIME with no fraction, as the column is. CI's MySQL 8 ROUNDS the fraction (:00.6 reads :01, after the
+    // instant it was written at); a MariaDB box truncates it, which is why the case passed locally and failed in CI.
+    const [row] = await q("SELECT DATE_FORMAT(CAST('2030-05-05 10:00:00.600' AS DATETIME), '%Y-%m-%dT%H:%i:%sZ') AS t");
+    const written = Date.parse("2030-05-05T10:00:00.600Z");
+    const stored = Date.parse(String(row.t));
+    // Either way it lands within a second of the write...
+    expect(Math.abs(stored - written)).toBeLessThan(1000);
+    // ...so a turn a minute on always finds it due, on either engine.
+    expect(written + 60_000).toBeGreaterThan(stored);
+    expect(soon().getTime() - Date.now()).toBeGreaterThanOrEqual(60_000);
+  });
+
   describe("changed words ask again", () => {
     it("an alignment with earlier words stops counting when the words change, and aligning again counts", async () => {
       const who = await newAccount("words");
@@ -375,7 +397,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
 
         await alignAgreement(who.id);
         expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: true });
-        await turn(new Date());
+        await turn(soon());
         expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
       });
       // The first text was superseded by the second: one in force, never two.
