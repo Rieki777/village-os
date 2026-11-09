@@ -114,6 +114,11 @@ msgstr ""
 msgid "Your pledge is withdrawn."
 msgstr ""
 
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted, priced by the village's rule"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
 msgid "Your answer"
@@ -407,6 +412,11 @@ msgctxt "funding round stage"
 msgid "The village has chosen"
 msgstr ""
 
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted. The price was not recorded beside the rule, so set it on the pricing desk."
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Ask the village for one copy of its database"
 msgstr ""
@@ -455,6 +465,11 @@ msgstr ""
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Download the copy"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Price it with the village's rule (optional)"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -619,6 +634,14 @@ msgstr ""
 msgid "Delete this change request? This cannot be undone."
 msgstr ""
 
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, model.currency)
+#. placeholder {1}: wholeMoney(s.range.lowTotalMinor, model.currency)
+#. placeholder {2}: wholeMoney(s.range.highTotalMinor, model.currency)
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Suggested {0}, likely {1} to {2}."
+msgstr ""
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choose"
@@ -636,6 +659,11 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "Object"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Voice starts when the village adopts its own pay settings."
 msgstr ""
 
 #: client/src/components/modules/BuilderJourney.tsx
@@ -762,6 +790,11 @@ msgctxt "when the review time ends"
 msgid "Waits until {until}"
 msgstr ""
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Hours it takes"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
 msgstr ""
@@ -825,6 +858,11 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Reading the village's pay settings…"
 msgstr ""
 
 #. placeholder {0}: q.title
@@ -984,6 +1022,16 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "1 quest still needs yours"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Earned Equity is owed on this quest until the village writes what Earned Equity means."
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As much as"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -1411,6 +1459,11 @@ msgctxt "change request note outcome"
 msgid "Turned down"
 msgstr ""
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Use this price"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -1809,6 +1862,11 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "to"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As little as"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -2368,6 +2426,12 @@ msgctxt "pricing desk"
 msgid "Suggestion"
 msgstr ""
 
+#. placeholder {0}: filled.unoffered.map(tokenName).join(", ")
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The rule pays {0}, which quests do not pay here yet. Turn it on in the quest pay rules first."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that changes a value"
 msgid "Change it to: {proposedTo}"
@@ -2429,6 +2493,11 @@ msgstr "Usar el idioma del navegador"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Saved"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -2493,6 +2562,11 @@ msgstr ""
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "The village has launched, so another admin co-signs before the key is replaced."
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Conditions"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -2605,6 +2679,11 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a page loading"
 msgid "Loading…"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Kind of work"
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx

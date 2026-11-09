@@ -19,16 +19,18 @@
  * the ones nobody kept. This is the screen the Journey to Launch row
  * `starter-quests` links to.
  */
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
 import { ExampleChip, forgetExamplesCache } from "@/components/ExamplesBanner";
 import WorkValueEditor, { draftFrom, draftToBody, usePayOptions, type WorkValueDraft } from "@/components/WorkValueEditor";
+import QuestEnginePrice, { type EngineUse } from "@/components/valuation/QuestEnginePrice";
 import { usePrefill } from "@/lib/profilePrefill";
 import { linesToList, listToLines } from "@/lib/questBoard";
 
 export default function QuestsTab({ password }: { password: string }) {
+  const { t } = useLingui();
   const [quests, setQuests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Record<string, any>>({});
@@ -40,6 +42,8 @@ export default function QuestsTab({ password }: { password: string }) {
   const offered = options?.quest ?? null;
   const currency = options?.currency ?? "";
   const [addingPay, setAddingPay] = useState<WorkValueDraft>({ value: "", tokens: {} });
+  // The rule's price, once "Use this price" is pressed (quest re-price Q3b).
+  const [engineUse, setEngineUse] = useState<EngineUse | null>(null);
   useEffect(() => {
     if (!options) return;
     setAddingPay((p) => (Object.keys(p.tokens).length ? p : { ...draftFrom(null, options.quest, options.currency), value: p.value }));
@@ -127,7 +131,15 @@ export default function QuestsTab({ password }: { password: string }) {
               const d = await call("/admin/quests", { ...adding, valueMinor: pay.valueMinor, valueTokens: pay.valueTokens, cashMinor: pay.cashMinor });
               if (d) {
                 forgetExamplesCache("quests");
-                toast.success("Posted");
+                // Priced by the rule and left as it was: record the figure beside
+                // its inputs, so the pricing desk shows this quest as set. A price
+                // retyped after "Use this price" is the poster's own, as before.
+                if (engineUse && addingPay.value === engineUse.value && d.id) {
+                  const set = await call(`/quests/${encodeURIComponent(d.id)}/pay`, { work: engineUse.work, set: { totalMinor: engineUse.totalMinor } }, "PUT");
+                  if (set?.state === "set") toast.success(t({ message: "Posted, priced by the village's rule", context: "quest editor" }));
+                  else toast.success(t({ message: "Posted. The price was not recorded beside the rule, so set it on the pricing desk.", context: "quest editor" }));
+                } else toast.success("Posted");
+                setEngineUse(null);
                 setAdding({ title: "", description: "", circle: "" });
                 setAddingPay(options ? draftFrom(null, options.quest, options.currency) : { value: "", tokens: {} });
                 setFromProfile(null);
@@ -138,6 +150,9 @@ export default function QuestsTab({ password }: { password: string }) {
           >
             Post quest
           </button>
+        </div>
+        <div className="mt-3">
+          <QuestEnginePrice offered={offered} currency={currency} onUse={(next, use) => { setAddingPay(next); setEngineUse(use); }} />
         </div>
         <div className="mt-3 text-gray-700">
           <WorkValueEditor draft={addingPay} onChange={setAddingPay} offered={offered} currency={currency || null} cadence="once" inputClassName={inputCls} />
