@@ -90,6 +90,24 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} gatherings are choosing a time.",
     celebrate: false,
   },
+  /*
+   * Change requests (Rye, 2026-11-06). `change_request_review` asks a holder
+   * of a power the changes touch to look, like a code owner;
+   * `change_request` tells a member about a note, an answer or an edit on a
+   * change request they wrote or wrote in.
+   */
+  change_request_review: {
+    group: "decisions",
+    blurb: "A change request touches what your role looks after. Ask, raise a concern or an objection, suggest an edit, or say you can live with it.",
+    many: "{n} change requests are asking for your review.",
+    celebrate: false,
+  },
+  change_request: {
+    group: "decisions",
+    blurb: "Something new on a change request you are part of. Open it to read and answer.",
+    many: "{n} updates on change requests you are part of.",
+    celebrate: false,
+  },
   ballot_closing: {
     group: "decisions",
     blurb: "The window is closing and your vote is still owed. Quorum is measured against everyone on the roll.",
@@ -126,6 +144,15 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "decisions",
     blurb: "Too few of the roll answered for this to settle anything. The question stands, and it can be asked again.",
     many: "{n} votes closed with too few answering to settle them.",
+    celebrate: false,
+  },
+  // The quorum fallback (0334): too few answered, so the same question is open
+  // again on a linked ballot. Its own kind, because nothing was decided and the
+  // member is being asked to vote, which `ballot_no_quorum` does not ask.
+  ballot_rerun_opened: {
+    group: "decisions",
+    blurb: "Too few answered a vote you are on the roll for, so it is open again for as long as before, and half as many voices are enough this time.",
+    many: "{n} votes are open again with too few having answered.",
     celebrate: false,
   },
   ballot_withdrawn: {
@@ -451,6 +478,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
 
   // ── Work ──────────────────────────────────────────────────────────────────
+  quest_claimed: {
+    group: "work",
+    blurb: "You took on a quest. The quest shows who to talk to, your first task, your crew link and the date.",
+    many: "You took on {n} quests.",
+    celebrate: false,
+  },
   quest_submitted: {
     group: "work",
     blurb: "Somebody finished work and it is waiting to be read. Value moves when a steward says so.",

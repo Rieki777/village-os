@@ -71,6 +71,8 @@ export function altOr(value: string | undefined, fallback: string): string {
 }
 
 export interface PublicGameConfig {
+  /** The village's default language, dial `village.default_locale` (spec i18n US3). */
+  defaultLocale?: string;
   project: {
     name: string;
     tagline: string;
@@ -610,6 +612,14 @@ export interface QuestClaim {
    * `claimsAnnouncedHere`), so the quest page does not celebrate it again.
    */
   announcedByRewardMoment?: boolean;
+  /** The quest's terms when this claim was taken (0342, C8). Absent on a claim taken before. */
+  payTerms?: {
+    valueMinor: number | null;
+    valueCurrency: string | null;
+    valueTokens: { token: string; amount: number }[] | null;
+    cashMinor: number | null;
+    cashCurrency: string | null;
+  } | null;
 }
 
 export async function fetchGameMe(): Promise<GameMe | null> {

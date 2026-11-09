@@ -58,6 +58,14 @@
  * written to a log of the last twenty that `GET /api/saberra/runs` answers.
  * The job checks every scheduler tick and calls the service only when the
  * module's `pollSchedule` says it is due; off, the default, never calls it.
+ *
+ * ── THE DIFFERENCES, READ-ONLY ───────────────────────────────────────────
+ *
+ * Every read keeps a snapshot of the service's circles and roles
+ * (`server/lib/saberraSnapshot.ts`). Two reads compute, at request time, how
+ * that snapshot and the live chart differ (`shared/seraDifferences.ts`): a
+ * count for any signed-in member, with no subject in it, and the full list
+ * behind the review queue's key. Neither writes anything.
  */
 import { boolVar } from "../lib/variables";
 import type { Express } from "express";
@@ -81,10 +89,51 @@ import { linkableMember, memberLinks, memberName, unlinkMember } from "../repos/
 import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
 import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
 import { clearReview } from "../repos/seraLinkReviews";
+import { countAnswer, forgetCachedDifferences, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
+import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
+import { doorsNow, type Deciders } from "../lib/seraDoors";
+import { waitingChartProposals } from "../repos/seraDifferences";
+import { saberraAgentName } from "../lib/saberraGuide";
+import { villageTimezone } from "../lib/villageReaders";
 
-type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser">;
+/**
+ * `mayStillSee` and `overLimit` are taken when the caller hands them in. The
+ * differences list asks `mayStillSee` (a look, never a break-glass), and both
+ * differences reads are bounded per member by `overLimit`. Without them the list
+ * falls back to `guardCapability` on the same key, which is the gate every
+ * other read here asks and never a wider one, and the reads go unbounded the
+ * way every other route here does.
+ */
+type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser"> &
+  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members" | "lapseContext">> & {
+    /** The holder reads the count's "who decides" needs (review S2). Without them the count says nothing about it. */
+    deciders?: Deciders;
+  };
+
+/** How often one member may ask, per minute: a page that polls, never a loop. */
+const DIFFERENCES_COUNT_PER_MINUTE = 120;
+const DIFFERENCES_LIST_PER_MINUTE = 60;
+const TOO_MANY = { error: "That is a lot of checks in a minute. Wait a moment and look again." };
 
 const MODULE_ID = "saberra";
+/**
+ * The daily age-out. A cut of carried records changes rows without changing
+ * their seq, which the cached list keys on, so the cache is forgotten whenever
+ * anything was cut (review R3-5).
+ */
+export async function ageOutStoredReads(
+  pool: Parameters<typeof pruneByAge>[0],
+  prune: (pool: Parameters<typeof pruneByAge>[0]) => Promise<number> = (p) => pruneByAge(p),
+  forget: () => void = forgetCachedDifferences,
+): Promise<string> {
+  const n = await prune(pool);
+  if (n > 0) forget();
+  return `removed ${n} stored read(s) past ${SNAPSHOT_MAX_AGE_DAYS} days`;
+}
+
+/** The daily job that ages stored reads out (spec R27). */
+export const SNAPSHOT_AGE_JOB = "saberra-snapshot-age";
+const DAY_MS = 24 * 60 * 60 * 1000;
 const SECRET_KEY = "sera_api_secret";
 
 /** Whether the store holds an https address for the service. The rule is `httpsAddress`, as the sync's. */
@@ -94,13 +143,18 @@ function addressSet(): boolean {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { guardCapability, getPool, authedUser } = deps;
+  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders, lapseContext } = deps;
+  // The lapse context, so a lapsed holder is never named in a sentence (review N5).
+  const read = () => readDifferences(getPool(), Date.now(), lapseContext?.());
 
   // The pool is read when the job RUNS, never when it is registered: this runs
   // during boot, before the pool is guaranteed to be the one the village uses.
   // Every tick, so a schedule saved in the panel is honoured within one; the
   // job itself decides whether anything is due, and off calls nothing.
   registerJob(POLL_JOB, TICK_MS, () => pollOnce(getPool()));
+  // Stored reads age out daily whatever the schedule or the module, so a name
+  // stored as sent cannot outlive an erasure (spec R27).
+  registerJob(SNAPSHOT_AGE_JOB, DAY_MS, () => ageOutStoredReads(getPool()));
 
   /** What a steward needs before pressing anything. */
   app.get("/api/saberra/status", async (req, res) => {
@@ -279,6 +333,65 @@ export function register(app: Express, deps: Deps): void {
       res.json(await syncRunsAnswer(getPool()));
     } catch {
       res.status(500).json({ error: "Could not read the sync log." });
+    }
+  });
+
+  /**
+   * HOW MANY WAYS THE SERVICE AND THE CHART HERE DIFFER, for every member (R25).
+   *
+   * Its own payload: totals per lane, the conflicts, how many to check first,
+   * how many of our changes the service has not caught up with, and when it was
+   * last read. Never a subject, a name or a value, so it is safe for anybody
+   * signed in, which is what lets every member see that something waits (I.3).
+   * Computed at read time from the stored snapshots and the live chart, and
+   * writes nothing.
+   */
+  app.get("/api/saberra/differences/count", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "Sign in to see this." });
+    if (overLimit && (await overLimit(`sera-differences-count:${user.id}`, DIFFERENCES_COUNT_PER_MINUTE, 60_000))) {
+      return res.status(429).json(TOO_MANY);
+    }
+    try {
+      const count = countAnswer(await read());
+      // Who decides and who sets pay, by the holder test: role names and first names only (S2).
+      const doors = deciders && members ? await doorsNow(getPool(), deciders, members) : null;
+      // About this reader, outside the cache (QA Q5): the list's own gate, and whether they decide.
+      const reader = {
+        mayRead: mayStillSee ? await mayStillSee(req, "intake.moderate") : null,
+        decides: !!doors && doors.deciderIds.includes(String(user.id)),
+      };
+      res.json({ ...count, decides: doors?.decides ?? null, paySetBy: doors?.paySetBy ?? null, reader });
+    } catch {
+      res.status(500).json({ error: "Could not read the differences." });
+    }
+  });
+
+  /**
+   * EVERY DIFFERENCE, with its words (R25): the service's values beside ours,
+   * so the review queue's key. A LOOK asks `mayStillSee`, the rule the review
+   * queue's own read follows: opening a list is looking, and there is no
+   * break-glass on a GET. Computed at read time and writes nothing; taking or
+   * keeping a difference is the next slice's, through the publish door.
+   */
+  app.get("/api/saberra/differences", async (req, res) => {
+    if (mayStillSee) {
+      if (!(await mayStillSee(req, "intake.moderate"))) return res.status(401).json({ error: "auth_required" });
+    } else if (!(await guardCapability(req, res, "intake.moderate"))) {
+      return;
+    }
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (overLimit && (await overLimit(`sera-differences:${user.id}`, DIFFERENCES_LIST_PER_MINUTE, 60_000))) {
+      return res.status(429).json(TOO_MANY);
+    }
+    try {
+      const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
+      const listed = await read();
+      const waiting = await waitingChartProposals(getPool(), MODULE_ID);
+      res.json(listAnswer(listed, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone(), waiting }));
+    } catch {
+      res.status(500).json({ error: "Could not read the differences." });
     }
   });
 

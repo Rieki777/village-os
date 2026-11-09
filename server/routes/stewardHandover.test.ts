@@ -311,7 +311,7 @@ describe.skipIf(!configured)("the one hand-over control, on a real schema", () =
       expect(r.json.cooling.map((c: any) => c.capability)).toEqual(["steward.veto"]);
       expect((await holdings()).map((h: any) => h.capability), "the veto waits; story.tell crossed").toEqual(["story.tell"]);
       expect((await call("GET")).json.powers.filter((p: any) => p.matureOnly).map((p: any) => p.capability).sort()).toEqual(
-        ["cash.pay", "dial.set", "exchange.manage", "module.switch", "steward.veto"],
+        ["cash.pay", "dial.set", "exchange.manage", "module.switch", "role.pay", "steward.veto"],
       );
     });
 

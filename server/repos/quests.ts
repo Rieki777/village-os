@@ -170,6 +170,18 @@ export type QuestRemoval =
   | { ok: false; reason: "missing" }
   | { ok: false; reason: "in_flight"; count: number };
 
+/**
+ * The place a quest sits at (0060's `structure_key`), or null. Read on its own
+ * because `QUEST_SELECT` does not carry the column and every consumer of the
+ * record would otherwise gain a field it never asked for. The next-step box
+ * reads it to name the place's steward (server/lib/questNextStep.ts).
+ */
+export async function questStructureKey(pool: Pool, questId: string): Promise<string | null> {
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT `structure_key` FROM `quests` WHERE `id` = ? LIMIT 1", [questId]);
+  const key = rows[0]?.structure_key;
+  return key == null || String(key).trim() === "" ? null : String(key);
+}
+
 export interface QuestsRepo {
   all(): Promise<QuestRecord[]>;
   byId(id: string): Promise<QuestRecord | null>;
@@ -492,6 +504,62 @@ export interface ClaimRecord {
   confidence?: "on_track" | "at_risk" | "stuck" | null;
   confidenceNote?: string | null;
   confidenceAt?: string | null;
+  /** The quest's terms when the claim was taken (0342). Null on a claim taken before. */
+  payTerms?: ClaimPayTerms | null;
+}
+
+/**
+ * THE TERMS A CLAIM WAS TAKEN AT (0342; valuation spec C8). Once a member takes
+ * a quest on, its price is fixed: only the worker's agreement or a vote changes
+ * it. `openClaim` copies the quest's own terms here under the quest's row lock,
+ * and consent pays from them. `valueTokens` null means the village's standard
+ * prices it, as it does on the quest. A claim taken before 0342 has none, and
+ * consent pays it off the quest as it stands.
+ */
+export interface ClaimPayTerms {
+  valueMinor: number | null;
+  valueCurrency: string | null;
+  valueTokens: TokenAmount[] | null;
+  cashMinor: number | null;
+  cashCurrency: string | null;
+  stayCreditReward: number | null;
+}
+
+/** The terms a quest row offers, read the way `rowToQuest` reads them. */
+function termsOfQuestRow(r: RowDataPacket): ClaimPayTerms {
+  const value = readWorkValue(r.value_minor, r.value_currency);
+  const cash = readWorkValue(r.cash_minor, r.cash_currency);
+  return {
+    valueMinor: value?.minor ?? null,
+    valueCurrency: value?.currency ?? null,
+    valueTokens: readValueTokens(r.value_tokens),
+    cashMinor: cash?.minor ?? null,
+    cashCurrency: cash?.currency ?? null,
+    stayCreditReward: r.stay_credit_reward == null ? null : Number(r.stay_credit_reward),
+  };
+}
+
+function readPayTerms(raw: unknown): ClaimPayTerms | null {
+  if (raw == null) return null;
+  let v: any = raw;
+  if (typeof raw === "string" || Buffer.isBuffer(raw)) {
+    try {
+      v = JSON.parse(String(raw));
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== "object") return null;
+  const value = readWorkValue(v.valueMinor, v.valueCurrency);
+  const cash = readWorkValue(v.cashMinor, v.cashCurrency);
+  return {
+    valueMinor: value?.minor ?? null,
+    valueCurrency: value?.currency ?? null,
+    valueTokens: readValueTokens(v.valueTokens),
+    cashMinor: cash?.minor ?? null,
+    cashCurrency: cash?.currency ?? null,
+    stayCreditReward: v.stayCreditReward == null ? null : Number(v.stayCreditReward),
+  };
 }
 
 /** What `openClaim` answers with, so a caller never has to guess. */
@@ -652,6 +720,16 @@ export interface ClaimsRepo {
    * a submitted or consented claim has work or recognition attached to it.
    */
   remove(id: string): Promise<ClaimRecord | null>;
+  /**
+   * THE WORKER TAKES THE QUEST'S PRICE AS IT STANDS NOW (valuation spec C8).
+   * A claim keeps the terms it was taken at (0342); only the worker's agreement
+   * or a vote changes them. This is the worker's agreement: on their own open
+   * claim, it replaces the kept terms with the quest's current ones, under both
+   * row locks. Refuses anybody else's claim and a resolved one.
+   */
+  takeCurrentPrice(id: string, userId: string): Promise<ClaimMoveOutcome | { ok: false; reason: "not_yours" }>;
+  /** Who holds an open claim on a quest (picked up or handed in), so a price is never set by the person it pays. */
+  openClaimantsOf(questId: string): Promise<string[]>;
   /** Stage rules read this on hot paths â€” a COUNT, never a full scan. */
   consentedCount(userId: string): Promise<number>;
   /** One grouped query for listing N members (admin players view). */
@@ -721,7 +799,7 @@ const CLAIM_SELECT =
   // confidence (0055) rides along so every read carries it. Only
   // `setConfidence` writes it, and CLAIM_UPDATE below, the one SET list every
   // claim transition shares, leaves it out, so no transition can clobber it.
-  "SELECT id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at, consented_by, confidence, confidence_note, confidence_at FROM quest_claims";
+  "SELECT id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at, consented_by, confidence, confidence_note, confidence_at, pay_terms FROM quest_claims";
 
 function rowToClaim(r: RowDataPacket): ClaimRecord {
   return {
@@ -743,6 +821,7 @@ function rowToClaim(r: RowDataPacket): ClaimRecord {
     confidence: (r.confidence ?? null) as ClaimRecord["confidence"],
     confidenceNote: r.confidence_note ?? null,
     confidenceAt: toIso(r.confidence_at),
+    payTerms: readPayTerms(r.pay_terms),
   };
 }
 
@@ -756,8 +835,8 @@ function rowToClaim(r: RowDataPacket): ClaimRecord {
  * above.
  */
 const CLAIM_INSERT =
-  "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at) " +
-  "VALUES (?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP),?,?)";
+  "INSERT INTO quest_claims (id, quest_id, quest_title, user_id, user_name, status, artifact_url, note, amount, claimed_at, submitted_at, consented_at, pay_terms) " +
+  "VALUES (?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP),?,?,?)";
 
 const claimParams = (c: ClaimRecord): any[] => [
   c.id,
@@ -772,6 +851,7 @@ const claimParams = (c: ClaimRecord): any[] => [
   toDb(c.claimedAt),
   toDb(c.submittedAt),
   toDb(c.resolvedAt),
+  c.payTerms ? JSON.stringify(c.payTerms) : null,
 ];
 
 const CLAIM_UPDATE =
@@ -892,8 +972,10 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
         try {
           await conn.beginTransaction();
           // The lock. Everything after this reads a world nobody else can move.
+          // It also reads the quest's terms, which the claim keeps (0342, C8):
+          // read under the lock, so no re-price lands between the read and the insert.
           const [quest] = await conn.query<RowDataPacket[]>(
-            "SELECT id FROM quests WHERE id = ? FOR UPDATE",
+            "SELECT id, value_minor, value_currency, value_tokens, cash_minor, cash_currency, stay_credit_reward FROM quests WHERE id = ? FOR UPDATE",
             [c.questId],
           );
           if (!quest.length) {
@@ -914,6 +996,7 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
             await conn.rollback();
             return { ok: false, reason: "already", existing } as const;
           }
+          c.payTerms = termsOfQuestRow(quest[0]);
           await conn.query(CLAIM_INSERT, claimParams(c));
           await conn.commit();
           return { ok: true, claim: c } as const;
@@ -928,6 +1011,54 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
 
     async consentOnce(id, from, mutate, post) {
       return moveUnderLock(pool, id, from, mutate, post);
+    },
+
+    async openClaimantsOf(questId) {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT DISTINCT user_id FROM quest_claims WHERE quest_id = ? AND status IN ('claimed','submitted')",
+        [questId],
+      );
+      return rows.map((r) => String(r.user_id));
+    },
+
+    async takeCurrentPrice(id, userId) {
+      return withDeadlockRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          const [rows] = await conn.query<RowDataPacket[]>(`${CLAIM_SELECT} WHERE id = ? FOR UPDATE`, [id]);
+          if (!rows[0]) {
+            await conn.rollback();
+            return { ok: false, reason: "missing" } as const;
+          }
+          const claim = rowToClaim(rows[0]);
+          if (claim.userId !== userId) {
+            await conn.rollback();
+            return { ok: false, reason: "not_yours" } as const;
+          }
+          if (!OPEN_CLAIM.includes(claim.status)) {
+            await conn.rollback();
+            return { ok: false, reason: "status", status: claim.status } as const;
+          }
+          const [quest] = await conn.query<RowDataPacket[]>(
+            "SELECT id, value_minor, value_currency, value_tokens, cash_minor, cash_currency, stay_credit_reward FROM quests WHERE id = ? FOR UPDATE",
+            [claim.questId],
+          );
+          if (!quest[0]) {
+            await conn.rollback();
+            return { ok: false, reason: "missing" } as const;
+          }
+          claim.payTerms = termsOfQuestRow(quest[0]);
+          await conn.query("UPDATE quest_claims SET pay_terms = ? WHERE id = ?", [JSON.stringify(claim.payTerms), id]);
+          await conn.commit();
+          return { ok: true, claim } as const;
+        } catch (e) {
+          await conn.rollback();
+          throw e;
+        } finally {
+          conn.release();
+        }
+      });
     },
 
     async declineOnce(id, at) {

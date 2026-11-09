@@ -49,6 +49,7 @@ import { limitNav, simpleNav } from "@/components/admin/adminFeelState";
 import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
+const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -96,6 +97,7 @@ import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
 import SecretsKeyBanner, { SealedSaveButton } from "@/components/admin/SecretsKeyBanner";
+import SigningKeyCard from "@/components/admin/SigningKeyCard";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -912,6 +914,7 @@ export function IntegrationsTab({ password }: { password: string }) {
         </p>
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
+      <SigningKeyCard password={password} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
         <div className="w-full space-y-5">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}
@@ -7906,6 +7909,7 @@ export default function Admin() {
         onNight={setNight}
         onSignOut={() => setPassword(null)}
         extra={<AdminSeraChip password={password} />}
+        defaultLocale={cfg?.defaultLocale ?? null}
       />
 
       <div className="flex w-full">
@@ -7968,6 +7972,7 @@ export default function Admin() {
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
+          {activeTab === "pricing-desk" && <Suspense fallback={null}><PricingDeskTab password={password} /></Suspense>}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
           {activeTab === "failures" && <FailuresTab password={password} />}

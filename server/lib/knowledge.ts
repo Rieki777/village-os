@@ -315,6 +315,8 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   // the doc describes the tables and never holds an entry.
   journal: "journal.md",
   "gene-keys": "gene-keys.md",
+  "funding-rounds": "funding-rounds.md",
+  places: "places.md",
   // Shipped with its module (2026-10-09). The contract for the room, its six
   // stages and its privacy line; it holds no session's words.
   sessions: "live-sessions.md",

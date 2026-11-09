@@ -426,6 +426,34 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 160,
     emblem: "Sparkles",
   },
+  "funding-rounds": {
+    promise: "Choose together which quests the season funds, within a pot.",
+    benefits: [
+      "Members share rough ideas, by name or without one, and each idea opens its own forum thread",
+      "Ideas are shaped into quests with a price, then members tick every one they would fund",
+      "The count shows what Voice chose beside what one member, one vote chose, and says where they differ",
+      "Funded quests hold their share of the pot and are paid when the work is done, so the pot is never spent twice",
+    ],
+    forWhom: "Villages with a budget to share that want the people doing the work to choose where it goes.",
+    setupSummary: "Seat someone who holds the pots, by default the Treasury role, then open a pot and a round.",
+    dataSummary: "Each idea and who shared it, kept private when they share it without a name; members' ticks; and a record of each act for later rewards.",
+    hue: 45,
+    emblem: "Sprout",
+  },
+  places: {
+    promise: "Every place on the land as a living invitation, from the first idea to a building that needs care.",
+    benefits: [
+      "One list of every place, by zone, with the stage it has reached and how ready it is",
+      "Each place shows the roles that care for it, its open quests and what it waits on",
+      "A place reaches building only with its permits complete and a steward in place, or by the village's highest vote",
+      "Anyone can step forward to steward a place, with what they would build, with whom and by when",
+    ],
+    forWhom: "Villages building on their land that want every place to say what it needs and who it is waiting for.",
+    setupSummary: "Seat someone who keeps the registry, then load the village's places from its seed.",
+    dataSummary: "Each place's name, zone, stage, permits and words. Who holds its roles is read from the org chart, never copied.",
+    hue: 120,
+    emblem: "Landmark",
+  },
   "session-card": {
     promise: "A card to pull as a session opens, so the room starts present with each other and the day.",
     benefits: [

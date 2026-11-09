@@ -21,6 +21,7 @@
  * Boots dist/index.js against a throwaway schema like every routes suite, and
  * skips loudly without TEST_DATABASE_URL.
  */
+import { createHmac } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -124,6 +125,7 @@ beforeAll(async () => {
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       BASE_RPC_URL: "",
       GOVERNANCE_HUB_SECRET: HUB_SECRET,
+      HYPHA_VOICE_WEBHOOK_SECRET: "", // R171: this suite sets the voice secret through Admin, Integrations
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -331,6 +333,197 @@ describe.skipIf(!DB_CONFIGURED)("the public amendment history", () => {
     const row = (feed.json as any[]).find((h) => h.key === "abuse.investor_docs_per_ip_hourly" && h.to === "51");
     expect(row, feed.text.slice(0, 400)).toBeTruthy();
     expect(row.withheld).toBe(false);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the village signing key, replaced from Admin (R069)", () => {
+  // The only recovery for a leaked or stranded key was a hand-written DELETE on
+  // app_config. Now an admin replaces it, behind a typed confirmation.
+  it("shows the key, refuses without the typed confirmation, and replaces it with one", async () => {
+    const before = await call("GET", "/api/admin/identity/signing-key");
+    expect(before.status, before.text).toBe(200);
+    expect(before.json).toMatchObject({ canSign: true, atRest: "sealed" });
+
+    const unconfirmed = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: "yes" });
+    expect(unconfirmed.status, unconfirmed.text).toBe(400);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json.kid, "the control: nothing moved").toBe(before.json.kid);
+
+    const rotated = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: before.json.confirmWith });
+    expect(rotated.status, rotated.text).toBe(200);
+    expect(rotated.json).toMatchObject({ ok: true, previousKid: before.json.kid });
+    expect(rotated.json.kid).not.toBe(before.json.kid);
+
+    // What peers read now carries the new key and is signed with it.
+    const discovery = await call("GET", "/.well-known/village.json", undefined, "");
+    expect(discovery.status, discovery.text).toBe(200);
+    expect(discovery.json.publicKey.kid).toBe(rotated.json.kid);
+    expect(discovery.json.proof.kid).toBe(rotated.json.kid);
+
+    // The admins and stewards were told, the same hour.
+    const [told] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE type = 'signing_key_rotated'"); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(Number(told[0]?.n)).toBeGreaterThan(0);
+  });
+
+  it("refuses a stranger", async () => {
+    const r = await call("POST", "/api/admin/identity/signing-key/rotate", { confirm: "make a new key" }, "");
+    expect(r.status).toBe(401);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("after launch, a new signing key takes two admins (the coordinator, 2026-11-08)", () => {
+  // Rye's two-signature rule, as for keystone keys: whenever two or more people
+  // can sign, the first press asks and a different admin's press replaces it.
+  const PW = "SecondSigner123!";
+  let bo = { id: "", token: "" };
+  let mo = { id: "", token: "" };
+  let launchBefore: string | null = null;
+  const confirm = { confirm: "make a new key" };
+  const kidNow = async () => String((await call("GET", "/api/admin/identity/signing-key")).json?.kid ?? "");
+
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    const join = async (name: string, email: string) => {
+      const r = await call("POST", "/api/auth/register", { name, email, password: PW, paths: ["resident"] }, "");
+      expect(r.status, r.text).toBe(200);
+      return { id: String(r.json?.user?.id ?? ""), token: String(r.json?.token ?? "") };
+    };
+    bo = await join("Bo Second", `bo-second-${PORT}@example.test`);
+    mo = await join("Mo Member", `mo-member-${PORT}@example.test`);
+    const promoted = await call("PUT", `/api/admin/users/${bo.id}/role`, { role: "admin", addressUnprovedOk: true });
+    expect(promoted.status, promoted.text).toBe(200);
+    // The village stands on the far side of its launch vote, the co-sign's own test of launch.
+    const [rows] = await pool.query<any[]>("SELECT value FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: the e2e harness reading its own scratch schema
+    launchBefore = rows[0] ? (typeof rows[0].value === "string" ? rows[0].value : JSON.stringify(rows[0].value)) : null;
+    const launched = { ...(launchBefore ? JSON.parse(launchBefore) : {}), launchedByBallotId: "fixture-launch-ballot" };
+    await pool.query( // module-review-ok: the e2e harness setting its own scratch schema's launch state
+      "INSERT INTO app_config (config_key, value) VALUES ('launch-state', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)",
+      [JSON.stringify(launched)],
+    );
+  });
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED || !pool) return;
+    if (launchBefore === null) await pool.query("DELETE FROM app_config WHERE config_key = 'launch-state'"); // module-review-ok: the e2e harness restoring its own scratch schema
+    else await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'launch-state'", [launchBefore]); // module-review-ok: the e2e harness restoring its own scratch schema
+    if (bo.id) await call("PUT", `/api/admin/users/${bo.id}/role`, { role: "member" });
+  });
+
+  it("the first press asks and replaces nothing; the asker cannot be the second; another admin's press replaces it", async () => {
+    const before = await kidNow();
+    const asked = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(asked.status, asked.text).toBe(202);
+    expect(asked.json?.pending?.mine).toBe(true);
+    expect(await kidNow(), "nothing moved on the ask").toBe(before);
+    const shown = await call("GET", "/api/admin/identity/signing-key", undefined, bo.token);
+    expect(shown.json).toMatchObject({ twoSign: true, pending: { id: asked.json.pending.id, mine: false } });
+    const [ask] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND dedupe_key LIKE 'signing-key-cosign:%'", [bo.id]); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(Number(ask[0]?.n), "the other admin was asked").toBe(1);
+
+    const again = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(again.status, again.text).toBe(202);
+    expect(again.json?.pending?.id, "the same request, still waiting").toBe(asked.json.pending.id);
+    expect(await kidNow(), "the asker is never the second signature").toBe(before);
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate", confirm, mo.token)).status, "a member is no signer").toBe(401);
+
+    const signed = await call("POST", "/api/admin/identity/signing-key/rotate", confirm, bo.token);
+    expect(signed.status, signed.text).toBe(200);
+    expect(signed.json).toMatchObject({ ok: true, previousKid: before, cosignedBy: bo.id });
+    expect(await kidNow()).toBe(signed.json.kid);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json?.pending, "the request is done with").toBeNull();
+    const [audit] = await pool.query<any[]>("SELECT text FROM health_events WHERE text LIKE 'identity:signing-key:rotated%co-signed by%'"); // module-review-ok: the e2e harness reading its own scratch schema
+    expect(audit.length, "the record names both").toBe(1);
+  });
+
+  it("a declined request replaces nothing, and its asker is told", async () => {
+    const before = await kidNow();
+    const asked = await call("POST", "/api/admin/identity/signing-key/rotate", confirm);
+    expect(asked.status, asked.text).toBe(202);
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, mo.token)).status).toBe(401);
+    const declined = await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, bo.token);
+    expect(declined.status, declined.text).toBe(200);
+    expect(declined.json).toMatchObject({ ok: true, withdrawn: false });
+    expect(await kidNow()).toBe(before);
+    expect((await call("GET", "/api/admin/identity/signing-key")).json?.pending).toBeNull();
+    expect((await call("POST", "/api/admin/identity/signing-key/rotate/decline", {}, bo.token)).status, "nothing left to decline").toBe(404);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the Hypha voice secret, typed into Admin, Integrations (R171)", () => {
+  // A founder on a hosted village holds Admin and not the host. The boot check
+  // that kept this secret env-only now runs at the write, in both directions.
+  const VOICE = "hypha_voice_webhook_secret";
+  const OTHER = "riverside_webhook_secret";
+  const OWN = "a1".repeat(32);
+  const put = (key: string, value: string) => call("PUT", `/api/admin/integrations/${key}`, { value });
+  const status = async (key: string) => ((await call("GET", "/api/admin/integrations")).json?.secrets as any[]).find((s) => s.key === key);
+  /** A delivery naming no claim: one that verifies stops at "no claim named", before anything settles. */
+  const deliver = async (secret: string) => {
+    const body = JSON.stringify({ status: "confirmed" });
+    const res = await fetch(`${BASE}/api/webhooks/hypha-voice`, { // module-review-ok: the test client dialing the server under test on localhost
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-hypha-signature": `sha256=${createHmac("sha256", secret).update(body).digest("hex")}` },
+      body,
+    });
+    return { status: res.status, text: await res.text() };
+  };
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED) return;
+    for (const key of [VOICE, OTHER]) await put(key, "");
+  });
+
+  it("has a card, and the receiver has nothing to verify against until it is set", async () => {
+    const integ = await call("GET", "/api/admin/integrations");
+    expect(integ.status, integ.text).toBe(200);
+    expect((integ.json?.cards as any[]).some((c) => c.key === VOICE), "the voice secret has a card").toBe(true);
+    expect(await status(VOICE)).toMatchObject({ configured: false, source: "none" });
+    expect((await deliver(OWN)).status).toBe(503);
+  });
+
+  it("refuses a short value and a copied one at the write, and stores neither", async () => {
+    const short = await put(VOICE, "hunter2");
+    expect(short.status, short.text).toBe(409);
+    expect(short.json?.error).toMatch(/too short/);
+    expect((await put(OTHER, OWN)).status).toBe(200);
+    const copied = await put(VOICE, OWN);
+    expect(copied.status, copied.text).toBe(409);
+    expect(copied.json?.error).toMatch(/matches another secret/);
+    expect(await status(VOICE)).toMatchObject({ configured: false });
+    expect((await put(OTHER, "")).status).toBe(200);
+  });
+
+  it("takes a value of its own, sealed, and a delivery signed with it verifies", async () => {
+    const saved = await put(VOICE, OWN);
+    expect(saved.status, saved.text).toBe(200);
+    expect(await status(VOICE)).toMatchObject({ configured: true, source: "admin", atRest: "sealed" });
+    expect((await deliver("b2".repeat(32))).status, "the control: any other secret is a bad signature").toBe(401);
+    const signed = await deliver(OWN);
+    expect(signed.status, signed.text).toBe(400);
+    expect(signed.text).toContain("no claim named");
+  });
+
+  it("refuses another callback secret that copies it", async () => {
+    const copied = await put(OTHER, OWN);
+    expect(copied.status, copied.text).toBe(409);
+    expect(copied.json?.error).toMatch(/Hypha voice secret/);
+    expect((await put(OTHER, "c3".repeat(32))).status, "the control: a value of its own saves").toBe(200);
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("a satellite provider chosen on the dial shows its key card (R171)", () => {
+  const cardKeys = async () => ((await call("GET", "/api/admin/integrations")).json?.cards as any[]).map((c) => c.key);
+
+  afterAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "" });
+  });
+
+  it("has no satellite card while no provider is chosen, and the chosen provider's once one is", async () => {
+    expect(await cardKeys(), "the control: nothing chosen, no card").not.toContain("satellite_mapbox_token");
+    const chose = await call("PUT", "/api/admin/variables/village.satellite_provider", { value: "mapbox" });
+    expect(chose.status, chose.text).toBe(200);
+    expect(await cardKeys()).toContain("satellite_mapbox_token");
+    expect(await cardKeys(), "only the chosen provider's").not.toContain("satellite_esri_api_key");
   });
 });
 

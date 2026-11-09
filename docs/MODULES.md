@@ -1,6 +1,6 @@
 # Modules
 
-Everything a village can run: 31 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
+Everything a village can run: 33 modules, what each one is, what it needs, what it adds to the one capability gate, which dials it owns, and where its routes live.
 
 This is the registry, read out loud. It describes the platform a fork inherits, and it says nothing about any one village: which modules are actually on is a village's own decision, held in its `module_settings` table.
 
@@ -41,7 +41,7 @@ The four core modules sit outside that. They are always public and the lifecycle
 | `connected` | the vendor bills the village directly and answers for the service; the platform answers for the connector. The credential is a secrets-store entry the village holds and can see as source and last4. That visibility IS the tier: the village has its own account and can revoke it unaided. |
 | `managed` | the platform bills and takes the first call; the vendor sits behind a private escalation the village never sees. The credential is platform-held, env-only, and never returned to a village even masked, because it is not the village's to see. This is the PLATFORM_ASSISTANT_KEY posture generalised, and it is settled policy under hub ADR-49. |
 
-Today the registry holds 30 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
+Today the registry holds 32 at `included`, one at `connected`. The tier is a label and never a gate: enabling a module makes no network call, reads no secret and checks no licence. Listings are accepted under contract version 1.2.
 
 ### The data a module holds
 
@@ -50,14 +50,14 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Data class | Modules |
 | --- | --- |
 | `none` | none |
-| `village-content` | six: `resources`, `health`, `network`, `crowdpool`, `hypha`, `saberra` |
-| `member-pii` | 25: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance`, `comms` |
+| `village-content` | seven: `resources`, `health`, `network`, `crowdpool`, `places`, `hypha`, `saberra` |
+| `member-pii` | 26: `quests`, `gratitude`, `progression`, `profiles`, `map`, `forum`, `feed`, `messaging`, `stays`, `automation`, `library`, `badges`, `exchange`, `redemption`, `commerce`, `tools`, `events`, `introductions`, `journal`, `gene-keys`, `funding-rounds`, `session-card`, `moon-review`, `sessions`, `governance`, `comms` |
 
 ### What standing one up looks like
 
 | Setup | What it means | Modules |
 | --- | --- | --- |
-| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `session-card`, `moon-review`, `sessions`, `governance` |
+| `none` | works the moment it is on. The Go-live card offers itself right after Turn on. | `quests`, `gratitude`, `progression`, `profiles`, `forum`, `feed`, `messaging`, `network`, `introductions`, `journal`, `gene-keys`, `funding-rounds`, `places`, `session-card`, `moon-review`, `sessions`, `governance` |
 | `optional` | better with content, honest without it. | `map`, `resources`, `automation`, `health`, `badges`, `crowdpool`, `tools` |
 | `required` | needs real content before going live (a room and a price, a stocked treasury), and the Go-live card waits for readiness. | `stays`, `library`, `exchange`, `redemption`, `commerce`, `events`, `hypha`, `comms`, `saberra` |
 
@@ -65,10 +65,10 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 
 | Shelf | Id | What is on it | Modules |
 | --- | --- | --- | --- |
-| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 6 |
+| Coordinate | `coordinate` | Plan the work and the days: quests, the calendar, calls, tools. | 7 |
 | Recognise | `recognise` | See people: gratitude, the path from guest to co-creator, badges. | 3 |
 | Host and earn | `host-and-earn` | Value moving with care: stays, the shelves, the exchange, payments. | 5 |
-| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 8 |
+| Know and decide | `know-and-decide` | How the village understands itself: conversations, decisions, power, health. | 9 |
 | Connect | `connect` | People finding people: profiles, messages, the feed, other villages. | 9 |
 
 ## The whole library at a glance
@@ -99,6 +99,8 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Introductions | `introductions` | Connect | no | included | member-pii | none | none yet |
 | Journal | `journal` | Know and decide | no | included | member-pii | none | [journal.md](modules/journal.md) |
 | Gene Keys | `gene-keys` | Connect | no | included | member-pii | none | [gene-keys.md](modules/gene-keys.md) |
+| Funding rounds | `funding-rounds` | Coordinate | no | included | member-pii | none | [funding-rounds.md](modules/funding-rounds.md) |
+| Living places | `places` | Know and decide | no | included | village-content | none | [places.md](modules/places.md) |
 | Session Card | `session-card` | Connect | no | included | member-pii | none | [session-card.md](modules/session-card.md) |
 | End-of-Moon Review | `moon-review` | Coordinate | no | included | member-pii | none | [moon-review.md](modules/moon-review.md) |
 | Live Sessions | `sessions` | Coordinate | no | included | member-pii | none | [live-sessions.md](modules/live-sessions.md) |
@@ -107,7 +109,7 @@ Read as the widest thing in the module's own tables: `none`, `village-content`, 
 | Village Comms | `comms` | Connect | no | included | member-pii | required | [comms.md](modules/comms.md) |
 | Organisational Memory | `saberra` | Know and decide | no | connected | village-content | required | [organisational-memory.md](modules/organisational-memory.md) |
 
-That is 31 modules, four of them core. 25 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
+That is 33 modules, four of them core. 27 carry a contract doc under `docs/modules/` and six do not yet; `node scripts/check-module-docs.mjs` holds that second number to a ratchet that only ever falls. Filenames there do not follow module ids, so the mapping is real data and lives in `MODULE_DOCS` in `server/lib/knowledge.ts`, which is where this table reads it.
 
 ## The four core modules
 
@@ -268,6 +270,27 @@ The village's calendar: gatherings with a time, a place, a capacity and an RSVP.
 | What a village plants | nothing beyond the platform's own layers |
 | What it needs from you | Say which hemisphere this village is in (`decision`, `before-enable`) |
 | Contract doc | [events.md](modules/events.md) |
+
+### Funding rounds
+
+The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape them into quests, tick the ones they would fund, and the count shows both what Voice chose and what one member, one vote chose. Funded quests hold their share of the pot and are paid when the work is done.
+
+| Fact | Value |
+| --- | --- |
+| Id | `funding-rounds` |
+| Shelf | Coordinate (`coordinate`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `member-pii` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `forum`, `governance`, `map` |
+| Capabilities it adds | `pot.steward` |
+| Variable keys it owns | none |
+| API prefixes | `/api/funding-rounds` |
+| What a village plants | nothing beyond the platform's own layers |
+| What it needs from you | Seat someone in the Treasury role, or another role that holds the funding pots (`hands`, `before-enable`, recommended) |
+| Contract doc | [funding-rounds.md](modules/funding-rounds.md) |
 
 ### End-of-Moon Review
 
@@ -476,7 +499,7 @@ The living org chart: circles, the roles that orbit them, who holds each role, w
 | Capabilities it adds | `map.viewPeople`, `map.contact`, `map.photograph`, `map.curatePhotos` |
 | Variable keys it owns | `events.rsvp_enabled`, `map.public_structure`, `map.concierge_enabled`, `map.contact_daily_cap`, `map.contact_recipient_daily_cap`, `map.show_quests`, `map.vacant_highlight`, `map.contact_retention_days`, `map.photo_max_mb`, `map.photos_per_place`, `map.photos_per_member_daily`, `map.photo_report_hide_threshold`, `map.photo_tombstone_days` |
 | API prefixes | `/api/map`, `/api/circles`, `/api/places`, `/api/admin/places` |
-| What a village plants | nothing beyond the platform's own layers |
+| What a village plants | `satellite-imagery-key` |
 | What it needs from you | Draw one circle (`content`, `before-enable`) |
 | Contract doc | [village-map.md](modules/village-map.md) |
 | Switching it off is blocked by | `resources`, which requires it while non-off |
@@ -567,6 +590,27 @@ A journal for each member: morning and evening practices, a weekly pulse, a debr
 | What a village plants | nothing beyond the platform's own layers |
 | What it needs from you | nothing beyond its seeds |
 | Contract doc | [journal.md](modules/journal.md) |
+
+### Living places
+
+Every place on the land as a living invitation: what it is, which stage it has reached from idea to built, which permits it waits on, the roles that care for it, and how to step forward as its steward.
+
+| Fact | Value |
+| --- | --- |
+| Id | `places` |
+| Shelf | Know and decide (`know-and-decide`) |
+| A village can switch it off | yes, and it ships off. An admin moves it to `preview`, `members`, `public` |
+| Tier | `included` |
+| Data it holds | `village-content` |
+| Standing it up | `none`, works the moment it is on. The Go-live card offers itself right after Turn on. |
+| Requires | nothing |
+| Recommends | `map`, `governance` |
+| Capabilities it adds | `place.tend`, `place.permit` |
+| Variable keys it owns | `map.public_structure` |
+| API prefixes | `/api/place-registry` |
+| What a village plants | nothing beyond the platform's own layers |
+| What it needs from you | Seat someone in a role that keeps the place registry, then load the village's places (`hands`, `before-enable`, recommended) |
+| Contract doc | [places.md](modules/places.md) |
 
 ### Governance
 
@@ -837,6 +881,8 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 | `events` | `map` |
 | `introductions` | `badges`, `map` |
 | `journal` | `gratitude` |
+| `funding-rounds` | `forum`, `governance`, `map` |
+| `places` | `map`, `governance` |
 | `moon-review` | `sessions`, `governance`, `saberra` |
 | `sessions` | `gratitude` |
 | `governance` | `forum` |
@@ -845,7 +891,7 @@ Read the other way: `map` cannot be switched off while `resources` is on, `forum
 
 ## The dials a module owns
 
-Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 31 modules own 111 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
+Game variables are namespaced, and Admin hides a namespace while its module is off. Between them the 33 modules own 112 keys. A key here is a DEFAULT: the database stores changed values only, and a village that has never touched a dial inherits the platform's answer.
 
 Ten keys are claimed by more than one module, so switching one module off leaves the dial owned by the other:
 
@@ -857,14 +903,14 @@ Ten keys are claimed by more than one module, so switching one module off leaves
 | `governance.default_method` | `governance`, `hypha` |
 | `governance.weight_mode` | `exchange`, `governance` |
 | `governance.weight_token` | `exchange`, `governance` |
-| `map.public_structure` | `map`, `resources` |
+| `map.public_structure` | `map`, `resources`, `places` |
 | `payments.purchase_limit_30d_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_annual_usd` | `stays`, `exchange` |
 | `payments.purchase_limit_per_order_usd` | `stays`, `exchange` |
 
 ## Capabilities
 
-A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 45 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Fifteen modules add keys:
+A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which holds 53 keys in total. It never becomes a second permission mechanism. The order of the one gate is admin, then badge denies, then role, then badge grants, then stage: a badge deny beats role and stage, and only admin outranks it. Seventeen modules add keys:
 
 | Module | Capabilities |
 | --- | --- |
@@ -879,6 +925,8 @@ A module ADDS capability keys to the one gate in `shared/capabilities.ts`, which
 | `exchange` | `exchange.buy`, `exchange.swap`, `exchange.manage` |
 | `redemption` | `redemption.confirm` |
 | `events` | `event.rsvp`, `event.manage` |
+| `funding-rounds` | `pot.steward` |
+| `places` | `place.tend`, `place.permit` |
 | `moon-review` | `moon.approve`, `moon.approve_alone`, `moon.approve_own` |
 | `sessions` | `session.template` |
 | `governance` | `ballot.vote`, `member.vouch` |
@@ -890,7 +938,7 @@ The same facts, for anything that would rather parse than read. Regenerated with
 
 ```json
 {
-  "moduleCount": 31,
+  "moduleCount": 33,
   "coreCount": 4,
   "lifecycle": {
     "off": 0,
@@ -1499,6 +1547,56 @@ The same facts, for anything that would rather parse than read. Regenerated with
         "/api/gene-keys"
       ],
       "contractDoc": "docs/modules/gene-keys.md"
+    },
+    {
+      "id": "funding-rounds",
+      "name": "Funding rounds",
+      "description": "The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape them into quests, tick the ones they would fund, and the count shows both what Voice chose and what one member, one vote chose. Funded quests hold their share of the pot and are paid when the work is done.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "member-pii",
+      "group": "coordinate",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "forum",
+        "governance",
+        "map"
+      ],
+      "capabilities": [
+        "pot.steward"
+      ],
+      "variableKeys": [],
+      "apiPrefixes": [
+        "/api/funding-rounds"
+      ],
+      "contractDoc": "docs/modules/funding-rounds.md"
+    },
+    {
+      "id": "places",
+      "name": "Living places",
+      "description": "Every place on the land as a living invitation: what it is, which stage it has reached from idea to built, which permits it waits on, the roles that care for it, and how to step forward as its steward.",
+      "core": false,
+      "tier": "included",
+      "dataClass": "village-content",
+      "group": "know-and-decide",
+      "setup": "none",
+      "requires": [],
+      "recommends": [
+        "map",
+        "governance"
+      ],
+      "capabilities": [
+        "place.tend",
+        "place.permit"
+      ],
+      "variableKeys": [
+        "map.public_structure"
+      ],
+      "apiPrefixes": [
+        "/api/place-registry"
+      ],
+      "contractDoc": "docs/modules/places.md"
     },
     {
       "id": "session-card",

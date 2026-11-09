@@ -12,26 +12,32 @@
  *
  * Admin is a light-only workspace by ruling (2026-09-04): fixed grays here.
  */
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { toast } from "sonner";
+import { Trans, useLingui } from "@lingui/react/macro";
 import WorkValueEditor, { draftFrom, draftToBody, usePayOptions, type WorkValueDraft } from "@/components/WorkValueEditor";
 import type { TokenAmount } from "@shared/workValue";
+
+// The valuation engine loads only when somebody opens it (spec, PR C).
+const RolePayWithEngine = lazy(() => import("@/components/valuation/RolePayWithEngine"));
 
 export default function RoleValueEditor({
   role,
   call,
   onSaved,
 }: {
-  role: { id: string; valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
+  role: { id: string; name?: string; valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
   call: (path: string, body?: unknown, method?: string) => Promise<any>;
   onSaved: () => void;
 }) {
+  const { t } = useLingui();
   const options = usePayOptions();
   const offered = options?.role ?? null;
   // Always the village's currency today: the server stamps it on save (WorkValueEditor.tsx).
   const currency = options?.currency || "";
   const [draft, setDraft] = useState<WorkValueDraft | null>(null);
   const [open, setOpen] = useState(false);
+  const [engine, setEngine] = useState(false);
   const base = draftFrom(role, offered ?? [], currency);
   const shown = draft ?? base;
   const dirty = JSON.stringify(shown) !== JSON.stringify(base);
@@ -39,6 +45,16 @@ export default function RoleValueEditor({
 
   return (
     <div className="mt-3 rounded-lg border border-gray-100 px-3 py-2 text-gray-700">
+      <button type="button" onClick={() => setEngine((o) => !o)} className="block text-xs font-semibold text-gray-600 min-h-[32px]">
+        {engine ? t`Hide the valuation engine` : t`Work out this role's pay with the valuation engine`}
+      </button>
+      {engine && (
+        <div className="mt-2 mb-3">
+          <Suspense fallback={<p className="text-sm text-gray-500"><Trans context="role pay">Opening…</Trans></p>}>
+            <RolePayWithEngine role={{ id: role.id, name: role.name ?? role.id }} call={call} onSaved={onSaved} />
+          </Suspense>
+        </div>
+      )}
       <button type="button" onClick={() => setOpen((o) => !o)} className="text-xs font-semibold text-gray-600 min-h-[32px]">
         {open ? "Hide what this role is worth and pays" : "What this role is worth and pays"}
       </button>

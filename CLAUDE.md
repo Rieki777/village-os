@@ -282,7 +282,10 @@ display faces are a different path and still accept `.woff` (`server/index.ts` s
 The woff2 bytes themselves are unhinted copies committed in `client/src/fonts`: every glyph,
 code point and layout feature of the @fontsource file, without the TrueType hinting, which took
 another 84 KB off the ceiling. `useUnhintedFonts` in `vite.config.ts` points the @fontsource CSS
-at them. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
+at them. Eight of the families are served from ONE variable file each (`<family>-latin-wght-<style>.woff2`):
+every weight's @font-face keeps its own single weight and only its url points at the shared file,
+so font matching is unchanged and the 39 static files became 9, about 370 KB off the ceiling.
+`--check` proves per cut that the variable instance lays text out exactly as the static cut did. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
 `--check`), or `client/src/lib/unhintedFonts.test.ts` fails.
 
 The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
@@ -557,7 +560,11 @@ pages — a fork REPLACES those wholesale, so its own name is not debt there; th
 script, and the line is drawn at product: anything a signed-in member coordinates through stays
 ratcheted), and HARD-CLEAN — everything else, where any brand hit fails. A genuine false
 positive takes an inline `brand-ok: <reason>` ON THE LINE ITSELF; a waiver on the line above
-does nothing. New code is born clean, everywhere.
+does nothing. New code is born clean, everywhere. The PUBLISHER's own name, in any spelling
+("ReGen Civics", "regen-civics", "ReGenCivics"), is allowed only in the files its `ATTRIBUTION`
+list names, up to the count each entry gives (the coordinator, 2026-11-08, R063): it names the
+publisher there (the profile import and its file format, the hub, the hosting path) and is residue
+anywhere a village's own name belongs.
 
 The comment stripping lives in `scripts/brand-strip.mjs` and is tested by
 `node scripts/check-brand-refs.test.mjs` — it was wrong twice, and both times the guard reported

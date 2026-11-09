@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 type OfferedScope = "moon.read" | "moon.write" | "tasks.write" | "moon.review" | "admin" | "sera.undoable";
 interface Offer { scope: OfferedScope; write: boolean; ticked: boolean }
@@ -82,7 +83,9 @@ export default function OAuthAuthorize() {
   const here = `${window.location.pathname}${window.location.search}`;
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-10">
+    <main className="mx-auto max-w-lg px-4 pb-10 pt-3">
+      {/* The language selector (spec i18n US2): this page renders without the shell. */}
+      <PageLanguageBar className="mb-4" />
       <h1 className="text-2xl font-semibold text-foreground">Connect an agent</h1>
       {loading ? null : !user ? (
         <div className="mt-4 space-y-3">

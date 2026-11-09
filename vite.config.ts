@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { linguiMacros } from "./client/src/i18n/linguiMacros";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
@@ -10,6 +11,7 @@ import {
   routePreloadTable,
 } from "./client/src/lib/routePreload";
 import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
+import { splitArtifact, type SplitResult } from "./server/lib/groundsSplit";
 
 /**
  * Serve the Living Map artifact in DEV, from the same source the server uses.
@@ -28,6 +30,18 @@ import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
  */
 function serveGroundsInDev(): Plugin {
   const file = path.resolve(import.meta.dirname, "docs", "prototypes", "grounds-v0.html");
+  /*
+   * The same split production serves (server/routes/grounds.ts): the page with
+   * its embedded images swapped for /grounds/a/ files. Re-split only when the
+   * file changes, so a reload after an edit shows the edit.
+   */
+  let memo: { key: string; split: SplitResult } | null = null;
+  const split = (): SplitResult => {
+    const st = fs.statSync(file);
+    const key = `${st.size}:${st.mtimeMs}`;
+    if (memo?.key !== key) memo = { key, split: splitArtifact(fs.readFileSync(file, "utf8")) };
+    return memo.split;
+  };
   return {
     name: "serve-grounds-in-dev",
     apply: "serve",
@@ -35,8 +49,16 @@ function serveGroundsInDev(): Plugin {
       server.middlewares.use((req, res, next) => {
         const url = (req.url ?? "").split("?")[0];
         const isArtifact = url === "/grounds/index.html" || /^\/grounds\/grounds-[a-f0-9]+\.html$/.test(url);
-        if (!isArtifact && url !== "/grounds/manifest.json") return next();
+        const asset = /^\/grounds\/a\/([0-9a-f]{16}\.[a-z]+)$/.exec(url);
+        if (!isArtifact && !asset && url !== "/grounds/manifest.json") return next();
         if (!fs.existsSync(file)) return next();
+        if (asset) {
+          const a = split().assets.get(asset[1]);
+          if (!a) return next();
+          res.setHeader("Content-Type", a.type);
+          res.end(a.bytes);
+          return;
+        }
         if (url === "/grounds/manifest.json") {
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           /*
@@ -52,7 +74,7 @@ function serveGroundsInDev(): Plugin {
           return;
         }
         res.setHeader("Content-Type", "text/html; charset=utf-8");
-        fs.createReadStream(file).pipe(res);
+        res.end(split().html);
       });
     },
   };
@@ -100,8 +122,12 @@ function dropLegacyWoffFallback(): Plugin {
  * Serve the unhinted copies of the packaged faces (client/src/fonts) in place
  * of @fontsource's own files: the same glyphs, code points and layout
  * features, without the TrueType hinting. 888 KB of the dist budget became
- * 808 KB. client/src/lib/unhintedFonts.ts has the rule and
- * `scripts/unhint-fonts.py --check` the proof that nothing else differs.
+ * 808 KB. Eight families then went to one variable file each, every weight's
+ * @font-face pointing at it with its own single weight unchanged: 39 files
+ * became 9 and the fonts about 350 KB lighter in blocks. client/src/lib/unhintedFonts.ts
+ * has the rule and `scripts/unhint-fonts.py --check` the proof that nothing
+ * else differs, per cut, including that each variable instance lays text out
+ * exactly as the static cut it replaces.
  */
 function useUnhintedFonts(): Plugin {
   const dir = path.resolve(import.meta.dirname, "client", "src", "fonts");
@@ -271,7 +297,7 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
+  plugins: [linguiMacros(), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

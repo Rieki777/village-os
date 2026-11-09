@@ -70,7 +70,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { collectFacts } from "./generate-token-doc.mjs";
+import { ceilingCell, collectFacts } from "./generate-token-doc.mjs";
 
 export const ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1"),
@@ -1089,7 +1089,7 @@ export const REGIONS = {
       cell(`\`${r.trigger}\``),
       cell(`\`${r.token}\``),
       cell(r.amount === null ? "read from the work" : r.amount),
-      cell(r.ceiling),
+      cell(ceilingCell(r)),
       cell(r.recipient),
       cell(r.enabled === false ? "**no**" : "yes"),
     ]);

@@ -601,7 +601,7 @@ export const MODULES: ModuleDef[] = [
   //    per-deployment admin act. ──────────────────────────────────────────────
   {
     id: "map",
-    guild: [],
+    guild: ["satellite-imagery-key"],
     setupNeeds: [
       {
         id: "first-circle",
@@ -1441,6 +1441,81 @@ export const MODULES: ModuleDef[] = [
     apiPrefixes: ["/api/gene-keys"],
     // No openStateCheck: it holds nothing anybody is owed. Off hides every
     // surface; saved results stay in their table and return when it is on.
+  },
+  {
+    id: "funding-rounds",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "pot-holder",
+        kind: "hands",
+        ref: "pot.steward",
+        title: "Seat someone in the Treasury role, or another role that holds the funding pots",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/funding-rounds.md Setup; server/lib/starterRoles.ts POT_STEWARD_GRANTS",
+      },
+    ],
+    tier: "included",
+    // An idea names its author, kept even when the idea is shown without a
+    // name, and the interaction record names the member who acted (0338).
+    dataClass: "member-pii",
+    group: "coordinate",
+    setup: "none",
+    name: "Funding rounds",
+    description:
+      "The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape them into quests, tick the ones they would fund, and the count shows both what Voice chose and what one member, one vote chose. Funded quests hold their share of the pot and are paid when the work is done.",
+    // Each idea opens a forum thread when the forum is on; funded ideas become
+    // quests; the pot's holder is a role seated on the map.
+    requires: [],
+    recommends: ["forum", "governance", "map"],
+    capabilities: ["pot.steward"],
+    variableKeys: [],
+    apiPrefixes: ["/api/funding-rounds"],
+    // openStateCheck attached by the server at boot: a round past its seed
+    // stage and not closed holds the module on (server/lib/fundingRounds.ts).
+  },
+  {
+    id: "places",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "registry-keeper",
+        kind: "hands",
+        ref: "place.tend",
+        title: "Seat someone in a role that keeps the place registry, then load the village's places",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/places.md Setup",
+      },
+    ],
+    tier: "included",
+    // A place is village content: its name, zone, stage and words. Who holds
+    // its roles is read from the org chart and sent only on the map's own
+    // viewPeople tier, and no child's location is ever stored (0354).
+    dataClass: "village-content",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Living places",
+    description:
+      "Every place on the land as a living invitation: what it is, which stage it has reached from idea to built, which permits it waits on, the roles that care for it, and how to step forward as its steward.",
+    // The anchors come from the map's published scene, and a place with no
+    // anchor is listed without being drawn, so the map is recommended, never
+    // required.
+    requires: [],
+    recommends: ["map", "governance"],
+    capabilities: ["place.tend", "place.permit"],
+    // A visitor reads the public tier only while the org chart is public.
+    variableKeys: ["map.public_structure"],
+    apiPrefixes: ["/api/place-registry"],
   },
   {
     id: "session-card",

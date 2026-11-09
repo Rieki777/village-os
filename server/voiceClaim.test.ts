@@ -20,7 +20,7 @@
  * minutes to sit in. Three neighbouring suites copied the constant from here;
  * all four are back on the global.
  */
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import mysql from "mysql2/promise";
 import {
   ensureVoiceToken,
@@ -45,6 +45,8 @@ import {
   requestVoiceClaim,
   retryRefund,
   settleVoiceClaim,
+  usableVoiceSecret,
+  voiceSecretWriteRefusal,
 } from "./lib/voiceClaim";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./db/testDb";
 import { loadSecrets, putSecret } from "./lib/secrets";
@@ -559,6 +561,62 @@ describe.skipIf(!configured)("carrying voice to Hypha", () => {
     } finally {
       await putSecret(pool, "governance_hub_secret", "", "voice-test", env);
     }
+  });
+
+  /*
+   * THE VOICE SECRET IN THE STORE (readiness R171). A founder on a hosted
+   * village holds Admin and not the host, so the secret has a slot beside the
+   * other callback secrets, and the host variable is its fallback. The boot
+   * check that kept it env-only is kept at the WRITE instead: a short or
+   * borrowed value is refused before it is stored, from either side, and a
+   * stored value never stops the server from starting.
+   */
+  describe("the voice secret typed into Admin, Integrations (R171)", () => {
+    const sealed = { VILLAGE_SECRETS_KEY: "3c".repeat(32) } as NodeJS.ProcessEnv;
+    const own = "e".repeat(64);
+    const slots = ["hypha_voice_webhook_secret", "riverside_webhook_secret", "governance_hub_secret"] as const;
+
+    beforeEach(async () => { await loadSecrets(pool, sealed); });
+    afterEach(async () => { for (const k of slots) await putSecret(pool, k, "", "voice-test", sealed); });
+
+    it("is read with no host variable, and the receiver uses it", async () => {
+      expect(usableVoiceSecret(sealed), "the control: nothing set, nothing to verify against").toBe("");
+      await putSecret(pool, "hypha_voice_webhook_secret", own, "voice-test", sealed);
+      expect(checkVoiceSecret(sealed)).toEqual({ ok: true });
+      expect(usableVoiceSecret(sealed)).toBe(own);
+    });
+
+    it("refuses a short value or a borrowed one at the write, before it is stored", async () => {
+      expect(voiceSecretWriteRefusal("hypha_voice_webhook_secret", "hunter2", sealed)).toMatch(/too short/);
+      await putSecret(pool, "riverside_webhook_secret", own, "voice-test", sealed);
+      expect(voiceSecretWriteRefusal("hypha_voice_webhook_secret", own, sealed)).toMatch(/matches another secret/);
+      // The control: a value of its own is let through, and clearing always is.
+      expect(voiceSecretWriteRefusal("hypha_voice_webhook_secret", "f".repeat(64), sealed)).toBeNull();
+      expect(voiceSecretWriteRefusal("hypha_voice_webhook_secret", "", sealed)).toBeNull();
+    });
+
+    it("refuses another callback secret that copies the voice secret, from either home", async () => {
+      await putSecret(pool, "hypha_voice_webhook_secret", own, "voice-test", sealed);
+      expect(voiceSecretWriteRefusal("governance_hub_secret", own, sealed)).toMatch(/Hypha voice secret/);
+      expect(voiceSecretWriteRefusal("governance_hub_secret", "d".repeat(64), sealed)).toBeNull();
+      expect(voiceSecretWriteRefusal("resend_api_key", own, sealed), "only a callback secret could sign a claim").toBeNull();
+      // The host variable counts as the voice secret too, when nothing is typed.
+      await putSecret(pool, "hypha_voice_webhook_secret", "", "voice-test", sealed);
+      const hosted = { ...sealed, HYPHA_VOICE_WEBHOOK_SECRET: own } as NodeJS.ProcessEnv;
+      expect(voiceSecretWriteRefusal("riverside_webhook_secret", own, hosted)).toMatch(/Hypha voice secret/);
+    });
+
+    it("never stops the boot over a stored value, and the receiver refuses it", async () => {
+      // Two stored values that match, which only a write past the route can make.
+      await putSecret(pool, "hypha_voice_webhook_secret", own, "voice-test", sealed);
+      await putSecret(pool, "governance_hub_secret", own, "voice-test", sealed);
+      expect(checkVoiceSecret(sealed)).toMatchObject({ ok: false, fatal: true });
+      expect(() => assertVoiceSecret(sealed)).not.toThrow();
+      expect(usableVoiceSecret(sealed), "a borrowed secret verifies nothing").toBe("");
+      // The control: the same pair from the host still refuses the boot.
+      const hosted = { HYPHA_VOICE_WEBHOOK_SECRET: own, GOVERNANCE_HUB_SECRET: own } as NodeJS.ProcessEnv;
+      expect(() => assertVoiceSecret(hosted)).toThrow(/matches another secret/i);
+    });
   });
 
   it("does not kill the boot over a space with no secret", async () => {
