@@ -114,7 +114,7 @@ import {
 } from "../../repos/commsMessages";
 import { numberVar } from "../variables";
 import { signLink } from "./links";
-import { isSuppressed } from "./suppressions";
+import { isSuppressed, suppressionOf } from "./suppressions";
 import type { Transport, TransportMessage, TransportResult } from "./transport";
 
 // ── What the post office is handed ──────────────────────────────────────────
@@ -308,12 +308,30 @@ interface Subject {
  * asked: `insert` is `post()` writing the row, `send` is a drain about to send
  * it. `mode` is handed in by a drain that read it once for the whole run.
  */
+/** Suppressions even essential mail honours: the address cannot, or will not, receive anything. */
+const HARD_SUPPRESSIONS: ReadonlySet<string> = new Set(["bounced", "complained", "erased"]);
+
 async function decide(deps: PostOfficeDeps, s: Subject, phase: "insert" | "send", known?: CommsMode): Promise<Decision> {
   const essential = s.kind === "essential";
   if (!essential && s.expiresAt != null && s.expiresAt <= nowSeconds()) return { act: "expire" };
   const gap = notConfigured(deps, deps.sender());
   if (gap) return phase === "insert" ? { act: "skip", reason: "not_configured", gap } : { act: "hold", reason: "unavailable" };
-  if (essential) return { act: "send", rehearse: null };
+  if (essential) {
+    // ESSENTIAL MAIL STILL HONOURS THE HARD SUPPRESSIONS (coordinator, 9 Nov
+    // 2026). Essential skips the list because the person asked for that email,
+    // which is true of a password reset and not of a confirmation a stranger
+    // typed into a public form. An address that bounced, complained or was
+    // erased never gets one: it cannot, or will not, receive. "Stop
+    // everything" and a manual suppress keep what the person asks for.
+    try {
+      const held = await suppressionOf(deps.getPool(), s.emailKey);
+      if (held && HARD_SUPPRESSIONS.has(String(held.reason))) return { act: "skip", reason: "suppressed" };
+    } catch (err) {
+      console.error("[comms] the suppression on an essential email could not be read, so it waits", err);
+      return { act: "hold", reason: "unavailable" };
+    }
+    return { act: "send", rehearse: null };
+  }
 
   const automated = AUTOMATED_KINDS.has(s.kind);
   const mode = automated ? known ?? (await readMode(deps)) : null;
