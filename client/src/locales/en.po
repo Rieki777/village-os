@@ -168,6 +168,12 @@ msgctxt "sera answers"
 msgid "Publish the draft"
 msgstr "Publish the draft"
 
+#. placeholder {0}: x.label
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access task"
+msgid "Give: {0}"
+msgstr "Give: {0}"
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "None yet"
@@ -282,6 +288,10 @@ msgstr "How what is left is shared"
 msgctxt "quest editor"
 msgid "Posted, priced by the village's rule"
 msgstr "Posted, priced by the village's rule"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "What you will contribute next moon"
+msgstr "What you will contribute next moon"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
@@ -682,6 +692,10 @@ msgstr "The village is deciding a change to this right now."
 msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
 msgstr "They agreed to sign the Love Letter before seating, and the NDA once approved."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Access to give or take back"
+msgstr "Access to give or take back"
+
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
 msgstr "This quest has a new price."
@@ -838,6 +852,11 @@ msgctxt "module library, builder section heading"
 msgid "Build a module"
 msgstr "Build a module"
 
+#. placeholder {0}: x.label
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Give: {0}"
+#~ msgstr "Give: {0}"
+
 #. placeholder {0}: m.support.vendorName
 #: client/src/components/journey/EconomicsView.tsx
 msgid "{0} answers for the service."
@@ -981,6 +1000,10 @@ msgstr "Take it in"
 msgid "The rings run from {0} at the centre to {1} at the edge. A block with no reading yet runs to the centre and its name is in italics."
 msgstr "The rings run from {0} at the centre to {1} at the edge. A block with no reading yet runs to the centre and its name is in italics."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Given"
+#~ msgstr "Given"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Editing a change starts the review again."
 msgstr "Editing a change starts the review again."
@@ -1026,6 +1049,11 @@ msgstr "Your role runs from adoption to the next new moon, {moonEnds}. Each moon
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
 msgstr "Hide how this was worked out"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "moon renewal action"
+msgid "Take it back"
+msgstr "Take it back"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
@@ -1480,6 +1508,7 @@ msgid "Parts of this agreement name people, so they show to members only."
 msgstr "Parts of this agreement name people, so they show to members only."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
 #: client/src/pages/FundingRounds.tsx
 msgid "That did not save. Try again."
 msgstr "That did not save. Try again."
@@ -1971,6 +2000,10 @@ msgstr "an unknown time"
 msgid "Apply for this role"
 msgstr "Apply for this role"
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Roles carrying on into the next moon"
+msgstr "Roles carrying on into the next moon"
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Where the words and the settings part"
 msgstr "Where the words and the settings part"
@@ -2063,6 +2096,14 @@ msgstr "Adopted. The exit policy and the governance page read it from now on."
 msgid "No quest reached the ballot in this round."
 msgstr "No quest reached the ballot in this round."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Done"
+#~ msgstr "Done"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Filed. The village renews filed roles together."
+msgstr "Filed. The village renews filed roles together."
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "Something here changed since it was taken. Undo it or take it again before this draft is published."
@@ -2104,6 +2145,10 @@ msgstr "It moves into {theirCircle}."
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid " (leave it empty to use the file's name)"
 msgstr " (leave it empty to use the file's name)"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Update what I will contribute"
+msgstr "Update what I will contribute"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
@@ -2248,6 +2293,10 @@ msgstr "From {author}"
 msgctxt "pricing desk"
 msgid "Your figure for {0}"
 msgstr "Your figure for {0}"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Waiting to be given"
+msgstr "Waiting to be given"
 
 #: client/src/components/QuestSafety.tsx
 msgctxt "quest safety heading"
@@ -2709,6 +2758,11 @@ msgctxt "pricing desk"
 msgid "Cancel"
 msgstr "Cancel"
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access action"
+msgid "Done"
+msgstr "Done"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "When it is done:"
@@ -2879,10 +2933,20 @@ msgctxt "admin helper panel"
 msgid "Close the helper"
 msgstr "Close the helper"
 
+#. placeholder {0}: x.label
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Take back: {0}"
+#~ msgstr "Take back: {0}"
+
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "an outside contact's organisation"
 msgid "Organisation (optional)"
 msgstr "Organisation (optional)"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access state"
+msgid "Given"
+msgstr "Given"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2898,6 +2962,10 @@ msgstr "Nobody holds the {chosenName} role today, so a request would reach nobod
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "{0}. Adopted on {1}."
 msgstr "{0}. Adopted on {1}."
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Carry on"
+#~ msgstr "Carry on"
 
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "Decision Matrix column, before its answer"
@@ -3574,6 +3642,12 @@ msgctxt "sera answers"
 msgid "The village is voting on it until {closes}."
 msgstr "The village is voting on it until {closes}."
 
+#. placeholder {0}: x.label
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access task"
+msgid "Take back: {0}"
+msgstr "Take back: {0}"
+
 #: client/src/pages/RoleDraft.tsx
 msgid "What happens after you apply"
 msgstr "What happens after you apply"
@@ -3870,6 +3944,10 @@ msgstr "A draft the village has not adopted yet."
 msgctxt "start a change request"
 msgid "Start it"
 msgstr "Start it"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Your access"
+#~ msgstr "Your access"
 
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Chosen by {names}."
@@ -4368,6 +4446,10 @@ msgstr "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasur
 msgid "This figure is outside the suggestion's band, so pick a reason."
 msgstr "This figure is outside the suggestion's band, so pick a reason."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "That did not work. Try again."
+msgstr "That did not work. Try again."
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take the season off"
 msgstr "Take the season off"
@@ -4565,6 +4647,10 @@ msgstr "Back to all {headCount}"
 msgctxt "treasury sync"
 msgid "Try again"
 msgstr "Try again"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "{filedCount} filed. One action renews every filed role for the next moon."
+msgstr "{filedCount} filed. One action renews every filed role for the next moon."
 
 #: client/src/components/journey/TestRun.tsx
 msgid "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
@@ -4892,6 +4978,10 @@ msgctxt "pricing desk"
 msgid "Its worker takes the new price here"
 msgstr "Its worker takes the new price here"
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Carry on into the next moon?"
+msgstr "Carry on into the next moon?"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Now in {announced}"
@@ -5168,6 +5258,10 @@ msgstr "The kind of decision"
 msgid "{0}, outside the village"
 msgstr "{0}, outside the village"
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Not needed"
+#~ msgstr "Not needed"
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "Bring it to somebody outside the village, at {outsideOrganisation}. Members see who they are and how to reach them."
 msgstr "Bring it to somebody outside the village, at {outsideOrganisation}. Members see who they are and how to reach them."
@@ -5185,6 +5279,10 @@ msgstr "That did not save. Try again."
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
 msgstr "Move to its own change request"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Renew all filed roles"
+msgstr "Renew all filed roles"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."
@@ -5364,6 +5462,13 @@ msgstr "Saved as a draft. It counts once the village adopts it."
 msgctxt "sera changes"
 msgid "Which changes"
 msgstr "Which changes"
+
+#. placeholder {0}: c.roleName
+#. placeholder {1}: day(c.termEndsAt)
+#. placeholder {2}: day(c.nextTermEndsAt)
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "{0} runs to {1}. Carrying on takes it to {2}. Nothing renews on its own."
+msgstr "{0} runs to {1}. Carrying on takes it to {2}. Nothing renews on its own."
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -5545,6 +5650,11 @@ msgstr "Consequences, and how to appeal"
 msgid "Only Voice funds {title} ({cost})."
 msgstr "Only Voice funds {title} ({cost})."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access action"
+msgid "Not needed"
+msgstr "Not needed"
+
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft tray"
 msgid "Playing as {playing}."
@@ -5647,6 +5757,11 @@ msgstr "Which change request"
 msgctxt "site header"
 msgid "Main Site"
 msgstr "Main Site"
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "moon renewal action"
+msgid "Carry on"
+msgstr "Carry on"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a switch setting"
@@ -5894,6 +6009,11 @@ msgstr "{0} inside the band"
 msgid "Anybody in the village can suggest a change to it under Say."
 msgstr "Anybody in the village can suggest a change to it under Say."
 
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access heading"
+msgid "Your access"
+msgstr "Your access"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Or as much as"
@@ -6113,6 +6233,16 @@ msgstr "none configured"
 msgctxt "sera answers"
 msgid "Retire it here"
 msgstr "Retire it here"
+
+#. placeholder {0}: out.renewed?.length ?? 0
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgid "Renewed {0} role(s) for the next moon."
+msgstr "Renewed {0} role(s) for the next moon."
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+msgctxt "role access state"
+msgid "Not needed"
+msgstr "Not needed"
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgctxt "button that saves a canvas block's public line"
@@ -6742,6 +6872,10 @@ msgstr "Change this row"
 msgctxt "pricing desk"
 msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
 msgstr "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+
+#: client/src/components/seasonPlans/RoleCarryOn.tsx
+#~ msgid "Take it back"
+#~ msgstr "Take it back"
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "The new price was not taken."
