@@ -51,6 +51,10 @@ msgstr ""
 msgid "Your draft holds three. Take one off to draft another."
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgid "Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Check again"
@@ -2308,6 +2312,10 @@ msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
+msgstr ""
+
+#: client/src/pages/RoleDraft.tsx
+msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx

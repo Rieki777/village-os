@@ -195,6 +195,10 @@ describe("what happens next", () => {
     const items = within(steps).getAllByRole("listitem").map((li) => li.textContent ?? "");
     expect(items[0]).toMatch(/confirm/i);
     expect(items.some((t) => /Love Letter/.test(t))).toBe(true);
+    // Rye, 9 Nov: the NDA comes after approval, before any confidential record.
+    const nda = items.findIndex((t) => /NDA/.test(t));
+    const invite = items.findIndex((t) => /invitation/.test(t));
+    expect(nda).toBeGreaterThan(invite);
   });
 
   it("lists places looking for a steward when the registry names them, and links the map otherwise", async () => {

@@ -32,6 +32,7 @@ import { Link } from "wouter";
 import { ArrowRight, Check, Compass, MapPin, Sparkles, X } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
+import InfoTip from "@/components/InfoTip";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { readsTerms } from "@/components/characters/RolesThatFit";
@@ -333,7 +334,11 @@ export default function RoleDraft() {
                       </div>
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
-                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{t({ message: "Time", context: "role draft stat" })}</dt>
+                          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            <InfoTip tip={t`Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start.`}>
+                              {t({ message: "Time", context: "role draft stat" })}
+                            </InfoTip>
+                          </dt>
                           <dd className={role.timeCommitment ? "font-semibold text-foreground" : "italic text-muted-foreground"}>
                             {role.timeCommitment ?? t({ message: "Hours not set yet", context: "role draft stat" })}
                           </dd>
@@ -452,6 +457,7 @@ export default function RoleDraft() {
                 <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
                   <li>{t`One role application carries all your picks, with the terms each role offers.`}</li>
                   <li>{t`Each role's circle is asked to consent, and a holder of the power to place people in roles adopts it, never their own.`}</li>
+                  <li>{t`Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
                     {t`Planning for next season instead? Propose my roles lets you change any words (your changes show in gold) and tie your season goals to the village's.`}{" "}
                     {picks[0] && (
@@ -466,6 +472,7 @@ export default function RoleDraft() {
                   <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
                   <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your application, and never their own.`}</li>
                   <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
+                  <li>{t`Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>{t`You sign the Love Letter, the village's membership agreement, before you are seated.`}</li>
                   <li>{t`Your role starts on the first day of next season.`}</li>
                 </ol>
