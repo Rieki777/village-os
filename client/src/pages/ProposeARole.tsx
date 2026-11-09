@@ -18,6 +18,8 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
+import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
+import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
@@ -41,7 +43,7 @@ interface FormRole {
 type FormState =
   | { kind: "loading" }
   | { kind: "closed"; message: string }
-  | { kind: "open"; village: string; season: { id: string; name: string | null; startsOn: string } | null; roles: FormRole[] }
+  | { kind: "open"; village: string; season: { id: string; name: string | null; startsOn: string } | null; term: OpenProposalTerm | null; roles: FormRole[] }
   | { kind: "failed" };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -125,7 +127,7 @@ export default function ProposeARole() {
       .then((r) => r.json())
       .then((d) => {
         const roles: FormRole[] = Array.isArray(d?.roles) ? d.roles : [];
-        setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
+        setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, term: termOf(d.term) ?? null, roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
         // The roles the Apply link or the draft was for, ticked while the village still offers them.
         if (d?.open && wanted.length) {
           const offered = wanted.filter((id) => roles.some((r) => r.id === id)).slice(0, OPEN_PROPOSAL_MAX_ROLES);
@@ -223,7 +225,13 @@ export default function ProposeARole() {
     <Shell>
       <div className="mb-8">
         <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>
-        <p className="mt-3 text-muted-foreground">{form.season ? OPEN_WORDS.lede(seasonName) : OPEN_WORDS.noSeason}</p>
+        <p className="mt-3 text-muted-foreground">
+          {form.term
+            ? OPEN_WORDS.ledeMoon(civilDayWords(form.term.startsOn), civilDayWords(form.term.endsOn))
+            : form.season
+              ? OPEN_WORDS.lede(seasonName)
+              : OPEN_WORDS.noSeason}
+        </p>
       </div>
 
       {form.season && (
@@ -241,8 +249,8 @@ export default function ProposeARole() {
             {unoffered > 0 && (
               <p role="status" className="rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
                 {unoffered === 1
-                  ? t`1 role you picked is not open for next season any more. Pick from the roles below.`
-                  : t`${unoffered} roles you picked are not open for next season any more. Pick from the roles below.`}
+                  ? t`1 role you picked is not open any more. Pick from the roles below.`
+                  : t`${unoffered} roles you picked are not open any more. Pick from the roles below.`}
               </p>
             )}
             {circles.map(([circle, roles]) => (

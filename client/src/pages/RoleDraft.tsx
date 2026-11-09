@@ -27,6 +27,8 @@
  * After sign-up, the character page offers what was drafted
  * (components/roleDraft/DraftCarry.tsx).
  */
+import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
+import { civilDayWords } from "@shared/seasonPlans";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight, Check, Compass, MapPin, Sparkles, X } from "lucide-react";
@@ -71,7 +73,7 @@ type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: D
  * (`GET /api/open-proposals/form`, public). A visitor's board shows only roles
  * the form would take, and no Apply when it is closed (red team, 9 Nov).
  */
-type FormState = { open: boolean; offered: Set<string> | null; message: string | null };
+type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null };
 
 function useProposalForm(): FormState | null {
   const [form, setForm] = useState<FormState | null>(null);
@@ -81,12 +83,12 @@ function useProposalForm(): FormState | null {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!live) return;
-        if (!d) return setForm({ open: false, offered: null, message: null });
+        if (!d) return setForm({ open: false, offered: null, message: null, term: null });
         const ids = Array.isArray(d.roles) ? d.roles.map((r: any) => String(r?.id ?? "")).filter(Boolean) : null;
-        setForm({ open: !!d.open, offered: ids ? new Set(ids) : null, message: typeof d.message === "string" ? d.message : null });
+        setForm({ open: !!d.open, offered: ids ? new Set(ids) : null, message: typeof d.message === "string" ? d.message : null, term: termOf(d.term) ?? null });
       })
       .catch(() => {
-        if (live) setForm({ open: false, offered: null, message: null });
+        if (live) setForm({ open: false, offered: null, message: null, term: null });
       });
     return () => {
       live = false;
@@ -219,6 +221,7 @@ export default function RoleDraft() {
 
   const ctx = { now: new Date(), season: seasonForSheet(season), classNames };
   const pickCount = picks.length;
+  const moonEnds = form?.term ? civilDayWords(form.term.endsOn) : "";
   // The village's goals for this season, live (the Season tab in Admin). Done ones drop off.
   const seasonDoc = season as unknown as { name?: string | null; goals?: Array<{ id?: string; text?: string; done?: boolean }> } | null;
   const seasonName = typeof seasonDoc?.name === "string" ? seasonDoc.name.trim() : "";
@@ -502,7 +505,11 @@ export default function RoleDraft() {
                   <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
                   <li>{t`Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>{t`You sign the Love Letter, the village's membership agreement, before you are seated.`}</li>
-                  <li>{t`Your role starts on the first day of next season.`}</li>
+                  <li>
+                    {form?.term
+                      ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each moon you lay out what you will contribute.`
+                      : t`Your role starts on the first day of next season.`}
+                  </li>
                 </ol>
               )}
             </div>

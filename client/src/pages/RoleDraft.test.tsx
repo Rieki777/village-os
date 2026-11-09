@@ -229,3 +229,11 @@ describe("the season's goals", () => {
     expect(screen.getByText(/what you would like to contribute each moon and this season/)).toBeTruthy();
   });
 });
+
+describe("a village whose proposals are for this moon", () => {
+  it("says the role runs to the next new moon, by its day", async () => {
+    serve({ form: { ...OPEN_FORM, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } } });
+    render(<RoleDraft />);
+    expect(await screen.findByText(/Your role runs from adoption to the next new moon, 8 December 2026/)).toBeTruthy();
+  });
+});

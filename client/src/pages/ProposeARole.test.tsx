@@ -201,7 +201,7 @@ describe("arriving with several roles", () => {
     render(<ProposeARole />);
     await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
     await waitFor(() => expect(ticked("r-cook")).toBe(true));
-    expect(screen.getByText(/1 role you picked is not open for next season/)).toBeTruthy();
+    expect(screen.getByText(/1 role you picked is not open any more/)).toBeTruthy();
   });
 
   it("ticks no more than three", async () => {
@@ -211,5 +211,13 @@ describe("arriving with several roles", () => {
     await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
     await waitFor(() => expect(ticked("r-gate")).toBe(true));
     expect([ticked("r-well"), ticked("r-host"), ticked("r-cook")]).toEqual([true, true, false]);
+  });
+});
+
+describe("a village whose proposals are for this moon (Rye, 9 Nov 2026)", () => {
+  it("names the moon's days instead of next season", async () => {
+    serve({ ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
+    render(<ProposeARole />);
+    expect(await screen.findByText(OPEN_WORDS.ledeMoon("9 November 2026", "8 December 2026"))).toBeTruthy();
   });
 });

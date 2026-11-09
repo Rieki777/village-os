@@ -76,6 +76,8 @@ import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
+import { activeClock } from "../lib/gratitude-cycles";
+import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 
 type Deps = Pick<
   AppDeps,
@@ -92,6 +94,8 @@ type Deps = Pick<
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
 export interface OpenProposalSettings {
   publicLink: boolean;
+  /** What public proposals are for: next season (the default) or the moon (shared/openProposalTerm.ts). */
+  term: OpenProposalTermMode;
 }
 
 export const OPEN_SETTINGS_KEY = "open-proposals";
@@ -129,7 +133,28 @@ export function register(app: Express, deps: Deps): void {
   async function settings(): Promise<OpenProposalSettings> {
     const doc = dbDocument(getPool(), OPEN_SETTINGS_KEY, { publicLink: true } as any);
     await doc.load();
-    return { publicLink: doc.get().publicLink !== false };
+    const term = (doc.get() as any).term;
+    return { publicLink: doc.get().publicLink !== false, term: isTermMode(term) ? term : "season" };
+  }
+
+  /**
+   * What a proposal sent now is for. "season": next season, as before. "moon":
+   * the moon (from its new moon to the next) inside the season running now,
+   * whose id the proposal carries so adoption finds the calendar it was made on.
+   */
+  type Target = { season: { id: string; name: string | null; startsOn: string; endsOn: string | null }; term: OpenProposalTerm | null };
+  function target(mode: OpenProposalTermMode): Target | null {
+    if (mode !== "moon") {
+      const s = nextSeason();
+      return s ? { season: s, term: null } : null;
+    }
+    const state = deps.seasonState();
+    const cur = state.current;
+    if (!cur || !cur.id || !cur.startsOn) return null;
+    return {
+      season: { id: String(cur.id), name: String(cur.name ?? "").trim() || null, startsOn: String(cur.startsOn), endsOn: cur.endsOn ? String(cur.endsOn) : null },
+      term: moonTermFor(now(), activeClock(), state.timezone || "UTC"),
+    };
   }
 
   /** Next season by the village's calendar: the first that starts after today, or null. */
@@ -169,8 +194,16 @@ export function register(app: Express, deps: Deps): void {
   app.get("/api/open-proposals/form", async (req, res) => {
     const d = await door(req.query.link);
     if (!d.open) return res.json({ open: false, message: OPEN_WORDS.closed });
-    const season = nextSeason();
-    res.json({ open: true, village: projectName(), season, roles: season ? await offered() : [] });
+    const mode = (await settings()).term;
+    const t = target(mode);
+    res.json({
+      open: true,
+      village: projectName(),
+      season: t?.season ?? null,
+      term: t?.term ?? null,
+      ...(t ? {} : { message: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason }),
+      roles: t ? await offered() : [],
+    });
   });
 
   app.post("/api/open-proposals", async (req, res) => {
@@ -180,12 +213,16 @@ export function register(app: Express, deps: Deps): void {
     if (await overLimit(`open-proposal:ip:${clientIp(req)}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     const d = await door(body.link);
     if (!d.open) return res.status(403).json({ error: OPEN_WORDS.closed });
-    const season = nextSeason();
-    if (!season) return res.status(409).json({ error: OPEN_WORDS.noSeason });
+    const mode = (await settings()).term;
+    const t = target(mode);
+    if (!t) return res.status(409).json({ error: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason });
+    const season = t.season;
     const roles = await offered();
     const parsed = parseOpenProposal(body, { roleIds: new Set(roles.map((r) => r.id)), address: singlePublicAddress });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
-    const { name, email, body: proposal } = parsed.value;
+    const { name, email } = parsed.value;
+    // The term is the village's, set here and never taken from the form.
+    const proposal = { ...parsed.value.body, ...(t.term ? { term: t.term } : {}) };
     const emailKey = emailKeyOf(email);
     if (await overLimit(`open-proposal:email:${emailKey}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
 
@@ -200,6 +237,7 @@ export function register(app: Express, deps: Deps): void {
       village: projectName(),
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
+      ...(t.term ? { when: moonTermWords(t.term) } : {}),
     });
     const sent = await postEmail({
       idempotencyKey: `open-proposal:${id}:confirm`,
@@ -247,6 +285,7 @@ export function register(app: Express, deps: Deps): void {
     const linkLabel = new Map(links.map((l) => [l.id, l.label]));
     res.json({
       publicLink: s.publicLink,
+      term: s.term,
       publicPath: "/propose-a-role",
       links: links.map((l) => ({ id: l.id, label: l.label, createdAt: l.createdAt, on: !l.revokedAt })),
       proposals: waiting.map((p) => ({
@@ -258,6 +297,7 @@ export function register(app: Express, deps: Deps): void {
         roles: p.body.roles.map((r) => ({ roleId: r.roleId, name: roleName.get(r.roleId) ?? null, note: r.note })),
         why: p.body.why,
         aim: p.body.aim,
+        term: p.body.term ?? null,
         createdAt: p.createdAt,
         confirmedAt: p.confirmedAt,
       })),
@@ -266,10 +306,19 @@ export function register(app: Express, deps: Deps): void {
 
   app.put("/api/admin/open-proposals/settings", async (req, res) => {
     if (!(await guardCapability(req, res, "intake.moderate"))) return;
-    if (typeof req.body?.publicLink !== "boolean") return res.status(400).json({ error: "Say whether the public link is on." });
+    const hasLink = req.body?.publicLink !== undefined;
+    const hasTerm = req.body?.term !== undefined;
+    if (!hasLink && !hasTerm) return res.status(400).json({ error: "Say whether the public link is on." });
+    if (hasLink && typeof req.body.publicLink !== "boolean") return res.status(400).json({ error: "Say whether the public link is on." });
+    if (hasTerm && !isTermMode(req.body.term)) return res.status(400).json({ error: "Proposals are for next season or this moon.", field: "term" });
+    const standing = await settings();
+    const next = { publicLink: hasLink ? req.body.publicLink : standing.publicLink, term: hasTerm ? req.body.term : standing.term };
     const doc = dbDocument(getPool(), OPEN_SETTINGS_KEY, { publicLink: true } as any);
-    await doc.put({ publicLink: req.body.publicLink });
-    res.json({ publicLink: req.body.publicLink, message: req.body.publicLink ? OPEN_WORDS.publicOn : OPEN_WORDS.publicOff });
+    await doc.put(next as any);
+    const message = hasTerm
+      ? next.term === "moon" ? "Public proposals are now for this moon, from its new moon to the next." : "Public proposals are now for next season."
+      : next.publicLink ? OPEN_WORDS.publicOn : OPEN_WORDS.publicOff;
+    res.json({ ...next, message });
   });
 
   app.post("/api/admin/open-proposals/links", async (req, res) => {
