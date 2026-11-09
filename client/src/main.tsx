@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { fetchConfigCached } from "./lib/gameApi";
+import { listenForThemeChanges } from "./lib/liveTheme";
 import "./index.css";
 
 /**
@@ -96,6 +97,8 @@ warmFirstScreenFonts();
 // Consume the preloaded config now, so it has usually resolved before the
 // first render and useGameConfig/useBrandImages start with it (gameApi.ts).
 fetchConfigCached();
+// A Look saved in Admin re-themes open pages without a reload (lib/liveTheme.ts).
+listenForThemeChanges();
 
 createRoot(document.getElementById("root")!).render(<App />);
 

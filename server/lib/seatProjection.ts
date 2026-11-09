@@ -47,7 +47,7 @@
  * `orgSeatTier` is the only place it is applied.
  */
 import type { ModuleLifecycle } from "../../shared/modules";
-import { roleCard } from "./roleCardProjection";
+import { roleCard, type CardVillageWords } from "./roleCardProjection";
 import { isListed, visibleTo, type ListingViewer } from "../../shared/roleListing";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
@@ -157,6 +157,8 @@ export interface SeatProjectionCtx {
   roleNames?: ReadonlyMap<string, string>;
   /** The village setting that holds Apply back until a card is complete (org.apply_needs_complete_card). */
   cardGate?: boolean;
+  /** The village settings the card quotes: who holds first conversations, who consents paid roles. */
+  cardWords?: CardVillageWords;
 }
 
 /**
@@ -468,7 +470,7 @@ export function projectSeat(
     // The "Not listed" chip: present only when false, and only ever sent to a reader allowed to see an unlisted role.
     ...(isListed(role) ? {} : { listed: false }),
     state: seatState(role, held, ctx.now),
-    card: roleCard(role, held.length, seatState(role, held, ctx.now), tier, { roleNames: ctx.roleNames, gated: ctx.cardGate }),
+    card: roleCard(role, held.length, seatState(role, held, ctx.now), tier, { roleNames: ctx.roleNames, gated: ctx.cardGate, words: ctx.cardWords }),
     holderCount: held.length,
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),

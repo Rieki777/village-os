@@ -18,7 +18,7 @@ export default function RoleCardParams({ seat }: { seat: Record<string, any> }) 
   const showPay = !!view.pay && !readsTerms;
   if (view.rows.length === 0 && !showPay && !view.beingWritten) return null;
   return (
-    <section aria-label={t`About this role`} className="space-y-2 rounded-xl border border-border bg-card p-3 text-sm text-card-foreground" data-testid="role-card-params">
+    <section aria-label={t({ message: "About this role", context: "full role card parameters block" })} className="space-y-2 rounded-xl border border-border bg-card p-3 text-sm text-card-foreground" data-testid="role-card-params">
       {view.beingWritten && (
         <p role="status" className="rounded-lg bg-muted px-3 py-2 text-foreground" data-testid="being-written">
           {view.beingWrittenLine}
@@ -46,7 +46,7 @@ export default function RoleCardParams({ seat }: { seat: Record<string, any> }) 
       )}
       {showPay && view.pay && (
         <div data-testid="public-pay">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Trans>What it pays</Trans></p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Trans context="full role card: the pay range heading">What it pays</Trans></p>
           <p className="font-medium text-foreground">{view.pay.headline}</p>
           {view.pay.lines.map((l, i) => (
             <p key={i} className="text-muted-foreground">{l}</p>

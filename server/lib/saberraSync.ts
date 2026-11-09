@@ -59,6 +59,9 @@ import { proposeStructure, type VendorRecord } from "./saberraProposals";
 import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
 import { idShapeOk, pageIdOf } from "./saberraRelations";
 import { writeSnapshot } from "./saberraSnapshot";
+import { retireReplacedBatches } from "./saberraRetire";
+import { lapseLeftAnswers } from "./seraAnswer";
+import { forgetCachedDifferences, readDifferences } from "./seraDifferencesRead";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "./secrets";
@@ -536,6 +539,12 @@ async function runLocked(
           trigger,
           new Date(at.getTime() + (Date.now() - started)),
         );
+        // Under this lock, after the read is kept: an answer whose difference has left the list lapses (review 7).
+        forgetCachedDifferences();
+        await lapseLeftAnswers(pool, () => readDifferences(pool)).catch((e) => {
+          const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+          console.warn(`[saberra] the answers were not checked against this read (${code}); the next read checks them`);
+        });
       } catch (e) {
         const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
         console.warn(`[saberra] the sync kept no snapshot this time (${code}); the differences list reads the one before`);
@@ -568,6 +577,16 @@ async function runLocked(
     } finally {
       await keepRead();
     }
+    /*
+     * THE OLD DELIVERIES RETIRE HERE, under this lock and after the landing,
+     * never on a page load (spec R28): a waiting delivery the read just kept
+     * holds whole goes, with its reason, and this landing's own stays for one
+     * release. A retire that fails never stops the sync (server/lib/saberraRetire.ts).
+     */
+    await retireReplacedBatches(pool, typeof answer.batchId === "string" ? answer.batchId : null).catch((e) => {
+      const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+      console.warn(`[saberra] the old deliveries were not retired this time (${code}); the next landing tries again`);
+    });
     const reason = fetched.failures.length > 0 ? "partial" : null;
     const run = await finish(describeLanding(describeRead(blankRun(at, trigger, "landed", reason), fetched), answer), fingerprint);
     return { status: 200, body: answer, run };

@@ -333,6 +333,17 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
   {
+    // Budgets spec R34: every budget line that counts names a circle, so a line
+    // for the whole village sits on the village's own circle.
+    key: "budgets.village_circle_id",
+    category: "Village",
+    label: "The village's own circle, for budget lines about the whole village",
+    description:
+      "Every cash budget line belongs to a circle. A line for the whole village, like a sheet row that names no circle, goes on this one. Leave it empty and the budget finds it on the org chart: the active circle set as the link circle, or else the lead circle, or else the one circle with no parent. With none of those, an upload row that names no circle is refused until this is set. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "gratitude.base_budget",
     category: "Gratitude",
     label: "Base sending allowance per cycle",
@@ -1009,6 +1020,16 @@ export const VARIABLES: VariableDef[] = [
       "When on, value can only be released for work that was actually filed. Turning this off lets an admin credit a quest nobody submitted, which breaks the promise that credit follows shown work.",
     type: "boolean",
     default: "true",
+  },
+  {
+    // Rye, 2026-11-09: quests are fun, and families are encouraged.
+    key: "quest.minimum_ages",
+    category: "Quests",
+    label: "Let quests ask a minimum age",
+    description:
+      "Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.",
+    type: "boolean",
+    default: "false",
   },
   {
     key: "quest.self_consent_until_members",
@@ -2463,6 +2484,24 @@ export const VARIABLES: VariableDef[] = [
       "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
     type: "boolean",
     default: "false",
+  },
+  {
+    key: "org.first_conversation_role",
+    category: "The village's people",
+    label: "The role that holds first conversations",
+    description:
+      "The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.paid_consent_circle",
+    category: "The village's people",
+    label: "The circle that consents paid roles",
+    description:
+      "The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
   },
   {
     key: "org.ccos_terms",

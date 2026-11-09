@@ -539,6 +539,43 @@ export interface DecidedChange {
   payload: Record<string, unknown>;
 }
 
+// ── The builders: one per change a decision can make ─────────────────────
+//
+// `decideStructure` below builds every change through these, and so does the
+// differences list (shared/seraSettle.ts), so there is ONE writer of each op.
+// The list takes one difference at a time, and spec R12 holds it to exactly
+// that field: `seatField` names one field and nothing else, never the
+// whole-record update an accepted structure makes.
+
+/** A new circle, by id, with its name, purpose and parent. */
+export const circleCreate = (id: string, name: string, purpose: unknown = null, parentId: unknown = null): DecidedChange => ({
+  op: "create_circle",
+  orgRoleId: `circle:${id}`,
+  payload: { name, purpose, parentCircleId: parentId },
+});
+
+/** A new role with the fields it is made with. */
+export const seatCreate = (id: string, payload: Record<string, unknown>): DecidedChange => ({ op: "create_seat", orgRoleId: id, payload: { ...payload } });
+
+/** An update naming the fields it changes. */
+export const seatUpdate = (id: string, payload: Record<string, unknown>): DecidedChange => ({ op: "update_seat", orgRoleId: id, payload: { ...payload } });
+
+/** The fields one difference may change on a role, one at a time (R12). */
+export type SeatField = "name" | "aim" | "circleId";
+
+/** One field of a role, and nothing else beside it. */
+export const seatField = (id: string, field: SeatField, value: string): DecidedChange => seatUpdate(id, { [field]: value });
+
+/** Retire a role, stamped with who chose to, which is what tells a person's retirement from a machine's (orgDrafts `stewardChose`). */
+export const seatRest = (id: string, chosenBy: string, retiring: string): DecidedChange => ({ op: "rest_seat", orgRoleId: id, payload: { chosenBy, retiring } });
+
+/** Retire a circle, stamped the same way. */
+export const circleRest = (id: string, chosenBy: string, retiring: string): DecidedChange => ({
+  op: "rest_circle",
+  orgRoleId: `circle:${id}`,
+  payload: { chosenBy, retiring },
+});
+
 export interface RetireSet {
   seats: Array<{ id: string; name: string; circleId: string | null }>;
   circles: Array<{ id: string; name: string }>;
@@ -706,33 +743,25 @@ export function decideStructure(
 
   // ── The changes, in the order publish applies them ──
   const changes: DecidedChange[] = [];
-  for (const c of parentsFirst(keptNew)) {
-    changes.push({
-      op: "create_circle",
-      orgRoleId: `circle:${c.id}`,
-      payload: { name: c.name, purpose: c.purpose, parentCircleId: c.parentId },
-    });
-  }
+  for (const c of parentsFirst(keptNew)) changes.push(circleCreate(c.id, c.name, c.purpose, c.parentId));
   for (const s of updates) {
     const payload: Record<string, unknown> = {};
     for (const k of UPDATE_FIELDS) if (s.payload[k] !== undefined) payload[k] = s.payload[k];
     if (s.circleId) payload.circleId = s.circleId;
-    changes.push({ op: "update_seat", orgRoleId: s.match!.seatId, payload });
+    changes.push(seatUpdate(s.match!.seatId, payload));
   }
   for (const s of creates) {
     const renamed = renames.get(s.key);
-    changes.push({
-      op: "create_seat",
-      orgRoleId: s.id,
-      payload: {
+    changes.push(
+      seatCreate(s.id, {
         ...(renamed !== undefined ? { ...s.payload, name: renamed } : s.payload),
         ...(decisions.startUnlisted === true ? { listed: false } : {}),
-      },
-    });
+      }),
+    );
   }
   if (retiring) {
-    for (const s of retire.seats) changes.push({ op: "rest_seat", orgRoleId: s.id, payload: { chosenBy: actor, retiring: "old-chart" } });
-    for (const c of retire.circles) changes.push({ op: "rest_circle", orgRoleId: `circle:${c.id}`, payload: { chosenBy: actor, retiring: "old-chart" } });
+    for (const s of retire.seats) changes.push(seatRest(s.id, actor, "old-chart"));
+    for (const c of retire.circles) changes.push(circleRest(c.id, actor, "old-chart"));
   }
 
   // ── What happens to each proposal ──

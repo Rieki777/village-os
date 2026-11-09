@@ -57,7 +57,7 @@ export function RoleListingPanel({ roles, circles, call, onDone }: Props) {
     const d = await call("/admin/org/listing/only", { ids: Array.from(picked) });
     setBusy(false);
     if (d) {
-      toast.success(t`${d.listed} listed, ${d.unlisted} unlisted`);
+      toast.success(t({ message: `${d.listed} listed, ${d.unlisted} unlisted`, context: "role listing result" }));
       setCanUndo(true);
       onDone();
     }
@@ -75,7 +75,7 @@ export function RoleListingPanel({ roles, circles, call, onDone }: Props) {
   return (
     <section aria-labelledby="role-listing-h" className="rounded-xl border border-border bg-card p-4 space-y-3" data-testid="role-listing-panel">
       <div>
-        <h3 id="role-listing-h" className="font-display text-base font-bold text-foreground"><Trans>Listed roles</Trans></h3>
+        <h3 id="role-listing-h" className="font-display text-base font-bold text-foreground"><Trans context="role listing panel heading">Listed roles</Trans></h3>
         <p className="text-sm text-muted-foreground">{LISTING_WORDS.listOnlyHelp}</p>
       </div>
       <ul className="grid gap-1 sm:grid-cols-2">
@@ -88,7 +88,7 @@ export function RoleListingPanel({ roles, circles, call, onDone }: Props) {
                 <span className="min-w-0">
                   {r.name}
                   {r.circleId && circleName.get(String(r.circleId)) ? (
-                    <span className="text-muted-foreground"> <Trans>in</Trans> {circleName.get(String(r.circleId))}</span>
+                    <span className="text-muted-foreground"> <Trans context="role listing: a role in a circle">in</Trans> {circleName.get(String(r.circleId))}</span>
                   ) : null}
                 </span>
                 <NotListedChip role={r} />
@@ -111,7 +111,7 @@ export function RoleListingPanel({ roles, circles, call, onDone }: Props) {
             {LISTING_WORDS.undo}
           </button>
         )}
-        <span className="text-xs text-muted-foreground">{picked.size} <Trans>ticked</Trans></span>
+        <span className="text-xs text-muted-foreground">{picked.size} <Trans context="role listing: how many roles are ticked">ticked</Trans></span>
       </div>
     </section>
   );

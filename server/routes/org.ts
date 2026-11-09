@@ -96,6 +96,7 @@ import { submissionStatusNotice } from "../lib/submissionNotices";
 import { isTombstone } from "../lib/oauthAccounts";
 import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
+import { expectedChangesOf } from "./orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
@@ -394,7 +395,7 @@ export function register(app: Express, deps: Deps): void {
     if (await openDraftBallot(getPool(), req.params.id)) return res.status(409).json({ error: BALLOT_OPEN_REFUSAL });
     if ((await launchedByVote(getPool())) && !(await holderMayPublish(req, res, { authedUser, guardCapability, capabilityCtx, liveHoldersOf }))) return;
     const actor = await authedUser(req);
-    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null);
+    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null, expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });
@@ -917,7 +918,7 @@ export function register(app: Express, deps: Deps): void {
       res.status(400).json({ error: parsed.problem });
       return false;
     }
-    const steps = parsed.value.interviewerRoles ?? [];
+    const steps = parsed.value.conversations ?? [];
     if (steps.length) {
       const known = new Set((await listOrgRoles(getPool())).map((r) => r.id));
       const unknown = steps.filter((x) => !known.has(x.roleId));

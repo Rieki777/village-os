@@ -15,6 +15,16 @@
  *
  * Pure: no Node builtins.
  */
+import {
+  parseConversationMode,
+  parseInterviewSteps,
+  readInterviewerRoles,
+  type ConversationMode,
+  type InterviewStep,
+} from "./interviewerRoles";
+
+// The ordered conversations live in shared/interviewerRoles.ts, shared with the interview lane.
+export * from "./interviewerRoles";
 
 // ── Track ────────────────────────────────────────────────────────────────────
 
@@ -39,35 +49,16 @@ export const WHERE_WORDS: Record<WhereWorked, string> = {
   both: "On the land or remote",
 };
 
-// ── Interviews: an ordered list ──────────────────────────────────────────────
-
-export interface InterviewStep {
-  /** The role whose holder interviews. */
-  roleId: string;
-  /** How long this interview runs. */
-  minutes: number;
-  /** This interviewer gives the final approval. At most one step carries it. */
-  final?: boolean;
-}
-
-export const INTERVIEW_MAX_STEPS = 6;
-export const INTERVIEW_MIN_MINUTES = 5;
-export const INTERVIEW_MAX_MINUTES = 240;
-/** What a plain role id reads as when an older list named roles without lengths. */
-export const INTERVIEW_DEFAULT_MINUTES = 20;
-
-export interface InterviewStepView extends InterviewStep {
-  /** The role's name, resolved by the server so a visitor needs no second read. */
-  roleName: string | null;
-}
-
 // ── The record ───────────────────────────────────────────────────────────────
 
 export interface RoleParams {
   villageGoals: string[] | null;
   track: RoleTrack | null;
   selectionCriteria: string[] | null;
-  interviewerRoles: InterviewStep[] | null;
+  /** The ordered conversations (org_roles.conversations): role, minutes, final approval. */
+  conversations: InterviewStep[] | null;
+  /** NULL reads as one block (D30). */
+  conversationMode: ConversationMode | null;
   whereWorked: WhereWorked | null;
   languages: string[] | null;
   budgetLine: string | null;
@@ -81,7 +72,8 @@ export const ROLE_PARAM_KEYS = [
   "villageGoals",
   "track",
   "selectionCriteria",
-  "interviewerRoles",
+  "conversations",
+  "conversationMode",
   "whereWorked",
   "languages",
   "budgetLine",
@@ -97,7 +89,8 @@ export const ROLE_PARAM_COLUMNS: Record<RoleParamKey, string> = {
   villageGoals: "village_goals",
   track: "track",
   selectionCriteria: "selection_criteria",
-  interviewerRoles: "interviewer_roles",
+  conversations: "conversations",
+  conversationMode: "conversation_mode",
   whereWorked: "where_worked",
   languages: "languages",
   budgetLine: "budget_line",
@@ -111,7 +104,8 @@ export const ROLE_PARAM_LABELS: Record<RoleParamKey, string> = {
   villageGoals: "Village goals it serves",
   track: "Track",
   selectionCriteria: "Selection criteria",
-  interviewerRoles: "Interviews",
+  conversations: "Conversations",
+  conversationMode: "How the conversations are held",
   whereWorked: "Where",
   languages: "Languages",
   budgetLine: "Budget line",
@@ -157,45 +151,6 @@ export function parseTextList(raw: unknown, field: string, max: number, len: num
     out.push(t);
   }
   if (out.length > max) return bad(`${field} holds at most ${max} lines.`);
-  return ok(out.length ? out : null);
-}
-
-/**
- * The ordered interviews. A step is `{ roleId, minutes, final? }`. A bare role id
- * (how a plain list of roles would arrive) reads as 20 minutes. The same role
- * is not named twice, and at most one step is the final approval.
- */
-export function parseInterviewSteps(raw: unknown): Parsed<InterviewStep[] | null> {
-  if (raw === null || raw === undefined) return ok(null);
-  if (!Array.isArray(raw)) return bad("The interviews are an ordered list.");
-  const out: InterviewStep[] = [];
-  const seen = new Set<string>();
-  for (const item of raw) {
-    let roleId = "";
-    let minutes: number = INTERVIEW_DEFAULT_MINUTES;
-    let final = false;
-    if (typeof item === "string") roleId = item.trim();
-    else if (item && typeof item === "object") {
-      const o = item as Record<string, unknown>;
-      roleId = typeof o.roleId === "string" ? o.roleId.trim() : "";
-      if (o.minutes !== undefined && o.minutes !== null && o.minutes !== "") {
-        const m = Number(o.minutes);
-        if (!Number.isInteger(m)) return bad("An interview's length is a whole number of minutes.");
-        minutes = m;
-      }
-      final = o.final === true;
-    } else continue;
-    if (!roleId) return bad("Each interview names a role.");
-    if (roleId.length > 120) return bad("A role id in the interviews is too long.");
-    if (minutes < INTERVIEW_MIN_MINUTES || minutes > INTERVIEW_MAX_MINUTES) {
-      return bad(`An interview runs ${INTERVIEW_MIN_MINUTES} to ${INTERVIEW_MAX_MINUTES} minutes.`);
-    }
-    if (seen.has(roleId)) return bad("A role interviews once in the list.");
-    seen.add(roleId);
-    out.push(final ? { roleId, minutes, final: true } : { roleId, minutes });
-  }
-  if (out.length > INTERVIEW_MAX_STEPS) return bad(`At most ${INTERVIEW_MAX_STEPS} interviews.`);
-  if (out.filter((s) => s.final).length > 1) return bad("Only one interview gives the final approval.");
   return ok(out.length ? out : null);
 }
 
@@ -260,7 +215,8 @@ export function parseRoleParams(body: unknown): Parsed<Partial<RoleParams>> {
   if (o.villageGoals !== undefined) problems.push(put("villageGoals", parseTextList(asJson(o.villageGoals), "Village goals", 5, 120)));
   if (o.track !== undefined) problems.push(put("track", parseTrack(o.track)));
   if (o.selectionCriteria !== undefined) problems.push(put("selectionCriteria", parseTextList(asJson(o.selectionCriteria), "Selection criteria", 5, 200)));
-  if (o.interviewerRoles !== undefined) problems.push(put("interviewerRoles", parseInterviewSteps(asJson(o.interviewerRoles))));
+  if (o.conversations !== undefined) problems.push(put("conversations", parseInterviewSteps(asJson(o.conversations))));
+  if (o.conversationMode !== undefined) problems.push(put("conversationMode", parseConversationMode(o.conversationMode)));
   if (o.whereWorked !== undefined) problems.push(put("whereWorked", parseWhere(o.whereWorked)));
   if (o.languages !== undefined) problems.push(put("languages", parseTextList(asJson(o.languages), "Languages", 8, 40)));
   if (o.budgetLine !== undefined) problems.push(put("budgetLine", parseLine(o.budgetLine, "The budget line", 120)));
@@ -296,7 +252,7 @@ export function roleParamsFromRow(r: Record<string, unknown>): RoleParams {
     const p = parseTextList(asJson(v), "x", max, len);
     return p.ok ? p.value : null;
   };
-  const steps = parseInterviewSteps(asJson(r.interviewer_roles));
+  const mode = parseConversationMode(r.conversation_mode);
   const track = parseTrack(r.track);
   const where = parseWhere(r.where_worked);
   const days = parseDays(r.review_after_days);
@@ -307,7 +263,8 @@ export function roleParamsFromRow(r: Record<string, unknown>): RoleParams {
     villageGoals: list(r.village_goals, 5, 120),
     track: track.ok ? track.value : null,
     selectionCriteria: list(r.selection_criteria, 5, 200),
-    interviewerRoles: steps.ok ? steps.value : null,
+    conversations: readInterviewerRoles(r.conversations).length ? readInterviewerRoles(r.conversations) : null,
+    conversationMode: mode.ok ? mode.value : null,
     whereWorked: where.ok ? where.value : null,
     languages: list(r.languages, 8, 40),
     budgetLine: budget.ok ? budget.value : null,
@@ -326,30 +283,6 @@ export function roughHours(text: string | null | undefined): string | null {
   if (!t) return null;
   if (/^(roughly|about|around|approximately)\b/i.test(t)) return t.charAt(0).toUpperCase() + t.slice(1);
   return `Roughly ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
-}
-
-/** The total time of a list of interviews, in words. */
-export function interviewTotalWords(steps: readonly InterviewStep[]): string {
-  const total = steps.reduce((n, s) => n + s.minutes, 0);
-  if (total <= 0) return "";
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m} minutes`;
-  const hours = `${h} ${h === 1 ? "hour" : "hours"}`;
-  return m === 0 ? hours : `${hours} ${m} minutes`;
-}
-
-function minutesWords(m: number): string {
-  if (m % 60 === 0) {
-    const h = m / 60;
-    return `${h} ${h === 1 ? "hour" : "hours"}`;
-  }
-  return `${m} minutes`;
-}
-
-/** One line per interview, in order: "1. Visionary Channel, 1 hour". The final approval says so. */
-export function interviewLines(steps: ReadonlyArray<InterviewStep & { roleName?: string | null }>): string[] {
-  return steps.map((s, i) => `${i + 1}. ${s.roleName ?? "An interviewer"}, ${minutesWords(s.minutes)}${s.final ? ", final approval" : ""}`);
 }
 
 // ── The completeness gate ────────────────────────────────────────────────────
@@ -397,7 +330,7 @@ export interface CardGateInput {
   hasTerm: boolean;
   villageGoals: readonly string[] | null | undefined;
   selectionCriteria: readonly string[] | null | undefined;
-  interviewerRoles: readonly InterviewStep[] | null | undefined;
+  conversations: readonly InterviewStep[] | null | undefined;
 }
 
 export interface CardGate {
@@ -427,7 +360,7 @@ export function roleCardGate(i: CardGateInput): CardGate {
     term: i.hasTerm,
     goal: (i.villageGoals ?? []).length > 0,
     criteria: (i.selectionCriteria ?? []).length > 0,
-    interviews: (i.interviewerRoles ?? []).length > 0,
+    interviews: (i.conversations ?? []).length > 0,
     range: !paid || i.hasRange,
   };
   const parts = CARD_PARTS.filter((p) => p !== "range" || paid);

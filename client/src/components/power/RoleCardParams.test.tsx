@@ -11,7 +11,7 @@ import { applyHrefFor, guardedAction, termsSlotFor } from "./SeatTermsSlot";
 
 const card = {
   complete: true, missing: [], gated: true, track: "paid", villageGoals: ["Fund the land"], selectionCriteria: ["Careful"],
-  interviews: [{ roleId: "v", roleName: "Visionary Channel", minutes: 60 }, { roleId: "x", roleName: "Anchor One", minutes: 20, final: true }],
+  conversations: [{ roleId: "h", roleName: "Human Operations Lead", minutes: 60 }, { roleId: "v", roleName: "Visionary Channel", minutes: 20, final: true }],
   whereWorked: "both", languages: ["English"], reviewAfterDays: 90,
   publicPay: { kind: "range", currency: "USD", minMinor: 200000, maxMinor: 300000, per: "month", note: "Depends on funding" },
 };
@@ -20,8 +20,8 @@ describe("RoleCardParams", () => {
   it("draws the parameters, hours as Roughly, the interviews in order, and the pay range for a visitor", () => {
     render(<RoleCardParams seat={{ id: "r", timeCommitment: "40 hours a week", card }} />);
     expect(screen.getByText("Roughly 40 hours a week")).toBeTruthy();
-    expect(screen.getByText("1. Visionary Channel, 1 hour")).toBeTruthy();
-    expect(screen.getByText("2. Anchor One, 20 minutes, final approval")).toBeTruthy();
+    expect(screen.getByText("1. Human Operations Lead, 1 hour")).toBeTruthy();
+    expect(screen.getByText("2. Visionary Channel, 20 minutes, final approval")).toBeTruthy();
     expect(screen.getByTestId("public-pay").textContent).toContain("Depends on funding");
   });
 

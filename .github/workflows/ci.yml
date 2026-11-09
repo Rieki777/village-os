@@ -766,6 +766,12 @@ jobs:
         # Same story, same fix: present in the tree, invoked by nothing.
         run: node scripts/check-tailwind-gray.mjs
 
+      - name: Tailwind palette ratchet
+        # Every page paints from the village's Admin palette (Rye 2026-11-09).
+        # Tailwind's default palette (bg-emerald-50, text-blue-900, ...) is
+        # compiled in and no Admin setting reaches it; the per-file count only falls.
+        run: node scripts/check-tailwind-palette.mjs
+
       - name: Token doc
         # docs/TOKENS.md is GENERATED from the migrations and the server
         # source, and this is the step that makes it worth reading. It

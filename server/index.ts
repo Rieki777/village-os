@@ -250,6 +250,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerBudgetRoutes } from "./routes/budgets";
 import { register as registerValuationRoutes } from "./routes/valuation";
 import { earnedEquityMeaningWritten } from "./lib/valuationStore";
 import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
@@ -859,6 +860,7 @@ import {
   type OrgRole,
 } from "./lib/orgChart";
 import { listingViewerFor } from "./lib/listingViewer";
+import { cardWordsFrom } from "./lib/roleCardProjection";
 import { circlesToShow } from "../shared/roleListing";
 import { mapSeatTier, mapShowsStructureTo, orgSeatTier, payBadgeBoosts, projectSeats, villageWay } from "./lib/seatProjection";
 // ── Lane L3: how resources flow — declarations, never movements ─────────────
@@ -9754,7 +9756,7 @@ async function startServer() {
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
     const mapListing = listingViewerFor({ admin, capCtx: viewerCapCtx, userId: viewer?.id, assignments: orgAssignments });
     const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
-      route: "map", listing: mapListing, cardGate: boolVar("org.apply_needs_complete_card"), now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
+      route: "map", listing: mapListing, cardGate: boolVar("org.apply_needs_complete_card"), cardWords: cardWordsFrom(orgRoles, circlesRepo.all() as Array<{ id: string; name: string }>, { firstConversationRole: stringVar("org.first_conversation_role"), paidConsentCircle: stringVar("org.paid_consent_circle") }), now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
       heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined,
     });
 
@@ -17712,6 +17714,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
+  registerBudgetRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, seasonState, liveHoldersOf, projectCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""), rolesCarrying, roleHolders: loadRoleHolders, revisionSecret: AUTH_TOKEN_SECRET }); // the cash budget (0360): every write through one door, role.pay (server/routes/budgets.ts)
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
   const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
   registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
@@ -24379,7 +24382,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", listing: orgListing, cardGate: boolVar("org.apply_needs_complete_card"), now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: tier.terms ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", listing: orgListing, cardGate: boolVar("org.apply_needs_complete_card"), cardWords: cardWordsFrom(roles, circlesRepo.all() as Array<{ id: string; name: string }>, { firstConversationRole: stringVar("org.first_conversation_role"), paidConsentCircle: stringVar("org.paid_consent_circle") }), now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: tier.terms ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
     });
   });
 
@@ -24866,7 +24869,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, boolVar, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
+  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, isAdmin, liveHoldersOf, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 

@@ -68,11 +68,15 @@ export function roleCardView(seat: unknown, locale = "en-GB"): RoleCardView {
   const days = Number(card.reviewAfterDays);
   if (Number.isInteger(days) && days > 0) rows.push({ id: "review", label: "Review", lines: [`First review after ${days} ${days === 1 ? "day" : "days"}`] });
 
-  const steps: InterviewStepView[] = Array.isArray(card.interviews) ? card.interviews : [];
-  if (steps.length) {
+  const steps: InterviewStepView[] = Array.isArray(card.conversations) ? card.conversations : [];
+  const first = typeof card.firstConversation === "string" && card.firstConversation.trim() ? `First conversation: ${card.firstConversation.trim()}` : null;
+  const consent = typeof card.consentCircle === "string" && card.consentCircle.trim() ? `Paid roles are consented by ${card.consentCircle.trim()}` : null;
+  if (steps.length || first || consent) {
     const lines = interviewLines(steps);
     const total = interviewTotalWords(steps);
-    rows.push({ id: "interviews", label: "How it is filled", lines: total ? [...lines, `${total} of interviews in all`] : lines });
+    const head = first ? [first] : [];
+    const tail = consent ? [consent] : [];
+    rows.push({ id: "interviews", label: "How it is filled", lines: [...head, ...lines, ...(total ? [`${total} of conversations in all`] : []), ...tail] });
   }
 
   const criteria = list(card.selectionCriteria);

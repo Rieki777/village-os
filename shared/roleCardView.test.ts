@@ -8,14 +8,16 @@ const card = {
   track: "paid",
   villageGoals: ["Fund the land"],
   selectionCriteria: ["Careful with money"],
-  interviews: [
-    { roleId: "v", roleName: "Visionary Channel", minutes: 60 },
-    { roleId: "a", roleName: "Anchor One", minutes: 20 },
-    { roleId: "b", roleName: "Anchor Two", minutes: 20, final: true },
+  conversations: [
+    { roleId: "h", roleName: "Human Operations & Onboarding Lead Steward", minutes: 60 },
+    { roleId: "t", roleName: "Technical Operations Steward", minutes: 20 },
+    { roleId: "v", roleName: "Visionary Channel", minutes: 20, final: true },
   ],
   whereWorked: "both",
   languages: ["English", "Spanish"],
   reviewAfterDays: 90,
+  firstConversation: "Human Operations & Onboarding Lead Steward",
+  consentCircle: "Anchor Circle",
   publicPay: { kind: "range", currency: "USD", minMinor: 200000, maxMinor: 300000, per: "month", note: "Funding dependent" },
 };
 
@@ -26,10 +28,12 @@ describe("roleCardView", () => {
     expect(v.rows[0].lines).toEqual(["Roughly 40 hours a week"]);
     const interviews = v.rows.find((r) => r.id === "interviews")!;
     expect(interviews.lines).toEqual([
-      "1. Visionary Channel, 1 hour",
-      "2. Anchor One, 20 minutes",
-      "3. Anchor Two, 20 minutes, final approval",
-      "1 hour 40 minutes of interviews in all",
+      "First conversation: Human Operations & Onboarding Lead Steward",
+      "1. Human Operations & Onboarding Lead Steward, 1 hour",
+      "2. Technical Operations Steward, 20 minutes",
+      "3. Visionary Channel, 20 minutes, final approval",
+      "1 hour 40 minutes of conversations in all",
+      "Paid roles are consented by Anchor Circle",
     ]);
     expect(v.applyAllowed).toBe(true);
     expect(v.pay?.headline).toMatch(/2,000/);

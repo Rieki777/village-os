@@ -21,6 +21,10 @@ import { readDoor, type Door } from "@shared/seraDecides";
 export interface ListedDifference extends Difference {
   /** The waiting arrival that holds it, for the structure review link (review C7), or null when none does. */
   batchId?: string | null;
+  /** Kept by somebody without the power to decide it, so it still waits for those who have it (R16). */
+  setAside?: boolean;
+  /** When somebody here last rewrote what this conflict is about, where published history says so. */
+  changedHereAt?: string | null;
   words: { sentence: string; flags: string[]; source: string; open: string | null; openWords: string };
 }
 
@@ -34,6 +38,49 @@ export interface CountAnswer extends DifferenceCount {
   paySetBy: Door | null;
   /** About this reader: may they read the list (null when the server could not say), and do they decide. */
   reader?: { mayRead: boolean | null; decides: boolean };
+  /** The drafts the list's answers opened, by id and size only (R38's door to a vote). */
+  drafts?: CountDraft[];
+}
+
+/** One answer in a draft, as the list sends it (R13, review 3, 11). */
+export interface InDraftItem {
+  key: string;
+  answer: "taken" | "edited";
+  sentence: string;
+  /** The words the draft will write, for a name or a role's words. */
+  value: string | null;
+  field: "name" | "aim" | null;
+  /** The role the words are for. */
+  about: string | null;
+  /** An edit's author: "you", a role's name, or null. */
+  by: string | null;
+  /** Its difference has gone, or moved since it was taken. */
+  changed: boolean;
+  /** The difference as it stands now, to take again. */
+  now: { key: string; seraHash: string; oursHash: string } | null;
+}
+
+/** One draft the list's answers opened, as the list sends it (R13). */
+export interface InDraftGroup {
+  draftId: string;
+  title: string | null;
+  items: InDraftItem[];
+  /** The new roles that came with a new circle in it. */
+  with: number;
+  /** How many changes the draft really holds, nested roles included. */
+  changes: number;
+  /** Their ids, which a publish from the page sends back (review 12). */
+  changeIds: string[];
+  /** Something in it changed since it was taken: never published from the page. */
+  hasChanged: boolean;
+}
+
+/** One open draft on the count, by id and size: no subject (R38). */
+export interface CountDraft {
+  id: string;
+  changes: number;
+  changeIds: string[];
+  hasChanged: boolean;
 }
 
 /** `GET /api/saberra/differences`, behind the review queue's key. */
@@ -50,6 +97,8 @@ export interface ListAnswer {
   circleOrder?: string[];
   /** The waiting arrivals the newest read holds whole: only these may fold away (review S1). */
   heldBatches?: string[];
+  /** What a person took, by draft: not live yet (R13). */
+  inDraft?: InDraftGroup[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -84,6 +133,16 @@ export function readCount(v: unknown): CountAnswer | null {
     reader: isObj(v.reader)
       ? { mayRead: typeof v.reader.mayRead === "boolean" ? v.reader.mayRead : null, decides: v.reader.decides === true }
       : undefined,
+    drafts: Array.isArray(v.drafts)
+      ? v.drafts
+          .filter((d): d is Record<string, unknown> => isObj(d) && typeof d.id === "string" && typeof d.changes === "number")
+          .map((d) => ({
+            id: d.id as string,
+            changes: d.changes as number,
+            changeIds: Array.isArray(d.changeIds) ? d.changeIds.filter((x): x is string => typeof x === "string") : [],
+            hasChanged: d.hasChanged === true,
+          }))
+      : [],
   };
 }
 
@@ -98,6 +157,8 @@ function listedOf(v: unknown): ListedDifference | null {
     ...(v as unknown as Difference),
     flags: Array.isArray(v.flags) ? (v.flags as Difference["flags"]) : [],
     batchId: typeof v.batchId === "string" && v.batchId !== "" ? v.batchId : null,
+    setAside: v.setAside === true,
+    changedHereAt: typeof v.changedHereAt === "string" ? v.changedHereAt : null,
     words: {
       sentence: w.sentence as string,
       flags: Array.isArray(w.flags) ? w.flags.filter((f): f is string => typeof f === "string") : [],
@@ -127,6 +188,39 @@ export function readList(v: unknown): ListAnswer | null {
       : null,
     circleOrder: Array.isArray(v.circleOrder) ? v.circleOrder.filter((c): c is string => typeof c === "string") : [],
     heldBatches: Array.isArray(v.heldBatches) ? v.heldBatches.filter((c): c is string => typeof c === "string") : [],
+    inDraft: Array.isArray(v.inDraft) ? v.inDraft.map(inDraftOf).filter((g): g is InDraftGroup => g !== null) : [],
+  };
+}
+
+function inDraftItemOf(i: unknown): InDraftItem | null {
+  if (!isObj(i) || typeof i.key !== "string" || typeof i.sentence !== "string") return null;
+  const now = isObj(i.now) && typeof i.now.key === "string" && typeof i.now.seraHash === "string" && typeof i.now.oursHash === "string"
+    ? { key: i.now.key, seraHash: i.now.seraHash, oursHash: i.now.oursHash }
+    : null;
+  return {
+    key: i.key,
+    answer: i.answer === "edited" ? "edited" : "taken",
+    sentence: i.sentence,
+    value: typeof i.value === "string" ? i.value : null,
+    field: i.field === "name" || i.field === "aim" ? i.field : null,
+    about: typeof i.about === "string" ? i.about : null,
+    by: typeof i.by === "string" ? i.by : null,
+    changed: i.changed === true,
+    now,
+  };
+}
+
+function inDraftOf(v: unknown): InDraftGroup | null {
+  if (!isObj(v) || typeof v.draftId !== "string" || !Array.isArray(v.items)) return null;
+  const items = v.items.map(inDraftItemOf).filter((i): i is InDraftItem => i !== null);
+  return {
+    draftId: v.draftId,
+    title: typeof v.title === "string" ? v.title : null,
+    items,
+    with: num(v.with),
+    changes: typeof v.changes === "number" ? v.changes : items.length,
+    changeIds: Array.isArray(v.changeIds) ? v.changeIds.filter((x): x is string => typeof x === "string") : [],
+    hasChanged: v.hasChanged === true,
   };
 }
 

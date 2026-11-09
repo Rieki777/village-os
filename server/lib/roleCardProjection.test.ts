@@ -32,13 +32,13 @@ const role = (over: Partial<OrgRole> = {}): OrgRole =>
     representsCircle: false, howChosen: null, howChosenGloss: null,
     termsOffer: OFFER as unknown as string, termsOfferAt: null, termsOfferBy: null, listed: null,
     timeCommitment: "40 hours a week", track: "paid", villageGoals: ["Fund the land"], selectionCriteria: ["Careful"],
-    interviewerRoles: [{ roleId: "visionary", minutes: 60 }, { roleId: "x", minutes: 20, final: true }],
+    conversations: [{ roleId: "human-ops", minutes: 60 }, { roleId: "visionary", minutes: 20, final: true }],
     whereWorked: "both", languages: ["English"], budgetLine: "Finance", fundedFrom: "2026-12-01", reviewAfterDays: 90,
     accessBundle: ["Bank view"], bookingUrl: "https://cal.example/first",
     ...over,
   }) as OrgRole;
 
-const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]) };
+const ctx: SeatProjectionCtx = { route: "org", now: NOW, nameOf: () => "Mara", firstName: (s) => s, roleNames: new Map([["visionary", "Visionary Channel"]]), cardWords: { firstConversationRole: "Human Operations & Onboarding Lead Steward", paidConsentCircle: "Anchor Circle" } };
 const base = { editing: false, viewPeople: false, peopleArePublic: true, mapStructure: false } as const;
 const VISITOR = orgSeatTier({ ...base });
 const GUEST = orgSeatTier({ ...base, mapStructure: true });
@@ -50,7 +50,7 @@ const card = (r: OrgRole, tier: ReturnType<typeof orgSeatTier>) => seat(r, tier)
 const sorted = (o: object) => Object.keys(o).sort();
 
 const PUBLIC_CARD_KEYS = [
-  "complete", "missing", "written", "of", "gated", "track", "villageGoals", "selectionCriteria", "interviews",
+  "complete", "missing", "written", "of", "gated", "track", "villageGoals", "selectionCriteria", "conversations", "conversationMode", "firstConversation",
   "whereWorked", "languages", "reviewAfterDays", "publicPay",
 ].sort();
 
@@ -75,7 +75,8 @@ describe("the public pay range", () => {
       expect(text).not.toContain("noticeDays");
       expect(text).not.toContain("calendar-month");
       // The card carries the public keys and nothing a terms reader alone gets.
-      expect(sorted(card(role(), tier))).toEqual(PUBLIC_CARD_KEYS);
+      // The consenting circle is named for a paid role, in the village's setting words.
+      expect(sorted(card(role(), tier))).toEqual([...PUBLIC_CARD_KEYS, "consentCircle"].sort());
     }
   });
 
@@ -83,7 +84,7 @@ describe("the public pay range", () => {
     const s = seat(role(), MEMBER);
     expect(s).toHaveProperty("termsOffer");
     expect(JSON.stringify(s)).toContain(PLANTED);
-    expect(sorted(card(role(), MEMBER))).toEqual([...PUBLIC_CARD_KEYS, "budgetLine", "fundedFrom"].sort());
+    expect(sorted(card(role(), MEMBER))).toEqual([...PUBLIC_CARD_KEYS, "consentCircle", "budgetLine", "fundedFrom"].sort());
   });
 
   it("keeps the budget line, the access bundle and the booking link above the public tiers", () => {
@@ -111,11 +112,18 @@ describe("the public pay range", () => {
 
 describe("the card's parameters", () => {
   it("names the interviewing roles in order, with their lengths and the final approval", () => {
-    const steps = card(role(), VISITOR).interviews;
+    const steps = card(role(), VISITOR).conversations;
     expect(steps).toEqual([
-      { roleId: "visionary", minutes: 60, roleName: "Visionary Channel" },
-      { roleId: "x", minutes: 20, final: true, roleName: null },
+      { roleId: "human-ops", minutes: 60, roleName: null },
+      { roleId: "visionary", minutes: 20, final: true, roleName: "Visionary Channel" },
     ]);
+    expect(card(role(), VISITOR)).toMatchObject({ conversationMode: "block", firstConversation: "Human Operations & Onboarding Lead Steward" });
+  });
+
+  it("names the consenting circle for a paid role only (control: the paid role above names it)", () => {
+    const unpaid = role({ track: "volunteer", termsOffer: { v: 1, pay: { kind: "none" } } as unknown as string });
+    expect(card(unpaid, VISITOR)).not.toHaveProperty("consentCircle");
+    expect(card(role(), VISITOR).consentCircle).toBe("Anchor Circle");
   });
 
   it("gates on the village setting only: the gate is always computed, and held back only when asked", () => {

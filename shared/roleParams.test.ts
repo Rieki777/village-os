@@ -4,7 +4,6 @@ import {
   beingWrittenLine,
   interviewLines,
   interviewTotalWords,
-  parseInterviewSteps,
   parseRoleParams,
   roleCardGate,
   roleParamColumns,
@@ -13,44 +12,13 @@ import {
   type CardGateInput,
 } from "./roleParams";
 
-/** The Lead Financial Steward's order, as Rye ruled it: the first interview an hour, three of twenty minutes, the last the final approval. */
+/** The Lead Financial Steward's order, as Rye ruled it (9 Nov, corrected). */
 const RYE_ORDER = [
-  { roleId: "visionary-channel", minutes: 60 },
-  { roleId: "second", minutes: 20 },
-  { roleId: "third", minutes: 20 },
-  { roleId: "fourth", minutes: 20, final: true },
+  { roleId: "human-operations-onboarding", minutes: 60 },
+  { roleId: "technical-operations", minutes: 20 },
+  { roleId: "to-be-confirmed", minutes: 20 },
+  { roleId: "visionary-channel", minutes: 20, final: true },
 ];
-
-describe("the ordered interviews", () => {
-  it("keeps the order, each length and the final approval, and totals two hours", () => {
-    const r = parseInterviewSteps(RYE_ORDER);
-    expect(r).toEqual({ ok: true, value: RYE_ORDER });
-    if (!r.ok || !r.value) throw new Error("unreachable");
-    expect(interviewTotalWords(r.value)).toBe("2 hours");
-    const lines = interviewLines(r.value.map((s, i) => ({ ...s, roleName: ["Visionary Channel", "Two", "Three", "Four"][i] })));
-    expect(lines[0]).toBe("1. Visionary Channel, 1 hour");
-    expect(lines[3]).toBe("4. Four, 20 minutes, final approval");
-  });
-  it("reads a bare list of role ids as twenty minutes each", () => {
-    expect(parseInterviewSteps(["a", "b"])).toEqual({
-      ok: true,
-      value: [{ roleId: "a", minutes: 20 }, { roleId: "b", minutes: 20 }],
-    });
-  });
-  it("refuses two final approvals, a repeated role, a silly length and too many steps", () => {
-    expect(parseInterviewSteps([{ roleId: "a", final: true }, { roleId: "b", final: true }]).ok).toBe(false);
-    expect(parseInterviewSteps([{ roleId: "a" }, { roleId: "a" }]).ok).toBe(false);
-    expect(parseInterviewSteps([{ roleId: "a", minutes: 2 }]).ok).toBe(false);
-    expect(parseInterviewSteps([{ roleId: "a", minutes: 600 }]).ok).toBe(false);
-    expect(parseInterviewSteps(Array.from({ length: 7 }, (_, i) => ({ roleId: `r${i}` }))).ok).toBe(false);
-    // Control: the same shapes inside the limits pass.
-    expect(parseInterviewSteps([{ roleId: "a", minutes: 5, final: true }, { roleId: "b", minutes: 240 }]).ok).toBe(true);
-  });
-  it("reads nothing written as null", () => {
-    expect(parseInterviewSteps(null)).toEqual({ ok: true, value: null });
-    expect(parseInterviewSteps([])).toEqual({ ok: true, value: null });
-  });
-});
 
 describe("hours", () => {
   it("reads Roughly, once", () => {
@@ -93,14 +61,16 @@ describe("the parameters in a write", () => {
     const p = roleParamsFromRow({
       village_goals: JSON.stringify(["One"]),
       track: "volunteer",
-      interviewer_roles: JSON.stringify(RYE_ORDER),
+      conversations: JSON.stringify(RYE_ORDER),
+      conversation_mode: "separate",
       review_after_days: 90,
       funded_from: new Date("2026-12-01T00:00:00Z"),
       booking_url: "https://cal.example/x",
     });
     expect(p.villageGoals).toEqual(["One"]);
     expect(p.track).toBe("volunteer");
-    expect(p.interviewerRoles).toEqual(RYE_ORDER);
+    expect(p.conversations).toEqual(RYE_ORDER);
+    expect(p.conversationMode).toBe("separate");
     expect(p.fundedFrom).toBe("2026-12-01");
     expect(p.languages).toBeNull();
   });
@@ -118,11 +88,11 @@ describe("the completeness gate", () => {
     hasTerm: true,
     villageGoals: ["Fund the land"],
     selectionCriteria: ["Careful with money"],
-    interviewerRoles: [{ roleId: "a", minutes: 20 }],
+    conversations: [{ roleId: "a", minutes: 20 }],
   };
   it("is complete when everything is written, and names each missing part when not", () => {
     expect(roleCardGate(complete)).toMatchObject({ complete: true, missing: [], written: CARD_PARTS.length, of: CARD_PARTS.length });
-    const g = roleCardGate({ ...complete, aim: " ", villageGoals: [], interviewerRoles: null });
+    const g = roleCardGate({ ...complete, aim: " ", villageGoals: [], conversations: null });
     expect(g.complete).toBe(false);
     expect(g.missing).toEqual(["aim", "goal", "interviews"]);
   });

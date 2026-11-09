@@ -290,7 +290,7 @@ export const ROLE_COLS =
   // 0362: whether a steward has confirmed the role for discovery. NULL reads as listed.
   "listed, " +
   // 0362: the parameters of the full card (shared/roleParams.ts).
-  "village_goals, track, selection_criteria, interviewer_roles, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url";
+  "village_goals, track, selection_criteria, conversations, conversation_mode, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was

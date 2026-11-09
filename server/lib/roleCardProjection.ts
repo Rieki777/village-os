@@ -15,6 +15,7 @@
  * about their content.
  */
 import { invitesApplications, isListed } from "../../shared/roleListing";
+import { conversationModeOf } from "../../shared/interviewerRoles";
 import { roleCardGate } from "../../shared/roleParams";
 import { payStatesRange, publicPayOf } from "../../shared/rolePublicPay";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
@@ -23,6 +24,10 @@ import type { OrgRole } from "./orgChart";
 export interface RoleCardTier {
   terms: boolean;
   editing: boolean;
+}
+
+function isPaid(role: OrgRole, payKind: string | undefined): boolean {
+  return role.track === "paid" || role.track === "local" || payKind === "fixed" || payKind === "range";
 }
 
 /** The completeness gate for one role, read from the same offer the card shows. */
@@ -46,9 +51,19 @@ export function gateOf(role: OrgRole) {
       hasTerm,
       villageGoals: role.villageGoals,
       selectionCriteria: role.selectionCriteria,
-      interviewerRoles: role.interviewerRoles,
+      conversations: role.conversations,
     }),
   };
+}
+
+/**
+ * What the village says about how a role is filled: the role that holds first conversations
+ * and the circle that consents paid roles (village settings, role journey v3). Both are
+ * names already resolved by the route, so the card carries words and no ids.
+ */
+export interface CardVillageWords {
+  firstConversationRole?: string | null;
+  paidConsentCircle?: string | null;
 }
 
 export function roleCard(
@@ -56,7 +71,7 @@ export function roleCard(
   held: number,
   state: string,
   tier: RoleCardTier,
-  opts: { roleNames?: ReadonlyMap<string, string>; gated?: boolean },
+  opts: { roleNames?: ReadonlyMap<string, string>; gated?: boolean; words?: CardVillageWords },
 ): Record<string, unknown> {
   const { pay, gate } = gateOf(role);
   const open = invitesApplications({ seats: role.seats, held, state, recruiting: role.recruiting });
@@ -69,12 +84,29 @@ export function roleCard(
     track: role.track ?? null,
     villageGoals: role.villageGoals ?? null,
     selectionCriteria: role.selectionCriteria ?? null,
-    interviews: (role.interviewerRoles ?? []).map((s) => ({ ...s, roleName: opts.roleNames?.get(s.roleId) ?? null })),
+    conversations: (role.conversations ?? []).map((s) => ({ ...s, roleName: opts.roleNames?.get(s.roleId) ?? null })),
+    conversationMode: conversationModeOf(role.conversationMode),
     whereWorked: role.whereWorked ?? null,
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
+    firstConversation: opts.words?.firstConversationRole ?? null,
+    ...(isPaid(role, pay?.kind) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
     ...(pay && open && isListed(role) ? { publicPay: pay } : {}),
     ...(tier.terms ? { budgetLine: role.budgetLine ?? null, fundedFrom: role.fundedFrom ?? null } : {}),
     ...(tier.editing ? { accessBundle: role.accessBundle ?? null, bookingUrl: role.bookingUrl ?? null } : {}),
+  };
+}
+
+/** The village's two card settings as names: the role that holds first conversations, the circle that consents paid roles. */
+export function cardWordsFrom(
+  roles: ReadonlyArray<{ id: string; name: string }>,
+  circles: ReadonlyArray<{ id: string; name: string }>,
+  settings: { firstConversationRole: string; paidConsentCircle: string },
+): CardVillageWords {
+  const roleId = settings.firstConversationRole.trim();
+  const circleId = settings.paidConsentCircle.trim();
+  return {
+    firstConversationRole: roleId ? (roles.find((r) => r.id === roleId)?.name ?? null) : null,
+    paidConsentCircle: circleId ? (circles.find((c) => c.id === circleId)?.name ?? null) : null,
   };
 }
