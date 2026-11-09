@@ -14,9 +14,10 @@
  *
  * `adoptEffect` is the one place that says what pressing Adopt will do, by
  * pen and by moment. Before the Birthing a suggestion that names a setting
- * writes it; after it, a dial suggestion is filed as a proposal in its
- * author's name, and the consequence pen's vote is not built yet, which the
- * sentence says instead of offering a button that would be refused. The
+ * writes it; after it, a dial, module, exit-term or matrix suggestion is filed
+ * as a proposal in its author's name, and the care door goes to the conflict
+ * agreement's own vote while Conflict Evolution is on, which the sentence says
+ * instead of offering a button that would be refused. The
  * server decides in the end (`pen` on each suggestion), and the page only
  * ever offers what `pen.youMayAdopt` says will work.
  */
@@ -113,6 +114,8 @@ export interface ProposalView {
   cannotAdopt?: string;
   pen: PenView;
   youProposedIt: boolean;
+  /** This viewer holds the village's story and may set this open suggestion aside (D7). Absent reads as no. */
+  youMaySetAside?: boolean;
 }
 
 /** A decided suggestion, as Adopt lists it under "Decided lately". */
@@ -133,6 +136,8 @@ export interface DecidedView {
   withdrawn: boolean;
   /** Adopted by filing it as a proposal the village votes on. */
   filed: boolean;
+  /** Set aside by whoever holds the village's story, with a note (D7). Absent reads as no. */
+  setAside?: boolean;
   decidedBy: { id: string; name: string };
   /** The pen's note. Null when none was written. */
   decisionNote: string | null;
@@ -313,11 +318,12 @@ export function suggestedLine(p: Pick<ProposalView, "proposedBy" | "createdAt" |
 }
 
 /** "Declined by Ivy on 5 October 2026." How a decided suggestion was decided, and by whom. */
-export function decidedLine(d: Pick<DecidedView, "status" | "withdrawn" | "filed" | "decidedBy" | "decidedAt" | "youProposedIt">, locale?: string): string {
+export function decidedLine(d: Pick<DecidedView, "status" | "withdrawn" | "filed" | "setAside" | "decidedBy" | "decidedAt" | "youProposedIt">, locale?: string): string {
   const on = d.decidedAt ? ` on ${readingDate(d.decidedAt, locale)}` : "";
   if (d.withdrawn) return `Withdrawn by ${d.youProposedIt ? "you" : "the member who made it"}${on}.`;
   const who = d.decidedBy.name || "the pen";
   if (d.filed) return `Filed${on} as a proposal to change the Game's rules, in its author's name. The village decides it.`;
+  if (d.setAside) return `Set aside by ${who}${on}, who holds the village's story.`;
   return d.status === "adopted" ? `Adopted by ${who}${on}.` : `Declined by ${who}${on}.`;
 }
 
@@ -406,7 +412,6 @@ export function adoptEffect(
   careDoorByAgreement = true,
 ): string {
   const pen = p.pen;
-  const notBuilt = "That vote is not built yet, so this suggestion stays open until it is.";
   // The server's own sentence, where adopting is certain to be refused today.
   if (p.cannotAdopt) return p.cannotAdopt;
   if (p.target === "words") {
@@ -432,12 +437,10 @@ export function adoptEffect(
     const to = LIFECYCLE_WORDS[(p.change as ModuleChange | null)?.to ?? "off"];
     if (pen.how === "act") {
       return birthed
-        ? `Adopting switches this ${to} straight away. No vote can move the module a vote runs on, so it stays with the administrators after the Game starts.`
+        ? `Adopting switches this ${to} straight away. Since the Game started, whoever holds the power to switch modules does this, and with nobody holding it the village votes.`
         : `The Game has not started, so adopting switches this ${to} straight away.`;
     }
-    return pen.ballotBuilt
-      ? `The Game has started, so adopting files this as a proposal in its author's name, and the village votes on it.`
-      : `The Game has started, so this goes to a vote of the whole village. ${notBuilt}`;
+    return "The Game has started, so adopting files this as a proposal in its author's name, and the village votes on it.";
   }
   // The consequence pen: the exit terms, the care door, the closing words and the matrix.
   if (pen.how === "ballot") {
@@ -447,7 +450,8 @@ export function adoptEffect(
     if (door?.id === "exit:restorative" && careDoorByAgreement) {
       return "The Game has started, so the care door changes only by a vote on the village's conflict agreement, which carries the whole agreement. Open that vote from the agreement itself.";
     }
-    return `The Game has started, so this goes to a vote of the whole village at the structural tier. ${notBuilt}`;
+    const whose = p.youProposedIt ? "your" : `${p.proposedBy.name || "its author"}'s`;
+    return `The Game has started, so adopting files this as a proposal in ${whose} name, and the village votes on it at the structural tier. Only the member who suggested it can file it.`;
   }
   if (p.target === "matrix") return "The Game has not started, so adopting adds this row to the Decision Matrix straight away.";
   return door?.id === "exit:restorative"
@@ -492,7 +496,8 @@ export function mayDecline(p: Pick<ProposalView, "pen" | "youProposedIt">): bool
  * one sentence is true of every setting: a dial is filed as a proposal, the
  * governance module stays with the administrators and switches straight away,
  * the care door goes through the conflict agreement's own vote, and the exit
- * terms wait for a vote not built yet. So the line sends the reader to each
+ * terms and the matrix are filed as proposals the village votes on at the
+ * structural tier. So the line sends the reader to each
  * card, whose `adoptEffect` says which (audit of Wave 3b, 2026-09-28).
  */
 export function adoptIntro(birthed: boolean): string {
@@ -671,7 +676,9 @@ export function suggestionFate(
       label: "Start a proposal",
     };
   }
-  if (!pen.ballotBuilt) return { text: "That vote is not built yet, so a suggestion here stays open until it is." };
+  if (option.target === "matrix" || (option.target === "setting" && (option.door === "exit:terms" || option.door === "exit:restorative"))) {
+    return { text: "The Game has started, so the member who suggests this files it as a proposal, and the village votes on it at the structural tier." };
+  }
   return null;
 }
 

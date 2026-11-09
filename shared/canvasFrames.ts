@@ -391,7 +391,7 @@ export function parseMatrixRow(raw: unknown): { ok: true; row: MatrixRowChange }
   };
 }
 
-function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | { ok: false; error: string } {
+export function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | { ok: false; error: string } {
   const b = (raw ?? {}) as Record<string, unknown>;
   const change: ExitTermsChange = {};
   if (b.noticePeriodDays !== undefined) {
@@ -415,7 +415,7 @@ function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | {
   return { ok: true, change };
 }
 
-function parseRestorative(raw: unknown): { ok: true; change: RestorativeChange } | { ok: false; error: string } {
+export function parseRestorative(raw: unknown): { ok: true; change: RestorativeChange } | { ok: false; error: string } {
   const b = (raw ?? {}) as Record<string, unknown>;
   const change: RestorativeChange = {};
   if (b.steps !== undefined) {

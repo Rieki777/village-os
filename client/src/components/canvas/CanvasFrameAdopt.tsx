@@ -6,8 +6,8 @@
  * what adopting it would do TODAY, and who decides. What adopting does
  * changes at the Birthing, and the frame says which side of it the village is
  * on: before it, a suggestion that names a setting writes the setting; after
- * it, a dial suggestion is filed as a proposal in its author's name, and the
- * consequence pen's vote is not built yet, which is said instead of offered
+ * it, a dial, module, exit-term or matrix suggestion is filed as a proposal in
+ * its author's name, and only the author is offered that button
  * (`adoptEffect`, client/src/lib/canvasFramesCopy.ts).
  *
  * BUTTONS ONLY WHERE THEY WILL WORK. The server answers `pen.youMayAdopt` for
@@ -182,26 +182,32 @@ function ProposalCard({
 }) {
   const { t } = useLingui();
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<"" | "adopt" | "decline" | "withdraw">("");
+  const [busy, setBusy] = useState<"" | "adopt" | "decline" | "withdraw" | "set-aside">("");
   const [error, setError] = useState<{ text: string; toProposals: boolean } | null>(null);
 
   const mayAdopt = mayAdoptHere(p);
   const declines = mayDecline(p);
   const withdraws = p.youProposedIt;
-  const acts = mayAdopt || declines || withdraws;
+  // D7: the story's holder may set aside a suggestion nobody here may decline (a vote's, say).
+  const setsAside = !!p.youMaySetAside && !declines && !withdraws;
+  const acts = mayAdopt || declines || withdraws || setsAside;
   const dial = dialOf(p, payload.doors);
   const lines = changeLines(p, dial);
   const pen = p.pen.sentence;
 
-  const decide = async (what: "adopt" | "decline" | "withdraw") => {
+  const decide = async (what: "adopt" | "decline" | "withdraw" | "set-aside") => {
     setError(null);
     if (what === "decline" && note.trim().length < 2) {
       setError({ text: t`Say in a sentence why this is declined. The note is public, like the suggestion.`, toProposals: false });
       return;
     }
+    if (what === "set-aside" && note.trim().length < 2) {
+      setError({ text: t`Say in a sentence why this is set aside. The note is public, like the suggestion.`, toProposals: false });
+      return;
+    }
     setBusy(what);
     try {
-      const path = what === "adopt" ? "adopt" : "decline";
+      const path = what === "adopt" ? "adopt" : what === "set-aside" ? "set-aside" : "decline";
       const r = await fetch(`/api/canvas/proposals/${p.id}/${path}`, {
         method: "POST",
         headers: headers(),
@@ -217,7 +223,9 @@ function ProposalCard({
           ? String(d?.message ?? t({ message: "Adopted.", context: "a canvas suggestion was adopted" }))
           : what === "withdraw"
             ? t`Your suggestion is withdrawn. It is listed under Decided lately on this block.`
-            : t`Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.`,
+            : what === "set-aside"
+              ? t`Set aside. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.`
+              : t`Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.`,
       );
     } catch {
       setError({ text: t`That did not reach the server, so nothing was decided.`, toProposals: false });
@@ -261,7 +269,13 @@ function ProposalCard({
         <div className="space-y-2 border-t border-stone-100 pt-2">
           <label className="block text-sm">
             <span className="font-medium text-stone-900">
-              {declines ? (mayAdopt ? t`Your note (optional to adopt, needed to decline)` : t`Your note (needed to decline)`) : t({ message: "Your note (optional)", context: "label of the note box on a canvas suggestion" })}
+              {declines
+                ? mayAdopt
+                  ? t`Your note (optional to adopt, needed to decline)`
+                  : t`Your note (needed to decline)`
+                : setsAside && !mayAdopt
+                  ? t`Your note (needed to set it aside)`
+                  : t({ message: "Your note (optional)", context: "label of the note box on a canvas suggestion" })}
             </span>
             <span className="block text-xs text-stone-600">{noteReaders(p, payload.notesArePublic)}</span>
             <textarea
@@ -303,6 +317,18 @@ function ProposalCard({
                 className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
               >
                 {busy === "withdraw" ? t({ message: "Withdrawing", context: "a suggestion is being withdrawn" }) : t({ message: "Withdraw my suggestion", context: "button on a canvas suggestion its author made" })}
+              </button>
+            )}
+            {setsAside && (
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() => void decide("set-aside")}
+                className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
+              >
+                {busy === "set-aside"
+                  ? t({ message: "Setting aside", context: "a canvas suggestion is being set aside by the story's holder" })
+                  : t({ message: "Set it aside", context: "button: the story's holder sets aside a canvas suggestion" })}
               </button>
             )}
           </div>

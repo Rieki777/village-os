@@ -284,7 +284,7 @@ import { register as registerWalletRoutes } from "./routes/wallet";
 import { register as registerTokenJobRoutes } from "./routes/tokenJobs";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerRestorativeIntakeRoutes } from "./routes/restorativeIntake";
-import { register as registerExitRoutes } from "./routes/exits";
+import { register as registerExitRoutes, exitVoteDoor } from "./routes/exits";
 import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
 import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
@@ -19990,9 +19990,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // The body moved to server/lib/mechanicsPropose.ts, so the canvas adopt door
   // files a dial change through the same checks after the Birthing.
-  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders: { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) }, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
+  const anySwitchHolder = async () => (await liveHoldersOf("module.switch")).length > 0; // canvas follow-up G.3: governance below members waits for a holder
+  const exitVote = exitVoteDoor({ isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }); // the consequence pen's vote on the exit policy (canvas follow-up G.1)
+  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders: { ...moduleChangeReaders, exitVote, anySwitchHolder, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) }, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
   /** One validator for a proposal's change set, wherever it is built: the create route and change requests (server/routes/changeRequests.ts). */
-  const validateProposalChanges = (changes: unknown) => validateChangeSet(getPool(), Array.isArray(changes) ? changes : [], rawValue, Math.max(0, numberVar("governance.change_cooldown_days")), readMintRulesForChangeSet, { ...moduleChangeReaders, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) });
+  const validateProposalChanges = (changes: unknown) => validateChangeSet(getPool(), Array.isArray(changes) ? changes : [], rawValue, Math.max(0, numberVar("governance.change_cooldown_days")), readMintRulesForChangeSet, { ...moduleChangeReaders, exitVote, anySwitchHolder, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) });
   app.post("/api/game/mechanics/proposals", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to propose a change to the game" });
@@ -20220,6 +20222,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     sharedPasswordPosture: () => false,
     // A `brand_field` vote writes through the same document the admin brand route writes (Rye, 2026-11-06).
     brand: { read: () => getBrand(), write: async (next) => { await brandRepo.put(next as any); } },
+    exitVote, // canvas follow-up G.1: the exit policy's own save, minus the admin check
+    anySwitchHolder,
   });
 
   async function applyMechanicsProposal(
@@ -24115,7 +24119,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, liveHoldersOf, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, liveHoldersOf, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo, capabilityCtx });
   registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });
