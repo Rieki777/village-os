@@ -64,7 +64,18 @@ describe.skipIf(!configured)("companions against a real schema", () => {
   const RIVERBEND = { name: "Riverbend", guideName: "The guide", timeZone: "UTC" };
   let villageNow = RIVERBEND;
   const prefs: Record<string, any> = {};
-  const env = (over: Partial<CompanionsEnv> = {}): CompanionsEnv => ({ pool, today: TODAY, ceiling: 3, roleScope: "all", guideName: "The guide", ...over });
+  // The outside agent's name is the module's, never a constant: a name no code holds proves it.
+  const OUTSIDE = "Wren of the Commons";
+  const env = (over: Partial<CompanionsEnv> = {}): CompanionsEnv => ({
+    pool,
+    today: TODAY,
+    ceiling: 3,
+    roleScope: "all",
+    guideName: "The guide",
+    outsideGuideName: OUTSIDE,
+    guideOf: async () => "village",
+    ...over,
+  });
 
   const as = async (who: string | null, key: string, req: any = {}) => {
     whoami = who;
@@ -95,6 +106,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
       },
       overLimit: async () => false,
       members: {
+        byId: async (id: string) => ({ id, prefs: prefs[id] ?? {} }),
         update: async (id: string, fn: (u: any) => void) => {
           const u = { id, prefs: prefs[id] ?? {} };
           fn(u);
@@ -119,6 +131,33 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     // Control: the same member, the village says all roles.
     const all = await syncArmy(env(), "u-rick");
     expect(all.map((c) => c.scope).sort()).toEqual(["personal", "role"]);
+  });
+
+  /*
+   * Rye, 2026-11-06: the personal companion follows the member's OWN chosen
+   * guide (the 2026-10-24 chooser), and no longer stays on the village guide.
+   * A role companion keeps the engine its holder set.
+   */
+  it("the personal companion follows the guide the member chose, both ways, and names it by the module's name", async () => {
+    const chose: Record<string, "village" | "saberra"> = { "u-rick": "saberra" };
+    const e = env({ guideOf: async (id) => chose[id] ?? "village" });
+    const personalOf = async () => (await syncArmy(e, "u-rick")).find((c) => c.scope === "personal")!;
+    expect((await personalOf()).provider, "made on the outside agent the member chose").toBe("saberra");
+    const shown = (await armyView(e, "u-rick", words)).find((c) => c.scope === "personal")!;
+    expect(shown.engine, "named by the module's name for its agent").toBe(OUTSIDE);
+    expect(shown.engineConnected, "the outside side has no chat yet").toBe(false);
+    expect(shown.chatEngine, "so the village guide answers the chat for now").toBe("The guide");
+    expect(shown.outsideEngine).toBe(OUTSIDE);
+    // The member switches back: the same companion follows, nothing new is made.
+    const before = (await personalOf()).id;
+    chose["u-rick"] = "village";
+    const back = await personalOf();
+    expect([back.id, back.provider]).toEqual([before, "village"]);
+    expect((await armyView(e, "u-rick", words)).find((c) => c.scope === "personal")!.engine).toBe("The guide");
+    // A role companion is not the personal one: the member's choice leaves it where its holder set it.
+    chose["u-rick"] = "saberra";
+    const roles = (await syncArmy(e, "u-rick")).filter((c) => c.scope === "role");
+    for (const r of roles) expect(r.provider, r.name).toBe("village");
   });
 
   it("caps questions at three a companion a day; the fourth is held, and opens the next morning", async () => {
@@ -352,6 +391,26 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(a.ok && b.ok).toBe(true);
     expect(await claimForDoor(pool, a as any)).toBe(true);
     expect(await claimForDoor(pool, b as any)).toBe(false);
+  });
+
+  it("reads the member's own saved guide for the personal companion, and leaves its engine to the chooser", async () => {
+    // What the guide chooser saves (PUT /api/guide, server/routes/guideChoice.ts).
+    prefs["u-ben"] = { ...(prefs["u-ben"] ?? {}), guide: "saberra" };
+    try {
+      const view = await as("u-ben", "GET /api/me/companions");
+      expect(view.status).toBe(200);
+      const personal = view.body.companions.find((c: any) => c.scope === "personal");
+      expect(personal.provider, "the member's own choice, read through the route").toBe("saberra");
+      // Set from the companion page, it would disagree with the chooser, so only the chooser moves it.
+      const set = await as("u-ben", "PATCH /api/me/companions/:id", { params: { id: personal.id }, body: { provider: "village" } });
+      expect(set.status).toBe(400);
+      expect(set.body.error).toMatch(/guide you chose/);
+      prefs["u-ben"] = { ...prefs["u-ben"], guide: "village" };
+      const back = (await as("u-ben", "GET /api/me/companions")).body.companions.find((c: any) => c.scope === "personal");
+      expect([back.id, back.provider]).toEqual([personal.id, "village"]);
+    } finally {
+      delete prefs["u-ben"]?.guide;
+    }
   });
 
   it("asks for the member's yes before a chat goes to a model, and keeps a yes per provider", async () => {
