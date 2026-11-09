@@ -60,17 +60,47 @@ export type HolderStanding = "holder" | "admin-before-launch" | "admin-no-stewar
 const launched = (deps: Pick<HolderDoorDeps, "getPool" | "launchedByVote">): Promise<boolean> =>
   deps.launchedByVote ? deps.launchedByVote() : launchedByVoteOf(deps.getPool());
 
-/** Which door this person reaches the power through, for a page that says so. Answers nothing. */
+/**
+ * Which door this person reaches the power through, for a page that says so.
+ * Answers nothing. Null whenever `holderDoor` would refuse them, so a banner
+ * never offers a door that is shut. The break-glass is left out on purpose: it
+ * is an emergency act through the gate, written into the public record, and no
+ * page should show it as a standing.
+ */
 export async function holderStanding(
-  deps: Pick<HolderDoorDeps, "getPool" | "liveHoldersOf" | "launchedByVote">,
+  deps: Pick<HolderDoorDeps, "getPool" | "liveHoldersOf" | "launchedByVote" | "capabilityCtx">,
   user: { id: unknown; isAdmin?: boolean } | null,
   cap: Capability,
 ): Promise<HolderStanding> {
   if (!user) return null;
   if ((await deps.liveHoldersOf(cap)).includes(String(user.id))) return "holder";
   if (!user.isAdmin) return null;
+  // On a key the village holds, the gate refuses an admin who is not a holder.
+  if (isVillageHeld(cap, (await deps.capabilityCtx(user)).villageHeld)) return null;
   if (!(await launched(deps))) return "admin-before-launch";
   return (await deps.liveHoldersOf(BREAK_GLASS_SEAT)).length === 0 ? "admin-no-steward" : null;
+}
+
+/** Why the door refused, handed to a caller that answers in its own shape. */
+export interface HolderRefusal {
+  cap: Capability;
+  /** not-a-holder: a member with no standing, or an admin after launch with a steward holding the role. */
+  reason: "not-a-holder";
+  /** The live holders of the power; empty means the village decides. */
+  holders: readonly string[];
+  /** The door's own answer, for a caller that wants its words with its own status. */
+  body: Record<string, unknown>;
+}
+
+export interface HolderDoorOptions {
+  /**
+   * Answer a refusal in the caller's own shape (Budgets: a 409 naming its
+   * suggestion vote path). The decision and its order stay the door's. The
+   * gate's own answers on a key the village holds (the 409 that names the
+   * holder and offers the break-glass) are never handed here: they go out as
+   * the gate wrote them.
+   */
+  refuse?: (res: any, refusal: HolderRefusal) => void;
 }
 
 /** The refusal after launch, written once for every door. */
@@ -87,22 +117,52 @@ export function notAHolderBody(cap: Capability, holders: readonly string[]): Rec
   };
 }
 
+/** A response that only remembers what was sent, so the gate's answer can be read before it is passed on. */
+function captured() {
+  const out: { status: number; body: unknown; sent: boolean } = { status: 200, body: undefined, sent: false };
+  const res: any = {
+    status(code: number) {
+      out.status = code;
+      return res;
+    },
+    json(body: unknown) {
+      out.body = body;
+      out.sent = true;
+      return res;
+    },
+  };
+  return { res, out };
+}
+
 /**
  * May this request go through the door for `cap`. Answers the request when
  * the answer is no, the way `guardCapability` does, and the caller returns.
  */
-export async function holderDoor(req: any, res: any, deps: HolderDoorDeps, cap: Capability): Promise<boolean> {
+export async function holderDoor(req: any, res: any, deps: HolderDoorDeps, cap: Capability, opts: HolderDoorOptions = {}): Promise<boolean> {
   const user = await deps.authedUser(req);
   if (!user) {
     res.status(401).json({ error: "auth_required" });
     return false;
   }
   const holders = (await deps.liveHoldersOf(cap)).filter((h) => h !== "");
-  if (!(await deps.guardCapability(req, res, cap, { status: 403, body: notAHolderBody(cap, holders) }))) return false;
+  const body = notAHolderBody(cap, holders);
+  const refuse = (): false => {
+    if (opts.refuse) opts.refuse(res, { cap, reason: "not-a-holder", holders, body });
+    else res.status(403).json(body);
+    return false;
+  };
+  // The gate answers into a capture: its refusal for somebody with no standing
+  // is this door's own body, and goes to the caller's shape; anything else it
+  // wrote (the village-held 409) is passed on exactly as written.
+  const gate = captured();
+  if (!(await deps.guardCapability(req, gate.res, cap, { status: 403, body }))) {
+    if (gate.out.body === body) return refuse();
+    res.status(gate.out.status).json(gate.out.body);
+    return false;
+  }
   if (holders.includes(String(user.id))) return true;
   if (isVillageHeld(cap, (await deps.capabilityCtx(user)).villageHeld)) return true;
   if (!(await launched(deps))) return true;
   if ((await deps.liveHoldersOf(BREAK_GLASS_SEAT)).length === 0) return true;
-  res.status(403).json(notAHolderBody(cap, holders));
-  return false;
+  return refuse();
 }
