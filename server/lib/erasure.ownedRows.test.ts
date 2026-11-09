@@ -812,7 +812,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
   });
 
   /*
-   * The cash budget (0347, budgets spec R26). A leaver's account id comes off
+   * The cash budget (9999, budgets spec R26). A leaver's account id comes off
    * the lines they changed, the rates they locked and the imports they ran;
    * the role they acted as stays, and so does every row, and a bystander's
    * attribution does not move.

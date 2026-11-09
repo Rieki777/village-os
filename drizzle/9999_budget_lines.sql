@@ -1,4 +1,4 @@
--- 0347: a village writes down its cash budget, line by line, every import of it, a note per period, the sources that feed it, and an envelope per circle.
+-- 9999: a village writes down its cash budget, line by line, every import of it, a note per period, the sources that feed it, and an envelope per circle.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can
