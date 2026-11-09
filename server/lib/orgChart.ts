@@ -20,6 +20,7 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { raiseRevokeForEnded } from "./roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
@@ -1215,6 +1216,7 @@ export async function endSeating(pool: Pool | PoolConnection, assignmentId: stri
     [reason ?? null, assignmentId],
   );
   seatingsChanged();
+  if (r?.affectedRows) await raiseRevokeForEnded(pool, [assignmentId]);
   return !!r?.affectedRows;
 }
 
@@ -1242,11 +1244,13 @@ export async function releaseSeatingsForUser(
   userId: string,
   reason: string,
 ): Promise<number> {
+  const [liveIds]: any = await pool.query("SELECT id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [userId]);
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE user_id = ? AND ended_at IS NULL",
     [reason, userId],
   );
   seatingsChanged();
+  await raiseRevokeForEnded(pool, (liveIds as any[]).map((r) => String(r.id)));
   await pool.query(
     "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
     [userId],

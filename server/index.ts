@@ -115,6 +115,7 @@ import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerRoleRenewalRoutes } from "./routes/roleRenewal";
+import { configureAccessNotices } from "./lib/roleAccess";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
@@ -24990,7 +24991,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // Ending a seating and forgetting a documented holder, registered at
   // exactly the point they used to sit. Express matches in registration
   // order.
-  registerOrgSeatingRoutes(app, { isAdmin, authedUser, guardCapability, adminActor, getPool, notify, notifyAdmins });
+  registerOrgSeatingRoutes(app, { isAdmin, authedUser, guardCapability, adminActor, getPool });
+  configureAccessNotices({ notify, notifyAdmins: (type, title, key, link) => notifyAdmins(type, title, key, link) });
   registerRoleRenewalRoutes(app, { authedUser, guardCapability, getPool, notify, capabilityCtx });
 
   /**

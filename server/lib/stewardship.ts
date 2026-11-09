@@ -144,6 +144,7 @@ import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
 import { clockFor, termWarningOpensAt, termWarningOpensFor, type CycleClock } from "../../shared/cycleClock";
 import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
 import { adoptedUnseatedSeats } from "../repos/seatRenewals";
+import { raiseRevokeForEnded } from "./roleAccess";
 import {
   blankVetoActReason,
   blankVetoActReasonsBy,
@@ -2290,11 +2291,14 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
   // powers that would be false one plane over.
   // A seat the village has already renewed (an adopted application waiting
   // for its first day) is not warned about: its next term is agreed (RC2).
+  const lapsedSeatingIds: string[] = [];
   const renewing = await adoptedUnseatedSeats(deps.pool).catch(() => new Set<string>());
   for (const a of deps.seatings) {
     if (a.holderKind !== "member" || !a.userId) continue;
     if (a.orgRoleId && renewing.has(`${a.userId}@${a.orgRoleId}`)) continue;
     const ended = !!a.lapsed;
+    // A term that ran out without renewal: remind the granting role to take the access back (a reminder, never an automatic revoke).
+    if (ended) lapsedSeatingIds.push(a.id);
     if (!ended && !due(a.termEndsAt, a.startedAt)) continue;
     // A one-moon term is warned every moon on the same seating, so its key names the term it warns about.
     const endsAtDate = a.termEndsAt ? new Date(String(a.termEndsAt instanceof Date ? a.termEndsAt.toISOString() : a.termEndsAt)) : null;
@@ -2339,6 +2343,9 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
     });
     if (r.fresh) report.holdersTold += 1;
   }
+
+  // After both planes are read, so the reminder never sits between the sweep and its own queries.
+  if (lapsedSeatingIds.length) await raiseRevokeForEnded(deps.pool, lapsedSeatingIds);
 
   /*
    * THE LOUD CALENDAR. Keyed on the day, so an admin hears it once a day and

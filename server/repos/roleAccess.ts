@@ -216,6 +216,8 @@ export async function renewSeating(pool: Pool, r: RenewalRow, nextEnds: Date, by
     [nextEnds, r.assignmentId, r.forTermEndsAt],
   );
   if (!u?.affectedRows) return false;
+  // A term that had lapsed and is now renewed no longer ends: its revoke reminders are withdrawn.
+  await pool.query("UPDATE role_access_tasks SET state = 'not_needed' WHERE assignment_id = ? AND kind = 'revoke' AND state = 'open'", [r.assignmentId]);
   await pool.query(
     "UPDATE role_moon_renewals SET status = 'renewed', next_term_ends_at = ?, renewed_at = NOW(), renewed_by = ? WHERE id = ? AND status = 'filed'",
     [nextEnds, by, r.id],

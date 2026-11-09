@@ -23,6 +23,24 @@ export interface AccessNoticeDeps {
   notifyAdmins: (type: string, title: string, dedupeKey: string, link?: string) => Promise<unknown>;
 }
 
+/**
+ * The notice dependencies, set once at boot (server/index.ts). A seating ends in
+ * several places that have no notifier of their own; each calls
+ * `raiseRevokeForEnded`, and the notice goes through here. Unset in a test, the
+ * tasks are still raised and nobody is told.
+ */
+let configured: AccessNoticeDeps | undefined;
+export function configureAccessNotices(deps: AccessNoticeDeps | undefined): void {
+  configured = deps;
+}
+
+/** Raise revoke tasks for seatings that have just ended. Best effort: the end stands either way. */
+export async function raiseRevokeForEnded(db: { query: Pool["query"] }, assignmentIds: string[]): Promise<void> {
+  for (const id of assignmentIds) {
+    await raiseRevokeTasks(db as unknown as Pool, id, configured).catch(() => 0);
+  }
+}
+
 export const ACCESS_TASKS_LINK = "/admin?tab=org";
 const MY_ACCESS_LINK = "/season-plan";
 

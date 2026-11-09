@@ -315,7 +315,8 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
       const title = s.renewed ? `Your role as ${name} was renewed on your new terms` : `You were seated as ${name}`;
       await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
       // The role has started: one grant task per item on its card (L8). Best effort; the seating stands.
-      await raiseGrantTasks(pool, s.assignmentId, { notify: deps.notify, notifyAdmins: deps.notifyAdmins }).catch(() => 0);
+      // A renewal on new terms is the same person in the same role: the access they hold stays.
+      if (!s.renewed) await raiseGrantTasks(pool, s.assignmentId, { notify: deps.notify, notifyAdmins: deps.notifyAdmins }).catch(() => 0);
     }
   }
   if (outcome.kind === "held-full") {

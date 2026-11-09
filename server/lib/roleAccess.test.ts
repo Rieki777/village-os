@@ -6,7 +6,9 @@ import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "../db/testDb";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
-import { raiseGrantTasks, raiseRevokeTasks } from "./roleAccess";
+import { configureAccessNotices, raiseGrantTasks, raiseRevokeTasks } from "./roleAccess";
+import { endSeating, releaseSeatingsForUser } from "./orgChart";
+import { runTermWatch } from "./stewardship";
 import { carryOnCardsFor, fileCarryOn, renewAllFiled } from "./moonRenewal";
 import { tasksForAssignment } from "../repos/roleAccess";
 
@@ -106,5 +108,36 @@ describe.skipIf(!configured)("access tasks and moon renewal", () => {
     expect(new Date(after.term_ends_at).getTime()).toBe(LUNAR_CLOCK.startOf(n + 2).getTime());
     // A second press renews nothing.
     expect((await renewAllFiled(pool, "u-steward", LUNAR_CLOCK)).renewed).toHaveLength(0);
+  });
+  describe("revoke tasks on EVERY way a role ends", () => {
+    const revokesOf = async () => (await tasksForAssignment(pool, "a-fin")).filter((t) => t.kind === "revoke");
+    beforeEach(async () => {
+      configureAccessNotices(deps);
+      await raiseGrantTasks(pool, "a-fin", deps);
+      sent.length = 0;
+      admins.length = 0;
+    });
+
+    it("the admin end door (endSeating)", async () => {
+      expect(await endSeating(pool, "a-fin", "stepped down")).toBe(true);
+      expect((await revokesOf()).map((t) => t.state)).toEqual(["open", "open"]);
+      expect(sent.length + admins.length).toBeGreaterThan(0);
+    });
+
+    it("the holder leaving (releaseSeatingsForUser)", async () => {
+      await releaseSeatingsForUser(pool, "u-new", "member left the village");
+      expect(await revokesOf()).toHaveLength(2);
+    });
+
+    it("a term that ran out without renewal, until it is renewed", async () => {
+      const lapsed = [{ id: "a-fin", orgRoleId: "r-fin", holderKind: "member", userId: "u-new", roleName: "Lead Financial Steward", daysLeft: null, lapsed: true, termEndsAt: ends, startedAt: starts }];
+      await runTermWatch({ pool, clock: LUNAR_CLOCK, now: new Date(ends.getTime() + DAY), season: { current: { id: "s" } }, seatings: lapsed, notify: async () => ({ fresh: true }), notifyAdmins: async () => undefined });
+      expect((await revokesOf()).map((t) => t.state)).toEqual(["open", "open"]);
+      // The holder filed late and the role was renewed: the reminders are withdrawn.
+      const late = new Date(ends.getTime() - 3 * DAY);
+      await fileCarryOn(pool, "u-new", "a-fin", "Carry on", late, LUNAR_CLOCK);
+      await renewAllFiled(pool, "u-steward", LUNAR_CLOCK);
+      expect((await revokesOf()).map((t) => t.state)).toEqual(["not_needed", "not_needed"]);
+    });
   });
 });

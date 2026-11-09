@@ -36,6 +36,7 @@
  * is lossy, and an archive may not be.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { raiseRevokeForEnded } from "./roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesChosenBy, draftChangesNamingPeople, draftStatus, lockCirclesCounter, lockDraftRow, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
@@ -1756,6 +1757,7 @@ async function applyChange(
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
     seatingsChanged();
+    await raiseRevokeForEnded(conn, [String(p.assignmentId ?? "")]);
     return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
@@ -1892,6 +1894,8 @@ export async function revertDraft(
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
+        const revertKey = c.payload?.userId ? String(c.payload.userId) : documentedKey(String(c.payload?.displayName ?? "unnamed"));
+        const [revertedIds]: any = await conn.query("SELECT id FROM org_role_assignments WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?", [c.orgRoleId, revertKey]);
         await conn.query(
           "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = 'draft reverted' WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
           // The same key `applyChange` seated under, from the same function.
@@ -1902,6 +1906,7 @@ export async function revertDraft(
             : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
         seatingsChanged();
+        await raiseRevokeForEnded(conn, (revertedIds as any[]).map((r) => String(r.id)));
       } else if (c.op === "end_holding" && c.beforeJson && !(c.beforeJson.user_id && (await isAgentAccount(conn, String(c.beforeJson.user_id))))) {
         // 0319: a holder marked as an agent account since the holding ended is not seated again; it holds no role.
         const b = c.beforeJson;
