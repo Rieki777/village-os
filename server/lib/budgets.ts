@@ -2451,7 +2451,7 @@ async function switchOffReason(s: BudgetSourceState, e: BudgetEnv, pool: Pool): 
     return null;
   }
   if (s.setAs === BREAK_GLASS) {
-    if (!(await e.stewardHolders()).includes(s.setBy)) return "The steward who broke the glass to turn this source on no longer sits in the steward's seat. A holder of the budget power turns it on again.";
+    if (!(await e.stewardHolders()).includes(s.setBy)) return "The steward who broke the glass to turn this source on no longer holds the steward's role. A holder of the budget power turns it on again.";
     return null;
   }
   if (!(await e.holdsRolePay(s.setBy))) return "The person who turned this source on no longer holds the budget power. A holder turns it on again.";
