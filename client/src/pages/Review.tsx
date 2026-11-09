@@ -71,7 +71,7 @@ import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
-import { SeraFold, SeraMemberPage, SeraTop, useSeraOnReview } from "@/components/review/SeraDifferences";
+import { SeraFold, SeraMemberPage, SeraTop, useSeraOnReview } from "@/components/review/SeraOnReview";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
