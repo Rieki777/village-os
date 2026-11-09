@@ -38,7 +38,8 @@ describe("splitArtifact", () => {
   it("lifts every embedded image over the threshold out of the page", () => {
     expect(out.html).not.toContain(big);
     expect(out.html).not.toContain(big2);
-    expect(out.html.match(new RegExp(ASSET_PREFIX.replace(/\//g, "\\/") + "[0-9a-f]{16}\\.(png|jpg|webp)", "g"))).toHaveLength(4);
+    expect(ASSET_PREFIX).toBe("/grounds/a/");
+    expect(out.html.match(/\/grounds\/a\/[0-9a-f]{16}\.(png|jpg|webp)/g)).toHaveLength(4);
   });
 
   it("gives each image back byte for byte, under a name made from its content", () => {
