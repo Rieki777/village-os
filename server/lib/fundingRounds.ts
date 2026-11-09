@@ -3,12 +3,23 @@
  * pot (Rye, 2026-11-06). This file holds the rules; server/repos/fundingRounds.ts
  * holds the SQL; server/routes/fundingRounds.ts holds the doors.
  *
- * WHAT IS BUILT HERE (S2). Pots, rounds and the seed stage: a member posts a
+ * WHAT IS BUILT HERE. Pots, rounds and the seed stage (S2): a member posts a
  * rough idea, named or anonymous by their own tick, and each idea opens its
  * own forum discussion thread so every idea exists in the standard format.
- * Grow, choose and harvest are derived stages already (shared/fundingRounds.ts)
- * and their doors arrive in the next slice; a round whose grow date is unset
- * stays in seed, which is how a village runs seed only for a season.
+ * The loop (S3): in grow the author shapes their idea into a quest (what it
+ * delivers, what it asks); in choose members tick every quest they would
+ * fund, privately until it closes; at harvest both counts run ONCE (Equal
+ * Shares weighted by counted Voice, and one member one vote), the pot's
+ * decider funds, each funded quest holds an earmark on the pot and becomes a
+ * quest on the board, and the disagreement is kept in the round's record.
+ * A round whose grow date is unset stays in seed, which is how a village runs
+ * seed only for a season.
+ *
+ * NOT HERE YET (S4, plan §13): the work-only Voice read, the Voice snapshot
+ * frozen when choose OPENS, and the 48-hour vote that can switch a round to
+ * the people's count. Until then counted Voice is the village's own ballot
+ * weight (`governanceWeights.weightsFor`), read at harvest, and the
+ * disagreement is shown but no vote holds the differing quests back.
  *
  * ANONYMITY. The author is always stored, for erasure and abuse handling, and
  * never leaves the server when the idea is anonymous: every view below is
@@ -25,14 +36,19 @@ import type { Pool } from "mysql2/promise";
 import {
   ANONYMOUS_BYLINE, ANONYMOUS_MIN_MEMBERS, acceptsIdeas, datesProblem, parseIdea, stageAt,
   type Byline, type IdeaStatus, type PotClock, type RoundStage,
+  isGrown, parseGrow,
 } from "../../shared/fundingRounds";
+import { countBothWays, divergenceOf, type ShareResult } from "../../shared/equalShares";
+import type { QuestRecord } from "../repos/quests";
+import { onRealItemPublished } from "./examples";
 import { LIFECYCLE_RANK, MODULES_BY_ID } from "../../shared/modules";
 import { firstNameOf } from "./peopleLock";
 import { effectiveLifecycle, moduleConfig } from "./modules";
 import {
   forgetMember, ideaById, ideasByAuthor, ideasOfRound, insertIdea, insertIdeaThread, insertInteraction, insertPot, insertRound,
   interactionCountsFor, interactionsOf, listPots, listRounds, liveIdeasOf, openRoundCount, potById, receivedOf, roundById,
-  setIdeaThread, updateRoundDates, type IdeaRow, type InteractionInput, type PotRow, type RoundRow,
+  setIdeaThread, updateRoundDates, type IdeaRow, type InteractionInput, type PotRow, type Queryable, type RoundRow,
+  allMarksOf, claimIdeaQuest, claimOutcome, earmarkTotals, insertEarmark, lockPot, marksOf, marksOfMember, releaseIdeaQuest, replaceMarks, setEarmarkQuest, setIdeaStatus, updateIdeaGrow,
 } from "../repos/fundingRounds";
 
 export const MODULE_ID = "funding-rounds";
@@ -66,13 +82,21 @@ export interface PotView {
   status: PotRow["status"];
   /** Received minus paid. */
   balanceMinor: number;
-  /** Held plus owed earmarks. None exist before the harvest slice. */
+  /** Held plus owed earmarks: money promised to funded quests. */
   earmarkedMinor: number;
+  /** Balance minus earmarks: what a new round may offer. */
   freeMinor: number;
 }
 
+/** A pot's money, in its minor unit. Free = received - held - owed - paid, never below zero. */
+async function potMoney(db: Queryable, potId: string): Promise<{ balance: number; earmarked: number; free: number }> {
+  const received = await receivedOf(db, potId);
+  const e = await earmarkTotals(db, potId);
+  return { balance: received - e.paid, earmarked: e.held + e.owed, free: Math.max(0, received - e.held - e.owed - e.paid) };
+}
+
 export async function potView(pool: Pool, p: PotRow): Promise<PotView> {
-  const received = await receivedOf(pool, p.id);
+  const money = await potMoney(pool, p.id);
   return {
     id: p.id,
     name: p.name,
@@ -85,9 +109,9 @@ export async function potView(pool: Pool, p: PotRow): Promise<PotView> {
     circleId: p.circleId,
     homeStructureKey: p.structureKey,
     status: p.status,
-    balanceMinor: received,
-    earmarkedMinor: 0,
-    freeMinor: received,
+    balanceMinor: money.balance,
+    earmarkedMinor: money.earmarked,
+    freeMinor: money.free,
   };
 }
 
@@ -243,11 +267,18 @@ export interface IdeaView {
   structureKey: string | null;
   circleId: string | null;
   status: IdeaStatus;
+  /** Grow: what the quest delivers and what it asks of the pot. */
+  deliverable: string | null;
+  askMinor: number | null;
+  sharedImpact: boolean;
   byline: Byline;
   /** The viewer wrote it. True for their own anonymous idea too; never reveals anyone else. */
   mine: boolean;
   threadId: string | null;
+  questId: string | null;
   createdAt: string | null;
+  /** First names of the members who ticked it. Only once choosing has closed (plan R6); absent before. */
+  markedBy?: string[];
 }
 
 /** How an idea's author is shown: "a member" when anonymous, else their first name. */
@@ -269,9 +300,13 @@ export function ideaView(idea: IdeaRow, viewerId: string | null, nameOf: (id: st
     structureKey: idea.structureKey,
     circleId: idea.circleId,
     status: idea.status,
+    deliverable: idea.deliverable,
+    askMinor: idea.askMinor,
+    sharedImpact: idea.sharedImpact,
     byline: bylineOf(idea, nameOf),
     mine: viewerId != null && idea.authorId === viewerId,
     threadId: idea.threadId,
+    questId: idea.questId,
     createdAt: idea.createdAt,
   };
 }
@@ -391,6 +426,18 @@ export async function overview(pool: Pool, now: Date, memberCount: number): Prom
   return { pots: potViews, rounds: views };
 }
 
+export interface RoundDetail {
+  round: RoundView;
+  pot: PotView;
+  ideas: IdeaView[];
+  /** The quests members choose between: grown, with an ask. Shown from choose on. */
+  ballot: IdeaView[];
+  /** The viewer's own ticks. Nobody else's are shown until choosing closes. */
+  myMarks: string[];
+  /** Both counts and the disagreement, from harvest on; null before, or while the count waits. */
+  outcome: RoundOutcome | null;
+}
+
 export async function roundDetail(
   pool: Pool,
   roundId: string,
@@ -398,28 +445,333 @@ export async function roundDetail(
   now: Date,
   memberCount: number,
   nameOf: (id: string) => string | null,
-): Promise<{ round: RoundView; pot: PotView; ideas: IdeaView[] } | null> {
-  const r = await roundById(pool, roundId);
+  harvest?: HarvestDeps,
+): Promise<RoundDetail | null> {
+  let r = await roundById(pool, roundId);
   if (!r) return null;
   const pot = await potById(pool, r.potId);
   if (!pot) return null;
+  const stage = stageAt(datesOf(r), now);
+  if (stage === "harvest" && harvest) {
+    await harvestIfDue(pool, harvest, r, pot);
+    r = (await roundById(pool, roundId)) as RoundRow;
+  }
   const ideas = await ideasOfRound(pool, roundId);
+  const views = ideas.map((i) => ideaView(i, viewerId, nameOf));
+  if (stage === "harvest" || stage === "closed") {
+    // Ticks are named once choosing has closed (plan R6). First names only.
+    const byIdea = new Map<string, string[]>();
+    for (const m of await marksOf(pool, roundId)) {
+      const name = firstNameOf(nameOf(m.userId) ?? "") || "a member";
+      byIdea.set(m.ideaId, [...(byIdea.get(m.ideaId) ?? []), name]);
+    }
+    for (const v of views) v.markedBy = byIdea.get(v.id) ?? [];
+  }
+  const showBallot = stage === "choose" || stage === "harvest" || stage === "closed";
   return {
     round: roundView(r, now, memberCount, ideas.length),
     pot: await potView(pool, pot),
-    ideas: ideas.map((i) => ideaView(i, viewerId, nameOf)),
+    ideas: views,
+    ballot: showBallot ? views.filter((v) => onBallot(v)) : [],
+    myMarks: await marksOfMember(pool, roundId, viewerId),
+    outcome: (r.outcome as RoundOutcome | null) ?? null,
   };
+}
+
+/** On the ballot: shaped in grow, with an ask, and not withdrawn or held. */
+function onBallot(i: { status: IdeaStatus; deliverable: string | null; askMinor: number | null }): boolean {
+  return (i.status === "grown" || i.status === "on_ballot" || i.status === "funded" || i.status === "not_funded") && isGrown(i);
+}
+
+// ── grow ────────────────────────────────────────────────────────────────────
+
+type Refusal = { ok: false; status: number; problem: string };
+
+/** The author shapes their idea, in seed or grow. It joins the ballot once it says what it delivers and asks. */
+export async function growIdea(pool: Pool, actorId: string, ideaId: string, body: unknown, now: Date, nameOf: (id: string) => string | null): Promise<{ ok: true; idea: IdeaView } | Refusal> {
+  const idea = await ideaById(pool, ideaId);
+  if (!idea) return { ok: false, status: 404, problem: "No such idea." };
+  if (idea.authorId !== actorId) return { ok: false, status: 403, problem: "Only the person who shared this idea can shape it." };
+  const round = (await roundById(pool, idea.roundId)) as RoundRow;
+  const stage = stageAt(datesOf(round), now);
+  if (stage !== "seed" && stage !== "grow") return { ok: false, status: 409, problem: "Ideas are shaped before choosing opens." };
+  if (idea.status === "withdrawn" || idea.status === "held" || idea.status === "stopped") {
+    return { ok: false, status: 409, problem: "This idea is not in the round any more." };
+  }
+  const parsed = parseGrow(body);
+  if (!parsed.ok) return { ok: false, status: 400, problem: parsed.problem };
+  const g = parsed.grow;
+  const next = {
+    title: g.title ?? idea.title,
+    what: g.what ?? idea.what,
+    deliverable: g.deliverable === undefined ? idea.deliverable : g.deliverable,
+    askMinor: g.askMinor === undefined ? idea.askMinor : g.askMinor,
+    sharedImpact: g.sharedImpact ?? idea.sharedImpact,
+  };
+  const status: IdeaStatus = isGrown(next) ? "grown" : "seed";
+  await updateIdeaGrow(pool, ideaId, { ...next, status });
+  await recordInteraction(pool, {
+    actorUserId: actorId,
+    kind: "idea.grown",
+    subjectType: "funding_idea",
+    subjectRef: ideaId,
+    roundId: idea.roundId,
+    visibility: idea.shownAs === "anonymous" ? "private" : "members",
+    dedupeKey: `idea.grown:${ideaId}:${now.getTime()}`,
+  });
+  return { ok: true, idea: ideaView((await ideaById(pool, ideaId)) as IdeaRow, actorId, nameOf) };
+}
+
+/** The author takes their idea out of the round, before choosing opens. It frees a place in their allowance. */
+export async function withdrawIdea(pool: Pool, actorId: string, ideaId: string, now: Date, nameOf: (id: string) => string | null): Promise<{ ok: true; idea: IdeaView } | Refusal> {
+  const idea = await ideaById(pool, ideaId);
+  if (!idea) return { ok: false, status: 404, problem: "No such idea." };
+  if (idea.authorId !== actorId) return { ok: false, status: 403, problem: "Only the person who shared this idea can withdraw it." };
+  const round = (await roundById(pool, idea.roundId)) as RoundRow;
+  const stage = stageAt(datesOf(round), now);
+  if (stage !== "seed" && stage !== "grow") return { ok: false, status: 409, problem: "An idea is withdrawn before choosing opens." };
+  await setIdeaStatus(pool, ideaId, "withdrawn");
+  await recordInteraction(pool, {
+    actorUserId: actorId,
+    kind: "idea.withdrawn",
+    subjectType: "funding_idea",
+    subjectRef: ideaId,
+    roundId: idea.roundId,
+    visibility: idea.shownAs === "anonymous" ? "private" : "members",
+    dedupeKey: `idea.withdrawn:${ideaId}`,
+  });
+  return { ok: true, idea: ideaView((await ideaById(pool, ideaId)) as IdeaRow, actorId, nameOf) };
+}
+
+// ── choose ──────────────────────────────────────────────────────────────────
+
+/** Replace the member's ticks, while the round is in choose. Every tick must be on the ballot. */
+export async function setMarks(pool: Pool, actorId: string, roundId: string, body: unknown, now: Date): Promise<{ ok: true; myMarks: string[] } | Refusal> {
+  const round = await roundById(pool, roundId);
+  if (!round) return { ok: false, status: 404, problem: "No such round." };
+  if (stageAt(datesOf(round), now) !== "choose") return { ok: false, status: 409, problem: "Ticks are given while the round is choosing." };
+  const raw = (body && typeof body === "object" ? (body as Record<string, unknown>).ideaIds : null) ?? [];
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "string")) return { ok: false, status: 400, problem: "Send the ideas you would fund as a list." };
+  const wanted = Array.from(new Set(raw as string[]));
+  const ballot = new Set((await ideasOfRound(pool, roundId)).filter(onBallot).map((i) => i.id));
+  if (wanted.some((id) => !ballot.has(id))) return { ok: false, status: 400, problem: "You can only tick quests on this round's ballot." };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await replaceMarks(conn, roundId, actorId, wanted);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+  // Ticks are secret until close, so the record of this act is private.
+  await recordInteraction(pool, {
+    actorUserId: actorId,
+    kind: "round.marked",
+    subjectType: "funding_round",
+    subjectRef: roundId,
+    roundId,
+    visibility: "private",
+    dedupeKey: `round.marked:${roundId}:${actorId}`,
+  });
+  return { ok: true, myMarks: await marksOfMember(pool, roundId, actorId) };
+}
+
+// ── harvest ─────────────────────────────────────────────────────────────────
+
+export interface CountView {
+  funded: string[];
+  steps: ShareResult["steps"];
+  spentMinor: number;
+  leftoverMinor: number;
+}
+
+/** A round's outcome, written once at harvest and kept in its record. */
+export interface RoundOutcome {
+  /** The public tie-break draw: the round id and its harvest instant. */
+  seed: string;
+  decider: "power" | "people";
+  quorumMet: boolean;
+  quorumPct: number;
+  /** Members who ticked at least one quest, and the electorate they came from. */
+  markers: number;
+  electorate: number;
+  /** What the round could spend: the amount offered, never more than the pot's free money. */
+  availableMinor: number;
+  power: CountView;
+  people: CountView;
+  divergence: Array<{ ideaId: string; fundedBy: "power" | "people"; costMinor: number }>;
+  /** Ticks per quest, kept so the record survives a ticker's erasure. */
+  marksByIdea: Record<string, number>;
+  countedAt: string;
+}
+
+export interface HarvestDeps {
+  /**
+   * Who may choose, each with their counted Voice: the same roll every village
+   * vote uses (present members holding ballot.vote, weighted by the village's
+   * weight mode). One function, so S4's work-only read replaces it in one place.
+   */
+  electorate: () => Promise<Array<{ userId: string; weight: number }>>;
+  questsRepo: { add: (q: QuestRecord) => Promise<unknown>; all: () => Promise<unknown[]> };
+}
+
+const countView = (r: ShareResult): CountView => ({ funded: r.funded, steps: r.steps, spentMinor: r.spent, leftoverMinor: r.leftover });
+
+/**
+ * Run the count if the round is in harvest and nobody has. Never twice: the
+ * pot row is locked, the outcome is re-read under the lock, and the outcome
+ * is written by a guarded update before any earmark. A failure leaves the
+ * outcome empty, so the next read tries again; it never fails the read.
+ */
+export async function harvestIfDue(pool: Pool, deps: HarvestDeps, round: RoundRow, pot: PotRow): Promise<void> {
+  try {
+    if (round.outcome == null) await runHarvest(pool, deps, round, pot);
+    await ensureQuests(pool, deps, round.id, pot);
+  } catch (err) {
+    console.error(`[funding-rounds] round ${round.id} has not counted yet:`, err);
+  }
+}
+
+async function runHarvest(pool: Pool, deps: HarvestDeps, round: RoundRow, pot: PotRow): Promise<void> {
+  const roll = await deps.electorate();
+  const voice = new Map(roll.map((e) => [e.userId, e.weight]));
+  const electorate = Array.from(voice.keys());
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await lockPot(conn, pot.id);
+    const fresh = await roundById(conn, round.id);
+    if (!fresh || fresh.outcome != null) {
+      await conn.rollback();
+      return;
+    }
+    const ideas = (await ideasOfRound(conn, round.id)).filter(onBallot);
+    const ballotIds = new Set(ideas.map((i) => i.id));
+    const members = new Set(electorate);
+    const marks = (await marksOf(conn, round.id)).filter((m) => ballotIds.has(m.ideaId) && members.has(m.userId));
+    const markers = new Set(marks.map((m) => m.userId)).size;
+    const quorumMet = electorate.length > 0 && markers * 100 >= round.quorumPct * electorate.length;
+    const money = await potMoney(conn, pot.id);
+    const availableMinor = Math.min(round.offeredMinor ?? money.free, money.free);
+    const options = ideas.map((i) => ({ id: i.id, cost: i.askMinor as number }));
+    const seed = `${round.id}:${(round.harvestAt as Date).toISOString()}`;
+    const both = countBothWays({
+      pot: quorumMet ? availableMinor : 0,
+      voice: new Map(electorate.map((id) => [id, voice.get(id) ?? 0])),
+      options,
+      marks: marks.map((m) => ({ voter: m.userId, option: m.ideaId })),
+      seed,
+      capPct: pot.weightCapPct,
+    });
+    const marksByIdea: Record<string, number> = {};
+    for (const m of marks) marksByIdea[m.ideaId] = (marksByIdea[m.ideaId] ?? 0) + 1;
+    const outcome: RoundOutcome = {
+      seed,
+      decider: pot.decider,
+      quorumMet,
+      quorumPct: round.quorumPct,
+      markers,
+      electorate: electorate.length,
+      availableMinor,
+      power: countView(both.power),
+      people: countView(both.people),
+      divergence: divergenceOf(both, options).map((d) => ({ ideaId: d.option, fundedBy: d.fundedBy, costMinor: d.cost })),
+      marksByIdea,
+      countedAt: new Date().toISOString(),
+    };
+    if (!(await claimOutcome(conn, round.id, pot.decider, pot.weightCapPct, outcome))) {
+      await conn.rollback();
+      return;
+    }
+    const funded = new Set(outcome[pot.decider].funded);
+    const promised = ideas.filter((i) => funded.has(i.id)).reduce((s, i) => s + (i.askMinor as number), 0);
+    // held + owed + paid never exceeds what the pot received.
+    if (promised > money.free) throw new Error(`round ${round.id} would promise ${promised} from a pot with ${money.free} free`);
+    for (const i of ideas) {
+      if (funded.has(i.id)) {
+        await insertEarmark(conn, { id: newId("earmark"), potId: pot.id, roundId: round.id, ideaId: i.id, amountMinor: i.askMinor as number, changedBy: null });
+        await setIdeaStatus(conn, i.id, "funded");
+      } else {
+        await setIdeaStatus(conn, i.id, "not_funded");
+      }
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+  await recordInteraction(pool, {
+    actorUserId: round.createdBy,
+    kind: "round.harvested",
+    subjectType: "funding_round",
+    subjectRef: round.id,
+    roundId: round.id,
+    visibility: "members",
+    dedupeKey: `round.harvested:${round.id}`,
+  });
+}
+
+/**
+ * Each funded idea becomes a quest on the board, through the same repo the
+ * admin form and accepted proposals use. Priced as asked: a currency pot's
+ * quest pays that cash at consent, through the existing cash rails. Runs on
+ * every harvest read, so a quest that failed to save is made next time.
+ */
+async function ensureQuests(pool: Pool, deps: HarvestDeps, roundId: string, pot: PotRow): Promise<void> {
+  const funded = (await ideasOfRound(pool, roundId)).filter((i) => i.status === "funded" && !i.questId);
+  if (funded.length === 0) return;
+  let order = (await deps.questsRepo.all()).length;
+  let made = 0;
+  const cash = pot.unitKind === "currency";
+  for (const i of funded) {
+    const quest: QuestRecord = {
+      id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title: i.title.slice(0, 160),
+      description: i.what,
+      impact: i.whoHelps,
+      deliverable: i.deliverable,
+      gratitude: "",
+      valueMinor: cash ? i.askMinor : null,
+      valueCurrency: cash ? pot.unitCode : null,
+      cashMinor: cash ? i.askMinor : null,
+      cashCurrency: cash ? pot.unitCode : null,
+      tags: ["funding-round"],
+      status: "Open",
+      order: ++order,
+      isExample: false,
+    };
+    // Claim first: only the request that wins the claim makes the quest.
+    if (!(await claimIdeaQuest(pool, i.id, quest.id))) continue;
+    try {
+      await deps.questsRepo.add(quest);
+    } catch (err) {
+      await releaseIdeaQuest(pool, i.id, quest.id);
+      throw err;
+    }
+    await setEarmarkQuest(pool, i.id, quest.id);
+    made++;
+  }
+  if (made > 0) onRealItemPublished(pool, "quests", null);
 }
 
 export { interactionCountsFor };
 
 // ── member export and erasure ───────────────────────────────────────────────
 
-/** A member's own Funding rounds data: their ideas (anonymous ones included, they are theirs) and their interaction rows. */
+/** A member's own Funding rounds data: their ideas (anonymous ones included, they are theirs), their ticks and their interaction rows. */
 export async function exportMemberFundingRounds(pool: Pool, userId: string): Promise<unknown> {
   const ideas = await ideasByAuthor(pool, userId);
   return {
-    ideas: ideas.map((i) => ({ id: i.id, roundId: i.roundId, title: i.title, what: i.what, shownAs: i.shownAs, status: i.status, createdAt: i.createdAt })),
+    ideas: ideas.map((i) => ({
+      id: i.id, roundId: i.roundId, title: i.title, what: i.what, deliverable: i.deliverable, askMinor: i.askMinor,
+      shownAs: i.shownAs, status: i.status, createdAt: i.createdAt,
+    })),
+    marks: await allMarksOf(pool, userId),
     interactions: await interactionsOf(pool, userId),
   };
 }
