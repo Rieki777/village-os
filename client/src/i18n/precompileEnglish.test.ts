@@ -25,7 +25,7 @@ describe("precompileMessages: English compiled at build, so no compiler ships (s
     expect(out).toContain('message:["To decide ",["nDecide"]]');
     // And with components holding a nested element, as a Trans around a link emits.
     const linked = 'e.jsx(a,{id:"Qw3rT9",values:{n:x},components:{0:e.jsx("a",{href:"#x"})},message:"See <0>{n}</0>"})';
-    expect(precompileMessages(linked)).toContain('message:["See ",');
+    expect(precompileMessages(linked)).toContain('message:["See <0>",["n"],"</0>"]');
   });
 
   it("leaves code without macro descriptors untouched", () => {
