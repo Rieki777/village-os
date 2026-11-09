@@ -47,6 +47,7 @@
  * `orgSeatTier` is the only place it is applied.
  */
 import type { ModuleLifecycle } from "../../shared/modules";
+import { roleCard } from "./roleCardProjection";
 import { isListed, visibleTo, type ListingViewer } from "../../shared/roleListing";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
@@ -152,6 +153,10 @@ export interface SeatProjectionCtx {
    * sees listed roles only, which is the safe default for every caller.
    */
   listing?: ListingViewer;
+  /** Role names by id, so a card can name its interviewing roles. `projectSeats` fills it from the roles it is handed. */
+  roleNames?: ReadonlyMap<string, string>;
+  /** The village setting that holds Apply back until a card is complete (org.apply_needs_complete_card). */
+  cardGate?: boolean;
 }
 
 /**
@@ -463,6 +468,7 @@ export function projectSeat(
     // The "Not listed" chip: present only when false, and only ever sent to a reader allowed to see an unlisted role.
     ...(isListed(role) ? {} : { listed: false }),
     state: seatState(role, held, ctx.now),
+    card: roleCard(role, held.length, seatState(role, held, ctx.now), tier, { roleNames: ctx.roleNames, gated: ctx.cardGate }),
     holderCount: held.length,
     isExample: role.isExample,
     ...(tier.structure ? seatStructure(role, held, ctx.now) : {}),
@@ -494,5 +500,6 @@ export function projectSeats(
     bySeat.set(a.orgRoleId, list);
   }
   const viewer: ListingViewer = ctx.listing ?? { seesUnlisted: false };
-  return roles.filter((r) => r.active && visibleTo(r, viewer)).map((r) => projectSeat(r, bySeat.get(r.id) ?? [], tier, ctx));
+  const named: SeatProjectionCtx = ctx.roleNames ? ctx : { ...ctx, roleNames: new Map(roles.map((r) => [r.id, r.name])) };
+  return roles.filter((r) => r.active && visibleTo(r, viewer)).map((r) => projectSeat(r, bySeat.get(r.id) ?? [], tier, named));
 }
