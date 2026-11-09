@@ -1,26 +1,7 @@
 {
-  "version": 1,
-  "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists.",
-  "registryDisputes": [
-    {
-      "kind": "exists",
-      "topic": "Who the collaboration with the construction tool belongs to",
-      "sources": [
-        "On the call: Rye personally",
-        "Amora's 8 Nov record: the first priority module for Amora's Village OS"
-      ],
-      "toSettle": "Rye's decision 1"
-    },
-    {
-      "kind": "exists",
-      "topic": "What module builders earn",
-      "sources": [
-        "ReGen from the ReGen Civics builders' pool",
-        "Amora's 8 Nov record: tokens by adoption and equity in Amora's platform network"
-      ],
-      "toSettle": "Rye's decision 7"
-    }
-  ],
+  "version": 2,
+  "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists. Version 2 applies Rye's corrections of 9 Nov 2026 (plan v3.1).",
+  "registryDisputes": [],
   "zones": [
     {
       "key": "public-edge",
@@ -215,18 +196,25 @@
     },
     {
       "key": "caretakers-house",
-      "name": "Caretaker's house",
+      "name": "Caretaker's house (the Rancho)",
       "zone": "waterfall",
       "kind": "building",
-      "stage": "built",
+      "stage": "in_use",
       "confirmed": true,
       "stewardRoleTitle": "Build & Project Steward",
       "roleTitles": [
-        "School Steward"
+        "School Steward",
+        "Land Liaison"
       ],
       "childSafeZone": true,
-      "positionText": "Behind the entrance, by the waterfall",
-      "description": "Standing. First planned as a home for the land stewards; now proposed as the school for 10 to 15 children, adding tent classrooms as it grows (candidate proposal, 3 Nov)."
+      "positionText": "Right next to the cafe and the waterfall",
+      "description": "The caretaker's home, and the one home built today. Renovated (bath, casita and floor) for a summer program that is no longer coming. Proposed as the school for 10 to 15 children, adding tent classrooms as it grows (candidate proposal, 3 Nov). An April idea to replace it with a greenhouse medicine garden was set aside.",
+      "units": {
+        "homes": 1
+      },
+      "aliases": [
+        "rancho"
+      ]
     },
     {
       "key": "container-area",
@@ -248,23 +236,11 @@
       "name": "Waterfall Cafe",
       "zone": "waterfall",
       "kind": "building",
-      "stage": "idea",
-      "phase": "P2",
-      "confirmed": false,
+      "stage": "built",
+      "confirmed": true,
       "stewardRoleTitle": "Regenerative Business Steward",
-      "positionText": "By the waterfall, joined to the yoga deck",
-      "description": "An alcohol-free elixir bar, kitchen and event room serving members and visitors.",
-      "disputes": [
-        {
-          "kind": "exists",
-          "topic": "The cafe",
-          "sources": [
-            "Plan version 2: stands today",
-            "Amora's records: planned P2"
-          ],
-          "toSettle": "Confirm which building the map calls the cafe"
-        }
-      ]
+      "positionText": "Just inside the gate by the waterfalls",
+      "description": "An alcohol-free elixir bar, kitchen and event room by the waterfall, serving members and visitors. Standing."
     },
     {
       "key": "waterfall-wellness",
@@ -289,51 +265,6 @@
       "description": "A temazcal, a red tent, a fire pit and gardens."
     },
     {
-      "key": "waterfall-coworking",
-      "name": "Waterfall co-working",
-      "zone": "waterfall",
-      "kind": "building",
-      "stage": "idea",
-      "confirmed": false,
-      "positionText": "Not recorded",
-      "description": "Named in recent tasks with a Rancho photo.",
-      "disputes": [
-        {
-          "kind": "position",
-          "topic": "Where the waterfall co-working is",
-          "sources": [
-            "Recent tasks: named, with a Rancho photo",
-            "Amora's records: no place on the map"
-          ],
-          "toSettle": "Record its place"
-        }
-      ]
-    },
-    {
-      "key": "rancho",
-      "name": "The Rancho",
-      "zone": "gathering",
-      "kind": "building",
-      "stage": "built",
-      "confirmed": true,
-      "stewardRoleTitle": "Build & Project Steward",
-      "roleTitles": [
-        "Land Liaison"
-      ],
-      "positionText": "Needs confirming",
-      "description": "Renovated (bath, casita and floor) for a summer program that is no longer coming. No use planned this season. An April idea to replace it with a greenhouse medicine garden was set aside.",
-      "disputes": [
-        {
-          "kind": "position",
-          "topic": "The Rancho's position on the map",
-          "sources": [
-            "Amora's records: position needs confirming"
-          ],
-          "toSettle": "Confirm its position"
-        }
-      ]
-    },
-    {
       "key": "event-space",
       "name": "Event space",
       "zone": "gathering",
@@ -354,30 +285,14 @@
     },
     {
       "key": "kitchen",
-      "name": "Kitchen & Hearth",
+      "name": "Waterfall co-working",
       "onMap": true,
-      "zone": "gathering",
+      "zone": "waterfall",
       "kind": "building",
       "stage": "idea",
-      "phase": "P1",
-      "confirmed": false,
-      "proposedMatch": "Outdoor kitchen",
-      "roleTitles": [
-        "Gatherings Steward"
-      ],
-      "positionText": "At the gathering place",
-      "description": "Feeds people at gatherings, a step up from the potluck.",
-      "disputes": [
-        {
-          "kind": "match",
-          "topic": "Is the map's Kitchen & Hearth the planned outdoor kitchen?",
-          "sources": [
-            "Live map: drawn as standing",
-            "Working list: planned P1"
-          ],
-          "toSettle": "Confirm the match"
-        }
-      ]
+      "confirmed": true,
+      "positionText": "Where the live map draws it, by the waterfall",
+      "description": "Co-working by the waterfall. Named in recent tasks with a Rancho photo."
     },
     {
       "key": "composting-toilets",
@@ -406,6 +321,20 @@
       ]
     },
     {
+      "key": "outdoor-kitchen",
+      "name": "Outdoor kitchen",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P1",
+      "confirmed": true,
+      "roleTitles": [
+        "Gatherings Steward"
+      ],
+      "positionText": "At the gathering place",
+      "description": "Feeds people at gatherings, a step up from the potluck."
+    },
+    {
       "key": "lotus-tent",
       "name": "Lotus tent on a platform",
       "zone": "gathering",
@@ -424,43 +353,10 @@
       "name": "Glamping tents",
       "zone": "gathering",
       "kind": "building",
-      "stage": "idea",
-      "phase": "P0",
-      "confirmed": false,
-      "positionText": "Not recorded",
-      "description": "Considered for worker housing, retreats or events.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Tents",
-          "sources": [
-            "Plan version 2: glamping tents stand today",
-            "Working list: only considered"
-          ],
-          "toSettle": "Count what stands"
-        }
-      ]
-    },
-    {
-      "key": "tents",
-      "name": "Tents",
-      "zone": "gathering",
-      "kind": "building",
-      "stage": "idea",
-      "confirmed": false,
-      "positionText": "Not recorded",
-      "description": "Listed among the public spaces in one role card.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Tents",
-          "sources": [
-            "One role card: among the public spaces",
-            "Other records: missing"
-          ],
-          "toSettle": "Count what stands"
-        }
-      ]
+      "stage": "built",
+      "confirmed": true,
+      "positionText": "At the top of the land, in the cleared opening with the best views",
+      "description": "Glamping tents for worker housing, retreats or events. Standing."
     },
     {
       "key": "temporary-water-line",
@@ -519,21 +415,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P2",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "In the village heart",
       "description": "Fifteen one-floor, one-bedroom homes, for sale or shared ownership.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 15
+      }
     },
     {
       "key": "small-homes",
@@ -542,21 +430,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P3",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "In the village heart",
       "description": "Twenty-one two-floor homes with two bedrooms.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 21
+      }
     },
     {
       "key": "family-duplexes",
@@ -565,21 +445,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P3",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "In the village heart",
       "description": "Eighteen three-bedroom family homes, two to a shared wall.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 18
+      }
     },
     {
       "key": "neighbourhood-commons",
@@ -696,20 +568,11 @@
       "kind": "garden",
       "stage": "idea",
       "phase": "P1",
-      "confirmed": false,
-      "stewardRoleTitle": "Land & Permaculture Steward",
+      "confirmed": true,
       "positionText": "Where the live map draws it",
       "description": "Nursery and starts for the food forest, gardens and landscaping.",
-      "disputes": [
-        {
-          "kind": "exists",
-          "topic": "Greenhouse",
-          "sources": [
-            "Live map: standing, with a live drip line quest",
-            "Amora's records: not recorded as built"
-          ],
-          "toSettle": "Confirm it, or label it planned"
-        }
+      "roleTitles": [
+        "Land & Permaculture Steward"
       ]
     },
     {
@@ -817,19 +680,9 @@
       "phase": "P3",
       "confirmed": false,
       "proposedMatch": "Retreat center",
-      "stewardRoleTitle": "Retreat Center Venture Steward",
       "positionText": "On the ridge, ocean view",
-      "description": "Ocean-view villas, a yoga shala and a pool; runs as a hotel between retreats.",
+      "description": "Forty ocean-view villas for up to 100 guests, a yoga shala and a pool; runs as a hotel between retreats. Proposals are open: anyone may claim building it.",
       "disputes": [
-        {
-          "kind": "size",
-          "topic": "Retreat center size",
-          "sources": [
-            "April list: 40 villas, up to 100 guests",
-            "November webinar: 75 guests"
-          ],
-          "toSettle": "Use master plan version 8"
-        },
         {
           "kind": "match",
           "topic": "Is the map's Guest Lodge the retreat center?",
@@ -839,7 +692,11 @@
           ],
           "toSettle": "Confirm the match"
         }
-      ]
+      ],
+      "roleTitles": [
+        "Retreat Center Venture Steward"
+      ],
+      "showcase": true
     },
     {
       "key": "ridgeA",
@@ -855,15 +712,6 @@
       "positionText": "On the ridge, ocean view",
       "description": "Ocean-view homes in clusters of three.",
       "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        },
         {
           "kind": "match",
           "topic": "Is Ridge Hamlet North part of the ocean-view homes?",
@@ -890,15 +738,6 @@
       "description": "Ocean-view homes in clusters of three.",
       "disputes": [
         {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        },
-        {
           "kind": "match",
           "topic": "Is Ridge Hamlet South part of the ocean-view homes?",
           "sources": [
@@ -916,21 +755,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P3",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "Along the road",
       "description": "Nineteen plots where people build their own creative homes, approved in the D1 study.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "selfBuildLots": 19
+      }
     },
     {
       "key": "forest-homes",
@@ -939,21 +770,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P4-5",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "In the forest",
       "description": "Four homes in the forest.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 4
+      }
     },
     {
       "key": "retreat-homes",
@@ -962,21 +785,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P3",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "Behind the ridge",
       "description": "Six small homes for people who work at the retreat center.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 6
+      }
     },
     {
       "key": "community",
@@ -1020,21 +835,14 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P3-5",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "Above the center, and behind it across the road",
       "description": "Thirty apartments and two three-floor homes above the center; a cluster of five homes behind it.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 7,
+        "apartments": 30
+      }
     },
     {
       "key": "water",
@@ -1233,21 +1041,13 @@
       "kind": "homes",
       "stage": "idea",
       "phase": "P2",
-      "confirmed": false,
+      "confirmed": true,
       "isHome": true,
       "positionText": "Between the Dominicalito road and the first river",
       "description": "Twelve small dwellings.",
-      "disputes": [
-        {
-          "kind": "count",
-          "topic": "Home count",
-          "sources": [
-            "8 Nov record: about 100 houses",
-            "April list: 93 homes, 30 apartments, 19 self-build lots, 8 casitas"
-          ],
-          "toSettle": "Use master plan version 8"
-        }
-      ]
+      "units": {
+        "homes": 12
+      }
     },
     {
       "key": "roads-crossings",
@@ -1291,7 +1091,11 @@
       "phase": "P2",
       "confirmed": true,
       "positionText": "On the south-east border",
-      "description": "Eight small casitas with a shared kitchen, for back-to-nature retreats and ceremony."
+      "description": "Eight small casitas with a shared kitchen, for back-to-nature retreats and ceremony.",
+      "units": {
+        "casitas": 8
+      },
+      "isHome": true
     },
     {
       "key": "vision-quest-platforms",
@@ -1451,5 +1255,58 @@
         "d1-employer-registration"
       ]
     }
-  ]
+  ],
+  "settled": [
+    {
+      "topic": "Who the collaboration with the construction tool belongs to",
+      "answer": "ReGen Civics; Amora keeps its land data",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 10)"
+    },
+    {
+      "topic": "What module builders earn",
+      "answer": "ReGen from the ReGen Civics builders' pool; equity goes to people who back Amora's quests",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 10)"
+    },
+    {
+      "topic": "The cafe",
+      "answer": "The Waterfall Cafe is standing, just inside the gate by the waterfalls",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 1)"
+    },
+    {
+      "topic": "Tents",
+      "answer": "Glamping tents stand at the top of the land, in the cleared opening with the best views",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 2)"
+    },
+    {
+      "topic": "Greenhouse",
+      "answer": "Planned, open for a steward to claim and lead the quest to build it",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 3)"
+    },
+    {
+      "topic": "Retreat center size",
+      "answer": "40 villas, up to 100 guests",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 4)"
+    },
+    {
+      "topic": "Home count",
+      "answer": "The April working list: 93 homes, 30 apartments, 19 self-build forest lots, 8 forest casitas; one home built, the caretaker's home",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 5)"
+    },
+    {
+      "topic": "The Rancho and the caretaker's house",
+      "answer": "One place: the Rancho is the caretaker's home, right next to the cafe and the waterfall",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 6)"
+    },
+    {
+      "topic": "Waterfall co-working",
+      "answer": "Where the map's kitchen is; that place becomes the co-working",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 7)"
+    }
+  ],
+  "homesTarget": {
+    "homes": 93,
+    "apartments": 30,
+    "selfBuildLots": 19,
+    "casitas": 8
+  }
 }

@@ -409,6 +409,38 @@ export interface SeedPlace {
   childSafeZone?: boolean;
   isHome?: boolean;
   targetDate?: string;
+  /** Other keys this place has been called; lookups resolve them, rows are never re-keyed. */
+  aliases?: string[];
+  /** Home units here, for the homes-progress count. */
+  units?: Partial<HomeUnits>;
+  /** Featured as an open invitation. */
+  showcase?: boolean;
+}
+
+export interface HomeUnits { homes: number; apartments: number; selfBuildLots: number; casitas: number }
+const UNIT_KEYS: (keyof HomeUnits)[] = ["homes", "apartments", "selfBuildLots", "casitas"];
+
+/**
+ * Homes built against the village's target (absolute counts, never a share on
+ * a card). A unit counts as built when its place stands: built, in use or
+ * needs care, and confirmed.
+ */
+export function homesProgress(
+  places: ReadonlyArray<{ stage: PlaceStage | null; confirmed: boolean; units?: Partial<HomeUnits> }>,
+  target: HomeUnits | null,
+): { built: HomeUnits; planned: HomeUnits; target: HomeUnits | null } {
+  const zero = (): HomeUnits => ({ homes: 0, apartments: 0, selfBuildLots: 0, casitas: 0 });
+  const built = zero();
+  const planned = zero();
+  for (const p of places) {
+    const standing = p.confirmed && p.stage !== null && (p.stage === "built" || p.stage === "in_use" || p.stage === "needs_care");
+    for (const k of UNIT_KEYS) {
+      const n = p.units?.[k] ?? 0;
+      if (!Number.isSafeInteger(n) || n <= 0) continue;
+      (standing ? built : planned)[k] += n;
+    }
+  }
+  return { built, planned, target };
 }
 export interface PlacesSeed {
   version: number;
@@ -416,6 +448,8 @@ export interface PlacesSeed {
   places: SeedPlace[];
   permits: PermitItem[];
   registryDisputes?: SeedDispute[];
+  settled?: Array<{ topic: string; answer: string; by: string }>;
+  homesTarget?: HomeUnits;
 }
 
 /**
@@ -449,6 +483,13 @@ export function seedProblems(seed: PlacesSeed, liveKeys: readonly string[]): str
     if (p.name.length > PLACE_LIMITS.name) out.push(`${p.key}: name over ${PLACE_LIMITS.name} characters`);
     if (p.positionText.length > PLACE_LIMITS.positionText) out.push(`${p.key}: position text too long`);
     if (p.setAside && !p.setAside.reason.trim()) out.push(`${p.key}: set aside with no reason`);
+  }
+  for (const p of seed.places) {
+    for (const a of p.aliases ?? []) {
+      const hit = keyCollision(a, keys);
+      if (hit) out.push(`${p.key}: alias ${a} collides with place ${hit}`);
+      if (liveKeys.some((k) => k.toLowerCase() === a.toLowerCase())) out.push(`${p.key}: alias ${a} is a live map key`);
+    }
   }
   for (const k of liveKeys) if (!keys.has(k)) out.push(`${k}: on the map but missing from the registry`);
   for (const p of seed.places) {

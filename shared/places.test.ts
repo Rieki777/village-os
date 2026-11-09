@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkStageMove,
   findPermitCycle,
+  homesProgress,
   isLegacyPlaceKey,
   isPlaceKey,
   keyCollision,
@@ -288,5 +289,43 @@ describe("the first village's own seed record", () => {
 
   it("keeps every disputed place unconfirmed", () => {
     for (const p of seed.places) if (placeInDoubt(p.disputes)) expect(p.confirmed).toBe(false);
+  });
+
+  // The village's corrections of 9 Nov 2026 (plan v3.1), each held by a test.
+  const by = (k: string) => seed.places.find((p) => p.key === k);
+  it("carries the 9 Nov corrections", () => {
+    expect(by("waterfall-cafe")).toMatchObject({ stage: "built", confirmed: true });
+    expect(by("glamping-tents")).toMatchObject({ stage: "built", confirmed: true });
+    expect(by("tents")).toBeUndefined();
+    expect(by("greenhouse")).toMatchObject({ stage: "idea", confirmed: true });
+    expect(by("greenhouse")?.stewardRoleTitle).toBeUndefined();
+    expect(by("guest")?.showcase).toBe(true);
+    expect(by("guest")?.disputes?.some((d) => d.kind === "size")).toBe(false);
+    expect(by("rancho")).toBeUndefined();
+    expect(by("caretakers-house")?.aliases).toContain("rancho");
+    expect(by("kitchen")?.name).toBe("Waterfall co-working");
+    expect(by("waterfall-coworking")).toBeUndefined();
+    expect(seed.registryDisputes ?? []).toEqual([]);
+  });
+
+  it("counts one home built against the April list", () => {
+    const h = homesProgress(seed.places, seed.homesTarget ?? null);
+    expect(h.built).toEqual({ homes: 1, apartments: 0, selfBuildLots: 0, casitas: 0 });
+    expect(h.target).toEqual({ homes: 93, apartments: 30, selfBuildLots: 19, casitas: 8 });
+  });
+});
+
+describe("homes progress", () => {
+  it("counts only confirmed standing places as built", () => {
+    const h = homesProgress(
+      [
+        { stage: "in_use", confirmed: true, units: { homes: 2 } },
+        { stage: "built", confirmed: false, units: { homes: 5 } },
+        { stage: "idea", confirmed: true, units: { casitas: 3 } },
+      ],
+      null,
+    );
+    expect(h.built.homes).toBe(2);
+    expect(h.planned).toEqual({ homes: 5, apartments: 0, selfBuildLots: 0, casitas: 3 });
   });
 });
