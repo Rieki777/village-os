@@ -18,6 +18,7 @@ import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
+import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/EditRoleButton";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
@@ -299,6 +300,8 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   link to it has nothing to ask anybody. */}
               {!role.isExample && <RoleHolderCards role={role.raw} />}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {/* For a holder of the power to decide the structure, and nobody else: the editor is its own chunk. */}
+              {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
                 <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
                   {RP_WORDS.proposeThisRole}
@@ -493,6 +496,9 @@ export default function Roles() {
               is a way to hold some of it with your own hands, by{" "}
               <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
             </p>
+            <div className="mt-4 flex justify-center">
+              <NewRoleFromCardButton onMade={() => window.location.reload()} />
+            </div>
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
             <Link
               href="/roles/draft"

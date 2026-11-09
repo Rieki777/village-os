@@ -68,6 +68,7 @@ import {
 } from "../lib/orgDraftDecide";
 import type { Pool } from "mysql2/promise";
 import { deadlineInVillage } from "../lib/villageReaders"; // R134: a deadline in the village's own zone
+import { registerRoleEditRoutes } from "./roleEdit";
 
 type Deps = Pick<
   AppDeps,
@@ -134,6 +135,20 @@ export function register(app: Express, deps: Deps): void {
     seasonState,
   };
   closers[ORG_DRAFT] = orgDraftCloser(publishDeps);
+
+  // "Edit this role" (role journey, PR-B): the role card's editor saves through the same publish door.
+  registerRoleEditRoutes(app, {
+    authedUser,
+    isAdmin: (req) => isAdmin(req),
+    getPool,
+    overLimit,
+    liveHoldersOf,
+    publishDeps,
+    circleName: (id) => {
+      const row = (circlesRepo.all() as Array<Record<string, unknown>>).find((c) => String(c.id) === id);
+      return row && typeof row.name === "string" ? row.name : null;
+    },
+  });
 
   app.get("/api/org/drafts/:id/decide", async (req, res) => {
     const user = await authedUser(req);
