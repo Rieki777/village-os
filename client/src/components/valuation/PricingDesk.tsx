@@ -58,10 +58,10 @@ interface RowState {
   busy: boolean;
 }
 
-const input = "w-12 border border-gray-200 rounded-md px-1.5 py-1.5 text-sm bg-white text-center";
+const input = "w-12 border border-border rounded-md px-1.5 py-1.5 text-sm bg-card text-center";
 const btn = "rounded-lg px-3 py-2 text-sm font-semibold min-h-[40px]";
-const primary = `${btn} bg-emerald-800 text-white hover:bg-emerald-900 disabled:opacity-50`;
-const ghost = `${btn} border border-emerald-200 text-emerald-800 bg-white hover:bg-emerald-50`;
+const primary = `${btn} bg-teal-deep text-white hover:bg-teal-deep-dark disabled:opacity-50`;
+const ghost = `${btn} border border-border text-teal-deep bg-card hover:bg-muted`;
 const label = "block text-[11px] font-bold uppercase tracking-wide text-muted-foreground md:hidden";
 
 const toMinor = (text: string, currency: string): number | null => {
@@ -205,7 +205,7 @@ export default function PricingDesk({ call }: { call: Call }) {
   if (!read) return <p className="text-sm text-muted-foreground"><Trans context="pricing desk">Opening the pricing desk…</Trans></p>;
 
   const step = (done: boolean, now: boolean) =>
-    `rounded-xl border p-3 ${done ? "border-emerald-200 bg-emerald-50" : now ? "border-emerald-800 ring-2 ring-emerald-50 bg-white" : "border-gray-200 bg-white"}`;
+    `rounded-xl border p-3 ${done ? "border-sage/30 bg-sage-light" : now ? "border-teal-deep ring-2 ring-muted bg-card" : "border-border bg-card"}`;
   const hoursLeft = counts.hours;
   const eeNow = !read.eeMeaningWritten;
   const modelNow = !eeNow && !read.modelAdopted;
@@ -237,25 +237,25 @@ export default function PricingDesk({ call }: { call: Call }) {
       </ol>
 
       {!read.cashBudgetLeft && (
-        <p className="rounded-xl bg-blue-50 text-blue-900 px-3 py-2 text-sm mb-3">
+        <p className="rounded-xl bg-aqua-light text-foreground px-3 py-2 text-sm mb-3">
           <Trans context="pricing desk">No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash.</Trans>
         </p>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 my-3">
         <div className="flex flex-wrap gap-2 text-sm font-semibold">
-          <span className="rounded-full px-3 py-1 bg-emerald-50 text-emerald-800">{t({ message: `${counts.ready} inside the band`, context: "pricing desk" })}</span>
-          <span className="rounded-full px-3 py-1 bg-amber-50 text-amber-900">{t({ message: `${counts.hours} need your hours`, context: "pricing desk" })}</span>
-          <span className="rounded-full px-3 py-1 bg-red-50 text-red-800">{t({ message: `${counts.flagged} outside the band`, context: "pricing desk" })}</span>
-          <span className="rounded-full px-3 py-1 bg-gray-100 text-muted-foreground">{t({ message: `${counts.set} set`, context: "pricing desk" })}</span>
-          {counts.waiting > 0 && <span className="rounded-full px-3 py-1 bg-gray-100 text-muted-foreground">{t({ message: `${counts.waiting} waiting for a signer`, context: "pricing desk" })}</span>}
+          <span className="rounded-full px-3 py-1 bg-sage-light text-sage">{t({ message: `${counts.ready} inside the band`, context: "pricing desk" })}</span>
+          <span className="rounded-full px-3 py-1 bg-amber-light text-amber-ink">{t({ message: `${counts.hours} need your hours`, context: "pricing desk" })}</span>
+          <span className="rounded-full px-3 py-1 bg-coral/10 text-coral">{t({ message: `${counts.flagged} outside the band`, context: "pricing desk" })}</span>
+          <span className="rounded-full px-3 py-1 bg-muted text-muted-foreground">{t({ message: `${counts.set} set`, context: "pricing desk" })}</span>
+          {counts.waiting > 0 && <span className="rounded-full px-3 py-1 bg-muted text-muted-foreground">{t({ message: `${counts.waiting} waiting for a signer`, context: "pricing desk" })}</span>}
         </div>
         <button className={`${primary} w-full md:w-auto`} disabled={!read.modelAdopted || bulkBusy || counts.ready === 0} onClick={() => void useAllInBand()}>
           {t({ message: `Use the suggestion on all ${counts.ready} inside the band`, context: "pricing desk" })}
         </button>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white">
+      <div className="rounded-xl border border-border bg-card">
         <div className="hidden md:grid grid-cols-[1.6fr_1fr_1.2fr_1.5fr_1fr_1.3fr] gap-3 px-4 pt-2 pb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           <div><Trans context="pricing desk">Quest</Trans></div><div><Trans context="pricing desk">Pays today</Trans></div><div><Trans context="pricing desk">Suggestion</Trans></div><div><Trans context="pricing desk">Estimated hours</Trans></div><div><Trans context="pricing desk">Past prices</Trans></div><div />
         </div>
@@ -268,7 +268,7 @@ export default function PricingDesk({ call }: { call: Call }) {
             : (q.pay?.lines ?? []).map((l) => `${l.amount} ${l.name}`).join(" + ") || t({ message: `Nothing yet`, context: "pricing desk" });
           const ownMinor = r.own === null ? null : toMinor(r.own, currency);
           return (
-            <div key={q.id} className={`grid grid-cols-2 md:grid-cols-[1.5fr_1fr_1.1fr_1.6fr_0.8fr_1.2fr] gap-x-3 gap-y-2 items-center px-3 md:px-4 py-3 border-t border-gray-200 ${p.status === "flagged" ? "bg-red-50/40" : ""}`}>
+            <div key={q.id} className={`grid grid-cols-2 md:grid-cols-[1.5fr_1fr_1.1fr_1.6fr_0.8fr_1.2fr] gap-x-3 gap-y-2 items-center px-3 md:px-4 py-3 border-t border-border ${p.status === "flagged" ? "bg-coral/5" : ""}`}>
               <div className="col-span-2 md:col-span-1">
                 <b className="block text-foreground">{q.title}</b>
                 <span className="flex flex-col items-start text-sm text-muted-foreground">
@@ -294,7 +294,7 @@ export default function PricingDesk({ call }: { call: Call }) {
               </div>
               <div className="flex flex-nowrap items-center gap-1.5 text-sm col-span-2 md:col-span-1">
                 <span className={`${label} mr-1`}><Trans context="pricing desk">Hours</Trans></span>
-                <input aria-label={t({ message: `Estimated hours for ${q.title}`, context: "pricing desk" })} inputMode="decimal" className={`${input} ${r.confirmed ? "" : "border-amber-500 bg-amber-50"}`} value={r.hours} onChange={(e) => patch(q.id, { hours: e.target.value, confirmed: false })} />
+                <input aria-label={t({ message: `Estimated hours for ${q.title}`, context: "pricing desk" })} inputMode="decimal" className={`${input} ${r.confirmed ? "" : "border-notice bg-amber-light"}`} value={r.hours} onChange={(e) => patch(q.id, { hours: e.target.value, confirmed: false })} />
                 <span className="text-muted-foreground"><Trans context="pricing desk">from</Trans></span>
                 <input aria-label={t({ message: `As little as, for ${q.title}`, context: "pricing desk" })} inputMode="decimal" className={input} value={r.low} onChange={(e) => patch(q.id, { low: e.target.value, confirmed: false })} />
                 <span className="text-muted-foreground"><Trans context="pricing desk">to</Trans></span>
@@ -305,8 +305,8 @@ export default function PricingDesk({ call }: { call: Call }) {
                 {q.pastPrices.length ? q.pastPrices.map((x) => money(x.setMinor)).join(", ") : t({ message: `None yet`, context: "pricing desk" })}
               </div>
               <div className="col-span-2 md:col-span-1 flex md:flex-col gap-1.5">
-                {p.status === "set" && <span className="flex-1 text-center rounded-full bg-gray-100 text-muted-foreground py-2 text-sm font-semibold"><Trans context="pricing desk">Set</Trans></span>}
-                {p.status === "waiting" && <span className="flex-1 text-center rounded-full bg-gray-100 text-muted-foreground py-2 text-sm font-semibold"><Trans context="pricing desk">Waiting for a signer</Trans></span>}
+                {p.status === "set" && <span className="flex-1 text-center rounded-full bg-muted text-muted-foreground py-2 text-sm font-semibold"><Trans context="pricing desk">Set</Trans></span>}
+                {p.status === "waiting" && <span className="flex-1 text-center rounded-full bg-muted text-muted-foreground py-2 text-sm font-semibold"><Trans context="pricing desk">Waiting for a signer</Trans></span>}
                 {p.status === "hours" && (
                   <button className={`${ghost} flex-1`} disabled={!p.s} onClick={() => patch(q.id, { confirmed: true })}>
                     <Trans context="pricing desk">Confirm the hours first</Trans>
@@ -323,10 +323,10 @@ export default function PricingDesk({ call }: { call: Call }) {
                   ) : (
                     <div className="flex-1 flex flex-col gap-1.5">
                       <span className={label}><Trans context="pricing desk">Your figure</Trans></span>
-                      <input aria-label={t({ message: `Your figure for ${q.title}`, context: "pricing desk" })} inputMode="decimal" className={`w-full border rounded-md px-2 py-2 text-sm ${p.status === "flagged" ? "border-red-300 bg-red-50 text-red-800 font-semibold" : "border-gray-200 bg-white"}`} value={r.own} onChange={(e) => patch(q.id, { own: e.target.value })} />
+                      <input aria-label={t({ message: `Your figure for ${q.title}`, context: "pricing desk" })} inputMode="decimal" className={`w-full border rounded-md px-2 py-2 text-sm ${p.status === "flagged" ? "border-coral/40 bg-coral/10 text-coral font-semibold" : "border-border bg-card"}`} value={r.own} onChange={(e) => patch(q.id, { own: e.target.value })} />
                       <div className="flex gap-1.5">
                         <button
-                          className={`${p.status === "flagged" ? `${btn} bg-red-700 text-white disabled:opacity-50` : primary} flex-1`}
+                          className={`${p.status === "flagged" ? `${btn} bg-coral text-white disabled:opacity-50` : primary} flex-1`}
                           disabled={r.busy || ownMinor === null || (p.status === "flagged" && !r.reason)}
                           onClick={() => void setPrice(q, ownMinor!, p.status === "flagged" ? r.reason : undefined).then(async (ok) => { if (ok) await load(); })}
                         >
@@ -339,20 +339,20 @@ export default function PricingDesk({ call }: { call: Call }) {
                 )}
               </div>
               {p.status === "flagged" && p.s && ownMinor !== null && (
-                <div className="col-span-2 md:col-span-6 rounded-lg bg-red-50 text-red-800 px-3 py-2 text-sm flex flex-wrap items-center gap-2">
+                <div className="col-span-2 md:col-span-6 rounded-lg bg-coral/10 text-coral px-3 py-2 text-sm flex flex-wrap items-center gap-2">
                   <span>
                     {ownMinor > p.s.band.highMinor
                       ? t({ message: `${money(ownMinor)} is above the band (${money(p.s.band.lowMinor)} to ${money(p.s.band.highMinor)}). Pick a reason, then a second Treasurer or a steward signs it.`, context: "pricing desk" })
                       : t({ message: `${money(ownMinor)} is below the band (${money(p.s.band.lowMinor)} to ${money(p.s.band.highMinor)}). Pick a reason, then a second Treasurer or a steward signs it.`, context: "pricing desk" })}
                   </span>
-                  <select aria-label={t({ message: `Reason for ${q.title}`, context: "pricing desk" })} className="border border-red-200 rounded-md px-2 py-1 bg-white text-sm" value={r.reason} onChange={(e) => patch(q.id, { reason: e.target.value })}>
+                  <select aria-label={t({ message: `Reason for ${q.title}`, context: "pricing desk" })} className="border border-coral/30 rounded-md px-2 py-1 bg-card text-sm" value={r.reason} onChange={(e) => patch(q.id, { reason: e.target.value })}>
                     <option value="">{t({ message: `Pick a reason`, context: "pricing desk" })}</option>
                     {REASON_CODES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               )}
               {q.openClaims > 0 && (
-                <div className="col-span-2 md:col-span-6 rounded-lg bg-blue-50 text-blue-900 px-3 py-2 text-sm">
+                <div className="col-span-2 md:col-span-6 rounded-lg bg-aqua-light text-foreground px-3 py-2 text-sm">
                   {q.openClaims === 1 ? t({ message: `1 open claim keeps the price it was taken at.`, context: "pricing desk" }) : t({ message: `${q.openClaims} open claims keep the price they were taken at.`, context: "pricing desk" })}{" "}
                   <a className="underline font-semibold" href={`/quests/${encodeURIComponent(q.id)}#take-current-price`}><Trans context="pricing desk">Its worker takes the new price here</Trans></a>
                 </div>

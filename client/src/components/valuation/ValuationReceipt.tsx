@@ -38,7 +38,7 @@ export default function ValuationReceipt({
     .join(", ");
 
   return (
-    <div data-valuation-receipt className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-foreground">
+    <div data-valuation-receipt className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-semibold"><Trans context="valuation receipt">Reward</Trans></span>
         <span className="font-semibold tabular-nums">{money(s.expected.totalMinor)}</span>
@@ -57,7 +57,7 @@ export default function ValuationReceipt({
         {open ? t`Hide how this was worked out` : t`How this was worked out`}
       </button>
       {open && (
-        <dl className="mt-1 divide-y divide-gray-100">
+        <dl className="mt-1 divide-y divide-border">
           {s.receipt.unfolded.map((l) => (
             <div key={l.key} className="flex items-baseline justify-between gap-3 py-1.5">
               <dt className="min-w-0 text-foreground">{l.label}</dt>

@@ -1019,6 +1019,13 @@ export async function updateOrgRole(pool: Pool, id: string, body: any, value?: O
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(Array.isArray(body.accountabilities) ? body.accountabilities : []));
   }
+  // Which characters the role suits, set by a person: the boot-time guess flag
+  // clears with it, so no later boot overwrites the village's word (economySeed).
+  // The route checks the keys against the cast first (`characterTagsFrom`).
+  if (Array.isArray(body.archetypes)) {
+    sets.push("`archetypes` = ?", "`archetypes_suggested` = 0");
+    args.push(JSON.stringify(body.archetypes));
+  }
   // An override with no expiry is a status column with extra steps, so a
   // caller that sets one must say how long it stands for.
   if (body.statusOverride !== undefined) {
@@ -1785,4 +1792,22 @@ export function circleDecidesProblem(v: unknown): string | null {
     if (!known.has(key)) return `"${key}" is not part of a decides declaration`;
   }
   return null;
+}
+
+/**
+ * A role's character tags as a person sets them in the admin org chart (role
+ * draft board, Rye 9 Nov 2026). Only keys in the village's own cast pass: an
+ * unknown key silently matches nothing anywhere it is joined
+ * (shared/archetypes.ts), so it is refused by name instead. An empty list is a
+ * decision ("suits no character in particular"), not a reset to the guess.
+ */
+export function characterTagsFrom(v: unknown, cast: readonly string[]): { ok: true; tags: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) return { ok: false, error: "Characters arrive as a list of the village's character keys." };
+  const tags: string[] = [];
+  for (const raw of v as string[]) {
+    const k = raw.trim();
+    if (!cast.includes(k)) return { ok: false, error: `"${k.slice(0, 40)}" is not one of this village's characters.` };
+    if (!tags.includes(k)) tags.push(k);
+  }
+  return { ok: true, tags };
 }

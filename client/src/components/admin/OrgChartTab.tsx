@@ -45,6 +45,7 @@ import RoleValueEditor from "@/components/admin/RoleValueEditor";
 import RolePowerGroupsEditor from "@/components/admin/RolePowerGroupsEditor";
 import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
+import RoleCharacterTags from "@/components/admin/RoleCharacterTags";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
@@ -476,6 +477,8 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
                       {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
                       {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* Which characters the role suits, the village's word over the boot-time guess (role draft board, 9 Nov). */}
+                      {!r.isExample && <RoleCharacterTags role={r} call={call} onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
