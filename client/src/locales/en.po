@@ -51,10 +51,6 @@ msgstr "You asked for a new key at {askedAt}. It waits for another admin to co-s
 msgid "Your draft holds three. Take one off to draft another."
 msgstr "Your draft holds three. Take one off to draft another."
 
-#: client/src/pages/RoleDraft.tsx
-msgid "Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start."
-msgstr "Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start."
-
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Check again"
@@ -1230,6 +1226,11 @@ msgctxt "funding rounds"
 msgid "Open the pot"
 msgstr "Open the pot"
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft stat"
+msgid "~20 h half time, ~30 to 40 h full time"
+msgstr "~20 h half time, ~30 to 40 h full time"
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Show less"
@@ -1564,6 +1565,10 @@ msgctxt "next step box"
 msgid "Nobody holds {role} yet."
 msgstr "Nobody holds {role} yet."
 
+#: client/src/pages/RoleDraft.tsx
+msgid "We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20."
+msgstr "We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20."
+
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
 msgstr "Not synced yet. Press Sync to read every source."
@@ -1576,6 +1581,11 @@ msgstr "A pot"
 #: client/src/pages/RoleDraft.tsx
 msgid "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then."
 msgstr "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then."
+
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft stat"
+msgid "Roughly: {hours}"
+msgstr "Roughly: {hours}"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The amount must be a number."
@@ -1677,6 +1687,10 @@ msgctxt "quest editor"
 msgid "Use this price"
 msgstr "Use this price"
 
+#: client/src/pages/RoleDraft.tsx
+msgid "A role card shows the work the village needs done. Your application is the other half: what you would like to contribute each moon and this season, and how it serves these goals."
+msgstr "A role card shows the work the village needs done. Your application is the other half: what you would like to contribute each moon and this season, and how it serves these goals."
+
 #. placeholder {0}: label[band]
 #: client/src/components/admin/AgeBandCorrection.tsx
 msgctxt "admin age band"
@@ -1709,11 +1723,6 @@ msgstr "You hold the village's funding pots, so you can open a pot and a round."
 #: client/src/components/Layout.tsx
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
-
-#: client/src/pages/RoleDraft.tsx
-msgctxt "role draft stat"
-msgid "Hours not set yet"
-msgstr "Hours not set yet"
 
 #: client/src/components/admin/AgeBandCorrection.tsx
 msgctxt "admin age band"
@@ -2236,6 +2245,10 @@ msgctxt "pricing desk"
 msgid "Hours"
 msgstr "Hours"
 
+#: client/src/pages/RoleDraft.tsx
+msgid "What the whole village is working toward in {seasonName}"
+msgstr "What the whole village is working toward in {seasonName}"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Withdrawn"
@@ -2628,6 +2641,10 @@ msgstr "Remove {rn} from your draft"
 msgctxt "sera compare"
 msgid "Here now"
 msgstr "Here now"
+
+#: client/src/pages/RoleDraft.tsx
+msgid "What the whole village is working toward this season"
+msgstr "What the whole village is working toward this season"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"

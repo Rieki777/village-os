@@ -14,6 +14,10 @@ vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" })
 // The full card is its own component with its own tests; here it only has to open.
 vi.mock("@/components/power/SeatTradingCard", () => ({ default: ({ input }: { input: { name: string } }) => <article data-testid="full-card">{input.name}</article> }));
 
+// The season is one cached read in the app; each test says what it holds.
+const seasonRef = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("@/lib/gameApi", async (orig) => ({ ...(await orig<typeof import("@/lib/gameApi")>()), useSeason: () => seasonRef.value }));
+
 import RoleDraft from "./RoleDraft";
 
 const CAST = [
@@ -38,7 +42,7 @@ const ORG = {
 
 const OPEN_FORM = { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name })) };
 
-function serve(over: { org?: unknown; places?: unknown; form?: unknown } = {}) {
+function serve(over: { org?: unknown; places?: unknown; form?: unknown; season?: unknown } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -48,7 +52,7 @@ function serve(over: { org?: unknown; places?: unknown; form?: unknown } = {}) {
       if (u.includes("/api/org")) return json(over.org ?? ORG);
       if (u.includes("/api/open-proposals/form")) return json(over.form ?? OPEN_FORM);
       if (u.includes("/api/place-registry")) return over.places ? json(over.places) : json({ error: "not here" }, 404);
-      if (u.includes("/api/season")) return json({ current: null, upcoming: null, seasons: [] });
+      if (u.includes("/api/season")) return json(over.season ?? { current: null, upcoming: null, seasons: [] });
       return json([]);
     }),
   );
@@ -61,6 +65,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  seasonRef.value = null;
   vi.unstubAllGlobals();
 });
 
@@ -72,9 +77,9 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("25 to 30 hours a week")).toBeTruthy();
-    // A role that wrote no hours says so; nothing is guessed.
-    expect(within(card("Cook")).getByText("Hours not set yet")).toBeTruthy();
+    expect(within(lfs).getByText("Roughly: 25 to 30 hours a week")).toBeTruthy();
+    // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
+    expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
   });
 
   it("offers the village's own cast, and more than one character can be picked", async () => {
@@ -210,5 +215,17 @@ describe("what happens next", () => {
     serve();
     render(<RoleDraft />);
     expect((await screen.findByRole("link", { name: /Living Map/ })).getAttribute("href")).toBe("/map");
+  });
+});
+
+describe("the season's goals", () => {
+  it("shows the village's open goals for the season, and frames the application as what you would contribute", async () => {
+    seasonRef.value = { name: "Season of Foundations", goals: [{ id: "g1", text: "Investor ready", done: false }, { id: "g2", text: "Old goal", done: true }], current: null, upcoming: null, seasons: [] };
+    serve();
+    render(<RoleDraft />);
+    expect(await screen.findByRole("heading", { name: "What the whole village is working toward in Season of Foundations" })).toBeTruthy();
+    expect(screen.getByText("Investor ready")).toBeTruthy();
+    expect(screen.queryByText("Old goal")).toBeNull();
+    expect(screen.getByText(/what you would like to contribute each moon and this season/)).toBeTruthy();
   });
 });

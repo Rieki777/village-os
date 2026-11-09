@@ -219,6 +219,12 @@ export default function RoleDraft() {
 
   const ctx = { now: new Date(), season: seasonForSheet(season), classNames };
   const pickCount = picks.length;
+  // The village's goals for this season, live (the Season tab in Admin). Done ones drop off.
+  const seasonDoc = season as unknown as { name?: string | null; goals?: Array<{ id?: string; text?: string; done?: boolean }> } | null;
+  const seasonName = typeof seasonDoc?.name === "string" ? seasonDoc.name.trim() : "";
+  const goals = (Array.isArray(seasonDoc?.goals) ? seasonDoc!.goals : [])
+    .filter((g) => g && typeof g.text === "string" && g.text.trim() && !g.done)
+    .map((g, i) => ({ id: String(g.id ?? i), text: String(g.text).trim() }));
   const playing = chars.map(castName).join(", ");
 
   return (
@@ -317,6 +323,7 @@ export default function RoleDraft() {
                   const isOpen = open === role.id;
                   const openPlaces = role.openPlaces;
                   const answers = role.accountabilities;
+                  const hours = role.timeCommitment ?? "";
                   const seats = role.seats;
                   return (
                     <article key={role.id} className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-primary" : "border-border"}`}>
@@ -335,12 +342,14 @@ export default function RoleDraft() {
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
                           <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                            <InfoTip tip={t`Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start.`}>
+                            <InfoTip tip={t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20.`}>
                               {t({ message: "Time", context: "role draft stat" })}
                             </InfoTip>
                           </dt>
-                          <dd className={role.timeCommitment ? "font-semibold text-foreground" : "italic text-muted-foreground"}>
-                            {role.timeCommitment ?? t({ message: "Hours not set yet", context: "role draft stat" })}
+                          <dd className="font-semibold text-foreground">
+                            {role.timeCommitment
+                              ? t({ message: `Roughly: ${hours}`, context: "role draft stat" })
+                              : t({ message: "~20 h half time, ~30 to 40 h full time", context: "role draft stat" })}
                           </dd>
                         </div>
                         <div className="px-2 py-2">
@@ -449,6 +458,25 @@ export default function RoleDraft() {
               </p>
             </aside>
           </div>
+
+          {goals.length > 0 && (
+            <section className="mt-12 rounded-2xl border border-border bg-card p-5" aria-labelledby="draft-goals">
+              <h2 id="draft-goals" className="font-display text-2xl font-bold text-card-foreground">
+                {seasonName ? t`What the whole village is working toward in ${seasonName}` : t`What the whole village is working toward this season`}
+              </h2>
+              <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
+                {t`A role card shows the work the village needs done. Your application is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
+              </p>
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {goals.map((g) => (
+                  <li key={g.id} className="flex items-start gap-2 text-sm text-card-foreground">
+                    <Check className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
+                    {g.text}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="mt-12 grid gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>

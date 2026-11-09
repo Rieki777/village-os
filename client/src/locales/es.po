@@ -51,10 +51,6 @@ msgstr ""
 msgid "Your draft holds three. Take one off to draft another."
 msgstr ""
 
-#: client/src/pages/RoleDraft.tsx
-msgid "Roles here are contracted, not paid by the hour. The hours are roughly what the work takes, agreed before you start."
-msgstr ""
-
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Check again"
@@ -1236,6 +1232,11 @@ msgctxt "funding rounds"
 msgid "Open the pot"
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft stat"
+msgid "~20 h half time, ~30 to 40 h full time"
+msgstr ""
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Show less"
@@ -1573,6 +1574,10 @@ msgctxt "next step box"
 msgid "Nobody holds {role} yet."
 msgstr "Nadie ocupa todavía el rol {role}."
 
+#: client/src/pages/RoleDraft.tsx
+msgid "We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season. Hours are an estimate: full time is roughly 30 to 40 hours a week, half time roughly 20."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
 msgstr ""
@@ -1584,6 +1589,11 @@ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then."
+msgstr ""
+
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft stat"
+msgid "Roughly: {hours}"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -1687,6 +1697,10 @@ msgctxt "quest editor"
 msgid "Use this price"
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgid "A role card shows the work the village needs done. Your application is the other half: what you would like to contribute each moon and this season, and how it serves these goals."
+msgstr ""
+
 #. placeholder {0}: label[band]
 #: client/src/components/admin/AgeBandCorrection.tsx
 msgctxt "admin age band"
@@ -1720,11 +1734,6 @@ msgstr ""
 #, fuzzy
 #~ msgid "Skip to content"
 #~ msgstr "Ir al contenido"
-
-#: client/src/pages/RoleDraft.tsx
-msgctxt "role draft stat"
-msgid "Hours not set yet"
-msgstr ""
 
 #: client/src/components/admin/AgeBandCorrection.tsx
 msgctxt "admin age band"
@@ -2249,6 +2258,10 @@ msgctxt "pricing desk"
 msgid "Hours"
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgid "What the whole village is working toward in {seasonName}"
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Withdrawn"
@@ -2643,6 +2656,10 @@ msgstr ""
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Here now"
+msgstr ""
+
+#: client/src/pages/RoleDraft.tsx
+msgid "What the whole village is working toward this season"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
