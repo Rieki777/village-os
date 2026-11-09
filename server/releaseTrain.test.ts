@@ -220,8 +220,8 @@ describe("bumpVersionFiles: every place release.yml compares", () => {
   });
 
   it("keeps working after the move to another GitHub organisation (#431)", () => {
-    const moved = { ...files, "docker-compose.yml": "image: ${VILLAGE_OS_IMAGE:-ghcr.io/regen-civics/village-os:1.2.0}\n" };
-    expect(bumpVersionFiles(moved, "1.3.0")["docker-compose.yml"]).toContain("ghcr.io/regen-civics/village-os:1.3.0");
+    const moved = { ...files, "docker-compose.yml": "image: ${VILLAGE_OS_IMAGE:-ghcr.io/another-owner/village-os:1.2.0}\n" };
+    expect(bumpVersionFiles(moved, "1.3.0")["docker-compose.yml"]).toContain("ghcr.io/another-owner/village-os:1.3.0");
   });
 
   it("fails loud when a file no longer has the shape it expects", () => {
