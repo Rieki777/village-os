@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CHARACTER_CARDS, deriveTheme } from "@shared/brandTokens";
+import { announceThemeChange } from "@/lib/liveTheme";
 
 /**
  * Admin → Make This Yours → Look: the THREE decisions everything visual
@@ -39,7 +40,8 @@ export default function LookPanel({ password }: { password: string }) {
         body: JSON.stringify({ theme: { seed: theme.seed ?? "", character: theme.character ?? "", place: theme.place ?? "", accent: theme.accent ?? "" } }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Look saved. The whole site re-themes on next load");
+      announceThemeChange();
+      toast.success("Look saved. Open pages re-theme now");
     } catch { toast.error("Save failed"); }
     setSaving(false);
   };
