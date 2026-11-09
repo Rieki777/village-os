@@ -19,6 +19,7 @@
  * the ones nobody kept. This is the screen the Journey to Launch row
  * `starter-quests` links to.
  */
+import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders } from "@/components/admin/adminApi";
@@ -93,6 +94,8 @@ export default function QuestsTab({ password }: { password: string }) {
           The board members see. Edits are live immediately, no deploy. A quest with claims in
           flight cannot be deleted until those claims are consented or declined.
         </p>
+        {/* The Treasurer prices quests beside the engine (quest re-price Q3). */}
+        <a href="/pricing" className="inline-block mt-2 text-sm font-semibold text-emerald-800 underline"><Trans context="admin quests">Price the quests on the pricing desk</Trans></a>
       </div>
 
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-6">
