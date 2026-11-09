@@ -200,6 +200,12 @@ describe.skipIf(!configured)("answering the differences", () => {
       expect(r.status).toBe(200);
       expect(r.body.draftId).toBe(first.body.draftId);
       expect((await changesIn(String(r.body.draftId)))[1]).toEqual({ op: "update_seat", orgRoleId: roleId(P.steward), payload: { aim: "Keeps the wells and the rota." } });
+      // The take opened the draft as the service's; the person's words joining it make it a person's (review 11).
+      expect((await q("SELECT title, rationale, source_kind FROM org_drafts WHERE id = ?", [String(r.body.draftId)]))[0]).toEqual({
+        title: "Changes from Sera's list, some in words written here",
+        rationale: "Some changes here were taken from the list of ways Sera and this village's chart differ, and some were written here.",
+        source_kind: "human",
+      });
       expect((await q("SELECT answer, door, by_role_id, actor_user_id FROM saberra_settled WHERE difference_key = ?", [words.key]))[0]).toEqual({
         answer: "edited", door: "power", by_role_id: "ops-lead", actor_user_id: "u-ana",
       });
