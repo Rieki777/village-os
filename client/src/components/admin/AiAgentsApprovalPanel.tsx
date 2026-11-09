@@ -60,7 +60,7 @@ export default function AiAgentsApprovalPanel({ password }: { password: string }
       }
       setDoc((await r.json()) as Approval);
       setNote("");
-      toast.success(approved ? t`Approval recorded` : t`Approval withdrawn`);
+      toast.success(approved ? t({ message: `Approval recorded`, context: "ai agents approval" }) : t({ message: `Approval withdrawn`, context: "ai agents approval" }));
     } finally {
       setSaving(false);
     }
@@ -106,7 +106,7 @@ export default function AiAgentsApprovalPanel({ password }: { password: string }
         </button>
         {doc.approved && (
           <button type="button" className={button} disabled={saving} onClick={() => void save(false)}>
-            <Trans>Withdraw the approval</Trans>
+            <Trans context="ai agents approval">Withdraw the approval</Trans>
           </button>
         )}
       </div>
