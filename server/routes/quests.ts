@@ -74,6 +74,7 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
 import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
+import { claimRefusalFor } from "../lib/questClaimGate";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
@@ -790,51 +791,32 @@ export function register(app: Express, deps: Deps): void {
     if (!quest) return res.status(404).json({ error: "Quest not found" });
     // Consent on a claimed quest mints recognition from the faucet, grants
     // stay credits and advances a stage. Refusing the CLAIM closes that whole
-    // chain, because consent cannot happen without one.
-    if (await isExampleRow(getPool(), "quests", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    /*
-     * A CLOSED QUEST IS NOT AN INVITATION, and this route never asked.
-     *
-     * It checked `is_example`, `min_stage`, `requires_role` and the member's
-     * own claims, and never `quest.status`. Nothing on the client covered for
-     * it either: `Quests.tsx` filters the board by circle and difficulty only,
-     * so a quest an admin closed kept rendering with a live claim button, and
-     * the whole chain behind it stayed open. Refusing the claim closes the
-     * chain, the same reasoning the example guard above is written on.
-     *
-     * SUBMIT IS DELIBERATELY NOT GUARDED THIS WAY. Closing the board must
-     * never strand work already in flight: a member holding a claim from
-     * before the quest closed still hands it in and is still consented.
-     */
-    if (questClosed(quest.status)) {
+    // chain, because consent cannot happen without one. The rules live in ONE
+    // gate (shared/questClaimGate.ts) that the map's door asks too; this route
+    // only words the refusal. SUBMIT is deliberately not guarded by the closed
+    // rule: closing the board must never strand work already in flight.
+    // Refusals name exactly what is missing, because "computer says no"
+    // teaches nothing.
+    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+    if (refusal?.kind === "example") return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (refusal?.kind === "closed") {
       return res.status(409).json({
         error: "This quest is closed, so it is not taking new claims. The board has others open.",
-        status: String(quest.status ?? ""),
+        status: refusal.status,
       });
     }
-
-    // Progression gates (revision 2, step 3). Structured fields enforce; the
-    // legacy free-text `roleRequired` stays display-only prose. Refusals name
-    // exactly what is missing, because "computer says no" teaches nothing.
-    if (quest.minStage) {
-      const needed = stageIndex(quest.minStage);
-      if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-        return res.status(403).json({
-          error: `This quest opens at the ${stageName(quest.minStage)} stage. Keep walking the path and it will unlock.`,
-          minStage: quest.minStage,
-        });
-      }
+    if (refusal?.kind === "stage") {
+      return res.status(403).json({
+        error: `This quest opens at the ${stageName(refusal.minStage)} stage. Keep walking the path and it will unlock.`,
+        minStage: refusal.minStage,
+      });
     }
-    if (quest.requiresRole) {
-      const role = loadRoles().find((r) => r.id === quest.requiresRole);
-      if (!roleIdsFor(user.id).includes(quest.requiresRole)) {
-        return res.status(403).json({
-          error: `This quest is reserved for ${role?.name ?? quest.requiresRole}. Ask a founder about joining.`,
-          requiresRole: quest.requiresRole,
-        });
-      }
+    if (refusal?.kind === "role") {
+      const role = loadRoles().find((r) => r.id === refusal.requiresRole);
+      return res.status(403).json({
+        error: `This quest is reserved for ${role?.name ?? refusal.requiresRole}. Ask a founder about joining.`,
+        requiresRole: refusal.requiresRole,
+      });
     }
 
     /*
