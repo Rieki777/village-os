@@ -1,4 +1,4 @@
--- 0360: a new holder has an onboarding path ("Your first moons in <role>").
+-- 0365: a new holder has an onboarding path ("Your first moons in <role>").
 --
 -- Three new tables and nothing else, so this file is expand-only: the previous
 -- release neither reads nor writes them. No ALTER, no foreign keys.

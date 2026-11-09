@@ -1,5 +1,5 @@
 /**
- * The onboarding path against a real schema (0360): adoption opens a merged
+ * The onboarding path against a real schema (0365): adoption opens a merged
  * path, the Trail fact holds only while items are open, a check-in is served
  * to three people and nobody else, and the companion step never shows without
  * consent. Every rule has a control beside it that fails if the rule is removed.
