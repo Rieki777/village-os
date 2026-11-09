@@ -170,11 +170,18 @@ interface BudgetDoorDeps {
  * person and never the machine key. `door(user, ctx)` answers one person:
  * deny-aware first, then a live holder, then the admin's fallback until the
  * launch vote (and only while nobody holds the power and the village does not),
- * otherwise a refusal naming the suggestion path. The village's one shared
- * check for `role.pay` is the valuation lane's (`holderDoor`, PR #1027); this
- * door's holder and admin part moves onto it once that lands on main, and the
- * budget's own checks (the payee conflict, ended moons, the suggestion path)
- * stay on top of it.
+ * otherwise a refusal naming the suggestion path.
+ *
+ * NOT `holderDoor` YET, ON PURPOSE (the coordinator, 2026-11-09). The village's
+ * one shared check for `role.pay` is `holderDoor` (server/lib/holderDoor.ts,
+ * on main), but its `refuse` option (PR #1031), which lets this route answer in
+ * its own 409 shapes with a `suggest` per control, is not. So this door stays
+ * for now, and it refuses everywhere `holderDoor` refuses: it is STRICTER,
+ * failing closed for an admin while a holder exists and for an admin after the
+ * launch vote, where `holderDoor` lets an admin through. Moving the holder and
+ * admin part onto `holderDoor` is a follow-up once #1031 lands; the budget's
+ * own checks (the payee conflict, ended moons, the suggestion path) stay on
+ * top of it.
  */
 function budgetDoorOf(deps: BudgetDoorDeps): { door(user: any, ctx: CapabilityCtx | null, control?: string): Promise<BudgetDoor>; actingAs(userId: string): string } {
   const actingAs = (userId: string): string => {
