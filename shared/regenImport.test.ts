@@ -2,8 +2,11 @@
  * What a ReGen Civics file would set, and the exact bodies each kept part sends.
  *
  * The cards are ReGen Civics' own output (see regenFile.test.ts). The village
- * here is a fresh fork's: the eight councils `server/seeds/circles-seed.json`
- * seeds, no seats, nothing in scope, and a running season with an end date.
+ * here has eight councils of its own standing (`__fixtures__/standing-councils.json`),
+ * no seats, nothing in scope, and a running season with an end date. A fresh
+ * fork is born with no circle at all (server/seeds/circles-seed.json ships
+ * empty, ruled platform-wide 2026-10-01), so the councils the import rests are
+ * ones the village formed itself, and the fixture stands them up.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -22,7 +25,7 @@ import {
 
 const HERE = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
 const fixture = (name: string): string => fs.readFileSync(path.join(HERE, "__fixtures__", name), "utf8");
-const SEED = JSON.parse(fs.readFileSync(path.join(HERE, "..", "server", "seeds", "circles-seed.json"), "utf8")) as Array<{ id: string; name: string; aliases?: string[]; status?: string }>;
+const SEED = JSON.parse(fs.readFileSync(path.join(HERE, "__fixtures__", "standing-councils.json"), "utf8")) as Array<{ id: string; name: string; aliases?: string[]; status?: string }>;
 
 const profileOf = (name: string) => {
   const r = readRegenFile(fixture(name));
