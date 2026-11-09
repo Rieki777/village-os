@@ -36,6 +36,7 @@ import { circleDeleteProblem, onCircleStatusChange } from "../lib/circleTreasury
 import { listBudgets } from "../lib/resources";
 import { CIRCLE_STATUSES } from "../../shared/draftKinds";
 import { parentingRefusal, CIRCLE_LAYERS, isCircleLayer } from "../../shared/circleView";
+import { raiseCanvasRevisit } from "../lib/canvasRevisit";
 
 type Deps = Pick<AppDeps, "isAdmin" | "adminActor" | "circlesRepo" | "getPool" | "loadRoles">;
 
@@ -94,6 +95,8 @@ export function register(app: Express, deps: Deps): void {
     };
     await circlesRepo.insert(circle);
     onRealItemPublished(getPool(), "map", adminActor(req)?.id ?? null);
+    // A circle declared is one of the canvas's key moments (plan 4.2). Fire and forget.
+    raiseCanvasRevisit("circle-declared");
     res.json(circle);
   });
 
