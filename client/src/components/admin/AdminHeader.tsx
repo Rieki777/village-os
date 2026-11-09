@@ -16,12 +16,13 @@
  * leaves the browser, and Night look is remembered on this device only.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, LogOut } from "lucide-react";
+import { ChevronDown, LogOut, MessageCircle } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { LanguagePicker } from "@/i18n/LanguagePicker";
 import { HANDLED_EVENT, readHandledCount } from "./handledToday";
 import { whatIsThis } from "./adminWords";
 import { ADMIN_FILTERS_ID, focusAdminFilters, tabHasFilters } from "./adminFilters";
+import { ADMIN_HEADER_ID } from "./AdminHelperHost";
 import "./adminNight.css";
 
 export default function AdminHeader({
@@ -34,6 +35,7 @@ export default function AdminHeader({
   onSignOut,
   extra,
   defaultLocale = null,
+  onHelper,
 }: {
   villageName: string;
   siteUrl: string;
@@ -46,6 +48,8 @@ export default function AdminHeader({
   extra?: ReactNode;
   /** The village default language, for the selector's ordering (dial `village.default_locale`). */
   defaultLocale?: string | null;
+  /** Opens the Admin helper (the village guide's panel). Absent, the menu has no helper row. */
+  onHelper?: () => void;
 }) {
   const { t } = useLingui();
   const host = siteUrl.replace(/^https?:\/\//, "");
@@ -56,7 +60,7 @@ export default function AdminHeader({
     : t({ message: "Admin", context: "admin header" });
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-card text-card-foreground">
+    <header id={ADMIN_HEADER_ID} className="sticky top-0 z-30 border-b border-border bg-card text-card-foreground">
       <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div className="min-w-0">
           <p className="truncate text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -87,7 +91,7 @@ export default function AdminHeader({
         <div className="flex shrink-0 items-center gap-2">
           <div className="hidden sm:contents">{extra}</div>
           <LanguagePicker tone="onSheet" villageDefault={defaultLocale} />
-          <YouMenu userName={userName} night={night} onNight={onNight} onSignOut={onSignOut} />
+          <YouMenu userName={userName} night={night} onNight={onNight} onSignOut={onSignOut} onHelper={onHelper} />
         </div>
       </div>
     </header>
@@ -124,11 +128,13 @@ function YouMenu({
   night,
   onNight,
   onSignOut,
+  onHelper,
 }: {
   userName: string;
   night: boolean;
   onNight: (next: boolean) => void;
   onSignOut: () => void;
+  onHelper?: () => void;
 }) {
   const { t } = useLingui();
   const [open, setOpen] = useState(false);
@@ -189,6 +195,22 @@ function YouMenu({
             <div className="px-3 pb-2 pt-1">
               <p className="truncate text-sm font-semibold text-foreground">{name}</p>
               <p className="text-xs text-muted-foreground"><Trans context="admin header">Signed in to admin</Trans></p>
+            </div>
+          )}
+          {onHelper && (
+            <div className="border-t border-border py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onHelper();
+                }}
+                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-card-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                <span className="flex-1"><Trans context="admin header, opens the village guide's helper panel">Ask your guide</Trans></span>
+                <kbd className="rounded border border-border px-1.5 text-xs text-muted-foreground">{t({ message: "Ctrl /", context: "admin header, keyboard shortcut for the helper" })}</kbd>
+              </button>
             </div>
           )}
           <div className="border-t border-border px-3 py-3">
