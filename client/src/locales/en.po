@@ -12,6 +12,16 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr "Differs"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "It asks:"
+msgstr "It asks:"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pick a reason"
+msgstr "Pick a reason"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
 msgid "Concern"
@@ -56,10 +66,25 @@ msgctxt "next step box, copy the crew invite link"
 msgid "Copy the crew link"
 msgstr "Copy the crew link"
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As little as, for {0}"
+msgstr "As little as, for {0}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "In review"
 msgstr "In review"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{spent} goes to these quests, held for them until each one is done. {left} stays in the pot."
+msgstr "{spent} goes to these quests, held for them until each one is done. {left} stays in the pot."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "None yet"
+msgstr "None yet"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -76,9 +101,23 @@ msgctxt "role pay"
 msgid "Pick a reason"
 msgstr "Pick a reason"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure"
+msgstr "Your figure"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "What harm could this do to the village, or what would it stop us doing?"
 msgstr "What harm could this do to the village, or what would it stop us doing?"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your pledge is withdrawn."
+msgstr "Your pledge is withdrawn."
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted, priced by the village's rule"
+msgstr "Posted, priced by the village's rule"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
@@ -89,6 +128,10 @@ msgstr "Your answer"
 msgctxt "signing key"
 msgid "Village signing key"
 msgstr "Village signing key"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "What does it ask from the pot, in {unit}?"
+msgstr "What does it ask from the pot, in {unit}?"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
@@ -152,27 +195,48 @@ msgctxt "module library, builder step number"
 msgid "Step {n}"
 msgstr "Step {n}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, returned when the quest was not funded"
+msgstr "{who} pledged {much}, returned when the quest was not funded"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "A short name"
 msgstr "A short name"
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Take the new price"
+msgstr "Take the new price"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Paid {paidOn}"
 msgstr "Paid {paidOn}"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "What the village chose"
+msgstr "What the village chose"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Open menu"
 msgstr "Open menu"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "It changes something everyone shares, such as a path, the water or a common building."
+msgstr "It changes something everyone shares, such as a path, the water or a common building."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The amount must be a number above zero."
+msgstr "The amount must be a number above zero."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting once changed"
 msgid "After"
 msgstr "After"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share this idea"
 msgstr "Share this idea"
@@ -189,14 +253,27 @@ msgstr "Could not reach the server."
 msgid "Review dates, sectors and role types {agent} keeps."
 msgstr "Review dates, sectors and role types {agent} keeps."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pricing desk"
+msgstr "Pricing desk"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr "The vote is open. <0>Read it and vote</0>."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Counted by Voice, with each person's share capped. One member, one vote is shown beside it."
+msgstr "Counted by Voice, with each person's share capped. One member, one vote is shown beside it."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Wide range"
 msgstr "Wide range"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Both counts agree."
+#~ msgstr "Both counts agree."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that adds a change"
@@ -208,10 +285,18 @@ msgctxt "the reason for a suggestion"
 msgid "Why"
 msgstr "Why"
 
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "This quest has a new price."
+msgstr "This quest has a new price."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "page heading"
 msgid "Change requests"
 msgstr "Change requests"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Counted by one member, one vote. The count by Voice is shown beside it."
+msgstr "Counted by one member, one vote. The count by Voice is shown beside it."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a suggestion being sent"
@@ -228,7 +313,7 @@ msgctxt "funding rounds"
 msgid "Open a round for ideas"
 msgstr "Open a round for ideas"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is shared. Others can comment on it in its thread."
 msgstr "Your idea is shared. Others can comment on it in its thread."
 
@@ -262,6 +347,11 @@ msgstr "The five steps, and what to hand your agent ↓"
 msgctxt "change request note outcome"
 msgid "Taken in"
 msgstr "Taken in"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}, firm"
+msgstr "{who} pledged {much}, firm"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -301,6 +391,11 @@ msgstr "Take it in"
 msgid "Editing a change starts the review again."
 msgstr "Editing a change starts the review again."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Not funded this round"
+msgstr "Not funded this round"
+
 #: client/src/components/review/SeraCompare.tsx
 msgid "Struck words are only here. Underlined words are only in {theirsTitle}."
 msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
@@ -309,10 +404,15 @@ msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
 msgid "Hide how this was worked out"
 msgstr "Hide how this was worked out"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "The village has chosen"
 msgstr "The village has chosen"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted. The price was not recorded beside the rule, so set it on the pricing desk."
+msgstr "Posted. The price was not recorded beside the rule, so set it on the pricing desk."
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Ask the village for one copy of its database"
@@ -336,7 +436,12 @@ msgctxt "signing key"
 msgid "The key was not replaced"
 msgstr "The key was not replaced"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+msgstr "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 msgstr "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 
@@ -358,6 +463,19 @@ msgstr "A worry you cannot point to yet."
 msgctxt "database export"
 msgid "Download the copy"
 msgstr "Download the copy"
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Price it with the village's rule (optional)"
+msgstr "Price it with the village's rule (optional)"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Back this quest, in {unit}"
+msgstr "Back this quest, in {unit}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "This disagreement stays in the round's record for everyone to see."
+msgstr "This disagreement stays in the round's record for everyone to see."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
@@ -397,6 +515,20 @@ msgctxt "delete a change request"
 msgid "Delete"
 msgstr "Delete"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Nobody has backed this yet."
+msgstr "Nobody has backed this yet."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Save"
+msgstr "Save"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set the prices"
+msgstr "Set the prices"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the suggest form"
 msgid "Suggest a change"
@@ -407,35 +539,58 @@ msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set"
+msgstr "Set"
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, no date on the quest"
 msgid "No date yet. Agree one when you talk."
 msgstr "No date yet. Agree one when you talk."
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "You took it on at its earlier price, and your claim keeps that one unless you choose the new price shown above."
+msgstr "You took it on at its earlier price, and your claim keeps that one unless you choose the new price shown above."
 
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Nothing here yet."
 msgstr "Nothing here yet."
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}: waiting for a second Treasurer or a steward to sign."
+msgstr "{0}: waiting for a second Treasurer or a steward to sign."
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Sending..."
 msgstr "Sending..."
+
+#. placeholder {0}: money(p.s.range.lowTotalMinor)
+#. placeholder {1}: money(p.s.range.highTotalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Likely {0} to {1}"
+msgstr "Likely {0} to {1}"
 
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "{owner} version"
 msgstr "{owner} version"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it?"
 msgstr "Who might do it?"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Roughly what would it cost, in {unit}?"
 msgstr "Roughly what would it cost, in {unit}?"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
 #: client/src/pages/FundingRounds.tsx
 msgid "That did not save. Try again."
 msgstr "That did not save. Try again."
@@ -466,11 +621,25 @@ msgctxt "retry a failed read"
 msgid "Try again"
 msgstr "Try again"
 
+#. placeholder {0}: q.openClaims
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} open claims keep the price they were taken at."
+msgstr "{0} open claims keep the price they were taken at."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Delete this change request? This cannot be undone."
 msgstr "Delete this change request? This cannot be undone."
 
-#: client/src/pages/FundingRounds.tsx
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, model.currency)
+#. placeholder {1}: wholeMoney(s.range.lowTotalMinor, model.currency)
+#. placeholder {2}: wholeMoney(s.range.highTotalMinor, model.currency)
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Suggested {0}, likely {1} to {2}."
+msgstr "Suggested {0}, likely {1} to {2}."
+
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choose"
 msgstr "Choose"
@@ -488,6 +657,11 @@ msgstr "Show the suggestion"
 msgctxt "review response"
 msgid "Object"
 msgstr "Object"
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Voice starts when the village adopts its own pay settings."
+msgstr "Voice starts when the village adopts its own pay settings."
 
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, builder section"
@@ -517,6 +691,11 @@ msgstr "Say why"
 msgid "When shaping starts (leave empty to keep the round in Seed)"
 msgstr "When shaping starts (leave empty to keep the round in Seed)"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Confirm the hours first"
+msgstr "Confirm the hours first"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading on the change requests page"
 msgid "Your change requests"
@@ -530,7 +709,7 @@ msgstr "Why the village needs it"
 msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 msgstr "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Talk about it"
 msgstr "Talk about it"
@@ -540,9 +719,20 @@ msgctxt "review response"
 msgid "Ask a question"
 msgstr "Ask a question"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Send for signing"
+msgstr "Send for signing"
+
 #: client/src/pages/FundingRounds.tsx
 msgid "The pot is open."
 msgstr "The pot is open."
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours for {0}"
+msgstr "Estimated hours for {0}"
 
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
@@ -552,6 +742,16 @@ msgstr "Read both in full"
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing has been read from {agent} yet."
 msgstr "Nothing has been read from {agent} yet."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdraw my pledge"
+msgstr "Withdraw my pledge"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Own figure"
+msgstr "Own figure"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a note about every change"
@@ -568,9 +768,14 @@ msgctxt "a change request you started"
 msgid "Yours"
 msgstr "Yours"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr "A rough idea is enough. Each member may share {allowance} in this round."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Funded"
+msgstr "Funded"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "screen reader name of one change"
@@ -581,6 +786,11 @@ msgstr "{label}, from {before} to {after}"
 msgctxt "when the review time ends"
 msgid "Waits until {until}"
 msgstr "Waits until {until}"
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Hours it takes"
+msgstr "Hours it takes"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
@@ -596,10 +806,19 @@ msgctxt "signing key"
 msgid "an unknown time"
 msgstr "an unknown time"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
+msgstr "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
+
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "This round is closed"
 msgstr "This round is closed"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{n, plural, one {# person chose it.} other {# people chose it.}}"
+msgstr "{n, plural, one {# person chose it.} other {# people chose it.}}"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
@@ -619,7 +838,11 @@ msgctxt "site header"
 msgid "Close menu"
 msgstr "Close menu"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "No quest reached the ballot in this round."
+msgstr "No quest reached the ballot in this round."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Rough cost:"
 msgstr "Rough cost:"
@@ -633,9 +856,25 @@ msgstr "{agent} still didn't answer at {askedAt}."
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr "One of your numbers differs between sources. The Treasurer has been shown it."
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Reading the village's pay settings…"
+msgstr "Reading the village's pay settings…"
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Reason for {0}"
+msgstr "Reason for {0}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Nothing yet"
+msgstr "Nothing yet"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {n} small changes for the chart"
@@ -650,7 +889,7 @@ msgctxt "answer a note in a review"
 msgid "Answer"
 msgstr "Answer"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Yours"
 msgstr "Yours"
@@ -691,10 +930,16 @@ msgctxt "sera changes"
 msgid "Decide it in the structure review"
 msgstr "Decide it in the structure review"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "From {author}"
 msgstr "From {author}"
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure for {0}"
+msgstr "Your figure for {0}"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "The round is open for ideas."
@@ -710,17 +955,27 @@ msgctxt "character card, role ideas the village does not have yet"
 msgid "Roles this character could open. Propose one and the village decides:"
 msgstr "Roles this character could open. Propose one and the village decides:"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdraw it"
+msgstr "Withdraw it"
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, open roles tagged for no character"
 msgid "Also open in the village, for anyone:"
 msgstr "Also open in the village, for anyone:"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Waiting for a signer"
+msgstr "Waiting for a signer"
 
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, apply for one open role"
 msgid "Apply for {name}"
 msgstr "Apply for {name}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Harvest"
 msgstr "Harvest"
@@ -758,6 +1013,21 @@ msgstr "Roles open now"
 msgid "Its role comes with it, and leaving the circle out leaves it out too."
 msgstr "Its role comes with it, and leaving the circle out leaves it out too."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 quest still needs yours"
+msgstr "1 quest still needs yours"
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Earned Equity is owed on this quest until the village writes what Earned Equity means."
+msgstr "Earned Equity is owed on this quest until the village writes what Earned Equity means."
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As much as"
+msgstr "As much as"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
@@ -767,7 +1037,7 @@ msgstr "Invoices, by source"
 msgid "Moved into a change request of its own."
 msgstr "Moved into a change request of its own."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Yours, shared without your name"
 msgstr "Yours, shared without your name"
 
@@ -820,6 +1090,26 @@ msgstr "{0, plural, one {# change} other {# changes}}"
 msgid "Why not, in one line"
 msgstr "Why not, in one line"
 
+#. placeholder {0}: money(p.s.expected.totalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use {0}"
+msgstr "Use {0}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
+msgstr "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Cancel"
+msgstr "Cancel"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "When it is done:"
+msgstr "When it is done:"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
 msgid "Answer"
@@ -843,7 +1133,12 @@ msgctxt "funding rounds"
 msgid "What it is for"
 msgstr "What it is for"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Written"
+msgstr "Written"
+
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
 msgstr "Ideas welcome until {day}"
@@ -905,7 +1200,7 @@ msgstr "Objections answered"
 msgid "Sign in to see what your village is weighing."
 msgstr "Sign in to see what your village is weighing."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Closed"
 msgstr "Closed"
@@ -923,6 +1218,11 @@ msgstr "Read the list again"
 msgctxt "signing key"
 msgid "Keep this key"
 msgstr "Keep this key"
+
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
+msgstr "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
 
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
@@ -947,6 +1247,11 @@ msgctxt "link back to the list"
 msgid "All change requests"
 msgstr "All change requests"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Find it on the quest board"
+msgstr "Find it on the quest board"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
@@ -957,7 +1262,7 @@ msgctxt "valuation receipt"
 msgid "Paid as {paid}."
 msgstr "Paid as {paid}."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests until {day}"
 msgstr "Ideas are being shaped into quests until {day}"
@@ -965,6 +1270,13 @@ msgstr "Ideas are being shaped into quests until {day}"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Step {n} of 4: {words}. Review ends {ends}"
 msgstr "Step {n} of 4: {words}. Review ends {ends}"
+
+#. placeholder {0}: money(q.valueMinor)
+#. placeholder {1}: new Date(q.latest.at).toLocaleDateString()
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} · set {1}"
+msgstr "{0} · set {1}"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -1005,6 +1317,19 @@ msgctxt "a switch setting"
 msgid "Off"
 msgstr "Off"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
+msgstr "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Only one member, one vote funds {title} ({cost})."
+msgstr "Only one member, one vote funds {title} ({cost})."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "All checked"
+msgstr "All checked"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "What each of these holds is in the list above, so none of it is offered here a second time."
 msgstr "What each of these holds is in the list above, so none of it is offered here a second time."
@@ -1013,6 +1338,11 @@ msgstr "What each of these holds is in the list above, so none of it is offered 
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Translated automatically"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{hoursLeft} quests still need yours"
+msgstr "{hoursLeft} quests still need yours"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
@@ -1037,17 +1367,25 @@ msgctxt "funding rounds"
 msgid "A pot"
 msgstr "A pot"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The amount must be a number."
+msgstr "The amount must be a number."
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "{potName}. {line}."
 msgstr "{potName}. {line}."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The count is being made. Open this page again in a moment."
+msgstr "The count is being made. Open this page again in a moment."
+
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund until {day}"
 msgstr "Choosing which quests to fund until {day}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it:"
 msgstr "Who might do it:"
@@ -1056,6 +1394,17 @@ msgstr "Who might do it:"
 msgctxt "sera changes"
 msgid "Facts updated since yesterday: {nFacts}"
 msgstr "Facts updated since yesterday: {nFacts}"
+
+#. placeholder {0}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} outside the band"
+msgstr "{0} outside the band"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Chosen by {names}."
+msgstr "Chosen by {names}."
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -1072,7 +1421,7 @@ msgctxt "sera changes"
 msgid "Review it as one structure change"
 msgstr "Review it as one structure change"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Sharing"
 msgstr "Sharing"
@@ -1100,6 +1449,11 @@ msgctxt "change request note outcome"
 msgid "Turned down"
 msgstr "Turned down"
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Use this price"
+msgstr "Use this price"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -1109,7 +1463,7 @@ msgstr "Invoice {ref}"
 msgid "Your saved numbers did not load."
 msgstr "Your saved numbers did not load."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Grow"
 msgstr "Grow"
@@ -1127,9 +1481,22 @@ msgstr "You hold the village's funding pots, so you can open a pot and a round."
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your idea is withdrawn."
+msgstr "Your idea is withdrawn."
+
 #: client/src/components/modules/SuggestDial.tsx
 msgid "The suggestion was refused."
 msgstr "The suggestion was refused."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
+msgstr "{title} is fully backed by pledges, so it goes ahead without the pot."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Saved."
+msgstr "Saved."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the proposal just made"
@@ -1162,10 +1529,21 @@ msgstr "Close"
 msgid "The village votes on this change by itself."
 msgstr "The village votes on this change by itself."
 
+#. placeholder {0}: read.model.currency
+#. placeholder {1}: read.model.version
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}, version {1}"
+msgstr "{0}, version {1}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "start a change request"
 msgid "Start it"
 msgstr "Start it"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Chosen by {names}."
+#~ msgstr "Chosen by {names}."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
@@ -1199,19 +1577,42 @@ msgstr "{witness} finished Quests to witness"
 msgid "Until it is on, each small change waits for you in this list."
 msgstr "Until it is on, each small change waits for you in this list."
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Saved."
+#~ msgstr "Saved."
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Replace the key"
 msgstr "Replace the key"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Give the hours"
+msgstr "Give the hours"
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, joins two links"
 msgid "or"
 msgstr "or"
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Kind of work for {0}"
+msgstr "Kind of work for {0}"
 
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, copy failed"
@@ -1225,6 +1626,10 @@ msgstr "For the pot's holder"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr "Take this change out."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your choices are saved. You can change them until choosing closes."
+msgstr "Your choices are saved. You can change them until choosing closes."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box heading"
@@ -1241,15 +1646,36 @@ msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr "Tokens, by source"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Check the hours"
+msgstr "Check the hours"
+
+#. placeholder {0}: counts.waiting
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} waiting for a signer"
+msgstr "{0} waiting for a signer"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "{agent} didn't answer at {lastAt}"
 msgstr "{agent} didn't answer at {lastAt}"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{differ, plural, one {Voice and one member, one vote disagree on # quest.} other {Voice and one member, one vote disagree on # quests.}}"
+msgstr "{differ, plural, one {Voice and one member, one vote disagree on # quest.} other {Voice and one member, one vote disagree on # quests.}}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Time to review"
 msgstr "Time to review"
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use the suggestion on all {0} inside the band"
+msgstr "Use the suggestion on all {0} inside the band"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
@@ -1268,7 +1694,7 @@ msgstr "A different value for one of the changes. The author may take it in."
 msgid "The copy did not download"
 msgstr "The copy did not download"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests"
 msgstr "Ideas are being shaped into quests"
@@ -1282,14 +1708,32 @@ msgctxt "sera changes"
 msgid "Check first"
 msgstr "Check first"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Save my choices"
+msgstr "Save my choices"
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This figure is outside the suggestion's band, so pick a reason."
 msgstr "This figure is outside the suggestion's band, so pick a reason."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share an idea"
 msgstr "Share an idea"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{done} prices set."
+msgstr "{done} prices set."
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
@@ -1312,6 +1756,11 @@ msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
 msgstr "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 open claim keeps the price it was taken at."
+msgstr "1 open claim keeps the price it was taken at."
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Hide them"
@@ -1325,6 +1774,11 @@ msgstr "Copied"
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"
 msgstr "Choose a sitting steward"
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests"
+msgid "Price the quests on the pricing desk"
+msgstr "Price the quests on the pricing desk"
 
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
@@ -1368,6 +1822,11 @@ msgstr "Asking now."
 msgid "Likely {0} to {1}. {2}: {3}."
 msgstr "Likely {0} to {1}. {2}: {3}."
 
+#: client/src/components/admin/PricingDeskTab.tsx
+msgctxt "pricing desk"
+msgid "Open the desk as its own page, for a Treasurer who is not an admin"
+msgstr "Open the desk as its own page, for a Treasurer who is not an admin"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Small changes apply by themselves: off"
 msgstr "Small changes apply by themselves: off"
@@ -1387,14 +1846,28 @@ msgctxt "sera changes"
 msgid "Every circle"
 msgstr "Every circle"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "to"
+msgstr "to"
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As little as"
+msgstr "As little as"
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Reading the rounds"
 msgstr "Reading the rounds"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The rough cost must be a number."
 msgstr "The rough cost must be a number."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "What will be done when it is finished?"
+msgstr "What will be done when it is finished?"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
@@ -1405,10 +1878,29 @@ msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr "Everything waiting"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Both counts agree."
+msgstr "Both counts agree."
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Your claim now pays the quest's new price."
+msgstr "Your claim now pays the quest's new price."
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, nobody named on the quest"
 msgid "Ask in the quest chat below"
 msgstr "Ask in the quest chat below"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Hours"
+msgstr "Hours"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdrawn"
+msgstr "Withdrawn"
 
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
@@ -1419,6 +1911,16 @@ msgstr "Not now"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Reading the village's pay settings…"
 msgstr "Reading the village's pay settings…"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Choose what to fund"
+msgstr "Choose what to fund"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Its worker takes the new price here"
+msgstr "Its worker takes the new price here"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -1444,7 +1946,7 @@ msgstr "Circle"
 msgid "Nothing waits for you, and no draft is open."
 msgstr "Nothing waits for you, and no draft is open."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea was not shared. Try again."
 msgstr "Your idea was not shared. Try again."
 
@@ -1452,6 +1954,11 @@ msgstr "Your idea was not shared. Try again."
 msgctxt "heading of the review feed"
 msgid "The review"
 msgstr "The review"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "from"
+msgstr "from"
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, the deadline"
@@ -1496,9 +2003,19 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr "Send it on its own"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The village adopts them by vote"
+msgstr "The village adopts them by vote"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
 msgstr "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Earned Equity meaning"
+msgstr "Earned Equity meaning"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "review page"
@@ -1532,7 +2049,13 @@ msgstr "Your figure"
 msgid "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
 msgstr "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
 
-#: client/src/pages/FundingRounds.tsx
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As much as, for {0}"
+msgstr "As much as, for {0}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What would you do?"
 msgstr "What would you do?"
 
@@ -1578,10 +2101,21 @@ msgctxt "sera changes"
 msgid "{witness} finished Quest to witness"
 msgstr "{witness} finished Quest to witness"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until the pot's holder sets the next stage"
 msgstr "Ideas welcome until the pot's holder sets the next stage"
+
+#: client/src/components/admin/PricingDeskTab.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Opening the pricing desk…"
+msgstr "Opening the pricing desk…"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pays today"
+msgstr "Pays today"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
@@ -1601,6 +2135,11 @@ msgstr "Opening the round"
 msgctxt "funding rounds"
 msgid "Back to funding rounds"
 msgstr "Back to funding rounds"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}"
+msgstr "{who} pledged {much}"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -1641,6 +2180,11 @@ msgctxt "sera changes"
 msgid "Show everything waiting"
 msgstr "Show everything waiting"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Shape your idea into a quest"
+msgstr "Shape your idea into a quest"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
@@ -1659,10 +2203,14 @@ msgstr "Saved."
 msgid "Choose together which quests the season funds, within a pot."
 msgstr "Choose together which quests the season funds, within a pot."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who would it help?"
 msgstr "Who would it help?"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Only Voice funds {title} ({cost})."
+msgstr "Only Voice funds {title} ({cost})."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -1677,6 +2225,15 @@ msgstr "Reward"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Could be as little as"
 msgstr "Could be as little as"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+msgstr "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
+msgstr "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
 
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
@@ -1715,10 +2272,20 @@ msgstr "The chart and {agent} are in step"
 msgid "Anyone here can suggest a change. The village decides."
 msgstr "Anyone here can suggest a change. The village decides."
 
+#. placeholder {0}: counts.hours
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} need your hours"
+msgstr "{0} need your hours"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "who started a change request"
 msgid "Started by {author}"
 msgstr "Started by {author}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "No quest gathered enough support to be funded."
+msgstr "No quest gathered enough support to be funded."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Arrived {at}, with 1 proposal."
@@ -1733,10 +2300,24 @@ msgctxt "a setting with no value"
 msgid "not set"
 msgstr "not set"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Quest"
+msgstr "Quest"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, then withdrew it"
+msgstr "{who} pledged {much}, then withdrew it"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the change request just added to"
 msgid "Open it"
 msgstr "Open it"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Too few chose"
+msgstr "Too few chose"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -1762,10 +2343,20 @@ msgctxt "character card, open the role proposal"
 msgid "Propose a new role"
 msgstr "Propose a new role"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Thank you. Your pledge is shown on this quest."
+msgstr "Thank you. Your pledge is shown on this quest."
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "To decide"
 msgstr "To decide"
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} inside the band"
+msgstr "{0} inside the band"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -1780,6 +2371,11 @@ msgstr "See the open roles"
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Pledge"
+msgstr "Pledge"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A draft from this queue is still open."
@@ -1807,6 +2403,17 @@ msgctxt "heading over a module's settings"
 msgid "Its settings"
 msgstr "Its settings"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Suggestion"
+msgstr "Suggestion"
+
+#. placeholder {0}: filled.unoffered.map(tokenName).join(", ")
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The rule pays {0}, which quests do not pay here yet. Turn it on in the quest pay rules first."
+msgstr "The rule pays {0}, which quests do not pay here yet. Turn it on in the quest pay rules first."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that changes a value"
 msgid "Change it to: {proposedTo}"
@@ -1825,10 +2432,19 @@ msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "the circle's lead role"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You are backing this quest (pending). The Backer badge comes when the quest is done."
+msgstr "You are backing this quest (pending). The Backer badge comes when the quest is done."
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
 msgid "this quest's circle"
 msgstr "this quest's circle"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Write what it means first"
+msgstr "Write what it means first"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -1858,6 +2474,11 @@ msgctxt "role pay"
 msgid "Saved"
 msgstr "Saved"
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
+msgstr "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr "{error}. There may be changes waiting; this is not an empty list."
@@ -1876,6 +2497,11 @@ msgctxt "signing key"
 msgid "The village now signs with key {newKid}"
 msgstr "The village now signs with key {newKid}"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Past prices"
+msgstr "Past prices"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
 msgid "Answered"
@@ -1885,6 +2511,10 @@ msgstr "Answered"
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "No language matches"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
+msgstr "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
@@ -1912,10 +2542,21 @@ msgctxt "signing key"
 msgid "The village has launched, so another admin co-signs before the key is replaced."
 msgstr "The village has launched, so another admin co-signs before the key is replaced."
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Conditions"
+msgstr "Conditions"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Decline"
 msgstr "Decline"
+
+#. placeholder {0}: counts.set
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} set"
+msgstr "{0} set"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "which step a change request is on"
@@ -1932,20 +2573,31 @@ msgctxt "role pay"
 msgid "A note (optional)"
 msgstr "A note (optional)"
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Conditions for {0}"
+msgstr "Conditions for {0}"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 msgstr "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund"
 msgstr "Choosing which quests to fund"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Seed"
 msgstr "Seed"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pay settings adopted"
+msgstr "Pay settings adopted"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -1956,9 +2608,22 @@ msgstr "Skip to content"
 msgid "Your own figure first, before you see the suggestion (optional)"
 msgstr "Your own figure first, before you see the suggestion (optional)"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
+msgstr "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The desk could not be read."
+msgstr "The desk could not be read."
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "How this was worked out"
 msgstr "How this was worked out"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
+msgstr "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
@@ -1992,6 +2657,11 @@ msgctxt "a page loading"
 msgid "Loading…"
 msgstr "Loading…"
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Kind of work"
+msgstr "Kind of work"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick which change a note is about"
 msgid "Which change?"
@@ -2002,7 +2672,12 @@ msgctxt "default title of a suggestion"
 msgid "Change {label}"
 msgstr "Change {label}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours"
+msgstr "Estimated hours"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Round stages"
 msgstr "Round stages"
@@ -2011,6 +2686,15 @@ msgstr "Round stages"
 msgctxt "next step box, label before the first task"
 msgid "First:"
 msgstr "First:"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+msgstr "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "The new price was not taken."
+msgstr "The new price was not taken."
 
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -2022,7 +2706,7 @@ msgctxt "sera changes"
 msgid "To decide {nDecide}"
 msgstr "To decide {nDecide}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who it helps:"
 msgstr "Who it helps:"
@@ -2047,7 +2731,19 @@ msgctxt "change request note kind"
 msgid "Objection"
 msgstr "Objection"
 
+#. placeholder {0}: counts.ready
+#. placeholder {1}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} ready, {1} flagged"
+msgstr "{0} ready, {1} flagged"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "edit one change"
 msgid "Edit"
 msgstr "Edit"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "That price was not set."
+msgstr "That price was not set."

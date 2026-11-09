@@ -21,6 +21,12 @@ function header(night: boolean, onNight = vi.fn(), onSignOut = vi.fn()) {
 }
 
 describe("admin header", () => {
+  it("carries the language selector at every width, not inside the phone-hidden extras (spec i18n US2)", () => {
+    header(false);
+    const trigger = screen.getByRole("button", { name: /^Language: English \(EN\)/ });
+    expect(trigger.closest(".hidden")).toBeNull();
+  });
+
   it("shows the village, the filter link, and a night look that starts off", async () => {
     const onNight = vi.fn();
     const onSignOut = vi.fn();
