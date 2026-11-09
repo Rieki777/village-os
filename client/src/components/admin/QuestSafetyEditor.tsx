@@ -1,12 +1,13 @@
 /**
- * WHAT A QUEST ASKS OF THE BODY, set by the hands that edit the quest (build
- * days S5, spec US5). The founder's door to `PUT /api/admin/quests/:id/safety`:
+ * WHAT A HANDS-ON QUEST ASKS, set by the hands that edit the quest (build days
+ * S5, spec US5). The founder's door to `PUT /api/admin/quests/:id/safety`:
  * without it the route was reachable only by curl (check-admin-reach).
  *
- * A physical quest asks 18 unless the minimum is set, and never below 16 (Rye,
- * 2026-11-09; the server refuses lower and this field says why). Only earned
- * or granted badges are offered, because a badge members give themselves gates
- * nothing. After a save the editor says how many open claims the new rules now
+ * No quest asks an age unless the village turns minimum ages on (Rye,
+ * 2026-11-09: families are encouraged; Amora ships with them off). While they
+ * are on, a quest can ask 16 or 18, the two ages a band can answer. Only
+ * earned or granted badges are offered, because a badge members give
+ * themselves gates nothing. After a save the editor says how many open claims the new rules now
  * refuse, so whoever changed them sees who it affects (spec R3).
  *
  * Admin is a light-only workspace by ruling (2026-09-04): fixed grays here.
@@ -14,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { toast } from "sonner";
+import { MINIMUM_AGE_CHOICES } from "@shared/ageBands";
 import { API_BASE, authHeaders } from "./adminApi";
 
 interface Badge {
@@ -38,6 +40,7 @@ export default function QuestSafetyEditor({ questId, password }: { questId: stri
   const [badges, setBadges] = useState<Badge[]>([]);
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<number | null>(null);
+  const [agesOn, setAgesOn] = useState(false);
 
   useEffect(() => {
     let gone = false;
@@ -45,13 +48,13 @@ export default function QuestSafetyEditor({ questId, password }: { questId: stri
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (gone) return;
+        setAgesOn(d?.minimumAgesOn === true);
         setRules(
           d && typeof d === "object"
             ? {
                 physical: d.physical === true,
-                // The read answers the age in force; a physical quest with no
-                // minimum of its own reads 18, which is the default it keeps.
-                minAge: d.physical && d.minAge === 18 ? "" : d.minAge == null ? "" : String(d.minAge),
+                // The quest's own choice, kept while the village has minimum ages off.
+                minAge: d.minAgeChosen == null ? "" : String(d.minAgeChosen),
                 requiredBadges: Array.isArray(d.requiredBadges) ? d.requiredBadges.map((b: any) => String(b?.id ?? b)) : [],
                 safetyNote: typeof d.safetyNote === "string" ? d.safetyNote : "",
                 estimateHours: d.estimateHours == null ? "" : String(d.estimateHours),
@@ -111,28 +114,31 @@ export default function QuestSafetyEditor({ questId, password }: { questId: stri
     <div className="space-y-3">
       <label className="flex items-center gap-2 text-sm text-gray-700">
         <input type="checkbox" checked={rules.physical} onChange={(e) => setRules({ ...rules, physical: e.target.checked })} />
-        <Trans context="admin quest safety">Physical work on site</Trans>
+        <Trans context="admin quest safety">Hands-on quest on site</Trans>
       </label>
       <div className="grid sm:grid-cols-2 gap-2">
-        <label className="text-xs text-gray-500">
-          <Trans context="admin quest safety">Minimum age</Trans>
-          <input
-            inputMode="numeric"
-            value={rules.minAge}
-            onChange={(e) => setRules({ ...rules, minAge: e.target.value })}
-            placeholder={rules.physical ? "18" : ""}
-            className={`${inputCls} w-full mt-1`}
-          />
-        </label>
+        {agesOn ? (
+          <label className="text-xs text-gray-500">
+            <Trans context="admin quest safety">Minimum age</Trans>
+            <select value={rules.minAge} onChange={(e) => setRules({ ...rules, minAge: e.target.value })} className={`${inputCls} w-full mt-1`}>
+              <option value="">{t({ message: "Open to every age", context: "admin quest safety" })}</option>
+              {MINIMUM_AGE_CHOICES.map((a) => (
+                <option key={a} value={String(a)}>
+                  {t({ message: `${a} and older`, context: "admin quest safety" })}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label className="text-xs text-gray-500">
           <Trans context="admin quest safety">Hours it takes</Trans>
           <input inputMode="decimal" value={rules.estimateHours} onChange={(e) => setRules({ ...rules, estimateHours: e.target.value })} className={`${inputCls} w-full mt-1`} />
         </label>
       </div>
-      {rules.physical ? (
+      {!agesOn ? (
         <p className="text-sm text-gray-700">
           <Trans context="admin quest safety">
-            A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights.
+            Every quest is open to every age, and families are welcome. A village that wants minimum ages turns on Let quests ask a minimum age in Settings, under Quests.
           </Trans>
         </p>
       ) : null}
