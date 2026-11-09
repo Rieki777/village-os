@@ -95,7 +95,12 @@ type Deps = Pick<
 
 const ASKS_PER_WINDOW = 10;
 
-/** A body's `expectedChanges`: a list of change ids, or null when the caller sent none (review 12). */
+/**
+ * A body's `expectedChanges`: a list of change ids, or null when the caller sent none (review 12).
+ * The publish-by-power route passes it on, so a publish refuses a draft that moved since the
+ * publisher saw it. No comment sits inside that handler: `visionNeverApplies.test.ts` reads the
+ * 900 characters before each call of the publisher for the route's path.
+ */
 export function expectedChangesOf(body: unknown): string[] | null {
   const v = body && typeof body === "object" ? (body as Record<string, unknown>).expectedChanges : undefined;
   if (!Array.isArray(v)) return null;
@@ -193,7 +198,6 @@ export function register(app: Express, deps: Deps): void {
     const draftId = String(req.params.id ?? "");
     const running = await openDraftBallot(getPool(), draftId);
     if (running) return res.status(409).json({ error: "ballot_open", message: BALLOT_OPEN_REFUSAL, ballotId: running.id });
-    // Optional (review 12): the changes the publisher was shown, so the publish refuses a draft that moved since.
     const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id), expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
