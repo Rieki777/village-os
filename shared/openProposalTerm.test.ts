@@ -38,17 +38,17 @@ describe("the words", () => {
 
   it("puts the moon in the confirmation and the adoption letters", () => {
     const when = moonTermWords({ kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" });
-    expect(confirmLetter({ firstName: "Juno", village: "Amora", roleNames: ["Lead Financial Steward"], link: "https://x", when }).text).toContain(
-      "You proposed to hold Lead Financial Steward in Amora for this moon, from 9 November 2026 to 8 December 2026.",
+    expect(confirmLetter({ firstName: "Juno", village: "Willowmere", roleNames: ["Lead Financial Steward"], link: "https://x", when }).text).toContain(
+      "You proposed to hold Lead Financial Steward in Willowmere for this moon, from 9 November 2026 to 8 December 2026.",
     );
-    const yes = adoptedInviteLetter({ firstName: "Juno", village: "Amora", roleNames: ["Lead Financial Steward"], season: null, startsOn: "9 November 2026", moon: { from: "9 November 2026", to: "8 December 2026" }, link: "https://x", days: 14 });
+    const yes = adoptedInviteLetter({ firstName: "Juno", village: "Willowmere", roleNames: ["Lead Financial Steward"], season: null, startsOn: "9 November 2026", moon: { from: "9 November 2026", to: "8 December 2026" }, link: "https://x", days: 14 });
     expect(yes.text).toContain("adopted your proposal to hold Lead Financial Steward this moon.");
     expect(yes.text).toContain("Your roles run from 9 November 2026 to the next new moon, 8 December 2026.");
     expect(yes.text).not.toContain("next season");
   });
 
   it("keeps a season proposal's words as they were", () => {
-    expect(confirmLetter({ firstName: null, village: "Amora", roleNames: ["Cook"], link: "https://x" }).text).toContain("in Amora next season.");
+    expect(confirmLetter({ firstName: null, village: "Willowmere", roleNames: ["Cook"], link: "https://x" }).text).toContain("in Willowmere next season.");
   });
 });
 
