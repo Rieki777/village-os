@@ -250,6 +250,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerMemberTimeZoneRoutes } from "./routes/memberTimeZone"; // role journey L6
 import { register as registerValuationRoutes } from "./routes/valuation";
 import { earnedEquityMeaningWritten } from "./lib/valuationStore";
 import { register as registerMoonRecapRoutes, exportMoonReviews } from "./routes/moonRecaps";
@@ -17708,6 +17709,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
+  registerMemberTimeZoneRoutes(app, { authedUser, getPool, overLimit });
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
   const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)

@@ -100,6 +100,11 @@ msgstr "Check again"
 msgid "Start with a quest. Quests walk a path, and a path leads to a role."
 msgstr "Start with a quest. Quests walk a path, and a path leads to a role."
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Times across the village show in this zone."
+msgstr "Times across the village show in this zone."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Nothing is being weighed right now."
 msgstr "Nothing is being weighed right now."
@@ -779,6 +784,11 @@ msgstr "{who} pledged {much}, firm"
 msgid "Start again from this choice's words"
 msgstr "Start again from this choice's words"
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Times across the village show in this zone. You have not chosen one, so we use your browser's ({zone})."
+msgstr "Times across the village show in this zone. You have not chosen one, so we use your browser's ({zone})."
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Open a pot"
@@ -1138,6 +1148,11 @@ msgstr "The full card for {roleName}"
 msgctxt "funding rounds"
 msgid "Save"
 msgstr "Save"
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Use a place name, such as Europe/Lisbon."
+msgstr "Use a place name, such as Europe/Lisbon."
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -1744,6 +1759,11 @@ msgstr "Close the agreement's frames"
 msgctxt "funding round stage"
 msgid "This round is closed"
 msgstr "This round is closed"
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Saved."
+msgstr "Saved."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{n, plural, one {# person chose it.} other {# people chose it.}}"
@@ -3462,6 +3482,11 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr "Replace the key"
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Clear"
+msgstr "Clear"
+
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 msgstr "Your suggestion is withdrawn. It is listed under Decided lately on this block."
@@ -4016,6 +4041,11 @@ msgstr "Last synced {syncedAt}"
 msgid "The season, week by week"
 msgstr "The season, week by week"
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Your time zone"
+msgstr "Your time zone"
+
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run button"
 msgid "Run the test"
@@ -4145,6 +4175,11 @@ msgstr "This block's public line is hidden for now."
 msgctxt "the closing policy is being saved"
 msgid "Saving..."
 msgstr "Saving..."
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Use my browser's ({browser})"
+msgstr "Use my browser's ({browser})"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -4438,6 +4473,11 @@ msgstr "What we say"
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "<0>The canvas's own article<1/></0>, where its authors describe the canvas."
 msgstr "<0>The canvas's own article<1/></0>, where its authors describe the canvas."
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Time zone"
+msgstr "Time zone"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "button that opens the conflict agreement editor"
@@ -5268,6 +5308,11 @@ msgstr "Their role here, such as cohort ombuds"
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Your account, {firstName}"
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Save"
+msgstr "Save"
+
 #. placeholder {0}: catalyst.aName
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Could not load. Are you signed in as {0}?"
@@ -5714,6 +5759,11 @@ msgstr "Kind of work"
 msgctxt "when a practice happens"
 msgid "When"
 msgstr "When"
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "That did not save. Try again."
+msgstr "That did not save. Try again."
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Proposing a change puts it to a village vote, and this village has not turned governance on yet. Whoever keeps the exit policy can change these words, so say what you would change to them."
