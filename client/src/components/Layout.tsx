@@ -2,6 +2,8 @@ import { Link, useLocation } from "wouter";
 import { m, AnimatePresence } from "framer-motion";
 import { TreePine, Menu, X, User, LogOut, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { LanguagePicker } from "@/i18n/LanguagePicker";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import NotificationBell from "@/components/NotificationBell";
@@ -32,6 +34,9 @@ export default function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const bare = isBareRoute(location);
   const { user, logout } = useAuth();
+  const { t } = useLingui();
+  // Named, so the catalog reads "Your account, {firstName}" and not "{0}".
+  const firstName = user?.name.split(" ")[0] ?? "";
   // The shell's identity — logo, name, outside links, footer copy — comes
   // from the live config, never from literals: this is what makes a fork's
   // shell the fork's without touching a component. While config is loading
@@ -173,7 +178,7 @@ export default function Layout({ children }: LayoutProps) {
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-white focus:text-teal-deep focus:font-semibold focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-teal-deep"
       >
-        Skip to content
+        <Trans context="site header">Skip to content</Trans>
       </a>
 
       {/* Navigation, inside the page's banner landmark: there was no <header>
@@ -270,6 +275,9 @@ export default function Layout({ children }: LayoutProps) {
               )
             )}
 
+            {/* The language selector (spec i18n US2; mock approved by Rye 2026-11-06). */}
+            <LanguagePicker villageDefault={cfg?.defaultLocale ?? null} />
+
             {user ? (
               <div className="flex items-center gap-3">
                 <NotificationBell memberId={user.id} />
@@ -293,7 +301,7 @@ export default function Layout({ children }: LayoutProps) {
                     aria-controls="account-menu"
                     // Named for a screen reader at every width, because the
                     // visible name below hides between lg and xl.
-                    aria-label={`Your account, ${user.name.split(" ")[0]}`}
+                    aria-label={t({ message: `Your account, ${firstName}`, context: "site header" })}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
                   >
                     <User className="w-4 h-4" />
@@ -333,10 +341,10 @@ export default function Layout({ children }: LayoutProps) {
                           // "Everywhere" is honest, not decorative: tokenVersion
                           // is the only revocation lever, so this ends the
                           // session on every device the member is signed in on.
-                          title="Sign out everywhere"
+                          title={t({ message: "Sign out everywhere", context: "site header" })}
                         >
                           <LogOut className="w-4 h-4" />
-                          Sign out everywhere
+                          <Trans context="site header">Sign out everywhere</Trans>
                         </button>
                       </m.div>
                     )}
@@ -346,7 +354,7 @@ export default function Layout({ children }: LayoutProps) {
             ) : (
               <Link href="/login" className="flex items-center gap-2 px-3 py-1.5 bg-black/10 hover:bg-black/20 rounded-lg text-sm transition-colors whitespace-nowrap">
                 <User className="w-4 h-4" />
-                Sign in
+                <Trans context="site header">Sign in</Trans>
               </Link>
             )}
 
@@ -357,20 +365,21 @@ export default function Layout({ children }: LayoutProps) {
                 rel="noopener noreferrer"
                 className="px-3 xl:px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-sm whitespace-nowrap"
               >
-                Main Site
+                <Trans context="site header">Main Site</Trans>
               </a>
             )}
           </div>
 
           {/* Mobile Menu Button (bell beside it when signed in) */}
-          <div className="lg:hidden flex items-center gap-1 text-white">
+          <div className="lg:hidden flex items-center gap-2 text-white">
+            <LanguagePicker villageDefault={cfg?.defaultLocale ?? null} />
             {user && <NotificationBell memberId={user.id} />}
             {/* Icon-only, so it needs a spoken name and a state a screen
                 reader can hear — otherwise it announces as bare "button". */}
             <button
               ref={menuButton}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-label={mobileMenuOpen ? t({ message: "Close menu", context: "site header" }) : t({ message: "Open menu", context: "site header" })}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-menu"
               className="text-white inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:-m-2"
@@ -473,7 +482,7 @@ export default function Layout({ children }: LayoutProps) {
                         onClick={() => { setMobileMenuOpen(false); logout(); }}
                         className="block text-white hover:opacity-80 transition-opacity text-sm py-2 text-left"
                       >
-                        Sign out everywhere
+                        <Trans context="site header">Sign out everywhere</Trans>
                       </button>
                     </>
                   ) : (
@@ -482,7 +491,7 @@ export default function Layout({ children }: LayoutProps) {
                       className="block text-white hover:underline transition-colors text-sm py-2"
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      Sign in or join
+                      <Trans context="site header">Sign in or join</Trans>
                     </Link>
                   )}
                 </div>
@@ -494,7 +503,7 @@ export default function Layout({ children }: LayoutProps) {
                     rel="noopener noreferrer"
                     className="block px-4 py-2 bg-amber text-foreground rounded-lg font-medium hover:bg-amber/90 transition-colors text-center mt-3"
                   >
-                    Main Site
+                    <Trans context="site header">Main Site</Trans>
                   </a>
                 )}
               </div>

@@ -548,6 +548,16 @@ describe("what a model may not be saved with", () => {
   });
 });
 
+describe("the engine's dials a model may not be saved with", () => {
+  it("names a no-sign band outside 0 to 50%, a negative spread, and range words out of order", () => {
+    const problems = validateModel({ ...V1, engine: { bandPct: 60, singleLowPct: -1, narrowPct: 60, mediumPct: 50 } });
+    expect(problems).toContain("The no-sign band must be between 0% and 50% of the suggestion.");
+    expect(problems).toContain("The range around a single estimate must be between 0% and 100%.");
+    expect(problems).toContain("A narrow range must be under a medium one.");
+    expect(validateModel({ ...V1, engine: { bandPct: 15 } })).toEqual([]);
+  });
+});
+
 describe("what a change needs (plan 3.1)", () => {
   const v2: ValuationModel = {
     ...V1,
@@ -566,17 +576,51 @@ describe("what a change needs (plan 3.1)", () => {
     expect(doorFor(changes)).toBe("proposal");
   });
 
-  it("sends the currency, the Voice rate and the Voice cap to the founder ring, and the benefit swing to a finance or steward role", () => {
-    expect(doorFor(diffModels(V1, { ...V1, voicePerUnit: 2 }))).toBe("founder");
-    expect(doorFor(diffModels(V1, { ...V1, currency: "CRC" }))).toBe("founder");
-    expect(doorFor(diffModels(V1, { ...V1, voiceCapPerMemberPerMoon: 500 }))).toBe("founder");
+  it("sends the currency, the Voice rate and the Voice cap to the village's highest vote, never a founder alone (Article 0, 2026-11-06), and the benefit swing to a finance or steward role", () => {
+    expect(doorFor(diffModels(V1, { ...V1, voicePerUnit: 2 }))).toBe("vote");
+    expect(doorFor(diffModels(V1, { ...V1, currency: "CRC" }))).toBe("vote");
+    expect(doorFor(diffModels(V1, { ...V1, voiceCapPerMemberPerMoon: 500 }))).toBe("vote");
+    expect(diffModels(V1, { ...V1, voicePerUnit: 2 }).some((c) => (c.door as string) === "founder")).toBe(false);
     expect(diffModels(V1, { ...V1, benefit: { maxPct: 20 } })).toEqual([{ key: "benefit", label: "Village benefit range", from: "±25%", to: "±20%", door: "steward" }]);
     expect(diffModels(V1, V1)).toEqual([]);
   });
 
-  it("lets a version tweak the reward settings (Rye, 2026-10-31: settings in the valuation pages)", () => {
-    const changes = diffModels(V1, { ...V1, reward: { equityMatchPct: 150, creditsBonusPct: 10, defaultCashPct: 0 } });
-    expect(changes).toEqual([{ key: "equityMatch", label: "Earned Equity match", from: "100%", to: "150%", door: "version" }]);
+  it("lets a version tweak the default cash share, and sends the reward multiple to the highest vote, since it moves every price and every Voice at once (QA G4)", () => {
+    expect(diffModels(V1, { ...V1, reward: { equityMatchPct: 100, creditsBonusPct: 10, defaultCashPct: 30 } })).toEqual([
+      { key: "defaultCash", label: "Default cash share of the base", from: "0%", to: "30%", door: "version" },
+    ]);
+    expect(diffModels(V1, { ...V1, reward: { equityMatchPct: 150, creditsBonusPct: 10, defaultCashPct: 0 } })).toEqual([
+      { key: "equityMatch", label: "Earned Equity match", from: "100%", to: "150%", door: "vote" },
+    ]);
+    expect(doorFor(diffModels(V1, { ...V1, reward: { equityMatchPct: 100, creditsBonusPct: 20, defaultCashPct: 0 } }))).toBe("vote");
+  });
+
+  it("measures a band's 10% step from the version the village last adopted, so steps cannot be chained (QA G4)", () => {
+    const step = (model: ValuationModel, pct: number): ValuationModel => ({
+      ...model,
+      version: model.version + 1,
+      bands: model.bands.map((b) => (b.key === "general" ? { ...b, hourValueMinor: Math.round(b.hourValueMinor * (1 + pct / 100)) } : b)),
+    });
+    const once = step(V1, 9);
+    const twice = step(once, 9);
+    expect(diffModels(once, twice).find((c) => c.key === "band:general")?.door).toBe("version");
+    expect(diffModels(once, twice, { adopted: V1 }).find((c) => c.key === "band:general")?.door).toBe("proposal");
+  });
+
+  it("sends a new band priced above a band with the same legal floor to a proposal (QA G4)", () => {
+    const sameFloor = V1.bands.find((b) => b.key === "general")!;
+    const extra: ValuationModel = { ...V1, version: 2, bands: [...V1.bands, { ...sameFloor, key: "general-plus", label: "Specialist general", hourValueMinor: 447 }] };
+    expect(diffModels(V1, extra).find((c) => c.key === "band:general-plus")?.door).toBe("proposal");
+    const fresh: ValuationModel = { ...V1, version: 2, bands: [...V1.bands, { key: "care", label: "Care", hourValueMinor: 342, source: src("Unskilled minimum") }] };
+    expect(diffModels(V1, fresh).find((c) => c.key === "band:care")?.door).toBe("version");
+  });
+
+  it("lets a version turn hours on in receipts (C13: off by default)", () => {
+    expect(diffModels(V1, { ...V1, receiptShowsHours: true })).toEqual([{ key: "receiptShowsHours", label: "Receipts show hours", from: "off", to: "on", door: "version" }]);
+  });
+
+  it("lets a version tune the engine's own dials", () => {
+    expect(diffModels(V1, { ...V1, engine: { bandPct: 15 } })).toEqual([{ key: "engine:bandPct", label: "No-sign band", from: "10%", to: "15%", door: "version" }]);
   });
 
   it("previews who gains and who loses, and the change in total reward", () => {

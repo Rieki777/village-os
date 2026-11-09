@@ -574,7 +574,7 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const big = await call("POST", "/api/redemptions", { token: CREDITS, amount: 20, askedFor: "a lathe" }, wrenToken);
     expect(big.status, big.text.slice(0, 300)).toBe(409);
     expect(String(big.json?.error)).toContain("left to redeem this moon");
-    await setVar("redemption.max_village_per_cycle", "0");
+    await setVar("redemption.max_village_per_cycle", "");
 
     // AN UNVALUED TOKEN IS REFUSED WHILE A CAP STANDS, and allowed once it is
     // lifted. This is the decision the design had to make out loud.
@@ -583,11 +583,18 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
     const unpriced = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a day of help" }, wrenToken);
     expect(unpriced.status, unpriced.text.slice(0, 300)).toBe(409);
     expect(String(unpriced.json?.error)).toContain("no rate for this token");
-    await setVar("redemption.max_per_request", "0");
+    await setVar("redemption.max_per_request", "");
     const services = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a day of help" }, wrenToken);
     expect(services.status, services.text.slice(0, 300)).toBe(201);
     expect(services.json?.redemption?.money, "an unvalued request carries no figures").toBeNull();
     expect((await call("POST", `/api/redemptions/${services.json.redemption.id}/withdraw`, undefined, wrenToken)).status).toBe(200);
+    // A CEILING OF 0 IS A CEILING OF ZERO (Rye, 2026-11-05: redemption fails
+    // closed), so it is a limit that stands and the same unpriced ask is refused.
+    await setVar("redemption.max_per_request", "0");
+    const underZero = await call("POST", "/api/redemptions", { token: CREDITS, amount: 5, askedFor: "a day of help" }, wrenToken);
+    expect(underZero.status, underZero.text.slice(0, 300)).toBe(409);
+    expect(String(underZero.json?.error)).toContain("no rate for this token");
+    await setVar("redemption.max_per_request", "");
 
     await setVar("redemption.fee_pct", "0");
     await setVar("redemption.fee_fixed", "0");
@@ -809,9 +816,9 @@ describe.skipIf(!DB_CONFIGURED)("the redemption doors", () => {
 
     await setVar("redemption.currencies", "");
     await setVar("redemption.min_amount", "0");
-    await setVar("redemption.max_per_request", "0");
-    await setVar("redemption.max_per_member_per_cycle", "0");
-    await setVar("redemption.max_village_per_cycle", "0");
+    await setVar("redemption.max_per_request", "");
+    await setVar("redemption.max_per_member_per_cycle", "");
+    await setVar("redemption.max_village_per_cycle", "");
     await setVar("redemption.fee_pct", "0");
     await setVar("redemption.fee_fixed", "0");
     await setVar("redemption.rate_source", "exchange");

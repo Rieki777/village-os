@@ -262,6 +262,7 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     case "ballot_not_yet_in_effect":
     case "ballot_failed":
     case "ballot_no_quorum":
+    case "ballot_rerun_opened":
     case "ballot_withdrawn":
     case "ballot_advisory_closed":
     case "ballot_expired":
@@ -363,6 +364,11 @@ export function emailCadenceFor(type: string, p: NotifyPrefs): "immediate" | "da
     // (server/routes/villageExport.ts). Told the same hour: an admin or steward
     // who did not do it needs to know today, while changing the password helps.
     case "village_export":
+      return "immediate";
+    // The village's signing key was replaced (server/routes/signingKey.ts).
+    // The same hour, for the same reason as an export: an admin or steward who
+    // did not do it needs to know while it can still be acted on.
+    case "signing_key_rotated":
       return "immediate";
     // The failed-actions report, at most once a day. Daily and not immediate on
     // purpose: the failures that cannot wait already alert on their own

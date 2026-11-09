@@ -80,7 +80,9 @@ describe("module images", () => {
   // `canvas` (hue 90, LayoutGrid) and `conflict-evolution` (hue 345,
   // HeartHandshake) joined with the canvas build on the same terms: no file, so
   // the ratchet does not move, until Rye approves art for them.
-  const DRAWN_FALLBACK = new Set(["saberra", "canvas", "conflict-evolution"]);
+  // `funding-rounds` (0338) joins on the drawn-fallback terms until Rye approves
+  // its art: hue 45 and Sprout, no file, nothing against the image budget.
+  const DRAWN_FALLBACK = new Set(["saberra", "canvas", "conflict-evolution", "funding-rounds"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

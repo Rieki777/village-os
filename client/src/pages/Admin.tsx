@@ -99,6 +99,7 @@ import HandoverTab from "@/components/admin/HandoverTab";
 import AdminGate from "@/components/admin/AdminGate";
 import FailuresTab from "@/components/admin/FailuresTab";
 import SecretsKeyBanner, { SealedSaveButton } from "@/components/admin/SecretsKeyBanner";
+import SigningKeyCard from "@/components/admin/SigningKeyCard";
 import VariablesTab from "@/components/admin/VariablesTab";
 import VotingWeightsPanel from "@/components/admin/VotingWeightsPanel";
 import NeedsPanel, { NeedsSetupStep, useNeedsSetupObservation } from "@/components/admin/NeedsPanel";
@@ -915,6 +916,7 @@ export function IntegrationsTab({ password }: { password: string }) {
         </p>
       </div>
       <SecretsKeyBanner status={data?.villageSecretsKey} />
+      <SigningKeyCard password={password} />
       {loading && !data ? <div className="text-center py-12 text-gray-400">Loading…</div> : (
         <div className="w-full space-y-5">
           {/* The one value that flows the OTHER way: what to paste into Stripe. */}

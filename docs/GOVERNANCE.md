@@ -11,7 +11,7 @@ This describes a FRESH village: what a village standing up a new instance holds 
 <!-- written by a person: generated -->
 This file is generated. `scripts/generate-governance-doc.mjs` reads the engine, the subject registry, the dials, the capability tables, the module definition, the clock and the route registrations, works out the facts, and writes the whole document. `scripts/check-governance-doc.mjs` regenerates it and fails the build when the committed text and the code have come apart.
 
-It describes the sources at fingerprint `6d58ba8680640f8d`, which regenerating reproduces.
+It describes the sources at fingerprint `49aecacbc0d1e10a`, which regenerating reproduces.
 
 <!-- written by a person: editing -->
 Editing this file by hand does not hold. Change the code, then run:
@@ -89,7 +89,7 @@ The governance module ships **off**. Its lifecycles are `off`, `preview`, `membe
 <!-- written by a person: decisionIs -->
 A decision is a ballot: one question, one frozen electorate, one document, and one outcome recorded by a person. The document a ballot carries is the document that was checked when it opened, stored on the ballot's own row, so what was voted on is what was read.
 
-A ballot is in one of these states: `open`, `passed`, `failed`, `no_quorum`, `withdrawn`.
+A ballot is in one of these states: `open`, `passed`, `failed`, `no_quorum`, `no_quorum_rerun`, `withdrawn`.
 
 <!-- written by a person: oneOpenBallot -->
 One open ballot per subject, held on a unique index and never on an application check. Closing frees the subject the same second, so a vote that missed its participation can be asked again the same hour, and the ballot that missed stays closed with its own frozen roll.
@@ -173,6 +173,7 @@ The dials a village holds, with the ring that says who may move each one and the
 | `governance.weight_cap_pct` | The most voting weight one member can carry | `founder` | `20` | 1 to 100 % | when it is written |
 | `governance.unity_pct` | Unity needed to pass | `open` | `80` | 50 to 100 % | when it is written |
 | `governance.quorum_pct` | Quorum needed to count | `open` | `20` | 1 to 100 % | when it is written |
+| `governance.quorum_fallback` | Ask again when too few vote | `open` | `off` | `off`, `on` | when it is written |
 | `governance.vote_days` | How long a ballot stays open | `open` | `7` | 1 to 30 days | when it is written |
 | `governance.consent_window_days` | How long a consent window stays open | `open` | `7` | 1 to 30 days | when it is written |
 | `governance.default_method` | How village-wide ballots decide | `open` | `custom` | `custom`, `majority`, `consensus`, `consent`, `hypha` | when it is written |
@@ -192,7 +193,7 @@ The dials a village holds, with the ring that says who may move each one and the
 <!-- written by a person: dialsStorage -->
 Only CHANGED values are stored. An absent row means the platform default in the table above, so a fresh village starts with every one of these and no rows at all.
 
-12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 47 settings above is one of them, so every governance dial takes effect the moment it is written.
+12 settings across the whole registry wait for a cycle close instead of applying when they are written: `cycle.mode`, `economy.voice_claim_threshold`, `economy.equity_claim_threshold`, `economy.claims_week_days`, `economy.claims_week_starts`, `gratitude.base_budget`, `gratitude.pool_per_cycle`, `gratitude.pool_token`, `gratitude.full_sends_per_cycle`, `feed.heart_amount`, `feed.max_hearts_per_recipient_per_cycle`, `ledger.admin_mint_cycle_cap`. The per-stage sending multipliers carry the same timing through their own override, one for each rung of the ladder. None of the 48 settings above is one of them, so every governance dial takes effect the moment it is written.
 
 ## What each kind of decision asks
 
@@ -208,7 +209,9 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 | `gps_change` | 0% | 50% | 0 | no | the village's own | yes |
 | `org_draft` | 0% | 0% | 0 | no | the village's own | no, it conducts a decision and executes nothing |
 | `conflict_agreement` | 80% | 50% | 0 | no | `custom` | yes |
+| `admin_edit` | 0% | 0% | 0 | no | the village's own | no, it conducts a decision and executes nothing |
 | `mint_request` | 80% | 50% | 0 | no | `custom` | no, it conducts a decision and executes nothing |
+| `database_export` | 97% | 97% | 0 | no | `custom` | no, it conducts a decision and executes nothing |
 
 - `village_launch`: Starting the Game asks every member on the roll to vote yes. An abstention is not a yes, and a vote nobody cast is not a yes either.
 - `mint_rule`: This one changes what the village mints, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
@@ -217,7 +220,9 @@ What each kind of decision asks. A subject declares MINIMUMS and the village's o
 - `gps_change`: This one changes the statement every later change is judged against, so it asks for more than half the village's voting weight to take part. How much of that has to agree is the village's own setting.
 - `org_draft`: A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.
 - `conflict_agreement`: This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.
+- `admin_edit`: A suggested change to one admin control asks whatever this village asks of any decision. A holder of the power could make it without a vote, so the vote is not priced above the village's own bar.
 - `mint_request`: This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.
+- `database_export`: This one hands one steward a copy of every member's data, which cannot be called back once it leaves, so it asks the highest bar the village sets.
 
 Every other subject type keeps the village's own dials: `80% unity` and `20% quorum` on a fresh village, with no floor of its own.
 
@@ -228,7 +233,7 @@ The wizard offers types the executors have not reached. Those open as practice v
 
 The wizard's type list is held in two files, once on the server and once in the browser, and they agree today.
 
-A change set carries at most 12 entries, all game dials or all minting rules and never both, because a ballot carries one threshold priced by its subject and a set that is two subjects has no honest price.
+A change set carries at most 22 entries by default. Each village moves that number by vote (`governance.change_set_cap`), anywhere from 1 to 50. A set is priced at its hardest element and applies whole or not at all. A game dial and a minting rule still go up as two proposals, because a dial moves when the vote carries and a minting rule moves at the next moon.
 
 ## What closing a decision does
 
@@ -514,6 +519,7 @@ What a village publishes, read from the route registrations. The door on each ro
 | POST | `/api/governance/power-transfers` | signed in | none |
 | GET | `/api/governance/purpose` | signed in | none |
 | POST | `/api/governance/purpose-changes` | signed in | none |
+| POST | `/api/governance/quorum-fallback/failsafe` | administrator | none |
 | GET | `/api/governance/role-applications` | signed in | none |
 | POST | `/api/governance/role-applications` | signed in | none |
 | GET | `/api/governance/role-applications/:id` | signed in | none |
@@ -530,11 +536,15 @@ What a village publishes, read from the route registrations. The door on each ro
 | GET | `/api/governance/standing` | signed in | none |
 | GET | `/api/governance/stewardship` | signed in | none |
 | POST | `/api/governance/vetoes/:id/redact` | administrator | none |
+| GET | `/api/governance/village-export/:ballotId/download` | signed in | none |
+| GET | `/api/governance/village-export/:ballotId/standing` | signed in | none |
+| POST | `/api/governance/village-export/put-to-village` | signed in | none |
+| GET | `/api/governance/village-export/stewards` | signed in | none |
 | GET | `/api/governance/voice-spread` | anyone, including a stranger | none |
 | GET | `/api/governance/weights` | signed in | none |
 | GET | `/api/governance/wizard` | signed in | none |
 
-69 routes: 55 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
+74 routes: 60 under the governance prefix and 14 under the mechanics prefix. 9 of them answer a stranger, 4 ask for a named power, and 0 could not be classified from the code by this reader.
 
 The routes that answer a stranger are the village's public record. At the module's `public` lifecycle a stranger reads the ballot list, one decision and the objection lineage as titles, counts, tallies, dials and status. Who voted, how, who has not voted yet, who objected and the document itself are for signed-in members, and ruling 22, still staged, is about what members read.
 
@@ -782,7 +792,7 @@ Built: `governance.weight_mode` carries 3 choices, nothing refuses a change in e
 > explain
 
 <!-- written by a person: ruling-15 -->
-Built: a change set carries up to 12 entries and passes or fails as one. Staged: the set must be all dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor among its elements, so nobody can smuggle a big change under a small one; and when one element fails at apply time nothing applies, and the proposal names the element that blocked it.
+Built: a change set carries up to 22 entries by default (a village dial, 1 to 50) and passes or fails as one. Staged: the set must be all dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor among its elements, so nobody can smuggle a big change under a small one; and when one element fails at apply time nothing applies, and the proposal names the element that blocked it.
 
 ### 16. Vote it down, say what to fix, withdraw, edit, resubmit
 
@@ -842,7 +852,7 @@ The case this answered: a proposal passes on the 20th of the moon, the steward i
 > Everything can be! But the more critical it is, the higher percentage of quorum you need (hard to get quorum) such that changing the most critical things would require a max high of 97% quorum where only 3% of the whole network would be able to not be informed and have 97% approval (max heights - we don't recommend more than those though they can exceed them (if they do we warn them) because the closer you get to 100% the chances of you getting a stalemate increase where the Game breaks even though a massive majority want to continue they can't because someone died suddenly or stopped playing the Game, etc.
 
 <!-- written by a person: ruling-21 -->
-Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 8 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
+Every setting carries a criticality tier now, defaulting to routine, and the tier sets both the quorum and the unity a change to it needs: routine asks nothing beyond the village's own dials, structural asks 80 unity and 50 quorum, and constitutional asks 97 and 97, which is the founder's own number. The tiers are themselves eight settings, and the 10 subject floors that used to live only in code are settings too. All ten are raise-only: the shipped number is a floor and a village may go above it and never below, because a village that can lower the bar for changing the bar has no bar. Any dial typed above 97 shows the stalemate warning in words while it is being typed, and the Birthing is the one subject exempt from it because it stays at 100 and 100 by rule. Still open: the founder's 2026-09-02 ruling that a threshold changes at its own current bar, which is a later lane.
 
 ### 22. Who voted is visible, how they voted is hidden, and names appear after half
 
@@ -1070,7 +1080,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
 
 ```json
 {
-  "commit": "6d58ba8680640f8d",
+  "commit": "49aecacbc0d1e10a",
   "module": {
     "id": "governance",
     "shipsAs": "off",
@@ -1121,6 +1131,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "passed",
       "failed",
       "no_quorum",
+      "no_quorum_rerun",
       "withdrawn"
     ],
     "unityStampedByMethod": {
@@ -1225,6 +1236,19 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "why": "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised."
     },
     {
+      "subjectType": "admin_edit",
+      "minUnityPct": 0,
+      "minQuorumPct": 0,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": null,
+      "criticality": "routine",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": false,
+      "why": "A suggested change to one admin control asks whatever this village asks of any decision. A holder of the power could make it without a vote, so the vote is not priced above the village's own bar."
+    },
+    {
       "subjectType": "mint_request",
       "minUnityPct": 80,
       "minQuorumPct": 50,
@@ -1236,6 +1260,19 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "minYesHeads": null,
       "executesAtClose": false,
       "why": "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar."
+    },
+    {
+      "subjectType": "database_export",
+      "minUnityPct": 97,
+      "minQuorumPct": 97,
+      "minElectorate": 0,
+      "everySeatWeighs": false,
+      "method": "custom",
+      "criticality": "constitutional",
+      "abstainPolicy": null,
+      "minYesHeads": null,
+      "executesAtClose": false,
+      "why": "This one hands one steward a copy of every member's data, which cannot be called back once it leaves, so it asks the highest bar the village sets."
     }
   ],
   "executingSubjectTypes": [
@@ -1616,6 +1653,20 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "applyTiming": "instant"
     },
     {
+      "key": "governance.quorum_fallback",
+      "label": "Ask again when too few vote",
+      "ring": "open",
+      "type": "choice",
+      "default": "off",
+      "min": null,
+      "max": null,
+      "choices": [
+        "off",
+        "on"
+      ],
+      "applyTiming": "instant"
+    },
+    {
       "key": "governance.vote_days",
       "label": "How long a ballot stays open",
       "ring": "open",
@@ -1810,7 +1861,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
     "token",
     "custom"
   ],
-  "changeSetMaxEntries": 12,
+  "changeSetMaxEntries": 22,
   "wizard": {
     "types": [
       "role_application",
@@ -1921,7 +1972,7 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "path": "/api/game/mechanics/history",
       "door": "anyone, including a stranger",
       "capability": null,
-      "file": "server/index.ts"
+      "file": "server/routes/mechanicsHistory.ts"
     },
     {
       "method": "GET",
@@ -2260,6 +2311,13 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "file": "server/routes/governingPurpose.ts"
     },
     {
+      "method": "POST",
+      "path": "/api/governance/quorum-fallback/failsafe",
+      "door": "administrator",
+      "capability": null,
+      "file": "server/routes/quorumFallback.ts"
+    },
+    {
       "method": "GET",
       "path": "/api/governance/role-applications",
       "door": "signed in",
@@ -2370,6 +2428,34 @@ The same facts, for anything that would sooner parse than read. Regenerated with
       "door": "administrator",
       "capability": null,
       "file": "server/routes/governanceVetoes.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/village-export/:ballotId/download",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/exportVotes.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/village-export/:ballotId/standing",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/exportVotes.ts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/governance/village-export/put-to-village",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/exportVotes.ts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/governance/village-export/stewards",
+      "door": "signed in",
+      "capability": null,
+      "file": "server/routes/exportVotes.ts"
     },
     {
       "method": "GET",
@@ -2977,7 +3063,7 @@ The tables and columns the rules above rest on. The generator checks every one a
 | `delegations.accepted_at` | a delegation carries a choice only once the delegate accepts it |
 | `role_holder_terms` | a term survives an unrelated appointment |
 
-Checked against the 234 migration files in `drizzle/`.
+Checked against the 241 migration files in `drizzle/`.
 
 ## What this file is made from
 
@@ -2986,6 +3072,7 @@ The generator reads these and fails loudly if any of them moves:
 
 - `shared/governanceEngine.ts`
 - `shared/ballotSubjects.ts`
+- `shared/changeSetCap.ts`
 - `shared/governanceKinds.ts`
 - `shared/cycleClock.ts`
 - `shared/gameVariables.ts`

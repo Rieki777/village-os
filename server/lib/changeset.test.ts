@@ -262,6 +262,30 @@ describe.skipIf(!configured)("the legacy apply throws rather than half-applying"
     expect(rows[0].sentence).toContain("project.name");
   });
 
+  it("a carried currency vote writes the code and says on the ledger that nothing is converted (Rye, 2026-11-06)", async () => {
+    let stored: any = { project: { name: "Larksfield", fiatCurrency: "CRC" } };
+    const withBrand = (): ChangesetDeps => ({ ...deps(), brand: { read: () => stored, write: async (next) => { stored = next; } } });
+    await applyMechanicsProposal(
+      withBrand(),
+      {
+        id: "gmp-currency",
+        title: "Count in dollars",
+        changeSet: [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" }],
+        proposerUserId: "u-a",
+        hyphaRef: null,
+        status: "passed_onsite",
+        ballotId: "bal-currency",
+      },
+      "u-a",
+      { onApplied: async () => {} },
+    );
+    expect(stored.project).toEqual({ name: "Larksfield", fiatCurrency: "USD" });
+    const rows = await elementsFor(pool, "bal-currency");
+    expect(rows.map((r) => [r.kind, r.oldValue, r.newValue])).toEqual([["brand_field", "CRC", "USD"]]);
+    expect(rows[0].sentence).toContain("currency changes from CRC to USD");
+    expect(rows[0].sentence).toContain("Nothing already recorded is converted");
+  });
+
   it("control: with no brand writer, a brand change is refused before the first write", async () => {
     const before = numberVar("governance.vote_days");
     const out = await applyMechanicsProposal(

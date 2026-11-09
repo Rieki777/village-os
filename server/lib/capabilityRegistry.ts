@@ -187,6 +187,18 @@ export const POWERS: readonly PowerEntry[] = [
     routes: ["/api/cash-owed/queue", "/api/cash-owed/:id/paid"],
   },
   {
+    capability: "role.pay",
+    title: "What roles are paid",
+    surface: "Setting what a role is worth and pays, beside the valuation engine's suggestion",
+    routes: ["/api/org/roles/:id/pay"],
+  },
+  {
+    capability: "pot.steward",
+    title: "The village's funding pots",
+    surface: "Opening a funding pot and its rounds, and setting when each round moves from ideas to shaping, choosing and harvest",
+    routes: ["/api/funding-rounds/pots", "/api/funding-rounds/pots/:id/rounds", "/api/funding-rounds/rounds/:id/dates"],
+  },
+  {
     capability: "module.switch",
     title: "Which modules the village runs",
     surface: "Turning a module on after launch, without a vote",
@@ -276,7 +288,126 @@ export const POWERS: readonly PowerEntry[] = [
     surface: "Which Power groups each role carries, and what each Power group can do",
     routes: ["/api/admin/org-roles/:id/power-groups", "/api/admin/roles/:id/capabilities"],
   },
+  {
+    capability: "operator.accounts",
+    title: "Members' accounts",
+    surface: "Sign-in links, sessions, account roles, stages and exits",
+    routes: [
+      "/api/admin/users/:id/send-password-link",
+      "/api/admin/users/:id/revoke-sessions",
+      "/api/admin/users/:id/role",
+      "/api/admin/exit-policy",
+      "/api/admin/exits",
+      "/api/admin/exits/:id/settle-balances",
+      "/api/admin/exits/:id/resolve",
+      "/api/admin/exits/:id/cancel",
+      "/api/admin/players/:id",
+      "/api/admin/roles/:id/admin-access",
+      "/api/admin/players/:id/stage",
+      "/api/admin/payments/suspensions/:id/lift",
+    ],
+  },
+  {
+    capability: "operator.config",
+    title: "The village's settings",
+    surface: "Settings, tools, training, the setup assistant, imported pages, drafts and closing a cycle",
+    routes: [
+      "/api/admin/tools",
+      "/api/admin/tools/order",
+      "/api/admin/tools/:id",
+      "/api/admin/tools/check-links",
+      "/api/admin/assistant/launch",
+      "/api/admin/assistant/organize",
+      "/api/admin/assistant/studio",
+      "/api/admin/drafts/:id/accept",
+      "/api/admin/drafts/:id/reject",
+      "/api/admin/settings",
+      "/api/admin/cycles/close",
+      "/api/admin/cycles/settlement-proposal",
+      "/api/admin/site-pull",
+      "/api/admin/site-pull/assets",
+      "/api/admin/training-modules",
+      "/api/admin/training-modules/:id",
+    ],
+  },
+  {
+    capability: "operator.secrets",
+    title: "Provider keys",
+    surface: "The provider keys and the email sender, written and never read back",
+    routes: [
+      "/api/admin/email-config",
+      "/api/admin/integrations/:key",
+    ],
+  },
+  {
+    capability: "operator.recover",
+    title: "Repair tools",
+    surface: "Ledger reconcile, unused uploads and landing due decisions",
+    routes: [
+      "/api/admin/exchange/reconcile",
+      "/api/admin/uploads/orphans/remove",
+      "/api/admin/governance/land-due",
+    ],
+  },
 ];
+
+/**
+ * THE FIVE KEYS A ROLE TAKES ON ONLY AT THE VILLAGE'S HIGHEST TIER.
+ *
+ * Rye, 2026-11-06: "EVERYTHING can change with the highest village vote", and
+ * on these five, which nothing could hand over: they become passable, ONLY by
+ * a highest-tier village vote. Each is outside `TRANSFERABLE`, so the village
+ * never holds one, and before this a seed or an admin was the only way onto a
+ * role. A village whose groups lost the recap approvals could not give them
+ * back to anybody.
+ *
+ * `POST /api/governance/power-grants` accepts these and raises the ballot to
+ * the highest tier, so an ordinary vote cannot move them. They are not in
+ * `POWERS`, because `POWERS` is the list of keys a village can go on to HOLD,
+ * and holding these would freeze the work they approve: no ballot approves a
+ * recap.
+ *
+ * FOLLOW-UP (coordinator, 2026-11-06, "grant only, for now"): village HOLDING
+ * of these five waits on a recap-approval ballot; until one exists they stay
+ * out of TRANSFERABLE.
+ */
+export const HIGHEST_TIER_GRANTS: readonly PowerEntry[] = [
+  {
+    capability: "moon.approve",
+    title: "Approving the moon's work",
+    surface: "Reading each member's end-of-moon recap and approving the work toward their pay",
+    routes: ["/api/moon-review/:recap/work"],
+  },
+  {
+    capability: "moon.approve_alone",
+    title: "Approving the moon's work alone",
+    surface: "Approving a recap without a second approver",
+    routes: ["/api/moon-review/:recap/work"],
+  },
+  {
+    capability: "moon.approve_own",
+    title: "Approving your own moon's work",
+    surface: "Approving the recap of the approver's own work",
+    routes: ["/api/moon-review/:recap/work"],
+  },
+  {
+    capability: "map.edit",
+    title: "Reshaping the land",
+    surface: "The land editor in build mode, and the masterplan",
+    routes: ["/api/map/masterplan"],
+  },
+  {
+    capability: "member.superVouch",
+    title: "Admitting a member outright",
+    surface: "A super-vouch, which admits somebody past the bar the village set",
+    routes: ["/api/members/:id/super-vouch"],
+  },
+];
+
+/** The highest-tier entry for this key, or null for every other key. */
+export function highestTierGrant(cap: string): PowerEntry | null {
+  return HIGHEST_TIER_GRANTS.find((p) => p.capability === cap) ?? null;
+}
 
 /**
  * TRANSFERABLE KEYS NOTHING GATES ON YET, each with the reason it is here.

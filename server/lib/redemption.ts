@@ -675,11 +675,12 @@ export interface MoneyAsk {
   capsSet: boolean;
   grossMinor: number;
   minMinor: number;
-  maxPerRequestMinor: number;
+  /** The three ceilings: null is no ceiling, 0 is zero (Rye, 2026-11-05). */
+  maxPerRequestMinor: number | null;
   memberSoFarMinor: number;
-  memberCapMinor: number;
+  memberCapMinor: number | null;
   villageSoFarMinor: number;
-  villageCapMinor: number;
+  villageCapMinor: number | null;
   /** Pre-formatted money, so this file never formats and stays quotable. */
   grossText: string;
   minText: string;
@@ -709,16 +710,31 @@ export function redemptionMoneyRefusal(ask: MoneyAsk): string | null {
   if (ask.minMinor > 0 && ask.grossMinor < ask.minMinor) {
     return `The smallest redemption here is ${ask.minText}, and this one comes to ${ask.grossText}`;
   }
-  if (ask.maxPerRequestMinor > 0 && ask.grossMinor > ask.maxPerRequestMinor) {
+  if (ask.maxPerRequestMinor !== null && ask.grossMinor > ask.maxPerRequestMinor) {
     return `The most one redemption may be worth here is ${ask.maxText}, and this one comes to ${ask.grossText}`;
   }
-  if (ask.memberCapMinor > 0 && ask.memberSoFarMinor + ask.grossMinor > ask.memberCapMinor) {
+  if (ask.memberCapMinor !== null && ask.memberSoFarMinor + ask.grossMinor > ask.memberCapMinor) {
     return `You have ${ask.memberLeftText} left to redeem this moon, and this one comes to ${ask.grossText}`;
   }
-  if (ask.villageCapMinor > 0 && ask.villageSoFarMinor + ask.grossMinor > ask.villageCapMinor) {
+  if (ask.villageCapMinor !== null && ask.villageSoFarMinor + ask.grossMinor > ask.villageCapMinor) {
     return `This village has ${ask.villageLeftText} left to redeem this moon, and this one comes to ${ask.grossText}. The count starts again at the new moon`;
   }
   return null;
+}
+
+/**
+ * Whether any money limit is set, which is what makes an unvalued request a
+ * refusal. A ceiling of 0 is a limit, the tightest there is; only a blank
+ * ceiling (null) is none. The floor is a limit while it is above 0, because a
+ * floor of 0 lets every request through by itself.
+ */
+export function moneyCapsSet(caps: {
+  minMinor: number;
+  maxPerRequestMinor: number | null;
+  memberCapMinor: number | null;
+  villageCapMinor: number | null;
+}): boolean {
+  return caps.minMinor > 0 || caps.maxPerRequestMinor !== null || caps.memberCapMinor !== null || caps.villageCapMinor !== null;
 }
 
 // ── Warnings, which ride and never block ───────────────────────────────────

@@ -380,6 +380,22 @@ jobs:
         # and the thank-you allowlist holds. Clean at this ref.
         run: node scripts/check-hyphen-dash.mjs
 
+      - name: Translation ratchet
+        # New user-facing English goes through Lingui (<Trans>, t, msg) so it
+        # can be translated (internal spec i18n, US6.1). Counts per file what
+        # does not, against scripts/i18n-ratchet-baseline.json; old strings
+        # never block, a rise does. Watched RED before wiring: one added
+        # <p>Hello there</p> fails naming the file and line.
+        run: node scripts/check-i18n-ratchet.mjs
+
+      - name: Translation catalogs
+        # en.po matches the code; short strings carry a context; reviewed
+        # languages translate their scope; every translation keeps its
+        # source's arguments, plural categories, select keys and tags (spec
+        # i18n US6.2). Watched RED before wiring: a Spanish string missing
+        # {firstName} fails naming the message.
+        run: node scripts/check-i18n-catalogs.mjs
+
       - name: Auth guard
         # A client call to a route that refuses strangers carries a token.
         # This deployment authenticates by `Authorization: Bearer` alone, with

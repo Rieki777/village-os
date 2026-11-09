@@ -459,6 +459,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 160,
     emblem: "Sparkles",
   },
+  "funding-rounds": {
+    promise: "Choose together which quests the season funds, within a pot.",
+    benefits: [
+      "Members share rough ideas, by name or without one, and each idea opens its own forum thread",
+      "Ideas are shaped into quests with a price, then members tick every one they would fund",
+      "The count shows what Voice chose beside what one member, one vote chose, and says where they differ",
+      "Funded quests hold their share of the pot and are paid when the work is done, so the pot is never spent twice",
+    ],
+    forWhom: "Villages with a budget to share that want the people doing the work to choose where it goes.",
+    setupSummary: "Seat someone who holds the pots, by default the Treasury role, then open a pot and a round.",
+    dataSummary: "Each idea and who shared it, kept private when they share it without a name; members' ticks; and a record of each act for later rewards.",
+    hue: 45,
+    emblem: "Sprout",
+  },
   "session-card": {
     promise: "A card to pull as a session opens, so the room starts present with each other and the day.",
     benefits: [

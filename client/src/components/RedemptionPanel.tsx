@@ -91,9 +91,10 @@ interface Payload {
     feePct: number;
     feeFixedMinor: number;
     minMinor: number;
-    maxPerRequestMinor: number;
-    memberCapMinor: number;
-    villageCapMinor: number;
+    /** Null is no ceiling; 0 is a ceiling of zero. */
+    maxPerRequestMinor: number | null;
+    memberCapMinor: number | null;
+    villageCapMinor: number | null;
     processText: string;
   };
 }

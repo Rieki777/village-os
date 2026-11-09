@@ -62,8 +62,8 @@ const MEMBER_PAYLOAD = {
  */
 const MONEY = {
   currencies: ["CHF"], currency: "CHF", rateSource: "exchange", rateMinor: null,
-  feePct: 0, feeFixedMinor: 0, minMinor: 0, maxPerRequestMinor: 0,
-  memberCapMinor: 0, villageCapMinor: 0, processText: "",
+  feePct: 0, feeFixedMinor: 0, minMinor: 0, maxPerRequestMinor: null,
+  memberCapMinor: null, villageCapMinor: null, processText: "",
 };
 
 describe("RedemptionPanel prints the human amounts the route sends", () => {

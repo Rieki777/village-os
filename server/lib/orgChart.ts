@@ -155,6 +155,11 @@ export interface OrgRole {
   /** The member who published the offer. */
   termsOfferBy: string | null;
   /**
+   * The building on the land this seat lives in (0060), a map structure key.
+   * Null when nobody has placed it; the map then uses its circle's home.
+   */
+  structureKey?: string | null;
+  /**
    * WHAT THE ROLE IS WORTH EACH CYCLE AND WHAT IT PAYS EACH SEAT (0265).
    * The value is minor units of `valueCurrency`, NULL when nobody has set one.
    * The list is human token amounts, NULL when the role has no list of its own
@@ -274,7 +279,11 @@ export const ROLE_COLS =
   // 0268: the handover words. Structure like aim and domain, in every tier's core.
   "bring_me, not_mine, runbook, " +
   // 0274: the CCOS words. Structure like the handover words, in every tier's core.
-  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment";
+  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, " +
+  // 0060: the building on the land this seat lives in. Written by the scene
+  // import and read by /api/admin/map/structures, and selected by nobody here,
+  // so the Living Map placed every seat by its circle's NAME (map lane R1).
+  "structure_key";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -337,6 +346,7 @@ export function rowToRole(r: any): OrgRole {
     termsOffer: r.terms_offer ?? null,
     termsOfferAt: r.terms_offer_at ?? null,
     termsOfferBy: r.terms_offer_by ?? null,
+    structureKey: typeof r.structure_key === "string" && r.structure_key.trim() ? r.structure_key.trim() : null,
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
@@ -1042,7 +1052,8 @@ export type OrgRoleValueEdit = {
   cashCurrency?: string | null;
 };
 
-function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
+/** The SET clauses and arguments for a role's value, list and cash: the one writer, also used by an org draft's publish. */
+export function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
   if (!v) return;
   if (v.valueMinor !== undefined) {
     const set = v.valueMinor !== null && !!v.valueCurrency;

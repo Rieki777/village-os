@@ -13,11 +13,13 @@
  * A steward sees the dials themselves in the steward panel and changes them
  * there; this section is for everybody else who is signed in.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link } from "wouter";
 import { SlidersHorizontal } from "lucide-react";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { proposalHref } from "./switchModules";
+import { addChange, myGathering, type ChangeRequestSummary } from "@/components/governance/changeRequestClient";
 
 interface PublicDial {
   key: string;
@@ -30,20 +32,66 @@ interface PublicDial {
   withheld?: boolean;
 }
 
-const shown = (d: PublicDial, raw: string) => {
-  if (d.type === "boolean") return raw === "true" || raw === "1" ? "On" : "Off";
+const shown = (d: PublicDial, raw: string, on: string, off: string) => {
+  if (d.type === "boolean") return raw === "true" || raw === "1" ? on : off;
   const choice = d.choices?.find((c) => c.value === raw)?.label;
   if (choice) return choice;
   return d.unit ? `${raw} ${d.unit}` : raw;
 };
 
+/** "Added. Garden hours has 3 changes." with a real plural. */
+function AddedLine({ title, changes }: { title: string; changes: number }) {
+  return (
+    <Plural value={changes} one={`Added. ${title} has # change.`} other={`Added. ${title} has # changes.`} />
+  );
+}
+
 function SuggestOne({ d }: { d: PublicDial }) {
+  const { t } = useLingui();
+  const on = t({ message: "On", context: "a switch setting" });
+  const off = t({ message: "Off", context: "a switch setting" });
+  const label = d.label;
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(d.value);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  // Change requests (Rye, 2026-11-06; spec R35): the same form ends two ways,
+  // each with the sentence that says what happens next.
+  const [gathering, setGathering] = useState<ChangeRequestSummary[]>([]);
+  const [into, setInto] = useState<string>("");
+  const [added, setAdded] = useState<{ id: string; title: string; changes: number } | null>(null);
+  const aloneId = useId();
+  const gatherId = useId();
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    myGathering().then((list) => {
+      if (!alive) return;
+      setGathering(list);
+      setInto(list[0]?.id ?? "");
+    });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  const gather = async () => {
+    setBusy(true);
+    setError(null);
+    const out = await addChange({
+      into: into || null,
+      title: t({ message: `Change ${label}`, context: "default title of a suggestion" }).slice(0, 120),
+      why: reason.trim(),
+      change: { key: d.key, to: to.trim() },
+    }).catch(() => ({ ok: false as const, message: t`That did not go through. Try again in a moment.` }));
+    setBusy(false);
+    if (!out.ok) setError(out.message);
+    else setAdded({ id: out.id, title: out.title, changes: out.changes });
+  };
+  const target = gathering.find((g) => g.id === into);
+  const targetTitle = target?.title ?? "";
 
   const send = async () => {
     setBusy(true);
@@ -52,15 +100,15 @@ function SuggestOne({ d }: { d: PublicDial }) {
       const res = await fetch("/api/game/mechanics/proposals", {
         method: "POST",
         headers: { Authorization: `Bearer ${authToken() ?? ""}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ title: `Change ${d.label}`, rationale: reason.trim(), changes: [{ key: d.key, to: to.trim() }] }),
+        body: JSON.stringify({ title: t({ message: `Change ${label}`, context: "default title of a suggestion" }), rationale: reason.trim(), changes: [{ key: d.key, to: to.trim() }] }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         const problems = Array.isArray(body?.problems) ? body.problems.map((p: any) => String(p?.problem ?? "")).filter(Boolean) : [];
-        setError(problems.length ? problems.join(". ") : String(body?.message || body?.error || "The suggestion was refused."));
+        setError(problems.length ? problems.join(". ") : String(body?.message || body?.error || t`The suggestion was refused.`));
       } else setSent(String(body.id));
     } catch {
-      setError("That did not go through. Try again in a moment.");
+      setError(t`That did not go through. Try again in a moment.`);
     }
     setBusy(false);
   };
@@ -69,16 +117,25 @@ function SuggestOne({ d }: { d: PublicDial }) {
     <li className="rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-foreground">{d.label}</p>
-        <p className="text-sm text-muted-foreground">{d.withheld ? "Set by the village" : shown(d, d.value)}</p>
+        <p className="text-sm text-muted-foreground">{d.withheld ? t`Set by the village` : shown(d, d.value, on, off)}</p>
       </div>
-      {sent ? (
+      {added ? (
+        <p className="mt-1 text-sm" role="status">
+          <AddedLine title={added.title} changes={added.changes} />{" "}
+          <Link href={`/changes/${added.id}`} className="text-teal-deep underline">
+            <Trans context="open the change request just added to">Open it</Trans>
+          </Link>
+        </p>
+      ) : sent ? (
         <p className="mt-1 text-sm">
-          Suggested.{" "}
-          <Link href={proposalHref(sent)} className="text-teal-deep underline">See your proposal</Link>
+          <Trans context="a suggestion was sent">Suggested.</Trans>{" "}
+          <Link href={proposalHref(sent)} className="text-teal-deep underline">
+            <Trans context="open the proposal just made">See your proposal</Trans>
+          </Link>
         </p>
       ) : !open ? (
         <button type="button" onClick={() => setOpen(true)} className="mt-1 min-h-[44px] text-sm font-medium text-teal-deep underline">
-          Suggest a change
+          <Trans context="open the suggest form">Suggest a change</Trans>
         </button>
       ) : (
         <form
@@ -90,10 +147,10 @@ function SuggestOne({ d }: { d: PublicDial }) {
         >
           <p className="text-sm text-muted-foreground">{d.description}</p>
           <label className="block text-sm font-medium text-foreground">
-            New value
+            <Trans context="the new value of a setting">New value</Trans>
             {d.type === "boolean" || d.choices?.length ? (
               <select value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 block w-full min-h-[44px] rounded-lg border border-border bg-background px-2 text-base">
-                {(d.type === "boolean" ? [{ value: "true", label: "On" }, { value: "false", label: "Off" }] : d.choices ?? []).map((c) => (
+                {(d.type === "boolean" ? [{ value: "true", label: on }, { value: "false", label: off }] : d.choices ?? []).map((c) => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
@@ -102,17 +159,52 @@ function SuggestOne({ d }: { d: PublicDial }) {
             )}
           </label>
           <label className="block text-sm font-medium text-foreground">
-            Why
+            <Trans context="the reason for a suggestion">Why</Trans>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={2000} className="mt-1 block w-full rounded-lg border border-border bg-background p-2 text-base" />
           </label>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy || reason.trim().length < 10 || to.trim() === d.value} className="min-h-[44px] px-4 rounded-lg bg-teal-deep text-white text-sm font-semibold disabled:opacity-40">
-              {busy ? "Sending…" : "Suggest it"}
-            </button>
-            <button type="button" onClick={() => setOpen(false)} className="min-h-[44px] px-4 rounded-lg border border-border text-sm font-medium">
-              Not now
-            </button>
+          {gathering.length > 1 && (
+            <label className="block text-sm font-medium text-foreground">
+              <Trans context="pick a change request to add to">Which change request</Trans>
+              <select value={into} onChange={(e) => setInto(e.target.value)} className="mt-1 block w-full min-h-[44px] rounded-lg border border-border bg-background px-2 text-base">
+                {gathering.map((g) => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+                <option value="">{t({ message: "A new change request", context: "start a new change request" })}</option>
+              </select>
+            </label>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <button
+                type="submit"
+                aria-describedby={aloneId}
+                disabled={busy || reason.trim().length < 10 || to.trim() === d.value}
+                className="w-full min-h-[44px] px-4 rounded-lg bg-teal-deep text-white text-sm font-semibold disabled:opacity-40"
+              >
+                {busy ? t({ message: "Sending…", context: "a suggestion being sent" }) : t({ message: "Send it on its own", context: "send one suggestion to a vote alone" })}
+              </button>
+              <p id={aloneId} className="mt-1 text-xs text-muted-foreground">
+                <Trans>The village votes on this change by itself.</Trans>
+              </p>
+            </div>
+            <div>
+              <button
+                type="button"
+                aria-describedby={gatherId}
+                onClick={() => void gather()}
+                disabled={busy || reason.trim().length < 10 || to.trim() === d.value}
+                className="w-full min-h-[44px] px-4 rounded-lg border border-teal-deep text-teal-deep text-sm font-semibold disabled:opacity-40"
+              >
+                {target ? t({ message: `Add to ${targetTitle}`, context: "add a suggestion to a change request" }) : t`Add to a new change request`}
+              </button>
+              <p id={gatherId} className="mt-1 text-xs text-muted-foreground">
+                <Trans>Gather it with other changes and send them to one vote.</Trans>
+              </p>
+            </div>
           </div>
+          <button type="button" onClick={() => setOpen(false)} className="min-h-[44px] px-4 rounded-lg border border-border text-sm font-medium">
+            <Trans context="close a form without saving">Not now</Trans>
+          </button>
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         </form>
       )}
@@ -146,9 +238,11 @@ export default function SuggestDial({ dialKeys }: { dialKeys: string[] }) {
     <section aria-labelledby="suggest-dials" className="mt-8">
       <h2 id="suggest-dials" className="flex items-center gap-2 font-semibold text-foreground">
         <SlidersHorizontal className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-        Its settings
+        <Trans context="heading over a module's settings">Its settings</Trans>
       </h2>
-      <p className="text-sm text-muted-foreground mt-1 mb-3">Anyone here can suggest a change. The village decides.</p>
+      <p className="text-sm text-muted-foreground mt-1 mb-3">
+        <Trans>Anyone here can suggest a change. The village decides.</Trans>
+      </p>
       <ul className="grid gap-2 sm:grid-cols-2">
         {dials.map((d) => (
           <SuggestOne key={d.key} d={d} />

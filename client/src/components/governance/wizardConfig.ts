@@ -914,6 +914,16 @@ export const SUBJECT_NOUN: Record<string, string> = {
    */
   mint_request: "A grant of new tokens",
   /*
+   * ALSO NOT A WIZARD TYPE. A member's suggested edit to an admin control,
+   * put to the village (server/routes/adminSuggestions.ts).
+   */
+  admin_edit: "A suggested change to an admin control",
+  /*
+   * ALSO NOT A WIZARD TYPE. One copy of the village's database for a named
+   * steward, put to the village at its highest bar (server/routes/exportVotes.ts).
+   */
+  database_export: "One copy of the village's database",
+  /*
    * The vote mode became something the village decides on 2026-09-02 (Q8),
    * with its own subject type so it can carry the constitutional bar. The
    * noun is what is being decided, which is how every vote after it will be

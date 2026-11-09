@@ -90,6 +90,8 @@ export const MIGRATION_DIR = "drizzle";
 export const SOURCES = [
   "shared/governanceEngine.ts",
   "shared/ballotSubjects.ts",
+  // The change-set cap: a village dial since 2026-11-06, bounded here.
+  "shared/changeSetCap.ts",
   "shared/governanceKinds.ts",
   "shared/cycleClock.ts",
   "shared/gameVariables.ts",
@@ -841,26 +843,21 @@ export function weightFacts(root = ROOT) {
   return { modes: unionOf(root, "server/lib/governanceWeights.ts", "WeightMode") };
 }
 
-/** What a change set may carry, from the one validator that prices it. */
+/** What a change set may carry, from the one file that bounds it. */
 export function changeSetFacts(root = ROOT) {
-  const rel = "server/lib/mechanics.ts";
+  // Since 2026-11-06 the cap is a village dial (governance.change_set_cap).
+  // Its default, floor and ceiling are named constants in one shared file,
+  // which both the dial's registry entry and the validator import.
+  const rel = "shared/changeSetCap.ts";
   const abs = absOf(root, rel);
-  // The cap is read from the exported constant when there is one, because a
-  // named export survives a refactor that a literal in a comparison does not.
-  // The old inline shape is still accepted so this keeps answering for a tree
-  // that has not named it yet, and the refusal fires only when both are gone.
-  const named = constAnywhere(abs, "CHANGE_SET_CAP");
-  if (named) {
-    const cap = literalOf(named, abs);
-    if (typeof cap !== "number") fail(`${rel} declares CHANGE_SET_CAP as something other than a number`);
-    return { maxChanges: cap };
-  }
-  const text = readText(abs);
-  const m = /changes\.length\s*>\s*(\d+)/.exec(text);
-  if (!m) {
-    fail(`${rel} caps a change set neither with CHANGE_SET_CAP nor with "changes.length > N"; the dial ceiling is read from one of them`);
-  }
-  return { maxChanges: Number(m[1]) };
+  const read = (name) => {
+    const node = constAnywhere(abs, name);
+    if (!node) fail(`${rel} no longer declares ${name}; the change-set cap is read from it`);
+    const value = literalOf(node, abs);
+    if (typeof value !== "number") fail(`${rel} declares ${name} as something other than a number`);
+    return value;
+  };
+  return { maxChanges: read("CHANGE_SET_CAP_DEFAULT"), capMin: read("CHANGE_SET_CAP_MIN"), capMax: read("CHANGE_SET_CAP_MAX") };
 }
 
 /** Starting the Game: the one row that says a village has, and what it refuses until then. */
@@ -2021,6 +2018,10 @@ const KNOWN_DIALS = [
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // Rye, 2026-11-06: a missed quorum asked again once, at half the bar, off by
+  // default (0334, shared/quorumFallback.ts). It builds no staged ruling here:
+  // the stalemate re-run above is a different door, on an OPEN ballot.
+  "governance.quorum_fallback",
 ];
 
 export function dialCoverageProblem(keys, known = KNOWN_DIALS) {
@@ -2334,7 +2335,7 @@ const RULINGS = [
     ],
     status: () => "**Half built.**",
     note: (f) =>
-      `Built: a change set carries up to ${f.changeSet.maxChanges} entries and passes or fails as one. Staged: the set must be all ` +
+      `Built: a change set carries up to ${f.changeSet.maxChanges} entries by default (a village dial, ${f.changeSet.capMin} to ${f.changeSet.capMax}) and passes or fails as one. Staged: the set must be all ` +
       "dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change " +
       "set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and " +
       "half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor " +
@@ -3251,8 +3252,10 @@ export function render(f) {
   );
   p();
   p(
-    `A change set carries at most ${f.changeSet.maxChanges} entries, all game dials or all minting rules and never both, ` +
-      "because a ballot carries one threshold priced by its subject and a set that is two subjects has no honest price.",
+    `A change set carries at most ${f.changeSet.maxChanges} entries by default. Each village moves that number by vote ` +
+      `(\`governance.change_set_cap\`), anywhere from ${f.changeSet.capMin} to ${f.changeSet.capMax}. A set is priced at its ` +
+      "hardest element and applies whole or not at all. A game dial and a minting rule still go up as two proposals, " +
+      "because a dial moves when the vote carries and a minting rule moves at the next moon.",
   );
   p();
 

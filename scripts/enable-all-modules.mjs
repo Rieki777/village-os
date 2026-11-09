@@ -101,6 +101,9 @@ export const TARGETS = [
   // off, each line becomes ["<id>", "members"]. Neither requires the other.
   ["canvas", "held", "security review pending (Module Library Contract clause 13)"],
   ["conflict-evolution", "held", "security review pending (Module Library Contract clause 13)"],
+  // HELD on the same terms. A member-pii module (an idea's author is kept even
+  // when it is shown without a name), turned on for a village deliberately.
+  ["funding-rounds", "held", "security review pending (Module Library Contract clause 13)"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */

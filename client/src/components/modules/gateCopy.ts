@@ -49,6 +49,7 @@ export const GATE_LINES: Record<string, string> = {
   feed: "The everyday stream: posts, gatherings, and the village's own milestones.",
   forum: "Village conversations by topic, and the proposals that come out of them.",
   "gene-keys": "Your Gene Keys lines and how you work best, and the six lines your circle holds.",
+  "funding-rounds": "This season's funding round: the ideas members have shared, and the quests the village chose to fund.",
   governance:
     "Proposals on their way to a vote, the ballots running today, and the outcome of every one that has closed.",
   health: "This village's vital signs, cycle by cycle.",

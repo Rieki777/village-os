@@ -280,6 +280,38 @@ export const ORG_DRAFT = "org_draft";
  */
 export const MINT_REQUEST = "mint_request";
 
+/**
+ * ONE EXPORT OF THE WHOLE VILLAGE'S DATABASE, AUTHORISED BY THE VILLAGE (Rye,
+ * 2026-11-06: "export by vote: YES").
+ *
+ * The other door is the deployment's ADMIN_PASSWORD (server/routes/
+ * villageExport.ts), and it stays. This one is for a village whose password
+ * holder is not the person it trusts with every member's data: a vote at the
+ * village's highest tier names ONE steward, and that steward may download ONE
+ * export, once, while their seat is live. Every member is told when it goes.
+ * The subject ref is the named steward's id, so a steward has one such vote
+ * open at a time. The rules and the closer are server/lib/exportVotes.ts.
+ *
+ * PRICED AT THE TOP. The file holds every member's data and cannot be called
+ * back once it leaves, so it asks the constitutional floors here and, when
+ * the ballot opens, the village's own highest tier if that is higher.
+ */
+export const DATABASE_EXPORT = "database_export";
+
+/**
+ * A MEMBER'S SUGGESTED EDIT TO AN ADMIN CONTROL, decided by the village
+ * (ROLE_POWERS_DESIGN.md §4.5). Opened when the village holds the power behind
+ * the control or nobody does, when a holder sends a suggestion to a vote, or
+ * when the suggester raises one that waited 14 days. `subject_ref` is the
+ * suggestion id in `assistant_drafts`. Carried, the closer applies the edit
+ * through the same function the direct route calls (server/lib/adminSuggestions.ts).
+ *
+ * Priced like ORG_DRAFT: a holder of the power could make the same edit with
+ * no vote at all, so the vote asks the village's own bar and no more. Absent
+ * from `KIND_FOR_SUBJECT`, so it is a Game change that waits its window.
+ */
+export const ADMIN_EDIT = "admin_edit";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -489,6 +521,13 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
+  [ADMIN_EDIT]: {
+    minUnityPct: 0,
+    minQuorumPct: 0,
+    minElectorate: 0,
+    criticality: "routine",
+    why: "A suggested change to one admin control asks whatever this village asks of any decision. A holder of the power could make it without a vote, so the vote is not priced above the village's own bar.",
+  },
   [MINT_REQUEST]: {
     ...tierFloors("structural"),
     minElectorate: 0,
@@ -501,6 +540,14 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.",
+  },
+  [DATABASE_EXPORT]: {
+    ...tierFloors("constitutional"),
+    minElectorate: 0,
+    criticality: "constitutional",
+    // `custom` for MINT_REQUEST's reason: only it counts the unity a ballot freezes.
+    method: "custom",
+    why: "This one hands one steward a copy of every member's data, which cannot be called back once it leaves, so it asks the highest bar the village sets.",
   },
 };
 
@@ -1079,6 +1126,21 @@ export const META_SETTING_KEYS: readonly string[] = [
   // same power as moving the bar.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // When and how often a proposal may reach the vote (change requests C17;
+  // Rye, 2026-11-06: "great go with all suggestions"). A cheap trial of any
+  // of these could empty the review or the vote just before a big change.
+  "governance.proposal_support_threshold",
+  "governance.proposals_per_member_per_cycle",
+  "governance.change_cooldown_days",
+  "governance.vote_days",
+  // How many changes one proposal may carry (Rye, 2026-11-06). It shapes
+  // every other proposal, so a cheap trial of it would be a moon in which
+  // larger bundles go up at a bar nobody agreed to.
+  "governance.change_set_cap",
+  // How many change requests one member may gather (spec R20).
+  "governance.change_requests_gathering_per_member",
+  // How long a change request is reviewed (spec R20).
+  "governance.change_request_review_days",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */
@@ -1350,6 +1412,10 @@ export function consecutiveNoQuorum(closes: readonly { status: string }[]): numb
   for (const row of closes) {
     const status = String(row.status ?? "");
     if (status === "open") continue;
+    // A first ballot the quorum fallback asked again (0334). It and its re-run
+    // are ONE miss, so the first is skipped and the re-run alone counts, which
+    // means the fallback never makes a subject end sooner.
+    if (status === "no_quorum_rerun") continue;
     if (status !== "no_quorum") break;
     n += 1;
   }

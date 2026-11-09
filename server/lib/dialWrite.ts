@@ -34,6 +34,7 @@ import type { Pool } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { ringOf, VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { floorDialRefusal } from "./villageFloors";
+import { QUORUM_FALLBACK_KEY, ADMIN_ROUTE_REFUSAL as QUORUM_FALLBACK_ADMIN_ROUTE } from "../../shared/quorumFallback";
 import type { CapabilityVerdict } from "./appDeps";
 import { readGameStart } from "./gameStart";
 import { setVariable } from "./variables";
@@ -130,6 +131,8 @@ export async function writeDial(
       };
     }
   }
+  // 0334: ON is the failsafe door's, OFF is the village's vote (Rye, 2026-11-06).
+  if (key === QUORUM_FALLBACK_KEY) return { status: 409, body: { error: QUORUM_FALLBACK_ADMIN_ROUTE, proposeInstead: true } };
   if (raw === undefined || raw === null) return { status: 400, body: { error: "A value is required" } };
   // After the Birthing, what a vote MEANS is the village's, and the one door
   // to it is a governance_mode ballot. This route is how a village is set up,

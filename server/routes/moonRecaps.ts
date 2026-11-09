@@ -36,7 +36,7 @@
  */
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
-import { MOON_API_PREFIXES, MOON_REVIEW_MODULE, MOON_ROUTES, type GatherResponse } from "../../shared/moonRecap";
+import { MOON_API_PREFIXES, MOON_REVIEW_MODULE, MOON_ROUTES, type GatherResponse, type SendInvoiceResponse } from "../../shared/moonRecap";
 import { civilDateKey } from "../../shared/lunar";
 import { requireModule, effectiveLifecycle } from "../lib/modules";
 import { preflight } from "../lib/saberraSync";
@@ -62,6 +62,8 @@ export type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "seaso
   cashKeyHolders: () => Promise<string[]>;
   /** Who holds any key through a live seat, admins left out (`liveHoldersOf`, server/index.ts). */
   keyHolders: KeyHolders;
+  /** After a send committed: the invoice rails email it to the village's Sera inbox (server/lib/invoiceMail.ts). Never fails the send. */
+  afterInvoiceSent?: (userId: string, invoice: SendInvoiceResponse["invoice"]) => Promise<unknown>;
 };
 
 /** The members' door, which no prefix in MOON_API_PREFIXES covers. */
@@ -171,6 +173,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const out = await sendInvoice(pool, uid, moon, await loadFrame(pool, uid, moon, frameDeps()), req.body, { notify: deps.notify, keyHolders: deps.keyHolders });
     if (!out.ok) return fail(res, out);
+    if (deps.afterInvoiceSent) await deps.afterInvoiceSent(uid, out.value.invoice).catch(() => undefined);
     res.json(out.value);
   });
 

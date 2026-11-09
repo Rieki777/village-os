@@ -14,6 +14,7 @@ import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
 import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
+import { LocaleRoot } from "@/i18n/LocaleRoot";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -186,6 +187,7 @@ const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) =>
 const EmailAction = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailAction })));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
+const ChangeRequests = lazyPage(() => import("./pages/ChangeRequests"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
@@ -243,6 +245,7 @@ const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
+const FundingRounds = lazyPage(() => import("./pages/FundingRounds"));
 const Sessions = lazyPage(() => import("./pages/Sessions"));
 const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
@@ -382,6 +385,8 @@ function Router() {
       <Route path="/email/a" component={EmailAction} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />
+      <Route path="/changes" component={ChangeRequests} />
+      <Route path="/changes/:id" component={ChangeRequests} />
       <Route path="/village-email" component={VillageEmail} />
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
@@ -412,6 +417,10 @@ function Router() {
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
       <Route path="/journal" component={Journal} />
+      {/* The village chooses which quests to fund, within a pot. Behind
+          ModuleGate("funding-rounds") and sign-in. */}
+      <Route path="/funding-rounds" component={FundingRounds} />
+      <Route path="/funding-rounds/:id" component={FundingRounds} />
       {/* A circle's live calls: the list, then one room. Both behind
           ModuleGate("sessions") and sign-in; members only, no guests. The
           list is declared before the room for the reason /decisions gives. */}
@@ -451,6 +460,8 @@ function App() {
       <MotionConfig reducedMotion="user">
       <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
+        {/* The visitor's language, before any page renders (internal spec i18n, US1). */}
+        <LocaleRoot fallback={<PageLoading />}>
         <ModuleProvider>
           <TooltipProvider>
             <Toaster />
@@ -464,6 +475,7 @@ function App() {
           </TooltipProvider>
 
         </ModuleProvider>
+        </LocaleRoot>
         </AuthProvider>
       </LazyMotion>
       </MotionConfig>
