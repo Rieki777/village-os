@@ -80,6 +80,16 @@ export interface ChunkFacts {
   facadeModuleId: string | null;
   /** CSS files this chunk pulls in. */
   css: readonly string[];
+  /** Parts of moved English this chunk awaits before it runs (client/src/i18n/copySplit.ts). */
+  copyParts?: readonly string[];
+}
+
+/** Where a part of moved English is served, relative to `base` (server/routes/i18n.ts). */
+export const copyPartPath = (part: string) => `api/i18n/catalog/en/part/${part}`;
+
+/** The parts a built chunk awaits, read off its code: `__villageCopyLoad("<part>")`. */
+export function copyPartsIn(code: string): string[] {
+  return Array.from(code.matchAll(/__villageCopyLoad\("([A-Za-z0-9_-]{6,32})"\)/g), (m) => m[1]);
 }
 
 export interface RoutePreloadTable {
@@ -144,8 +154,10 @@ export function routePreloadTable(routes: readonly LazyRoute[], chunks: readonly
     patterns.add(pattern);
     const want: string[] = [];
     for (const c of closure(chunk)) {
-      if (!loaded.has(c.fileName)) want.push(c.fileName);
+      if (loaded.has(c.fileName)) continue;
+      want.push(c.fileName);
       for (const css of c.css) if (!loaded.has(css)) want.push(css);
+      for (const part of c.copyParts ?? []) want.push(copyPartPath(part));
     }
     const ids = Array.from(new Set(want)).map(at);
     if (ids.length) out.push([pattern, ids]);
@@ -166,7 +178,7 @@ export function routePreloadScript(table: RoutePreloadTable, base: string): stri
     if (!new RegExp(r[i][0], "i").test(p)) continue;
     for (var j = 0; j < r[i][1].length; j++) {
       var h = b + f[r[i][1][j]], l = d.createElement("link");
-      if (/\\.css$/.test(h)) { l.rel = "preload"; l.as = "style"; } else { l.rel = "modulepreload"; }
+      if (/\\.css$/.test(h)) { l.rel = "preload"; l.as = "style"; } else if (/\\/part\\//.test(h)) { l.rel = "preload"; l.as = "fetch"; } else { l.rel = "modulepreload"; }
       l.crossOrigin = "";
       l.href = h;
       d.head.appendChild(l);

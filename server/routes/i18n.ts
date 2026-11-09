@@ -76,6 +76,42 @@ export function register(app: Express, deps: Deps): void {
     res.json(body);
   });
 
+  /**
+   * A PART of the English the build moved out of the lazy chunks
+   * (client/src/i18n/copySplit.ts). A chunk awaits its part before it runs, so
+   * a missing part is a 404 and the chunk's import fails loudly, exactly like a
+   * missing chunk. Parts are content-addressed (the name is a hash of the
+   * words), so one is cacheable for a year. English only: no other language is
+   * split yet, and an unknown locale is a 404, not an empty body, because a
+   * chunk asking for one is a bug.
+   *
+   * The name is checked against a strict pattern BEFORE it is joined onto a
+   * path, so no request can read outside dist/i18n/parts/<locale>.
+   */
+  const PART = /^[A-Za-z0-9_-]{6,32}$/;
+  const SPLIT_LOCALES = new Set(["en"]);
+  const parts = new Map<string, string | null>();
+  app.get("/api/i18n/catalog/:locale/part/:part", (req, res) => {
+    const locale = String(req.params.locale ?? "");
+    const part = String(req.params.part ?? "");
+    if (!PART.test(part)) return res.status(400).json({ error: "bad_part" });
+    if (!SPLIT_LOCALES.has(locale)) return res.status(404).json({ error: "no_parts_for_locale" });
+    const key = `${locale}/${part}`;
+    if (!parts.has(key)) {
+      let body: string | null = null;
+      try {
+        body = fs.readFileSync(path.join(deps.catalogDir, "parts", locale, `${part}.json`), "utf8");
+      } catch {
+        body = null;
+      }
+      // Only a found part is remembered: a deploy can add parts, never change one.
+      if (body !== null) parts.set(key, body);
+      else return res.status(404).json({ error: "no_such_part" });
+    }
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.type("application/json").send(parts.get(key));
+  });
+
   app.get("/api/i18n/locales", (_req, res) => {
     const list = [...LOCALES, ...(deps.pseudoAllowed() ? PSEUDO_LOCALES : [])].map((l) => ({
       tag: l.tag,
