@@ -89,7 +89,13 @@ import { linkableMember, memberLinks, memberName, unlinkMember } from "../repos/
 import { LINK_WORDS, seraOwnerIdProblem } from "@shared/seraPersonLinks";
 import { backfill, linksWithReviews } from "../lib/seraPersonMatch";
 import { clearReview } from "../repos/seraLinkReviews";
-import { countAnswer, forgetCachedDifferences, listAnswer, readDifferences } from "../lib/seraDifferencesRead";
+import { changedHereAt, countAnswer, forgetCachedDifferences, listAnswer, readDifferences, wordsOf } from "../lib/seraDifferencesRead";
+import { answerDifferences, readAnswerBody, readUndoBody, undoAnswers } from "../lib/seraAnswer";
+import { doorHolders } from "../lib/seraDoors";
+import { publishDoorFor } from "../lib/orgDraftDecide";
+import { nameCheckFor } from "../lib/saberraNames";
+import { rosterRows } from "../repos/peopleRoster";
+import type { AnswerDoor } from "@shared/seraSettle";
 import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
 import { doorsNow, type Deciders } from "../lib/seraDoors";
 import { waitingChartProposals } from "../repos/seraDifferences";
@@ -105,14 +111,22 @@ import { villageTimezone } from "../lib/villageReaders";
  * way every other route here does.
  */
 type Deps = Pick<AppDeps, "guardCapability" | "getPool" | "authedUser"> &
-  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members" | "lapseContext">> & {
+  Partial<Pick<AppDeps, "mayStillSee" | "overLimit" | "members" | "lapseContext" | "isAdmin">> & {
     /** The holder reads the count's "who decides" needs (review S2). Without them the count says nothing about it. */
     deciders?: Deciders;
+    /**
+     * Who holds a power live, the gate's own count, for the door an answer is
+     * recorded through (R16, R17). Without it every answer is a moderator's,
+     * which never claims a power nobody checked.
+     */
+    liveHoldersOf?: (capability: string) => Promise<string[]>;
   };
 
 /** How often one member may ask, per minute: a page that polls, never a loop. */
 const DIFFERENCES_COUNT_PER_MINUTE = 120;
 const DIFFERENCES_LIST_PER_MINUTE = 60;
+/** Answers per member per minute: a person working down the list with the keyboard, never a script. */
+const ANSWERS_PER_MINUTE = 60;
 const TOO_MANY = { error: "That is a lot of checks in a minute. Wait a moment and look again." };
 
 const MODULE_ID = "saberra";
@@ -143,9 +157,35 @@ function addressSet(): boolean {
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders, lapseContext } = deps;
+  const { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, deciders, lapseContext, isAdmin, liveHoldersOf } = deps;
   // The lapse context, so a lapsed holder is never named in a sentence (review N5).
   const read = () => readDifferences(getPool(), Date.now(), lapseContext?.());
+  const listOpts = () => {
+    const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
+    return { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone() };
+  };
+
+  /**
+   * The door an answer comes through (R16, R17): `power` for a live holder of
+   * `org.decide` by the gate's own deny-aware count, `admin` for the admin
+   * panel before launch, and `moderator` for anyone else the review queue's key
+   * lets in. The role named is the first one the public powers view gives them
+   * the power through, for the record; names are read at view time (III.2).
+   */
+  const doorOf = async (req: unknown, userId: string): Promise<{ door: AnswerDoor; byRoleId: string | null }> => {
+    if (!liveHoldersOf) return { door: "moderator", byRoleId: null };
+    const door = await publishDoorFor(getPool(), { userId, isAdmin: isAdmin ? await isAdmin(req as never) : false }, await liveHoldersOf("org.decide"));
+    if (door !== "power" || !deciders) return { door: door ?? "moderator", byRoleId: null };
+    const held = doorHolders({
+      capability: "org.decide",
+      roles: deciders.roles(),
+      holdings: deciders.roleHolders(),
+      nameOf: () => "",
+      orgRoleName: () => undefined,
+      villageHolder: await deciders.villageHolder("org.decide"),
+    }).find((h) => h.userId === userId);
+    return { door, byRoleId: held?.roleId ?? null };
+  };
 
   // The pool is read when the job RUNS, never when it is registered: this runs
   // during boot, before the pool is guaranteed to be the one the village uses.
@@ -386,12 +426,59 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json(TOO_MANY);
     }
     try {
-      const cfg = (moduleConfig(MODULE_ID) as Record<string, unknown> | null) ?? {};
       const listed = await read();
       const waiting = await waitingChartProposals(getPool(), MODULE_ID);
-      res.json(listAnswer(listed, { agent: saberraAgentName(), dashboard: cfg.dashboardUrl, timeZone: villageTimezone(), waiting }));
+      // When somebody here rewrote what each conflict is about, from published history only.
+      const swap = nameCheckFor(await rosterRows(getPool())).swap;
+      const changedHere = await changedHereAt(getPool(), listed.list, swap).catch(() => ({}));
+      res.json(listAnswer(listed, { ...listOpts(), waiting, changedHere }));
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
+    }
+  });
+
+  /**
+   * TAKE, KEEP OR EDIT (spec R12 to R16). Behind the review queue's own key,
+   * because an answer writes a draft or a keep and never the chart: the
+   * publish door is where the holder test stands (R17). Every item carries the
+   * difference's key and both hashes as the person saw them, and the server
+   * checks them again under its locks (R14). The rules and the writes are in
+   * server/lib/seraAnswer.ts.
+   */
+  app.post("/api/saberra/differences/answer", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (overLimit && (await overLimit(`sera-answer:${user.id}`, ANSWERS_PER_MINUTE, 60_000))) return res.status(429).json(TOO_MANY);
+    const body = readAnswerBody(req.body);
+    if (!body) return res.status(400).json({ error: "Say what to answer, and how." });
+    try {
+      const userId = String(user.id);
+      const opts = listOpts();
+      const out = await answerDifferences(
+        getPool(),
+        { read, agent: opts.agent, describe: (d) => ({ ...d, words: wordsOf(d, { holders: {} }, opts) }) },
+        { act: body.act, items: body.items, actor: { userId, ...(await doorOf(req, userId)) } },
+      );
+      res.status(out.status).json(out.body);
+    } catch {
+      res.status(500).json({ error: "Could not write the answer." });
+    }
+  });
+
+  /** Take answers back (R15, R16): a keep waits again, and a take still in an open draft comes out of it. */
+  app.post("/api/saberra/differences/undo", async (req, res) => {
+    if (!(await guardCapability(req, res, "intake.moderate"))) return;
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    if (overLimit && (await overLimit(`sera-answer:${user.id}`, ANSWERS_PER_MINUTE, 60_000))) return res.status(429).json(TOO_MANY);
+    const keys = readUndoBody(req.body);
+    if (!keys) return res.status(400).json({ error: "Say which answers to undo." });
+    try {
+      const out = await undoAnswers(getPool(), { agent: saberraAgentName() }, { keys, actorUserId: String(user.id) });
+      res.status(out.status).json(out.body);
+    } catch {
+      res.status(500).json({ error: "Could not undo the answer." });
     }
   });
 

@@ -582,7 +582,8 @@ export function openDraftCap(activeMembers: number): number {
 }
 
 export async function createDraft(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the draft is made inside (the differences list's answers). */
+  pool: Pool | PoolConnection,
   body: {
     title: string;
     rationale?: string | null;
@@ -629,7 +630,8 @@ const UNDER_A_VOTE =
   "The village is voting on this draft, so it cannot be changed until the vote closes. Withdraw the draft to stop the vote.";
 
 export async function addChange(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the change is added inside. */
+  pool: Pool | PoolConnection,
   draftId: string,
   body: { op: DraftOp; orgRoleId: string; payload?: any },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {

@@ -86,14 +86,23 @@ export interface AcceptedProposalRow {
 }
 
 /**
- * The proposals from `moduleId` accepted into these drafts. Their payload is
- * the one that landed unless a steward edited it at accept, which overwrites
- * it; the dedupe key is never rewritten, so the caller can tell the two apart.
+ * The proposals from `moduleId` accepted into these drafts UNTOUCHED: never
+ * edited at accept (spec T14a). An accept that changed the words marks
+ * `edited_at_accept` (0350), so a proposal whose capitals alone a steward fixed
+ * is left out here, and the change built from it has no base it could be
+ * mistaken for.
+ *
+ * A row accepted before 0350 carries no mark whatever was done to it, so the
+ * caller still checks that the payload hashes to the dedupe key it landed
+ * under, and the engine still treats a base differing from the service's
+ * value by capitals alone as unknown (shared/seraDifferences.ts
+ * `tracedUpToCase`). Both stay as a second guard for those older rows: nothing
+ * can tell an old capitals-only edit from the service's own words.
  */
 export async function acceptedProposalsFor(pool: Pool, moduleId: string, draftIds: readonly string[]): Promise<AcceptedProposalRow[]> {
   if (draftIds.length === 0) return [];
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, created_ref, kind, payload, source_ref, dedupe_key FROM external_proposals WHERE module_id = ? AND status = 'accepted' AND created_ref IN (${draftIds.map(() => "?").join(",")})`,
+    `SELECT id, created_ref, kind, payload, source_ref, dedupe_key FROM external_proposals WHERE module_id = ? AND status = 'accepted' AND edited_at_accept IS NULL AND created_ref IN (${draftIds.map(() => "?").join(",")})`,
     [moduleId, ...draftIds],
   );
   return rows.map((r) => ({
@@ -117,6 +126,23 @@ export async function publishStamp(pool: Pool, moduleId: string): Promise<string
 
 /** The kinds that change the chart (shared/structurePlan.ts STRUCTURE_KINDS). */
 const CHART_KINDS = ["org.proposed", "role.proposed", "circle.proposed"];
+
+/** Every proposal from `moduleId` still waiting, of any kind, for the retire after a landing (spec R28). */
+export async function waitingFromModule(
+  pool: Pool,
+  moduleId: string,
+): Promise<Array<{ batchId: string; kind: string; receivedAt: string | null; payload: Record<string, unknown> | null }>> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT batch_id, kind, UNIX_TIMESTAMP(received_at) AS at, payload FROM external_proposals WHERE module_id = ? AND status = 'proposed'",
+    [moduleId],
+  );
+  return rows.map((r) => ({
+    batchId: String(r.batch_id),
+    kind: String(r.kind),
+    receivedAt: r.at === null || r.at === undefined ? null : new Date(Number(r.at) * 1000).toISOString(),
+    payload: objectOf(r.payload),
+  }));
+}
 
 /** Every proposal from `moduleId` still waiting that changes the chart, for the list's links (review C7). */
 export async function waitingChartProposals(

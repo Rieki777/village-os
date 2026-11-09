@@ -176,6 +176,15 @@ vi.mock("../repos/seraDifferences", async (importOriginal) => ({
   publishedFromModule: async () => [],
   acceptedProposalsFor: async () => [],
   publishStamp: async () => "0:0",
+  // Nothing waits in the queue here, so a landing retires nothing (server/lib/saberraRetire.ts).
+  waitingFromModule: async () => [],
+}));
+// Nothing answered and nothing linked yet (0350): the answers are held against a real schema in
+// server/lib/seraAnswer.test.ts.
+vi.mock("../repos/seraSettled", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../repos/seraSettled")>()),
+  answersFor: async () => new Map(),
+  linksFor: async () => ({ circles: {}, roles: {} }),
 }));
 
 vi.mock("../repos/moduleFacts", () => ({

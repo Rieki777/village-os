@@ -811,6 +811,28 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     ]);
   });
 
+  it("de-attributes their answers to the outside service's differences and the links they set, keeping the rows and everyone else's", async () => {
+    const leaver = await member("own-leaver-sera", "Wren Halloway");
+    await member("own-sera-ash", "Ash Moreno");
+    const answer = (key: string, actor: string) =>
+      q("INSERT INTO saberra_settled (difference_key, sera_hash, ours_hash, answer, door, actor_user_id) VALUES (?, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'kept', 'power', ?)", [key, actor]);
+    await answer("role:own-sera-1:aim", leaver.id);
+    await answer("role:own-sera-2:aim", "own-sera-ash");
+    await q("INSERT INTO saberra_links (subject_kind, page_key, our_id, set_by, actor_user_id) VALUES ('role', 'own-sera-1', 'r-1', 'keep', ?), ('role', 'own-sera-2', 'r-2', 'keep', 'own-sera-ash')", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT difference_key, answer, actor_user_id FROM saberra_settled WHERE difference_key LIKE 'role:own-sera-%' ORDER BY difference_key")).toEqual([
+      { difference_key: "role:own-sera-1:aim", answer: "kept", actor_user_id: null },
+      { difference_key: "role:own-sera-2:aim", answer: "kept", actor_user_id: "own-sera-ash" },
+    ]);
+    expect(await q("SELECT page_key, our_id, actor_user_id FROM saberra_links WHERE page_key LIKE 'own-sera-%' ORDER BY page_key")).toEqual([
+      { page_key: "own-sera-1", our_id: "r-1", actor_user_id: null },
+      { page_key: "own-sera-2", our_id: "r-2", actor_user_id: "own-sera-ash" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("sera-answers-after-tombstone");
+  });
+
   it("runs every new step after the tombstone, between the role tensions and the role proposals, and runs clean twice", async () => {
     const leaver = await member("own-leaver-st", "Wren Halloway");
     await anonymizeMember(pool, leaver, "admin-1", deps());

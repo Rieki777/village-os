@@ -46,6 +46,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { ExternalProposalRow, ProposalStatus } from "../lib/externalProposals";
+import { canonicalJson } from "../../shared/canonicalJson";
 
 /**
  * Every column, and every read below takes all of them.
@@ -230,6 +231,14 @@ export async function decideProposal(
   if (input.editedPayload) {
     sets.push("payload = ?");
     args.push(JSON.stringify(input.editedPayload));
+    /*
+     * MARKED WHEN THE WORDS CHANGED (0350). The dedupe key hashes the words
+     * folded to lower case, so a steward's change of capitals alone used to
+     * pass for the service's own words, and the differences list traced its
+     * base from them (spec T14a). Marked only when the edited payload is not
+     * the one stored, so sending the payload back unchanged is no edit.
+     */
+    if (!(await payloadIs(pool, input.id, input.editedPayload))) sets.push("edited_at_accept = CURRENT_TIMESTAMP");
   }
   args.push(input.id);
   const [res]: any = await pool.query(
@@ -237,6 +246,13 @@ export async function decideProposal(
     args,
   );
   return Number(res?.affectedRows ?? 0) > 0;
+}
+
+/** Whether a waiting record's stored payload is this one, compared as canonical JSON so key order is no edit. */
+async function payloadIs(pool: Pool, id: string, payload: Record<string, unknown>): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT payload FROM external_proposals WHERE id = ?", [id]);
+  if (!rows[0]) return false;
+  return canonicalJson(asJson(rows[0].payload)) === canonicalJson(payload);
 }
 
 /**
@@ -355,13 +371,17 @@ export async function rebatchWaiting(pool: Pool, id: string, batchId: string): P
  * transaction, because the claim that came back is now the newest word.
  *
  * Answers how many waiting claims it retired, or null when nothing reopened.
+ *
+ * NEVER A ROW THE DIFFERENCES LIST RETIRED (0350, spec R28). Such a row carries
+ * a `retired_reason`: the list holds what it said, so bringing it back would put
+ * the same change in front of a steward twice.
  */
 export async function reopenSuperseded(pool: Pool, row: { id: string; batchId: string; identityKey: string }): Promise<number | null> {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [res] = await conn.query<any>(
-      "UPDATE external_proposals SET status = 'proposed', batch_id = ? WHERE id = ? AND status = 'superseded'",
+      "UPDATE external_proposals SET status = 'proposed', batch_id = ? WHERE id = ? AND status = 'superseded' AND retired_reason IS NULL",
       [row.batchId, row.id],
     );
     if (!Number(res?.affectedRows ?? 0)) {
@@ -403,4 +423,35 @@ export async function withdrawGone(
   if (!gone.length) return [];
   await pool.query("UPDATE external_proposals SET status = 'superseded' WHERE id IN (?) AND status = 'proposed'", [gone]);
   return gone;
+}
+
+/**
+ * Retire every record still waiting in one module's delivery, with the reason
+ * (spec R28). Only `status = 'proposed'`: anything a steward decided is history
+ * and stays exactly as it is. The reason is what keeps a later landing from
+ * bringing the row back (`reopenSuperseded`). Answers how many it retired.
+ */
+export async function retireWaitingBatch(pool: Pool, input: { moduleId: string; batchId: string; reason: string }): Promise<number> {
+  const [res] = await pool.query<any>(
+    "UPDATE external_proposals SET status = 'superseded', retired_reason = ? WHERE module_id = ? AND batch_id = ? AND status = 'proposed'",
+    [input.reason.slice(0, 64), input.moduleId, input.batchId],
+  );
+  return Number(res?.affectedRows ?? 0);
+}
+
+/**
+ * The deliveries from one module with something a person is still working on:
+ * a record accepted into a draft that is still open, or a record decided since
+ * `sinceSeconds`. Retiring either would pull a batch out from under a review
+ * in progress (spec R28).
+ */
+export async function batchesInReview(pool: Pool, moduleId: string, batchIds: readonly string[], sinceSeconds: number): Promise<Set<string>> {
+  if (batchIds.length === 0) return new Set();
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT DISTINCT p.batch_id FROM external_proposals p LEFT JOIN org_drafts d ON d.id = p.created_ref " +
+      `WHERE p.module_id = ? AND p.batch_id IN (${batchIds.map(() => "?").join(",")}) ` +
+      "AND ((p.status = 'accepted' AND d.status = 'open') OR (p.decided_at IS NOT NULL AND UNIX_TIMESTAMP(p.decided_at) >= ?))",
+    [moduleId, ...batchIds, sinceSeconds],
+  );
+  return new Set(rows.map((r) => String(r.batch_id)));
 }
