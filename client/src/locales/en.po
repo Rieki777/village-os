@@ -17,6 +17,11 @@ msgctxt "role pay"
 msgid "Kind of work"
 msgstr "Kind of work"
 
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Not now"
+msgstr "Not now"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Reason"
@@ -30,6 +35,10 @@ msgstr "Pick a reason"
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
+msgstr "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -50,6 +59,10 @@ msgstr "Paid {paidOn}"
 msgctxt "site header"
 msgid "Open menu"
 msgstr "Open menu"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote is open. <0>Read it and vote</0>."
+msgstr "The vote is open. <0>Read it and vote</0>."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -74,14 +87,31 @@ msgstr "Chain: {there}."
 msgid "Hide how this was worked out"
 msgstr "Hide how this was worked out"
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Ask the village for one copy of its database"
+msgstr "Ask the village for one copy of its database"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "No steward is sitting now, so there is nobody to name."
+msgstr "No steward is sitting now, so there is nobody to name."
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
 msgstr "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Download the copy"
+msgstr "Download the copy"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The steward who receives it"
+msgstr "The steward who receives it"
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
@@ -101,9 +131,22 @@ msgctxt "role pay"
 msgid "Say why"
 msgstr "Say why"
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Why the village needs it"
+msgstr "Why the village needs it"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
+msgstr "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
 msgstr "Estimated effort for the moon, in hours"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Opening..."
+msgstr "Opening..."
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -150,6 +193,11 @@ msgstr "This village's records: {here}."
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Ask the village"
+msgstr "Ask the village"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
@@ -173,6 +221,10 @@ msgstr "No invoice has been sent yet."
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Translated automatically"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
+msgstr "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -228,6 +280,10 @@ msgstr "Tokens, by source"
 msgid "Saved. The role's pay is set."
 msgstr "Saved. The role's pay is set."
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy did not download"
+msgstr "The copy did not download"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This figure is outside the suggestion's band, so pick a reason."
 msgstr "This figure is outside the suggestion's band, so pick a reason."
@@ -244,10 +300,18 @@ msgstr "Hide the valuation engine"
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Choose a sitting steward"
+msgstr "Choose a sitting steward"
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
 msgid "Opening…"
 msgstr "Opening…"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote did not open"
+msgstr "The vote did not open"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -261,6 +325,11 @@ msgstr "Try again"
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Likely {0} to {1}. {2}: {3}."
 msgstr "Likely {0} to {1}. {2}: {3}."
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Downloading..."
+msgstr "Downloading..."
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -276,6 +345,10 @@ msgctxt "language picker"
 msgid "Now in {announced}"
 msgstr "Now in {announced}"
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "One copy of the village's database"
+msgstr "One copy of the village's database"
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
@@ -290,6 +363,10 @@ msgctxt "role pay"
 msgid "Your figure"
 msgstr "Your figure"
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
+msgstr "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
+
 #: client/src/components/TreasurySync.tsx
 msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
 msgstr "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
@@ -303,6 +380,10 @@ msgstr "Sign in or join"
 msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr "Reading the invoice tracks."
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
+msgstr "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"

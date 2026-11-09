@@ -280,6 +280,24 @@ export const ORG_DRAFT = "org_draft";
 export const MINT_REQUEST = "mint_request";
 
 /**
+ * ONE EXPORT OF THE WHOLE VILLAGE'S DATABASE, AUTHORISED BY THE VILLAGE (Rye,
+ * 2026-11-06: "export by vote: YES").
+ *
+ * The other door is the deployment's ADMIN_PASSWORD (server/routes/
+ * villageExport.ts), and it stays. This one is for a village whose password
+ * holder is not the person it trusts with every member's data: a vote at the
+ * village's highest tier names ONE steward, and that steward may download ONE
+ * export, once, while their seat is live. Every member is told when it goes.
+ * The subject ref is the named steward's id, so a steward has one such vote
+ * open at a time. The rules and the closer are server/lib/exportVotes.ts.
+ *
+ * PRICED AT THE TOP. The file holds every member's data and cannot be called
+ * back once it leaves, so it asks the constitutional floors here and, when
+ * the ballot opens, the village's own highest tier if that is higher.
+ */
+export const DATABASE_EXPORT = "database_export";
+
+/**
  * A MEMBER'S SUGGESTED EDIT TO AN ADMIN CONTROL, decided by the village
  * (ROLE_POWERS_DESIGN.md §4.5). Opened when the village holds the power behind
  * the control or nobody does, when a holder sends a suggestion to a vote, or
@@ -499,6 +517,14 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.",
+  },
+  [DATABASE_EXPORT]: {
+    ...tierFloors("constitutional"),
+    minElectorate: 0,
+    criticality: "constitutional",
+    // `custom` for MINT_REQUEST's reason: only it counts the unity a ballot freezes.
+    method: "custom",
+    why: "This one hands one steward a copy of every member's data, which cannot be called back once it leaves, so it asks the highest bar the village sets.",
   },
 };
 
@@ -1090,6 +1116,8 @@ export const META_SETTING_KEYS: readonly string[] = [
   "governance.change_set_cap",
   // How many change requests one member may gather (spec R20).
   "governance.change_requests_gathering_per_member",
+  // How long a change request is reviewed (spec R20).
+  "governance.change_request_review_days",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */

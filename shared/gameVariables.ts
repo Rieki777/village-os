@@ -27,7 +27,7 @@ import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects"
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
 import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
-import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY } from "./changeRequestLimits";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY, REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1305,6 +1305,22 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 50,
     unit: "change requests",
+  },
+  {
+    // Change requests (Rye, 2026-11-06, 3c; spec C3, R20). The review
+    // round before a vote. Meta, so a trial can never set it to nothing for
+    // a moon, and a lowered value never shortens a review already running.
+    key: REVIEW_DAYS_KEY,
+    category: "Governance",
+    label: "Days a change request is reviewed before its vote",
+    criticality: "structural",
+    description:
+      "How long the village has to ask questions, raise concerns and objections, and suggest edits before a change request may go to the vote. The clock starts again whenever a change or the why is edited. 0 lets a change request go to the vote as soon as its objections are answered.",
+    type: "integer",
+    default: String(REVIEW_DAYS_DEFAULT),
+    min: 0,
+    max: 30,
+    unit: "days",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────

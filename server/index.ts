@@ -113,6 +113,7 @@ import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
@@ -378,9 +379,10 @@ import {
   currentMintRuleValue,
   mintRuleLabel, moduleChangeLabel,
   rowToProposal,
-  priceChangeSet, validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
+  validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
   type MintRuleValues,
 } from "./lib/mechanics";
+import { changeSetPriceNow } from "./lib/changeSetPriceNow";
 import { buildMechanicsHandoff } from "./lib/hypha-bridge";
 // ── The Hypha Bridge module (R58) ────────────────────────────────────────────
 import * as hyphaRepo from "./repos/hypha";
@@ -22544,6 +22546,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
@@ -22999,10 +23002,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * `SUBJECT_FOR_ITEM_KIND`, an executor, and its kind in
      * `EXECUTABLE_ITEM_KINDS`. Nothing on this route changes for it.
      */
-    const priced = priceChangeSet(p.changeSet, method, {
-      unityPct: Math.max(0, numberVar("governance.unity_pct")),
-      quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
-    }, thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)));
+    const priced = changeSetPriceNow(p.changeSet).set; // one price with the dry run (change requests, 3b)
     if (priced.conflict) return res.status(409).json({ error: priced.conflict });
     // A subject may fix the method its own numbers are conducted by, and a
     // proposal brought back after a veto is priced at the village's highest set
@@ -24869,7 +24869,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerQuorumFallbackRoutes(app, { authedUser, isAdmin, getPool, notify });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
-  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges });
+  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges, liveHoldersOf, notify, cycleStart: () => new Date(currentCycle().startsAt), proposalsOpenedSince: (id, since) => proposalsOpenedSince(getPool(), id, since) });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
   registerMoonSettlementRoutes(app, {
