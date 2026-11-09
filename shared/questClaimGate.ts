@@ -19,6 +19,8 @@
  * decides. The order is the order a member is told: the first refusal wins.
  */
 
+import { bandMeets, type AgeBand } from "./ageBands";
+
 export interface ClaimGateFacts {
   /** A standing example renders on the board and refuses every claim. */
   isExample: boolean;
@@ -36,15 +38,32 @@ export interface ClaimGateFacts {
   requiresRole: string | null;
   /** The permission-plane roles the member holds. */
   memberRoleIds: readonly string[];
+  /**
+   * The badges the quest asks for (build days S5): safety badges for tools,
+   * heights and machines. Empty when it asks for none.
+   */
+  requiredBadges?: readonly string[];
+  /**
+   * The badges the member holds that may pass a safety gate: earned or
+   * granted, unexpired, never self-declared (server/lib/questClaimGate.ts).
+   */
+  memberBadgeIds?: readonly string[];
+  /** The minimum age the quest asks (shared/ageBands.ts `effectiveMinAge`), or null. */
+  minAge?: number | null;
+  /** The member's age band, or null when they have not said it. */
+  memberAgeBand?: AgeBand | null;
 }
 
 export type ClaimRefusal =
   | { kind: "example" }
   | { kind: "closed"; status: string }
   | { kind: "stage"; minStage: string }
-  | { kind: "role"; requiresRole: string };
+  | { kind: "role"; requiresRole: string }
+  | { kind: "badge"; missing: string[] }
+  | { kind: "attest"; minAge: number }
+  | { kind: "age"; minAge: number };
 
-export const CLAIM_REFUSAL_KINDS = ["example", "closed", "stage", "role"] as const satisfies readonly ClaimRefusal["kind"][];
+export const CLAIM_REFUSAL_KINDS = ["example", "closed", "stage", "role", "badge", "attest", "age"] as const satisfies readonly ClaimRefusal["kind"][];
 
 /** The first rule this member does not meet, or null when the claim may go ahead. */
 export function questClaimGate(f: ClaimGateFacts): ClaimRefusal | null {
@@ -58,6 +77,14 @@ export function questClaimGate(f: ClaimGateFacts): ClaimRefusal | null {
   if (f.requiresRole && !f.memberRoleIds.includes(f.requiresRole)) {
     return { kind: "role", requiresRole: f.requiresRole };
   }
+  // Age before badges: a badge can be earned on the day, an age cannot.
+  if (f.minAge != null) {
+    if (!f.memberAgeBand) return { kind: "attest", minAge: f.minAge };
+    if (!bandMeets(f.memberAgeBand, f.minAge)) return { kind: "age", minAge: f.minAge };
+  }
+  const held = new Set(f.memberBadgeIds ?? []);
+  const missing = (f.requiredBadges ?? []).filter((b) => !held.has(b));
+  if (missing.length) return { kind: "badge", missing };
   return null;
 }
 
@@ -71,4 +98,7 @@ export const MAP_REASON_FOR: Record<ClaimRefusal["kind"], "closed" | "not-yet"> 
   closed: "closed",
   stage: "not-yet",
   role: "not-yet",
+  badge: "not-yet",
+  attest: "not-yet",
+  age: "not-yet",
 };

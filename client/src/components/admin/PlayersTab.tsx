@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { BulkStageGrant } from "./StageFloorPicker";
 import PersonalListsPanel from "@/components/yourList/PersonalListsPanel";
+import AgeBandCorrection from "./AgeBandCorrection";
 
 const AgentsPanel = lazy(() => import("./AgentsPanel"));
 // Only opened when a steward goes to delete someone, so it loads then.
@@ -189,6 +190,7 @@ export default function PlayersTab({ password }: { password: string }) {
                 onStage={(id) => grant(p.id, id ?? "")}
                 onSignOut={() => revokeSessions(p.id, p.name)}
                 onDelete={() => setErasing({ id: p.id, email: p.email })}
+                footerExtra={<AgeBandCorrection userId={p.id} name={p.name} password={password} />}
               />
             ))}
           </div>

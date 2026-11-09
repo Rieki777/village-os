@@ -26,6 +26,11 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(src, "es.po"), 'msgid ""\nmsgstr ""\n"Language: es\\n"\n\n#, fuzzy\nmsgid "Sign in"\nmsgstr "Iniciar sesión"\n');
   const out = path.join(dir, "out");
   await compileCatalogs({ srcDir: src, outDir: out });
+  // A part as the build writes it (client/src/i18n/copySplit.ts writeCopyParts).
+  fs.mkdirSync(path.join(out, "parts", "en"), { recursive: true });
+  fs.writeFileSync(path.join(out, "parts", "en", "Pa_rt-123456.json"), JSON.stringify({ messages: { Ab12Cd: ["A long paragraph of English."] } }));
+  // Control for the traversal test: a real file one level up that a bad name would reach.
+  fs.writeFileSync(path.join(out, "parts", "secret.json"), JSON.stringify({ messages: { leak: ["leaked"] } }));
 
   const app = express();
   register(app, { catalogDir: out, pseudoAllowed: () => pseudoAllowed });
@@ -87,5 +92,34 @@ describe("GET /api/i18n/locales", () => {
     expect(body.locales).toContainEqual({ tag: "en", tier: "source", dir: "ltr" });
     expect(body.locales).toContainEqual({ tag: "es", tier: "reviewed", dir: "ltr" });
     expect(body.locales.some((l: { tier: string }) => l.tier === "pseudo")).toBe(false);
+  });
+});
+
+describe("GET /api/i18n/catalog/:locale/part/:part", () => {
+  it("serves a part of the English the build moved out of a chunk, cacheable for a year", async () => {
+    const res = await get("/api/i18n/catalog/en/part/Pa_rt-123456");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ messages: { Ab12Cd: ["A long paragraph of English."] } });
+    // Content-addressed: a part's name changes whenever its words do.
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("answers a part that does not exist with 404, so the chunk's import fails loudly", async () => {
+    expect((await get("/api/i18n/catalog/en/part/Nope00000000")).status).toBe(404);
+  });
+
+  it("serves parts for English only, for now", async () => {
+    expect((await get("/api/i18n/catalog/es/part/Pa_rt-123456")).status).toBe(404);
+  });
+
+  it("refuses any part name outside the strict pattern before it touches the disk", async () => {
+    // Control: the file a traversal would reach is really there, one level up.
+    const res0 = await get("/api/i18n/catalog/en/part/Pa_rt-123456");
+    expect(res0.status).toBe(200);
+    for (const bad of ["..%2Fsecret", "..%5Csecret", "%2E%2E%2Fsecret", "abc", "a".repeat(33), "Pa_rt-123456.json", "Pa%00rt123456"]) {
+      const res = await get(`/api/i18n/catalog/en/part/${bad}`);
+      expect(res.status, bad).toBe(400);
+      expect(await res.text(), bad).not.toContain("leaked");
+    }
   });
 });

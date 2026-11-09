@@ -9,8 +9,10 @@ import {
   lazyRoutesFromApp,
   routePreloadScript,
   routePreloadTable,
+  copyPartsIn,
 } from "./client/src/lib/routePreload";
 import { pointAtUnhintedFonts } from "./client/src/lib/unhintedFonts";
+import { CopyCollector, splitLongCopy } from "./client/src/i18n/copySplit";
 import { splitArtifact, type SplitResult } from "./server/lib/groundsSplit";
 
 /**
@@ -186,6 +188,7 @@ function routeChunkPreload(): Plugin {
           isDynamicEntry: out.isDynamicEntry,
           facadeModuleId: out.facadeModuleId,
           css: [...(out.viteMetadata?.importedCss ?? [])],
+          copyParts: copyPartsIn(out.code),
         });
       }
       const table = routePreloadTable(lazyRoutesFromApp(app), chunks);
@@ -296,8 +299,16 @@ function smallGroupOf(id: string, info: ModuleInfoOf, eager: Set<string>): Small
   return verdict;
 }
 
+/**
+ * Long English moved out of the lazy chunks into dist/i18n/parts/en, outside
+ * dist/public (client/src/i18n/copySplit.ts). One collector per build: the
+ * transform half (precompileEnglish) fills it, the renderChunk half reads it.
+ */
+const longCopy = new CopyCollector();
+const LONG_COPY_PARTS = path.resolve(import.meta.dirname, "dist", "i18n", "parts", "en");
+
 export default defineConfig({
-  plugins: [linguiMacros(), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
+  plugins: [linguiMacros(longCopy), splitLongCopy(longCopy, LONG_COPY_PARTS), react(), tailwindcss(), serveGroundsInDev(), dropLegacyWoffFallback(), useUnhintedFonts(), routeChunkPreload()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

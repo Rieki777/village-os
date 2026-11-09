@@ -139,6 +139,7 @@ describe("which door a reader sets pay through, for the page that says so", () =
     getPool: () => { throw new Error(REACHED); },
     liveHoldersOf: async (cap: string) => holders[cap] ?? [],
     launchedByVote: async () => launched,
+    capabilityCtx: async () => ({ villageHeld: [] }),
   });
   it("names a holder, an admin before launch, an admin with no steward seated, and nobody else", async () => {
     const { holderStanding } = await import("../lib/holderDoor");

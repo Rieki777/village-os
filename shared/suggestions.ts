@@ -87,6 +87,8 @@ export const SUGGESTION_ROUTE: Record<Capability, SuggestionRoute> = {
   // decides, like cash.pay beside it.
   "role.pay": "holders",
   "pot.steward": "holders",
+  "place.tend": "holders",
+  "place.permit": "holders",
   "module.switch": "holders",
   // The veto stays ballot-only (Rye, 2026-09-23). `routeSuggestion` enforces
   // it again, so a dial that one day writes this table cannot flip it.

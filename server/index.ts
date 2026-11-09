@@ -167,6 +167,7 @@ import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/h
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
 import { claimRefusalFor } from "./lib/questClaimGate";
+import { ageBandOf } from "./repos/questSafety";
 import { MAP_REASON_FOR } from "../shared/questClaimGate";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -216,6 +217,7 @@ import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
 import { exportMemberFundingRounds, fundingRoundsOpenState, register as registerFundingRoundsRoutes } from "./routes/fundingRounds";
+import { register as registerPlaceRegistryRoutes } from "./routes/placeRegistry";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { register as registerI18nRoutes } from "./routes/i18n";
 import { setShellLang, shellLocale } from "./lib/i18nShell";
@@ -18234,6 +18236,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members, questsRepo, electorate: buildElectorate });
+  registerPlaceRegistryRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, overLimit, members, firstName, lapseContext, circlesRepo });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
@@ -25974,6 +25977,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         "SELECT a.*, b.name AS badge_name FROM badge_awards a JOIN badges b ON b.id = a.badge_id WHERE a.user_id = ?",
       ),
       skillTags: await mine("SELECT tag FROM skill_tags WHERE user_id = ?"),
+      ageBand: await ageBandOf(getPool(), user.id),
       forumThreads: await mine("SELECT * FROM forum_threads WHERE author_id = ?"),
       forumReplies: await mine("SELECT * FROM forum_replies WHERE author_id = ?"),
       // Both directions: an introduction is a fact about two people, and each

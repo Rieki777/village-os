@@ -159,6 +159,7 @@
  * an account that does not exist with some traces outstanding. Neither is
  * silent any more.
  */
+import { forgetAgeBand } from "../repos/questSafety";
 import type { Pool } from "mysql2/promise";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -701,6 +702,15 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "skill-tags",
       run: async () => {
         await pool.query("DELETE FROM skill_tags WHERE user_id = ?", [target.id]); // module-review-ok: skill_tags are claims a person made about themselves in a searchable directory, and nothing else would ever remove them; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
+      },
+    },
+    {
+      // An age band is a fact about a body (0356, build days): kept only to
+      // check a physical quest's minimum age, and nothing a departed member
+      // could still be asked. It goes with them.
+      name: "age-band",
+      run: async () => {
+        await forgetAgeBand(pool, target.id);
       },
     },
     {
