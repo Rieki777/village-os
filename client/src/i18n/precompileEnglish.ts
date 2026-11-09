@@ -119,6 +119,8 @@ export function precompileMessages(code: string, onLong?: (id: string, compiledJ
     const literalEnd = literalStart + msg[1].length;
     const compiled = compiledLiteral(msg[1], head);
     if (onLong && literalText(msg[1]).length >= LONG_MESSAGE_CHARS) {
+      // `head` matched ID, so it holds Lingui's 6-character hashed id. An
+      // explicit `id:` of another shape never matches ID and is never split.
       onLong(/"([A-Za-z0-9_-]{6})"/.exec(head)![1], compiled);
       // Drop `message: <literal>` and one comma beside it: the one after when
       // another field follows, else the one before it.
