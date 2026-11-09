@@ -170,6 +170,18 @@ export type QuestRemoval =
   | { ok: false; reason: "missing" }
   | { ok: false; reason: "in_flight"; count: number };
 
+/**
+ * The place a quest sits at (0060's `structure_key`), or null. Read on its own
+ * because `QUEST_SELECT` does not carry the column and every consumer of the
+ * record would otherwise gain a field it never asked for. The next-step box
+ * reads it to name the place's steward (server/lib/questNextStep.ts).
+ */
+export async function questStructureKey(pool: Pool, questId: string): Promise<string | null> {
+  const [rows] = await pool.query<RowDataPacket[]>("SELECT `structure_key` FROM `quests` WHERE `id` = ? LIMIT 1", [questId]);
+  const key = rows[0]?.structure_key;
+  return key == null || String(key).trim() === "" ? null : String(key);
+}
+
 export interface QuestsRepo {
   all(): Promise<QuestRecord[]>;
   byId(id: string): Promise<QuestRecord | null>;

@@ -72,7 +72,8 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
-import { keepExampleQuest, questClosed } from "../repos/quests";
+import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
+import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
@@ -114,6 +115,8 @@ type Deps = Pick<
    * the exception and reads `unavailable` for itself.
    */
   limitState(bucket: string, max: number, windowMs: number): Promise<LimitState>;
+  /** The next-step box after a claim (server/lib/questNextStep.ts). */
+  questNextStep(quest: QuestRecord, userId: string): Promise<ResolvedNextStep>;
 };
 
 export function register(app: Express, deps: Deps): void {
@@ -769,6 +772,16 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
+  /** The box, or null when gathering it failed. Logged loudly; never fails the claim. */
+  async function nextStepOrNull(quest: QuestRecord, userId: string, claimId: string): Promise<ResolvedNextStep | null> {
+    try {
+      return await deps.questNextStep(quest, userId);
+    } catch (err) {
+      console.error(`[quests] claim ${claimId}: the next-step box could not be gathered`, err);
+      return null;
+    }
+  }
+
   // Quests: claim / submit (player)
   app.post("/api/game/quests/:id/claim", async (req, res) => {
     const user = await authedUser(req);
@@ -852,7 +865,29 @@ export function register(app: Express, deps: Deps): void {
       if (taken.reason === "gone") return res.status(404).json({ error: "Quest not found" });
       return res.status(409).json({ error: "Already claimed", claim: taken.existing });
     }
-    res.json(claim);
+    // The claim stands before anything below runs: the box and the bell are
+    // help, and neither may turn a made claim into an error the member retries.
+    const next = await nextStepOrNull(quest, user.id, claim.id);
+    await bellQuestClaimed(notify, user.id, claim.id, quest);
+    res.json({ ...claim, next });
+  });
+
+  /**
+   * The next-step box again, for the member holding a live claim. A claim made
+   * on a weak signal whose reply was lost, or a box closed by mistake, is one
+   * read away instead of gone.
+   */
+  app.get("/api/game/quests/:id/next", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const quest = await questsRepo.byId(req.params.id);
+    if (!quest) return res.status(404).json({ error: "Quest not found" });
+    const mine = await claimsRepo.forUser(user.id);
+    const active = mine.find((c) => c.questId === quest.id && (c.status === "claimed" || c.status === "submitted"));
+    if (!active) return res.status(404).json({ error: "No active claim for this quest" });
+    const next = await nextStepOrNull(quest, user.id, active.id);
+    if (!next) return res.status(503).json({ error: "next_step_unavailable" });
+    res.json({ claimId: active.id, next });
   });
 
   app.post("/api/game/quests/:id/submit", async (req, res) => {

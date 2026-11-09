@@ -41,6 +41,11 @@ msgctxt "database export"
 msgid "Not now"
 msgstr "Not now"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, copy the crew invite link"
+msgid "Copy the crew link"
+msgstr "Copy the crew link"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "In review"
@@ -257,6 +262,11 @@ msgstr "That did not load."
 msgid "Edit the name or the why"
 msgstr "Edit the name or the why"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, when the quest starts"
+msgid "Starts {at}"
+msgstr "Starts {at}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "delete a change request"
 msgid "Delete"
@@ -271,6 +281,11 @@ msgstr "Suggest a change"
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, no date on the quest"
+msgid "No date yet. Agree one when you talk."
+msgstr "No date yet. Agree one when you talk."
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -438,6 +453,11 @@ msgctxt "signing key"
 msgid "Withdraw the request"
 msgstr "Withdraw the request"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, after copying the crew link"
+msgid "Link copied"
+msgstr "Link copied"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "decline a suggested edit"
 msgid "Turn it down"
@@ -508,6 +528,11 @@ msgstr "Signs what other villages read about this one: its discovery page, its p
 msgid "Everyone in the village can read what you write here."
 msgstr "Everyone in the village can read what you write here."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Talk to {label}"
+msgstr "Talk to {label}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a request the server refused"
 msgid "That was refused."
@@ -546,6 +571,11 @@ msgctxt "database export"
 msgid "Ask the village"
 msgstr "Ask the village"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, start a crew for this quest"
+msgid "Start a crew and invite friends"
+msgstr "Start a crew and invite friends"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "({count} of at most {cap})"
 msgstr "({count} of at most {cap})"
@@ -574,6 +604,11 @@ msgctxt "signing key"
 msgid "Withdrawn. The village keeps its key."
 msgstr "Withdrawn. The village keeps its key."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the quest has no first step written"
+msgid "Read the quest above, then start with the first thing you can do today"
+msgstr "Read the quest above, then start with the first thing you can do today"
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr "Vote on it again here"
@@ -582,6 +617,11 @@ msgstr "Vote on it again here"
 msgctxt "signing key"
 msgid "Make a new key"
 msgstr "Make a new key"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the next build day"
+msgid "Next build day: {at}"
+msgstr "Next build day: {at}"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -611,6 +651,11 @@ msgstr "You do not hold the steward role now, so this copy cannot be delivered. 
 msgctxt "valuation receipt"
 msgid "Medium range"
 msgstr "Medium range"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Nobody holds {role} yet."
+msgstr "Nobody holds {role} yet."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
@@ -721,6 +766,11 @@ msgstr "Replace the key"
 msgid "Take this change out."
 msgstr "Take this change out."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box heading"
+msgid "Your next step"
+msgstr "Your next step"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick a change to edit"
 msgid "Choose a change"
@@ -739,6 +789,11 @@ msgstr "Time to review"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
 msgstr "Saved. The role's pay is set."
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Your crew has {size} so far."
+msgstr "Your crew has {size} so far."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "A different value for one of the changes. The author may take it in."
@@ -819,6 +874,11 @@ msgstr "Last synced {syncedAt}"
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 msgstr "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, nobody named on the quest"
+msgid "Ask in the quest chat below"
+msgstr "Ask in the quest chat below"
+
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "close a form without saving"
@@ -843,6 +903,11 @@ msgstr "Open for review"
 msgctxt "heading of the review feed"
 msgid "The review"
 msgstr "The review"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the deadline"
+msgid "Due by {at}"
+msgstr "Due by {at}"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "One copy of the village's database"
@@ -1038,6 +1103,11 @@ msgctxt "role pay"
 msgid "Or as much as"
 msgstr "Or as much as"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, link to open roles"
+msgid "See the open roles"
+msgstr "See the open roles"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
@@ -1068,6 +1138,16 @@ msgstr "Gather it with other changes and send them to one vote."
 #: client/src/components/Layout.tsx
 #~ msgid "Main Site"
 #~ msgstr "Main Site"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, a role whose name could not be read"
+msgid "the circle's lead role"
+msgstr "the circle's lead role"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "this quest's circle"
+msgstr "this quest's circle"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -1195,6 +1275,11 @@ msgctxt "default title of a suggestion"
 msgid "Change {label}"
 msgstr "Change {label}"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, label before the first task"
+msgid "First:"
+msgstr "First:"
+
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Your own figure was {0}."
@@ -1204,6 +1289,11 @@ msgstr "Your own figure was {0}."
 msgctxt "role pay"
 msgid "Responsibility"
 msgstr "Responsibility"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Ask in {circle}"
+msgstr "Ask in {circle}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
