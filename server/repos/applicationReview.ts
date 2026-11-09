@@ -72,8 +72,9 @@ export async function openReviews(db: Db): Promise<Array<{ ref: string; confirme
     "SELECT c.application_ref, UNIX_TIMESTAMP(c.stamped_at) AS confirmed_s, " +
       "(SELECT UNIX_TIMESTAMP(MAX(s.stamped_at)) FROM application_steps s WHERE s.application_ref = c.application_ref) AS last_s, " +
       "(SELECT UNIX_TIMESTAMP(MIN(s.stamped_at)) FROM application_steps s WHERE s.application_ref = c.application_ref AND s.kind = 'first_reply') AS reply_s " +
-      "FROM application_steps c WHERE c.kind = 'confirmed' " +
-      "AND NOT EXISTS (SELECT 1 FROM application_steps d WHERE d.application_ref = c.application_ref AND d.kind = 'decided') LIMIT 500",
+      "FROM application_steps c LEFT JOIN open_role_proposals p ON p.id = c.application_ref WHERE c.kind = 'confirmed' " +
+      "AND (p.id IS NULL OR p.status = 'confirmed') " +
+      "AND NOT EXISTS (SELECT 1 FROM application_steps d WHERE d.application_ref = c.application_ref AND d.kind IN ('decided','cleared')) LIMIT 500",
   );
   return rows.map((r: any) => ({ ref: String(r.application_ref), confirmedAt: fromSeconds(r.confirmed_s) as Date, lastAt: fromSeconds(r.last_s) as Date, firstReplyAt: fromSeconds(r.reply_s) }));
 }
@@ -212,6 +213,67 @@ export async function insertRecusal(db: Db, r: { ref: string; userId: string; in
 export async function recusedUsers(db: Db, ref: string): Promise<string[]> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT user_id FROM application_recusals WHERE application_ref = ?", [ref]);
   return rows.map((r: any) => String(r.user_id));
+}
+
+// ── Retention and erasure ───────────────────────────────────────────────────
+
+/**
+ * Scores and conversation notes follow the application's retention (brief v3
+ * section 9): cleared when the application is anonymised and when a member who
+ * wrote or received them is erased. What stays is the shape of the review (which
+ * steps happened, which roles were asked) and nothing that scores or names a
+ * person: no evidence line, no recusal reason, no scorer, no actor, no status
+ * link hash, no applicant account id. Idempotent; stamps a `cleared` step once.
+ */
+export async function clearReviewOf(db: Db, refs: readonly string[], at: Date): Promise<number> {
+  if (!refs.length) return 0;
+  await db.query("DELETE FROM application_scores WHERE application_ref IN (?)", [[...refs]]);
+  await db.query("UPDATE application_recusals SET reason = NULL WHERE application_ref IN (?)", [[...refs]]);
+  await db.query("UPDATE application_interviews SET scorer_user_id = NULL WHERE application_ref IN (?)", [[...refs]]);
+  await db.query("UPDATE application_steps SET actor_user_id = NULL WHERE application_ref IN (?)", [[...refs]]);
+  await db.query(
+    "UPDATE application_steps SET detail_json = JSON_REMOVE(detail_json, '$.statusHash', '$.applicantUserId') WHERE application_ref IN (?) AND kind = 'confirmed' AND detail_json IS NOT NULL",
+    [[...refs]],
+  );
+  for (const ref of refs) await stampStep(db, { ref, kind: "cleared", at });
+  return refs.length;
+}
+
+/**
+ * The applications whose review is due to be cleared: an open proposal that was
+ * anonymised, a member application not adopted and decided 90 days ago, and a
+ * proposal that no longer exists. Not the ones already cleared.
+ */
+export async function refsDueForClearing(db: Db, before: Date): Promise<string[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT DISTINCT s.application_ref FROM application_steps s " +
+      "LEFT JOIN open_role_proposals p ON p.id = s.application_ref " +
+      "LEFT JOIN seat_applications a ON a.id = s.application_ref " +
+      "WHERE s.kind = 'confirmed' " +
+      "AND NOT EXISTS (SELECT 1 FROM application_steps c WHERE c.application_ref = s.application_ref AND c.kind = 'cleared') " +
+      "AND ((p.id IS NOT NULL AND p.anonymised_at IS NOT NULL) " +
+      "  OR (a.id IS NOT NULL AND a.status IN ('not-adopted','withdrawn') AND a.decided_at < ?) " +
+      "  OR (p.id IS NULL AND a.id IS NULL)) LIMIT 500",
+    [before],
+  );
+  return rows.map((r: any) => String(r.application_ref));
+}
+
+/**
+ * A member is erased: the scorecards they wrote go, their recusals go, their
+ * name leaves every interview and step, and the review of any application they
+ * made is cleared. How many applications were cleared.
+ */
+export async function forgetMemberReview(db: Db, userId: string, at: Date): Promise<number> {
+  await db.query("DELETE FROM application_scores WHERE scorer_user_id = ?", [userId]);
+  await db.query("DELETE FROM application_recusals WHERE user_id = ?", [userId]);
+  await db.query("UPDATE application_interviews SET scorer_user_id = NULL WHERE scorer_user_id = ?", [userId]);
+  await db.query("UPDATE application_steps SET actor_user_id = NULL WHERE actor_user_id = ?", [userId]);
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT application_ref FROM application_steps WHERE kind = 'confirmed' AND JSON_UNQUOTE(JSON_EXTRACT(detail_json, '$.applicantUserId')) = ?",
+    [userId],
+  );
+  return clearReviewOf(db, rows.map((r: any) => String(r.application_ref)), at);
 }
 
 // ── Holders of a role, live ─────────────────────────────────────────────────

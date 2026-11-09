@@ -182,6 +182,7 @@ import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { forgetRoleTensionsFor } from "./roleTensions";
 import { forgetMemberProposals } from "../repos/roleProposals";
+import { forgetMemberReview } from "../repos/applicationReview";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -1452,6 +1453,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Scorecards, recusals and the review of an application the member made
+       * (role journey L5, migration 0364). They follow the application's
+       * retention, and a member's erasure ends it: the scores they wrote go, the
+       * review of their own application is cleared, and their name leaves every
+       * interview and step. What stays is which steps happened.
+       */
+      name: "application-review-after-tombstone",
+      run: async () => {
+        await forgetMemberReview(pool, target.id, new Date());
+      },
+    },
+    {
+      /*
        * Role proposals (0273): the member's drafts go, with the feedback on
        * them; a proposal they submitted loses its words and its link, since
        * the application keeps the record of what was decided; and feedback
@@ -2302,6 +2316,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "investor-fact-words-after-tombstone",
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
+  "application-review-after-tombstone",
   "role-proposals-after-tombstone",
   "seat-journal-after-tombstone",
   "seat-claims-after-tombstone",

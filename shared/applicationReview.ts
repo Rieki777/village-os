@@ -50,7 +50,7 @@ export function kindOfRef(ref: unknown): ApplicationKind | null {
 
 // ── The steps ───────────────────────────────────────────────────────────────
 
-export const STEP_KINDS = ["confirmed", "first_reply", "interview", "scores_in", "consent", "decided"] as const;
+export const STEP_KINDS = ["confirmed", "first_reply", "interview", "scores_in", "consent", "decided", "cleared"] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 export const STEP_WORDS: Record<StepKind, string> = {
@@ -60,6 +60,7 @@ export const STEP_WORDS: Record<StepKind, string> = {
   scores_in: "Conversations done",
   consent: "The circle's consent",
   decided: "Decision",
+  cleared: "Cleared",
 };
 
 // ── How the conversations are booked (D30) ──────────────────────────────────

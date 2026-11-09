@@ -30,7 +30,8 @@ import { reviewClockTick } from "../lib/applicationReview";
 import { loadVariables } from "../lib/variables";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
 import { usersRepo } from "../repos/users";
-import { register } from "./openProposals";
+import { register, tidyOpenProposals } from "./openProposals";
+import { forgetMemberReview } from "../repos/applicationReview";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[applicationReview] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
@@ -553,6 +554,66 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       const confirmedAt = Number((await q("SELECT UNIX_TIMESTAMP(stamped_at) AS s FROM application_steps WHERE application_ref = ? AND kind = 'confirmed'", [id]))[0].s) * 1000;
       await reviewClockTick(deps(new Date(confirmedAt + 5 * 24 * 60 * 60 * 1000)));
       expect(state.adminNotices.some((n) => n.key.startsWith(`app:${id}:reply`))).toBe(false);
+    });
+  });
+
+
+  describe("scores follow the application's retention", () => {
+    const left = async (id: string) => ({
+      scores: Number((await q("SELECT COUNT(*) AS n FROM application_scores WHERE application_ref = ?", [id]))[0].n),
+      scorers: (await q("SELECT scorer_user_id FROM application_interviews WHERE application_ref = ? AND scorer_user_id IS NOT NULL", [id])).length,
+      hash: String((await q("SELECT detail_json FROM application_steps WHERE application_ref = ? AND kind = 'confirmed'", [id]))[0].detail_json).includes("statusHash\":\""),
+    });
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it("clears scores, recusal reasons and the status link when the application is anonymised after 90 days, and leaves a younger one", async () => {
+      const old = await confirmed("old@example.test");
+      const young = await confirmed("young@example.test");
+      for (const id of [old.id, young.id]) {
+        await score(id, Number((await interviews(id))[0].id), IA.id);
+        await call("POST", `/api/governance/applications/${id}/recuse`, { reason: "I know them." }, IB.id);
+      }
+      expect(await left(old.id)).toMatchObject({ scores: 3, scorers: 1, hash: true });
+      await call("POST", `/api/governance/open-proposals/${old.id}/decline`, {}, FOUNDER.id);
+
+      // CONTROL: a day later nothing is old enough.
+      await tidyOpenProposals(pool, new Date(Date.now() + DAY));
+      expect((await left(old.id)).scores).toBe(3);
+      expect((await left(young.id)).scores).toBe(3);
+
+      await tidyOpenProposals(pool, new Date(Date.now() + 91 * DAY));
+      expect(await left(old.id)).toEqual({ scores: 0, scorers: 0, hash: false });
+      expect(await q("SELECT reason FROM application_recusals WHERE application_ref = ?", [old.id])).toEqual([{ reason: null }]);
+      expect(await stepKinds(old.id)).toContain("cleared");
+      // The shape of the review stays: which conversations happened.
+      expect((await interviews(old.id)).length).toBe(4);
+      // The one nobody decided expires at 90 days too (withdrawn, name and address off), and its review goes with it.
+      expect((await left(young.id)).scores).toBe(0);
+    });
+
+    it("clears the cards a member wrote, and the review of their own application, when they are erased", async () => {
+      const mine = await confirmed(APPLICANT.email);
+      const other = await confirmed("bystander@example.test");
+      await score(other.id, Number((await interviews(other.id))[0].id), IA.id);
+      await score(mine.id, Number((await interviews(mine.id))[0].id), IA.id);
+      await call("POST", `/api/governance/applications/${other.id}/recuse`, { reason: "Friends." }, IB.id);
+
+      // The scorer is erased: their cards go from both applications; the recusal of somebody else stays.
+      await forgetMemberReview(pool, IA.id, new Date());
+      expect((await left(other.id)).scores).toBe(0);
+      expect(await q("SELECT 1 FROM application_recusals WHERE application_ref = ? AND user_id = ?", [other.id, IB.id])).toHaveLength(1);
+
+      // CONTROL: a card by somebody still here is untouched by that erasure.
+      const third = await confirmed("third@example.test");
+      await score(third.id, Number((await interviews(third.id))[0].id), IA.id);
+      await forgetMemberReview(pool, IC.id, new Date());
+      expect((await left(third.id)).scores).toBe(3);
+
+      // The applicant is erased: the review of their application is cleared.
+      await score(mine.id, Number((await interviews(mine.id))[0].id), IA.id).catch(() => undefined);
+      expect(await forgetMemberReview(pool, APPLICANT.id, new Date())).toBe(1);
+      expect((await left(mine.id)).hash).toBe(false);
+      expect(await stepKinds(mine.id)).toContain("cleared");
     });
   });
 

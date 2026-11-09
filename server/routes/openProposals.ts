@@ -79,6 +79,7 @@ import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
 import { registerApplicationReview } from "./applicationReview";
+import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
 import { boolVar } from "../lib/variables";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
@@ -411,5 +412,7 @@ export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised`;
+  // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
+  const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised, ${cleared} reviews cleared`;
 }
