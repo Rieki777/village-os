@@ -3103,6 +3103,22 @@ export const VARIABLES: VariableDef[] = [
     max: 720,
     unit: "hours",
   },
+  /*
+   * THE ADMIN HELPER'S SWITCH (server/routes/adminHelper.ts, 2026-11-09).
+   * Ships OFF: AI touching a village's settings is the village's call, made by
+   * whoever governs AI use there, so the helper waits for that yes even after
+   * the key is set. The helper may never propose this dial itself
+   * (shared/adminHelper.ts).
+   */
+  {
+    key: "platform.admin_helper",
+    category: "Platform",
+    label: "The guide's helper in Admin",
+    description:
+      "Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It also needs the village's own Anthropic key on the server. Off until the village decides to use it.",
+    type: "boolean",
+    default: "false",
+  },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
   // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
