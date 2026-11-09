@@ -266,6 +266,7 @@ import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary"
 import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { register as registerClosingPolicyRoutes } from "./routes/closingPolicy";
+import { register as registerVillageBrainAdminRoutes } from "./routes/villageBrainAdmin";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
@@ -13037,78 +13038,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // always: nothing here is published, relayed, federated, or crawled, and
   // `server/lib/villageBrain.ts` carries the reasoning.
 
-  /** The whole brief plus the record's shape, for the admin editor. */
-  app.get("/api/admin/brain", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [filled, records] = await Promise.all([briefAll(getPool(), "admin"), recordSummaries(getPool())]);
-    const byId = new Map(filled.map((r) => [r.section, r]));
-    res.json({
-      // Every section, written or not. The blanks are the point: they are what
-      // lets the assistant raise a subject nobody has covered yet.
-      sections: BRIEF_SECTIONS.map((spec) => {
-        const row = byId.get(spec.id);
-        return {
-          id: spec.id,
-          title: spec.title,
-          audience: row?.audience ?? spec.audience,
-          feeds: spec.feeds,
-          ask: spec.ask,
-          minimum: !!spec.minimum,
-          status: row ? row.status : "blank",
-          source: row?.source ?? null,
-          body: row?.body ?? "",
-          confirmedBy: row?.confirmedBy ?? null,
-          revision: row?.revision ?? 0,
-          updatedAt: row?.updatedAt ?? null,
-        };
-      }),
-      record: records,
-      blanks: BRIEF_SECTIONS.filter((s) => !byId.has(s.id)).map((s) => s.id),
-    });
-  });
-
-  /** Write one section. Confirming is a separate, named act. */
-  app.put("/api/admin/brain/:section", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const section = String(req.params.section);
-    if (!BRIEF_BY_ID[section]) return res.status(400).json({ error: `no brief section called ${section}` });
-    const body = String(req.body?.body ?? "").trim();
-    if (body.length < 2) return res.status(400).json({ error: "A section needs something in it" });
-    if (body.length > 40000) return res.status(400).json({ error: "That section is too long to keep" });
-    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-    if (!actor) return res.status(401).json({ error: "auth_required", message: "Writing the brief needs a named admin" });
-    const row = await briefWrite(getPool(), {
-      section,
-      body,
-      audience: briefAudienceFromBody(req.body?.audience),
-      source: "admin",
-      confirmedBy: req.body?.confirm === false ? null : actor,
-    });
-    void recordEvent(getPool(), {
-      kind: "audit", text: `brain:write:${section}:r${row.revision}:${row.audience}`, actorUserId: actor,
-      entityType: "brain", entityRef: section, audience: "admin",
-    });
-    res.json({ success: true, section: row });
-  });
-
-  /** Confirm a section the assistant or the intake proposed. */
-  app.post("/api/admin/brain/:section/confirm", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const section = String(req.params.section);
-    const existing = await briefGet(getPool(), section, "admin");
-    if (!existing) return res.status(404).json({ error: "There is nothing written there yet" });
-    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-    if (!actor) return res.status(401).json({ error: "auth_required", message: "Confirming the brief needs a named admin" });
-    const row = await briefWrite(getPool(), {
-      section, body: existing.body, audience: existing.audience,
-      source: existing.source as any, confirmedBy: actor,
-    });
-    void recordEvent(getPool(), {
-      kind: "audit", text: `brain:confirm:${section}`, actorUserId: actor,
-      entityType: "brain", entityRef: section, audience: "admin",
-    });
-    res.json({ success: true, section: row });
-  });
+  // The editor's three doors (GET /api/admin/brain, PUT .../:section, POST .../:section/confirm)
+  // live in server/routes/villageBrainAdmin.ts: story.tell through the one gate for the
+  // shared sections (D2), the canvas admin pen for the four private ones (G.4).
+  registerVillageBrainAdminRoutes(app, { authedUser, isAdmin, getPool, capabilityCtx, guardCapability, liveHoldersOf });
 
   /**
    * The brain as markdown, for a human, for the assistant, and for any other
