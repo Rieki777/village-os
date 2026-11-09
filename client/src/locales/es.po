@@ -170,6 +170,11 @@ msgctxt "treasury sync"
 msgid "Your invoices"
 msgstr ""
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm a changed age band"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
@@ -294,6 +299,11 @@ msgstr ""
 msgid "Counted by one member, one vote. The count by Voice is shown beside it."
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Safety saved"
+msgstr ""
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a suggestion being sent"
 msgid "Sending…"
@@ -328,6 +338,11 @@ msgstr ""
 msgctxt "module library, builder section heading"
 msgid "Build a module"
 msgstr "Construye un módulo"
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Physical work on site"
+msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -480,6 +495,7 @@ msgctxt "module library, builder section"
 msgid "Copy it into the AI you build with, then add what your module should do."
 msgstr "Cópialo en la IA con la que construyes y luego añade lo que debe hacer tu módulo."
 
+#: client/src/components/admin/AgeBandCorrection.tsx
 #: client/src/components/QuestSafety.tsx
 #, fuzzy
 msgctxt "age band option"
@@ -526,6 +542,11 @@ msgstr ""
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the suggest form"
 msgid "Suggest a change"
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Badges a member needs"
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -707,6 +728,11 @@ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgid "The pot is open."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Safety note, shown as written"
 msgstr ""
 
 #. placeholder {0}: q.title
@@ -1162,6 +1188,7 @@ msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr ""
 
+#: client/src/components/admin/AgeBandCorrection.tsx
 #: client/src/components/QuestSafety.tsx
 #, fuzzy
 msgctxt "age band option"
@@ -1283,6 +1310,11 @@ msgstr "Próximo día de obra: {at}"
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
@@ -1429,6 +1461,12 @@ msgctxt "change request note outcome"
 msgid "Turned down"
 msgstr ""
 
+#. placeholder {0}: label[band]
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm {name}'s age band as {0}? The change is recorded with your name."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -1457,6 +1495,11 @@ msgstr ""
 #~ msgid "Skip to content"
 #~ msgstr "Ir al contenido"
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Age band confirmed"
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is withdrawn."
 msgstr ""
@@ -1467,6 +1510,11 @@ msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "That did not save. Try again."
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -1587,6 +1635,11 @@ msgctxt "quest safety, ask for the age band"
 msgid "Say your age band once. The village keeps the band, never your birth date."
 msgstr "Indica tu rango de edad una sola vez. La aldea guarda el rango, nunca tu fecha de nacimiento."
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Hours it takes"
+msgstr ""
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, joins two links"
 msgid "or"
@@ -1623,6 +1676,11 @@ msgstr "Tu siguiente paso"
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick a change to edit"
 msgid "Choose a change"
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Minimum age"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -1923,6 +1981,11 @@ msgctxt "quest safety, minimum age"
 msgid "Everyone on this quest is at least {minAge}."
 msgstr "Todas las personas en esta misión tienen al menos {minAge} años."
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Circle"
@@ -1994,6 +2057,7 @@ msgctxt "pricing desk"
 msgid "The village adopts them by vote"
 msgstr ""
 
+#: client/src/components/admin/AgeBandCorrection.tsx
 #: client/src/components/QuestSafety.tsx
 #, fuzzy
 msgctxt "age band option"
@@ -2405,6 +2469,11 @@ msgctxt "heading over a module's settings"
 msgid "Its settings"
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Save safety"
+msgstr ""
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Suggestion"
@@ -2590,6 +2659,11 @@ msgctxt "funding round stage"
 msgid "Seed"
 msgstr ""
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "That did not save. Try again."
+msgstr ""
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Pay settings adopted"
@@ -2655,6 +2729,11 @@ msgctxt "a page loading"
 msgid "Loading…"
 msgstr ""
 
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quest safety"
+msgid "Safety on site: age, badges and note"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick which change a note is about"
 msgid "Which change?"
@@ -2713,6 +2792,10 @@ msgstr ""
 msgctxt "next step box"
 msgid "Ask in {circle}"
 msgstr "Pregunta en {circle}"
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgid "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"

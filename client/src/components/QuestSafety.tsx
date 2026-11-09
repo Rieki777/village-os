@@ -22,6 +22,20 @@ interface Safety {
   safetyNote: string | null;
 }
 
+/** Read only what this card draws. A body of any other shape draws nothing, never a crash on the quest page. */
+function asSafety(d: unknown): Safety | null {
+  if (!d || typeof d !== "object") return null;
+  const o = d as Record<string, unknown>;
+  return {
+    physical: o.physical === true,
+    minAge: typeof o.minAge === "number" ? o.minAge : null,
+    requiredBadges: Array.isArray(o.requiredBadges)
+      ? o.requiredBadges.filter((b): b is { id: string; name: string } => !!b && typeof b === "object" && typeof (b as any).name === "string")
+      : [],
+    safetyNote: typeof o.safetyNote === "string" ? o.safetyNote : null,
+  };
+}
+
 export default function QuestSafety({ questId, signedIn }: { questId: string; signedIn: boolean }) {
   const { t } = useLingui();
   const [safety, setSafety] = useState<Safety | null>(null);
@@ -33,7 +47,7 @@ export default function QuestSafety({ questId, signedIn }: { questId: string; si
     let gone = false;
     gameFetch(`/api/game/quests/${encodeURIComponent(questId)}/safety`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => !gone && setSafety(d))
+      .then((d) => !gone && setSafety(asSafety(d)))
       .catch(() => !gone && setSafety(null));
     return () => {
       gone = true;

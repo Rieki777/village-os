@@ -704,7 +704,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
-      // An age band is a fact about a body (0351, build days): kept only to
+      // An age band is a fact about a body (0356, build days): kept only to
       // check a physical quest's minimum age, and nothing a departed member
       // could still be asked. It goes with them.
       name: "age-band",
