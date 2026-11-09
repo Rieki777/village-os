@@ -11,16 +11,13 @@
  * `recruiting` is the door and has always been a column: it is not asked.
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
+import { presentOrgRoleColumns } from "../repos/orgRoleColumns";
 import { JSON_PARAMETERS, PARAMETER_COLUMNS, PARAMETER_KEYS, readParameter, type ParameterKey } from "../../shared/roleParameters";
 
 /** The parameter keys whose column exists in `org_roles` now, `recruiting` aside. */
 export async function liveParameterKeys(db: Pool | PoolConnection): Promise<ParameterKey[]> {
   const keys = PARAMETER_KEYS.filter((k) => k !== "recruiting");
-  const [rows]: any = await db.query(
-    "SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'org_roles' AND COLUMN_NAME IN (?)", // module-review-ok: asks the database which columns exist, not a table's rows
-    [keys.map((k) => PARAMETER_COLUMNS[k])],
-  );
-  const have = new Set((rows as any[]).map((r) => String(r.c)));
+  const have = await presentOrgRoleColumns(db, keys.map((k) => PARAMETER_COLUMNS[k]));
   return keys.filter((k) => have.has(PARAMETER_COLUMNS[k]));
 }
 
