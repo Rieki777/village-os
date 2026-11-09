@@ -232,7 +232,7 @@ export async function decideProposal(
     sets.push("payload = ?");
     args.push(JSON.stringify(input.editedPayload));
     /*
-     * MARKED WHEN THE WORDS CHANGED (0350). The dedupe key hashes the words
+     * MARKED WHEN THE WORDS CHANGED (`a_sera_difference_is_answered`). The dedupe key hashes the words
      * folded to lower case, so a steward's change of capitals alone used to
      * pass for the service's own words, and the differences list traced its
      * base from them (spec T14a). Marked only when the edited payload is not
@@ -372,7 +372,7 @@ export async function rebatchWaiting(pool: Pool, id: string, batchId: string): P
  *
  * Answers how many waiting claims it retired, or null when nothing reopened.
  *
- * NEVER A ROW THE DIFFERENCES LIST RETIRED (0350, spec R28). Such a row carries
+ * NEVER A ROW THE DIFFERENCES LIST RETIRED (`a_sera_difference_is_answered`, spec R28). Such a row carries
  * a `retired_reason`: the list holds what it said, so bringing it back would put
  * the same change in front of a steward twice.
  */

@@ -84,7 +84,7 @@ export interface DifferencesRead {
   /** Every page id the newest read holds, as one key: an arrival is held in the list when all of its are here. */
   heldPageIds: string[];
   /**
-   * How each difference was answered (0350), read on every call outside the
+   * How each difference was answered (`a_sera_difference_is_answered`), read on every call outside the
    * cache, so an answer given a moment ago shows at once. Absent: nothing has
    * been answered, and the list is the engine's whole.
    */

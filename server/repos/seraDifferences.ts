@@ -88,11 +88,11 @@ export interface AcceptedProposalRow {
 /**
  * The proposals from `moduleId` accepted into these drafts UNTOUCHED: never
  * edited at accept (spec T14a). An accept that changed the words marks
- * `edited_at_accept` (0350), so a proposal whose capitals alone a steward fixed
+ * `edited_at_accept` (`a_sera_difference_is_answered`), so a proposal whose capitals alone a steward fixed
  * is left out here, and the change built from it has no base it could be
  * mistaken for.
  *
- * A row accepted before 0350 carries no mark whatever was done to it, so the
+ * A row accepted before that migration carries no mark whatever was done to it, so the
  * caller still checks that the payload hashes to the dedupe key it landed
  * under, and the engine still treats a base differing from the service's
  * value by capitals alone as unknown (shared/seraDifferences.ts

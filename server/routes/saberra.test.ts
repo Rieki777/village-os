@@ -179,7 +179,7 @@ vi.mock("../repos/seraDifferences", async (importOriginal) => ({
   // Nothing waits in the queue here, so a landing retires nothing (server/lib/saberraRetire.ts).
   waitingFromModule: async () => [],
 }));
-// Nothing answered and nothing linked yet (0350): the answers are held against a real schema in
+// Nothing answered and nothing linked yet (`a_sera_difference_is_answered`): the answers are held against a real schema in
 // server/lib/seraAnswer.test.ts.
 vi.mock("../repos/seraSettled", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../repos/seraSettled")>()),

@@ -1714,7 +1714,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * How they answered the outside service's differences (0350): the
+       * How they answered the outside service's differences (`a_sera_difference_is_answered`): the
        * answers and the page-id links stay as the village's record of what
        * was decided, and no longer say who gave them. Hashes and ids only, so
        * there are no words to clear (spec R27).
@@ -2276,7 +2276,7 @@ export const BACKFILL_LEAVES_OUT: Readonly<Record<string, string>> = {
   "alignment-names-after-tombstone":
     "it finds the member in other people's words by the name and handle the tombstone took, and a finished record holds neither",
   "sera-answers-after-tombstone":
-    "its two tables are new in 0350, so no member whose erasure finished before them can have answered there",
+    "its two tables are new in the a_sera_difference_is_answered migration, so no member whose erasure finished before them can have answered there",
   audit: "the sweep wrote its line when it finished, and a second would say the erasure happened twice",
   [EXTERNAL_STEP]: "the outside stores were asked when the sweep finished, and asking them again is the /review button's job",
 };

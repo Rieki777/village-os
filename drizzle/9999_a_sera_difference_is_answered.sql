@@ -1,4 +1,5 @@
--- 0350: a difference from the outside service is answered, and the old queue says why it went.
+-- 9999: a difference from the outside service is answered, and the old queue says why it went.
+-- 9999 is a placeholder: the integrator gives the real number at compose time.
 --
 -- WHAT THIS IS FOR.
 -- The review page lists the ways the outside service's chart and the live chart
