@@ -53,6 +53,7 @@ import {
   resolvePeriod,
   shareMoved,
   shareState,
+  lineShareOfMoon,
   sharedDays,
   whyNotCounted,
   type BudgetCategory,
@@ -82,6 +83,7 @@ import { recordEvent } from "./events";
 import { dailyRatesUrl, latestRates } from "./fxRates";
 import { activeClock, currentCycle } from "./gratitude-cycles";
 import { launchedByVote } from "./orgDraftDecide";
+import { stringVar } from "./variables";
 import { villageTimezone } from "./villageReaders";
 
 export { BY_VILLAGE_VOTE };
@@ -118,6 +120,8 @@ export interface BudgetEnv {
   holdsRolePay(userId: string): Promise<boolean>;
   /** Has the launch vote carried (`launchedByVote`). For `recheckSource`. */
   launched(pool: Pool): Promise<boolean>;
+  /** The `budgets.village_circle_id` setting (a game variable), "" when it is not set (R34). */
+  villageCircleSetting(): string;
   /**
    * The base still to set this moon, for the share in percent (R10). The
    * valuation lane owns it too; null until handed in, and then the preview
@@ -135,6 +139,13 @@ const DEFAULT_ENV: BudgetEnv = {
   // Fails closed: with nothing wired, nobody holds the power, so a re-check turns a source off.
   holdsRolePay: async () => false,
   launched: (pool) => launchedByVote(pool),
+  villageCircleSetting: () => {
+    try {
+      return stringVar("budgets.village_circle_id");
+    } catch {
+      return "";
+    }
+  },
   baseToSet: async () => null,
 };
 
@@ -205,6 +216,7 @@ export function rowToLine(r: RowDataPacket): StoredLine {
     fxAsOf: r.fx_as_of_text ? String(r.fx_as_of_text) : null,
     fxLockedBy: str(r.fx_locked_by),
     fxLockedAt: iso(r.fx_locked_at),
+    sourceVillageWide: Number(r.source_village_wide) === 1,
     prevPlannedMinor: r.prev_planned_minor === null || r.prev_planned_minor === undefined ? null : Number(r.prev_planned_minor),
     prevSeenAt: iso(r.prev_seen_at),
   };
@@ -216,7 +228,7 @@ const digest = (v: unknown): string => createHash("sha256").update(JSON.stringif
 const valueOf = (l: StoredLine) => [
   l.id, l.lineKey, l.source, l.sourceRef, l.sourceChangedAt, l.periodKind, l.periodKey, l.startsOn, l.endsOn, l.circleId, l.roleId,
   l.matched, l.category, l.plannedMinor, l.spentMinor, l.currency, l.label, l.sourceLabel, l.note, l.status, l.adoptedAt,
-  l.fxRate ?? null, l.fxSource ?? null, l.fxAsOf ?? null,
+  l.fxRate ?? null, l.fxSource ?? null, l.fxAsOf ?? null, !!l.sourceVillageWide,
 ];
 
 /** The budget as it stands, as one digest: what the figure names as its `revision` (R7). */
@@ -304,8 +316,18 @@ export interface ImportScope {
   whole?: boolean;
 }
 
+export interface ChartCircle {
+  id: string;
+  name: string;
+  isExample: boolean;
+  status: string;
+  layer: string | null;
+  parentCircleId: string | null;
+  sortOrder: number;
+}
+
 export interface BudgetChart {
-  circles: Array<{ id: string; name: string; isExample: boolean }>;
+  circles: ChartCircle[];
   roles: Array<{ id: string; name: string; circleId: string | null; active: boolean; isExample: boolean }>;
 }
 
@@ -381,7 +403,34 @@ export interface PlanInput {
   readAt: string;
   /** The role the writer acts through, for an adoption's `adopted_as`. */
   byAs: string | null;
+  /** The village's own circle (R34), where a line for the whole village sits; null when none resolves. */
+  villageCircleId: string | null;
 }
+
+/** Where the village's circle came from, for the page to say so (R34). */
+export type VillageCircleFrom = "setting" | "link" | "lead" | "root";
+
+/**
+ * THE VILLAGE'S OWN CIRCLE (R34): the `budgets.village_circle_id` setting when
+ * it names a circle that is not dormant, else the active circle whose
+ * governance layer is `link`, else `lead`, else the only circle with no
+ * parent. Null when none of those resolves. Example circles never count.
+ */
+export function villageCircleOf(circles: readonly ChartCircle[], setting: string): { id: string; from: VillageCircleFrom } | null {
+  const live = circles.filter((c) => !c.isExample);
+  const named = setting.trim() ? live.find((c) => c.id === setting.trim() && c.status !== "dormant") : undefined;
+  if (named) return { id: named.id, from: "setting" };
+  const active = live.filter((c) => c.status === "active");
+  const link = active.find((c) => c.layer === "link");
+  if (link) return { id: link.id, from: "link" };
+  const lead = active.find((c) => c.layer === "lead");
+  if (lead) return { id: lead.id, from: "lead" };
+  const roots = live.filter((c) => !c.parentCircleId);
+  return roots.length === 1 ? { id: roots[0].id, from: "root" } : null;
+}
+
+const NO_VILLAGE_CIRCLE =
+  "This row names no circle, and the village has no circle of its own to put it on. Name the circle, or set the village's circle (the budgets.village_circle_id setting, under Village in the game's settings).";
 
 /** A stored daily rate as a lock reads it: the rate (null past 14 days), its day and where it came from. */
 export interface ProviderRate {
@@ -493,10 +542,19 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
   let circleId = base?.circleId ?? null;
   let roleId = base?.roleId ?? null;
   let matched = base?.matched ?? true;
+  let sourceVillageWide = base?.sourceVillageWide ?? false;
   if (sera) {
     circleId = clean(row.circleId) || null;
     roleId = clean(row.roleId) || null;
     matched = row.matched !== false;
+    sourceVillageWide = false;
+    // A source's line that names no circle lands on the village's circle, marked so (R34); with no such circle it cannot count.
+    if (matched && circleId === null && roleId === null) {
+      if (input.villageCircleId) {
+        circleId = input.villageCircleId;
+        sourceVillageWide = true;
+      } else matched = false;
+    }
   } else if (!base || has(row.circle) || has(row.role) || has(row.circleId) || has(row.roleId)) {
     const circleText = has(row.circleId) ? row.circleId : has(row.circle) ? row.circle : base?.circleId ?? null;
     const roleText = has(row.roleId) ? row.roleId : has(row.role) ? row.role : base?.roleId ?? null;
@@ -505,6 +563,11 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
       circleId = s.circleId;
       roleId = s.roleId;
     } else refuse(s.cell, "scope", s.message);
+  }
+  // Every line that counts names a circle (R34): a row for the whole village goes on the village's circle.
+  if (!sera && circleId === null && !refused.some((r) => r.cell === "circle" || r.cell === "role")) {
+    if (input.villageCircleId) circleId = input.villageCircleId;
+    else refuse("circle", "no_village_circle", NO_VILLAGE_CIRCLE);
   }
 
   const sourceRef = sera ? clean(row.sourceRef) : base?.sourceRef ?? null;
@@ -531,6 +594,7 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
       circleId,
       roleId,
       matched,
+      sourceVillageWide,
       category,
       plannedMinor,
       spentMinor,
@@ -866,7 +930,9 @@ function withdrawByScope(input: PlanInput, listedKeys: string[], plan: ImportPla
     circles = new Set();
     for (const c of input.scope.circles) {
       if (c === null || clean(c) === "") {
+        // Village-wide is the village's own circle now (R34); a line with no circle reads the same.
         circles.add(null);
+        if (input.villageCircleId) circles.add(input.villageCircleId);
         continue;
       }
       const s = matchScope(c, null, input.chart);
@@ -1007,10 +1073,26 @@ export async function committedFor(db: Pool | PoolConnection, moonId: string, e:
 
 // ── The figure (R7) ─────────────────────────────────────────────────────────
 
-function figureFor(lines: readonly StoredLine[], moonId: string, committed: CommittedParts, e: BudgetEnv): CashBudgetLeft | null {
+function figureFor(lines: readonly StoredLine[], moonId: string, committed: CommittedParts, e: BudgetEnv, villageCircleId: string | null): CashBudgetLeft | null {
   const moon = moonPeriod(moonId, e.timezone());
   if (!moon) return null;
-  return budgetFigure(lines, { id: moonId, startsOn: moon.startsOn, endsOn: moon.endsOn, days: moon.days }, e.currency() || null, committed, stateRevision(lines));
+  return budgetFigure(lines, { id: moonId, startsOn: moon.startsOn, endsOn: moon.endsOn, days: moon.days }, e.currency() || null, committed, stateRevision(lines), villageCircleId);
+}
+
+const chartCircleOf = (c: RowDataPacket): ChartCircle => ({
+  id: String(c.id),
+  name: String(c.name ?? ""),
+  isExample: Number(c.is_example) === 1,
+  status: String(c.status ?? "active"),
+  layer: str(c.layer),
+  parentCircleId: str(c.parent_circle_id),
+  sortOrder: Number(c.sort_order) || 0,
+});
+
+/** The village's circle as the chart and the setting say today (R34). */
+export async function budgetVillageCircle(pool: Pool | PoolConnection, over: Partial<BudgetEnv> = {}): Promise<{ id: string; from: VillageCircleFrom } | null> {
+  const e = { ...env, ...over };
+  return villageCircleOf((await repo.budgetChartRows(pool)).circles.map(chartCircleOf), e.villageCircleSetting());
 }
 
 /**
@@ -1024,7 +1106,7 @@ export async function cashBudgetLeft(pool: Pool, moonId: string, over: Partial<B
   const e = { ...env, ...over };
   if (!moonPeriod(moonId, e.timezone())) return null;
   const lines = (await repo.budgetLineRows(pool)).map(rowToLine);
-  return figureFor(lines, moonId, await committedFor(pool, moonId, e), e);
+  return figureFor(lines, moonId, await committedFor(pool, moonId, e), e, (await budgetVillageCircle(pool, e))?.id ?? null);
 }
 
 /** Each circle's name by id, for the moon's plan per circle (R31). */
@@ -1241,7 +1323,7 @@ function moonsOf(l: Pick<StoredLine, "startsOn" | "endsOn">): string[] {
 }
 
 /** What an import moves (R18): each line's planned amount and each touched moon's counted total, before and after. */
-function changesOf(p: { existing: StoredLine[]; after: StoredLine[]; plan: ImportPlan }, village: string, timezone: string): { lineChanges: LineChange[]; moonChanges: MoonChange[]; swing: boolean } {
+function changesOf(p: { existing: StoredLine[]; after: StoredLine[]; plan: ImportPlan; villageCircleId: string | null }, village: string, timezone: string): { lineChanges: LineChange[]; moonChanges: MoonChange[]; swing: boolean } {
   const lineChanges: LineChange[] = p.plan.writes
     .filter((w) => w.before && w.op !== "withdraw" && w.before.plannedMinor !== w.line.plannedMinor)
     .map((w) => ({
@@ -1267,8 +1349,8 @@ function changesOf(p: { existing: StoredLine[]; after: StoredLine[]; plan: Impor
       const m = moonPeriod(id, timezone);
       if (!m) return;
       const span = { id, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days };
-      const beforeMinor = moonPlan(p.existing, span, village || null).totalMinor;
-      const afterMinor = moonPlan(p.after, span, village || null).totalMinor;
+      const beforeMinor = moonPlan(p.existing, span, village || null, p.villageCircleId).totalMinor;
+      const afterMinor = moonPlan(p.after, span, village || null, p.villageCircleId).totalMinor;
       if (beforeMinor === afterMinor) return;
       moonChanges.push({ moonId: id, beforeMinor, afterMinor, pct: pctOf(beforeMinor, afterMinor), swing: swingOf(beforeMinor, afterMinor) });
     });
@@ -1277,6 +1359,7 @@ function changesOf(p: { existing: StoredLine[]; after: StoredLine[]; plan: Impor
 
 interface Prepared {
   timezone: string;
+  villageCircleId: string | null;
   village: string;
   sourceLabel: string | null;
   sourceLink: string | null;
@@ -1293,10 +1376,11 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   const existing = (await repo.budgetLineRows(db)).map(rowToLine);
   const chartRows = await repo.budgetChartRows(db);
   const chart: BudgetChart = {
-    circles: chartRows.circles.map((c) => ({ id: String(c.id), name: String(c.name ?? ""), isExample: Number(c.is_example) === 1 })),
+    circles: chartRows.circles.map(chartCircleOf),
     roles: chartRows.roles.map((r) => ({ id: String(r.id), name: String(r.name ?? ""), circleId: str(r.circle_id), active: Number(r.active) === 1, isExample: Number(r.is_example) === 1 })),
   };
   const names = budgetNameCheck(await rosterRows(db as Pool));
+  const villageCircleId = villageCircleOf(chart.circles, e.villageCircleSetting())?.id ?? null;
   const villageCurrency = e.currency();
   const readAt = new Date().toISOString();
   const today = civilDateKey(new Date(), e.timezone());
@@ -1322,6 +1406,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     standing,
     readAt,
     byAs: input.byAs,
+    villageCircleId,
   });
   const own = sourceProblems(input, names);
   plan.refused.unshift(...own.refused);
@@ -1334,6 +1419,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   const state = stateRevision(existing);
   return {
     timezone: e.timezone(),
+    villageCircleId,
     village: villageCurrency,
     sourceLabel: own.label,
     sourceLink: own.link,
@@ -1342,8 +1428,8 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     after,
     stateRevision: state,
     revision: digest([state, planDigest(plan, readAt)]),
-    shareBefore: shareState(moonId, figureFor(existing, moonId, committed, e), base),
-    shareAfter: shareState(moonId, figureFor(after, moonId, committed, e), base),
+    shareBefore: shareState(moonId, figureFor(existing, moonId, committed, e, villageCircleId), base),
+    shareAfter: shareState(moonId, figureFor(after, moonId, committed, e, villageCircleId), base),
   };
 }
 
@@ -1469,6 +1555,7 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
         fxLockedAt: line.fxLockedAt ? new Date(line.fxLockedAt) : null,
         prevPlannedMinor: line.prevPlannedMinor ?? null,
         prevSeenAt: line.prevSeenAt ? new Date(line.prevSeenAt) : null,
+        sourceVillageWide: !!line.sourceVillageWide,
       };
       if (w.op === "add") await repo.insertBudgetLine(conn, row);
       else await repo.updateBudgetLine(conn, row);
@@ -1565,13 +1652,14 @@ export async function budgetAhead(pool: Pool, fromMoonId: string, count: number,
   const changedAt = new Map(lines.map((l) => [l.id, l.changedAt]));
   const village = e.currency().toUpperCase() || null;
   const current = e.currentMoonId();
+  const villageCircleId = (await budgetVillageCircle(pool, e))?.id ?? null;
   const ids = Array.from({ length: n }, (_, i) => boundsForNumber(parsed.cycleNumber! + i).id);
   const notes = new Map((await repo.periodNoteRows(pool, ids)).map((r) => [String(r.period_key), noteOf(r)]));
   const moons: AheadMoon[] = [];
   for (const id of ids) {
     const m = moonPeriod(id, e.timezone());
     if (!m) continue;
-    const plan = moonPlan(lines, { id, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days }, village);
+    const plan = moonPlan(lines, { id, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days }, village, villageCircleId);
     const plannedAsOf = plan.lineIds.map((x) => changedAt.get(x) ?? null).filter((x): x is string => !!x).sort().pop() ?? null;
     const note = notes.get(id);
     moons.push({
@@ -1585,6 +1673,196 @@ export async function budgetAhead(pool: Pool, fromMoonId: string, count: number,
     });
   }
   return { currentMoonId: current, villageCurrency: village, moons };
+}
+
+// ── A circle's envelope (R35) and the circles view (R31) ────────────────────
+
+export interface BudgetEnvelope {
+  circleId: string;
+  periodKind: PeriodKind;
+  periodKey: string;
+  startsOn: string;
+  endsOn: string;
+  plannedMinor: number;
+  currency: string;
+  goalNote: string | null;
+  changedAt: string | null;
+  /** An account id. The read route names `changedAs` and never this. */
+  changedBy: string | null;
+  changedAs: string | null;
+}
+
+const envelopeOf = (r: RowDataPacket): BudgetEnvelope => ({
+  circleId: String(r.circle_id),
+  periodKind: r.period_kind,
+  periodKey: String(r.period_key),
+  startsOn: String(r.starts_on_text ?? r.starts_on).slice(0, 10),
+  endsOn: String(r.ends_on_text ?? r.ends_on).slice(0, 10),
+  plannedMinor: Number(r.planned_minor),
+  currency: String(r.currency),
+  goalNote: str(r.goal_note),
+  changedAt: iso(r.changed_at),
+  changedBy: str(r.changed_by),
+  changedAs: str(r.changed_as),
+});
+
+export async function budgetEnvelopes(pool: Pool): Promise<BudgetEnvelope[]> {
+  return (await repo.budgetEnvelopeRows(pool)).map(envelopeOf);
+}
+
+/** The longest goal note an envelope keeps (R35). */
+export const GOAL_NOTE_MAX = 500;
+
+/** What an envelope allows over a span: whole for its own period, else floored by the days they share, the way a line is. */
+export function envelopeShare(env_: Pick<BudgetEnvelope, "periodKind" | "periodKey" | "startsOn" | "endsOn" | "plannedMinor">, span: { id: string; startsOn: string; endsOn: string; days: number }): number {
+  return lineShareOfMoon(env_, span).countedMinor;
+}
+
+export type EnvelopeResult =
+  | {
+      ok: true;
+      written: boolean;
+      revision: string;
+      before: Omit<BudgetEnvelope, "changedBy"> | null;
+      after: Pick<BudgetEnvelope, "circleId" | "periodKind" | "periodKey" | "startsOn" | "endsOn" | "plannedMinor" | "currency" | "goalNote">;
+      /** What the circle's lines that count plan over the envelope's period (all categories). */
+      circlePlannedMinor: number;
+      /** The lines pass the envelope: a warning, never a block (R35). */
+      over: boolean;
+    }
+  | { ok: false; status: 400 | 404 | 409; code: string; message: string };
+
+/**
+ * A CIRCLE'S ENVELOPE (R35): what a circle may plan for a period, in the
+ * village's currency, with a goal note checked for names (R15). Set through
+ * the R21 door, which the caller has already passed; previewed with the
+ * circle's lines measured against it, bound by revision, recorded. The moon's
+ * figure still counts lines, never envelopes.
+ */
+export async function setEnvelope(
+  pool: Pool,
+  input: { circleId: string; period: string; planned: string | number; goalNote: string | null; format?: NumberFormatChoice; by: string | null; byAs: string | null; dryRun: boolean; revision?: string | null },
+): Promise<EnvelopeResult> {
+  const e = env;
+  const chart = await repo.budgetChartRows(pool);
+  const circle = chart.circles.map(chartCircleOf).find((c) => c.id === input.circleId && !c.isExample);
+  if (!circle) return { ok: false, status: 404, code: "no_circle", message: "There is no circle by that id on the chart." };
+  const p = resolvePeriod(input.period, periodEnvOf(e));
+  if (!p.ok) return { ok: false, status: 400, code: "period", message: p.message };
+  const village = e.currency().toUpperCase();
+  if (!village) return { ok: false, status: 400, code: "no_currency", message: "This village has no currency set yet, and an envelope is set in it." };
+  const amount = readAmount(input.planned, village, input.format ?? { locale: "en", chosen: false });
+  if (!amount.ok) return { ok: false, status: 400, code: amount.reason, message: amount.message };
+  const goalNote = String(input.goalNote ?? "").normalize("NFC").trim() || null;
+  if (goalNote && Array.from(goalNote).length > GOAL_NOTE_MAX) return { ok: false, status: 400, code: "too_long", message: `Keep what this budget is for to ${GOAL_NOTE_MAX} characters.` };
+  if (goalNote) {
+    const find = budgetNameCheck(await rosterRows(pool))(goalNote);
+    if (find?.kind === "refused") return { ok: false, status: 400, code: `name_${find.what}`, message: nameFindWords(find) };
+    if (find?.kind === "held") return { ok: false, status: 400, code: "names_held", message: nameFindWords(find) };
+  }
+  const existing = (await budgetEnvelopes(pool)).find((x) => x.circleId === circle.id && x.periodKey === p.period.key) ?? null;
+  const after = { circleId: circle.id, periodKind: p.period.kind, periodKey: p.period.key, startsOn: p.period.startsOn, endsOn: p.period.endsOn, plannedMinor: amount.minor, currency: village, goalNote };
+  const lines = (await repo.budgetLineRows(pool)).map(rowToLine);
+  const span = { id: p.period.key, startsOn: p.period.startsOn, endsOn: p.period.endsOn, days: daysInclusive(p.period.startsOn, p.period.endsOn) };
+  const villageCircleId = villageCircleOf(chart.circles.map(chartCircleOf), e.villageCircleSetting())?.id ?? null;
+  const circlePlannedMinor = moonPlan(lines, span, village, villageCircleId).byCircle.find((c) => c.circleId === circle.id)?.totalMinor ?? 0;
+  const before = existing ? (({ changedBy: _changedBy, ...rest }) => rest)(existing) : null;
+  const revision = digest([before, after, stateRevision(lines)]);
+  const out = { ok: true as const, written: false, revision, before, after, circlePlannedMinor, over: circlePlannedMinor > amount.minor };
+  if (input.dryRun) return out;
+  if (input.revision !== revision) return { ok: false, status: 409, code: "stale", message: "The envelope or the circle's lines changed since this preview. Read the fresh preview, then confirm again." };
+  await repo.upsertBudgetEnvelope(pool, { ...after, changedBy: input.by, changedAs: input.byAs });
+  void recordEvent(pool, { kind: "audit", text: `budget:envelope:${circle.id}:${p.period.key}`, actorUserId: input.by, entityType: "budget_envelope", entityRef: `${circle.id}:${p.period.key}`, audience: "admin" });
+  return { ...out, written: true };
+}
+
+export interface CircleView {
+  id: string;
+  name: string;
+  parentCircleId: string | null;
+  sortOrder: number;
+  status: string;
+  layer: string | null;
+  /** A dormant circle holds nothing; the page folds it under "Dormant circles" (R31). */
+  dormant: boolean;
+  /** The village's own circle (R34). */
+  village: boolean;
+  /** All categories, from the lines that count, for the moon. */
+  plannedMinor: number;
+  byCategory: Record<BudgetCategory, number>;
+  /** The circle's envelope for this moon: whole for the moon's own, else floored by shared days. */
+  envelope: (Omit<BudgetEnvelope, "changedBy"> & { forMoonMinor: number }) | null;
+  /** The lines pass the envelope: a warning only (R35). Null with no envelope. */
+  over: boolean | null;
+  /** Cash owed for this moon's work in this circle. The route shows it only to cash.pay holders (R23). */
+  committedMinor: number;
+}
+
+/**
+ * THE CIRCLES VIEW (R31): every circle the chart carries, examples left out,
+ * in `sort_order` with its parent so the page nests it like the chart; each
+ * with what its lines that count plan this moon, its envelope, whether the
+ * lines pass it, and the cash owed for its work this moon (role rows by their
+ * role's or seat's circle; a quest or proposal row names no circle and is
+ * counted apart as `unplacedCommittedMinor`).
+ */
+export async function budgetCircles(pool: Pool, moonId: string, over: Partial<BudgetEnv> = {}): Promise<{ moonId: string; villageCircleId: string | null; circles: CircleView[]; unplacedCommittedMinor: number } | null> {
+  const e = { ...env, ...over };
+  const m = moonPeriod(moonId, e.timezone());
+  if (!m) return null;
+  const span = { id: moonId, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days };
+  const chart = await repo.budgetChartRows(pool);
+  const circles = chart.circles.map(chartCircleOf).filter((c) => !c.isExample);
+  const villageCircleId = villageCircleOf(circles, e.villageCircleSetting())?.id ?? null;
+  const village = e.currency().toUpperCase() || null;
+  const plan = moonPlan((await repo.budgetLineRows(pool)).map(rowToLine), span, village, villageCircleId);
+  const envelopes = (await budgetEnvelopes(pool)).filter((x) => sharedDays(x, span) > 0);
+  // Cash owed this moon, placed on a circle through the role or the seat it was owed against.
+  const roleCircle = new Map(chart.roles.map((r) => [String(r.id), str(r.circle_id)]));
+  const seatRole = new Map(chart.seatings.map((s) => [String(s.id), String(s.org_role_id)]));
+  const committed = new Map<string, number>();
+  let unplacedCommittedMinor = 0;
+  const at = moonInstants(moonId);
+  if (at && village) {
+    for (const r of await repo.cashOwedForMoon(pool, cashKeys.role(moonId, "", "").slice(0, -1), at.startsAt, at.endsAt)) {
+      if (String(r.currency).toUpperCase() !== village) continue;
+      if (r.work_kind === "role") {
+        const k = decodeRoleKey(String(r.occurrence_key));
+        if (!k || k.cycle !== moonId) continue;
+        const ref = String(r.work_ref);
+        const circle = roleCircle.get(ref) ?? roleCircle.get(seatRole.get(ref) ?? "") ?? null;
+        if (circle) committed.set(circle, (committed.get(circle) ?? 0) + Number(r.amount_minor));
+        else unplacedCommittedMinor += Number(r.amount_minor);
+      } else unplacedCommittedMinor += Number(r.amount_minor);
+    }
+  }
+  const zero = { role_pay: 0, quest_pay: 0, materials: 0, other: 0 };
+  return {
+    moonId,
+    villageCircleId,
+    unplacedCommittedMinor,
+    circles: circles.map((c) => {
+      const p = plan.byCircle.find((x) => x.circleId === c.id);
+      const own = envelopes.find((x) => x.circleId === c.id && x.periodKey === moonId) ?? envelopes.find((x) => x.circleId === c.id) ?? null;
+      const envelope = own ? (({ changedBy: _changedBy, ...rest }) => ({ ...rest, forMoonMinor: envelopeShare(own, span) }))(own) : null;
+      const plannedMinor = p?.totalMinor ?? 0;
+      return {
+        id: c.id,
+        name: c.name,
+        parentCircleId: c.parentCircleId,
+        sortOrder: c.sortOrder,
+        status: c.status,
+        layer: c.layer,
+        dormant: c.status === "dormant",
+        village: c.id === villageCircleId,
+        plannedMinor,
+        byCategory: p?.byCategory ?? { ...zero },
+        envelope,
+        over: envelope ? plannedMinor > envelope.forMoonMinor : null,
+        committedMinor: committed.get(c.id) ?? 0,
+      };
+    }),
+  };
 }
 
 // ── A source's standing switch (v0.4, R18) ─────────────────────────────────

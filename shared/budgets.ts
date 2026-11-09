@@ -308,6 +308,8 @@ export interface FigureLine {
   /** Who locked it. An account id: the read route names the role instead, never the id. */
   fxLockedBy?: string | null;
   fxLockedAt?: string | null;
+  /** A source's line that named no circle and landed on the village's circle (R34). */
+  sourceVillageWide?: boolean;
 }
 
 // ── A locked rate (spec 5a, option b) ───────────────────────────────────────
@@ -440,23 +442,25 @@ export type DropReason = "village_line" | "circle_line";
 
 /**
  * PRECEDENCE, by moon and scope, never by period key (R4). Among the lines
- * that count and touch this moon, per category: a village-wide line from the
- * village's own people (an upload or a hand line) drops every line the
- * library sent in that category; a circle line of theirs drops the library's
- * lines for that circle.
+ * that count and touch this moon, per category: a line from the village's own
+ * people (an upload or a hand line) on the VILLAGE'S CIRCLE (R34, where a line
+ * for the whole village sits; a line with no circle reads the same) drops
+ * every line a source sent in that category; a line of theirs on another
+ * circle drops the source's lines for that circle.
  */
-export function precedence(lines: readonly FigureLine[]): { kept: FigureLine[]; dropped: Array<{ id: string; by: DropReason }> } {
+export function precedence(lines: readonly FigureLine[], villageCircleId: string | null = null): { kept: FigureLine[]; dropped: Array<{ id: string; by: DropReason }> } {
+  const villageWide = (l: FigureLine) => l.roleId === null && (l.circleId === null || l.circleId === villageCircleId);
   const dropped = new Map<string, DropReason>();
   for (const category of BUDGET_CATEGORIES) {
     const inCat = lines.filter((l) => l.category === category);
     const own = inCat.filter((l) => l.source !== "sera");
     const sera = inCat.filter((l) => l.source === "sera");
     if (!sera.length) continue;
-    if (own.some((l) => l.circleId === null && l.roleId === null)) {
+    if (own.some(villageWide)) {
       for (const l of sera) dropped.set(l.id, "village_line");
       continue;
     }
-    const circles = new Set(own.filter((l) => l.circleId !== null && l.roleId === null).map((l) => l.circleId));
+    const circles = new Set(own.filter((l) => l.circleId !== null && l.roleId === null && !villageWide(l)).map((l) => l.circleId));
     for (const l of sera) if (l.circleId !== null && circles.has(l.circleId)) dropped.set(l.id, "circle_line");
   }
   return { kept: lines.filter((l) => !dropped.has(l.id)), dropped: Array.from(dropped, ([id, by]) => ({ id, by })) };
@@ -541,6 +545,7 @@ export function budgetFigure(
   villageCurrency: string | null,
   committed: CommittedParts,
   revision: string,
+  villageCircleId: string | null = null,
 ): CashBudgetLeft | null {
   const touching = lines.filter((l) => CASH_CATEGORIES.includes(l.category) && sharedDays(l, moon) > 0);
   const notCounted: FigureWorking["notCounted"] = [];
@@ -551,7 +556,7 @@ export function budgetFigure(
     else if (l.status !== "withdrawn") notCounted.push({ id: l.id, reason: why, currency: l.currency });
   }
   if (!villageCurrency || counting.length === 0) return null;
-  const { kept, dropped } = precedence(counting);
+  const { kept, dropped } = precedence(counting, villageCircleId);
   const workingLines: FigureWorkingLine[] = kept.map((l) => {
     // Converted first, then pro-rated (spec 5a: "pro-rating applies after conversion").
     const convertedMinor = inVillageCurrency(l, villageCurrency)!;
@@ -595,12 +600,12 @@ export interface MoonPlan {
  * rate and pro-rated after conversion. The same arithmetic the figure uses,
  * so its role pay and quest pay are the figure's planned amount.
  */
-export function moonPlan(lines: readonly FigureLine[], moon: MoonSpan, villageCurrency: string | null): MoonPlan {
+export function moonPlan(lines: readonly FigureLine[], moon: MoonSpan, villageCurrency: string | null, villageCircleId: string | null = null): MoonPlan {
   const out: MoonPlan = { moonId: moon.id, byCategory: zeroByCategory(), cashPlannedMinor: 0, totalMinor: 0, byCircle: [], lineIds: [] };
   if (!villageCurrency) return out;
   const counting = lines.filter((l) => sharedDays(l, moon) > 0 && whyNotCounted(l, villageCurrency) === null);
   const circles = new Map<string, MoonPlan["byCircle"][number]>();
-  for (const l of precedence(counting).kept) {
+  for (const l of precedence(counting, villageCircleId).kept) {
     const minor = lineShareOfMoon({ ...l, plannedMinor: inVillageCurrency(l, villageCurrency)! }, moon).countedMinor;
     if (minor > 0) out.lineIds.push(l.id);
     out.byCategory[l.category] += minor;

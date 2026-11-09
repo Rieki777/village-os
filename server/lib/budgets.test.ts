@@ -32,7 +32,10 @@ import {
   budgetSource,
   budgetAhead,
   budgetRateDrift,
+  budgetCircles,
+  budgetEnvelopes,
   budgetSourceState,
+  setEnvelope,
   recheckSource,
   switchBudgetSource,
   cashSetThisMoonUnowedNotYetAgreed,
@@ -86,6 +89,8 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     await usersRepo(pool).add({ id: "u-wren", name: "Wren Halloway", handle: "wrenh", email: "wren@example.test", passwordHash: "x", paths: [] } as any);
     await usersRepo(pool).add({ id: "u-ana", name: "Anabel Quintero", email: "anabel@example.test", passwordHash: "x", paths: [] } as any);
     await q("INSERT INTO circles (id, name) VALUES ('c-garden', 'Garden'), ('c-kitchen', 'Kitchen'), ('c-twin-1', 'Twins'), ('c-twin-2', 'Twins')");
+    // The village's own circle (R34): the chart's link circle, where a line for the whole village sits.
+    await q("INSERT INTO circles (id, name, layer) VALUES ('c-village', 'The Village', 'link')");
     await createOrgRole(pool, { id: "r-gardener", name: "Gardener", circleId: "c-garden", seats: 1 });
     await createOrgRole(pool, { id: "r-cook", name: "Cook", circleId: "c-kitchen", seats: 1 });
   }, 180_000);
@@ -97,7 +102,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates", "budget_period_notes", "budget_sources"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates", "budget_period_notes", "budget_sources", "budget_envelopes"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     configureBudgets({
       currency: () => "CRC",
@@ -645,6 +650,90 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     await sourceOn("auto", null);
     expect(await recheckSource(pool, "sera")).toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("left") });
     await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = 'budget:source:sera:turned-off'"))[0].n).toBe(3), { timeout: 3000 });
+  });
+
+  // ── Circle is the key, envelopes, the circles view (v0.5, R31, R34, R35) ──
+
+  it("puts a row that names no circle on the village's circle: the setting, else the chart's link circle, its lead circle, or its one root, and refuses it naming the setting when none resolves", async () => {
+    const circleOf = async () => (await upload([row()])).added[0]?.circleId ?? null;
+    expect(await circleOf(), "the link circle").toBe("c-village");
+    configureBudgets({ villageCircleSetting: () => "c-kitchen" });
+    expect(await circleOf(), "the setting wins").toBe("c-kitchen");
+    configureBudgets({ villageCircleSetting: () => "" });
+    try {
+      await q("UPDATE circles SET layer = 'lead' WHERE id = 'c-village'");
+      expect(await circleOf(), "the lead circle").toBe("c-village");
+      await q("UPDATE circles SET layer = NULL WHERE id = 'c-village'");
+      const none = await upload([row()]);
+      expect(none.refused.map((r) => [r.cell, r.reason])).toEqual([["circle", "no_village_circle"]]);
+      expect(none.refused[0].message).toContain("budgets.village_circle_id");
+      await q("UPDATE circles SET parent_circle_id = 'c-village' WHERE id <> 'c-village'");
+      expect(await circleOf(), "the one circle with no parent").toBe("c-village");
+    } finally {
+      await q("UPDATE circles SET layer = 'link', parent_circle_id = NULL WHERE id = 'c-village'");
+      await q("UPDATE circles SET parent_circle_id = NULL WHERE id <> 'c-village'");
+    }
+  });
+
+  it("lands a source's line that names no circle on the village's circle, marked village-wide in the source, and no counted line lacks a circle", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("auto");
+    await sync([seraRow(), seraRow({ sourceRef: "rec-un", label: "Elsewhere", matched: false, circleId: null })]);
+    await confirm({ lines: [row({ label: "Village pay" }), row({ label: "Kitchen pay", circle: "Kitchen" }), row({ label: "Cook pay", role: "Cook" })] });
+    const all = await q("SELECT label, circle_id, matched, source_village_wide FROM budget_lines ORDER BY label");
+    expect(all).toEqual([
+      { label: "Cook pay", circle_id: "c-kitchen", matched: 1, source_village_wide: 0 },
+      { label: "Elsewhere", circle_id: null, matched: 0, source_village_wide: 0 },
+      { label: "Kitchen pay", circle_id: "c-kitchen", matched: 1, source_village_wide: 0 },
+      { label: "Library pay", circle_id: "c-village", matched: 1, source_village_wide: 1 },
+      { label: "Village pay", circle_id: "c-village", matched: 1, source_village_wide: 0 },
+    ]);
+    // R34's pin: every line that counts names a circle; only an unmatched source line has none.
+    const f = (await cashBudgetLeft(pool, MOON))!;
+    const counted = new Set(f.working.lines.map((l) => l.id));
+    for (const l of await q("SELECT id, circle_id, matched FROM budget_lines")) {
+      if (counted.has(l.id)) expect(l.circle_id, l.id).not.toBeNull();
+      if (l.circle_id === null) expect(l.matched).toBe(0);
+    }
+    // The village's own line on its circle drops the source's line there, as village-wide did (R4).
+    expect(f.working.dropped.map((d) => d.by)).toEqual(["village_line"]);
+  });
+
+  it("sets a circle's envelope through a preview bound by revision, checks its goal note for names, and measures the circle's lines against it", async () => {
+    await confirm({ lines: [row({ label: "Kitchen pay", circle: "Kitchen", planned: "500" }), row({ label: "Kitchen tools", circle: "Kitchen", category: "materials", planned: "200" })] });
+    const base = { circleId: "c-kitchen", period: MOON, planned: "600", goalNote: "Two cooks for the harvest moon", format: EN, by: "u-treasurer", byAs: "Treasury" };
+    const p = await setEnvelope(pool, { ...base, dryRun: true });
+    expect(p).toMatchObject({ ok: true, written: false, after: { plannedMinor: 60_000 }, circlePlannedMinor: 70_000, over: true });
+    expect(await budgetEnvelopes(pool), "a preview writes nothing").toEqual([]);
+    expect(await setEnvelope(pool, { ...base, dryRun: false, revision: "old" })).toMatchObject({ ok: false, status: 409, code: "stale" });
+    expect(await setEnvelope(pool, { ...base, dryRun: false, revision: (p as any).revision })).toMatchObject({ ok: true, written: true });
+    expect(await budgetEnvelopes(pool)).toEqual([expect.objectContaining({ circleId: "c-kitchen", periodKey: MOON, plannedMinor: 60_000, currency: "CRC", goalNote: "Two cooks for the harvest moon", changedBy: "u-treasurer", changedAs: "Treasury" })]);
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = ?", [`budget:envelope:c-kitchen:${MOON}`]))[0].n).toBe(1), { timeout: 3000 });
+    expect(await setEnvelope(pool, { ...base, goalNote: "For Wren Halloway", dryRun: true })).toMatchObject({ ok: false, code: "name_full_name" });
+    expect(await setEnvelope(pool, { ...base, goalNote: "x".repeat(501), dryRun: true })).toMatchObject({ ok: false, code: "too_long" });
+    expect(await setEnvelope(pool, { ...base, circleId: "c-nowhere", dryRun: true })).toMatchObject({ ok: false, status: 404 });
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "the figure still counts lines, never envelopes").toBe(50_000);
+  });
+
+  it("reads every circle from the chart, dormant ones marked, with planned, its envelope, over, and committed per circle", async () => {
+    await q("INSERT INTO circles (id, name, status, parent_circle_id, sort_order) VALUES ('c-old', 'Old', 'dormant', 'c-village', 9) ON DUPLICATE KEY UPDATE status = 'dormant'");
+    try {
+      await confirm({ lines: [row({ label: "Gardener pay", circle: "Garden", role: "Gardener", planned: "300" }), row({ label: "Village pay", planned: "100" })] });
+      const p = await setEnvelope(pool, { circleId: "c-garden", period: MOON, planned: "250", goalNote: "", format: EN, by: "u-treasurer", byAs: "Treasury", dryRun: true });
+      await setEnvelope(pool, { circleId: "c-garden", period: MOON, planned: "250", goalNote: "", format: EN, by: "u-treasurer", byAs: "Treasury", dryRun: false, revision: (p as any).revision });
+      await insertCashOwedRow(pool, { id: "co-c1", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-ana"), userId: "u-ana", workKind: "role", workRef: "r-gardener", workTitle: "Gardener", amountMinor: 900, currency: "CRC" });
+      await insertCashOwedRow(pool, { id: "co-c2", occurrenceKey: cashKeys.quest("claim-c"), userId: "u-ana", workKind: "quest", workRef: "q-1", workTitle: "Quest", amountMinor: 40, currency: "CRC" });
+      const v = (await budgetCircles(pool, MOON))!;
+      const byId = new Map(v.circles.map((c) => [c.id, c]));
+      expect(byId.get("c-garden")).toMatchObject({ name: "Garden", plannedMinor: 30_000, envelope: { plannedMinor: 25_000 }, over: true, committedMinor: 900, dormant: false, village: false });
+      expect(byId.get("c-village")).toMatchObject({ plannedMinor: 10_000, envelope: null, over: null, village: true, layer: "link" });
+      expect(byId.get("c-old")).toMatchObject({ dormant: true, status: "dormant", parentCircleId: "c-village", plannedMinor: 0 });
+      expect(byId.get("c-kitchen")).toMatchObject({ plannedMinor: 0, committedMinor: 0 });
+      expect(v.unplacedCommittedMinor, "a quest row names no circle").toBe(40);
+      expect(v.villageCircleId).toBe("c-village");
+    } finally {
+      await q("DELETE FROM circles WHERE id = 'c-old'");
+    }
   });
 
   it("refuses more than 2000 rows in one import", async () => {

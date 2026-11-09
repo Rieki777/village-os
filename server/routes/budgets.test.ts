@@ -189,6 +189,8 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 6 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
     await q("INSERT INTO circles (id, name) VALUES ('c-garden', 'Garden')");
+    // The village's own circle (R34), where a line for the whole village sits.
+    await q("INSERT INTO circles (id, name, layer) VALUES ('c-village', 'The Village', 'link')");
     await createOrgRole(pool, { id: "r-gardener", name: "Gardener", circleId: "c-garden", seats: 1 });
   }, 180_000);
 
@@ -199,7 +201,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes", "budget_sources"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes", "budget_sources", "budget_envelopes"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"] };
     villageHeld = [];
@@ -404,13 +406,15 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     }
   });
 
-  it("shows every member the moon's planned amount per circle, village-wide lines as their own entry", async () => {
+  it("shows every member the moon's planned amount per circle, the village's own circle among them", async () => {
     await importAs("u-hugo", [ROW, { ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener", planned: "50,000" }, { ...ROW, label: "Garden tools", circle: "Garden", category: "materials", planned: "1,000" }]);
     const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    // Village-wide lines are the village's own circle's now (R34).
     expect(read.body.byCircle).toEqual([
-      { circleId: null, circleName: null, byCategory: { role_pay: 10_000_000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 10_000_000 },
       { circleId: "c-garden", circleName: "Garden", byCategory: { role_pay: 5_000_000, quest_pay: 0, materials: 100_000, other: 0 }, totalMinor: 5_100_000 },
+      { circleId: "c-village", circleName: "The Village", byCategory: { role_pay: 10_000_000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 10_000_000 },
     ]);
+    expect(read.body.villageCircle).toEqual({ id: "c-village", from: "link" });
   });
 
   it("reads one to twelve moons ahead for every member, committed only for the current moon", async () => {
@@ -485,6 +489,50 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
     expect(read.body.sources[0]).toMatchObject({ on: false, offReason: expect.stringContaining("no longer holds") });
     expect(read.body.figure.plannedMinor, "nothing already counted is removed").toBe(100_000);
+  });
+
+  // ── Envelopes and the circles view (v0.5, R31, R35) ───────────────────────
+
+  it("sets a circle's envelope through the same door with a preview bound by revision, and every member reads it beside the circle's lines", async () => {
+    await importAs("u-hana", [{ ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener", planned: "300" }]);
+    const path = "/api/admin/budgets/envelopes/:circleId/:periodKey";
+    const params = { circleId: "c-garden", periodKey: MOON };
+    const body = { planned: "250", goalNote: "One gardener for the harvest moon", format: FORMAT };
+    expect((await call("PUT", path, "u-sam", body, params)).status, "the R21 door").toBe(403);
+    const p = await call("PUT", path, "u-hana", body, params);
+    expect(p.status).toBe(200);
+    expect(p.gated).toBe(true);
+    expect(p.body).toMatchObject({ written: false, circlePlannedMinor: 30_000, over: true, after: { plannedMinor: 25_000 } });
+    expect((await call("PUT", path, "u-hana", { ...body, dryRun: false, revision: "old" }, params)).status).toBe(409);
+    expect((await call("PUT", path, "u-hana", { ...body, dryRun: false, revision: p.body.revision }, params)).status).toBe(200);
+    expect((await call("PUT", path, "u-hana", { ...body, goalNote: "Write to sam@example.test" }, params)).status).toBe(400);
+    const read = await call("GET", "/api/budgets/circles", "u-sam", {}, {}, { moon: MOON });
+    expect(read.status).toBe(200);
+    const garden = read.body.circles.find((c: any) => c.id === "c-garden");
+    expect(garden).toMatchObject({ plannedMinor: 30_000, over: true, envelope: { plannedMinor: 25_000, goalNote: "One gardener for the harvest moon", changedAs: "Treasury", forMoonMinor: 25_000 } });
+    expect(JSON.stringify(read.body), "never by account").not.toContain("u-hana");
+    const budgets = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(budgets.body.envelopes).toEqual([expect.objectContaining({ circleId: "c-garden", over: true })]);
+  });
+
+  it("reads every circle from the chart for every member, dormant ones marked, and committed per circle only for cash.pay holders", async () => {
+    await q("INSERT INTO circles (id, name, status, parent_circle_id, sort_order) VALUES ('c-sleep', 'Sleeping', 'dormant', 'c-village', 5)");
+    try {
+      await importAs("u-hana", [{ ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener", planned: "300" }, ROW]);
+      await insertCashOwedRow(pool, { id: "co-cv", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-hugo"), userId: "u-hugo", workKind: "role", workRef: "r-gardener", workTitle: "Gardener", amountMinor: 700, currency: "CRC" });
+      const member = await call("GET", "/api/budgets/circles", "u-sam", {}, {}, { moon: MOON });
+      const byId = new Map(member.body.circles.map((c: any) => [c.id, c]));
+      expect(byId.get("c-village")).toMatchObject({ name: "The Village", village: true, plannedMinor: 10_000_000, parentCircleId: null });
+      expect(byId.get("c-sleep")).toMatchObject({ dormant: true, parentCircleId: "c-village", plannedMinor: 0 });
+      expect(byId.get("c-garden")).toMatchObject({ plannedMinor: 30_000, committedMinor: null });
+      expect(member.body.unplacedCommittedMinor).toBeNull();
+      const cash = await call("GET", "/api/budgets/circles", "u-cass", {}, {}, { moon: MOON });
+      expect(cash.body.circles.find((c: any) => c.id === "c-garden").committedMinor).toBe(700);
+      expect((await call("GET", "/api/budgets/circles", "u-gil", {}, {}, { moon: MOON })).status).toBe(403);
+      expect((await call("GET", "/api/budgets/circles", "u-sam", {}, {}, { moon: "soon" })).status).toBe(400);
+    } finally {
+      await q("DELETE FROM circles WHERE id = 'c-sleep'");
+    }
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────

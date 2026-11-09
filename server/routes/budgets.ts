@@ -13,6 +13,14 @@
  *   GET   /api/budgets/ahead?from=&count=          every member reads 1 to 12 moons ahead (R30)
  *   PUT   /api/admin/budgets/notes/:period         a note on how to read a period, through the same door (R32)
  *   POST  /api/admin/budgets/sources/:source       turn a source on, off, or between auto and review (R18)
+ *   GET   /api/budgets/circles?moon=               every circle on the chart with its plan and envelope (R31)
+ *   PUT   /api/admin/budgets/envelopes/:circleId/:periodKey   a circle's envelope, through the same door (R35)
+ *
+ * CIRCLE IS THE KEY (v0.5, R34). A line for the whole village sits on the
+ * village's own circle (the `budgets.village_circle_id` game variable, or the
+ * chart's link, lead or single root circle). An envelope is what a circle may
+ * plan for a period: its lines are measured against it and a pass warns,
+ * never blocks, and the moon's figure still counts lines.
  *
  * A SOURCE'S STANDING SWITCH (v0.4, R18; Rye, 9 Nov). Turning a source on is
  * an act of the same door, previewed with the share before and after, bound
@@ -69,6 +77,9 @@ import {
   BY_VILLAGE_VOTE,
   budgetAhead,
   budgetCircleNames,
+  budgetCircles,
+  budgetVillageCircle,
+  setEnvelope,
   budgetLines,
   budgetRateDrift,
   budgetSourceStates,
@@ -372,7 +383,12 @@ export function register(app: Express, deps: Deps): void {
     const left = [fedPlanned, fedCommitted].filter((x): x is string => !!x).sort().pop() ?? null;
     // Where it goes (R31): the moon's plan per circle, village-wide lines as their own entry.
     const names = await budgetCircleNames(pool);
-    const byCircle = moonPlan(all, span, village || null).byCircle.map((c) => ({ circleId: c.circleId, circleName: c.circleId ? names.get(c.circleId) ?? null : null, byCategory: c.byCategory, totalMinor: c.totalMinor }));
+    const villageCircle = await budgetVillageCircle(pool);
+    const circlesView = await budgetCircles(pool, moonId);
+    const envelopes = (circlesView?.circles ?? [])
+      .filter((c) => c.envelope)
+      .map((c) => ({ circleId: c.id, circleName: c.name, plannedMinor: c.plannedMinor, envelopeMinor: c.envelope!.forMoonMinor, periodKey: c.envelope!.periodKey, goalNote: c.envelope!.goalNote, changedAs: c.envelope!.changedAs, over: c.over }));
+    const byCircle = moonPlan(all, span, village || null, villageCircle?.id ?? null).byCircle.map((c) => ({ circleId: c.circleId, circleName: c.circleId ? names.get(c.circleId) ?? null : null, byCategory: c.byCategory, totalMinor: c.totalMinor }));
     const note = await periodNote(pool, moonId);
     // Who switched each source on is read by role, never by account (R18).
     const sources = (await budgetSourceStates(pool)).map(({ setBy: _setBy, ...s }) => s);
@@ -397,6 +413,8 @@ export function register(app: Express, deps: Deps): void {
       syncs,
       asOf: { planned: fedPlanned, committed: fedCommitted, left },
       byCircle,
+      villageCircle,
+      envelopes,
       sources,
       note: note ? { periodKey: note.periodKey, note: note.note, changedAt: note.changedAt, changedAs: note.changedAs } : null,
       mayReadCash,
@@ -435,6 +453,54 @@ export function register(app: Express, deps: Deps): void {
     const out = await setPeriodNote(getPool(), { period: String(req.params.period), note: typeof req.body?.note === "string" ? req.body.note : "", by: String(who.user.id), byAs: door.byAs });
     if (!out.ok) return res.status(out.status).json({ error: out.code, message: out.message });
     res.json(out);
+  });
+
+  // ── The circles view (R31) and a circle's envelope (R35) ──────────────────
+
+  app.get("/api/budgets/circles", async (req, res) => {
+    const who = await member(req, res);
+    if (!who) return;
+    const moonId = typeof req.query?.moon === "string" && req.query.moon ? String(req.query.moon) : currentCycle().id;
+    const view = await budgetCircles(getPool(), moonId);
+    if (!view) return res.status(400).json({ error: "bad_moon", message: "Name a moon by its id, like the one the moon review shows." });
+    // Committed per circle comes from `cash_owed`, which is holder-only (R23).
+    const mayReadCash = hasCapability("cash.pay", who.ctx);
+    res.json({
+      ...view,
+      unplacedCommittedMinor: mayReadCash ? view.unplacedCommittedMinor : null,
+      circles: view.circles.map((c) => ({ ...c, committedMinor: mayReadCash ? c.committedMinor : null, envelope: c.envelope ? (({ changedAt, changedAs, goalNote, plannedMinor, forMoonMinor, periodKey, periodKind, startsOn, endsOn, currency }) => ({ changedAt, changedAs, goalNote, plannedMinor, forMoonMinor, periodKey, periodKind, startsOn, endsOn, currency }))(c.envelope) : null })),
+      mayReadCash,
+    });
+  });
+
+  app.put("/api/admin/budgets/envelopes/:circleId/:periodKey", async (req, res) => {
+    markAdminGate(req); // a gate is consulted here: the default-deny under /api/admin needs to hear it
+    const who = await member(req, res);
+    if (!who) return;
+    const uid = String(who.user.id);
+    const body = req.body ?? {};
+    const dryRun = body.dryRun !== false;
+    if (await overLimit(`budget-${dryRun ? "preview" : "write"}:${uid}`, dryRun ? PREVIEWS_PER_WINDOW : WRITES_PER_WINDOW, WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many", message: "That is a lot of budget changes in a few minutes. Wait a little and try again." });
+    }
+    const door = await budgetDoor(who.user, who.ctx);
+    if (!door.ok) {
+      const { suggest: _suggest, ...refused } = door.body;
+      return res.status(door.status).json(refused);
+    }
+    const out = await setEnvelope(getPool(), {
+      circleId: String(req.params.circleId),
+      period: String(req.params.periodKey),
+      planned: typeof body.planned === "number" || typeof body.planned === "string" ? body.planned : "",
+      goalNote: typeof body.goalNote === "string" ? body.goalNote : null,
+      format: formatOf(body.format),
+      by: uid,
+      byAs: door.byAs,
+      dryRun,
+      revision: typeof body.revision === "string" ? body.revision : null,
+    });
+    if (!out.ok) return res.status(out.status).json({ error: out.code, message: out.message });
+    res.json({ ...out, door: { mayWrite: true, via: door.via } });
   });
 
   // ── A source's standing switch (R18) ──────────────────────────────────────

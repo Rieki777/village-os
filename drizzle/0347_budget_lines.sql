@@ -1,4 +1,4 @@
--- 0347: a village writes down its cash budget, line by line, every import of it, a note per period, and the sources that feed it.
+-- 0347: a village writes down its cash budget, line by line, every import of it, a note per period, the sources that feed it, and an envelope per circle.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can
@@ -23,9 +23,13 @@
 -- it (a moon id, a month, a season id, two dates), and its first and last civil
 -- day in the village's zone, inclusive, which is what pro-rating reads.
 --
--- Both scope columns NULL is a village-wide line. `matched` is false for a line
--- whose circle or role the library names and this chart does not have; such a
--- line never counts as village-wide.
+-- Every line that counts names a circle (budgets spec R34): a line for the
+-- whole village sits on the village's own circle (the `budgets.village_circle_id`
+-- setting, or the chart's link circle, its lead circle, or its one root).
+-- `circle_id` is NULL only for a line a source sent whose circle this chart
+-- does not have: `matched` is false for it, and it never counts.
+-- `source_village_wide` marks a source's line that named no circle and so
+-- landed on the village's circle.
 --
 -- Money is an integer count of minor units, never negative. `spent_minor` is
 -- NULL unless a person typed it or the library sent it.
@@ -60,13 +64,19 @@
 -- power. `set_by` is de-attributed on erasure; `set_as` names a role and stays.
 -- `on` is a reserved word, so every statement names it in backticks.
 --
+-- `budget_envelopes`, WHAT A CIRCLE MAY PLAN FOR A PERIOD (R35): one per
+-- circle and period, set by the people who keep the budget and read by every
+-- member, with a goal note checked for names. A circle's lines are measured
+-- against it and a pass warns, never blocks; the moon's figure still counts
+-- lines. `changed_by` is de-attributed on erasure.
+--
 -- `budget_period_notes`, HOW TO READ A PERIOD: one note per period key,
 -- written by the people who keep the budget and read by every member.
 -- `changed_by` is de-attributed on erasure; `changed_as` names a role and
 -- stays.
 --
 -- EXPAND ONLY, AND THE ROLLBACK HOLDS.
--- Four new tables. Nothing the previous release reads or writes changes, so it
+-- Five new tables. Nothing the previous release reads or writes changes, so it
 -- keeps working if it is put back over a migrated database. The UNIQUE key is on
 -- a new table only. No SQL function is called here.
 
@@ -83,6 +93,7 @@ CREATE TABLE IF NOT EXISTS `budget_lines` (
   `circle_id` varchar(64) NULL,
   `role_id` varchar(64) NULL,
   `matched` tinyint(1) NOT NULL DEFAULT 1,
+  `source_village_wide` tinyint(1) NOT NULL DEFAULT 0,
   `category` enum('role_pay','quest_pay','materials','other') NOT NULL,
   `planned_minor` bigint NOT NULL,
   `spent_minor` bigint NULL,
@@ -145,6 +156,23 @@ CREATE TABLE IF NOT EXISTS `budget_sources` (
   `schedule` enum('daily','hourly','off') NOT NULL DEFAULT 'daily',
   PRIMARY KEY (`source`),
   KEY `budget_sources_set_by` (`set_by`)
+);
+
+CREATE TABLE IF NOT EXISTS `budget_envelopes` (
+  `circle_id` varchar(64) NOT NULL,
+  `period_kind` enum('moon','month','season','span') NOT NULL,
+  `period_key` varchar(64) NOT NULL,
+  `starts_on` date NOT NULL,
+  `ends_on` date NOT NULL,
+  `planned_minor` bigint NOT NULL,
+  `currency` char(3) NOT NULL,
+  `goal_note` varchar(500) NULL,
+  `changed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `changed_by` varchar(64) NULL,
+  `changed_as` varchar(120) NULL,
+  PRIMARY KEY (`circle_id`, `period_key`),
+  KEY `budget_envelopes_days` (`starts_on`, `ends_on`),
+  KEY `budget_envelopes_changed_by` (`changed_by`)
 );
 
 CREATE TABLE IF NOT EXISTS `budget_period_notes` (

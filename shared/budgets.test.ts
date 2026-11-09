@@ -213,6 +213,17 @@ describe("precedence by moon and scope (R4)", () => {
   });
 });
 
+describe("the village's own circle stands where village-wide stood (R34, R4)", () => {
+  it("lets the village's own line on the village's circle drop every source line in its category, and a line on another circle drop only that circle's", () => {
+    const own = line({ id: "own-v", source: "upload", circleId: "c-village" });
+    const seraElsewhere = line({ id: "sera-k", source: "sera", circleId: "c-kitchen", adoptedAt: "2026-11-01" });
+    const seraVillage = line({ id: "sera-v", source: "sera", circleId: "c-village", sourceVillageWide: true, adoptedAt: "2026-11-01" });
+    expect(precedence([own, seraElsewhere, seraVillage], "c-village").dropped.map((d) => [d.id, d.by])).toEqual([["sera-k", "village_line"], ["sera-v", "village_line"]]);
+    // Read without knowing the village's circle, the same line is only a circle line.
+    expect(precedence([own, seraElsewhere, seraVillage], null).dropped.map((d) => [d.id, d.by])).toEqual([["sera-v", "circle_line"]]);
+  });
+});
+
 describe("the moon's figure, with null and 0 kept apart (R7, R8)", () => {
   const m = moonAt("2026-11-15T12:00:00Z");
   const moonLine = (over: Partial<FigureLine> = {}) => line({ periodKind: "moon", periodKey: m.id, startsOn: m.startsOn, endsOn: m.endsOn, ...over });

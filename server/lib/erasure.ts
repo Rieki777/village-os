@@ -1687,8 +1687,9 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
        * The cash budget (0347, budgets spec R26): their account id comes off
        * every budget line they changed (`changed_by`), every rate they locked
        * (`fx_locked_by`), every import they ran (`budget_syncs.by`), every
-       * period note they wrote (`budget_period_notes.changed_by`) and every
-       * source they switched (`budget_sources.set_by`). The rows stay, as the
+       * period note they wrote (`budget_period_notes.changed_by`), every
+       * source they switched (`budget_sources.set_by`) and every circle
+       * envelope they set (`budget_envelopes.changed_by`). The rows stay, as the
        * village's record of its plan, and `changed_as` and `set_as` stay too,
        * because they name the role the person acted through and never a person.
        *

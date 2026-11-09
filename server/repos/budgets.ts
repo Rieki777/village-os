@@ -29,6 +29,8 @@ export interface BudgetLineRow {
   circleId: string | null;
   roleId: string | null;
   matched: boolean;
+  /** A source's line that named no circle and landed on the village's circle (R34). */
+  sourceVillageWide: boolean;
   category: "role_pay" | "quest_pay" | "materials" | "other";
   plannedMinor: number;
   spentMinor: number | null;
@@ -54,12 +56,12 @@ export interface BudgetLineRow {
 
 const COLUMNS =
   "`id`, `line_key`, `source`, `source_ref`, `source_changed_at`, `period_kind`, `period_key`, `starts_on`, `ends_on`, " +
-  "`circle_id`, `role_id`, `matched`, `category`, `planned_minor`, `spent_minor`, `currency`, `label`, `source_label`, `note`, " +
+  "`circle_id`, `role_id`, `matched`, `source_village_wide`, `category`, `planned_minor`, `spent_minor`, `currency`, `label`, `source_label`, `note`, " +
   "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`, `prev_planned_minor`, `prev_seen_at`";
 
 const values = (r: BudgetLineRow): unknown[] => [
   r.id, r.lineKey, r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
-  r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
+  r.circleId, r.roleId, r.matched ? 1 : 0, r.sourceVillageWide ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
   r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt,
 ];
 
@@ -78,7 +80,7 @@ export async function budgetLineRows(db: Db): Promise<RowDataPacket[]> {
 
 export async function insertBudgetLine(db: Db, r: BudgetLineRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
-    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 32 }, () => "?").join(", ")})`,
+    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 33 }, () => "?").join(", ")})`,
     [...values(r), new Date()],
   );
   return res;
@@ -88,12 +90,12 @@ export async function insertBudgetLine(db: Db, r: BudgetLineRow): Promise<Result
 export async function updateBudgetLine(db: Db, r: BudgetLineRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `budget_lines` SET `source` = ?, `source_ref` = ?, `source_changed_at` = ?, `period_kind` = ?, `period_key` = ?, `starts_on` = ?, `ends_on` = ?, " +
-      "`circle_id` = ?, `role_id` = ?, `matched` = ?, `category` = ?, `planned_minor` = ?, `spent_minor` = ?, `currency` = ?, `label` = ?, `source_label` = ?, `note` = ?, " +
+      "`circle_id` = ?, `role_id` = ?, `matched` = ?, `source_village_wide` = ?, `category` = ?, `planned_minor` = ?, `spent_minor` = ?, `currency` = ?, `label` = ?, `source_label` = ?, `note` = ?, " +
       "`status` = ?, `adopted_at` = ?, `adopted_as` = ?, `changed_by` = ?, `changed_as` = ?, " +
       "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `prev_planned_minor` = ?, `prev_seen_at` = ?, `changed_at` = ? WHERE `id` = ?",
     [
       r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
-      r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
+      r.circleId, r.roleId, r.matched ? 1 : 0, r.sourceVillageWide ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
       r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt, new Date(), r.id,
     ],
   );
@@ -147,10 +149,14 @@ export async function budgetSyncRows(db: Db, limit = 50): Promise<RowDataPacket[
 }
 
 /** The chart a row's circle and role are matched against (R11): circles, and roles with their circle. */
-export async function budgetChartRows(db: Db): Promise<{ circles: RowDataPacket[]; roles: RowDataPacket[] }> {
-  const [circles] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `is_example` FROM `circles`");
+export async function budgetChartRows(db: Db): Promise<{ circles: RowDataPacket[]; roles: RowDataPacket[]; seatings: RowDataPacket[] }> {
+  const [circles] = await db.query<RowDataPacket[]>(
+    "SELECT `id`, `name`, `is_example`, `status`, `layer`, `parent_circle_id`, `sort_order` FROM `circles` ORDER BY `sort_order`, `name`, `id`",
+  );
   const [roles] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `circle_id`, `active`, `is_example` FROM `org_roles`");
-  return { circles, roles };
+  // A seating's role, so cash owed against a seat (the moon invoice's rows) finds its circle.
+  const [seatings] = await db.query<RowDataPacket[]>("SELECT `id`, `org_role_id` FROM `org_role_assignments`");
+  return { circles, roles, seatings };
 }
 
 /**
@@ -182,7 +188,7 @@ const likePrefix = (s: string) => `${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
  */
 export async function cashOwedForMoon(db: Db, rolePrefix: string, startsAt: Date, endsAt: Date): Promise<RowDataPacket[]> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT `id`, `work_kind`, `occurrence_key`, `amount_minor`, `currency`, `owed_at` FROM `cash_owed` " +
+    "SELECT `id`, `work_kind`, `work_ref`, `occurrence_key`, `amount_minor`, `currency`, `owed_at` FROM `cash_owed` " +
       "WHERE (`work_kind` = 'role' AND `occurrence_key` LIKE ?) OR (`work_kind` IN ('quest', 'proposal') AND `owed_at` >= ? AND `owed_at` < ?)",
     [likePrefix(rolePrefix), startsAt, endsAt],
   );
@@ -200,6 +206,30 @@ export async function forgetBudgetAttributionOf(db: Db, userId: string): Promise
   await db.query("UPDATE `budget_syncs` SET `by` = NULL WHERE `by` = ?", [userId]);
   await db.query("UPDATE `budget_period_notes` SET `changed_by` = NULL WHERE `changed_by` = ?", [userId]);
   await db.query("UPDATE `budget_sources` SET `set_by` = NULL WHERE `set_by` = ?", [userId]);
+  await db.query("UPDATE `budget_envelopes` SET `changed_by` = NULL WHERE `changed_by` = ?", [userId]);
+}
+
+/** Every circle's envelope (R35), dates as text for the reason `budgetLineRows` gives. */
+export async function budgetEnvelopeRows(db: Db): Promise<RowDataPacket[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT *, DATE_FORMAT(`starts_on`, '%Y-%m-%d') AS `starts_on_text`, DATE_FORMAT(`ends_on`, '%Y-%m-%d') AS `ends_on_text` FROM `budget_envelopes` ORDER BY `circle_id`, `starts_on`",
+  );
+  return rows;
+}
+
+/** Write one circle's envelope for one period whole, or replace it. */
+export async function upsertBudgetEnvelope(
+  db: Db,
+  r: { circleId: string; periodKind: string; periodKey: string; startsOn: string; endsOn: string; plannedMinor: number; currency: string; goalNote: string | null; changedBy: string | null; changedAs: string | null },
+): Promise<ResultSetHeader> {
+  const [res] = await db.query<ResultSetHeader>(
+    "INSERT INTO `budget_envelopes` (`circle_id`, `period_kind`, `period_key`, `starts_on`, `ends_on`, `planned_minor`, `currency`, `goal_note`, `changed_at`, `changed_by`, `changed_as`) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `period_kind` = VALUES(`period_kind`), `starts_on` = VALUES(`starts_on`), `ends_on` = VALUES(`ends_on`), " +
+      "`planned_minor` = VALUES(`planned_minor`), `currency` = VALUES(`currency`), `goal_note` = VALUES(`goal_note`), `changed_at` = VALUES(`changed_at`), " +
+      "`changed_by` = VALUES(`changed_by`), `changed_as` = VALUES(`changed_as`)",
+    [r.circleId, r.periodKind, r.periodKey, r.startsOn, r.endsOn, r.plannedMinor, r.currency, r.goalNote, new Date(), r.changedBy, r.changedAs],
+  );
+  return res;
 }
 
 /** One source's switch (v0.4, R18), or none. */
