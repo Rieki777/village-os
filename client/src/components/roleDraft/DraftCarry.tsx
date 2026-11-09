@@ -132,7 +132,7 @@ export default function DraftCarry({
           <p className="text-sm">
             {named.length ? t`The roles you drafted: ${roleList}.` : t`You drafted roles before you joined.`}
           </p>
-          <Link href={propose} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-notice px-4 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <Link href={propose} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             {member ? t`Apply for the roles you drafted` : t`Apply with your draft`}
           </Link>
         </div>
