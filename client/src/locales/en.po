@@ -22,6 +22,11 @@ msgctxt "save a change"
 msgid "Save"
 msgstr "Save"
 
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, link to every role"
+msgid "see every role"
+msgstr "see every role"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Kind of work"
@@ -45,6 +50,11 @@ msgstr "Nothing is being weighed right now."
 msgctxt "database export"
 msgid "Not now"
 msgstr "Not now"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, copy the crew invite link"
+msgid "Copy the crew link"
+msgstr "Copy the crew link"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
@@ -89,6 +99,11 @@ msgstr "Decided"
 msgid "Nobody has written yet."
 msgstr "Nobody has written yet."
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Hand this to your agent"
+msgstr "Hand this to your agent"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "starting a change request"
 msgid "Starting…"
@@ -131,6 +146,11 @@ msgstr "See which one"
 msgctxt "send a note"
 msgid "Send"
 msgstr "Send"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder step number"
+msgid "Step {n}"
+msgstr "Step {n}"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -212,16 +232,31 @@ msgstr "Open a round for ideas"
 msgid "Your idea is shared. Others can comment on it in its thread."
 msgstr "Your idea is shared. Others can comment on it in its thread."
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Worked examples"
+msgstr "Worked examples"
+
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the new value of a setting"
 msgid "New value"
 msgstr "New value"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section heading"
+msgid "Build a module"
+msgstr "Build a module"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Search languages"
 msgstr "Search languages"
+
+#: client/src/pages/Modules.tsx
+msgctxt "module library, builder card link to the builder section"
+msgid "The five steps, and what to hand your agent ↓"
+msgstr "The five steps, and what to hand your agent ↓"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
@@ -334,6 +369,11 @@ msgctxt "sera changes"
 msgid "Not in a circle"
 msgstr "Not in a circle"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Copy it into the AI you build with, then add what your module should do."
+msgstr "Copy it into the AI you build with, then add what your module should do."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr "That did not load."
@@ -346,6 +386,11 @@ msgstr "Showing {shownCount}: {shownWords}"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Edit the name or the why"
 msgstr "Edit the name or the why"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, when the quest starts"
+msgid "Starts {at}"
+msgstr "Starts {at}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "delete a change request"
@@ -361,6 +406,11 @@ msgstr "Suggest a change"
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, no date on the quest"
+msgid "No date yet. Agree one when you talk."
+msgstr "No date yet. Agree one when you talk."
 
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
@@ -438,6 +488,11 @@ msgstr "Show the suggestion"
 msgctxt "review response"
 msgid "Object"
 msgstr "Object"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Anyone can build for this platform, with an AI agent at your side. Five steps take you from an idea to a card on this page, in every village."
+msgstr "Anyone can build for this platform, with an AI agent at your side. Five steps take you from an idea to a card on this page, in every village."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Respond to this change request"
@@ -645,6 +700,26 @@ msgstr "From {author}"
 msgid "The round is open for ideas."
 msgstr "The round is open for ideas."
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, copy the agent text"
+msgid "Copy for your agent"
+msgstr "Copy for your agent"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, role ideas the village does not have yet"
+msgid "Roles this character could open. Propose one and the village decides:"
+msgstr "Roles this character could open. Propose one and the village decides:"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, open roles tagged for no character"
+msgid "Also open in the village, for anyone:"
+msgstr "Also open in the village, for anyone:"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, apply for one open role"
+msgid "Apply for {name}"
+msgstr "Apply for {name}"
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding round stage"
 msgid "Harvest"
@@ -659,6 +734,11 @@ msgstr "Withdraw the request"
 msgid "The list of changes did not load"
 msgstr "The list of changes did not load"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, after copying the crew link"
+msgid "Link copied"
+msgstr "Link copied"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "decline a suggested edit"
 msgid "Turn it down"
@@ -668,6 +748,11 @@ msgstr "Turn it down"
 msgctxt "change request step"
 msgid "Gathering"
 msgstr "Gathering"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card section heading"
+msgid "Roles open now"
+msgstr "Roles open now"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Its role comes with it, and leaving the circle out leaves it out too."
@@ -786,6 +871,11 @@ msgstr "Opening funding rounds"
 msgid "Everyone in the village can read what you write here."
 msgstr "Everyone in the village can read what you write here."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Talk to {label}"
+msgstr "Talk to {label}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a request the server refused"
 msgid "That was refused."
@@ -839,6 +929,11 @@ msgctxt "database export"
 msgid "Ask the village"
 msgstr "Ask the village"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, start a crew for this quest"
+msgid "Start a crew and invite friends"
+msgstr "Start a crew and invite friends"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing here matches what is chosen above."
 msgstr "Nothing here matches what is chosen above."
@@ -876,6 +971,11 @@ msgctxt "signing key"
 msgid "Withdrawn. The village keeps its key."
 msgstr "Withdrawn. The village keeps its key."
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the quest has no first step written"
+msgid "Read the quest above, then start with the first thing you can do today"
+msgstr "Read the quest above, then start with the first thing you can do today"
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr "Vote on it again here"
@@ -884,6 +984,11 @@ msgstr "Vote on it again here"
 msgctxt "signing key"
 msgid "Make a new key"
 msgstr "Make a new key"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the next build day"
+msgid "Next build day: {at}"
+msgstr "Next build day: {at}"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -917,6 +1022,11 @@ msgstr "You do not hold the steward role now, so this copy cannot be delivered. 
 msgctxt "valuation receipt"
 msgid "Medium range"
 msgstr "Medium range"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Nobody holds {role} yet."
+msgstr "Nobody holds {role} yet."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
@@ -1098,6 +1208,16 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr "Replace the key"
 
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, joins two links"
+msgid "or"
+msgstr "or"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, copy failed"
+msgid "Your browser blocked copying. Select the text above and copy it."
+msgstr "Your browser blocked copying. Select the text above and copy it."
+
 #: client/src/pages/FundingRounds.tsx
 msgid "For the pot's holder"
 msgstr "For the pot's holder"
@@ -1105,6 +1225,11 @@ msgstr "For the pot's holder"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr "Take this change out."
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box heading"
+msgid "Your next step"
+msgstr "Your next step"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick a change to edit"
@@ -1129,6 +1254,11 @@ msgstr "Time to review"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
 msgstr "Saved. The role's pay is set."
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Your crew has {size} so far."
+msgstr "Your crew has {size} so far."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "A different value for one of the changes. The author may take it in."
@@ -1186,6 +1316,11 @@ msgstr "Every village that follows this one will pause on the new key until some
 msgctxt "sera changes"
 msgid "Hide them"
 msgstr "Hide them"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, after copying the agent text"
+msgid "Copied"
+msgstr "Copied"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"
@@ -1270,6 +1405,11 @@ msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr "Everything waiting"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, nobody named on the quest"
+msgid "Ask in the quest chat below"
+msgstr "Ask in the quest chat below"
+
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "close a form without saving"
@@ -1312,6 +1452,11 @@ msgstr "Your idea was not shared. Try again."
 msgctxt "heading of the review feed"
 msgid "The review"
 msgstr "The review"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, the deadline"
+msgid "Due by {at}"
+msgstr "Due by {at}"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "One copy of the village's database"
@@ -1359,6 +1504,11 @@ msgstr "Members see how many changes wait and who decides them. The changes them
 msgctxt "review page"
 msgid "Review"
 msgstr "Review"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, nothing open right now"
+msgid "No role is open right now."
+msgstr "No role is open right now."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
@@ -1607,6 +1757,11 @@ msgctxt "role pay"
 msgid "Set this role's pay"
 msgstr "Set this role's pay"
 
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, open the role proposal"
+msgid "Propose a new role"
+msgstr "Propose a new role"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "To decide"
@@ -1617,6 +1772,11 @@ msgctxt "role pay"
 msgid "Or as much as"
 msgstr "Or as much as"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, link to open roles"
+msgid "See the open roles"
+msgstr "See the open roles"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
@@ -1624,6 +1784,10 @@ msgstr "Or as much as"
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A draft from this queue is still open."
 msgstr "A draft from this queue is still open."
+
+#: client/src/components/characters/OpenNowBadge.tsx
+msgid "{n, plural, one {# role open now} other {# roles open now}}"
+msgstr "{n, plural, one {# role open now} other {# roles open now}}"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "The rounds could not be read just now. Try again in a moment."
@@ -1655,6 +1819,16 @@ msgstr "Gather it with other changes and send them to one vote."
 #: client/src/components/Layout.tsx
 #~ msgid "Main Site"
 #~ msgstr "Main Site"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, a role whose name could not be read"
+msgid "the circle's lead role"
+msgstr "the circle's lead role"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "this quest's circle"
+msgstr "this quest's circle"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -1721,6 +1895,11 @@ msgstr "I can live with this"
 msgctxt "sera changes"
 msgid "Conflict"
 msgstr "Conflict"
+
+#: client/src/components/characters/RolesOpenNow.tsx
+msgctxt "character card, link to the quest board"
+msgid "Try a quest on the board"
+msgstr "Try a quest on the board"
 
 #. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -1828,6 +2007,11 @@ msgctxt "funding rounds"
 msgid "Round stages"
 msgstr "Round stages"
 
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box, label before the first task"
+msgid "First:"
+msgstr "First:"
+
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Your own figure was {0}."
@@ -1847,6 +2031,11 @@ msgstr "Who it helps:"
 msgctxt "role pay"
 msgid "Responsibility"
 msgstr "Responsibility"
+
+#: client/src/components/NextStepBox.tsx
+msgctxt "next step box"
+msgid "Ask in {circle}"
+msgstr "Ask in {circle}"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"

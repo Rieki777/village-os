@@ -164,6 +164,9 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
+import { claimRefusalFor } from "./lib/questClaimGate";
+import { MAP_REASON_FOR } from "../shared/questClaimGate";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -485,7 +488,7 @@ import {
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
-import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
+import { addCharacter, avatarFor, listArchetypes, openNowCounts, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
@@ -18753,6 +18756,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
+  const questNextStep = makeQuestNextStep({ getPool, circles: () => circlesRepo.all() as any[], crewsForQuest: (id) => crewsRepo.forQuest(id), lapseContext, memberName: async (id) => (await members.byId(id))?.name ?? null });
+  const nextOrNull = (quest: any, userId: string) => questNextStep(quest, userId).catch((err) => (console.error("[map] next-step box", err), null));
   app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
@@ -18862,21 +18867,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
         return reply({ ok: !!removed, state: removed ? "off" : "on", reason: removed ? undefined : "closed" });
       }
 
-      if (held) return reply({ ok: true, state: "on" });
+      if (held) return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
       // A closed quest is not taking claims, read exactly as the claim route
       // reads it: `closed` is this vocabulary's own "not taking answers".
-      if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
-        return reply({ ok: false, state: "off", reason: "closed" });
-      }
-      if (quest.minStage) {
-        const needed = stageIndex(quest.minStage);
-        if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-          return reply({ ok: false, state: "off", reason: "not-yet" });
-        }
-      }
-      if (quest.requiresRole && !roleIdsFor(user.id).includes(quest.requiresRole)) {
-        return reply({ ok: false, state: "off", reason: "not-yet" });
-      }
+      // The one claim gate both doors ask (shared/questClaimGate.ts), worded in
+      // the map's short vocabulary.
+      const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+      if (refusal) return reply({ ok: false, state: "off", reason: MAP_REASON_FOR[refusal.kind] });
       // The same locked insert the claim route takes: `held` above is a read
       // several awaits back, and two taps can pass it together.
       const taken = await claimsRepo.openClaim({
@@ -18892,7 +18889,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
       // "already" is the answer `held` gives: the person's intent is satisfied.
       if (!taken.ok && taken.reason === "gone") return reply({ ok: false, state: "off", reason: "gone" });
-      return reply({ ok: true, state: "on" });
+      if (taken.ok) await bellQuestClaimed(notify, user.id, taken.claim.id, quest);
+      return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
     } catch (err) {
       // The map reverts and says so. A promise is not worth a 500 page inside
       // an iframe the person cannot see the console of.
@@ -18955,6 +18953,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // the one route here that rasters for an anonymous caller, so it refuses
     // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
     limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
+    questNextStep,
   });
 
   // Quests: team consent (value release is always human-gated)
@@ -19336,7 +19335,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
+    const list = await listArchetypes(getPool(), villageId());
+    const open = await openNowCounts(getPool(), list.map((a) => a.key)).catch(() => null); // the cards still draw without a count
+    res.json(list.map((a) => (open ? { ...a, openNow: open.byKey[a.key] ?? 0, openToAll: open.untagged } : a)));
   });
 
   // ── The Player Profile ────────────────────────────────────────────────────
