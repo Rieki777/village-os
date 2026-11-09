@@ -2243,8 +2243,14 @@ function orgCircle(k){if(!ORG_CIRCLES||k==null||k==='')return null;
   return ORG_BY['id:'+String(k)]||ORG_BY['nm:'+orgFold(k)]||null}
 /* Does this place's circle name that live circle? */
 function orgNames(s,c){return !!(s&&s.circle&&c&&(s.circle===c.id||orgFold(s.circle)===orgFold(c.name)))}
-/* A live circle's home: the first place on the land whose circle names it. */
+/* A live circle's home. First the place the village's own record gives it
+   (circles.home_structure_key, map lane R1), when that place is on this
+   land; then the first place on the land whose circle names it. */
+function orgOnLand(k){if(typeof k!=='string'||!k)return null;
+  for(const s of SCENE.structures)if(s.key===k)return k;
+  return null}
 function orgHome(c){if(!c)return null;
+  const own=orgOnLand(c.home);if(own)return own;
   for(const s of SCENE.structures)if(orgNames(s,c))return s.key;
   return null}
 window.orgHome=orgHome;
@@ -2261,7 +2267,8 @@ function orgSeats(){
     const c=orgCircle(r.circleId);
     let x=ORG_SEAT_BY.get(key);if(!x){x={};ORG_SEAT_BY.set(key,x)}
     const say=String(r.description||'').replace(/\s+/g,' ').trim();
-    x.s=r.name.trim().slice(0,120);x.c=c?c.name:'';x.at=c?orgHome(c):null;
+    /* Its own building first (org_roles.structure_key), then its circle's home. */
+    x.s=r.name.trim().slice(0,120);x.c=c?c.name:'';x.at=orgOnLand(r.structureKey)||(c?orgHome(c):null);
     x.note=say.length>160?say.slice(0,157).trimEnd()+'...':say;
     x._state=roleStateIn(r.state);x._tags=roleTagsIn(r.archetypes);
     if(typeof orgWhoOnto==='function')orgWhoOnto(x,r);
@@ -7160,7 +7167,8 @@ function orgSetCircles(list){
     keep.push({id:c.id.slice(0,80),name:c.name.trim().slice(0,120),
       parentCircleId:typeof c.parentCircleId==='string'?c.parentCircleId:null,
       status:typeof c.status==='string'?c.status:'active',
-      colour:/^#[0-9a-f]{6}$/i.test(String(c.colour||''))?String(c.colour):'#9aa08f'})}
+      colour:/^#[0-9a-f]{6}$/i.test(String(c.colour||''))?String(c.colour):'#9aa08f',
+      home:typeof c.homeStructureKey==='string'&&c.homeStructureKey?c.homeStructureKey.slice(0,64):null})}
   for(const k of Object.keys(ORG_INK))delete ORG_INK[k];
   for(const k of Object.keys(ORG_BY))delete ORG_BY[k];
   for(const c of keep){ORG_BY['id:'+c.id]=c;ORG_BY['nm:'+orgFold(c.name)]=c;
