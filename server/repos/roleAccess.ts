@@ -212,7 +212,7 @@ export async function filedRenewals(pool: Pool): Promise<RenewalRow[]> {
  */
 export async function renewSeating(pool: Pool, r: RenewalRow, nextEnds: Date, by: string): Promise<boolean> {
   const [u]: any = await pool.query(
-    "UPDATE org_role_assignments SET term_ends_at = ? WHERE id = ? AND ended_at IS NULL AND term_ends_at = ?",
+    "UPDATE org_role_assignments SET term_ends_at = ?, season_id = NULL WHERE id = ? AND ended_at IS NULL AND term_ends_at = ?",
     [nextEnds, r.assignmentId, r.forTermEndsAt],
   );
   if (!u?.affectedRows) return false;

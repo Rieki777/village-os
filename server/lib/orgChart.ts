@@ -20,6 +20,7 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { isMoonTerm } from "../../shared/moonRenewal";
 import { raiseRevokeForEnded } from "./roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
@@ -476,6 +477,8 @@ export function isLapsed(
     return { lapsed: true, reason: "term" };
   }
   if (ctx.cadence === "never") return { lapsed: false, reason: null };
+  // D34: a moon term may cross the season's end. The season turn leaves a running moon term alone; its own date still ends it.
+  if (a.termEndsAt && isMoonTerm(a.startedAt, a.termEndsAt)) return { lapsed: false, reason: null };
   // A seat may opt out on its own card; null inherits the village setting.
   if (role.expiresEachSeason === false) return { lapsed: false, reason: null };
   /*

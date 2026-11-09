@@ -52,3 +52,12 @@ describe("renewal writes the next moon", () => {
     expect(nextMoonTermEnd(ends, LUNAR_CLOCK).getTime()).toBe(LUNAR_CLOCK.startOf(n + 2).getTime());
   });
 });
+
+describe("renewal across the season's end (D34)", () => {
+  it("writes the next moon even when the term runs past 31 December", () => {
+    const n = LUNAR_CLOCK.cycleNumberAt(new Date("2026-12-20T00:00:00Z"));
+    const ends = LUNAR_CLOCK.startOf(n + 1); // the moon that crosses the turn of the year ends in January
+    expect(ends.getUTCFullYear()).toBe(2027);
+    expect(nextMoonTermEnd(ends, LUNAR_CLOCK).getTime()).toBe(LUNAR_CLOCK.startOf(n + 2).getTime());
+  });
+});
