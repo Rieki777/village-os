@@ -30,7 +30,7 @@
  * the steward's veto, and one on a control that passes powers to the village.
  * Both are always ballots.
  */
-import type { Capability } from "./capabilities";
+import { ALL_CAPABILITIES, type Capability } from "./capabilities";
 
 export type SuggestionRoute = "holders" | "ballot";
 
@@ -40,10 +40,11 @@ export type SuggestionRoute = "holders" | "ballot";
  * sends every suggestion on that power to a village vote even while a role
  * holds it.
  *
- * The village changes an entry through a dial that only holders of
- * `power.assign` may turn (§4.5). That dial is NOT built yet; it is the
- * follow-up named in the pull request. Until it lands, this table is the
- * platform default and nothing writes to it.
+ * This table is the PLATFORM DEFAULT. A village changes an entry through the
+ * dial `PUT /api/admin/suggestion-routes` (server/routes/suggestionRoutes.ts),
+ * which only holders of `power.assign` may turn (§4.5), and which stores the
+ * entries that differ from this table and nothing else. Every door reads the
+ * village's table through `effectiveSuggestionRoutes`.
  */
 export const SUGGESTION_ROUTE: Record<Capability, SuggestionRoute> = {
   "quest.consent": "holders",
@@ -151,6 +152,13 @@ export const ADMIN_EDIT_CONTROLS = {
     label: "the words for the village's paths and stages",
     passesPowers: false,
   },
+  // The dial itself takes suggestions, so a village that holds `power.assign`
+  // still changes it, by a ballot (server/routes/suggestionRoutes.ts).
+  suggestion_routes: {
+    capability: "power.assign",
+    label: "where suggestions on each power go",
+    passesPowers: false,
+  },
 } as const satisfies Record<string, AdminEditControlSpec>;
 
 export type AdminEditControlId = keyof typeof ADMIN_EDIT_CONTROLS;
@@ -207,4 +215,60 @@ export function suggestionDiff(from: unknown, to: unknown, prefix = ""): DiffLin
   }
   if (JSON.stringify(from ?? null) === JSON.stringify(to ?? null)) return [];
   return [{ path: prefix, from: from ?? null, to: to ?? null }];
+}
+
+// ── The dial: the village's own SUGGESTION_ROUTE ───────────────────────────
+
+/**
+ * What the village stored: only the entries that differ from the platform
+ * default, keyed by power. An absent entry inherits SUGGESTION_ROUTE, so a
+ * platform change to a default reaches every village that never chose.
+ */
+export interface SuggestionRoutesDocument {
+  routes: Partial<Record<Capability, SuggestionRoute>>;
+}
+
+const KNOWN = new Set<string>(ALL_CAPABILITIES);
+
+/** Every problem with a dial payload, in words. Empty means it may be stored. */
+export function suggestionRoutesProblems(body: unknown): string[] {
+  if (!isPlainObject(body)) return ['Send the routes as { routes: { <power>: "holders" or "ballot" } }.'];
+  const extra = Object.keys(body).filter((k) => k !== "routes");
+  if (extra.length) return [`Only "routes" may be sent. Not: ${extra.join(", ")}.`];
+  const routes = body.routes;
+  if (!isPlainObject(routes)) return ['"routes" must be an object keyed by power.'];
+  const problems: string[] = [];
+  for (const [cap, route] of Object.entries(routes)) {
+    if (!KNOWN.has(cap)) problems.push(`"${cap}" is not a power this village knows.`);
+    else if (route !== "holders" && route !== "ballot") problems.push(`"${cap}" must go to "holders" or "ballot".`);
+    else if (cap === "steward.veto" && route !== "ballot") problems.push("Suggestions on the steward's veto always go to a village vote.");
+  }
+  return problems;
+}
+
+/** The document to store for a checked payload: the entries that differ from the default. */
+export function storableSuggestionRoutes(body: SuggestionRoutesDocument): SuggestionRoutesDocument {
+  const routes: Partial<Record<Capability, SuggestionRoute>> = {};
+  for (const cap of ALL_CAPABILITIES) {
+    const r = body.routes[cap];
+    if ((r === "holders" || r === "ballot") && r !== SUGGESTION_ROUTE[cap]) routes[cap] = r;
+  }
+  return { routes };
+}
+
+/**
+ * The village's table in force: the default with the stored entries laid on
+ * top. A stored entry that is no longer readable (a power that went away, a
+ * word that is not a route) is ignored, so a bad row never moves a suggestion.
+ * The steward's veto reads "ballot" whatever was stored; `routeSuggestion`
+ * says so again.
+ */
+export function effectiveSuggestionRoutes(stored: unknown): Record<Capability, SuggestionRoute> {
+  const out: Record<Capability, SuggestionRoute> = { ...SUGGESTION_ROUTE };
+  const routes = isPlainObject(stored) && isPlainObject(stored.routes) ? stored.routes : {};
+  for (const [cap, route] of Object.entries(routes)) {
+    if (KNOWN.has(cap) && (route === "holders" || route === "ballot")) out[cap as Capability] = route;
+  }
+  out["steward.veto"] = "ballot";
+  return out;
 }

@@ -8,6 +8,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Lock, LogOut } from "lucide-react";
+import { LanguagePicker } from "@/i18n/LanguagePicker";
 import { HANDLED_EVENT, readHandledCount } from "./handledToday";
 import "./adminNight.css";
 
@@ -22,6 +23,7 @@ export default function AdminHeader({
   onNight,
   onSignOut,
   extra,
+  defaultLocale = null,
 }: {
   villageName: string;
   siteUrl: string;
@@ -29,6 +31,8 @@ export default function AdminHeader({
   onNight: (next: boolean) => void;
   onSignOut: () => void;
   extra?: ReactNode;
+  /** The village default language, for the selector's ordering (dial `village.default_locale`). */
+  defaultLocale?: string | null;
 }) {
   const [handled, setHandled] = useState(() => readHandledCount(new Date()));
   useEffect(() => {
@@ -66,6 +70,10 @@ export default function AdminHeader({
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden sm:contents">{extra}</div>
+          {/* The language selector (spec i18n US2). Admin draws its own header,
+              so the site header's selector never reached it. At every width,
+              unlike `extra`: a phone is where a language is hardest to guess. */}
+          <LanguagePicker tone={night ? "onLight" : "onDark"} villageDefault={defaultLocale} />
           <p className={`whitespace-nowrap text-xs sm:text-sm ${quiet}`}>
             <span className="sm:hidden">{handled} today</span>
             <span className="hidden sm:inline">Handled today: {handled}, on this device</span>
