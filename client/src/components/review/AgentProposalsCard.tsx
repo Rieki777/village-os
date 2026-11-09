@@ -71,7 +71,7 @@ export default function AgentProposalsCard({ headers }: { headers: () => Record<
         const d = (await r.json().catch(() => ({}))) as { error?: string };
         toast.error(d.error ?? t`That could not be published`);
       } else {
-        toast.success(t`Published`);
+        toast.success(t({ message: `Published`, context: "connector proposals" }));
       }
     } finally {
       setBusy(null);
@@ -127,11 +127,11 @@ export default function AgentProposalsCard({ headers }: { headers: () => Record<
             <div className="flex flex-wrap gap-2 mt-2">
               {c.changes > 0 && (
                 <button disabled={busy === c.draftId} onClick={() => void publish(c)} className={`${button} bg-teal-deep text-white`}>
-                  <Trans>Publish</Trans>
+                  <Trans context="connector proposals">Publish</Trans>
                 </button>
               )}
               <button disabled={busy === c.draftId} onClick={() => void withdraw(c)} className={button}>
-                <Trans>Withdraw</Trans>
+                <Trans context="connector proposals">Withdraw</Trans>
               </button>
             </div>
           </li>
@@ -143,10 +143,10 @@ export default function AgentProposalsCard({ headers }: { headers: () => Record<
             <p className="text-sm text-muted-foreground mt-1"><Trans>Fill the role in Admin, then mark it done.</Trans></p>
             <div className="flex flex-wrap gap-2 mt-2">
               <button disabled={busy === s.id} onClick={() => void resolve(s, "taken")} className={button}>
-                <Trans>Done</Trans>
+                <Trans context="connector proposals">Done</Trans>
               </button>
               <button disabled={busy === s.id} onClick={() => void resolve(s, "dismissed")} className={button}>
-                <Trans>Dismiss</Trans>
+                <Trans context="connector proposals">Dismiss</Trans>
               </button>
             </div>
           </li>
