@@ -6,6 +6,7 @@
  */
 import { Compass, Home } from "lucide-react";
 import { useLocation } from "wouter";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 export default function NotFound() {
   const [, setLocation] = useLocation();
@@ -13,7 +14,10 @@ export default function NotFound() {
   // <main>, because this page renders without the shell: it was the one page
   // with no main landmark at all, and every module-off route lands here.
   return (
-    <main className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-teal-deep/10 to-background px-4">
+    <main className="min-h-screen w-full flex flex-col bg-gradient-to-b from-teal-deep/10 to-background px-4">
+      {/* The language selector (spec i18n US2): this page renders without the shell. */}
+      <PageLanguageBar className="pt-3" />
+      <div className="flex flex-1 items-center justify-center py-6">
       <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-lg p-8 text-center">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 rounded-full bg-amber/15 flex items-center justify-center">
@@ -39,6 +43,7 @@ export default function NotFound() {
           <Home className="w-4 h-4" aria-hidden="true" />
           Back to the village
         </button>
+      </div>
       </div>
     </main>
   );

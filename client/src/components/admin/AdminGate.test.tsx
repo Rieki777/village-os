@@ -104,8 +104,12 @@ describe("AdminGate", () => {
       expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
       // Only the reads the server allows members, and every one a GET.
       expect(fetched.sort()).toEqual(["/api/admin/capabilities/holding", "/api/admin/org/drafts", "/api/admin/org/expiring"]);
-      // Nothing to press but signing out.
-      expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Sign out and switch accounts"]);
+      // Nothing to press but signing out, and the reader's own language (spec
+      // i18n US2), which changes how this page reads and nothing in the village.
+      expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+        "Language: English (EN)",
+        "Sign out and switch accounts",
+      ]);
     } finally {
       vi.unstubAllGlobals();
     }

@@ -233,6 +233,8 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "cash.pay": "read the cash the village owes its members, and mark a payment as made once the money has gone out",
   "role.pay": "set what a role is worth and pays, beside the valuation engine's suggestion, never on a role they hold",
   "pot.steward": "hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits the pot",
+  "place.tend": "keep the village's place registry: load it from the seed, confirm a place, set its readiness, and adopt a change of stage",
+  "place.permit": "keep a place's permit checklist and say whether it sits in the preserve or the river buffer",
   "module.switch": "turn a module on for the whole village, without a vote",
   "steward.veto":
     "stop a decision the village has already carried, inside the window before it lands, and say why",

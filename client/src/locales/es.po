@@ -12,7 +12,7 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "It asks:"
 msgstr ""
@@ -87,7 +87,7 @@ msgctxt "change request step"
 msgid "In review"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{spent} goes to these quests, held for them until each one is done. {left} stays in the pot."
 msgstr ""
 
@@ -141,6 +141,15 @@ msgctxt "sera answers"
 msgid "Withdrawn, and the village's vote on it ended. Each change waits in the list again."
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your pledge is withdrawn."
+msgstr ""
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted, priced by the village's rule"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
 msgid "Your answer"
@@ -151,7 +160,7 @@ msgctxt "signing key"
 msgid "Village signing key"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What does it ask from the pot, in {unit}?"
 msgstr ""
 
@@ -217,15 +226,14 @@ msgctxt "module library, builder step number"
 msgid "Step {n}"
 msgstr "Paso {n}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, returned when the quest was not funded"
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "A short name"
 msgstr ""
-
-#: client/src/components/review/SeraBulk.tsx
-#~ msgctxt "sera answers"
-#~ msgid "More"
-#~ msgstr ""
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "Take the new price"
@@ -236,7 +244,7 @@ msgctxt "treasury sync"
 msgid "Paid {paidOn}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "What the village chose"
 msgstr ""
@@ -247,8 +255,12 @@ msgctxt "site header"
 msgid "Open menu"
 msgstr "Abrir menú"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "It changes something everyone shares, such as a path, the water or a common building."
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The amount must be a number above zero."
 msgstr ""
 
 #: client/src/components/review/SeraBulk.tsx
@@ -261,7 +273,7 @@ msgctxt "the value of a setting once changed"
 msgid "After"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share this idea"
 msgstr ""
@@ -287,7 +299,7 @@ msgstr ""
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Counted by Voice, with each person's share capped. One member, one vote is shown beside it."
 msgstr ""
 
@@ -324,7 +336,7 @@ msgctxt "sera answers"
 msgid "Keep {n}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Counted by one member, one vote. The count by Voice is shown beside it."
 msgstr ""
 
@@ -348,7 +360,7 @@ msgctxt "funding rounds"
 msgid "Open a round for ideas"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is shared. Others can comment on it in its thread."
 msgstr ""
 
@@ -387,6 +399,11 @@ msgstr "Los cinco pasos y lo que debes darle a tu agente ↓"
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
 msgid "Taken in"
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}, firm"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -449,7 +466,7 @@ msgstr ""
 msgid "Editing a change starts the review again."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Not funded this round"
 msgstr ""
@@ -462,7 +479,7 @@ msgstr ""
 msgid "Hide how this was worked out"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "The village has chosen"
 msgstr ""
@@ -470,6 +487,11 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Its words name a member here, so they cannot be taken as they are."
+msgstr ""
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "quest editor"
+msgid "Posted. The price was not recorded beside the rule, so set it on the pricing desk."
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
@@ -494,7 +516,12 @@ msgctxt "signing key"
 msgid "The key was not replaced"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 msgstr ""
 
@@ -517,7 +544,16 @@ msgctxt "database export"
 msgid "Download the copy"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Price it with the village's rule (optional)"
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Back this quest, in {unit}"
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "This disagreement stays in the round's record for everyone to see."
 msgstr ""
 
@@ -559,7 +595,11 @@ msgctxt "delete a change request"
 msgid "Delete"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Nobody has backed this yet."
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Save"
 msgstr ""
@@ -651,15 +691,16 @@ msgctxt "sera compare"
 msgid "{owner} version"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it?"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Roughly what would it cost, in {unit}?"
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
 #: client/src/pages/FundingRounds.tsx
 msgid "That did not save. Try again."
 msgstr ""
@@ -716,7 +757,15 @@ msgstr ""
 msgid "Delete this change request? This cannot be undone."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, model.currency)
+#. placeholder {1}: wholeMoney(s.range.lowTotalMinor, model.currency)
+#. placeholder {2}: wholeMoney(s.range.highTotalMinor, model.currency)
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Suggested {0}, likely {1} to {2}."
+msgstr ""
+
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choose"
 msgstr ""
@@ -733,6 +782,11 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "Object"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Voice starts when the village adopts its own pay settings."
 msgstr ""
 
 #: client/src/components/modules/BuilderJourney.tsx
@@ -786,7 +840,7 @@ msgstr ""
 msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Talk about it"
 msgstr ""
@@ -836,6 +890,11 @@ msgstr ""
 msgid "Nothing has been read from {agent} yet."
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdraw my pledge"
+msgstr ""
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Own figure"
@@ -856,11 +915,11 @@ msgctxt "a change request you started"
 msgid "Yours"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Funded"
 msgstr ""
@@ -883,6 +942,11 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Start from {owner} instead"
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Hours it takes"
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
@@ -915,7 +979,7 @@ msgctxt "sera answers"
 msgid "Each one leaves the list until {agent} changes it again."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "This round is closed"
 msgstr ""
@@ -930,7 +994,7 @@ msgctxt "sera answers"
 msgid "Keep the vote"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{n, plural, one {# person chose it.} other {# people chose it.}}"
 msgstr ""
 
@@ -953,7 +1017,7 @@ msgctxt "site header"
 msgid "Close menu"
 msgstr "Cerrar menú"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "No quest reached the ballot in this round."
 msgstr ""
 
@@ -962,7 +1026,7 @@ msgctxt "sera answers"
 msgid "Something here changed since it was taken. Undo it or take it again before this draft is published."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Rough cost:"
 msgstr ""
@@ -974,6 +1038,11 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Reading the village's pay settings…"
 msgstr ""
 
 #. placeholder {0}: q.title
@@ -1014,7 +1083,7 @@ msgctxt "sera answers"
 msgid "Take {n}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Yours"
 msgstr ""
@@ -1057,7 +1126,7 @@ msgstr ""
 #~ msgid "Decide it in the structure review"
 #~ msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "From {author}"
 msgstr ""
@@ -1090,7 +1159,7 @@ msgctxt "character card, role ideas the village does not have yet"
 msgid "Roles this character could open. Propose one and the village decides:"
 msgstr "Roles que este personaje podría abrir. Propón uno y la aldea decide:"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Withdraw it"
 msgstr ""
@@ -1115,7 +1184,7 @@ msgctxt "character card, apply for one open role"
 msgid "Apply for {name}"
 msgstr "Postúlate a {name}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Harvest"
 msgstr ""
@@ -1168,15 +1237,20 @@ msgctxt "pricing desk"
 msgid "1 quest still needs yours"
 msgstr ""
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Earned Equity is owed on this quest until the village writes what Earned Equity means."
+msgstr ""
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "{n} go into a draft. They go live when the draft is published."
 msgstr ""
 
-#: client/src/components/review/SeraMember.tsx
-#~ msgctxt "sera answers"
-#~ msgid "1 of them is in a draft, waiting to be published."
-#~ msgstr ""
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As much as"
+msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -1187,7 +1261,7 @@ msgstr ""
 msgid "Moved into a change request of its own."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Yours, shared without your name"
 msgstr ""
 
@@ -1256,7 +1330,7 @@ msgctxt "pricing desk"
 msgid "Use {0}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
 msgstr ""
 
@@ -1265,7 +1339,7 @@ msgctxt "pricing desk"
 msgid "Cancel"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "When it is done:"
 msgstr ""
@@ -1299,7 +1373,7 @@ msgctxt "pricing desk"
 msgid "Written"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
 msgstr ""
@@ -1371,7 +1445,7 @@ msgstr ""
 msgid "Sign in to see what your village is weighing."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Closed"
 msgstr ""
@@ -1390,6 +1464,11 @@ msgctxt "signing key"
 msgid "Keep this key"
 msgstr ""
 
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Ask the village"
@@ -1399,11 +1478,6 @@ msgstr ""
 msgctxt "next step box, start a crew for this quest"
 msgid "Start a crew and invite friends"
 msgstr "Forma una cuadrilla e invita a tus amistades"
-
-#: client/src/components/review/SeraKeys.tsx
-#~ msgctxt "sera answers"
-#~ msgid "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
-#~ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing here matches what is chosen above."
@@ -1418,7 +1492,7 @@ msgctxt "link back to the list"
 msgid "All change requests"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Find it on the quest board"
 msgstr ""
@@ -1434,7 +1508,7 @@ msgctxt "valuation receipt"
 msgid "Paid as {paid}."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests until {day}"
 msgstr ""
@@ -1505,7 +1579,7 @@ msgctxt "a switch setting"
 msgid "Off"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
 msgstr ""
 
@@ -1514,7 +1588,7 @@ msgctxt "sera answers"
 msgid "Withdraw it and end the vote"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Only one member, one vote funds {title} ({cost})."
 msgstr ""
 
@@ -1570,7 +1644,7 @@ msgctxt "funding rounds"
 msgid "A pot"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The amount must be a number."
 msgstr ""
 
@@ -1589,16 +1663,16 @@ msgctxt "funding rounds"
 msgid "{potName}. {line}."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The count is being made. Open this page again in a moment."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund until {day}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it:"
 msgstr ""
@@ -1614,7 +1688,7 @@ msgctxt "pricing desk"
 msgid "{0} outside the band"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Chosen by {names}."
 msgstr ""
@@ -1634,7 +1708,7 @@ msgctxt "sera changes"
 msgid "Review it as one structure change"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Sharing"
 msgstr ""
@@ -1669,6 +1743,11 @@ msgctxt "change request note outcome"
 msgid "Turned down"
 msgstr ""
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Use this price"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -1678,7 +1757,7 @@ msgstr ""
 msgid "Your saved numbers did not load."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Grow"
 msgstr ""
@@ -1707,7 +1786,7 @@ msgctxt "sera answers"
 msgid "Added to the draft. It goes live when the draft is published."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is withdrawn."
 msgstr ""
 
@@ -1715,12 +1794,16 @@ msgstr ""
 msgid "The suggestion was refused."
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
+msgstr ""
+
 #: client/src/components/review/SeraMember.tsx
 msgctxt "sera answers"
 msgid "{n} changes are in a draft, waiting to be published."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Saved."
 msgstr ""
@@ -1871,7 +1954,7 @@ msgstr ""
 msgid "Take this change out."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your choices are saved. You can change them until choosing closes."
 msgstr ""
 
@@ -1916,7 +1999,7 @@ msgctxt "sera changes"
 msgid "{agent} didn't answer at {lastAt}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{differ, plural, one {Voice and one member, one vote disagree on # quest.} other {Voice and one member, one vote disagree on # quests.}}"
 msgstr ""
 
@@ -1962,7 +2045,7 @@ msgstr ""
 msgid "The copy did not download"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests"
 msgstr ""
@@ -1976,7 +2059,7 @@ msgctxt "sera changes"
 msgid "Check first"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Save my choices"
 msgstr ""
@@ -1998,7 +2081,7 @@ msgstr ""
 msgid "This figure is outside the suggestion's band, so pick a reason."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share an idea"
 msgstr ""
@@ -2165,21 +2248,21 @@ msgctxt "pricing desk"
 msgid "to"
 msgstr ""
 
-#: client/src/components/review/SeraMember.tsx
-#~ msgctxt "sera answers"
-#~ msgid "{n} of them are in a draft, waiting to be published."
-#~ msgstr ""
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "As little as"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Reading the rounds"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The rough cost must be a number."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What will be done when it is finished?"
 msgstr ""
 
@@ -2192,7 +2275,7 @@ msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Both counts agree."
 msgstr ""
@@ -2211,7 +2294,7 @@ msgctxt "pricing desk"
 msgid "Hours"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Withdrawn"
 msgstr ""
@@ -2236,7 +2319,7 @@ msgctxt "sera answers"
 msgid "In a draft, not live yet: {n} changes"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Choose what to fund"
 msgstr ""
@@ -2271,7 +2354,7 @@ msgstr ""
 msgid "Nothing waits for you, and no draft is open."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea was not shared. Try again."
 msgstr ""
 
@@ -2410,7 +2493,7 @@ msgctxt "pricing desk"
 msgid "As much as, for {0}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What would you do?"
 msgstr ""
 
@@ -2457,7 +2540,7 @@ msgctxt "sera changes"
 msgid "{witness} finished Quest to witness"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until the pot's holder sets the next stage"
 msgstr ""
@@ -2495,6 +2578,11 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Back to funding rounds"
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -2536,7 +2624,7 @@ msgctxt "sera changes"
 msgid "Show everything waiting"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Shape your idea into a quest"
 msgstr ""
@@ -2564,12 +2652,12 @@ msgctxt "sera answers"
 msgid "Withdrawing it ends the village's vote on it, and the votes cast so far are set aside."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who would it help?"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Only Voice funds {title} ({cost})."
 msgstr ""
 
@@ -2590,6 +2678,10 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+msgstr ""
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -2647,7 +2739,7 @@ msgctxt "who started a change request"
 msgid "Started by {author}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "No quest gathered enough support to be funded."
 msgstr ""
 
@@ -2674,12 +2766,16 @@ msgctxt "pricing desk"
 msgid "Quest"
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, then withdrew it"
+msgstr ""
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the change request just added to"
 msgid "Open it"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Too few chose"
 msgstr ""
@@ -2707,6 +2803,10 @@ msgstr ""
 msgctxt "character card, open the role proposal"
 msgid "Propose a new role"
 msgstr "Proponer un rol nuevo"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Thank you. Your pledge is shown on this quest."
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -2738,6 +2838,11 @@ msgstr "Ver los roles abiertos"
 #, fuzzy
 #~ msgid "Close menu"
 #~ msgstr "Cerrar menú"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Pledge"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A draft from this queue is still open."
@@ -2780,6 +2885,12 @@ msgctxt "pricing desk"
 msgid "Suggestion"
 msgstr ""
 
+#. placeholder {0}: filled.unoffered.map(tokenName).join(", ")
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The rule pays {0}, which quests do not pay here yet. Turn it on in the quest pay rules first."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that changes a value"
 msgid "Change it to: {proposedTo}"
@@ -2803,6 +2914,10 @@ msgstr ""
 msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "el rol que guía el círculo"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You are backing this quest (pending). The Backer badge comes when the quest is done."
+msgstr ""
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
@@ -2869,6 +2984,11 @@ msgctxt "role pay"
 msgid "Saved"
 msgstr ""
 
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr ""
@@ -2908,6 +3028,10 @@ msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "I can live with this"
@@ -2938,6 +3062,11 @@ msgstr ""
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "The village has launched, so another admin co-signs before the key is replaced."
+msgstr ""
+
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Conditions"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -2977,12 +3106,12 @@ msgctxt "treasury sync"
 msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Seed"
 msgstr ""
@@ -3002,6 +3131,10 @@ msgstr "Ir al contenido"
 msgid "Your own figure first, before you see the suggestion (optional)"
 msgstr ""
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
+msgstr ""
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "The desk could not be read."
@@ -3011,7 +3144,7 @@ msgstr ""
 msgid "How this was worked out"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
 msgstr ""
 
@@ -3059,10 +3192,10 @@ msgctxt "a page loading"
 msgid "Loading…"
 msgstr ""
 
-#: client/src/components/review/SeraMember.tsx
-#~ msgctxt "sera answers"
-#~ msgid "The vote did not open."
-#~ msgstr ""
+#: client/src/components/valuation/QuestEnginePrice.tsx
+msgctxt "quest editor"
+msgid "Kind of work"
+msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick which change a note is about"
@@ -3079,7 +3212,7 @@ msgctxt "pricing desk"
 msgid "Estimated hours"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Round stages"
 msgstr ""
@@ -3108,7 +3241,7 @@ msgctxt "sera changes"
 msgid "To decide {nDecide}"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who it helps:"
 msgstr ""

@@ -97,6 +97,7 @@ describe.skipIf(!configured)("setting a quest's price with the Treasurer and the
       },
       overLimit: async () => false,
       liveHoldersOf: async (cap: string) => holders[cap] ?? [],
+      capabilityCtx: async () => ({ villageHeld: [] }),
       projectCurrency: () => "CRC",
       eeMeaningWritten: () => true,
       // The scratch schema registers no tokens; the admin door's real check is exercised in valuation.test.ts.
