@@ -1,4 +1,5 @@
--- 0355: a village writes down its cash budget, line by line, every import of it, a note per period, the sources that feed it, and an envelope per circle.
+-- 0360: a village writes down its cash budget, line by line, every import of it, a note per period, the sources that feed it, and an envelope per circle.
+-- 0360, as the integrator assigned (it was 0355; main reached 0356 while this waited to land).
 --
 -- WHAT THIS IS FOR.
 -- Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can

@@ -1,5 +1,5 @@
 /**
- * THE CASH BUDGET (budgets spec v0.2; tables in 0355). The one write path, the
+ * THE CASH BUDGET (budgets spec v0.2; tables in 0360). The one write path, the
  * moon's figure, and the registry a library source plugs into.
  *
  *   importBudgetLines(pool, input)   R2, R3, R4's flags, R5, R14: every write
