@@ -71,7 +71,7 @@ interface CovenantContent {
 
 interface LegalContent {
   membership?: {
-    /** e.g. "Amora 508(c)(1)(a)". Blank falls back to the village name. */
+    /** e.g. "Amora 508(c)(1)(a)". Blank: the page names the village's community and says no legal entity is published yet. */
     entityLabel?: string;
     /** The full paragraph in the letter body. Omitted entirely when blank. */
     contributionParagraph?: string;

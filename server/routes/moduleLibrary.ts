@@ -63,6 +63,7 @@
  * because "who turned this on" is the question the strip exists to answer, and
  * nothing at all rides for a visitor, who is refused.
  */
+import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
 import type { Express, Request } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import {
@@ -245,6 +246,7 @@ export function register(app: Express, deps: Deps): void {
     // Turning a module on for the first time reveals its standing examples, so
     // the founder meets a worked module rather than "No items yet." A no-op if
     // it was ever seeded or retired, or already holds real content.
+    raiseCanvasRevisitForLifecycle(getPool(), id); // governance reaching members, or the crowdpool switched on, is a canvas moment
     if (result.lifecycle !== "off" && examples !== false) await deps.seedExamplesOnEnable(id);
     // After launch, a change members could see is said out loud on the pulse.
     // Before launch nothing is public yet, and a preview stays quiet always.

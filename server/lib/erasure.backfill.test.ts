@@ -120,6 +120,7 @@ const GIVEN_TO_IT = [
   "moon-reviews-after-tombstone",
   "reward-moments-after-tombstone",
   "budget-attribution-after-tombstone",
+  "notebook-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ];

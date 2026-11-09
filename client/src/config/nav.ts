@@ -291,7 +291,8 @@ export const NAV: readonly NavEntry[] = [
     label: "About",
     items: [
       { href: "/how-we-create", brochure: true, label: "How We Create" },
-      { href: "/governance", label: "Governance" },
+      // Renamed on 2026-09-28 with the page it opens; the route stays put.
+      { href: "/governance", label: "How we work together" },
       { href: "/master-plan", brochure: true, label: "Master Plan" },
       { href: "/team", brochure: true, label: "Our Team" },
       // The other villages this one is linked with: part of what it is.

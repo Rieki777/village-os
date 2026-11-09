@@ -45,6 +45,8 @@ describe("role_application publishes", () => {
         conductable={[...CONDUCTABLE_TYPES]}
         advisory={["role_application"]}
         mayOpenAdvisory
+        // A member who may not open the other votes: applying asks terms.read, not proposal.open.
+        mayOpenBallot={false}
         onChoose={onChoose}
         onPractice={onPractice}
       />,
@@ -64,6 +66,7 @@ describe("role_application publishes", () => {
         conductable={CONDUCTABLE_TYPES.filter((t) => t !== "role_application")}
         advisory={[]}
         mayOpenAdvisory={false}
+        mayOpenBallot={false}
         onChoose={onChoose}
         onPractice={vi.fn()}
       />,

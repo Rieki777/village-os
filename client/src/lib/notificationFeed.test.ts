@@ -59,6 +59,25 @@ describe("batchRows", () => {
     expect(without.detail).not.toBe(without.title);
   });
 
+  it("never batches a restorative intake, and shows each one's words whole", () => {
+    // The intake's email carries the title alone, so this row is the one place
+    // its recipient reads the words, and every intake carries the same title.
+    const words = "Somebody wrote a long account of what happened. ".repeat(20);
+    const unread = batchRows(many("restorative_intake", BATCH_AT + 2, { title: "A private intake is waiting for you", body: words }));
+    expect(unread).toHaveLength(BATCH_AT + 2);
+    expect(unread.every((r) => !r.batched && r.whole && r.detail === words)).toBe(true);
+    // Read ones too: reading a row marks it read, and a read pile would batch.
+    const read = batchRows(many("restorative_intake", BATCH_AT + 1, { body: words, isRead: true }));
+    expect(read).toHaveLength(BATCH_AT + 1);
+    expect(read.every((r) => !r.batched && r.whole)).toBe(true);
+  });
+
+  it("every other kind still batches, and a single row's body is still cut to fit", () => {
+    expect(batchRows(many("moderation", BATCH_AT))[0].batched).toBe(true);
+    const [one] = batchRows([item({ id: "g", type: "gratitude", body: "thank you" })]);
+    expect(one.whole).toBe(false);
+  });
+
   it("orders newest first", () => {
     const rows = batchRows([
       item({ id: "old", type: "badge", at: "2026-08-01T00:00:00.000Z" }),

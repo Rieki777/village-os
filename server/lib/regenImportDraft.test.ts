@@ -5,18 +5,19 @@
  * shared/regenImport.test.ts proves what the draft SAYS. Only a database can
  * prove the four things a founder is promised on the import screen:
  *
- *   - every line previews clean on a fresh fork, so the founder reads the
+ *   - every line previews clean on a village with councils standing, so the founder reads the
  *     whole shape and nothing in it blocks;
  *   - publishing makes the project's circles, puts each seat in its circle
  *     with the card's fields, writes the team's holders as names to claim,
- *     and rests the councils a new village is born with;
+ *     and rests the councils the village already had;
  *   - reverting puts the councils back, rests every seat it made and leaves
  *     its circles dormant, because history is not deleted;
  *   - none of it needs anything the admin's draft route does not take.
  *
  * The card is ReGen Civics' own output (shared/__fixtures__, see
- * shared/regenFile.test.ts). The councils are the eight
- * server/seeds/circles-seed.json seeds on every fresh fork.
+ * shared/regenFile.test.ts). The councils are eight a village formed before
+ * it imported (shared/__fixtures__/standing-councils.json): a fresh fork is
+ * born with none, since server/seeds/circles-seed.json ships empty.
  *
  * No TEST_DATABASE_URL and the suite skips loudly (harness rule).
  */
@@ -36,7 +37,7 @@ let pool: mysql.Pool;
 
 const HERE = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
 const ROOT = path.join(HERE, "..", "..");
-const SEED = JSON.parse(fs.readFileSync(path.join(ROOT, "server", "seeds", "circles-seed.json"), "utf8")) as Array<{ id: string; name: string }>;
+const SEED = JSON.parse(fs.readFileSync(path.join(ROOT, "shared", "__fixtures__", "standing-councils.json"), "utf8")) as Array<{ id: string; name: string }>;
 const CARD = fs.readFileSync(path.join(ROOT, "shared", "__fixtures__", "regen-card-riverbend.json"), "utf8");
 
 /** Dated from today and never far out: MySQL 8 caps a TIMESTAMP at 2038 (see draftPublishOnce.test.ts). */

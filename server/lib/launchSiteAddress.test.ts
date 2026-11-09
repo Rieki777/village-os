@@ -17,6 +17,8 @@ import { dbDocument } from "../repos/store-db";
 import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
 import { ISSUANCE_CAP_REQUIREMENT } from "../../shared/issuanceCap";
 import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
+import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
+import { writeConfigDocument } from "../repos/appConfigDocs";
 import { dialsForSubject, overrideDials as highestTierDials, thresholdSettingsFrom, VILLAGE_LAUNCH } from "../../shared/ballotSubjects";
 
 describe("the site-address check reads FRONTEND_URL's shape", () => {
@@ -150,7 +152,9 @@ describe.skipIf(!testDbConfigured())("a ready village with no address of its own
       checks[r.checkKey] = () => ({ state: "ok", detail: "not in this test" });
     }
     checks["session-secret"] = () => ({ state: sessionSecret, detail: "held for this test" });
-    return { checks, moduleLifecycle: () => "off", env };
+    // Governance open to members, since `governance-on-for-members` is a
+    // blocking row read from this lifecycle; every other module is off.
+    return { checks, moduleLifecycle: (id) => (id === "governance" ? "members" : "off"), env };
   };
 
   beforeAll(async () => {
@@ -164,6 +168,16 @@ describe.skipIf(!testDbConfigured())("a ready village with no address of its own
     } as any);
     expect((await confirmManual(pool, ISSUANCE_CAP_REQUIREMENT, "founder-1", "declined")).ok).toBe(true);
     expect((await confirmManual(pool, "backups-drilled", "founder-1", true)).ok).toBe(true);
+    // The canvas build's platform-wide closing row reads the database, as in
+    // launchSecretsKey.test.ts: an adopted closing statement answers it.
+    await writeConfigDocument(pool, "exit-policy", {
+      closing: {
+        policyId: "proportional-closing-balance",
+        statement: PROPORTIONAL_CLOSING_STATEMENT,
+        adoptedBy: "founder-1",
+        adoptedAt: new Date().toISOString(),
+      },
+    });
   }, 300_000);
 
   afterAll(async () => {

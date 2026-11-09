@@ -1667,6 +1667,69 @@ export const MODULES: ModuleDef[] = [
     // `/api/season-plans`: each member's season plan and the village page of them (season plans RC1).
     apiPrefixes: ["/api/governance", "/api/admin/governance", "/api/season-plans"],
   },
+  /*
+   * THE TWO GOVERNANCE CANVAS MODULES (Rye's module ruling, 2026-10-01).
+   *
+   * The canvas build first shipped as core and always on. The ruling made it
+   * two optional modules, both OFF like every non-core module, that a founder
+   * switches on in Modules. Nothing turns either one on by itself, a season
+   * file included. Each works alone: neither requires the other.
+   *
+   * What stays core for every village whatever these say: the exit policy and
+   * its restorative path, the private intake, the closing policy row, the
+   * governance-on-for-members row and the build's honest-copy fixes.
+   */
+  {
+    id: "canvas",
+    guild: [],
+    tier: "included",
+    // Every reading names the member who recorded it, and suggestions carry
+    // their author. The canvas is the village's own account of itself, read
+    // by its admitted members.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    // Works the moment it is on: the first reading is the first content, and
+    // "not decided yet, because..." counts as one.
+    setup: "none",
+    name: "Governance Canvas",
+    description:
+      "The village reads how it governs itself, block by block, on the twelve blocks of the Governance Canvas: a reading per block, the season map, five frames to walk each block in, a Decision Matrix, one public line per block, a printable workbook and a companion that answers from the village's own record. While it is on, every block must be on record before the village is asked to start its Game.",
+    requires: [],
+    // The canvas's Power block reads the governance engine and the calendar
+    // offers its new-moon gathering. Better with both, whole without either.
+    recommends: ["governance", "events"],
+    // The pen is `story.tell`, which is core. The canvas adds no capability.
+    capabilities: [],
+    variableKeys: [],
+    // `/api/documents` is the member's notebook (own documents and the export
+    // pack), which the ruling puts inside this module.
+    apiPrefixes: ["/api/canvas", "/api/documents"],
+    // No openStateCheck: a reading holds no value anybody is owed. Off hides
+    // every surface; the readings stay in their table for when it is on again.
+  },
+  {
+    id: "conflict-evolution",
+    guild: [],
+    tier: "included",
+    // The agreement names the people who hold the care and cover roles and an
+    // outside contact, and an ombuds ask names the member who sent it.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    // Works the moment it is on: the agreement starts from the exit policy's
+    // own restorative steps, and the launch row says what is still missing.
+    setup: "none",
+    name: "Conflict Evolution",
+    description:
+      "A conflict agreement the village writes and changes by vote: where a conflict goes, who takes it and who covers, how soon a member hears back, a contact outside the village, and a private ask to the ombuds. While it is on, the village names a working conflict door before it is asked to start its Game.",
+    requires: [],
+    recommends: ["governance"],
+    capabilities: [],
+    variableKeys: [],
+    // `/api/care` holds no route yet. It is listed so the routes that follow
+    // the agreement (the care stages, routing and the consequences ladder)
+    // mount behind this gate the day they land.
+    apiPrefixes: ["/api/conflict-agreement", "/api/admin/conflict-agreement", "/api/care"],
+  },
   {
     id: "hypha",
     guild: ["basescan-api-key", "base-rpc-url"],
