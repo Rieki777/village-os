@@ -67,6 +67,7 @@
  */
 import crypto from "node:crypto";
 import { signTokenPayload } from "./memberTokens";
+import { secretValue } from "./secrets";
 
 /** Long enough for a slow sign-in with a password prompt, short enough that a captured state is stale. */
 export const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
@@ -128,6 +129,22 @@ export function resolveGoogleConfig(
     return { available: false, missing: ["GOOGLE_REDIRECT_URI (must be an absolute http or https URL)"] };
   }
   return { available: true, config: { clientId, clientSecret, redirectUri } };
+}
+
+/**
+ * The environment `resolveGoogleConfig` reads, with the OAuth client's two
+ * halves taken from Admin, Integrations first and the host second (readiness
+ * R171), so a founder without the host can turn Google on, with no restart:
+ * availability is asked fresh on every request. The callback address is still
+ * the host's (FRONTEND_URL or GOOGLE_REDIRECT_URI). Before boot has loaded the
+ * store, `secretValue` throws, and the host's values are all there is.
+ */
+export function googleCredentialEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
+  try {
+    return { ...env, GOOGLE_CLIENT_ID: secretValue("google_client_id", env), GOOGLE_CLIENT_SECRET: secretValue("google_client_secret", env) };
+  } catch {
+    return env;
+  }
 }
 
 /**

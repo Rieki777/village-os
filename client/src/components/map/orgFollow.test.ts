@@ -76,7 +76,7 @@ describe("lensFromOrg", () => {
   it("keeps what the map draws and names holders by name only", () => {
     const org = lensFromOrg(ORG_V1);
     expect(org?.version).toBe(ORG_V1.version);
-    expect(org?.circles).toEqual([{ id: "land", name: "Land Circle", parentCircleId: null, status: "active", colour: "#6fae52" }]);
+    expect(org?.circles).toEqual([{ id: "land", name: "Land Circle", parentCircleId: null, status: "active", colour: "#6fae52", homeStructureKey: null }]);
     expect(org?.roles[0]).toMatchObject({ id: "water", circleId: "land", state: "partial", holders: ["Ana"] });
   });
 
@@ -209,5 +209,26 @@ describe("useOrgFollow", () => {
     const m = mount();
     await act(() => m.hook.result.current.pushLens());
     expect(m.lenses()).toEqual([{ type: "lens", party: ["gardener"], roles: [] }]);
+  });
+});
+
+/* R1: the place keys pass through the shell to the map unchanged, and junk is dropped. */
+describe("lensFromOrg keeps where each seat and circle lives", () => {
+  const body = {
+    version: "v-places",
+    viewPeople: false,
+    circles: [
+      { id: "land", name: "Land Circle", status: "active", colour: "#6fae52", homeStructureKey: "greenhouse" },
+      { id: "hearth", name: "Hearth", status: "active", colour: "#aa8844", homeStructureKey: 42 },
+    ],
+    roles: [
+      { id: "r1", name: "Water Steward", circleId: "land", state: "open", seats: 1, holderCount: 0, structureKey: "water-tank" },
+      { id: "r2", name: "Cook", circleId: "hearth", state: "open", seats: 1, holderCount: 0 },
+    ],
+  };
+  it("passes a string key and turns anything else into null", () => {
+    const org = lensFromOrg(body)!;
+    expect(org.circles.map((c) => c.homeStructureKey)).toEqual(["greenhouse", null]);
+    expect(org.roles.map((r) => r.structureKey)).toEqual(["water-tank", null]);
   });
 });

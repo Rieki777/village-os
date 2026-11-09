@@ -35,7 +35,8 @@ import { notYetInEffectFor } from "../lib/atCloseLanding";
 import { activeClock } from "../lib/gratitude-cycles";
 import { dryRunProposal } from "../lib/proposalDryRun";
 import { changeSetSnapsToBoundary, elementsFor, type ChangesetDeps } from "../lib/changeset";
-import { CHANGE_SET_CAP } from "../lib/mechanics";
+import { CHANGE_SET_CAP_KEY, changeSetCapFrom } from "../lib/mechanics";
+import { pricePreview } from "../lib/changeSetPriceNow";
 import { stewardsSeated } from "../lib/stewardship";
 import { countdownSentence, vetoHoursFrom } from "../../shared/governanceKinds";
 
@@ -87,8 +88,9 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const changes = Array.isArray(req.body?.changeSet) ? req.body.changeSet : [];
     if (changes.length === 0) return res.status(400).json({ error: "A dry run needs at least one change to read" });
-    if (changes.length > CHANGE_SET_CAP) {
-      return res.status(400).json({ error: `A proposal carries at most ${CHANGE_SET_CAP} changes` });
+    const cap = changeSetCapFrom(numberVar(CHANGE_SET_CAP_KEY));
+    if (changes.length > cap) {
+      return res.status(400).json({ error: `A proposal carries at most ${cap} changes in this village` });
     }
     const days = Math.max(1, Math.min(90, Number(numberVar("governance.vote_days")) || 7));
     const closesAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
@@ -100,6 +102,9 @@ export function register(app: Express, deps: Deps): void {
       nextBoundaryAfter: (after: Date) => activeClock().nextBoundaryAfter(after),
       snapsToBoundary: (set) => changeSetSnapsToBoundary(set as any[]),
     });
-    res.json({ ...out, closesAt: closesAt.toISOString(), preview: true });
+    // What it would be voted at now, and which change sets that bar (change
+    // requests, Rye 2026-11-06). The same function the open-ballot route
+    // prices with, so the preview is the price.
+    res.json({ ...out, price: pricePreview(changes), closesAt: closesAt.toISOString(), preview: true });
   });
 }

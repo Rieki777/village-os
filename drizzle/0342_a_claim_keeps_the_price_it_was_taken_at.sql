@@ -1,0 +1,18 @@
+-- 0342: a quest claim keeps the price it was taken at (valuation spec C8).
+--
+-- WHAT THIS IS FOR.
+-- Once a member takes a quest on, its price is fixed: only the worker's
+-- agreement or a vote changes it (Rye, 2026-11-06, C8). Consent priced the claim
+-- off the quest row as it stood at consent, so a re-price of the board moved
+-- what an active claim was paid, with nobody asked.
+--
+-- `pay_terms` is the quest's own terms when the claim was taken, written by
+-- `openClaim` under the quest's row lock: its value, its list of tokens (null
+-- when the village's standard prices it), its cash and its stay credits. Consent
+-- pays from it.
+--
+-- EXPAND ONLY. One nullable column. A claim taken before this has NULL, and
+-- consent pays it off the quest as it stands, which is what it always did, so
+-- the previous release reads and writes this table unchanged. No backfill: the
+-- terms a claim was taken at were never recorded and cannot be recovered.
+ALTER TABLE `quest_claims` ADD COLUMN `pay_terms` JSON NULL;

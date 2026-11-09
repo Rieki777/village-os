@@ -27,6 +27,8 @@ export interface User {
   joinedAt: string;
   bio: string;
   avatar: string | null;
+  /** The member's own preferences; `locale` is their saved language (spec i18n US2.4). */
+  prefs?: { locale?: string };
 }
 
 interface AuthContextType {

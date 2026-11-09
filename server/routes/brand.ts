@@ -34,6 +34,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { sanitiseMapSkin } from "../../shared/mapSkin";
 import { normaliseProjectCurrency } from "../../shared/money";
+import { BRAND_CURRENCY_FIELD } from "../../shared/brandVote";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 
 /** The brand document as this module hands it back and takes it in. */
@@ -89,9 +90,13 @@ export function register(app: Express, deps: Deps): void {
       : null;
     const held = String(current.project?.fiatCurrency ?? "").trim();
     if (asked !== null && held && asked !== held && (await launchedAt())) {
+      // The lock holds here by default. A village vote at the highest tier is
+      // the door that stays open (Rye, 2026-11-06; shared/brandVote.ts).
       return res.status(409).json({
         code: "currency_locked",
-        error: `This village's currency was set at launch and stays ${held}. Everything already paid and owed is counted in it.`,
+        error: `This village's currency was set at launch and stays ${held} here. Everything already paid and owed is counted in it. A village vote at the highest tier can change it: raise it as a proposal.`,
+        proposeInstead: "brand_field",
+        field: BRAND_CURRENCY_FIELD,
       });
     }
     const next = {

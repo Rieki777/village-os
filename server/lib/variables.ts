@@ -53,6 +53,23 @@ export function numberVar(key: string): number {
   return typeof v === "number" ? v : Number(v) || 0;
 }
 
+/**
+ * A number dial that may be left blank: null for blank, the number otherwise.
+ *
+ * Only for a dial that declares what blank means (`blank` on its definition),
+ * because `numberVar` reads blank as 0 and on a cap that is the difference
+ * between "no ceiling" and "nothing at all". A dial without the declaration
+ * throws, so nobody reads a blank as null on a dial whose blank was never an
+ * answer.
+ */
+export function optionalNumberVar(key: string): number | null {
+  const def = VARIABLES_BY_KEY[key];
+  if (!def) throw new Error(`Unknown game variable: ${key}`);
+  if (!def.blank) throw new Error(`${key} does not say what blank means, so it cannot be read as optional`);
+  if (String(overrides[key] ?? def.default).trim() === "") return null;
+  return numberVar(key);
+}
+
 export function boolVar(key: string): boolean {
   const v = variable(key);
   return typeof v === "boolean" ? v : v === "true";

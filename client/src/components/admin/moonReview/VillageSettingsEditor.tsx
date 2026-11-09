@@ -26,6 +26,7 @@ interface Draft {
   taxForms: Array<{ key: string; label: string }>;
   taxFormRoutes: PayRoute[];
   holds: Array<{ taxFormKey: string; workCountry: string; note: string }>;
+  seraInbox: string;
 }
 
 const toDraft = (s: MoonReviewSettings): Draft => ({
@@ -39,6 +40,7 @@ const toDraft = (s: MoonReviewSettings): Draft => ({
   taxForms: s.taxForms.map((f) => ({ ...f })),
   taxFormRoutes: [...s.taxFormRoutes],
   holds: s.holds.map((h) => ({ ...h })),
+  seraInbox: s.seraInbox ?? "",
 });
 
 /** Empty fields send null, so the server's parser answers for each one. */
@@ -51,10 +53,11 @@ export const fromDraft = (d: Draft): Record<string, unknown> => ({
   taxForms: d.taxForms,
   taxFormRoutes: d.taxFormRoutes,
   holds: d.holds,
+  seraInbox: d.seraInbox.trim() || null,
 });
 
 export default function VillageSettingsEditor({ password }: { password: string }) {
-  const { state, save, saving, message } = useSettingsDocument<MoonReviewSettings>("settings", password);
+  const { state, save, saving, message, decideInbox } = useSettingsDocument<MoonReviewSettings>("settings", password);
   const [d, setD] = useState<Draft | null>(null);
 
   useEffect(() => {
@@ -79,6 +82,16 @@ export default function VillageSettingsEditor({ password }: { password: string }
           <label className={labelClass}>{W.vat}<input type="number" min={0} max={100} step="0.01" className={inputClass} value={d.vat} onChange={(e) => set({ vat: e.target.value })} /></label>
           <label className={labelClass}>{W.currency}<input className={inputClass} maxLength={3} value={d.currency} onChange={(e) => set({ currency: e.target.value.toUpperCase() })} /></label>
           <label className={`${labelClass} sm:col-span-2`}>{W.rateSource}<input className={inputClass} value={d.rateSource} onChange={(e) => set({ rateSource: e.target.value })} /></label>
+          <label className={`${labelClass} sm:col-span-2`}>{W.seraInbox}<input type="email" className={inputClass} maxLength={254} value={d.seraInbox} onChange={(e) => set({ seraInbox: e.target.value })} /><span className="mt-1 block text-xs text-muted-foreground">{W.seraInboxHint}</span></label>
+          {state.kind === "ready" && state.pendingSeraInbox ? (
+            <div data-testid="sera-inbox-pending" className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-foreground sm:col-span-2">
+              <p className="m-0">{W.seraInboxPending(state.pendingSeraInbox.address)}</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={primaryClass} onClick={() => void decideInbox("confirm")}>{W.seraInboxConfirm}</button>
+                <button type="button" className={buttonClass} onClick={() => void decideInbox("cancel")}>{W.seraInboxCancel}</button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 

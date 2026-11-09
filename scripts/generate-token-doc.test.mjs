@@ -29,10 +29,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  ceilingCell,
   generate,
+  ruleLine,
   seededRegistry,
   sentenceCoverageProblem,
   splitSql,
+  workPayTriggers,
 } from "./generate-token-doc.mjs";
 
 let run = 0;
@@ -295,6 +298,59 @@ check("a blank amount reads as what the work names, never as null", () => {
   const parsed = JSON.parse(/```json\n([\s\S]+?)\n```/.exec(text)[1]);
   const blankSeat = parsed.tokens.some((t) => (t.seededRules ?? []).some((r) => r.trigger === "role.cycle" && r.enabled && r.amount === null));
   if (blankSeat) assert.ok(prose.includes("what its role names of it"), "a blank seat rule must say the role decides");
+});
+
+check("a ceiling is stated only where one binds, because work is paid in full (Rye, 2026-10-22)", () => {
+  // `ceilingBinds` in shared/workValue.ts is false on quest, role and proposal
+  // pay, so the stored ceiling caps nothing there. The prose said "up to 100 a
+  // moon" on every one of them, a cap the no-caps ruling removed.
+  const triggers = workPayTriggers();
+  assert.deepStrictEqual([...triggers].sort(), ["proposal.accepted", "quest.completed", "role.cycle"]);
+  assert.strictEqual(
+    ruleLine({ trigger: "quest.completed", amount: 10, ceiling: 100, recipient: "claimant", ceilingBinds: false }),
+    "10 on `quest.completed` to the claimant",
+  );
+  assert.strictEqual(
+    ruleLine({ trigger: "gift.sent", amount: 5, ceiling: 50, recipient: "sender", ceilingBinds: true }),
+    "5 on `gift.sent` to the sender, up to 50 a moon",
+    "control: a rule a ceiling does bind still says so",
+  );
+  assert.strictEqual(ceilingCell({ ceiling: 100, ceilingBinds: false }), "none, work is paid in full");
+  assert.strictEqual(ceilingCell({ ceiling: 50, ceilingBinds: true }), "50");
+
+  const text = generate();
+  const prose = text.replace(/```json\n[\s\S]+?\n```/, "");
+  for (const t of triggers) {
+    const capped = new RegExp("`" + t.replace(".", "\\.") + "` to the [a-z]+, up to \\d+ a moon");
+    assert.ok(!capped.test(prose), `the prose states a cap on ${t}, which binds nothing`);
+    const tableRow = new RegExp("^\\| `" + t.replace(".", "\\.") + "` \\| `[a-z-]+` \\| [^|]+ \\| \\d+ \\|", "m");
+    assert.ok(!tableRow.test(prose), `the seeded-rules table prints a ceiling number on ${t}`);
+  }
+  const parsed = JSON.parse(/```json\n([\s\S]+?)\n```/.exec(text)[1]);
+  const rules = parsed.tokens.flatMap((t) => t.seededRules ?? []);
+  assert.ok(rules.length > 0, "the seed carries rules to check");
+  for (const r of rules) assert.strictEqual(r.ceilingBinds, !triggers.includes(r.trigger), `${r.trigger} carries the wrong ceilingBinds`);
+});
+
+check("THROWS when the work triggers move, never guessing which ceilings bind", () => {
+  // One directory per case: the reader caches a parsed file by its path.
+  const withWorkValue = (src, fn) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "token-doc-work-"));
+    try {
+      fs.mkdirSync(path.join(dir, "shared"));
+      fs.writeFileSync(path.join(dir, "shared", "workValue.ts"), src, "utf8");
+      return fn(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const list = 'export const WORK_PAY_TRIGGERS: readonly string[] = ["quest.completed"];\n';
+  withWorkValue('export function ceilingBinds(trigger: string): boolean {\n  return true;\n}\n', (dir) =>
+    assert.throws(() => workPayTriggers(dir), /WORK_PAY_TRIGGERS/, "a missing list must throw"));
+  withWorkValue(list + 'export function ceilingBinds(trigger: string): boolean {\n  return trigger.length > 0;\n}\n', (dir) =>
+    assert.throws(() => workPayTriggers(dir), /ceilingBinds/, "a ceilingBinds that stopped reading the list must throw"));
+  withWorkValue(list + 'export function ceilingBinds(trigger: string): boolean {\n  return !WORK_PAY_TRIGGERS.includes(trigger);\n}\n', (dir) =>
+    assert.deepStrictEqual(workPayTriggers(dir), ["quest.completed"], "control: the shape it reads today"));
 });
 
 console.log(`\n${run} check(s) passed\n`);
