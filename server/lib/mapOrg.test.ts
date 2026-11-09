@@ -20,6 +20,7 @@ function role(id: string, over: Partial<OrgRole> = {}): OrgRole {
     authority: null, firstYearOutcomes: null, first90DayOutcomes: null, locationExpectations: null,
     compensationReality: null, evidenceRequired: null,
     termsOffer: null, termsOfferAt: null, termsOfferBy: null,
+    structureKey: null,
     ...over,
   };
 }
@@ -110,5 +111,48 @@ describe("etagHits", () => {
     expect(etagHits(v, v)).toBe(false);
     expect(etagHits(undefined, v)).toBe(false);
     expect(etagHits("", v)).toBe(false);
+  });
+});
+
+/*
+ * R1 OF THE MAP LANE: THE PLACE A ROLE OR A CIRCLE LIVES IN REACHES THE MAP.
+ *
+ * `org_roles.structure_key` and `circles.home_structure_key` (0060) record
+ * which building on the land a seat or a circle belongs to. The map used to
+ * be sent neither, so it matched seats to buildings by NAME, and a village
+ * whose circles are not called "Land" or "Building" had every seat orphaned.
+ */
+describe("projectMapOrg carries where each seat and circle lives", () => {
+  const placed = (): MapOrgInput => ({
+    ...base(),
+    circles: [
+      { id: "land", name: "Land Circle", order: 2, status: "active", homeStructureKey: "greenhouse" },
+      { id: "hearth", name: "Hearth Council", order: 1, status: "active", homeStructureKey: "  " },
+    ],
+    roles: [role("water-steward", { structureKey: "water-tank" }), role("cook", { circleId: "hearth" })],
+  });
+
+  it("sends a role's own building and a circle's home", () => {
+    const s = projectMapOrg(placed());
+    expect(s.roles.find((r) => r.id === "water-steward")?.structureKey).toBe("water-tank");
+    expect(s.circles.find((c) => c.id === "land")?.homeStructureKey).toBe("greenhouse");
+  });
+
+  it("sends null, never an empty or blank key, when nothing is recorded", () => {
+    const s = projectMapOrg(placed());
+    expect(s.roles.find((r) => r.id === "cook")?.structureKey).toBeNull();
+    expect(s.circles.find((c) => c.id === "hearth")?.homeStructureKey).toBeNull();
+  });
+
+  it("moves the version when a seat moves to another building, so the map redraws it", () => {
+    const a = projectMapOrg(placed());
+    const moved = placed();
+    moved.roles = [role("water-steward", { structureKey: "ponds" }), role("cook", { circleId: "hearth" })];
+    expect(projectMapOrg(moved).version).not.toBe(a.version);
+  });
+
+  it("sends the place on every tier, because where a seat is is structure, not a person", () => {
+    const s = projectMapOrg({ ...placed(), viewPeople: false });
+    expect(s.roles.find((r) => r.id === "water-steward")?.structureKey).toBe("water-tank");
   });
 });

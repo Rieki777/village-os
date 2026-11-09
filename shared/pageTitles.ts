@@ -69,6 +69,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/verify-email": "Confirm your address",
   "/forgot-password": "Set a new password",
   "/game-mechanics": "Game Mechanics",
+  // Change requests: the list and, by longest prefix, each one.
+  "/changes": "Change requests",
   "/exit-policy": "Leaving well",
   "/tools": "Tools",
   // One line covers the shelf and every detail page: keys match by longest
@@ -87,6 +89,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/photographs": "Every photograph",
   "/admin": "Village settings",
   "/journal": "Journal",
+  "/funding-rounds": "Funding rounds",
   // One line covers the list and every room, by the longest-prefix rule.
   "/sessions": "Live sessions",
   // The shopfront pages (shared/brochure.ts). They had no entry, so their

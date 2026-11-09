@@ -37,6 +37,8 @@
  *   node scripts/check-brand-refs.mjs --update-baseline         # only ever downward, per file
  *   node scripts/check-brand-refs.mjs --update-baseline --force # allow a deliberate raise
  *   node scripts/check-brand-refs.mjs --baseline <path>         # read or write another baseline (its self-test)
+ *   node scripts/check-brand-refs.mjs --attribution <path>      # another attribution list, as JSON (its self-test)
+ *   node scripts/check-brand-refs.mjs --list-attribution        # print the list in force, as JSON
  */
 import fs from "fs";
 import path from "path";
@@ -56,9 +58,69 @@ const BASELINE_PATH = baselineArg !== -1 && process.argv[baselineArg + 1]
 const BANNED = [
   "amora",
   "dominicalito",
-  "regencivics",
   "amoracita",
 ];
+
+/**
+ * THE PUBLISHER'S NAME, in every spelling: "ReGen Civics", "ReGen-Civics",
+ * "regen-civics", "ReGenCivics" (readiness R063). The old list held only the
+ * joined form, so the spaced name in about fifty lines of admin copy and the
+ * hyphenated file-format and repository names went unseen.
+ *
+ * It is not a village's brand. The coordinator ruled on 2026-11-08: it is
+ * platform vocabulary where it NAMES THE PUBLISHER (attribution, about, the
+ * hub, the image and repository names after the move) and brand residue
+ * anywhere in village-facing gameplay copy, where a village's own name
+ * belongs. So the guard allows it ONLY in the attribution list below, and a
+ * mention anywhere else is a hit like any village term.
+ */
+const PUBLISHER = "regen[\\s-]*civics";
+
+/**
+ * THE ATTRIBUTION LIST: every file allowed to name the publisher, how many of
+ * its code lines may, and why. A file naming it more often than its entry
+ * allows fails, so a new mention in a long file is still a reviewed change to
+ * this list; an entry whose file no longer names it at all fails as stale, so
+ * the list cannot outlive what it describes. A village term on the same line
+ * is never excused by this list.
+ */
+const PROFILE_IMPORT = "reads a village profile made on the publisher's own site (the profile import)";
+const PROFILE_FORMAT = "the profile file format the publisher defines, and the tests and fixtures that pin it";
+const ATTRIBUTION_DEFAULT = {
+  "client/src/components/admin/ContentEditorTab.tsx": { lines: 1, why: PROFILE_IMPORT },
+  "client/src/components/admin/NeedsPanel.tsx": { lines: 1, why: PROFILE_IMPORT },
+  "client/src/components/admin/ProfileImport.tsx": { lines: 2, why: PROFILE_IMPORT },
+  "client/src/components/admin/ProfileImportDoor.tsx": { lines: 1, why: PROFILE_IMPORT },
+  "client/src/components/admin/PurposeStatementPanel.tsx": { lines: 2, why: PROFILE_IMPORT },
+  "client/src/components/admin/QuestsTab.tsx": { lines: 1, why: PROFILE_IMPORT },
+  "client/src/components/admin/TokensTab.tsx": { lines: 2, why: PROFILE_IMPORT },
+  "client/src/pages/Admin.tsx": { lines: 1, why: PROFILE_IMPORT },
+  "shared/regenFile.ts": { lines: 8, why: PROFILE_FORMAT },
+  "shared/regenImport.ts": { lines: 3, why: PROFILE_FORMAT },
+  "client/src/components/admin/ProfileImport.test.tsx": { lines: 5, why: PROFILE_FORMAT },
+  "client/src/components/admin/profilePrefill.test.tsx": { lines: 1, why: PROFILE_FORMAT },
+  "server/lib/regenImportDraft.test.ts": { lines: 1, why: PROFILE_FORMAT },
+  "server/lib/roleCcos.drafts.test.ts": { lines: 2, why: PROFILE_FORMAT },
+  "shared/__fixtures__/regen-card-riverbend.json": { lines: 2, why: PROFILE_FORMAT },
+  "shared/__fixtures__/regen-card-temple.json": { lines: 2, why: PROFILE_FORMAT },
+  "shared/__fixtures__/regen-village-riverbend.json": { lines: 4, why: PROFILE_FORMAT },
+  "shared/regenFile.test.ts": { lines: 6, why: PROFILE_FORMAT },
+  "shared/regenImport.test.ts": { lines: 2, why: PROFILE_FORMAT },
+  "shared/roleCcos.test.ts": { lines: 2, why: PROFILE_FORMAT },
+  "client/src/components/admin/goLivePlan.ts": { lines: 2, why: "names the publisher as the host on its own hosted path, and says what it never holds" },
+  "client/src/components/modules/PoolStatement.tsx": { lines: 1, why: "the builders' pool lives on the publisher's hub, and a builder's account is held there" },
+  "shared/modulePool.test.ts": { lines: 2, why: "the builders' pool lives on the publisher's hub, and a builder's account is held there" },
+  "client/src/pages/Feedback.tsx": { lines: 1, why: "says the feedback relay copies the publisher's platform team, the hub that listens" },
+  "shared/lunar.test.ts": { lines: 1, why: "the lunar constants are pinned to the publisher's own code, which this test names as their source" },
+};
+const attributionArg = process.argv.indexOf("--attribution");
+const ATTRIBUTION = attributionArg !== -1 && process.argv[attributionArg + 1]
+  ? JSON.parse(fs.readFileSync(path.resolve(process.argv[attributionArg + 1]), "utf8"))
+  : ATTRIBUTION_DEFAULT;
+if (process.argv.includes("--list-attribution")) {
+  console.log(JSON.stringify(ATTRIBUTION, null, 2));
+  process.exit(0);
+}
 
 const SCAN_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".sql", ".css", ".html", ".json"]);
 
@@ -140,7 +202,9 @@ function walk(dir, out = []) {
   return out;
 }
 
-const pattern = new RegExp(`\\b(${BANNED.join("|")})`, "i");
+const villageTerm = new RegExp(`\\b(${BANNED.join("|")})`, "i");
+const publisherTerm = new RegExp(PUBLISHER, "i");
+const pattern = { test: (s) => villageTerm.test(s) || publisherTerm.test(s) };
 
 /**
  * The guard reads CODE, not commentary. A comment recording where a design
@@ -149,10 +213,11 @@ const pattern = new RegExp(`\\b(${BANNED.join("|")})`, "i");
  * identifier is what a fork would inherit and have to hunt down. Comments
  * are counted separately and reported, never failed.
  */
-function scanFile(file) {
+function scanFile(file, mayNamePublisher = false) {
   const hits = [];
   let waived = 0;
   let provenance = 0;
+  let attributed = 0;
   const ext = path.extname(file);
   const lines = fs.readFileSync(file, "utf8").split("\n");
   let inBlock = false;
@@ -166,9 +231,10 @@ function scanFile(file) {
     if (/brand-ok:/.test(line)) { waived += 1; return; }
     const code = wasInBlock ? "" : stripComments(line, ext);
     if (!pattern.test(code)) { provenance += 1; return; }
+    if (mayNamePublisher && !villageTerm.test(code)) { attributed += 1; return; }
     hits.push({ line: i + 1, text: line.trim().slice(0, 120) });
   });
-  return { hits, waived, provenance };
+  return { hits, waived, provenance, attributed };
 }
 
 const walked = walk(ROOT);
@@ -178,13 +244,25 @@ const counts = {};
 const details = {};
 let waivers = 0;
 let provenanceTotal = 0;
+const attributedIn = {};
 for (const file of files) {
   const r = rel(file);
-  const { hits, waived, provenance } = scanFile(file);
+  const { hits, waived, provenance, attributed } = scanFile(file, Object.hasOwn(ATTRIBUTION, r));
   waivers += waived;
   provenanceTotal += provenance;
+  if (attributed) attributedIn[r] = attributed;
   if (hits.length) { counts[r] = hits.length; details[r] = hits; }
 }
+
+/** An entry over its allowance, or naming the publisher nowhere, fails: the list says exactly where the name lives. */
+const attributionProblems = [];
+for (const [r, entry] of Object.entries(ATTRIBUTION)) {
+  const n = attributedIn[r] ?? 0;
+  const allowed = Number(entry?.lines ?? 0);
+  if (n === 0) attributionProblems.push(`${r}: listed for attribution, but no code line in it names the publisher. Take it off ATTRIBUTION.`);
+  else if (n > allowed) attributionProblems.push(`${r}: ${n} line(s) name the publisher, its ATTRIBUTION entry allows ${allowed}. A new mention is a reviewed change to that entry (why: ${entry?.why ?? "none given"}).`);
+}
+const attributionTotal = Object.values(attributedIn).reduce((n, v) => n + v, 0);
 
 /**
  * SHOPFRONT is exempt, not zero. Every OTHER exempt/ratchet number this
@@ -269,6 +347,10 @@ for (const [file, count] of Object.entries(counts)) {
 const ratchetTotal = Object.entries(counts).filter(([f]) => isRatchet(f)).reduce((n, [, v]) => n + v, 0);
 const baselineTotal = Object.values(baseline).reduce((n, v) => n + v, 0);
 
+if (attributionProblems.length) {
+  failures.push({ file: "ATTRIBUTION (scripts/check-brand-refs.mjs)", reason: `${attributionProblems.length} entry problem(s)`, hits: [] });
+}
+
 if (failures.length) {
   console.error("\nBRAND GUARD FAILED — \"No village's brand in platform code\" (invariant 2.1 #2).\n");
   console.error("Identity belongs in shared/gameConfig.ts; per-deployment data belongs in seeds or the database.\n");
@@ -276,6 +358,8 @@ if (failures.length) {
     console.error(`  ${f.file} — ${f.reason}`);
     for (const h of f.hits) console.error(`      ${f.file}:${h.line}: ${h.text}`);
   }
+  for (const a of attributionProblems) console.error(`  ${a}`);
+  console.error(`\nThe publisher's name is allowed only where ATTRIBUTION lists it (the coordinator, 2026-11-08, R063). In village-facing copy, use the village's own name.`);
   console.error(`\nIf a hit is a genuine false positive, add \`brand-ok: <reason>\` on that line.`);
   console.error(`If you REMOVED references, refresh the baseline: node scripts/check-brand-refs.mjs --update-baseline\n`);
   console.error(`(SHOPFRONT stays exempt regardless: ${shopfrontTotal} reference(s) in ${SHOPFRONT.length} brochure page(s), by design, see EXEMPT/SHOPFRONT above.)\n`);
@@ -285,7 +369,8 @@ if (failures.length) {
 console.log(
   `Brand guard passed. Ratchet zones hold ${ratchetTotal} legacy reference(s) in code ` +
   `(baseline ${baselineTotal}); hard-clean zones are clean; ` +
-  `${provenanceTotal} provenance mention(s) in comments; ${waivers} waiver(s) in force. ` +
+  `${provenanceTotal} provenance mention(s) in comments; ${waivers} waiver(s) in force; ` +
+  `${attributionTotal} line(s) name the publisher, in the ${Object.keys(ATTRIBUTION).length} file(s) ATTRIBUTION lists. ` +
   `SHOPFRONT (${SHOPFRONT.length} brochure page(s), never gated by design: a fork replaces them, it does not white-label them) carries ${shopfrontTotal} reference(s).`,
 );
 

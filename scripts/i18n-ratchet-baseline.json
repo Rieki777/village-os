@@ -251,7 +251,6 @@
   "client/src/components/modules/PlanBasketPanel.tsx": 9,
   "client/src/components/modules/PoolStatement.tsx": 19,
   "client/src/components/modules/StarterSets.tsx": 5,
-  "client/src/components/modules/SuggestDial.tsx": 8,
   "client/src/components/modules/TurnOnAction.tsx": 14,
   "client/src/components/places/CuratorImage.tsx": 1,
   "client/src/components/places/PhotoCard.tsx": 11,

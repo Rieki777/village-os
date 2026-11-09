@@ -108,68 +108,9 @@ export async function listArchetypes(pool: Pool, villageId: string): Promise<Arc
   }));
 }
 
-export interface OpenPaths {
-  /**
-   * Seats tagged for this class.
-   *
-   * The platform's role cards show "~8h/wk" and `org_roles` has no hours
-   * column: that number lives in the platform repo's own role data, not in
-   * this schema. Rather than invent one, the card shows what a village
-   * actually records about a seat: what it is called, whether it is
-   * recruiting, and which circle it belongs to.
-   */
-  roles: Array<{
-    id: string;
-    name: string;
-    seats: number;
-    recruiting: boolean;
-    circleKey: string | null;
-    color: string | null;
-  }>;
-  questCount: number;
-}
-
-/**
- * What this class opens, which is a SUGGESTION and never a restriction.
- *
- * An untagged row belongs to everyone, and "tagged for nobody" has to read the
- * same way as "not tagged at all". JSON_LENGTH over a NULL column is NULL, so
- * both cases fall through the same branch here; collapsing them the other way
- * is how a filter quietly empties a board.
- *
- * This feeds the class panel only. The Quest Log, search and every earning
- * surface stay unfiltered, because a class guides what you are shown and never
- * what you may claim.
- */
-export async function openPathsFor(
-  pool: Pool,
-  villageId: string,
-  archetypeKey: string,
-): Promise<OpenPaths> {
-  const tagged = "JSON_CONTAINS(`archetypes`, JSON_QUOTE(?))";
-  const [roles] = await pool.query<RowDataPacket[]>(
-    "SELECT `id`, `name`, `seats`, `recruiting`, `circle_id`, `color` FROM `org_roles` " +
-      `WHERE \`active\` = 1 AND \`is_example\` = 0 AND ${tagged} ` +
-      "ORDER BY `recruiting` DESC, `sort_order`, `name` LIMIT 12",
-    [archetypeKey],
-  );
-  const [quests] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS n FROM `quests` " +
-      `WHERE \`status\` = 'open' AND \`is_example\` = 0 AND ${tagged}`,
-    [archetypeKey],
-  );
-  return {
-    roles: roles.map((r) => ({
-      id: String(r.id),
-      name: String(r.name ?? ""),
-      seats: Number(r.seats ?? 1),
-      recruiting: !!r.recruiting,
-      circleKey: r.circle_id == null ? null : String(r.circle_id),
-      color: r.color == null ? null : String(r.color),
-    })),
-    questCount: Number(quests[0]?.n ?? 0),
-  };
-}
+// What a class opens moved to server/repos/openPaths.ts (build days S2), so its
+// queries live in a repo; re-exported here so every caller keeps its import.
+export { openNowCounts, openPathsFor, type OpenPathRole, type OpenPaths } from "../repos/openPaths";
 
 export interface PlayerCharacter {
   id: string;

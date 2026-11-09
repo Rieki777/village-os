@@ -19,6 +19,7 @@ import {
   ensureSigningKey,
   NO_SIGNING_KEY_SENTENCE,
   resetSigningKeyForTests,
+  rotateSigningKey,
   signDocument,
   signingKeyAtRest,
   verifyDocument,
@@ -193,6 +194,64 @@ describe("a sealed key this deployment cannot open", () => {
     const stranded = await ensureSigningKey(pool, {});
     expect(signingKeyAtRest()).toBe("unreadable");
     expect(canSign()).toBe(false);
+  });
+});
+
+/*
+ * ROTATING THE KEY (readiness R069). Two ways reach a village that must have a
+ * new key: a leak, and a restore under a different VILLAGE_SECRETS_KEY, which
+ * strands the sealed private half. The only recovery was a hand-written
+ * DELETE on app_config. Rotation re-mints in place, sealed under the key this
+ * deployment holds, and peers see the change through the pause network.ts
+ * already raises on a new key.
+ */
+describe("rotating the signing key (R069)", () => {
+  it("re-mints a stranded key under the secrets key this deployment holds, so it signs again", async () => {
+    const { pool, store } = fakePool();
+    const minted = await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_A });
+    resetSigningKeyForTests();
+    await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_B });
+    expect(canSign(), "the control: stranded under the wrong key").toBe(false);
+
+    const rotated = await rotateSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_B });
+    expect(rotated).toMatchObject({ ok: true, previousKid: minted.kid });
+    if (!rotated.ok) throw new Error(rotated.error);
+    expect(rotated.kid).not.toBe(minted.kid);
+    expect(canSign()).toBe(true);
+    expect(signingKeyAtRest()).toBe("sealed");
+    expect(doc()(store).privateKeyPem, "no plaintext copy").toBeUndefined();
+    expect(String(store.value)).not.toContain("PRIVATE KEY");
+
+    // A fresh boot under the same key reads the new one, and what it signs verifies.
+    resetSigningKeyForTests();
+    const reloaded = await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_B });
+    expect(reloaded.kid).toBe(rotated.kid);
+    const signed = signDocument({ a: 1 }, reloaded, "2026-11-06T00:00:00.000Z");
+    expect(verifyDocument(signed, reloaded.publicKeyPem)).toBe(true);
+  });
+
+  it("replaces a leaked key: what it signs now does not verify under the old one", async () => {
+    const { pool } = fakePool();
+    const leaked = await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_A });
+    const rotated = await rotateSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_A });
+    if (!rotated.ok) throw new Error(rotated.error);
+    resetSigningKeyForTests();
+    const fresh = await ensureSigningKey(pool, { VILLAGE_SECRETS_KEY: KEY_A });
+    const signed = signDocument({ a: 1 }, fresh, "2026-11-06T00:00:00.000Z");
+    expect(verifyDocument(signed, leaked.publicKeyPem)).toBe(false);
+    expect(verifyDocument(signed, fresh.publicKeyPem)).toBe(true);
+  });
+
+  it("refuses with no usable secrets key, and leaves the row exactly as it was", async () => {
+    const { pool, store } = fakePool();
+    await ensureSigningKey(pool, {});
+    const before = store.value;
+    const refused = await rotateSigningKey(pool, {});
+    expect(refused).toMatchObject({ ok: false });
+    expect(store.value).toBe(before);
+    const quoted = await rotateSigningKey(pool, { VILLAGE_SECRETS_KEY: `"${KEY_A}"` });
+    expect(quoted, "a key in the wrong shape is no key").toMatchObject({ ok: false });
+    expect(store.value).toBe(before);
   });
 });
 

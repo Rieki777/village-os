@@ -34,6 +34,7 @@ interface FakeResponse {
   redirected: boolean;
   body: string;
   clone(): FakeResponse;
+  text(): Promise<string>;
 }
 const response = (body: string, redirected = false): FakeResponse => ({
   status: 200,
@@ -42,6 +43,9 @@ const response = (body: string, redirected = false): FakeResponse => ({
   body,
   clone() {
     return response(body, redirected);
+  },
+  async text() {
+    return body;
   },
 });
 
@@ -114,7 +118,13 @@ function worker(serve: (url: string) => FakeResponse) {
     return res;
   };
   const cacheName = /const CACHE = "([^"]+)"/.exec(SW)?.[1] ?? "";
-  return { visit, network, cached: () => caches.urls(cacheName), cacheName };
+  const assetCache = /const ASSETS = "([^"]+)"/.exec(SW)?.[1] ?? "";
+  const activate = async () => {
+    const pending: Promise<unknown>[] = [];
+    handlers.activate({ waitUntil: (p: Promise<unknown>) => pending.push(p) });
+    await Promise.all(pending);
+  };
+  return { visit, network, cached: () => caches.urls(cacheName), assets: () => caches.urls(assetCache), names: caches.names, activate, cacheName, assetCache };
 }
 
 describe("the map's service worker", () => {
@@ -148,5 +158,65 @@ describe("the map's service worker", () => {
     await w.visit(current);
     await w.visit(at("000000000000"));
     expect(w.cached(), "a redirected answer is not kept, and does not evict the real copy").toEqual([bare(current)]);
+  });
+});
+
+/*
+ * MAP SPEED PLAN S1: the page no longer carries its images; each is its own
+ * immutable file under /grounds/a/. Offline must keep working, so they are
+ * cached the same way the page is, and pruned to the set the current page
+ * still names, so a deploy that changes a sprite cannot leave the old one on
+ * the phone forever.
+ */
+describe("the map's lifted images", () => {
+  const img = (h: string) => `${ORIGIN}/grounds/a/${h.repeat(16).slice(0, 16)}.png`;
+  /** A page whose body names the given images, as the split page does. */
+  const page = (names: string[]) => names.map((u) => u.replace(ORIGIN, "")).join(" ");
+
+  it("names the asset cache this test reads (the positive control)", () => {
+    expect(worker(() => response("x")).assetCache).not.toBe("");
+  });
+
+  it("serves an image from the cache after the first visit, offline included", async () => {
+    const w = worker((url) => response(url.includes("/grounds/a/") ? "png bytes" : page([img("a")])));
+    await w.visit(at("cccccccccccc"));
+    await w.visit(img("a"));
+    const again = await w.visit(img("a"));
+    expect(again?.body).toBe("png bytes");
+    expect(w.network.filter((u) => u.includes("/grounds/a/")), "downloaded once").toEqual([img("a")]);
+    expect(w.assets()).toEqual([img("a")]);
+  });
+
+  it("keeps the images the current page names and drops the rest when a new version lands", async () => {
+    let current = page([img("a"), img("b")]);
+    const w = worker((url) => response(url.includes("/grounds/a/") ? "png" : current));
+    await w.visit(at("aaaaaaaaaaaa"));
+    await w.visit(img("a"));
+    await w.visit(img("b"));
+    expect(w.assets().sort()).toEqual([img("a"), img("b")].sort());
+    current = page([img("b"), img("c")]); // the next deploy changed one sprite
+    await w.visit(at("bbbbbbbbbbbb"));
+    expect(w.assets(), "the retired sprite is gone, the shared one stays").toEqual([img("b")]);
+  });
+
+  it("does not cache an image that answered with anything but a clean 200", async () => {
+    const w = worker((url) => (url.includes("/grounds/a/") ? { ...response("nope"), status: 404 } : response(page([]))));
+    await w.visit(img("d"));
+    expect(w.assets()).toEqual([]);
+  });
+
+  it("leaves other /grounds/ paths alone", async () => {
+    const w = worker(() => response("x"));
+    const res = await w.visit(`${ORIGIN}/grounds/a/../index.html`);
+    expect(res, "not answered by the worker").toBeUndefined();
+    expect(w.assets()).toEqual([]);
+  });
+
+  it("survives activation alongside the page cache", async () => {
+    const w = worker((url) => response(url.includes("/grounds/a/") ? "png" : page([img("a")])));
+    await w.visit(at("aaaaaaaaaaaa"));
+    await w.visit(img("a"));
+    await w.activate();
+    expect(w.names().sort()).toEqual([w.assetCache, w.cacheName].sort());
   });
 });

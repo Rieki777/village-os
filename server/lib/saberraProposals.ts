@@ -67,6 +67,8 @@ export interface VendorRecord {
   fields: Record<string, unknown>;
   /** A link back to the record in their product, for the steward reviewing it. */
   url?: string;
+  /** When the service last edited it, read through `editedAtOf`. Never who edited it. */
+  editedAt?: string;
 }
 
 /** A record that could not become a seat, named with the reason. */

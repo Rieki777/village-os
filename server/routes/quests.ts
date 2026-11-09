@@ -72,7 +72,9 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
-import { keepExampleQuest, questClosed } from "../repos/quests";
+import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
+import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
+import { claimRefusalFor } from "../lib/questClaimGate";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
@@ -114,6 +116,8 @@ type Deps = Pick<
    * the exception and reads `unavailable` for itself.
    */
   limitState(bucket: string, max: number, windowMs: number): Promise<LimitState>;
+  /** The next-step box after a claim (server/lib/questNextStep.ts). */
+  questNextStep(quest: QuestRecord, userId: string): Promise<ResolvedNextStep>;
 };
 
 export function register(app: Express, deps: Deps): void {
@@ -769,6 +773,16 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
+  /** The box, or null when gathering it failed. Logged loudly; never fails the claim. */
+  async function nextStepOrNull(quest: QuestRecord, userId: string, claimId: string): Promise<ResolvedNextStep | null> {
+    try {
+      return await deps.questNextStep(quest, userId);
+    } catch (err) {
+      console.error(`[quests] claim ${claimId}: the next-step box could not be gathered`, err);
+      return null;
+    }
+  }
+
   // Quests: claim / submit (player)
   app.post("/api/game/quests/:id/claim", async (req, res) => {
     const user = await authedUser(req);
@@ -777,51 +791,32 @@ export function register(app: Express, deps: Deps): void {
     if (!quest) return res.status(404).json({ error: "Quest not found" });
     // Consent on a claimed quest mints recognition from the faucet, grants
     // stay credits and advances a stage. Refusing the CLAIM closes that whole
-    // chain, because consent cannot happen without one.
-    if (await isExampleRow(getPool(), "quests", req.params.id)) {
-      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
-    }
-    /*
-     * A CLOSED QUEST IS NOT AN INVITATION, and this route never asked.
-     *
-     * It checked `is_example`, `min_stage`, `requires_role` and the member's
-     * own claims, and never `quest.status`. Nothing on the client covered for
-     * it either: `Quests.tsx` filters the board by circle and difficulty only,
-     * so a quest an admin closed kept rendering with a live claim button, and
-     * the whole chain behind it stayed open. Refusing the claim closes the
-     * chain, the same reasoning the example guard above is written on.
-     *
-     * SUBMIT IS DELIBERATELY NOT GUARDED THIS WAY. Closing the board must
-     * never strand work already in flight: a member holding a claim from
-     * before the quest closed still hands it in and is still consented.
-     */
-    if (questClosed(quest.status)) {
+    // chain, because consent cannot happen without one. The rules live in ONE
+    // gate (shared/questClaimGate.ts) that the map's door asks too; this route
+    // only words the refusal. SUBMIT is deliberately not guarded by the closed
+    // rule: closing the board must never strand work already in flight.
+    // Refusals name exactly what is missing, because "computer says no"
+    // teaches nothing.
+    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+    if (refusal?.kind === "example") return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    if (refusal?.kind === "closed") {
       return res.status(409).json({
         error: "This quest is closed, so it is not taking new claims. The board has others open.",
-        status: String(quest.status ?? ""),
+        status: refusal.status,
       });
     }
-
-    // Progression gates (revision 2, step 3). Structured fields enforce; the
-    // legacy free-text `roleRequired` stays display-only prose. Refusals name
-    // exactly what is missing, because "computer says no" teaches nothing.
-    if (quest.minStage) {
-      const needed = stageIndex(quest.minStage);
-      if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-        return res.status(403).json({
-          error: `This quest opens at the ${stageName(quest.minStage)} stage. Keep walking the path and it will unlock.`,
-          minStage: quest.minStage,
-        });
-      }
+    if (refusal?.kind === "stage") {
+      return res.status(403).json({
+        error: `This quest opens at the ${stageName(refusal.minStage)} stage. Keep walking the path and it will unlock.`,
+        minStage: refusal.minStage,
+      });
     }
-    if (quest.requiresRole) {
-      const role = loadRoles().find((r) => r.id === quest.requiresRole);
-      if (!roleIdsFor(user.id).includes(quest.requiresRole)) {
-        return res.status(403).json({
-          error: `This quest is reserved for ${role?.name ?? quest.requiresRole}. Ask a founder about joining.`,
-          requiresRole: quest.requiresRole,
-        });
-      }
+    if (refusal?.kind === "role") {
+      const role = loadRoles().find((r) => r.id === refusal.requiresRole);
+      return res.status(403).json({
+        error: `This quest is reserved for ${role?.name ?? refusal.requiresRole}. Ask a founder about joining.`,
+        requiresRole: refusal.requiresRole,
+      });
     }
 
     /*
@@ -852,7 +847,29 @@ export function register(app: Express, deps: Deps): void {
       if (taken.reason === "gone") return res.status(404).json({ error: "Quest not found" });
       return res.status(409).json({ error: "Already claimed", claim: taken.existing });
     }
-    res.json(claim);
+    // The claim stands before anything below runs: the box and the bell are
+    // help, and neither may turn a made claim into an error the member retries.
+    const next = await nextStepOrNull(quest, user.id, claim.id);
+    await bellQuestClaimed(notify, user.id, claim.id, quest);
+    res.json({ ...claim, next });
+  });
+
+  /**
+   * The next-step box again, for the member holding a live claim. A claim made
+   * on a weak signal whose reply was lost, or a box closed by mistake, is one
+   * read away instead of gone.
+   */
+  app.get("/api/game/quests/:id/next", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const quest = await questsRepo.byId(req.params.id);
+    if (!quest) return res.status(404).json({ error: "Quest not found" });
+    const mine = await claimsRepo.forUser(user.id);
+    const active = mine.find((c) => c.questId === quest.id && (c.status === "claimed" || c.status === "submitted"));
+    if (!active) return res.status(404).json({ error: "No active claim for this quest" });
+    const next = await nextStepOrNull(quest, user.id, active.id);
+    if (!next) return res.status(503).json({ error: "next_step_unavailable" });
+    res.json({ claimId: active.id, next });
   });
 
   app.post("/api/game/quests/:id/submit", async (req, res) => {

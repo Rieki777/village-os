@@ -18,6 +18,14 @@
  * does not require caching the whole app, so we do not.
  */
 const CACHE = "grounds-v1";
+/*
+ * The images the server lifts out of the artifact (map speed plan S1,
+ * server/lib/groundsSplit.ts). Each is named by a hash of its bytes, so it is
+ * as immutable as the hashed page, and cached the same way so the map still
+ * opens offline. Kept apart from the page so each cache prunes by its own rule.
+ */
+const ASSETS = "grounds-assets-v1";
+const ASSET_PATH = /^\/grounds\/a\/[0-9a-f]{16}\.(?:png|jpg|webp|gif|svg)$/;
 
 self.addEventListener("install", (event) => {
   // Nothing to precache. Take over as soon as the old worker lets go.
@@ -55,7 +63,7 @@ self.addEventListener("activate", (event) => {
       // Drop caches from an older naming scheme so an upgrade cannot leave
       // megabytes of unreachable artifact behind on someone's phone.
       const names = await caches.keys();
-      await Promise.all(names.filter((n) => n !== CACHE).map((n) => caches.delete(n)));
+      await Promise.all(names.filter((n) => n !== CACHE && n !== ASSETS).map((n) => caches.delete(n)));
       await self.clients.claim();
     })(),
   );
@@ -69,6 +77,22 @@ self.addEventListener("fetch", (event) => {
   try { url = new URL(req.url); } catch { return; }
   if (url.origin !== self.location.origin) return;
 
+  if (ASSET_PATH.test(url.pathname)) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(ASSETS);
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        const res = await fetch(req);
+        if (res && res.status === 200 && res.type === "basic" && !res.redirected) {
+          event.waitUntil(cache.put(req, res.clone()));
+        }
+        return res;
+      })(),
+    );
+    return;
+  }
+
   // Only the immutable, hashed artifact. The stable /grounds/index.html name
   // is deliberately excluded: its bytes change without its URL changing, so
   // caching it hard is exactly the stale-forever trap.
@@ -79,7 +103,7 @@ self.addEventListener("fetch", (event) => {
       const cache = await caches.open(CACHE);
       const hit = await cache.match(req);
       if (hit) {
-        event.waitUntil(keepOnly(cache, req.url));
+        event.waitUntil(keepOnly(cache, req.url).then(() => keepNamedAssets(hit.clone())));
         return hit;
       }
       const res = await fetch(req);
@@ -90,7 +114,9 @@ self.addEventListener("fetch", (event) => {
        * would then throw the real current copy away in its favour.
        */
       if (res && res.status === 200 && res.type === "basic" && !res.redirected) {
-        event.waitUntil(cache.put(req, res.clone()).then(() => keepOnly(cache, req.url)));
+        const copy = res.clone();
+        const named = res.clone();
+        event.waitUntil(cache.put(req, copy).then(() => keepOnly(cache, req.url)).then(() => keepNamedAssets(named)));
       }
       return res;
     })(),
@@ -126,5 +152,24 @@ async function keepOnly(cache, keepUrl) {
   const bare = (u) => u.split("#")[0];
   for (const key of await cache.keys()) {
     if (bare(key.url) !== bare(keepUrl)) await cache.delete(key);
+  }
+}
+
+/*
+ * ONLY THE IMAGES THE CURRENT MAP STILL NAMES.
+ *
+ * The same leak as above, one level down: a deploy that changes one sprite
+ * gives it a new name, and the old one would otherwise sit on the phone
+ * forever. The page just served is the one the manifest names, so whatever
+ * image it no longer mentions can never be asked for again.
+ */
+async function keepNamedAssets(pageResponse) {
+  let text;
+  try { text = await pageResponse.text(); } catch { return; }
+  const cache = await caches.open(ASSETS);
+  for (const key of await cache.keys()) {
+    let p;
+    try { p = new URL(key.url).pathname; } catch { continue; }
+    if (!text.includes(p)) await cache.delete(key);
   }
 }
