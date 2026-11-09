@@ -74,7 +74,7 @@ type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: D
  * (`GET /api/open-proposals/form`, public). A visitor's board shows only roles
  * the form would take, and no Apply when it is closed (red team, 9 Nov).
  */
-type FormRoleSteps = { id: string; name: string; interviews?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
+type FormRoleSteps = { id: string; name: string; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
 type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null; roles: FormRoleSteps[] };
 
 function useProposalForm(): FormState | null {
@@ -521,7 +521,7 @@ export default function RoleDraft() {
                   </li>
                 </ol>
               )}
-              {/* Each drafted role's interviews in order, when the role sets them (Rye's answer 7). */}
+              {/* Each drafted role's conversations in order, when the role sets them (Rye's answer 7). */}
               {!member && <NextForRoles roles={(form?.roles ?? []).filter((r) => picks.includes(r.id))} />}
             </div>
             <div>
