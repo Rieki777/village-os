@@ -65,6 +65,8 @@ import {
   CARE_DOOR_HELD_BY_AGREEMENT,
   CARE_DOOR_IN_AGREEMENT,
   CARE_DOOR_IS_THE_AGREEMENT_VOTE,
+  CLOSING_CHANGE_DOOR,
+  CLOSING_DOOR_IS_THE_CLOSING_VOTE,
   CONSEQUENCE_VOTE_NOT_BUILT,
   FILED_BY_PROPOSER,
   PEN_REFUSALS,
@@ -109,6 +111,8 @@ let QUALIFIED = true;
 let AGREEMENT_STORED = false;
 /** Every notice the routes send, as `notify` receives it. */
 const NOTICES: NotifyInput[] = [];
+/** Who holds `brief.private` live, as `liveHoldersOf` answers (G.4). Empty unless a test seats somebody. */
+let PRIVATE_HOLDERS: string[] = [];
 
 const who = (req: express.Request) => {
   const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -135,6 +139,10 @@ async function call(method: string, path: string, as: Who | null, body?: unknown
   return { status: r.status, body: (await r.json().catch(() => undefined)) as any };
 }
 
+
+/** Closing words a member might suggest (D3): eight words and more, under the village's own name. */
+const CLOSING_WORDS =
+  "If the village closes, the land passes to a community land trust and the cash is shared equally among whoever still lives here.";
 const propose = (as: Who, body: Record<string, unknown>) => call("POST", "/api/canvas/proposals", as, body);
 const adopt = (as: Who, id: number, note?: string) => call("POST", `/api/canvas/proposals/${id}/adopt`, as, note ? { note } : {});
 const decline = (as: Who, id: number, note?: string) => call("POST", `/api/canvas/proposals/${id}/decline`, as, note ? { note } : {});
@@ -244,6 +252,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       submissions: () => [],
       legalEntityLabel: () => "",
       seasonNow: () => null,
+      liveHoldersOf: async (capability: string) => (capability === "brief.private" ? [...PRIVATE_HOLDERS] : []),
     });
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -802,6 +811,36 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       expect((await call("DELETE", `/api/canvas/decision-matrix/rows/${id}`, "admin")).status).toBe(200);
       expect((await call("DELETE", `/api/canvas/decision-matrix/rows/${id}`, "admin")).status).toBe(404);
     });
+    it("the closing words (D3): any member suggests them, a member adopting is refused, an admin adopts and the exit policy reads them", async () => {
+      const r = await propose("member", {
+        blockId: "team", target: "setting", door: "exit:closing",
+        change: { policyId: "own-words", statement: CLOSING_WORDS }, body: "The land should outlast us.",
+      });
+      expect(r.status, JSON.stringify(r.body)).toBe(201);
+      const p = r.body.proposal;
+      expect(p.pen).toMatchObject({ pen: "consequence", how: "act", who: "admins" });
+      // Words the editor would refuse are refused at the door, in its words.
+      const bad = await propose("member", {
+        blockId: "team", target: "setting", door: "exit:closing", change: { policyId: "own-words", statement: "TBD" }, body: "Short.",
+      });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error).toMatch(/at least 8 words/);
+
+      expect(await adopt("member", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.consequence } });
+      expect(await adopt("teller", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.consequence } });
+      const adopted = await adopt("admin", p.id);
+      expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+      expect(adopted.body.outcome).toMatchObject({ wrote: "exit-policy", door: "exit:closing", fields: ["closing"] });
+      await exitPolicyRepo().load();
+      const stored = exitPolicyRepo().get() as any;
+      expect(stored.closing).toMatchObject({ policyId: "own-words", statement: CLOSING_WORDS, adoptedBy: "cf-admin" });
+      // What GET /api/exit-policy serves: the words and the day, never the account.
+      const read = withPolicyDefaults(stored).closing as any;
+      expect(read).toMatchObject({ policyId: "own-words", statement: CLOSING_WORDS });
+      expect(read.adoptedAt).toBeTruthy();
+      expect(read.adoptedBy).toBeUndefined();
+    });
+
   });
 
   describe("adopting, after the Birthing", () => {
@@ -886,6 +925,46 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       } finally {
         QUALIFIED = true;
       }
+    });
+
+    it("the private sections (G.4, D1): a seated brief.private holder adopts and reads them, the unseated admin is refused naming the vote", async () => {
+      const p = (await propose("teller", { blockId: "legal", sectionId: "legal", body: "The trust holds the title, and the members hold the trust." })).body.proposal;
+      PRIVATE_HOLDERS = ["cf-member"];
+      try {
+        const seen = (await block("member", "legal")).body;
+        expect(seen.pens.adminWords).toMatchObject({ pen: "admin", how: "act", who: "live-holders", youMayAdopt: true });
+        expect(seen.proposals.map((x: any) => x.id)).toContain(p.id);
+        expect(seen.answer.sections.find((s: any) => s.id === "legal").readable).toBe(true);
+        // The unseated admin no longer reads or adopts them, and the refusal names the vote.
+        const asAdmin = (await block("admin", "legal")).body;
+        expect(asAdmin.answer.sections.find((s: any) => s.id === "legal").readable).toBe(false);
+        expect(asAdmin.proposals.map((x: any) => x.id)).not.toContain(p.id);
+        expect(await adopt("admin", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.admin } });
+        expect(PEN_REFUSALS.admin).toContain("a power_grant vote gives brief.private to a role");
+        // The story's holder is still refused there.
+        expect(await adopt("teller", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.admin } });
+        const r = await adopt("member", p.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        expect((await briefGet(pool, "legal", "admin"))?.body).toBe("The trust holds the title, and the members hold the trust.");
+      } finally {
+        PRIVATE_HOLDERS = [];
+      }
+      // With nobody holding it, the administrators keep it.
+      expect((await block("admin", "legal")).body.pens.adminWords).toMatchObject({ who: "admins", youMayAdopt: true });
+    });
+
+    it("the closing words (D3) are sent to the closing policy vote (D6), and nothing moves", async () => {
+      await exitPolicyRepo().load();
+      const before = JSON.stringify((exitPolicyRepo().get() as any).closing ?? null);
+      const p = (await propose("member", {
+        blockId: "team", target: "setting", door: "exit:closing",
+        change: { policyId: "own-words", statement: `${CLOSING_WORDS} And the orchard stays.` }, body: "Keep the orchard.",
+      })).body.proposal;
+      expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot" });
+      expect(await adopt("admin", p.id)).toEqual({ status: 409, body: { error: CLOSING_DOOR_IS_THE_CLOSING_VOTE, door: CLOSING_CHANGE_DOOR } });
+      expect(CLOSING_DOOR_IS_THE_CLOSING_VOTE).toContain("closing policy vote");
+      await exitPolicyRepo().load();
+      expect(JSON.stringify((exitPolicyRepo().get() as any).closing ?? null)).toBe(before);
     });
 
     it("the care door is sent to the conflict agreement's own vote, the matrix waits for one nothing builds yet, and nothing moves", async () => {

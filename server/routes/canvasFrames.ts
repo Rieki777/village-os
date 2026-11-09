@@ -156,6 +156,8 @@ import { withNamedLock } from "../repos/namedLock";
 import { documentById, markDocumentShared } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
+import { adoptClosing } from "./closingPolicy";
+import type { ClosingChange } from "../../shared/canvasFrames";
 import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
 
 export interface CanvasFrameDeps
@@ -183,6 +185,12 @@ export interface CanvasFrameDeps
   submissions: ObservedDeps["submissions"];
   legalEntityLabel: ObservedDeps["legalEntityLabel"];
   seasonNow: ObservedDeps["seasonNow"];
+  /**
+   * Who holds a power live, the admin short-circuit left out (`liveHoldersOf`
+   * in server/index.ts). The admin pen asks it of `brief.private` (G.4).
+   * Absent means nobody holds anything, which is today's behaviour.
+   */
+  liveHoldersOf?: (capability: string) => Promise<string[]>;
 }
 
 /** How many suggestions one member may have open at once, across the canvas. */
@@ -195,7 +203,8 @@ export const PEN_REFUSALS: Record<CanvasPen, string> = {
   consequence: "The founders adopt this before the Game starts. You can suggest it, and they decide.",
   dial: "Adopting this changes one of the village's dials, which is for whoever may turn them. You can suggest it, and they decide.",
   module: "Switching a part of the Game on or off is for the founders before the Game starts. You can suggest it, and they decide.",
-  admin: "This section stays with the administrators. You can suggest words, and they decide.",
+  admin:
+    "This section stays with the administrators until a power_grant vote gives brief.private to a role, and then it is for whoever holds that. You can suggest words, and they decide.",
 };
 
 /** The consequence pen's vote for the exit terms and the matrix, which nothing builds yet. */
@@ -234,6 +243,14 @@ const WITHDRAWN_NOTE = "Withdrawn by the member who suggested it.";
 
 /** A suggestion somebody else is deciding at this moment. */
 export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Look again in a moment.";
+
+/** The closing words' vote (D6), which a canvas suggestion is pointed to after the Birthing (D3). */
+export const CLOSING_CHANGE_DOOR = "/api/governance/closing-policy-changes";
+
+/** Said when adopting a closing suggestion after the Birthing: the words change only by the closing policy vote. */
+export const CLOSING_DOOR_IS_THE_CLOSING_VOTE =
+  "The Game has started, so what closing the village means changes only by a closing policy vote at the structural tier. " +
+  "A member who can open votes opens it from the exit policy page, /exit-policy, with these words.";
 
 /** The purpose statement's vote has its own door. */
 export const PURPOSE_CHANGE_DOOR = "/api/governance/purpose-changes";
@@ -350,8 +367,13 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
   /** The Birthing and the handover, read live every time a pen is asked. */
   const penFacts = async (): Promise<CanvasPenFacts> => {
     const pool = getPool();
-    const [start, handover] = await Promise.all([readGameStart(pool), villageHandoverState(pool)]);
-    return { birthed: start.started, handoverComplete: handover.complete };
+    const [start, handover, privateHolders] = await Promise.all([
+      readGameStart(pool),
+      villageHandoverState(pool),
+      deps.liveHoldersOf ? deps.liveHoldersOf("brief.private") : Promise.resolve([] as string[]),
+    ]);
+    // The admin pen's live holders (G.4): `brief.private`, seated by a power_grant vote.
+    return { birthed: start.started, handoverComplete: handover.complete, holders: { admin: privateHolders } };
   };
 
   /**
@@ -376,6 +398,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       return capabilityDecision(rule.capability as Capability, await capabilityCtx(user)).allowed;
     }
     if (rule.who === "admins" || rule.who === "founders") return isAdmin(req);
+    // A pen a role holds live (the admin pen's `brief.private`, G.4): its holders, and nobody else.
+    if (rule.who === "live-holders") return (rule.holders ?? []).includes(String(user.id));
     if (rule.who === "any-member") return mayReadCanvas(deps, req, user);
     return false;
   };
@@ -525,6 +549,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     const admin = await isAdmin(req);
     const ctx = await capabilityCtx(user);
     const block = CANVAS_BLOCKS[id];
+    // The four private sections are read by whoever holds the admin pen (G.4).
+    const privateReader = await mayTake(req, user, whoAdoptsCanvasAnswer("admin", await penFacts()));
 
     // SAY: the adopted words, per section. An admin reads every row; a member
     // reads the rows the brief opened to members, and never the four sections
@@ -538,7 +564,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       const spec = BRIEF_BY_ID[section];
       const stored = byId.get(section);
       const adminOnly = isAdminOnlySection(section);
-      const readable = admin || (!adminOnly && (!stored || stored.audience === "member"));
+      const readable = adminOnly ? privateReader : admin || !stored || stored.audience === "member";
       const row = readable ? stored : undefined;
       return {
         id: section,
@@ -575,10 +601,10 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     // is shown to administrators and to the member who wrote it.
     const facts = await penFacts();
     const viewer = String(user.id);
-    const open = (await openProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, admin, viewer));
+    const open = (await openProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, privateReader, viewer));
     const proposals = [];
     for (const p of open) proposals.push(await proposalView(req, user, p, facts));
-    const decided = (await decidedProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, admin, viewer)).map((p) => decidedView(user, p));
+    const decided = (await decidedProposalsForBlock(pool, id)).filter((p) => readableSuggestion(p, privateReader, viewer)).map((p) => decidedView(user, p));
 
     const doors = [
       ...doorsForBlock(id).map((d) => ({
@@ -774,7 +800,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       if (pen === "prose") {
         // The ONE gate, with its own override hatch. A refusal is written by the guard.
         if (!(await guardCapability(req, res, "story.tell", { status: 403, body: { error: PEN_REFUSALS.prose } }))) return "answered";
-      } else if (!(await isAdmin(req))) {
+      } else if (!(await mayTake(req, user, rule))) {
+        // The admin pen: the administrators, or `brief.private`'s live holders after the Birthing (G.4).
         return { ok: false, status: 403, body: { error: PEN_REFUSALS.admin } };
       }
       const row = await briefWrite(pool, { section: String(p.sectionId), body: p.body, source: "admin", confirmedBy: String(user.id) });
@@ -879,6 +906,28 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         ok: true,
         outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
         message: filedMessage(filed.body),
+      };
+    }
+
+    // ── The closing words' door (D3), kept apart from the consequence branch below.
+    // Before the Birthing the exit policy's writers adopt through `adoptClosing`,
+    // the admin PUT's own adoption; after it the words change only by the D6 vote.
+    if (p.door === "exit:closing") {
+      if (rule.how === "ballot") {
+        return { ok: false, status: 409, body: { error: CLOSING_DOOR_IS_THE_CLOSING_VOTE, door: CLOSING_CHANGE_DOOR } };
+      }
+      if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.consequence } };
+      const c = (p.change ?? {}) as Partial<ClosingChange>;
+      const closing = await adoptClosing(
+        { getPool, exitPolicy: deps.exitPolicy.exitPolicyRepo },
+        { policyId: c.policyId, statement: c.statement, adopt: true },
+        String(user.id),
+      );
+      if (closing.status !== 200) return { ok: false, status: closing.status, body: closing.body };
+      return {
+        ok: true,
+        outcome: { wrote: "exit-policy", door: p.door, fields: ["closing"] },
+        message: `Adopted. ${CANVAS_DOORS["exit:closing"].label} now reads as suggested.`,
       };
     }
 

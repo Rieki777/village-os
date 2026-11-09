@@ -132,6 +132,7 @@ export const SOURCES = [
   // The conflict agreement's subject name (`[CONFLICT_AGREEMENT]` in
   // SUBJECT_CLOSERS) is read out of here, one import away, like the three above.
   "shared/conflictAgreement.ts",
+  "shared/closingPolicies.ts",
   // Every route module, walked as a directory rather than named one by one.
   // The three-file list this replaced made `server/routes/delegation.ts`,
   // `governanceVetoes.ts` and `governanceLanding.ts` invisible, and the
@@ -1909,6 +1910,7 @@ const SUBJECT_WORDS = {
   // Opened only once the Game has started: before the Birthing the founders
   // write the conflict agreement directly (server/routes/conflictAgreement.ts).
   conflict_agreement: "Adopts a new version of the conflict agreement, which the exit policy's restorative path then reads through. Nothing already under way is reopened.",
+  closing_policy: "Adopts new words for what closing the village means, the exit policy's closing section, stamped as adopted by the vote. The rest of the exit policy is untouched.",
   // A village agreement, written in the proposal wizard (defect 9, Wave 4):
   // server/routes/governanceAgreements.ts opens it, server/lib/agreementCloser.ts lands it.
   agreement: "Makes a written agreement the village's own, exactly as worded, with the review date it names. Nothing else changes on its own.",

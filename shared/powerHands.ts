@@ -315,8 +315,11 @@ export function whoMayPutHandToVillage(
  *                (`NEVER_BY_CHANGESET`, server/lib/changeset.ts), so it stays
  *                with the administrators after the Birthing too.
  *   admin        `people`, `legal`, `land` and `constraints`. Plan 2.3 keeps
- *                these with administrators for reading and writing, before
- *                the Birthing and after it.
+ *                these with administrators for reading and writing. After
+ *                the Birthing, once a `power_grant` vote seats
+ *                `brief.private` on a role, its live holders hold this pen
+ *                and an unseated admin is refused; with no live holder the
+ *                administrators keep it (canvas follow-up G.4, D1).
  *
  * Why `purposeHolds` is the AGGREGATE handover and not a capability: the
  * statement is not a capability, nobody holds a `gps.edit` key, and
@@ -338,6 +341,12 @@ export interface CanvasPenFacts {
    * administrators after the Birthing, because a vote would have nowhere to go.
    */
   votable?: boolean;
+  /**
+   * Who holds a pen's power live, by pen (`liveHoldersOf`, the admin
+   * short-circuit left out). Absent or empty means nobody. The admin pen reads
+   * `brief.private`'s holders (canvas follow-up G.4).
+   */
+  holders?: Partial<Record<CanvasPen, readonly string[]>>;
 }
 
 export interface CanvasAdoptionRule {
@@ -354,6 +363,8 @@ export interface CanvasAdoptionRule {
    * write directly, and a highest-tier vote may change the statement too.
    */
   alsoByVote?: true;
+  /** Who may act, when `who` is `live-holders`. */
+  holders?: readonly string[];
 }
 
 /** Which power a canvas answer's adoption needs, as one rule. Pure. */
@@ -364,7 +375,7 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     consequence: () => whoMayPutHandToVillage(facts.birthed, [], "admins"),
     dial: () => whoMayPutHandToVillage(facts.birthed, [], "the-gate"),
     module: () => whoMayPutHandToVillage(facts.birthed && facts.votable !== false, [], "admins"),
-    admin: () => whoMayPutHandToVillage(false, [], "admins"),
+    admin: () => whoMayPutHandToVillage(false, facts.birthed ? (facts.holders?.admin ?? []) : [], "admins"),
   };
   const rule = asked[pen]();
   const capability = rule.who !== "the-gate" ? undefined : pen === "dial" ? ("dial.set" as const) : ("story.tell" as const);
@@ -378,6 +389,7 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     because: rule.because,
     ...(capability ? { capability } : {}),
     ...(alsoByVote ? { alsoByVote: true as const } : {}),
+    ...(rule.who === "live-holders" ? { holders: rule.holders } : {}),
   };
 }
 
@@ -398,6 +410,9 @@ export function canvasPenSentence(rule: CanvasAdoptionRule): string {
   }
   if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
   if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
+  if (rule.pen === "admin" && rule.who === "live-holders") {
+    return "This section is for whoever holds the brief's private sections, for reading and for writing.";
+  }
   if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
   if (rule.pen === "module") return "The administrators switch this part of the Game on or off in the module library.";
   return "The founders adopt this before the Game starts.";

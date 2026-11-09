@@ -28,6 +28,7 @@ import {
   MODULE_LIFECYCLE_WORDS,
   penForProposal,
   type CanvasDoorId,
+  type ClosingChange,
   type DialChange,
   type DocumentShareChange,
   type ExitTermsChange,
@@ -371,6 +372,10 @@ export function changeLines(p: Pick<ProposalView, "target" | "door" | "change">,
     return [`Switched ${LIFECYCLE_WORDS[to] ?? to}`];
   }
   const out: string[] = [];
+  if (door?.id === "exit:closing") {
+    const k = c as unknown as ClosingChange;
+    return [`The words: ${k.statement}`];
+  }
   if (door?.id === "exit:terms") {
     const t = c as ExitTermsChange;
     if (t.noticePeriodDays !== undefined) out.push(`Notice before leaving: ${t.noticePeriodDays} ${t.noticePeriodDays === 1 ? "day" : "days"}`);
@@ -434,8 +439,11 @@ export function adoptEffect(
       ? `The Game has started, so adopting files this as a proposal in its author's name, and the village votes on it.`
       : `The Game has started, so this goes to a vote of the whole village. ${notBuilt}`;
   }
-  // The consequence pen: the exit terms, the care door and the matrix.
+  // The consequence pen: the exit terms, the care door, the closing words and the matrix.
   if (pen.how === "ballot") {
+    if (door?.id === "exit:closing") {
+      return "The Game has started, so what closing the village means changes only by a closing policy vote at the structural tier. Open that vote from the exit policy page.";
+    }
     if (door?.id === "exit:restorative" && careDoorByAgreement) {
       return "The Game has started, so the care door changes only by a vote on the village's conflict agreement, which carries the whole agreement. Open that vote from the agreement itself.";
     }
@@ -621,7 +629,8 @@ export function suggestionOptions(payload: Pick<BlockFramesPayload, "block" | "a
     out.push({ key: `words:${id}`, target: "words", sectionId: id, label: `Words for ${titles[id] ?? id}${mark}` });
   }
   for (const d of payload.doors) {
-    if (d.wired && d.id) out.push({ key: `setting:${d.id}`, target: "setting", door: d.id, label: `A setting: ${lowerFirst(d.label)}` });
+    // A door suggested from its own page (the closing words) stays out of the box.
+    if (d.wired && d.id && !CANVAS_DOORS[d.id].suggestedOnItsPage) out.push({ key: `setting:${d.id}`, target: "setting", door: d.id, label: `A setting: ${lowerFirst(d.label)}` });
   }
   if (payload.block.id === "power") out.push({ key: "matrix", target: "matrix", label: "A row of the Decision Matrix" });
   return out;
