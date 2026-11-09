@@ -160,6 +160,8 @@ import { register as registerGovernanceAgreementRoutes } from "./routes/governan
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
+import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
+import { orgStructureForHelper } from "./lib/adminHelperReaders";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -12849,6 +12851,18 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // (Wave 4) and registered HERE, the spot it left: after /api/admin's audit row and
   // default-deny, so both still apply. It now reads the brief (defect 10).
   registerOrganizeRoutes(app, { isAdmin, authedUser, capabilityCtx, getPool, clientIp, villageName: () => mergedConfig().project.name, assistantName: () => guidePromptName(getWorkWithUs().assistantName), noteAssistantUsage });
+  // The Admin helper: the village guide in a panel beside Admin (server/routes/adminHelper.ts).
+  registerAdminHelperRoutes(app, {
+    isAdmin, authedUser, clientIp, overLimit, noteAssistantUsage,
+    villageName: () => mergedConfig().project.name,
+    guideSource: () => getWorkWithUs().assistantName,
+    dials: () => allVariables(),
+    switchOn: () => boolVar("platform.admin_helper"),
+    readOrgStructure: async () => {
+      const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool())]);
+      return orgStructureForHelper({ roles, assignments, circles: circleViews(circlesRepo.all()) });
+    },
+  });
 
   registerCapabilityExplainerRoutes(app, { isAdmin, members, capabilityCtx, stageOf });
 

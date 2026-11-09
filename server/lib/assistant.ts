@@ -43,7 +43,8 @@ export type AssistantMode =
   | "synthesize"
   | "journal"
   | "roleGuide"
-  | "card";
+  | "card"
+  | "adminHelper";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -83,6 +84,13 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   // card after card cannot spend the journal's day. No tools: the facts arrive
   // prefetched, and a card that cannot be woven is served plain.
   card: { audience: "member", dailyBudget: 120, maxTokens: 1400, toolCalls: 0 },
+  // The Admin helper (server/routes/adminHelper.ts): the village's guide in a
+  // panel beside Admin, answering "how do I" and proposing one dial change at
+  // a time for the admin to apply. Three reader calls a turn: find the page or
+  // setting, then the org chart or the open requests if the question needs
+  // them. It writes nothing; the admin's Apply goes through the dial's own
+  // route.
+  adminHelper: { audience: "admin", dailyBudget: 120, maxTokens: 1500, toolCalls: 3 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */
@@ -103,6 +111,13 @@ export const ASSIST_BURST_PER_HOUR = 30;
  * fields are different jobs and should not be forced onto one tier forever.
  */
 export const DEFAULT_ASSISTANT_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * The Admin helper's model (2026-11-09): it reads the whole Admin map and
+ * proposes changes an admin will apply, so it runs on the stronger tier. Kept
+ * here beside the default, the one place model ids live.
+ */
+export const ADMIN_HELPER_MODEL = "claude-sonnet-5-5";
 
 export interface ChatMessage {
   role: "user" | "assistant";
