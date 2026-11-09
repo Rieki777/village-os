@@ -84,6 +84,12 @@ msgstr ""
 msgid "Nobody has written yet."
 msgstr ""
 
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder section"
+msgid "Hand this to your agent"
+msgstr "Dale esto a tu agente"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "starting a change request"
 msgid "Starting…"
@@ -111,6 +117,12 @@ msgstr ""
 msgctxt "send a note"
 msgid "Send"
 msgstr ""
+
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder step number"
+msgid "Step {n}"
+msgstr "Paso {n}"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -166,17 +178,35 @@ msgctxt "change request step"
 msgid "In the vote"
 msgstr ""
 
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder section"
+msgid "Worked examples"
+msgstr "Ejemplos resueltos"
+
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the new value of a setting"
 msgid "New value"
 msgstr ""
 
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder section heading"
+msgid "Build a module"
+msgstr "Construye un módulo"
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "Search languages"
 msgstr "Buscar idiomas"
+
+#: client/src/pages/Modules.tsx
+#, fuzzy
+msgctxt "module library, builder card link to the builder section"
+msgid "The five steps, and what to hand your agent ↓"
+msgstr "Los cinco pasos y lo que debes darle a tu agente ↓"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
@@ -252,6 +282,12 @@ msgctxt "change request note kind"
 msgid "Can live with it"
 msgstr ""
 
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder section"
+msgid "Copy it into the AI you build with, then add what your module should do."
+msgstr "Cópialo en la IA con la que construyes y luego añade lo que debe hacer tu módulo."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr ""
@@ -310,6 +346,12 @@ msgstr ""
 msgctxt "review response"
 msgid "Object"
 msgstr ""
+
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, builder section"
+msgid "Anyone can build for this platform, with an AI agent at your side. Five steps take you from an idea to a card on this page, in every village."
+msgstr "Cualquiera puede construir para esta plataforma, con un agente de IA a su lado. Cinco pasos te llevan de una idea a una tarjeta en esta página, en cada aldea."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Respond to this change request"
@@ -438,6 +480,12 @@ msgstr ""
 msgctxt "the reader started this change request"
 msgid "You started this"
 msgstr ""
+
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, copy the agent text"
+msgid "Copy for your agent"
+msgstr "Copiar para tu agente"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -730,6 +778,12 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr ""
 
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, copy failed"
+msgid "Your browser blocked copying. Select the text above and copy it."
+msgstr "Tu navegador bloqueó la copia. Selecciona el texto de arriba y cópialo."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr ""
@@ -781,6 +835,12 @@ msgstr ""
 msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
 msgstr ""
+
+#: client/src/components/modules/BuilderJourney.tsx
+#, fuzzy
+msgctxt "module library, after copying the agent text"
+msgid "Copied"
+msgstr "Copiado"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"

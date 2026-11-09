@@ -84,6 +84,11 @@ msgstr "Decided"
 msgid "Nobody has written yet."
 msgstr "Nobody has written yet."
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Hand this to your agent"
+msgstr "Hand this to your agent"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "starting a change request"
 msgid "Starting…"
@@ -111,6 +116,11 @@ msgstr "Every invoice, sent to paid"
 msgctxt "send a note"
 msgid "Send"
 msgstr "Send"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder step number"
+msgid "Step {n}"
+msgstr "Step {n}"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -165,16 +175,31 @@ msgctxt "change request step"
 msgid "In the vote"
 msgstr "In the vote"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Worked examples"
+msgstr "Worked examples"
+
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the new value of a setting"
 msgid "New value"
 msgstr "New value"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section heading"
+msgid "Build a module"
+msgstr "Build a module"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Search languages"
 msgstr "Search languages"
+
+#: client/src/pages/Modules.tsx
+msgctxt "module library, builder card link to the builder section"
+msgid "The five steps, and what to hand your agent ↓"
+msgstr "The five steps, and what to hand your agent ↓"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note outcome"
@@ -249,6 +274,11 @@ msgctxt "change request note kind"
 msgid "Can live with it"
 msgstr "Can live with it"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Copy it into the AI you build with, then add what your module should do."
+msgstr "Copy it into the AI you build with, then add what your module should do."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr "That did not load."
@@ -307,6 +337,11 @@ msgstr "Show the suggestion"
 msgctxt "review response"
 msgid "Object"
 msgstr "Object"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, builder section"
+msgid "Anyone can build for this platform, with an AI agent at your side. Five steps take you from an idea to a card on this page, in every village."
+msgstr "Anyone can build for this platform, with an AI agent at your side. Five steps take you from an idea to a card on this page, in every village."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Respond to this change request"
@@ -432,6 +467,11 @@ msgstr "Work out this role's pay with the valuation engine"
 msgctxt "the reader started this change request"
 msgid "You started this"
 msgstr "You started this"
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, copy the agent text"
+msgid "Copy for your agent"
+msgstr "Copy for your agent"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -717,6 +757,11 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr "Replace the key"
 
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, copy failed"
+msgid "Your browser blocked copying. Select the text above and copy it."
+msgstr "Your browser blocked copying. Select the text above and copy it."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr "Take this change out."
@@ -768,6 +813,11 @@ msgstr "The village has not set its rates yet. Set them on the economics page, t
 msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
 msgstr "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
+
+#: client/src/components/modules/BuilderJourney.tsx
+msgctxt "module library, after copying the agent text"
+msgid "Copied"
+msgstr "Copied"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"
