@@ -39,6 +39,8 @@ async function fillAndSend() {
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "a@b.test" } });
   const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
   const before = why.value;
+  fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
+  fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
   fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
   await screen.findByRole("heading", { name: "Check your email" });
   return before;
@@ -63,7 +65,7 @@ describe("the open form after the discover step", () => {
     expect(before).toContain("growing food");
     expect(posted).toHaveLength(1);
     const keys = Object.keys(posted[0].body).sort();
-    expect(keys).toEqual(["aim", "email", "hp", "link", "name", "roles", "why"].filter((k) => keys.includes(k)));
+    expect(keys).toEqual(["aim", "card", "email", "hp", "link", "name", "roles", "why"].filter((k) => keys.includes(k)));
     expect(posted[0].body.why).toContain("growing food");
     expect(posted[0].raw).not.toMatch(/Projector|humanDesign|geneKeys|ikigai/i);
   });
