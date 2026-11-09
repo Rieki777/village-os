@@ -150,6 +150,19 @@ export const ADMIN_EDIT_CONTROLS = {
     label: "the words for the village's paths and stages",
     passesPowers: false,
   },
+  /*
+   * THE CASH BUDGET (budgets spec R22). Every member may suggest a change to a
+   * line, or a whole upload, with the same preview; it goes to the holders of
+   * `role.pay` while a role holds it, and to a ballot when the village holds
+   * it or nobody does. The Accept and the ballot closer both call
+   * `importBudgetLines` (server/routes/budgets.ts registers it), the one write
+   * path the direct routes use.
+   */
+  budget_lines: {
+    capability: "role.pay",
+    label: "the village's cash budget",
+    passesPowers: false,
+  },
 } as const satisfies Record<string, AdminEditControlSpec>;
 
 export type AdminEditControlId = keyof typeof ADMIN_EDIT_CONTROLS;

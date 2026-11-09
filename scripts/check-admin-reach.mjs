@@ -125,6 +125,19 @@ const ALLOWED = {
   "POST /api/admin/suggestions/:id/decline": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
   "POST /api/admin/suggestions/:id/send-to-vote": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
   "POST /api/admin/suggestions/:id/raise": "Suggest-to-edit, the suggester's own list, next slice. Delete this line when it lands.",
+  /*
+   * THE CASH BUDGET (budgets spec v0.2), server slice first, the way
+   * suggest-to-edit shipped above: PR 1a is the store, the one write path, the
+   * door and the figure, with their suites (server/routes/budgets.test.ts).
+   * The page comes after Rye approves the design boards (PR 1b), and is built
+   * to them in PR 1c: the Admin tab, the standalone page and the members'
+   * section. Delete all five lines when that page lands.
+   */
+  "POST /api/admin/budgets/import": "The cash budget's upload, server slice (PR 1a). The page is PR 1c, after the boards are approved. Delete this line when it lands.",
+  "POST /api/admin/budgets/lines": "The cash budget, add one line, server slice (PR 1a). Delete this line when the PR 1c page lands.",
+  "PATCH /api/admin/budgets/lines/:id": "The cash budget, edit one line, server slice (PR 1a). Delete this line when the PR 1c page lands.",
+  "POST /api/admin/budgets/lines/:id/withdraw": "The cash budget, withdraw a line, server slice (PR 1a). Delete this line when the PR 1c page lands.",
+  "POST /api/admin/budgets/lines/:id/restore": "The cash budget, restore a line, server slice (PR 1a). Delete this line when the PR 1c page lands.",
 };
 
 /**

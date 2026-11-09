@@ -186,9 +186,16 @@ export const POWERS: readonly PowerEntry[] = [
   },
   {
     capability: "role.pay",
-    title: "What roles are paid",
-    surface: "Setting what a role is worth and pays, beside the valuation engine's suggestion",
-    routes: ["/api/org/roles/:id/pay"],
+    title: "The cash budget, and what roles are paid",
+    surface: "Keeping the village's cash budget, which sets each moon's cash share, and setting what a role is worth and pays beside the valuation engine's suggestion",
+    routes: [
+      "/api/org/roles/:id/pay",
+      "/api/admin/budgets/import",
+      "/api/admin/budgets/lines",
+      "/api/admin/budgets/lines/:id",
+      "/api/admin/budgets/lines/:id/withdraw",
+      "/api/admin/budgets/lines/:id/restore",
+    ],
   },
   {
     capability: "module.switch",

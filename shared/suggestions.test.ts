@@ -75,10 +75,13 @@ describe("routeSuggestion", () => {
 });
 
 describe("the admin controls a suggestion may name", () => {
-  it("starts with one wired control, the paths and stages words, behind story.tell", () => {
-    expect(Object.keys(ADMIN_EDIT_CONTROLS)).toEqual(["village_paths"]);
+  it("wires the paths and stages words behind story.tell, and the cash budget behind role.pay", () => {
+    expect(Object.keys(ADMIN_EDIT_CONTROLS)).toEqual(["village_paths", "budget_lines"]);
     expect(ADMIN_EDIT_CONTROLS.village_paths.capability).toBe("story.tell");
     expect(ADMIN_EDIT_CONTROLS.village_paths.passesPowers).toBe(false);
+    // Budgets spec R22: its Accept and its ballot closer call importBudgetLines (server/routes/budgets.test.ts).
+    expect(ADMIN_EDIT_CONTROLS.budget_lines.capability).toBe("role.pay");
+    expect(ADMIN_EDIT_CONTROLS.budget_lines.passesPowers).toBe(false);
   });
 });
 

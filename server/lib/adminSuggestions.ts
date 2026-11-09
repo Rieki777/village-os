@@ -38,16 +38,28 @@ export type Refusal = { ok: false; status: number; body: Record<string, unknown>
 
 /** One admin control a suggestion may name, as its own route module registers it. */
 export interface AdminEditControl {
-  /** The value in force now, and its version (the one the direct route's `x-content-was` names). */
-  read(): { value: unknown; version: string };
+  /**
+   * The value in force now, and its version (the one the direct route's
+   * `x-content-was` names). A control whose value lives in the database reads
+   * it there, so this may answer a promise; every caller awaits it.
+   */
+  read(): { value: unknown; version: string } | Promise<{ value: unknown; version: string }>;
   /** What is wrong with a payload, in words, or null. The direct route's own check. */
   problem(payload: unknown): string | null;
   /**
    * Apply it: the direct route's own write, given the version it was made on.
    * The route asks the gate before calling this; a carried vote is the
-   * village's decision and calls it directly.
+   * village's decision and calls it directly. `by.decidedBy` is the holder who
+   * accepted it, or `village:<ballot id>` for a carried vote, for a control
+   * whose own door asks who is writing (the cash budget's payee conflict).
    */
-  apply(payload: unknown, was: string): Promise<{ ok: true } | Refusal>;
+  apply(payload: unknown, was: string, by?: { decidedBy: string }): Promise<{ ok: true } | Refusal>;
+  /**
+   * What the change does, one line each, for the ballot's WHAT CHANGES. A
+   * control whose payload is a list of rows rather than the document itself
+   * says it in words; without this the ballot shows the leaf difference.
+   */
+  describe?(payload: unknown): string[] | Promise<string[]>;
 }
 
 const CONTROLS = new Map<AdminEditControlId, AdminEditControl>();
@@ -97,7 +109,7 @@ export async function acceptSuggestion(
 ): Promise<{ ok: true } | Refusal> {
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const stale = staleDifference(s, control.read());
+  const stale = staleDifference(s, await control.read());
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
   const problem = control.problem(s.edit.payload);
   if (problem) return { ok: false, status: 400, body: { error: problem, code: "payload_refused" } };
@@ -106,7 +118,7 @@ export async function acceptSuggestion(
   }
   let applied: { ok: true } | Refusal;
   try {
-    applied = await control.apply(s.edit.payload, s.edit.version);
+    applied = await control.apply(s.edit.payload, s.edit.version, { decidedBy: input.decidedBy });
   } catch (e) {
     await store.move(s.id, "accepted", s.status, { ballotId: s.ballotId });
     throw e;
@@ -132,10 +144,12 @@ export interface SuggestionBallotDeps {
 export const villageDecider = (ballotId: string): string => `village:${ballotId}`.slice(0, 64);
 
 /** The decision page shows this text as written, so plain lines only (no Markdown marks). */
-function ballotText(s: SuggestionRow, suggester: string, current: { value: unknown }, at: Date): { title: string; doc: string } {
+function ballotText(s: SuggestionRow, suggester: string, current: { value: unknown }, at: Date, described: string[] | null = null): { title: string; doc: string } {
   const label = ADMIN_EDIT_CONTROLS[s.edit.control].label;
   const title = `A suggested change to ${label}: the village decides`;
-  const lines = suggestionDiff(current.value, s.edit.payload).map((d) => `  ${d.path}: ${JSON.stringify(d.from)} becomes ${JSON.stringify(d.to)}`);
+  const lines = described
+    ? described.map((l) => `  ${l}`)
+    : suggestionDiff(current.value, s.edit.payload).map((d) => `  ${d.path}: ${JSON.stringify(d.from)} becomes ${JSON.stringify(d.to)}`);
   const doc = [
     title,
     "",
@@ -176,7 +190,7 @@ export async function putSuggestionToVillage(
   if (s.status !== "proposed") return { ok: false, status: 409, body: { error: `This suggestion is already ${s.status}.`, code: "not_waiting" } };
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const now = control.read();
+  const now = await control.read();
   const stale = staleDifference(s, now);
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
   const { setup } = input;
@@ -186,7 +200,8 @@ export async function putSuggestionToVillage(
   }
   const method = thresholdsForSubject(ADMIN_EDIT)?.method ?? setup.method;
   const dials = dialsForSubject(ADMIN_EDIT, method, setup.dials, thresholdSettingsFrom((key) => Number(numberVar(key)), (key) => stringVar(key)));
-  const { title, doc } = ballotText(s, await deps.nameOf(s.suggestedBy), now, input.at ?? new Date());
+  const described = control.describe ? await control.describe(s.edit.payload) : null;
+  const { title, doc } = ballotText(s, await deps.nameOf(s.suggestedBy), now, input.at ?? new Date(), described);
   let opened: Awaited<ReturnType<typeof openBallot>>;
   try {
     opened = await openBallot(deps.pool, {

@@ -259,7 +259,7 @@ export function register(app: Express, deps: Deps): void {
     const control = adminEditControl(body.control);
     if (!control) return res.status(409).json({ error: "control_not_wired", message: "This control cannot take suggestions yet." });
     const why = typeof body.why === "string" ? body.why.trim().slice(0, 2000) : "";
-    const current = control.read();
+    const current = await control.read();
     const edit: AdminEditPayload = {
       control: body.control,
       capability: ADMIN_EDIT_CONTROLS[body.control].capability,
@@ -326,7 +326,7 @@ export function register(app: Express, deps: Deps): void {
       });
       if (route !== "holders") continue;
       const control = adminEditControl(s.edit.control);
-      queue.push(view(s, { stale: control ? staleDifference(s, control.read()) : null, suggester: await nameOf(s.suggestedBy) }));
+      queue.push(view(s, { stale: control ? staleDifference(s, await control.read()) : null, suggester: await nameOf(s.suggestedBy) }));
     }
     res.json({ suggestions: queue });
   });

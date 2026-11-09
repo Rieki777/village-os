@@ -129,7 +129,11 @@ export type Capability =
   // back to the mature handover, like `cash.pay`; the seeded Treasury role
   // grants it. With no live holder, a role's pay goes to the village through an
   // org draft put to the vote (constitution 0.3).
-  | "role.pay" // set what a role is worth and pays
+  //
+  // The cash budget is the same power (budgets spec R21, Rye's C1, 9 Nov): the
+  // budget sets how much of each moon's work is paid in cash, so one power gives
+  // one answer. Every budget write goes through its door (server/routes/budgets.ts).
+  | "role.pay" // keep the cash budget, and set what a role is worth and pays
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -336,7 +340,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
-  "role.pay": "Set what a role is worth and pays, beside the valuation engine's suggestion",
+  "role.pay": "Keep the village's cash budget, and set what a role is worth and pays",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
