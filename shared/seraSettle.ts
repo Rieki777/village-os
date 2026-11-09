@@ -11,24 +11,33 @@
  * - R12. One difference writes one field. `changesFor` builds a take through
  *   the structure review's own builders (shared/structurePlan.ts), one field
  *   each: `seatField` for a name, a role's words or its circle, and never the
- *   whole-record update an accepted structure makes.
+ *   whole-record update an accepted structure makes. A take writes the
+ *   service's words AS STORED, line breaks and all; only the comparison uses
+ *   the normalised form.
  * - R13. "In a draft" is a state. A take names its draft, and the draft's own
  *   status says the rest: open is in a draft, published is settled, withdrawn
- *   or reverted is open again. Nothing has to be written when a draft moves,
- *   so the answer can never disagree with the draft.
+ *   or reverted is open again. A take in an open draft whose difference has
+ *   gone, or whose service value or ours has moved since, is "changed since
+ *   you took it": the draft card says so and the draft is not published or
+ *   added to until it is undone or taken again. The draft card is built from
+ *   the stored answers, so a take never hides when its difference goes.
  * - R16. A keep holds until the service's value changes, and an undo opens it
- *   again. A keep by somebody without the power to decide only sets a
- *   decision aside: it stays in the list for the people who decide.
+ *   again. A keep by somebody without the power to decide only sets the
+ *   difference aside: it stays in the list for the people who decide. While
+ *   automatic apply is off (C3) that holds for a small change and a fact too,
+ *   because they wait for the same people (R29). An answer whose difference
+ *   left the list after a later read has lapsed, and answers nothing.
  * - R30, R2. Bulk takes only what may be taken together. A row marked Check
  *   first (an unknown base among them) and pay are left out, and named.
  * - R31. A new circle carries the new roles the service puts in it, and
- *   leaving the circle out leaves them out.
+ *   leaving the circle out leaves them out. A new role already answered, or
+ *   carrying a reason to check first of its own, stays out and is named.
  *
  * Pure: no pool, no clock. The words are in plain English and take the
  * agent's name from config (R34).
  */
 import type { Difference } from "./seraDifferences";
-import { pageKey, waitingKind } from "./seraWaiting";
+import { pageKey } from "./seraWaiting";
 import { circleCreate, circleIdFor, circleRest, seatCreate, seatField, seatIdFor, seatRest, type DecidedChange } from "./structurePlan";
 
 // ── An answer, as the table keeps it ────────────────────────────────────────
@@ -54,66 +63,103 @@ export interface SettledRow {
   draftTitle: string | null;
   /** The new circle this new role was taken with, by its difference key. */
   cameWith: string | null;
+  /** Its difference left the list after it was answered, so it answers nothing now. */
+  lapsed?: boolean;
+  actorUserId?: string | null;
+  /** The role whose power the person acted through, by id. */
+  byRoleId?: string | null;
 }
 
-export type AnswerState = "open" | "inDraft" | "settled" | "setAside";
+export type AnswerState = "open" | "inDraft" | "changed" | "settled" | "setAside";
+
+const takenOrEdited = (row: Pick<SettledRow, "answer">) => row.answer === "taken" || row.answer === "edited";
 
 /** How the list reads one difference once its answer is read. */
-export function answerState(d: Pick<Difference, "seraHash" | "lane" | "state">, row: SettledRow | undefined): AnswerState {
-  if (!row) return "open";
-  if (row.answer === "taken" || row.answer === "edited") {
-    if (row.draftStatus === "open") return "inDraft";
+export function answerState(d: Pick<Difference, "seraHash" | "oursHash">, row: SettledRow | undefined): AnswerState {
+  if (!row || row.lapsed) return "open";
+  if (takenOrEdited(row)) {
+    if (row.draftStatus === "open") return row.seraHash !== d.seraHash || row.oursHash !== d.oursHash ? "changed" : "inDraft";
     // Live: what the service said then is answered, so it returns only once the service changes it again.
     if (row.draftStatus === "published") return row.seraHash === d.seraHash ? "settled" : "open";
     return "open";
   }
   if (row.answer === "kept" || row.answer === "applied") {
     if (row.seraHash !== d.seraHash) return "open";
-    if (row.answer === "kept" && row.door === "moderator" && waitingKind(d) === "toDecide") return "setAside";
+    // R16, and R29 while automatic apply is off: a moderator's keep sets it aside for the holders, whatever its lane.
+    if (row.answer === "kept" && row.door === "moderator") return "setAside";
     return "settled";
   }
   return "open";
+}
+
+/** One answer in an open draft, with its difference when the list still has it. */
+export interface DraftItem<D> {
+  key: string;
+  row: SettledRow;
+  /** The difference as it stands now, or null when the list no longer has it. */
+  d: D | null;
+  /** Its difference has gone, or its service value or ours has moved, since it was taken. */
+  changed: boolean;
 }
 
 export interface InDraft<D> {
   draftId: string;
   title: string | null;
   /** What the draft holds, one per answer a person gave. */
-  items: D[];
+  items: DraftItem<D>[];
   /** The new roles that came with a new circle in `items`. */
-  with: D[];
+  with: DraftItem<D>[];
 }
 
-/** The list as a reader sees it once every answer is read. */
+/**
+ * The list as a reader sees it once every answer is read. The drafts are
+ * built from the stored answers, never from the list, so a take whose
+ * difference has gone still shows, marked changed.
+ */
 export function withAnswers<D extends Difference>(
   list: readonly D[],
   rows: ReadonlyMap<string, SettledRow>,
 ): { open: D[]; setAside: Set<string>; inDraft: InDraft<D>[]; settled: number } {
   const open: D[] = [];
   const setAside = new Set<string>();
-  const drafts = new Map<string, InDraft<D>>();
   let settled = 0;
+  const byKey = new Map(list.map((d) => [d.key, d]));
   for (const d of list) {
-    const row = rows.get(d.key);
-    const state = answerState(d, row);
+    const state = answerState(d, rows.get(d.key));
     if (state === "settled") settled += 1;
-    else if (state === "inDraft" && row?.draftId) {
-      const g = drafts.get(row.draftId) ?? { draftId: row.draftId, title: row.draftTitle, items: [], with: [] };
-      (row.cameWith ? g.with : g.items).push(d);
-      drafts.set(row.draftId, g);
-    } else {
+    else if (state === "open" || state === "setAside") {
       if (state === "setAside") setAside.add(d.key);
       open.push(d);
     }
   }
+  const drafts = new Map<string, InDraft<D>>();
+  // The list's order first, then the answers whose difference has gone, in the order they were read.
+  const order = (r: SettledRow) => {
+    const i = list.findIndex((d) => d.key === r.key);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const inOpenDrafts = Array.from(rows.values())
+    .filter((r) => takenOrEdited(r) && !r.lapsed && r.draftStatus === "open" && r.draftId)
+    .sort((a, b) => order(a) - order(b));
+  for (const row of inOpenDrafts) {
+    const d = byKey.get(row.key) ?? null;
+    const item: DraftItem<D> = { key: row.key, row, d, changed: d === null || row.seraHash !== d.seraHash || row.oursHash !== d.oursHash };
+    const g = drafts.get(row.draftId!) ?? { draftId: row.draftId!, title: row.draftTitle, items: [], with: [] };
+    (row.cameWith ? g.with : g.items).push(item);
+    drafts.set(row.draftId!, g);
+  }
   return { open, setAside, inDraft: Array.from(drafts.values()), settled };
 }
+
+/** A draft holding a take that changed since it was taken: never published from the card, never added to (R13). */
+export const draftHasChanged = (g: InDraft<unknown>): boolean => [...g.items, ...g.with].some((i) => i.changed);
 
 // ── What a take writes (R12, R31) ───────────────────────────────────────────
 
 export type TakeRefusal =
   | "notTakeable"
   | "namesAMember"
+  | "editNamesAMember"
   | "pay"
   | "heldHere"
   | "severalCircles"
@@ -123,7 +169,9 @@ export type TakeRefusal =
   | "bringBack"
   | "blank"
   | "tooLong"
-  | "notEditable";
+  | "notEditable"
+  | "answered"
+  | "checkFirst";
 
 export interface TakeInput {
   d: Difference;
@@ -135,6 +183,8 @@ export interface TakeInput {
   draftCircles: ReadonlyMap<string, string>;
   /** An edit: the person's own words for the field, in place of the service's. */
   value?: string;
+  /** Every stored answer, so a new circle leaves out a new role already answered (R31). */
+  answers?: ReadonlyMap<string, SettledRow>;
 }
 
 export type Take =
@@ -146,8 +196,11 @@ const NAME_MAX = 120;
 const WORDS_MAX = 4000;
 /** A retirement taken from the list says so, the way the structure review's says "old-chart". */
 const RETIRING = "sera";
+/** The reasons a new role in a new circle carries by being there: taking the circle answers them. */
+const CARRIED_BY_THE_CIRCLE = new Set(["baseUnknown", "firstSight", "circleNotHere"]);
 
 const no = (why: TakeRefusal): Take => ({ ok: false, why });
+const asStored = (stored: unknown, normalised: string | null | undefined): string => (typeof stored === "string" && stored.trim() !== "" ? stored.trim() : (normalised ?? "").trim());
 
 /** Where a new role goes: a circle here, or a new one the draft already makes. */
 function placeRole(circleId: string | null, draftCircles: ReadonlyMap<string, string>): { ok: true; circleId: string | null } | { ok: false; why: TakeRefusal } {
@@ -160,26 +213,35 @@ function placeRole(circleId: string | null, draftCircles: ReadonlyMap<string, st
   return { ok: true, circleId };
 }
 
-/** A new role's create, from its difference: its id from the page id, its words, its circle. */
+/** A new role's create, from its difference: its id from the page id, its words as the service stored them, its circle. */
 function roleCreate(d: Difference, circleId: string | null): DecidedChange {
   const pk = pageKey(d.subject.pageId ?? d.key);
-  const aim = typeof d.params?.aim === "string" && d.params.aim.trim() !== "" ? d.params.aim : null;
+  const aim = asStored(d.params?.aimAsStored, typeof d.params?.aim === "string" ? d.params.aim : null);
   return seatCreate(seatIdFor(d.subject.pageId, `sera-role-${pk.slice(0, 40)}`), {
-    name: d.sera ?? d.subject.name,
-    ...(aim !== null ? { aim } : {}),
+    name: asStored(d.seraAsStored, d.sera ?? d.subject.name),
+    ...(aim !== "" ? { aim } : {}),
     ...(circleId !== null ? { circleId } : {}),
   });
 }
 
 /** The new roles the service puts in a new circle, by that circle's page key. */
-export function nestedIn(list: readonly Difference[], circlePageKey: string): Difference[] {
+export function nestedIn<D extends Difference>(list: readonly D[], circlePageKey: string): D[] {
   return list.filter((x) => x.kind === "roleAdd" && x.subject.ourId === null && x.subject.circleId === `sera:${circlePageKey}`);
 }
 
+/** Why a new role stays out of its new circle's take, or null when it goes in with it (R2, R31). */
+function nestedLeftOut(r: Difference, answers: ReadonlyMap<string, SettledRow> | undefined): TakeRefusal | null {
+  if (!r.takeable) return r.namesAMember ? "namesAMember" : "notTakeable";
+  if (answers && answerState(r, answers.get(r.key)) !== "open") return "answered";
+  if (r.flags.some((f) => !CARRIED_BY_THE_CIRCLE.has(f.key))) return "checkFirst";
+  return null;
+}
+
 /**
- * The changes one difference makes: the service's value, or the person's own
- * words for an edit, one field and nothing else (R12). A new circle brings its
- * new roles (R31); a new role whose circle is not here waits for that circle.
+ * The changes one difference makes: the service's value as stored, or the
+ * person's own words for an edit, one field and nothing else (R12). A new
+ * circle brings its new roles (R31); a new role whose circle is not here waits
+ * for that circle.
  */
 export function changesFor(input: TakeInput): Take {
   const { d, list, actor, draftCircles } = input;
@@ -189,7 +251,7 @@ export function changesFor(input: TakeInput): Take {
   if (editing && !(d.kind === "textField" && d.field === "aim") && !(d.kind === "rename" && d.subject.kind === "role")) return no("notEditable");
   if (!editing && !d.takeable) return no(d.namesAMember ? "namesAMember" : "notTakeable");
   const words = (max: number): { ok: true; v: string } | { ok: false; why: TakeRefusal } => {
-    const v = editing ? String(input.value).trim() : (d.sera ?? "");
+    const v = editing ? String(input.value).trim() : asStored(d.seraAsStored, d.sera);
     if (v === "") return { ok: false, why: "blank" };
     if (v.length > max) return { ok: false, why: "tooLong" };
     return { ok: true, v };
@@ -200,15 +262,16 @@ export function changesFor(input: TakeInput): Take {
   switch (d.kind) {
     case "circleAdd": {
       if (ourId !== null) return no("bringBack");
-      const name = d.sera ?? d.subject.name;
+      const name = asStored(d.seraAsStored, d.sera ?? d.subject.name);
       const pk = pageKey(d.subject.pageId ?? d.key);
       const id = circleIdFor(name, `sera-${pk.slice(0, 40)}`);
       const changes = [circleCreate(id, name)];
       const withKeys: string[] = [];
       const leftOut: Array<{ key: string; why: TakeRefusal }> = [];
       for (const r of nestedIn(list, pk)) {
-        if (!r.takeable) {
-          leftOut.push({ key: r.key, why: r.namesAMember ? "namesAMember" : "notTakeable" });
+        const why = nestedLeftOut(r, input.answers);
+        if (why) {
+          leftOut.push({ key: r.key, why });
           continue;
         }
         changes.push(roleCreate(r, id));
@@ -253,7 +316,7 @@ export function changesFor(input: TakeInput): Take {
 
 // ── Bulk with exceptions (R2, R30, R31) ─────────────────────────────────────
 
-export type LeftOutWhy = "checkFirst" | "pay" | "notTakeable" | "withCircle";
+export type LeftOutWhy = "checkFirst" | "pay" | "notTakeable" | "withCircle" | "oursAhead";
 
 export interface BulkPlan<D> {
   /** What a bulk take takes. */
@@ -262,6 +325,15 @@ export interface BulkPlan<D> {
   leftOut: Array<{ d: D; why: LeftOutWhy }>;
   /** Each new circle left out, with every new role that leaves with it. */
   cascades: Array<{ circle: D; roles: D[] }>;
+}
+
+/** Why a row is not taken in bulk, in the order the reasons are checked; null when it may be. */
+export function bulkLeftOut(d: Pick<Difference, "kind" | "state" | "bulkEligible" | "takeable">): Exclude<LeftOutWhy, "withCircle"> | null {
+  if (d.kind === "pay") return "pay";
+  if (d.state === "oursAhead") return "oursAhead";
+  if (!d.bulkEligible) return "checkFirst";
+  if (!d.takeable) return "notTakeable";
+  return null;
 }
 
 /**
@@ -282,16 +354,45 @@ export function bulkPlan<D extends Difference>(ticked: readonly D[], list: reado
       leftOut.push({ d, why: "withCircle" });
       continue;
     }
-    if (d.kind === "pay") leftOut.push({ d, why: "pay" });
-    else if (!d.bulkEligible) leftOut.push({ d, why: "checkFirst" });
-    else if (!d.takeable) leftOut.push({ d, why: "notTakeable" });
+    const why = bulkLeftOut(d);
+    if (why) leftOut.push({ d, why });
     else take.push(d);
     if (d.kind === "circleAdd" && d.subject.pageId && !take.includes(d)) touched.add(pageKey(d.subject.pageId));
   }
   const cascades = Array.from(touched)
-    .map((pk) => ({ circle: circles.get(pk)!, roles: nestedIn(list, pk) as D[] }))
+    .map((pk) => ({ circle: circles.get(pk)!, roles: nestedIn(list, pk) }))
     .filter((c) => c.circle && c.roles.length > 0);
   return { take, leftOut, cascades };
+}
+
+// ── A change in a draft, described without its difference ───────────────────
+
+/**
+ * What one draft change does, in words, for a take whose difference the list
+ * no longer has: names from the chart here and the change itself, never from
+ * the service and never a person.
+ */
+export function changeLine(c: { op: string; orgRoleId: string; payload: Record<string, unknown> }, names: ReadonlyMap<string, string>): string {
+  const text = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+  const role = names.get(c.orgRoleId) ?? text(c.payload.name) ?? "a role";
+  const circle = names.get(c.orgRoleId) ?? text(c.payload.name) ?? "a circle";
+  switch (c.op) {
+    case "create_circle":
+      return `A new circle, ${circle}`;
+    case "create_seat":
+      return `A new role, ${text(c.payload.name) ?? role}`;
+    case "rest_seat":
+      return `Retiring ${role}`;
+    case "rest_circle":
+      return `Retiring the circle ${circle}`;
+    case "update_seat":
+      if (c.payload.name !== undefined) return `A new name for ${role}`;
+      if (c.payload.aim !== undefined) return `New words for ${role}'s purpose`;
+      if (c.payload.circleId !== undefined) return `Moving ${role}`;
+      return `A change to ${role}`;
+    default:
+      return "A change to the structure";
+  }
 }
 
 // ── The words ───────────────────────────────────────────────────────────────
@@ -301,8 +402,10 @@ export function takeRefusalWords(why: TakeRefusal, agent: string): string {
   switch (why) {
     case "namesAMember":
       return "Its words name a member here, so they cannot be taken as they are. Edit them instead.";
+    case "editNamesAMember":
+      return "These words name a member here. Write them without the name.";
     case "pay":
-      return "Pay is set by a person in the role's terms, never taken from this list.";
+      return "Pay is set by a person in the role's terms. Ask whoever sets pay.";
     case "heldHere":
       return "Somebody holds this here, so it cannot be retired from this list.";
     case "severalCircles":
@@ -312,22 +415,39 @@ export function takeRefusalWords(why: TakeRefusal, agent: string): string {
     case "circleNotHere":
       return `${agent} puts it in a circle this village doesn't have.`;
     case "circleRename":
-      return "A circle is renamed on its own page, never from this list.";
+      return "Rename the circle on the circles page.";
     case "bringBack":
-      return "Something retired here is brought back on its own page, never from this list.";
+      return "Bring it back from the page it was retired on.";
     case "blank":
       return "Write the words first.";
     case "tooLong":
       return "That is longer than this field can hold.";
     case "notEditable":
       return "Only a role's name and its words can be edited here.";
+    case "answered":
+      return "It is already answered, so it stays as it is.";
+    case "checkFirst":
+      return "It is marked Check first, so take it on its own.";
     default:
       return "This one cannot be taken from this list.";
   }
 }
 
 /** Why an answer was refused before anything was written: the list moved under it, or it is already answered (R13, R14). */
-export type AnswerRefusal = "seraChanged" | "oursChanged" | "gone" | "inDraft" | "answered" | "underVote" | "checkFirst" | "live" | "nothing" | TakeRefusal;
+export type AnswerRefusal =
+  | "seraChanged"
+  | "oursChanged"
+  | "gone"
+  | "inDraft"
+  | "answered"
+  | "underVote"
+  | "live"
+  | "nothing"
+  | "oursAhead"
+  | "draftHasChanged"
+  | "circleHasRoles"
+  | "failed"
+  | TakeRefusal;
 
 export function answerRefusalWords(why: AnswerRefusal, agent: string): string {
   switch (why) {
@@ -343,12 +463,18 @@ export function answerRefusalWords(why: AnswerRefusal, agent: string): string {
       return "This was already answered.";
     case "underVote":
       return "The village is voting on the draft this is in, so it cannot change until the vote closes.";
-    case "checkFirst":
-      return "This one is marked Check first, so it is taken on its own and never with others.";
     case "live":
       return "This is live now with its draft, so it is not undone from this list.";
     case "nothing":
       return "There is nothing to undo here.";
+    case "oursAhead":
+      return `This was changed here and ${agent} still has the old way, so there is nothing to take.`;
+    case "draftHasChanged":
+      return "Something in this draft changed since it was taken. Undo it or take it again first.";
+    case "circleHasRoles":
+      return "Roles are placed in this new circle. Undo them first.";
+    case "failed":
+      return "The answer could not be written. Nothing changed.";
     default:
       return takeRefusalWords(why, agent);
   }

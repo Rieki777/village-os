@@ -60,6 +60,8 @@ import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
 import { idShapeOk, pageIdOf } from "./saberraRelations";
 import { writeSnapshot } from "./saberraSnapshot";
 import { retireReplacedBatches } from "./saberraRetire";
+import { lapseLeftAnswers } from "./seraAnswer";
+import { forgetCachedDifferences, readDifferences } from "./seraDifferencesRead";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "./secrets";
@@ -537,6 +539,12 @@ async function runLocked(
           trigger,
           new Date(at.getTime() + (Date.now() - started)),
         );
+        // Under this lock, after the read is kept: an answer whose difference has left the list lapses (review 7).
+        forgetCachedDifferences();
+        await lapseLeftAnswers(pool, () => readDifferences(pool)).catch((e) => {
+          const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+          console.warn(`[saberra] the answers were not checked against this read (${code}); the next read checks them`);
+        });
       } catch (e) {
         const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
         console.warn(`[saberra] the sync kept no snapshot this time (${code}); the differences list reads the one before`);

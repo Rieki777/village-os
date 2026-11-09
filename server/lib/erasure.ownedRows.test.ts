@@ -833,6 +833,25 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("sera-answers-after-tombstone");
   });
 
+  it("clears their id from the retirements they chose in a draft, and leaves everyone else's choice (review 15)", async () => {
+    const leaver = await member("own-leaver-rest", "Wren Halloway");
+    await member("own-rest-ash", "Ash Moreno");
+    await q("INSERT INTO org_drafts (id, title, status, source_kind) VALUES ('own-rest-d', 'Retire', 'open', 'agent')");
+    await q(
+      "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, sort_order) VALUES ('own-rest-1', 'own-rest-d', 'rest_seat', 'r-1', ?, 1), ('own-rest-2', 'own-rest-d', 'rest_circle', 'circle:c-1', ?, 2), ('own-rest-3', 'own-rest-d', 'rest_seat', 'r-2', ?, 3)",
+      [JSON.stringify({ chosenBy: leaver.id, retiring: "sera" }), JSON.stringify({ chosenBy: leaver.id, retiring: "old-chart" }), JSON.stringify({ chosenBy: "own-rest-ash", retiring: "sera" })],
+    );
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    const rows = await q("SELECT id, payload FROM org_draft_changes WHERE id LIKE 'own-rest-%' ORDER BY id");
+    expect(rows.map((r) => [r.id, (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload).chosenBy])).toEqual([
+      ["own-rest-1", null],
+      ["own-rest-2", null],
+      ["own-rest-3", "own-rest-ash"],
+    ]);
+  });
+
   it("runs every new step after the tombstone, between the role tensions and the role proposals, and runs clean twice", async () => {
     const leaver = await member("own-leaver-st", "Wren Halloway");
     await anonymizeMember(pool, leaver, "admin-1", deps());

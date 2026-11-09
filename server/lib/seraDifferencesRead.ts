@@ -64,8 +64,8 @@ import { listOrgAssignments, type LapseContext, type OrgAssignment } from "./org
 import { rosterRows } from "../repos/peopleRoster";
 import { snapshotIndex, snapshotsBySeq, type SnapshotIndexRow } from "../repos/saberraSnapshots";
 import { publishStamp } from "../repos/seraDifferences";
-import { answersFor, linksFor, publishedRoleChanges } from "../repos/seraSettled";
-import { withAnswers, type SettledRow } from "../../shared/seraSettle";
+import { answersFor, changesOfDrafts, chartNames, linksFor, publishedRoleChanges, type AnswerRow, type DraftChangeRow } from "../repos/seraSettled";
+import { changeLine, draftHasChanged, withAnswers, type SettledRow } from "../../shared/seraSettle";
 import { normaliseText, valueHash } from "../../shared/seraDifferences";
 
 const MODULE_ID = "saberra";
@@ -89,6 +89,23 @@ export interface DifferencesRead {
    * been answered, and the list is the engine's whole.
    */
   answers?: ReadonlyMap<string, SettledRow>;
+  /**
+   * Every change in the open drafts the answers point at, read outside the
+   * cache with the answers: what the draft card counts and shows, so it says
+   * what the draft really holds (review 3, 11).
+   */
+  draftChanges?: readonly DraftChangeRow[];
+  /** Our names for the roles and circles those changes touch, for a change whose difference has gone. */
+  draftNames?: ReadonlyMap<string, string>;
+}
+
+/** The open drafts the answers point at, with their changes and the names a change line needs. */
+async function draftsOfAnswers(pool: Pool, answers: ReadonlyMap<string, SettledRow>): Promise<{ draftChanges: DraftChangeRow[]; draftNames: Map<string, string> }> {
+  const ids = Array.from(new Set(Array.from(answers.values()).filter((r) => r.draftStatus === "open" && r.draftId).map((r) => r.draftId!))).sort();
+  const draftChanges = await changesOfDrafts(pool, ids);
+  const roles = draftChanges.filter((c) => !c.orgRoleId.startsWith("circle:")).map((c) => c.orgRoleId);
+  const circles = draftChanges.filter((c) => c.orgRoleId.startsWith("circle:")).map((c) => c.orgRoleId.slice("circle:".length));
+  return { draftChanges, draftNames: await chartNames(pool, Array.from(new Set(roles)), Array.from(new Set(circles))) };
 }
 
 /**
@@ -217,7 +234,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now(), laps
     const older = index.slice(1);
     const dayBefore = (older.find((r) => r.taken <= nowSeconds - DAY_SECONDS) ?? older[older.length - 1])?.seq ?? null;
     const key = createHash("sha256").update(canonicalJson({ seqs, dayBefore, live: liveIn, stamp, names: check.fingerprint, links })).digest("hex");
-    if (cached?.key === key) return { ...cached.value, holders, answers };
+    if (cached?.key === key) return { ...cached.value, holders, answers, ...(await draftsOfAnswers(pool, answers)) };
 
     const [rows, accepted] = await Promise.all([snapshotsBySeq(pool, seqs), acceptedForDifferences(pool)]);
     // A chosen row went (a prune ran in between): choose again rather than answer from part of them.
@@ -241,7 +258,7 @@ export async function readDifferences(pool: Pool, now: number = Date.now(), laps
     };
     // An answer from part of its rows is given once and never kept.
     if (whole) cached = { key, value };
-    return { ...value, answers };
+    return { ...value, answers, ...(await draftsOfAnswers(pool, answers)) };
   }
 }
 
@@ -258,12 +275,31 @@ export function answered(read: DifferencesRead) {
   return withAnswers(read.list, read.answers ?? new Map());
 }
 
+/** One open draft the list's answers made, by id, with the ids of the changes it really holds: no subject. */
+export interface DraftCount {
+  id: string;
+  /** How many changes the draft holds, nested roles included (review 3, 16). */
+  changes: number;
+  /** The ids of those changes, which a publish from the page sends back (review 12). */
+  changeIds: string[];
+  /** Something in it changed since it was taken, so the page never publishes it (R13). */
+  hasChanged: boolean;
+}
+
 export type CountAnswer = DifferenceCount & {
   lastReadAt: string | null;
   lastReadWhole: boolean;
-  /** Each open draft the list's answers made, by id and how many changes it holds: no subject (R38's door to a vote). */
-  drafts: Array<{ id: string; changes: number }>;
+  /** Every open draft the list's answers made (R38's door to a vote, for every one of them). */
+  drafts: DraftCount[];
 };
+
+/** The open drafts the answers made, from the stored answers and what each draft really holds. */
+function draftCounts(read: DifferencesRead, groups: ReturnType<typeof answered>["inDraft"]): DraftCount[] {
+  return groups.map((g) => {
+    const ids = (read.draftChanges ?? []).filter((c) => c.draftId === g.draftId).map((c) => c.id);
+    return { id: g.draftId, changes: ids.length, changeIds: ids, hasChanged: draftHasChanged(g) };
+  });
+}
 
 /** R25: totals per lane and the last read, and never a subject. What is answered or in a draft waits for nobody. */
 export function countAnswer(read: DifferencesRead): CountAnswer {
@@ -272,8 +308,35 @@ export function countAnswer(read: DifferencesRead): CountAnswer {
     ...countDifferences(a.open),
     lastReadAt: read.latest?.takenAt ?? null,
     lastReadWhole: wholeRead(read),
-    drafts: a.inDraft.map((g) => ({ id: g.draftId, changes: g.items.length })),
+    drafts: draftCounts(read, a.inDraft),
   };
+}
+
+/** One answer in an open draft, as the draft card shows it (R13, review 3, 11). */
+export interface ListedDraftItem {
+  key: string;
+  answer: "taken" | "edited";
+  /** The difference's sentence, or the change's own line when the difference has gone. */
+  sentence: string;
+  /** The words the draft will write, for a name or a role's words: what is really in the draft. */
+  value: string | null;
+  /** Which field those words are, and whose: for "Your words for Pump Keeper's purpose". */
+  field: "name" | "aim" | null;
+  about: string | null;
+  /** An edit's author, said as "you", a role's name, or null for somebody without one. */
+  by: "you" | string | null;
+  /** Its difference has gone, or moved since it was taken. */
+  changed: boolean;
+  /** The difference as it stands now, to take again, when the list still has it. */
+  now: { key: string; seraHash: string; oursHash: string } | null;
+}
+
+export interface ListedDraft extends DraftCount {
+  draftId: string;
+  title: string | null;
+  items: ListedDraftItem[];
+  /** How many new roles came with a new circle in it. */
+  with: number;
 }
 
 /**
@@ -307,7 +370,17 @@ export interface ListedDifference extends Difference {
 /** The whole list, each difference with its words, for a reader the list's gate let in. */
 export function listAnswer(
   read: DifferencesRead,
-  opts: { agent: string; dashboard: unknown; timeZone: string; waiting?: readonly WaitingChartItem[]; changedHere?: Readonly<Record<string, string>> },
+  opts: {
+    agent: string;
+    dashboard: unknown;
+    timeZone: string;
+    waiting?: readonly WaitingChartItem[];
+    changedHere?: Readonly<Record<string, string>>;
+    /** Who is reading, so an edit they wrote reads "Your words". */
+    viewerId?: string | null;
+    /** A capability role's name by id, for "<role>'s words". */
+    roleName?: (id: string) => string | null;
+  },
 ): {
   agent: string;
   lastReadAt: string | null;
@@ -318,7 +391,7 @@ export function listAnswer(
   heldBatches: string[];
   count: DifferenceCount;
   differences: ListedDifference[];
-  inDraft: Array<{ draftId: string; title: string | null; items: Array<{ key: string; sentence: string }>; with: number }>;
+  inDraft: ListedDraft[];
 } {
   const { agent, dashboard, timeZone } = opts;
   const a = answered(read);
@@ -334,7 +407,33 @@ export function listAnswer(
     heldBatches: held,
     count: countDifferences(a.open),
     // R13: what a person took, in its own group, with its draft (the page offers Publish and Withdraw).
-    inDraft: a.inDraft.map((g) => ({ draftId: g.draftId, title: g.title, items: g.items.map((d) => ({ key: d.key, sentence: sentenceOf(d) })), with: g.with.length })),
+    inDraft: draftCounts(read, a.inDraft).map((count, i) => {
+      const g = a.inDraft[i];
+      const changes = (read.draftChanges ?? []).filter((c) => c.draftId === g.draftId);
+      const names = read.draftNames ?? new Map<string, string>();
+      return {
+        ...count,
+        draftId: g.draftId,
+        title: g.title,
+        with: g.with.length,
+        items: g.items.map((it): ListedDraftItem => {
+          const change = changes.find((c) => c.id === (it.row as AnswerRow).draftChangeId) ?? null;
+          const raw = change?.op === "update_seat" ? (change.payload.aim ?? change.payload.name) : null;
+          const edited = it.row.answer === "edited";
+          return {
+            key: it.key,
+            answer: edited ? "edited" : "taken",
+            sentence: it.d ? sentenceOf(it.d) : change ? `${changeLine(change, names)}.` : sentenceOfGone(opts.agent),
+            value: typeof raw === "string" ? raw : null,
+            field: change?.op === "update_seat" ? (change.payload.aim !== undefined ? "aim" : change.payload.name !== undefined ? "name" : null) : null,
+            about: it.d?.subject.name ?? (change ? (names.get(change.orgRoleId) ?? null) : null),
+            by: edited ? (it.row.actorUserId && it.row.actorUserId === opts.viewerId ? "you" : (it.row.byRoleId && opts.roleName?.(it.row.byRoleId)) || null) : null,
+            changed: it.changed,
+            now: it.d ? { key: it.d.key, seraHash: it.d.seraHash, oursHash: it.d.oursHash } : null,
+          };
+        }),
+      };
+    }),
     differences: a.open.map((d, i) => ({
       ...d,
       // The arrival that holds it, for the structure review link; moderator data, never on the count.
@@ -347,6 +446,9 @@ export function listAnswer(
     })),
   };
 }
+
+/** A take whose difference and change have both gone: said plainly. */
+const sentenceOfGone = (agent: string): string => `A change taken from ${agent}'s list.`;
 
 /** One difference's words, as the list sends them: its sentence, its shown flags, where it came from, and the link to the service. */
 export function wordsOf(d: Difference, read: Pick<DifferencesRead, "holders">, opts: { agent: string; dashboard: unknown; timeZone: string }): ListedDifference["words"] {

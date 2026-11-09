@@ -465,13 +465,22 @@ export async function publishOrgDraft(
   draftId: string,
   publishedBy: string | null,
   actorUserId: string | null,
+  /** The change ids the publisher was shown, when the door sent them (review 12): the publish refuses on any other set. */
+  expectedChanges?: readonly string[] | null,
 ): Promise<Published> {
   const season = deps.seasonState();
-  const r = await publishDraft(deps.pool, draftId, publishedBy, draftChangeCap(), {
-    seasons: season.seasons,
-    currentSeasonId: season.current?.id ?? null,
-    timezone: season.timezone,
-  });
+  const r = await publishDraft(
+    deps.pool,
+    draftId,
+    publishedBy,
+    draftChangeCap(),
+    {
+      seasons: season.seasons,
+      currentSeasonId: season.current?.id ?? null,
+      timezone: season.timezone,
+    },
+    expectedChanges ?? null,
+  );
   if (!r.ok) return { ok: false, error: r.error };
   /*
    * A draft can move circles (0208), written by raw SQL inside the

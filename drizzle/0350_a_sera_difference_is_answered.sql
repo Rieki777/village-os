@@ -14,8 +14,11 @@
 -- ballot or sync), the role whose power the person acted through, and when. A
 -- take names the draft and the change it made, so the draft's own status says
 -- whether it is waiting, live, or withdrawn and so open again. `came_with` is
--- the new circle a new role was taken with. The actor's user id is the only
--- personal datum and the erasure de-attributes it.
+-- the new circle a new role was taken with. `link_made` says the answer tied a
+-- page id to ours, so its undo unties it. `lapsed_at` is when the answer
+-- stopped applying: the difference it answered left the list after a later
+-- read, so the same value coming back is a new suggestion. The actor's user id
+-- is the only personal datum and the erasure de-attributes it.
 --
 -- `saberra_links`: a service page id tied to one of our circles or roles by a
 -- person's take or keep, so a rename on either side never breaks the match. Ids
@@ -47,9 +50,12 @@ CREATE TABLE IF NOT EXISTS `saberra_settled` (
   `draft_id` varchar(64) NULL,
   `draft_change_id` varchar(64) NULL,
   `came_with` varchar(191) NULL,
+  `link_made` tinyint NOT NULL DEFAULT 0,
+  `lapsed_at` timestamp NULL DEFAULT NULL,
   `answered_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`difference_key`),
   KEY `saberra_settled_draft` (`draft_id`),
+  KEY `saberra_settled_came_with` (`came_with`),
   KEY `saberra_settled_actor` (`actor_user_id`)
 );
 

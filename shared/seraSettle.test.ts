@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Difference, DifferenceSubject } from "./seraDifferences";
-import { answerState, bulkPlan, changesFor, withAnswers, type SettledRow } from "./seraSettle";
+import { answerState, bulkPlan, changeLine, changesFor, draftHasChanged, withAnswers, type SettledRow } from "./seraSettle";
 
 let n = 0;
 type Over = Omit<Partial<Difference>, "subject"> & { subject?: Partial<DifferenceSubject> };
@@ -117,6 +117,34 @@ describe("a new circle carries its new roles (R31)", () => {
     expect(placed.ok && placed.changes.map((c) => c.payload.circleId)).toEqual(["land-stewardship"]);
   });
 
+  it("leaves out, and names, a new role already answered, already in a draft, or carrying a reason to check first of its own (R2, review 5)", () => {
+    const { circle, roles } = newCircleWithRoles();
+    const third = diff({ ...roles[0], key: "role:third:presence", sera: "Soil Tester", subject: { ...roles[0].subject, pageId: "third", name: "Soil Tester" } });
+    third.flags = [...third.flags, { key: "sameNameAsLive", params: { name: "Soil Tester", of: "role" } }];
+    const answers = new Map<string, SettledRow>([
+      [roles[0].key, row({ key: roles[0].key, seraHash: roles[0].seraHash, oursHash: roles[0].oursHash, answer: "kept", door: "power" })],
+      [roles[1].key, row({ key: roles[1].key, seraHash: roles[1].seraHash, oursHash: roles[1].oursHash, answer: "taken", draftId: "d0", draftStatus: "open" })],
+    ]);
+    const t = changesFor({ d: circle, list: [circle, ...roles, third], actor: "u-ana", draftCircles: new Map(), answers });
+    expect(t.ok && t.changes.map((c) => c.op)).toEqual(["create_circle"]);
+    expect(t.ok && t.leftOut).toEqual([
+      { key: roles[0].key, why: "answered" },
+      { key: roles[1].key, why: "answered" },
+      { key: third.key, why: "checkFirst" },
+    ]);
+  });
+
+  it("writes the service's words as stored, line breaks and all; only the comparison is normalised (review 6)", () => {
+    const stored = "Keeps the wells clean.\n\n- daily check\n- weekly report";
+    const words = diff({ sera: "Keeps the wells clean. - daily check - weekly report", seraAsStored: stored });
+    const t = changesFor({ d: words, list: [words], actor: "u-ana", draftCircles: new Map() });
+    expect(t.ok && t.changes[0].payload).toEqual({ aim: stored });
+    const { circle, roles } = newCircleWithRoles();
+    roles[0].params = { aim: "Keeps the seed bank. Sorts it.", aimAsStored: "Keeps the seed bank.\nSorts it." };
+    const c = changesFor({ d: circle, list: [circle, ...roles], actor: "u-ana", draftCircles: new Map() });
+    expect(c.ok && c.changes[1].payload.aim).toBe("Keeps the seed bank.\nSorts it.");
+  });
+
   it("leaves a role whose words name a member behind, and says so", () => {
     const { circle, roles } = newCircleWithRoles();
     roles[1].takeable = false;
@@ -140,6 +168,12 @@ describe("bulk takes only what may be taken together (R2, R30, R31)", () => {
       [unknownBase.key, "checkFirst"],
       [pay.key, "pay"],
     ]);
+  });
+
+  it("names pay and ours ahead as what they are, never as Check first (review 10)", () => {
+    const pay = diff({ kind: "pay", lane: "decision", field: "pay", bulkEligible: false, takeable: false, flags: [{ key: "baseUnknown" }] });
+    const ahead = diff({ state: "oursAhead", bulkEligible: false, takeable: false });
+    expect(bulkPlan([pay, ahead], [pay, ahead]).leftOut.map((l) => l.why)).toEqual(["pay", "oursAhead"]);
   });
 
   it("a new circle left out leaves its roles out with it, said as one cascade", () => {
@@ -180,22 +214,61 @@ describe("how the list reads an answered difference (R13, R16)", () => {
 
   it("a moderator without the power only sets a decision aside, and it stays in the list", () => {
     expect(answerState(d, row({ answer: "kept", door: "moderator" }))).toBe("setAside");
-    const small = diff({ seraHash: "s1" });
-    expect(answerState(small, row({ answer: "kept", door: "moderator" }))).toBe("settled");
+    const small = diff({ seraHash: "s1", oursHash: "o1" });
     const read = withAnswers([d, small], new Map([[d.key, row({ key: d.key, answer: "kept", door: "moderator" })], [small.key, row({ key: small.key })]]));
     expect(read.open.map((x) => x.key)).toEqual([d.key]);
     expect(Array.from(read.setAside)).toEqual([d.key]);
     expect(read.settled).toBe(1);
   });
 
+  it("while automatic apply is off, a moderator's keep of a small change or a fact only sets it aside too (R29, review 17)", () => {
+    const small = diff({ seraHash: "s1", oursHash: "o1", lane: "lowRisk" });
+    const fact = diff({ seraHash: "s1", oursHash: "o1", lane: "facts", kind: "valueField", field: "Sector" });
+    expect(answerState(small, row({ answer: "kept", door: "moderator" }))).toBe("setAside");
+    expect(answerState(fact, row({ answer: "kept", door: "moderator" }))).toBe("setAside");
+    expect(answerState(small, row({ answer: "kept", door: "power" }))).toBe("settled");
+  });
+
+  it("an answer whose difference left the list after it was answered answers nothing (review 7)", () => {
+    expect(answerState(d, row({ answer: "kept", lapsed: true }))).toBe("open");
+    expect(answerState(d, row({ answer: "taken", draftId: "d1", draftStatus: "published", lapsed: true }))).toBe("open");
+  });
+
   it("groups what is in a draft by draft, the roles a circle brought counted with it", () => {
     const { circle, roles } = newCircleWithRoles();
     const rows = new Map<string, SettledRow>([
-      [circle.key, row({ key: circle.key, seraHash: circle.seraHash, answer: "taken", draftId: "d1", draftStatus: "open", draftTitle: "From Sera's list" })],
-      ...roles.map((r): [string, SettledRow] => [r.key, row({ key: r.key, seraHash: r.seraHash, answer: "taken", draftId: "d1", draftStatus: "open", cameWith: circle.key })]),
+      [circle.key, row({ key: circle.key, seraHash: circle.seraHash, oursHash: circle.oursHash, answer: "taken", draftId: "d1", draftStatus: "open", draftTitle: "From Sera's list" })],
+      ...roles.map((r): [string, SettledRow] => [r.key, row({ key: r.key, seraHash: r.seraHash, oursHash: r.oursHash, answer: "taken", draftId: "d1", draftStatus: "open", cameWith: circle.key })]),
     ]);
     const read = withAnswers([circle, ...roles, d], rows);
     expect(read.open.map((x) => x.key)).toEqual([d.key]);
-    expect(read.inDraft).toEqual([{ draftId: "d1", title: "From Sera's list", items: [circle], with: roles }]);
+    expect(read.inDraft.map((g) => [g.draftId, g.title, g.items.map((i) => [i.d, i.changed]), g.with.map((i) => i.d)])).toEqual([
+      ["d1", "From Sera's list", [[circle, false]], roles],
+    ]);
+  });
+
+  it("builds a draft from the stored answers: a take whose difference has gone, or whose values moved, shows and is marked changed (review 3)", () => {
+    const words = diff({ seraHash: "s-now", oursHash: "o1" });
+    const gone = "role:gone000000000000000000000000000:presence";
+    const rows = new Map<string, SettledRow>([
+      [words.key, row({ key: words.key, seraHash: "s-then", oursHash: "o1", answer: "taken", draftId: "d1", draftStatus: "open" })],
+      [gone, row({ key: gone, answer: "taken", draftId: "d1", draftStatus: "open" })],
+    ]);
+    expect(answerState(words, rows.get(words.key))).toBe("changed");
+    expect(answerState(words, row({ seraHash: "s-now", oursHash: "o-moved", answer: "taken", draftId: "d1", draftStatus: "open" }))).toBe("changed");
+    const read = withAnswers([words], rows);
+    expect(read.open).toEqual([]);
+    expect(read.inDraft[0].items.map((i) => [i.key, i.d?.key ?? null, i.changed])).toEqual([
+      [words.key, words.key, true],
+      [gone, null, true],
+    ]);
+    expect(draftHasChanged(read.inDraft[0])).toBe(true);
+  });
+
+  it("says a change whose difference has gone in our own names, never the service's words", () => {
+    const names = new Map([["r-1", "Dish Rota"], ["circle:c-1", "Kitchen"]]);
+    expect(changeLine({ op: "rest_seat", orgRoleId: "r-1", payload: { chosenBy: "u" } }, names)).toBe("Retiring Dish Rota");
+    expect(changeLine({ op: "update_seat", orgRoleId: "r-1", payload: { aim: "x" } }, names)).toBe("New words for Dish Rota's purpose");
+    expect(changeLine({ op: "rest_circle", orgRoleId: "circle:c-1", payload: {} }, names)).toBe("Retiring the circle Kitchen");
   });
 });

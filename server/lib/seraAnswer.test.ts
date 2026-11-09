@@ -29,13 +29,16 @@ import { seatIdFor } from "../../shared/structurePlan";
 import { differenceSentence } from "../../shared/seraDifferenceWords";
 import type { Difference, SnapshotRecord } from "../../shared/seraDifferences";
 import { landProposal, markProposalDecided } from "./externalProposals";
-import { answered, countAnswer, forgetCachedDifferences, readDifferences } from "./seraDifferencesRead";
+import { answered, countAnswer, forgetCachedDifferences, listAnswer, readDifferences } from "./seraDifferencesRead";
 import { acceptedForDifferences } from "./saberraSnapshot";
-import { answerDifferences, undoAnswers, type AnswerItem } from "./seraAnswer";
+import { answerDifferences, lapseLeftAnswers, undoAnswers, type AnswerItem } from "./seraAnswer";
 import { RETIRED_REASON, retireReplacedBatches } from "./saberraRetire";
-import { createDraft, publishDraft, withdrawDraft } from "./orgDrafts";
+import { addChange, createDraft, DRAFT_CHANGED_SINCE_SHOWN, publishDraft, withdrawDraft } from "./orgDrafts";
+import { usersRepo } from "../repos/users";
 import { insertSnapshot } from "../repos/saberraSnapshots";
 import { ballotById } from "./ballots";
+import { nameCheckFor } from "./saberraNames";
+import { rosterRows } from "../repos/peopleRoster";
 import { register as registerSaberra } from "../routes/saberra";
 import { register as registerDecide } from "../routes/orgDraftDecide";
 
@@ -52,6 +55,7 @@ const pageOf = (tag: string) => createHash("sha256").update(`sera-answer-${tag}`
 const P = {
   water: pageOf("c-water"), land: pageOf("c-land"), ls: pageOf("c-ls"),
   steward: pageOf("steward"), pump: pageOf("pump"), dish: pageOf("dish"), well: pageOf("well"), seed: pageOf("seed"), keeper: pageOf("keeper"),
+  hoe: pageOf("hoe"),
 };
 const roleId = (pk: string) => seatIdFor(pk, "never");
 
@@ -68,14 +72,16 @@ const circleRecs = (): Rec[] => [
   { id: P.ls, fields: { "Circle Name": "Land Stewardship", Status: "Active" } },
 ];
 /** The newest read: five ways it differs from the chart here. */
-function roleRecs(over: { stewardBody?: string } = {}): Rec[] {
-  return [
+function roleRecs(over: { stewardBody?: string; dishStatus?: string; hoe?: boolean } = {}): Rec[] {
+  const out: Rec[] = [
     { id: P.steward, fields: { "Role Name": "Water Steward", Circle: [{ id: P.water }], Body: over.stewardBody ?? "Keeps the wells clean.", Status: "Active" } },
     { id: P.pump, fields: { "Role Name": "Pump Keeper", Circle: [{ id: P.land }], Body: "Keeps the pumps.", Status: "Active" } },
-    { id: P.dish, fields: { "Role Name": "Dish Rota", Circle: [{ id: P.water }], Body: "Keeps the dishes moving.", Status: "Archived" } },
+    { id: P.dish, fields: { "Role Name": "Dish Rota", Circle: [{ id: P.water }], Body: "Keeps the dishes moving.", Status: over.dishStatus ?? "Archived" } },
     { id: P.well, fields: { "Role Name": "Well Monitor", Circle: [{ id: P.water }], Body: "Checks the wells each week.", Status: "Proposed" } },
     { id: P.seed, fields: { "Role Name": "Seed Keeper", Circle: [{ id: P.ls }], Body: "Keeps the seed bank.", Status: "Active" } },
   ];
+  if (over.hoe) out.push({ id: P.hoe, fields: { "Role Name": "Hoe Keeper", Circle: [{ id: P.ls }], Body: "Keeps the hoes.", Status: "Active" } });
+  return out;
 }
 
 let readClock = Date.now() - 10 * 60_000;
@@ -120,6 +126,8 @@ const deps = {
   read: () => readDifferences(pool),
   describe: (d: Difference) => ({ ...d, words: { sentence: differenceSentence(d, AGENT) } }),
   agent: AGENT,
+  // R9: the wide match over today's roster, as the route hands it in.
+  namesAMember: async () => nameCheckFor(await rosterRows(pool)).names,
 };
 const HOLDER = { userId: "u-ana", door: "power" as const, byRoleId: "ops-lead" };
 const MODERATOR = { userId: "u-mo", door: "moderator" as const, byRoleId: null };
@@ -177,7 +185,8 @@ describe.skipIf(!configured)("answering the differences", () => {
       const v = await view();
       expect(v.open.map((d) => d.key)).not.toContain(move.key);
       expect(v.inDraft.map((g) => [g.draftId, g.items.map((d) => d.key)])).toEqual([[draftId, [move.key]]]);
-      expect(countAnswer(await readDifferences(pool)).drafts).toEqual([{ id: draftId, changes: 1 }]);
+      const ids = (await q("SELECT id FROM org_draft_changes WHERE draft_id = ?", [draftId])).map((r) => r.id);
+      expect(countAnswer(await readDifferences(pool)).drafts).toEqual([{ id: draftId, changes: 1, changeIds: ids, hasChanged: false }]);
       const again = await answerDifferences(pool, deps, { act: "take", items: [item(move)], actor: HOLDER });
       expect([again.status, again.body.why]).toEqual([409, "inDraft"]);
       expect(await changesIn(draftId)).toHaveLength(1);
@@ -236,7 +245,7 @@ describe.skipIf(!configured)("answering the differences", () => {
       expect((await view()).open.map((d) => d.key)).not.toContain(words.key);
       await keepRead();
       expect((await view()).open.map((d) => d.key), "an unchanged read leaves it answered").not.toContain(words.key);
-      const undo = await undoAnswers(pool, deps, { keys: [words.key], actorUserId: "u-ana" });
+      const undo = await undoAnswers(pool, deps, { keys: [words.key], actor: HOLDER });
       expect([undo.status, undo.body.undone]).toEqual([200, [words.key]]);
       expect((await view()).open.map((d) => d.key)).toContain(words.key);
       // Kept again, and the service then changes it: it is back.
@@ -270,7 +279,7 @@ describe.skipIf(!configured)("answering the differences", () => {
       expect((await publishDraft(pool, String(second.body.draftId), "u-ana")).ok).toBe(true);
       forgetCachedDifferences();
       expect((await readDifferences(pool)).list.map((d) => d.key)).not.toContain(move.key);
-      const undo = await undoAnswers(pool, deps, { keys: [move.key], actorUserId: "u-ana" });
+      const undo = await undoAnswers(pool, deps, { keys: [move.key], actor: HOLDER });
       expect([undo.status, undo.body.why]).toEqual([409, "live"]);
     });
   });
@@ -305,11 +314,226 @@ describe.skipIf(!configured)("answering the differences", () => {
       ]);
       const v = await view();
       expect(v.inDraft.map((g) => [g.items.map((d) => d.key), g.with.map((d) => d.key)])).toEqual([[[circle.key], [seed.key]]]);
-      const undo = await undoAnswers(pool, deps, { keys: [circle.key], actorUserId: "u-ana" });
+      const undo = await undoAnswers(pool, deps, { keys: [circle.key], actor: HOLDER });
       expect(undo.body.undone).toEqual([circle.key, seed.key]);
       expect(await changesIn(draftId)).toEqual([]);
       expect((await q("SELECT status FROM org_drafts WHERE id = ?", [draftId]))[0].status, "a draft left empty is withdrawn").toBe("withdrawn");
       expect((await view()).open.map((d) => d.key)).toEqual(expect.arrayContaining([circle.key, seed.key]));
+    });
+  });
+
+
+  describe("an edit's words are a person's (R9, review 1)", () => {
+    it("refuses words that name a member here, inside the transaction, and writes nothing", async () => {
+      await usersRepo(pool).add({ id: "u-wren", name: "Wren Halloway", email: "wren@example.test", passwordHash: "x", paths: [] });
+      const words = await one("textField", "Water Steward");
+      const r = await answerDifferences(pool, deps, { act: "edit", items: [{ ...item(words), value: "Wren Halloway keeps the wells." }], actor: HOLDER });
+      expect([r.status, r.body.why]).toEqual([400, "editNamesAMember"]);
+      expect(await q("SELECT COUNT(*) AS n FROM org_draft_changes WHERE draft_id <> 'd-first'")).toEqual([{ n: 0 }]);
+      expect((await answerDifferences(pool, deps, { act: "edit", items: [{ ...item(words), value: "Keeps the wells and the rota." }], actor: HOLDER })).status).toBe(200);
+      await q("DELETE FROM users WHERE id = 'u-wren'");
+    });
+  });
+
+  describe("a take never lands while its draft is publishing (review 2)", () => {
+    /** A pool whose next connection pauses at the publish's first write, after the draft row is locked. */
+    function pausingPool() {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      let paused!: () => void;
+      const reached = new Promise<void>((r) => (paused = r));
+      const proxy: any = new Proxy(pool, {
+        get(target: any, prop) {
+          if (prop === "getConnection") {
+            return async () => {
+              const conn = await target.getConnection();
+              const orig = conn.query.bind(conn);
+              let once = false;
+              conn.query = async (sql: any, ...rest: any[]) => {
+                if (!once && typeof sql === "string" && sql.startsWith("UPDATE org_draft_changes SET before_json")) {
+                  once = true;
+                  paused();
+                  await gate;
+                }
+                return orig(sql, ...rest);
+              };
+              return conn;
+            };
+          }
+          const v = target[prop];
+          return typeof v === "function" ? v.bind(target) : v;
+        },
+      });
+      return { proxy, reached, release };
+    }
+
+    it("waits for the publish, then goes into a new draft; the published one holds only what it applied", async () => {
+      const move = await one("roleMove");
+      const first = await answerDifferences(pool, deps, { act: "take", items: [item(move)], actor: HOLDER });
+      const draftId = String(first.body.draftId);
+      const { proxy, reached, release } = pausingPool();
+      const publishing = publishDraft(proxy, draftId, "u-ana");
+      await reached;
+      const words = await one("textField", "Water Steward");
+      let settledEarly = false;
+      const taking = answerDifferences(pool, deps, { act: "take", items: [item(words)], actor: HOLDER }).then((r) => {
+        settledEarly = true;
+        return r;
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      expect(settledEarly, "the take waits on the draft row the publish holds").toBe(false);
+      release();
+      expect((await publishing).ok).toBe(true);
+      const took = await taking;
+      expect(took.status).toBe(200);
+      expect(took.body.draftId).not.toBe(draftId);
+      expect(await changesIn(draftId)).toEqual([{ op: "update_seat", orgRoleId: roleId(P.pump), payload: { circleId: "land" } }]);
+      expect((await q("SELECT status FROM org_drafts WHERE id = ?", [took.body.draftId]))[0].status).toBe("open");
+    });
+
+    it("an undo waits too, then finds the take live and says so", async () => {
+      const move = await one("roleMove");
+      const first = await answerDifferences(pool, deps, { act: "take", items: [item(move)], actor: HOLDER });
+      const { proxy, reached, release } = pausingPool();
+      const publishing = publishDraft(proxy, String(first.body.draftId), "u-ana");
+      await reached;
+      const undoing = undoAnswers(pool, deps, { keys: [move.key], actor: HOLDER });
+      await new Promise((r) => setTimeout(r, 400));
+      release();
+      expect((await publishing).ok).toBe(true);
+      const u = await undoing;
+      expect([u.status, u.body.why]).toEqual([409, "live"]);
+      expect((await q("SELECT circle_id FROM org_roles WHERE id = ?", [roleId(P.pump)]))[0].circle_id).toBe("land");
+    });
+
+    it("a publish shown a set of changes refuses a draft that holds another (review 12)", async () => {
+      const move = await one("roleMove");
+      const first = await answerDifferences(pool, deps, { act: "take", items: [item(move)], actor: HOLDER });
+      const draftId = String(first.body.draftId);
+      const shown = (await q("SELECT id FROM org_draft_changes WHERE draft_id = ?", [draftId])).map((r) => String(r.id));
+      expect((await answerDifferences(pool, deps, { act: "take", items: [item(await one("textField", "Water Steward"))], actor: HOLDER })).body.draftId).toBe(draftId);
+      expect(await publishDraft(pool, draftId, "u-ana", null, null, shown)).toEqual({ ok: false, error: DRAFT_CHANGED_SINCE_SHOWN });
+      const now = (await q("SELECT id FROM org_draft_changes WHERE draft_id = ?", [draftId])).map((r) => String(r.id));
+      expect((await publishDraft(pool, draftId, "u-ana", null, null, now)).ok).toBe(true);
+    });
+  });
+
+  describe("a take outlives its difference only as changed (R13, review 3)", () => {
+    it("shows a take whose difference went, counts the draft's real changes, and never adds to that draft", async () => {
+      const dish = await one("roleRest", "Dish Rota");
+      const first = await answerDifferences(pool, deps, { act: "take", items: [item(dish)], actor: HOLDER });
+      const draftId = String(first.body.draftId);
+      // The service brings Dish Rota back: nothing differs any more, and the retirement still sits in the draft.
+      await keepRead(roleRecs({ dishStatus: "Active" }));
+      let read = await readDifferences(pool);
+      const shown = listAnswer(read, { agent: AGENT, dashboard: null, timeZone: "UTC" }).inDraft;
+      expect(shown.map((g) => [g.draftId, g.changes, g.hasChanged, g.items.map((i) => [i.sentence, i.changed, i.now])])).toEqual([
+        [draftId, 1, true, [["Retiring Dish Rota.", true, null]]],
+      ]);
+      expect(countAnswer(read).drafts.map((d) => [d.id, d.changes, d.hasChanged])).toEqual([[draftId, 1, true]]);
+      // A new take goes to a new draft, never into the one holding a change that moved.
+      const second = await answerDifferences(pool, deps, { act: "take", items: [item(await one("roleMove"))], actor: HOLDER });
+      expect(second.body.draftId).not.toBe(draftId);
+      read = await readDifferences(pool);
+      expect(countAnswer(read).drafts.map((d) => d.hasChanged).sort()).toEqual([false, true]);
+    });
+
+    it("a take whose service value moved is taken again in its own draft, with the new words in place of the old", async () => {
+      const words = await one("textField", "Water Steward");
+      const first = await answerDifferences(pool, deps, { act: "take", items: [item(words)], actor: HOLDER });
+      const draftId = String(first.body.draftId);
+      await keepRead(roleRecs({ stewardBody: "Keeps the wells clean and safe." }));
+      const read = await readDifferences(pool);
+      const item0 = listAnswer(read, { agent: AGENT, dashboard: null, timeZone: "UTC" }).inDraft[0].items[0];
+      expect([item0.changed, item0.value]).toEqual([true, "Keeps the wells clean."]);
+      expect((await answerDifferences(pool, deps, { act: "keep", items: [item0.now!], actor: HOLDER })).body.why).toBe("inDraft");
+      const again = await answerDifferences(pool, deps, { act: "take", items: [item0.now!], actor: HOLDER });
+      expect([again.status, again.body.draftId]).toEqual([200, draftId]);
+      expect(await changesIn(draftId)).toEqual([{ op: "update_seat", orgRoleId: roleId(P.steward), payload: { aim: "Keeps the wells clean and safe." } }]);
+      expect(listAnswer(await readDifferences(pool), { agent: AGENT, dashboard: null, timeZone: "UTC" }).inDraft[0].hasChanged).toBe(false);
+    });
+  });
+
+  describe("a new circle and the roles it carries (R31, review 4, 5)", () => {
+    it("undoing the circle takes out every role the draft places in it, and refuses, naming it, a role it cannot", async () => {
+      await keepRead(roleRecs({ hoe: true }));
+      const circle = await one("circleAdd", "Land Stewardship");
+      const r = await answerDifferences(pool, deps, { act: "take", items: [item(circle)], actor: HOLDER });
+      const draftId = String(r.body.draftId);
+      // One of its roles undone, then taken on its own: it goes into the draft's circle with no tie to the circle's take.
+      const hoe = await one("roleAdd", "Hoe Keeper");
+      expect((await undoAnswers(pool, deps, { keys: [hoe.key], actor: HOLDER })).status).toBe(200);
+      expect((await answerDifferences(pool, deps, { act: "take", items: [item(await one("roleAdd", "Hoe Keeper"))], actor: HOLDER })).status).toBe(200);
+      // A role somebody placed in the circle by hand, with no answer behind it.
+      expect((await addChange(pool, draftId, { op: "create_seat", orgRoleId: "by-hand", payload: { name: "Fence Mender", circleId: "land-stewardship" } })).ok).toBe(true);
+      const refused = await undoAnswers(pool, deps, { keys: [circle.key], actor: HOLDER });
+      expect([refused.status, refused.body.why, refused.body.error]).toEqual([409, "circleHasRoles", "Roles are placed in this new circle. Undo them first. Fence Mender."]);
+      await q("DELETE FROM org_draft_changes WHERE org_role_id = 'by-hand'");
+      const undo = await undoAnswers(pool, deps, { keys: [circle.key], actor: HOLDER });
+      expect(undo.status).toBe(200);
+      expect((undo.body.undone as string[]).sort()).toEqual([circle.key, hoe.key, (await one("roleAdd", "Seed Keeper")).key].sort());
+      expect(await changesIn(draftId)).toEqual([]);
+      expect((await q("SELECT status FROM org_drafts WHERE id = ?", [draftId]))[0].status).toBe("withdrawn");
+    });
+
+    it("taking the circle leaves a kept role of it alone, keeps the keep, and names it", async () => {
+      const seedRole = await one("roleAdd", "Seed Keeper");
+      expect((await answerDifferences(pool, deps, { act: "keep", items: [item(seedRole)], actor: HOLDER })).status).toBe(200);
+      const r = await answerDifferences(pool, deps, { act: "take", items: [item(await one("circleAdd", "Land Stewardship"))], actor: HOLDER });
+      expect((r.body.refused as Array<{ key: string; why: string }>).map((x) => [x.key, x.why])).toEqual([[seedRole.key, "answered"]]);
+      expect((await changesIn(String(r.body.draftId))).map((c) => c.op)).toEqual(["create_circle"]);
+      expect(await q("SELECT answer, came_with FROM saberra_settled WHERE difference_key = ?", [seedRole.key])).toEqual([{ answer: "kept", came_with: null }]);
+    });
+  });
+
+  describe("what a take writes and what it leaves behind (review 6, 7, 9, 13)", () => {
+    it("writes the service's words as stored, line breaks and all", async () => {
+      const stored = "Keeps the wells clean.\n\n- daily check\n- weekly report";
+      await keepRead(roleRecs({ stewardBody: stored }));
+      const r = await answerDifferences(pool, deps, { act: "take", items: [item(await one("textField", "Water Steward"))], actor: HOLDER });
+      expect((await changesIn(String(r.body.draftId)))[0].payload).toEqual({ aim: stored });
+    });
+
+    it("a keep lapses once its difference leaves the list, so the same value coming back is a suggestion again", async () => {
+      const words = await one("textField", "Water Steward");
+      expect((await answerDifferences(pool, deps, { act: "keep", items: [item(words)], actor: HOLDER })).status).toBe(200);
+      // The service comes round to ours: nothing differs, and the read is checked against the answers.
+      await keepRead(roleRecs({ stewardBody: "Keeps the wells." }));
+      expect(await lapseLeftAnswers(pool, () => readDifferences(pool))).toBe(1);
+      // Then goes back to the words that were kept.
+      await keepRead(roleRecs({ stewardBody: "Keeps the wells clean." }));
+      expect((await view()).open.map((d) => d.key)).toContain(words.key);
+    });
+
+    it("an undo unties the link its answer made, and records the undoer's own door", async () => {
+      const move = await one("roleMove");
+      expect((await answerDifferences(pool, deps, { act: "keep", items: [item(move)], actor: HOLDER })).status).toBe(200);
+      expect(await q("SELECT page_key FROM saberra_links")).toEqual([{ page_key: P.pump }]);
+      expect((await undoAnswers(pool, deps, { keys: [move.key], actor: MODERATOR })).status).toBe(200);
+      expect(await q("SELECT page_key FROM saberra_links")).toEqual([]);
+      expect(await q("SELECT answer, door, actor_user_id, by_role_id FROM saberra_settled WHERE difference_key = ?", [move.key])).toEqual([
+        { answer: "undone", door: "moderator", actor_user_id: "u-mo", by_role_id: null },
+      ]);
+    });
+
+    it("an edit makes its draft a person's draft and the card shows whose words they are (review 11)", async () => {
+      const words = await one("textField", "Water Steward");
+      const r = await answerDifferences(pool, deps, { act: "edit", items: [{ ...item(words), value: "Keeps the wells and the rota." }], actor: HOLDER });
+      const draftId = String(r.body.draftId);
+      expect((await q("SELECT title, source_kind FROM org_drafts WHERE id = ?", [draftId]))[0]).toEqual({
+        title: "Changes from Sera's list, some in words written here", source_kind: "human",
+      });
+      const read = await readDifferences(pool);
+      const mine = listAnswer(read, { agent: AGENT, dashboard: null, timeZone: "UTC", viewerId: "u-ana", roleName: () => "Ops lead" }).inDraft[0].items[0];
+      expect([mine.answer, mine.value, mine.by]).toEqual(["edited", "Keeps the wells and the rota.", "you"]);
+      const theirs = listAnswer(read, { agent: AGENT, dashboard: null, timeZone: "UTC", viewerId: "u-other", roleName: () => "Ops lead" }).inDraft[0].items[0];
+      expect(theirs.by).toBe("Ops lead");
+    });
+
+    it("never answers with the text of an error it did not expect (review 19)", async () => {
+      const broken = { ...deps, read: async () => { throw Object.assign(new Error("Table 'secret_internal' is marked as crashed"), { code: "ER_CRASHED_ON_USAGE" }); } };
+      const r = await answerDifferences(pool, broken, { act: "keep", items: [item(await one("roleMove"))], actor: HOLDER });
+      expect(r.body).toEqual({ error: "The answer could not be written. Nothing changed.", why: "failed" });
     });
   });
 
@@ -422,6 +646,9 @@ describe.skipIf(!configured)("a member puts the list's draft to the village", ()
   let base = "";
   const USERS: Record<string, { id: string; role: string }> = { "u-mem": { id: "u-mem", role: "member" }, "u-ana": { id: "u-ana", role: "member" } };
   const userOf = async (req: any) => USERS[String(req.headers["x-user"] ?? "")] ?? null;
+  /** Who holds org.decide by the gate's live count (a badge counts there), and who holds it through a role. */
+  let liveNow: string[] = [];
+  let roleHoldersNow: Array<{ roleId: string; userId: string }> = [];
 
   beforeAll(async () => {
     db = await provisionTestDb();
@@ -439,8 +666,13 @@ describe.skipIf(!configured)("a member puts the list's draft to the village", ()
       authedUser: userOf as never,
       mayStillSee: (async (req: any) => String(req.headers["x-user"]) === "u-ana") as never,
       members: { all: async () => [{ id: "u-mem", name: "Mem Ber" }, { id: "u-ana", name: "Ana Moss" }] } as never,
-      deciders: { roles: () => [], roleHolders: () => [], orgRoles: async () => [], villageHolder: async () => null },
-      liveHoldersOf: async () => [],
+      deciders: {
+        roles: () => [{ id: "ops-lead", name: "Ops lead", capabilities: ["org.decide"] }],
+        roleHolders: () => roleHoldersNow,
+        orgRoles: async () => [],
+        villageHolder: async () => null,
+      },
+      liveHoldersOf: async () => liveNow,
       isAdmin: async () => false,
     });
     registerDecide(app, {
@@ -453,7 +685,7 @@ describe.skipIf(!configured)("a member puts the list's draft to the village", ()
       notify: async () => ({}),
       seasonState: () => ({ current: { id: "s1" }, seasons: [], timezone: "UTC" }),
       circlesRepo: { load: async () => undefined, all: () => [] },
-      liveHoldersOf: async () => [],
+      liveHoldersOf: async () => liveNow,
       ballotSetup: async () => ({
         method: "majority", dials: { unityPct: 50, quorumPct: 0 }, snapshot: { mode: "equal", token: null }, tokenProblem: null,
         electorate: Object.keys(USERS).map((userId) => ({ userId, weight: 1 })), durationDays: 7,
@@ -478,6 +710,39 @@ describe.skipIf(!configured)("a member puts the list's draft to the village", ()
     return { status: r.status, json: (await r.json().catch(() => null)) as any };
   };
 
+  it("counts a power held through a badge as no power: such a keep is set aside, and a keep through a role settles (K13, review 14)", async () => {
+    await seed();
+    liveNow = ["u-ana"];
+    roleHoldersNow = [];
+    const list = await call("GET", "/api/saberra/differences", "u-ana");
+    const move = (list.json.differences as Difference[]).find((d) => d.kind === "roleMove")!;
+    const kept = await call("POST", "/api/saberra/differences/answer", "u-ana", { act: "keep", items: [item(move)] });
+    expect([kept.status, kept.json.done[0].setAside]).toEqual([200, true]);
+    expect((await q("SELECT door, by_role_id FROM saberra_settled WHERE difference_key = ?", [move.key]))[0]).toEqual({ door: "moderator", by_role_id: null });
+    roleHoldersNow = [{ roleId: "ops-lead", userId: "u-ana" }];
+    const again = await call("POST", "/api/saberra/differences/answer", "u-ana", { act: "keep", items: [item(move)] });
+    expect([again.status, again.json.done[0].setAside]).toEqual([200, false]);
+    expect((await q("SELECT door, by_role_id FROM saberra_settled WHERE difference_key = ?", [move.key]))[0]).toEqual({ door: "power", by_role_id: "ops-lead" });
+    liveNow = [];
+    roleHoldersNow = [];
+    await seed();
+  });
+
+  it("publishes through the holder's door only the changes it was shown (review 12)", async () => {
+    await seed();
+    const list = await call("GET", "/api/saberra/differences", "u-ana");
+    const move = (list.json.differences as Difference[]).find((d) => d.kind === "roleMove")!;
+    const took = await call("POST", "/api/saberra/differences/answer", "u-ana", { act: "take", items: [item(move)] });
+    const shown = (await call("GET", "/api/saberra/differences", "u-ana")).json.inDraft[0].changeIds as string[];
+    liveNow = ["u-ana"];
+    const stale = await call("POST", `/api/org/drafts/${took.json.draftId}/publish-by-power`, "u-ana", { expectedChanges: ["not-a-change"] });
+    expect([stale.status, stale.json.error]).toEqual([409, DRAFT_CHANGED_SINCE_SHOWN]);
+    const ok = await call("POST", `/api/org/drafts/${took.json.draftId}/publish-by-power`, "u-ana", { expectedChanges: shown });
+    expect(ok.status).toBe(200);
+    liveNow = [];
+    await seed();
+  });
+
   it("sees the draft the decision made on the count, by id and size only, and opens the vote through the existing door", async () => {
     const before = await call("GET", "/api/saberra/differences/count", "u-mem");
     expect(before.json.drafts).toEqual([]);
@@ -490,15 +755,20 @@ describe.skipIf(!configured)("a member puts the list's draft to the village", ()
     expect((await q("SELECT door FROM saberra_settled WHERE difference_key = ?", [move.key]))[0].door).toBe("moderator");
 
     const count = await call("GET", "/api/saberra/differences/count", "u-mem");
-    expect(count.json.drafts).toEqual([{ id: took.json.draftId, changes: 1 }]);
+    expect(count.json.drafts).toMatchObject([{ id: took.json.draftId, changes: 1, hasChanged: false }]);
     expect(JSON.stringify(count.json)).not.toContain("Pump Keeper");
     const decide = await call("GET", `/api/org/drafts/${took.json.draftId}/decide`, "u-mem");
     expect([decide.json.ballotNeeded, decide.json.youMayPutToVillage]).toEqual([true, true]);
     const put = await call("POST", `/api/org/drafts/${took.json.draftId}/put-to-village`, "u-mem");
     expect(put.status).toBe(200);
     expect(await ballotById(pool, put.json.ballot.id)).toMatchObject({ subjectType: "org_draft", subjectRef: took.json.draftId, openedBy: "u-mem", status: "open" });
-    // Under the vote the draft is frozen: its answer cannot be undone from the list.
+    // Under the vote the draft is frozen: its answer cannot be undone from the list, and a new take goes elsewhere (review 18).
     const undo = await call("POST", "/api/saberra/differences/undo", "u-ana", { keys: [move.key] });
     expect([undo.status, undo.json.why]).toEqual([409, "underVote"]);
+    const words = (list.json.differences as Difference[]).find((d) => d.kind === "textField" && d.subject.name === "Water Steward")!;
+    const next = await call("POST", "/api/saberra/differences/answer", "u-ana", { act: "take", items: [item(words)] });
+    expect(next.status).toBe(200);
+    expect(next.json.draftId).not.toBe(took.json.draftId);
+    expect(await q("SELECT COUNT(*) AS n FROM org_draft_changes WHERE draft_id = ?", [took.json.draftId])).toEqual([{ n: 1 }]);
   });
 });

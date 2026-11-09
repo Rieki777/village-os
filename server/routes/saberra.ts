@@ -167,24 +167,38 @@ export function register(app: Express, deps: Deps): void {
 
   /**
    * The door an answer comes through (R16, R17): `power` for a live holder of
-   * `org.decide` by the gate's own deny-aware count, `admin` for the admin
-   * panel before launch, and `moderator` for anyone else the review queue's key
-   * lets in. The role named is the first one the public powers view gives them
-   * the power through, for the record; names are read at view time (III.2).
+   * `org.decide`, `admin` for the admin panel before launch, and `moderator`
+   * for anyone else the review queue's key lets in.
+   *
+   * A HOLDER IS A HOLDER THROUGH A ROLE (K13). The gate's own count is
+   * deny-aware and counts a power a badge grants; an admin can mint a badge, so
+   * a holder here must be both in the gate's live count and holding the power
+   * through a role. A badge holder's keep is set aside like any moderator's.
+   * The role named is the one the public powers view gives them the power
+   * through, for the record; names are read at view time (III.2).
    */
   const doorOf = async (req: unknown, userId: string): Promise<{ door: AnswerDoor; byRoleId: string | null }> => {
-    if (!liveHoldersOf) return { door: "moderator", byRoleId: null };
-    const door = await publishDoorFor(getPool(), { userId, isAdmin: isAdmin ? await isAdmin(req as never) : false }, await liveHoldersOf("org.decide"));
-    if (door !== "power" || !deciders) return { door: door ?? "moderator", byRoleId: null };
-    const held = doorHolders({
-      capability: "org.decide",
-      roles: deciders.roles(),
-      holdings: deciders.roleHolders(),
-      nameOf: () => "",
-      orgRoleName: () => undefined,
-      villageHolder: await deciders.villageHolder("org.decide"),
-    }).find((h) => h.userId === userId);
-    return { door, byRoleId: held?.roleId ?? null };
+    const admin = isAdmin ? await isAdmin(req as never) : false;
+    const roleHeld = deciders
+      ? doorHolders({
+          capability: "org.decide",
+          roles: deciders.roles(),
+          holdings: deciders.roleHolders(),
+          nameOf: () => "",
+          orgRoleName: () => undefined,
+          villageHolder: await deciders.villageHolder("org.decide"),
+        })
+      : [];
+    const live = liveHoldersOf ? await liveHoldersOf("org.decide") : [];
+    const deciderIds = live.filter((id) => roleHeld.some((h) => h.userId === id));
+    const door = await publishDoorFor(getPool(), { userId, isAdmin: admin }, deciderIds);
+    if (door === "power") return { door, byRoleId: roleHeld.find((h) => h.userId === userId)?.roleId ?? null };
+    return { door: door ?? "moderator", byRoleId: null };
+  };
+  /** A capability role's name by id, for "<role>'s words" on the draft card. */
+  const roleName = (id: string): string | null => {
+    const r = deciders?.roles().find((x) => String(x.id) === id);
+    return r ? String(r.name ?? r.id) : null;
   };
 
   // The pool is read when the job RUNS, never when it is registered: this runs
@@ -431,7 +445,8 @@ export function register(app: Express, deps: Deps): void {
       // When somebody here rewrote what each conflict is about, from published history only.
       const swap = nameCheckFor(await rosterRows(getPool())).swap;
       const changedHere = await changedHereAt(getPool(), listed.list, swap).catch(() => ({}));
-      res.json(listAnswer(listed, { ...listOpts(), waiting, changedHere }));
+      const viewer = await authedUser(req);
+      res.json(listAnswer(listed, { ...listOpts(), waiting, changedHere, viewerId: viewer ? String(viewer.id) : null, roleName }));
     } catch {
       res.status(500).json({ error: "Could not read the differences." });
     }
@@ -457,7 +472,13 @@ export function register(app: Express, deps: Deps): void {
       const opts = listOpts();
       const out = await answerDifferences(
         getPool(),
-        { read, agent: opts.agent, describe: (d) => ({ ...d, words: wordsOf(d, { holders: {} }, opts) }) },
+        {
+          read,
+          agent: opts.agent,
+          describe: (d) => ({ ...d, words: wordsOf(d, { holders: {} }, opts) }),
+          // R9: the wide match the snapshot flags with, over today's roster.
+          namesAMember: async () => nameCheckFor(await rosterRows(getPool())).names,
+        },
         { act: body.act, items: body.items, actor: { userId, ...(await doorOf(req, userId)) } },
       );
       res.status(out.status).json(out.body);
@@ -475,7 +496,9 @@ export function register(app: Express, deps: Deps): void {
     const keys = readUndoBody(req.body);
     if (!keys) return res.status(400).json({ error: "Say which answers to undo." });
     try {
-      const out = await undoAnswers(getPool(), { agent: saberraAgentName() }, { keys, actorUserId: String(user.id) });
+      const userId = String(user.id);
+      // The undoer's own door and role, never the original answer's (R26).
+      const out = await undoAnswers(getPool(), { agent: saberraAgentName() }, { keys, actor: { userId, ...(await doorOf(req, userId)) } });
       res.status(out.status).json(out.body);
     } catch {
       res.status(500).json({ error: "Could not undo the answer." });
