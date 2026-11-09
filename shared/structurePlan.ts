@@ -51,6 +51,7 @@
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
 import type { RoleWordsLike } from "./roleFieldChanges";
 import { ROLE_CCOS_FIELDS } from "./roleCcos";
+import { readPayRange, type PayRange } from "./sourcePayRange";
 
 /** What the source's own status says, in the four words it uses, or `other`. */
 export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
@@ -97,6 +98,8 @@ export interface SourcePay {
   terms: string | null;
   /** US dollars a month, as the source holds it. */
   monthlyUsd: number | null;
+  /** The range the source holds, structured or read from unambiguous terms text. Information, never a term. */
+  range?: PayRange | null;
 }
 
 /** A source's pay status read into its standing. Null when none was sent. */
@@ -138,7 +141,9 @@ export function readSourcePay(v: unknown): SourcePay | null {
     terms: str(o.terms, 600),
     monthlyUsd: dollarsOf(o.monthlyUsd),
   };
-  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null ? out : null;
+  const range = readPayRange(o.range);
+  if (range) out.range = range;
+  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null || range ? out : null;
 }
 
 /** The proposal kinds that change the chart. Everything else in a batch is a note. */
