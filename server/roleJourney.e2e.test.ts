@@ -13,7 +13,7 @@
  * IT GROWS WITH EACH LANE. The `it.todo` steps at the end are the brief's
  * 6.5 steps another lane owns; each lane turns its step into a test (with a
  * control) when its PR lands: listing (PR-A), the card's parameters (PR-C),
- * interviews (L5), agreements before the start (PR-E), the access bundle and
+ * conversations (L5), agreements before the start (PR-E), the access bundle and
  * the onboarding path (L8, L9).
  *
  * A neutral village name, so the brand guard holds. Skips loudly without
@@ -243,10 +243,36 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     expect(String(app?.deliverables ?? "")).toContain("Accepts the terms on offer.");
   });
 
+  it("D34: the moon term crosses the season's end; the turn leaves it running, and next season's goals apply from the turn", async () => {
+    // The season ends yesterday and the next begins today, inside the moon the person holds the role for.
+    const F = state.founder;
+    const now = Date.now();
+    const cfg = (await call("GET", "/api/admin/seasons", undefined, F)).json;
+    const seasons = [
+      { id: "s-now", name: "Season of Seeds", startsOn: civil(now - 30 * DAY), endsOn: civil(now - DAY), goals: [{ text: "One set of numbers everyone trusts", done: false }] },
+      { id: "s-next", name: "Season of Roots", startsOn: civil(now), endsOn: civil(now + 90 * DAY), goals: [{ text: "Roots in the ground", done: false }] },
+    ];
+    const turned = await call("PUT", "/api/admin/seasons", { ...cfg, seasons }, F);
+    expect(turned.status, JSON.stringify(turned.json).slice(0, 400)).toBe(200);
+    expect(turned.json?.current?.id).toBe("s-next");
+    expect(state.moonEnds > civil(now - DAY), "the moon runs past the season's end").toBe(true);
+
+    // The seating is still there, still ending with the moon, not with the season.
+    const held = (await call("GET", "/api/org/holders", undefined, F)).json?.holdings ?? [];
+    const onRole = held.filter((h: any) => h?.orgRoleId === state.roleId);
+    expect(onRole, JSON.stringify(held).slice(0, 400)).toHaveLength(1);
+    expect(String(onRole[0].termEndsAt).slice(0, 10)).toBe(state.moonEnds);
+
+    // From the turn, the form offers the new season's goals.
+    const form = (await call("GET", "/api/open-proposals/form")).json;
+    expect(form.season?.id).toBe("s-next");
+    expect(form.goals.map((g: any) => g.text)).toEqual(["Roots in the ground"]);
+  });
+
   // ── The brief's 6.5 steps other lanes own. Each becomes a test, with a control, when its PR lands. ──
   it.todo("PR-A: an unlisted role is absent from the form and the board, and the listed one is offered");
   it.todo("PR-C: the public card carries the parameters and the pay range, and no other terms key");
-  it.todo("L5: the interviews run in the role's order, the final approval last, and consent opens after them");
+  it.todo("L5: the conversations run in the role's order, the final approval last, and consent opens after them");
   it.todo("PR-E: the membership alignment is made at application and carried to the account; the role start waits for confidentiality");
   it.todo("L8: the access tasks are raised at the start, and the ending revokes them");
   it.todo("L9: the onboarding path opens on the profile");
