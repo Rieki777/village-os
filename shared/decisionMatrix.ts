@@ -107,6 +107,7 @@ import {
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { CLOSING_POLICY } from "./closingPolicies";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 import { ADOPTING_POWER, ROLE_APPLICATION } from "./seatApplications";
 
@@ -288,6 +289,7 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
   [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
+  [CLOSING_POLICY]: "Changing what closing the village means",
   [ORG_DRAFT]: "Changing the village's circles and roles",
 };
 
@@ -720,6 +722,12 @@ function voteRow(
     approval = {
       who: "founder",
       text: "The founders, who write the conflict agreement until the Game starts. Until then this vote cannot be opened.",
+    };
+  } else if (subject === CLOSING_POLICY && !inp.gameStarted) {
+    // The same consequence pen (D6): the exit policy's writers adopt the words until the Birthing.
+    approval = {
+      who: "founder",
+      text: "The founders, who adopt what closing means until the Game starts. Until then this vote cannot be opened.",
     };
   } else if (!inp.governanceOnForMembers) {
     approval = {

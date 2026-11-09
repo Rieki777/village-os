@@ -67,6 +67,8 @@ import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import { CONFLICT_AGREEMENT, CONFLICT_AGREEMENT_KEY } from "../shared/conflictAgreement";
 import { conflictAgreementCloser } from "./lib/conflictAgreementCloser";
+import { closingPolicyCloser } from "./lib/closingPolicyCloser";
+import { CLOSING_POLICY } from "../shared/closingPolicies";
 import { raiseCanvasRevisitForLifecycle, raiseCanvasRevisitForSubmission } from "./lib/canvasRevisit";
 import { agreementCloser } from "./lib/agreementCloser";
 import { withConflictAgreement } from "./lib/conflictAgreement";
@@ -17718,7 +17720,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
-  registerClosingPolicyRoutes(app, { isAdmin, adminActor, getPool, exitPolicy: exitPolicyRepo });
+  registerClosingPolicyRoutes(app, { isAdmin, adminActor, getPool, exitPolicy: exitPolicyRepo, ballot: { authedUser, capabilityCtx, notify, weightModeNow, buildElectorate, addActivity } });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -21164,6 +21166,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * the pen. The whole executor, and why it is a file, is in
      * server/lib/gpsChangeCloser.ts.
      */
+    // A carried change to what closing means (D6): server/lib/closingPolicyCloser.ts.
+    [CLOSING_POLICY]: twoPhase(closingPolicyCloser({ getPool, exitPolicy: exitPolicyRepo, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "exit_policy", entityRef: "closing", audience: "admin" }) })),
     // A carried change to the conflict agreement: server/lib/conflictAgreementCloser.ts.
     [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, moduleOn: conflictEvolutionOn, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
     [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),

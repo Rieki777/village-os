@@ -69,6 +69,7 @@ import {
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { CLOSING_POLICY } from "./closingPolicies";
 
 export interface SubjectThresholds {
   /**
@@ -520,6 +521,20 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * WHAT CLOSING THIS VILLAGE MEANS, ONCE THE GAME HAS STARTED (sweep decision
+   * D6, Rye 2026-11-06). The same consequence pen as the conflict agreement:
+   * before the Birthing the exit policy's writers adopt the words, after it a
+   * change is this ballot, at the structural tier, `custom` for the same
+   * reason as above.
+   */
+  [CLOSING_POLICY]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    method: "custom",
+    why: "This one changes what every member is promised if the village closes, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
   [ADMIN_EDIT]: {
     minUnityPct: 0,

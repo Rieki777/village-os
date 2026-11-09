@@ -843,6 +843,8 @@ export const SUBJECT_NOUN: Record<string, string> = {
   gps_change: "Change of purpose",
   // Opened from the conflict agreement itself once the Game has started, never from the wizard.
   conflict_agreement: "Change to the conflict agreement",
+  // Opened from the exit policy once the Game has started (D6), never from the wizard.
+  closing_policy: "Change to what closing means",
   /*
    * NOT a wizard type, and here because `ballots.subject_type` carries it.
    * Without this entry an advisory vote fell through to "Decision", which is
