@@ -32,6 +32,7 @@
  *     also the largest. You arrive here by choosing to; the page does not need
  *     to announce itself.
  */
+import DraftCarry from "@/components/roleDraft/DraftCarry";
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -355,6 +356,19 @@ export default function Characters() {
             ) : null}
           </div>
 
+          {/* What they drafted on /roles/draft before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
+          {user && (
+            <div className="mb-4">
+              <DraftCarry
+                cast={archetypes}
+                userId={user?.id ? String(user.id) : null}
+                onPickCharacter={(key) => {
+                  stageSettled.current = true;
+                  setActiveKey(key);
+                }}
+              />
+            </div>
+          )}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[6rem_minmax(0,1fr)_20rem]">
             {/* THE STAGE, first in the DOM so a phone meets the character
                 immediately. The rail follows it on small screens and moves

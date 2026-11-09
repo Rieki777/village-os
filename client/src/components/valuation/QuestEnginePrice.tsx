@@ -27,7 +27,7 @@ export interface EngineUse {
   value: string;
 }
 
-const field = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white";
+const field = "w-full border border-border rounded-lg px-2 py-1.5 text-sm bg-card";
 const label = "block text-xs text-muted-foreground mb-1";
 
 export default function QuestEnginePrice({
@@ -89,7 +89,7 @@ export default function QuestEnginePrice({
   const tokenName = (slug: string) => read.tokenNames[slug] ?? slug;
 
   return (
-    <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3 space-y-2" data-quest-engine-price>
+    <div className="rounded-lg border border-sage/20 bg-sage-light/40 p-3 space-y-2" data-quest-engine-price>
       <p className="text-sm font-medium text-foreground"><Trans context="quest editor">Price it with the village's rule (optional)</Trans></p>
       <div className="grid gap-2 sm:grid-cols-5 items-end">
         <label className="sm:col-span-2">
@@ -125,7 +125,7 @@ export default function QuestEnginePrice({
           </p>
           <button
             type="button"
-            className="rounded-lg bg-emerald-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-900"
+            className="rounded-lg bg-teal-deep px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-deep-dark"
             onClick={() => onUse(filled.draft, { work, totalMinor: s.expected.totalMinor, value: filled.draft.value })}
           >
             <Trans context="quest editor">Use this price</Trans>
@@ -133,7 +133,7 @@ export default function QuestEnginePrice({
           {filled.voiceHeld && <p className="w-full text-xs text-muted-foreground"><Trans context="quest editor">Voice starts when the village adopts its own pay settings.</Trans></p>}
           {s.expected.earnedEquityHeld > 0 && <p className="w-full text-xs text-muted-foreground"><Trans context="quest editor">Earned Equity is owed on this quest until the village writes what Earned Equity means.</Trans></p>}
           {filled.unoffered.length > 0 && (
-            <p className="w-full text-xs text-amber-800">
+            <p className="w-full text-xs text-amber-ink">
               {t({ message: `The rule pays ${filled.unoffered.map(tokenName).join(", ")}, which quests do not pay here yet. Turn it on in the quest pay rules first.`, context: "quest editor" })}
             </p>
           )}

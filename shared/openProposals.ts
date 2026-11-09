@@ -19,6 +19,8 @@
  */
 
 /** The village's public link. */
+import { termOf, type OpenProposalTerm } from "./openProposalTerm";
+
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
 /** The public link with one role already picked: the door a visitor or a guest is offered on a role. */
@@ -49,6 +51,8 @@ export interface OpenProposalBody {
   roles: Array<{ roleId: string; note: string }>;
   why: string;
   aim: string;
+  /** Set by the server when the village's proposals are for the moon (shared/openProposalTerm.ts). Absent: next season. */
+  term?: OpenProposalTerm;
 }
 
 export interface OpenProposalInput {
@@ -73,6 +77,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
       .slice(0, OPEN_PROPOSAL_MAX_ROLES),
     why: text(o.why, OPEN_WHY_MAX).slice(0, OPEN_WHY_MAX),
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
+    ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
   };
 }
 
@@ -116,13 +121,13 @@ export function andList(items: readonly string[]): string {
 }
 
 /** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
-export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string }): { subject: string; text: string } {
+export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
   return {
     subject: `Confirm your proposal to ${i.village}`,
     text: [
       i.firstName ? `Hi ${i.firstName},` : "Hi,",
       "",
-      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} next season.`,
+      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} ${i.when ? `for ${i.when}` : "next season"}.`,
       "",
       "Confirm it's you, and your proposal goes to the village:",
       i.link,
@@ -138,6 +143,9 @@ export const OPEN_WORDS = {
   heading: (village: string) => `Propose a role in ${village}`,
   lede: (season: string) => `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles for ${season}, say what you bring, and send it. You don't need an account.`,
   noSeason: "The village hasn't set its next season yet, so there's nothing to propose for right now. Check back soon.",
+  /** The lede when the village's proposals are for the moon. */
+  ledeMoon: (from: string, to: string) => `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles for this moon, from ${from} to the next new moon on ${to}, say what you bring, and send it. You don't need an account.`,
+  noCurrentSeason: "The village has no season running right now, so there's nothing to propose for this moon. Check back soon.",
   closed: "This page isn't taking proposals right now.",
   pickRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles`,
   noteLabel: "What you bring to this role",
