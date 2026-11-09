@@ -103,9 +103,12 @@ const ASKS_PER_WINDOW = 10;
  */
 export function expectedChangesOf(body: unknown): string[] | null {
   const v = body && typeof body === "object" ? (body as Record<string, unknown>).expectedChanges : undefined;
-  if (!Array.isArray(v)) return null;
+  if (v === undefined || v === null) return null;
+  // Sent but malformed is never read as none sent (PR C residual): it becomes an
+  // empty list, which matches no draft that has a change in it, so publish refuses.
+  if (!Array.isArray(v)) return [];
   const ids = v.filter((x): x is string => typeof x === "string" && x !== "" && x.length <= 64);
-  return ids.length === v.length && ids.length <= 1000 ? ids : null;
+  return ids.length === v.length && ids.length <= 1000 ? ids : [];
 }
 const ASK_WINDOW_MS = 10 * 60 * 1000;
 

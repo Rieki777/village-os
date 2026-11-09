@@ -71,43 +71,43 @@ export default function ApplicationStatus() {
             <BreathingLoader label={PANEL_WORDS.statusHeading} />
           </div>
         )}
-        {state === "missing" && <p className="text-stone-700">{PANEL_WORDS.statusMissing}</p>}
+        {state === "missing" && <p className="text-foreground">{PANEL_WORDS.statusMissing}</p>}
         {state === "ready" && s && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
-              <h1 className="font-display text-3xl font-bold text-stone-900">{PANEL_WORDS.statusHeading}</h1>
-              {s.roles.length > 0 && <p className="mt-1 text-stone-600">{s.roles.join(", ")}</p>}
+              <h1 className="font-display text-3xl font-bold text-foreground">{PANEL_WORDS.statusHeading}</h1>
+              {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
-            <section aria-label={PANEL_WORDS.statusNext} className="rounded-xl border-2 border-teal-deep/40 bg-white p-5">
+            <section aria-label={PANEL_WORDS.statusNext} className="rounded-xl border-2 border-teal-deep/40 bg-card p-5">
               <p className="text-sm font-semibold text-teal-deep">{s.stepWords}</p>
-              <p className="mt-1 text-lg text-stone-900">{s.actsNext}</p>
-              {byDay && <p className="mt-1 text-stone-700">{PANEL_WORDS.statusBy(byDay)}</p>}
+              <p className="mt-1 text-lg text-foreground">{s.actsNext}</p>
+              {byDay && <p className="mt-1 text-foreground">{PANEL_WORDS.statusBy(byDay)}</p>}
             </section>
             <ol className="space-y-2">
               {s.path.map((p, i) => (
-                <li key={i} className="flex min-h-[44px] items-center gap-3 rounded-lg border border-stone-200 bg-white px-4" data-path-state={p.state}>
+                <li key={i} className="flex min-h-[44px] items-center gap-3 rounded-lg border border-border bg-card px-4" data-path-state={p.state}>
                   <span aria-hidden="true">{p.state === "done" ? "✓" : p.state === "now" ? "•" : "○"}</span>
-                  <span className={p.state === "later" ? "text-stone-600" : "font-medium text-stone-900"}>{p.label}</span>
+                  <span className={p.state === "later" ? "text-muted-foreground" : "font-medium text-foreground"}>{p.label}</span>
                   <span className="sr-only">{p.state === "done" ? "done" : p.state === "now" ? "now" : "later"}</span>
                 </li>
               ))}
             </ol>
             {s.booking && (
-              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-xl border border-stone-200 bg-white p-4">
-                <p className="text-stone-800">{s.booking}</p>
+              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-xl border border-border bg-card p-4">
+                <p className="text-foreground">{s.booking}</p>
                 {s.mode === "block" && (
                   <button
                     type="button"
                     onClick={() => void split()}
-                    className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-stone-400 px-4 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                   >
                     {PANEL_WORDS.splitAsk}
                   </button>
                 )}
-                {said && <p role="status" className="mt-2 text-sm text-stone-700">{said}</p>}
+                {said && <p role="status" className="mt-2 text-sm text-foreground">{said}</p>}
               </section>
             )}
-            <p className="text-sm text-stone-600">{PANEL_WORDS.statusPrivate}</p>
+            <p className="text-sm text-muted-foreground">{PANEL_WORDS.statusPrivate}</p>
           </article>
         )}
       </div>

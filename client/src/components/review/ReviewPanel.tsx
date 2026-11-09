@@ -22,9 +22,9 @@ interface Card {
 }
 
 const SECONDARY =
-  "inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-400 px-4 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50";
 const PRIMARY =
-  "inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50";
+  "inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50";
 
 async function call(path: string, method: "GET" | "POST", body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
   try {
@@ -102,27 +102,27 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
   const criterionText = (id: string) => card.criteria.find((c) => c.id === id)?.text ?? id;
 
   return (
-    <section aria-labelledby="rv-heading" className="rounded-xl border border-stone-200 bg-white p-5" data-review-panel="">
-      <h2 id="rv-heading" className="text-lg font-bold text-stone-900">
+    <section aria-labelledby="rv-heading" className="rounded-xl border border-border bg-card p-5" data-review-panel="">
+      <h2 id="rv-heading" className="text-lg font-bold text-foreground">
         {PANEL_WORDS.heading}
       </h2>
-      <p className="mt-1 text-sm text-stone-700">{PANEL_WORDS.intro}</p>
-      {card.booking && <p className="mt-1 text-sm text-stone-700">{card.booking.words}</p>}
+      <p className="mt-1 text-sm text-foreground">{PANEL_WORDS.intro}</p>
+      {card.booking && <p className="mt-1 text-sm text-foreground">{card.booking.words}</p>}
 
       <ol className="mt-4 space-y-3">
         {card.interviews.map((iv) => (
-          <li key={iv.position} className="rounded-lg border border-stone-200 p-3" data-interview-state={iv.state}>
-            <p className="font-semibold text-stone-900">
-              {iv.position}. {iv.roleName} <span className="font-normal text-stone-600">· {PANEL_WORDS.minutes(iv.minutes)}</span>
-              {iv.final && <span className="ml-2 rounded bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-800">{PANEL_WORDS.final}</span>}
+          <li key={iv.position} className="rounded-lg border border-border p-3" data-interview-state={iv.state}>
+            <p className="font-semibold text-foreground">
+              {iv.position}. {iv.roleName} <span className="font-normal text-muted-foreground">· {PANEL_WORDS.minutes(iv.minutes)}</span>
+              {iv.final && <span className="ml-2 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">{PANEL_WORDS.final}</span>}
             </p>
-            <p className="text-sm text-stone-600">{iv.state === "open" ? PANEL_WORDS.open : iv.state === "scored" ? PANEL_WORDS.scored : iv.state === "skipped" ? PANEL_WORDS.skipped : PANEL_WORDS.waiting}</p>
+            <p className="text-sm text-muted-foreground">{iv.state === "open" ? PANEL_WORDS.open : iv.state === "scored" ? PANEL_WORDS.scored : iv.state === "skipped" ? PANEL_WORDS.skipped : PANEL_WORDS.waiting}</p>
             {iv.entries && (
               <dl className="mt-2 space-y-1">
                 {iv.entries.map((e) => (
                   <div key={e.criterionId}>
-                    <dt className="text-sm font-semibold text-stone-700">{criterionText(e.criterionId)}</dt>
-                    <dd className="text-stone-900">
+                    <dt className="text-sm font-semibold text-foreground">{criterionText(e.criterionId)}</dt>
+                    <dd className="text-foreground">
                       <span className="font-semibold">{LEVEL_WORDS[e.level as ScoreLevel] ?? e.level}</span>
                       {": "}
                       {e.evidence}
@@ -134,7 +134,7 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
           </li>
         ))}
       </ol>
-      {!card.mayRead && hidden && <p className="mt-3 text-sm text-stone-600">{hidden}</p>}
+      {!card.mayRead && hidden && <p className="mt-3 text-sm text-muted-foreground">{hidden}</p>}
 
       {card.mayScore && (
         <form
@@ -145,13 +145,13 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
             void submit();
           }}
         >
-          <p className="font-semibold text-stone-900">{PANEL_WORDS.yourTurn(card.mayScore.minutes)}</p>
+          <p className="font-semibold text-foreground">{PANEL_WORDS.yourTurn(card.mayScore.minutes)}</p>
           {card.criteria.map((c) => (
             <fieldset key={c.id} className="space-y-2">
-              <legend className="font-medium text-stone-900">{c.text}</legend>
+              <legend className="font-medium text-foreground">{c.text}</legend>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={`${PANEL_WORDS.levelLabel}: ${c.text}`}>
                 {SCORE_LEVELS.map((l) => (
-                  <label key={l} className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-stone-300 px-3 text-sm">
+                  <label key={l} className="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm">
                     <input
                       type="radio"
                       name={`lv-${c.id}`}
@@ -163,12 +163,12 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
                   </label>
                 ))}
               </div>
-              <label className="block text-sm text-stone-700">
+              <label className="block text-sm text-foreground">
                 {PANEL_WORDS.evidenceLabel}
                 <input
                   type="text"
                   maxLength={EVIDENCE_MAX}
-                  className="mt-1 block min-h-[44px] w-full rounded-lg border border-stone-300 px-3"
+                  className="mt-1 block min-h-[44px] w-full rounded-lg border border-border px-3"
                   value={entries[c.id]?.evidence ?? ""}
                   onChange={(e) => setEntries((m) => ({ ...m, [c.id]: { level: m[c.id]?.level ?? "", evidence: e.target.value } }))}
                 />
@@ -187,11 +187,11 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
             {PANEL_WORDS.recuse}
           </button>
         ) : (
-          <div role="group" aria-label={PANEL_WORDS.recuse} className="w-full rounded-lg border border-stone-300 p-3">
-            <p className="text-stone-800">{PANEL_WORDS.recuseAsk}</p>
-            <label className="mt-2 block text-sm text-stone-700">
+          <div role="group" aria-label={PANEL_WORDS.recuse} className="w-full rounded-lg border border-border p-3">
+            <p className="text-foreground">{PANEL_WORDS.recuseAsk}</p>
+            <label className="mt-2 block text-sm text-foreground">
               {PANEL_WORDS.reasonLabel}
-              <input type="text" maxLength={300} className="mt-1 block min-h-[44px] w-full rounded-lg border border-stone-300 px-3" value={reason} onChange={(e) => setReason(e.target.value)} />
+              <input type="text" maxLength={300} className="mt-1 block min-h-[44px] w-full rounded-lg border border-border px-3" value={reason} onChange={(e) => setReason(e.target.value)} />
             </label>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" disabled={busy} className={PRIMARY} onClick={() => void stepOut()}>
@@ -207,7 +207,7 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
         {nobodyAtTheDoor && <VillageDoor applicationRef={applicationRef} onChanged={onChanged} />}
       </div>
       {said && (
-        <p role={said.ok ? "status" : "alert"} className={`mt-3 text-sm font-medium ${said.ok ? "text-sage" : "text-coral"}`}>
+        <p role={said.ok ? "status" : "alert"} className={`mt-3 text-sm font-medium ${said.ok ? "text-open" : "text-destructive"}`}>
           {said.text}
         </p>
       )}
@@ -234,7 +234,7 @@ function MoonDoor({ applicationRef, onChanged }: { applicationRef: string; onCha
       >
         {PANEL_WORDS.adoptThisMoon}
       </button>
-      {text && <p className="mt-2 text-sm text-stone-700">{text}</p>}
+      {text && <p className="mt-2 text-sm text-foreground">{text}</p>}
     </div>
   );
 }
@@ -244,7 +244,7 @@ function VillageDoor({ applicationRef, onChanged }: { applicationRef: string; on
   const [text, setText] = useState<string | null>(null);
   return (
     <div>
-      <p className="mb-2 text-sm text-stone-700">{PANEL_WORDS.toTheVillageLine}</p>
+      <p className="mb-2 text-sm text-foreground">{PANEL_WORDS.toTheVillageLine}</p>
       <button
         type="button"
         disabled={busy}
@@ -259,7 +259,7 @@ function VillageDoor({ applicationRef, onChanged }: { applicationRef: string; on
       >
         {PANEL_WORDS.toTheVillage}
       </button>
-      {text && <p className="mt-2 text-sm text-stone-700">{text}</p>}
+      {text && <p className="mt-2 text-sm text-foreground">{text}</p>}
     </div>
   );
 }
