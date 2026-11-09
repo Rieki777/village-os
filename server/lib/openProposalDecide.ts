@@ -68,6 +68,9 @@ import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
+import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
+import { stampStep } from "../repos/applicationReview";
+import { REVIEW_WORDS } from "../../shared/applicationReview";
 
 type Db = Pool | PoolConnection;
 
@@ -120,6 +123,8 @@ export interface Confirmed {
   closesAt: Date;
   /** The proposer's own account here, if their address has one. Never asked, never told. */
   own: string | null;
+  /** The review begun at confirm: the role's interviewers, in order (role journey L5). */
+  review?: ReviewStart;
 }
 
 /**
@@ -130,7 +135,7 @@ export interface Confirmed {
  * from now. Null when the token confirms nothing: used, run out, or unknown.
  */
 export async function confirmAndAsk(
-  deps: Pick<DecideDeps, "getPool" | "members" | "calendar">,
+  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews">,
   confirmHash: string,
   notBefore: Date,
   at: Date,
@@ -155,8 +160,14 @@ export async function confirmAndAsk(
         asked.push({ userId: h.userId, circleId });
       }
     }
-    await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
-    return { proposal, asked, closesAt, own };
+    // The review begins in this same transaction, so a proposal is never confirmed with half a review.
+    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at });
+    // Where the village asked for it, the circle is asked once the interviews are scored (shared/applicationReview.ts).
+    if (!review.holdConsent) {
+      await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
+      await stampStep(conn, { ref: proposal.id, kind: "consent", at });
+    }
+    return { proposal, asked, closesAt, own, review };
   });
 }
 
@@ -168,11 +179,25 @@ export async function confirmAndAsk(
  * per proposal and person, so a retry writes nothing twice.
  */
 export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" | "notifyAdmins" | "liveHoldersOf" | "calendar">, c: Confirmed): Promise<void> {
+  if (c.review) await announceReview(deps, c.review, greetingName(c.proposal.name));
   const pool = deps.getPool();
   const names = await roleNames(pool, c.proposal);
   const link = openProposalHref(c.proposal.id);
   const closesOn = civilDateKey(new Date(c.closesAt.getTime() - 1), deps.calendar().timezone || "UTC");
   for (const a of c.asked) {
+    if (c.review?.holdConsent) {
+      // Told it arrived; the ask itself waits for the interviews.
+      await deps.notify({
+        userId: a.userId,
+        type: "application_arrived",
+        title: REVIEW_WORDS.arrived(names),
+        body: REVIEW_WORDS.consentWaitsForInterviews,
+        link,
+        actorUserId: null,
+        dedupeKey: `op:${c.proposal.id}:arrived:${a.userId}`,
+      });
+      continue;
+    }
     await deps.notify({
       userId: a.userId,
       type: "open_role_proposal_consent_ask",
@@ -221,7 +246,7 @@ export type Placed =
  */
 export async function placeOnRoles(
   deps: DecideDeps,
-  p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string },
+  p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string; /** False writes the application and stops: it waits for a vote (role journey L5, the ballot fallback). */ adopt?: boolean },
 ): Promise<Placed> {
   const pool = deps.getPool();
   const calendar = deps.calendar();
@@ -272,6 +297,7 @@ export async function placeOnRoles(
     throw e;
   }
   const id = made.app.row.id;
+  if (p.adopt === false) return { ok: true, applicationId: id, outcome: "awaiting-holder" };
   const { outcome, app, textId } = await adoptApplication(
     pool,
     id,

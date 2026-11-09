@@ -257,7 +257,8 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     it("the link confirms it once, then the desk sees it; a second use, a wrong token and one past 48 hours are refused", async () => {
       const { id, token } = await send();
       const ok = await call("POST", "/api/open-proposals/confirm", { token });
-      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed });
+      // The applicant also gets the link to their own status page (role journey L5); only its hash is kept.
+      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`) });
       expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
       const again = await call("POST", "/api/open-proposals/confirm", { token });
       expect(again.status).toBe(410);

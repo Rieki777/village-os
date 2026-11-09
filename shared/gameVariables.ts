@@ -2447,6 +2447,24 @@ export const VARIABLES: VariableDef[] = [
     ring: "founder",
   },
   {
+    key: "org.consent_after_interviews",
+    category: "The village's people",
+    label: "Ask the circle to consent after the interviews",
+    description:
+      "Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every interview a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.onboarding_role",
+    category: "The village's people",
+    label: "The role that sends first replies to applicants",
+    description:
+      "The role whose holders are reminded to send each applicant a first reply within 3 business days, and are told when an application has not moved for ten days. Paste the role id from the org chart. Leave it empty and the admins are told instead. Reminders only: nothing here adopts or declines anybody.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.ccos_terms",
     category: "The village's people",
     label: "Show the CCOS term on circle and role card headings",

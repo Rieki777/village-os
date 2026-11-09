@@ -35,9 +35,10 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
+import ReviewPanel from "@/components/review/ReviewPanel";
 import type { ConsentAnswerOut, ConsentOut } from "@/components/roleProposal/proposalApi";
 import { gameFetch } from "@/lib/gameApi";
-import { DECIDE_WORDS, type DoorReason } from "@shared/openProposalDecide";
+import { DECIDE_WORDS, DOOR, type DoorReason } from "@shared/openProposalDecide";
 import { CONSENT_WORDS, type ConsentAnswer } from "@shared/roleProposalConsent";
 import { civilDayWords } from "@shared/seasonPlans";
 
@@ -255,6 +256,16 @@ export default function OpenProposal() {
                 waiting={p.status === "confirmed"}
                 onAnswered={() => void load()}
                 answer={answerConsent}
+              />
+            )}
+
+            {p.status === "confirmed" && (
+              <ReviewPanel
+                applicationRef={p.id}
+                onChanged={() => void load()}
+                moonEnded={!!p.term && new Date().toISOString().slice(0, 10) > p.term.endsOn}
+                mayAdopt={p.you.mayAdopt}
+                nobodyAtTheDoor={p.door.because !== DOOR.aRoleHolds}
               />
             )}
 

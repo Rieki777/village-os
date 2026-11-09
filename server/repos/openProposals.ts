@@ -125,6 +125,19 @@ export async function decideOpenProposal(
 }
 
 /**
+ * Rewrite a confirmed proposal's term to the moon running now (role journey L5,
+ * "adopt for the moon running now"). Guarded on `confirmed`, so a decided
+ * proposal is never changed under its decision. True when this call did.
+ */
+export async function rewriteTerm(db: Db, id: string, term: { startsOn: string; endsOn: string }): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.term', JSON_OBJECT('kind', 'moon', 'startsOn', ?, 'endsOn', ?)) WHERE id = ? AND status = 'confirmed'",
+    [term.startsOn, term.endsOn, id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}
+
+/**
  * Confirm the proposal a token's hash names: only an unconfirmed one made after
  * `notBefore`, and only once, because the hash is cleared as it is used. The
  * proposal it confirmed, or null.
