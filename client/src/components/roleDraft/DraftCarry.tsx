@@ -22,12 +22,16 @@ export default function DraftCarry({
   cast,
   roleNames,
   onPickCharacter,
+  userId,
 }: {
   cast: ReadonlyArray<{ key: string; name: string }>;
   /** Names the host already has. Without them, the chart is read once. */
   roleNames?: Readonly<Record<string, string>>;
   onPickCharacter: (key: string) => void;
+  /** The signed-in member, so a drafted role they already applied for (or were adopted for) is not offered again. */
+  userId?: string | null;
 }) {
+  const me = userId ?? null;
   const { t } = useLingui();
   const [draft, setDraft] = useState(() => {
     const read = readStoredJson("local", ROLE_DRAFT_KEY);
@@ -36,6 +40,38 @@ export default function DraftCarry({
   const [read, setRead] = useState<Record<string, string>>({});
   /** Whether the chart was read at the terms tier: a member applies through a role application. */
   const [member, setMember] = useState(false);
+  /**
+   * Drafted roles this person already has an application for, by role id:
+   * "adopted" or "applied". Somebody who arrives through an adopted proposal
+   * was placed on those roles at sign-up (server/lib/openProposalDecide.ts,
+   * placeOnRoles); offering to apply for them again would invite a duplicate
+   * (role journey walk, 9 Nov).
+   */
+  const [already, setAlready] = useState<Record<string, "adopted" | "applied">>({});
+  useEffect(() => {
+    if (!me || !draft.picks.length) return;
+    let live = true;
+    gameFetch("/api/governance/role-applications")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!live || !d || !Array.isArray(d.applications)) return;
+        const out: Record<string, "adopted" | "applied"> = {};
+        for (const a of d.applications) {
+          if (String(a?.candidate?.id ?? "") !== String(me)) continue;
+          const status = String(a?.status ?? "");
+          if (status === "withdrawn" || status === "declined") continue;
+          for (const seat of Array.isArray(a?.seats) ? a.seats : []) {
+            const id = String(seat?.id ?? "");
+            if (id && out[id] !== "adopted") out[id] = status === "adopted" ? "adopted" : "applied";
+          }
+        }
+        setAlready(out);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [me, draft.picks.length]);
   useEffect(() => {
     if (!draft.picks.length) return;
     let live = true;
@@ -59,8 +95,11 @@ export default function DraftCarry({
     const c = cast.find((x) => x.key === k);
     return c ? [{ key: k, name: c.name }] : [];
   });
-  const named = draft.picks.map((id) => names[id]).filter((n): n is string => !!n);
-  const propose = applyHrefFor(draft.picks, member);
+  const open = draft.picks.filter((id) => !already[id]);
+  const named = open.map((id) => names[id]).filter((n): n is string => !!n);
+  const propose = applyHrefFor(open, member);
+  const adoptedNames = draft.picks.filter((id) => already[id] === "adopted").map((id) => names[id] ?? id).join(", ");
+  const appliedNames = draft.picks.filter((id) => already[id] === "applied").map((id) => names[id] ?? id).join(", ");
   const roleList = named.join(", ");
 
   return (
@@ -86,7 +125,9 @@ export default function DraftCarry({
           </div>
         </div>
       )}
-      {draft.picks.length > 0 && propose && (
+      {adoptedNames && <p className="mt-3 text-sm font-semibold">{t`Adopted, and yours from the start of next season: ${adoptedNames}.`}</p>}
+      {appliedNames && <p className="mt-3 text-sm">{t`Already in your application: ${appliedNames}.`}</p>}
+      {open.length > 0 && propose && (
         <div className="mt-3">
           <p className="text-sm">
             {named.length ? t`The roles you drafted: ${roleList}.` : t`You drafted roles before you joined.`}

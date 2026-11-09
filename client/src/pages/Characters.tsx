@@ -361,6 +361,7 @@ export default function Characters() {
             <div className="mb-4">
               <DraftCarry
                 cast={archetypes}
+                userId={user?.id ? String(user.id) : null}
                 onPickCharacter={(key) => {
                   stageSettled.current = true;
                   setActiveKey(key);

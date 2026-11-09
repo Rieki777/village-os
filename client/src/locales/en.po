@@ -221,6 +221,10 @@ msgctxt "funding rounds"
 msgid "A short name"
 msgstr "A short name"
 
+#: client/src/components/roleDraft/DraftCarry.tsx
+msgid "Adopted, and yours from the start of next season: {adoptedNames}."
+msgstr "Adopted, and yours from the start of next season: {adoptedNames}."
+
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "Take the new price"
 msgstr "Take the new price"
@@ -2780,6 +2784,10 @@ msgstr "The village has not set its rates yet, so there is no suggested price. S
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr "{error}. There may be changes waiting; this is not an empty list."
+
+#: client/src/components/roleDraft/DraftCarry.tsx
+msgid "Already in your application: {appliedNames}."
+msgstr "Already in your application: {appliedNames}."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of a note box"

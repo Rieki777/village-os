@@ -16,7 +16,10 @@ const CAST = [
 ];
 
 beforeEach(() => localStorage.clear());
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("DraftCarry", () => {
   it("says nothing when there is no draft", () => {
@@ -53,5 +56,39 @@ describe("DraftCarry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear my draft" }));
     expect(localStorage.getItem(ROLE_DRAFT_KEY)).toBeNull();
     expect(screen.queryByRole("button", { name: "Clear my draft" })).toBeNull();
+  });
+});
+
+describe("a drafted role they were already adopted for", () => {
+  it("says it is theirs, and offers to apply only for the rest", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs", "events"] }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/api/governance/role-applications")) {
+          return new Response(JSON.stringify({ applications: [{ candidate: { id: "u-juno" }, status: "adopted", seats: [{ id: "lfs" }] }, { candidate: { id: "someone-else" }, status: "adopted", seats: [{ id: "events" }] }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ roles: [{ id: "lfs", name: "Lead Financial Steward" }, { id: "events", name: "Events Manager" }] }), { status: 200 });
+      }),
+    );
+    render(<DraftCarry cast={CAST} userId="u-juno" onPickCharacter={() => {}} />);
+    expect(await screen.findByText("Adopted, and yours from the start of next season: Lead Financial Steward.")).toBeTruthy();
+    const link = await screen.findByRole("link", { name: /Apply with your draft/ });
+    expect(link.getAttribute("href")).toBe("/propose-a-role?role=events");
+  });
+
+  it("offers no Apply when every drafted role is already theirs", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs"] }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).includes("role-applications")
+          ? new Response(JSON.stringify({ applications: [{ candidate: { id: "u-juno" }, status: "adopted", seats: [{ id: "lfs" }] }] }), { status: 200 })
+          : new Response(JSON.stringify({ roles: [{ id: "lfs", name: "Lead Financial Steward" }] }), { status: 200 }),
+      ),
+    );
+    render(<DraftCarry cast={CAST} userId="u-juno" onPickCharacter={() => {}} />);
+    await screen.findByText(/Adopted, and yours/);
+    expect(screen.queryByRole("link", { name: /Apply/ })).toBeNull();
   });
 });

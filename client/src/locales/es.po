@@ -221,6 +221,10 @@ msgctxt "funding rounds"
 msgid "A short name"
 msgstr ""
 
+#: client/src/components/roleDraft/DraftCarry.tsx
+msgid "Adopted, and yours from the start of next season: {adoptedNames}."
+msgstr ""
+
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "Take the new price"
 msgstr ""
@@ -2800,6 +2804,10 @@ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
+msgstr ""
+
+#: client/src/components/roleDraft/DraftCarry.tsx
+msgid "Already in your application: {appliedNames}."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
