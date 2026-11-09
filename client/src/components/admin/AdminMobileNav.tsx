@@ -56,7 +56,7 @@ export default function AdminMobileNav({
 
   return (
     <div className="lg:hidden">
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-3 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div data-admin-bottom-bar="" className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-3 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           ref={barRef}

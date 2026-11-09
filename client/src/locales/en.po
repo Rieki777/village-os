@@ -213,6 +213,11 @@ msgstr "Names a person, so members only."
 msgid "What harm could this do to the village, or what would it stop us doing?"
 msgstr "What harm could this do to the village, or what would it stop us doing?"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, connect step"
+msgid "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
+msgstr "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "button that asks an outside contact to talk"
 msgid "Ask to talk"
@@ -238,6 +243,11 @@ msgstr "How what is left is shared"
 msgctxt "quest editor"
 msgid "Posted, priced by the village's rule"
 msgstr "Posted, priced by the village's rule"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Money stays with you: pay, budgets, the exchange and redemption are changed by hand."
+msgstr "Money stays with you: pay, budgets, the exchange and redemption are changed by hand."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
@@ -1130,6 +1140,11 @@ msgstr "Adopt: suggestions on {name}"
 msgid "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told."
 msgstr "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, keyboard shortcut for the helper"
+msgid "Ctrl /"
+msgstr "Ctrl /"
+
 #: client/src/pages/RoleDraft.tsx
 msgid "The full card for {roleName}"
 msgstr "The full card for {roleName}"
@@ -1207,6 +1222,11 @@ msgstr "How widely it should be switched on"
 msgctxt "role draft character count"
 msgid "{n} open roles fit"
 msgstr "{n} open roles fit"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal"
+msgid "Applied."
+msgstr "Applied."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, no date on the quest"
@@ -1336,6 +1356,11 @@ msgstr "Each role's circle is asked to consent, and a holder of the power to pla
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing from {agent} waits for the chart"
 msgstr "Nothing from {agent} waits for the chart"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal: new value"
+msgid "Becomes"
+msgstr "Becomes"
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
@@ -1617,6 +1642,11 @@ msgstr "Own figure"
 #: client/src/pages/ProposeARole.tsx
 msgid "{unoffered} roles you picked are not open any more. Pick from the roles below."
 msgstr "{unoffered} roles you picked are not open any more. Pick from the roles below."
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, applies the proposed change"
+msgid "Apply"
+msgstr "Apply"
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement close date missing"
@@ -1904,6 +1934,11 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, opens an admin page"
+msgid "Open {label}"
+msgstr "Open {label}"
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Work out this role's pay with the valuation engine"
 msgstr "Work out this role's pay with the valuation engine"
@@ -2077,6 +2112,11 @@ msgstr "Turn it down"
 msgid "The village has not written any rows of its own yet."
 msgstr "The village has not written any rows of its own yet."
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, question box placeholder"
+msgid "How do I…"
+msgstr "How do I…"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "Gathering"
@@ -2133,6 +2173,11 @@ msgstr "1 quest still needs yours"
 msgctxt "exit policy section heading"
 msgid "Repair before departure"
 msgstr "Repair before departure"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "{guide} is thinking"
+msgstr "{guide} is thinking"
 
 #: client/src/components/valuation/QuestEnginePrice.tsx
 msgctxt "quest editor"
@@ -2371,6 +2416,11 @@ msgstr "{0}: {1} received ({2} {tokenLower} + {3} acknowledgments) from {4} memb
 msgid "Begin your own departure"
 msgstr "Begin your own departure"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal: current value"
+msgid "Now"
+msgstr "Now"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Open menu"
 #~ msgstr "Open menu"
@@ -2471,6 +2521,11 @@ msgctxt "a request the server refused"
 msgid "That was refused."
 msgstr "That was refused."
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Close the helper"
+msgstr "Close the helper"
+
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "an outside contact's organisation"
 msgid "Organisation (optional)"
@@ -2534,6 +2589,11 @@ msgstr "When to call them"
 msgctxt "admin header, jumps to the page's own filters"
 msgid "Change the filters"
 msgstr "Change the filters"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, connect step"
+msgid "Sign in at console.anthropic.com and create an API key for the village."
+msgstr "Sign in at console.anthropic.com and create an API key for the village."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Sign in to see what your village is weighing."
@@ -2771,6 +2831,11 @@ msgstr "How it serves the purpose:"
 msgctxt "role draft steps"
 msgid "After you apply"
 msgstr "After you apply"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, sends the question"
+msgid "Send"
+msgstr "Send"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a switch setting"
@@ -3018,6 +3083,11 @@ msgstr "Reading {name}"
 msgctxt "sera changes"
 msgid "Review it as one structure change"
 msgstr "Review it as one structure change"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Opening the helper"
+msgstr "Opening the helper"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -3296,6 +3366,11 @@ msgstr "What closing this village means"
 msgctxt "language picker"
 msgid "Close"
 msgstr "Close"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Helps you find things and proposes changes for you to approve."
+msgstr "Helps you find things and proposes changes for you to approve."
 
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "a button that deletes a matrix row"
@@ -3881,6 +3956,11 @@ msgctxt "admin quests"
 msgid "Price the quests on the pricing desk"
 msgstr "Price the quests on the pricing desk"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal: an empty value"
+msgid "(blank)"
+msgstr "(blank)"
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
 msgid "Opening…"
@@ -3917,6 +3997,11 @@ msgstr "Try again"
 #: client/src/components/journey/TestRun.tsx
 msgid "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
 msgstr "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, unnamed guide"
+msgid "your village guide"
+msgstr "your village guide"
 
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "The village adopts these words as what closing means here."
@@ -3961,6 +4046,11 @@ msgstr "{contact} on {when}"
 msgctxt "role draft filter"
 msgid "Only roles that fit"
 msgstr "Only roles that fit"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Your question"
+msgstr "Your question"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take this season off? The canvas goes back to canvas order, and every reading stays. The season itself is removed: to load it again you will need its file."
@@ -4683,6 +4773,11 @@ msgctxt "a setting whose value is hidden"
 msgid "Kept private"
 msgstr "Kept private"
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, opens the village guide's helper panel"
+msgid "Ask your guide"
+msgstr "Ask your guide"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
 msgid "Question"
@@ -4820,6 +4915,11 @@ msgstr "No cash budget this moon, so every price is paid in Credits and Earned E
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
 msgstr "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "{guide}, your Admin helper"
+msgstr "{guide}, your Admin helper"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Remove {rn} from your draft"
@@ -4972,6 +5072,11 @@ msgctxt "role draft badge"
 msgid "Fits {fitsNames}"
 msgstr "Fits {fitsNames}"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Connect Claude to turn on your helper"
+msgstr "Connect Claude to turn on your helper"
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "How it is decided (optional)"
@@ -4990,6 +5095,11 @@ msgstr "Apply"
 msgctxt "open the change request just added to"
 msgid "Open it"
 msgstr "Open it"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal"
+msgid "Proposed change"
+msgstr "Proposed change"
 
 #: client/src/pages/ExitPolicy.tsx
 msgid "Open my departure process"
@@ -5317,6 +5427,11 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Use my browser's language"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Ask me how to do something in Admin, where a setting lives, or what a control does. If you want something changed, I will show you the change first and you decide."
+msgstr "Ask me how to do something in Admin, where a setting lives, or what a control does. If you want something changed, I will show you the change first and you decide."
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Saved"
@@ -5383,6 +5498,11 @@ msgctxt "nothing credited"
 msgid "none"
 msgstr "none"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
+msgstr "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
+
 #: client/src/components/companion/CompanionPanel.tsx
 msgctxt "close the guide panel"
 msgid "Close"
@@ -5444,6 +5564,11 @@ msgstr "<0><1/> Print the canvas workbook</0> to talk it through on paper first.
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "A Markdown, text, PDF or Word (.docx) file, up to {0} MB"
 msgstr "A Markdown, text, PDF or Word (.docx) file, up to {0} MB"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, proposal"
+msgid "Left as it was."
+msgstr "Left as it was."
 
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Not completed and untouched for 14+ days. Update them in Admin → Build Progress."
@@ -5561,6 +5686,11 @@ msgctxt "funding round stage"
 msgid "Choosing which quests to fund"
 msgstr "Choosing which quests to fund"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, connect step"
+msgid "Open your hosting (Railway), choose the village's service, and open Variables."
+msgstr "Open your hosting (Railway), choose the village's service, and open Variables."
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Seed"
@@ -5616,6 +5746,11 @@ msgstr "Your own figure first, before you see the suggestion (optional)"
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "Add to my notebook"
 msgstr "Add to my notebook"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, declines the proposed change"
+msgid "Not now"
+msgstr "Not now"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The agreement could not be read just now."
@@ -5694,6 +5829,11 @@ msgstr "No reading yet"
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {n} small change for the chart"
 msgstr "{agent} suggests {n} small change for the chart"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, connect step"
+msgid "Come back here and open the helper again."
+msgstr "Come back here and open the helper again."
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
