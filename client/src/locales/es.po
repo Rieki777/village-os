@@ -1145,6 +1145,11 @@ msgctxt "pricing desk"
 msgid "Written"
 msgstr ""
 
+#: client/src/components/power/SeatAction.tsx
+msgctxt "role card button, signed out"
+msgid "Apply for {seatName}"
+msgstr ""
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
