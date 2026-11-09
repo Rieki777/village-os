@@ -42,6 +42,7 @@
  *
  * No `recordEvent` and no `addActivity`: the rows are the record.
  */
+import { cardSummary } from "../../shared/openProposalCard";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { civilDateKey } from "../../shared/lunar";
@@ -219,6 +220,20 @@ export type Placed =
  * the season's first day. An application already waiting for one of the roles
  * is answered `pending`, with its id, and nothing is written.
  */
+/**
+ * What the role application says the person will deliver: their aim, then
+ * their own role card (shared/openProposalCard.ts) in plain words, within the
+ * application's 2000 characters.
+ */
+function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ id: string; name?: string }>): string {
+  const aim = String(body.aim ?? "").trim();
+  if (!body.card) return aim;
+  const name = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
+  const goal = (id: string) => body.card?.serves.find((s) => s.goalId === id)?.goal || id;
+  const text = [aim, cardSummary(body.card, name, goal)].filter(Boolean).join("\n\n");
+  return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
+}
+
 export async function placeOnRoles(
   deps: DecideDeps,
   p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string },
@@ -239,14 +254,14 @@ export async function placeOnRoles(
     return { ok: false, code: "cannot", error: "The moon this proposal was for has ended, so nothing was changed. Ask them to propose again for this moon." };
   }
   const seatIds = p.proposal.body.roles.map((r) => r.roleId);
+  const seats = await seatsForUpdate(pool, seatIds);
   const parsed = parseApplicationInput({
     seatIds,
     note: p.proposal.body.why || null,
-    deliverables: p.proposal.body.aim || null,
+    deliverables: deliverablesOf(p.proposal.body, seats) || null,
     ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
   });
   if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
-  const seats = await seatsForUpdate(pool, seatIds);
   for (const id of seatIds) {
     const seat = seats.find((s) => s.id === id);
     if (!seat || !seat.active || seat.isExample) {
