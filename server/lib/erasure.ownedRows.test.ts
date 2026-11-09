@@ -859,6 +859,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       { circle_id: "c-b", changed_by: "own-bd-ash", changed_as: "Treasury" },
     ]);
     expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
+  });
 
   it("de-attributes their answers to the outside service's differences and the links they set, keeping the rows and everyone else's", async () => {
     const leaver = await member("own-leaver-sera", "Wren Halloway");
