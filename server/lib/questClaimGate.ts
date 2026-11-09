@@ -1,14 +1,16 @@
 /**
  * Gathers the facts the one claim gate decides on (shared/questClaimGate.ts)
- * for a quest and a member, so both claim doors ask the same question the
- * same way: the board's route in server/routes/quests.ts and the map's
- * promise route in server/index.ts.
+ * for a quest and a member, so every door into a claim asks the same question
+ * the same way: the board's route in server/routes/quests.ts, the map's
+ * promise route in server/index.ts, and joining a crew on a physical quest.
  */
 import type { Pool } from "mysql2/promise";
 import { questClaimGate, type ClaimRefusal } from "../../shared/questClaimGate";
 import { stageIndex } from "../../shared/gameConfig";
+import { effectiveMinAge } from "../../shared/ageBands";
 import { isExampleRow } from "./examples";
 import { questClosed } from "../repos/quests";
+import { ageBandOf, questSafetyOf, safetyBadgesHeld } from "../repos/questSafety";
 
 export interface ClaimGateDeps {
   getPool(): Pool;
@@ -21,17 +23,29 @@ export async function claimRefusalFor(
   quest: { id: string; status?: string | null; minStage?: string | null; requiresRole?: string | null },
   user: { id: string },
 ): Promise<ClaimRefusal | null> {
+  const pool = deps.getPool();
   const minStage = quest.minStage ?? null;
+  const safety = await questSafetyOf(pool, quest.id);
+  const minAge = effectiveMinAge(safety);
+  const requiredBadges = safety?.requiredBadges ?? [];
   return questClaimGate({
-    isExample: await isExampleRow(deps.getPool(), "quests", quest.id),
+    isExample: await isExampleRow(pool, "quests", quest.id),
     closed: questClosed(quest.status),
     status: String(quest.status ?? ""),
     minStage,
     neededStageIndex: minStage ? stageIndex(minStage) : -1,
-    // Asked only when a floor exists, as the routes always did: a member's
-    // stage costs a read, and most quests name no floor.
+    // Each fact is read only when the quest asks it, as the routes always did.
     memberStageIndex: minStage ? stageIndex(await deps.stageOf(user)) : 0,
     requiresRole: quest.requiresRole ?? null,
     memberRoleIds: quest.requiresRole ? deps.roleIdsFor(user.id) : [],
+    minAge,
+    memberAgeBand: minAge != null ? await ageBandOf(pool, user.id) : null,
+    requiredBadges,
+    memberBadgeIds: requiredBadges.length ? await safetyBadgesHeld(pool, user.id) : [],
   });
+}
+
+/** Whether the quest asks anything of the body, so joining its crew runs the gate too (spec R2). */
+export async function isPhysicalQuest(pool: Pool, questId: string): Promise<boolean> {
+  return !!(await questSafetyOf(pool, questId))?.physical;
 }

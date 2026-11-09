@@ -258,6 +258,12 @@ msgctxt "change request note kind"
 msgid "Can live with it"
 msgstr ""
 
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "age band option"
+msgid "16 or 17"
+msgstr "16 o 17"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr ""
@@ -457,6 +463,12 @@ msgctxt "the reader started this change request"
 msgid "You started this"
 msgstr ""
 
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "quest safety heading"
+msgid "Before you come to the site"
+msgstr "Antes de venir a la obra"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Withdraw the request"
@@ -559,6 +571,12 @@ msgstr ""
 msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr ""
+
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "age band option"
+msgid "18 or older"
+msgstr "18 o más"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
@@ -784,6 +802,12 @@ msgctxt "signing key"
 msgid "Replace the key"
 msgstr ""
 
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "quest safety, ask for the age band"
+msgid "Say your age band once. The village keeps the band, never your birth date."
+msgstr "Indica tu rango de edad una sola vez. La aldea guarda el rango, nunca tu fecha de nacimiento."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Take this change out."
 msgstr ""
@@ -925,6 +949,12 @@ msgctxt "open a change request for review"
 msgid "Open for review"
 msgstr ""
 
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "quest safety, minimum age"
+msgid "Everyone on this quest is at least {minAge}."
+msgstr "Todas las personas en esta misión tienen al menos {minAge} años."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the review feed"
 msgid "The review"
@@ -970,10 +1000,22 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr ""
 
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "age band option"
+msgid "Under 16"
+msgstr "Menos de 16"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Changes"
 msgstr ""
+
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "quest safety, age band"
+msgid "That did not save. Try again."
+msgstr "No se guardó. Inténtalo de nuevo."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
@@ -1157,6 +1199,12 @@ msgstr ""
 msgctxt "heading over a module's settings"
 msgid "Its settings"
 msgstr ""
+
+#: client/src/components/QuestSafety.tsx
+#, fuzzy
+msgctxt "quest safety, badges needed"
+msgid "You need: {badges}"
+msgstr "Necesitas: {badges}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that changes a value"

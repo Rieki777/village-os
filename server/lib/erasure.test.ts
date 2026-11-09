@@ -473,6 +473,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "org-drafts",
       "proposal-drafts",
       "skill-tags",
+      "age-band",
       "push-subscriptions",
       "forum-subscriptions",
       "wallet-challenges",

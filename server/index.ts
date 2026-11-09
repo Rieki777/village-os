@@ -166,6 +166,7 @@ import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/h
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
 import { claimRefusalFor } from "./lib/questClaimGate";
+import { ageBandOf } from "./repos/questSafety";
 import { MAP_REASON_FOR } from "../shared/questClaimGate";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
@@ -25964,6 +25965,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         "SELECT a.*, b.name AS badge_name FROM badge_awards a JOIN badges b ON b.id = a.badge_id WHERE a.user_id = ?",
       ),
       skillTags: await mine("SELECT tag FROM skill_tags WHERE user_id = ?"),
+      ageBand: await ageBandOf(getPool(), user.id),
       forumThreads: await mine("SELECT * FROM forum_threads WHERE author_id = ?"),
       forumReplies: await mine("SELECT * FROM forum_replies WHERE author_id = ?"),
       // Both directions: an introduction is a fact about two people, and each
