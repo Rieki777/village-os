@@ -20,6 +20,7 @@ import type { MessageDescriptor } from "@lingui/core";
 import { ArrowLeft, Check, Clock, GitPullRequest, MessageSquare } from "lucide-react";
 import { headers, refusal, type ChangeRequestSummary } from "@/components/governance/changeRequestClient";
 import { authToken } from "@/lib/gameApi";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 type State = "gathering" | "in_review" | "voting" | "closed";
 
@@ -817,8 +818,10 @@ export default function ChangeRequests() {
   const [, params] = useRoute("/changes/:id");
   const id = params?.id ?? null;
   return (
-    <main className="min-h-screen bg-stone-50 px-4 pb-28 pt-6 sm:px-6">
+    <main className="min-h-screen bg-stone-50 px-4 pb-28 pt-3 sm:px-6">
       <div className="mx-auto max-w-3xl">
+        {/* The language selector (spec i18n US2): this page renders without the shell. */}
+        <PageLanguageBar className="mb-3" />
         {id ? (
           <Link href="/changes" className="mb-3 inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-teal-deep hover:underline">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" /> <Trans context="link back to the list">All change requests</Trans>
