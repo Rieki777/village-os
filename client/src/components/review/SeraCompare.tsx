@@ -9,8 +9,8 @@
  * lines until "Read both in full". From 1280 px they sit in true columns in the
  * detail pane.
  *
- * Read-only in this release: taking, keeping and editing arrive with the
- * actions, so the only way on from here is the link the caller hands in.
+ * What a person can do from here, take, keep or edit, is handed in by the
+ * caller (components/review/SeraActs.tsx), under the two versions.
  */
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -140,6 +140,7 @@ export default function SeraCompare({
   source,
   chips,
   action,
+  subtitle,
 }: {
   d: ListedDifference;
   agent: string;
@@ -148,6 +149,8 @@ export default function SeraCompare({
   source: ReactNode;
   chips: ReactNode;
   action: ReactNode;
+  /** A conflict's "Someone here rewrote it on 1 Nov. Choose one, or write your own." */
+  subtitle?: ReactNode;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => {
@@ -165,6 +168,7 @@ export default function SeraCompare({
       <h2 ref={heading} tabIndex={-1} className="text-xl leading-snug font-bold text-foreground focus:outline-none [overflow-wrap:anywhere]">
         {d.words.sentence}
       </h2>
+      {subtitle}
       <p className="text-sm leading-normal text-muted-foreground">{source}</p>
       {chips}
       <CompareBlocks d={d} agent={agent} layout="stacked" />

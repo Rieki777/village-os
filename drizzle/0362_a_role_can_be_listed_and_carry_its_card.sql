@@ -12,7 +12,8 @@
 --   village_goals      json, the season goals the role serves
 --   track              varchar(24), paid, volunteer, local or ai
 --   selection_criteria json, 3 to 5 short lines
---   interviewer_roles  json, the ordered interviews: role id, minutes, final approval
+--   conversations      json, the ordered conversations: role id, minutes, final approval
+--   conversation_mode  varchar(16), block (one block, the default when NULL) or separate
 --   where_worked       varchar(24), land, remote or both
 --   languages          json, the languages the work runs in
 --   budget_line        varchar(120), the budget line name (members)
@@ -22,7 +23,7 @@
 --   booking_url        varchar(300), where a first conversation is booked
 --
 -- EXPAND ONLY, AND THE ROLLBACK HOLDS.
--- Twelve nullable columns with no default on a table every writer reaches
+-- Thirteen nullable columns with no default on a table every writer reaches
 -- with raw SQL naming its own columns. The previous release names none of
 -- them, so it keeps reading and writing `org_roles` unchanged if it is put
 -- back over a migrated database.
@@ -32,7 +33,8 @@ ALTER TABLE `org_roles`
   ADD COLUMN `village_goals` json NULL,
   ADD COLUMN `track` varchar(24) NULL,
   ADD COLUMN `selection_criteria` json NULL,
-  ADD COLUMN `interviewer_roles` json NULL,
+  ADD COLUMN `conversations` json NULL,
+  ADD COLUMN `conversation_mode` varchar(16) NULL,
   ADD COLUMN `where_worked` varchar(24) NULL,
   ADD COLUMN `languages` json NULL,
   ADD COLUMN `budget_line` varchar(120) NULL,
