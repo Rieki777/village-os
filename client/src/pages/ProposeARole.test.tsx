@@ -78,7 +78,7 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
     // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
+    fireEvent.click(screen.getByLabelText(/align with the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
@@ -246,7 +246,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
+    fireEvent.click(screen.getByLabelText(/align with the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });

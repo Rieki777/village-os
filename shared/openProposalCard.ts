@@ -23,6 +23,8 @@
  * application's own words (`cardSummary`, server/lib/openProposalDecide.ts).
  */
 
+import { agreedOf, parseAgreements, type ApplicationAgreed } from "./openProposalAgreements";
+
 export const CARD_LIMITS = {
   movesPerRole: 3,
   moveText: 200,
@@ -40,7 +42,7 @@ export interface OpenProposalCard {
   /** `goal` is the goal's words when the proposal was sent, written by the server, never the form. */
   serves: Array<{ goalId: string; how: string; goal?: string }>;
   hours: string;
-  agreed: { loveLetter: boolean; nda: boolean };
+  agreed: ApplicationAgreed;
 }
 
 export interface CardContext {
@@ -110,9 +112,10 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   if (serves.length > L.serves) return { ok: false, field: "card", error: CARD_WORDS.tooMany("goals", L.serves) };
   const hours = str(o.hours);
   if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
-  const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
-  if (agreed.loveLetter !== true || agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
-  return { ok: true, card: { roles, serves, hours, agreed: { loveLetter: true, nda: true } } };
+  // The agreements are their own file and their own lane (shared/openProposalAgreements.ts).
+  const agreements = parseAgreements(o.agreed);
+  if (!agreements.ok) return agreements;
+  return { ok: true, card: { roles, serves, hours, agreed: agreements.agreed } };
 }
 
 /** A stored card, read back safely; anything that is not one is no card. Never throws. */
@@ -135,7 +138,7 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       .map((s: any) => ({ goalId: cut(s?.goalId, 64), how: cut(s?.how, L.how), ...(str(s?.goal) ? { goal: cut(s?.goal, 300) } : {}) }))
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
-    agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
+    agreed: agreedOf(o.agreed),
   };
 }
 

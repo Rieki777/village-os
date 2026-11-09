@@ -16,6 +16,7 @@
  */
 import { useLingui } from "@lingui/react/macro";
 import { CARD_LIMITS } from "@shared/openProposalCard";
+import ApplicationAgreements from "./ApplicationAgreements";
 
 export interface RoleCardState {
   /** Outcome text -> target. */
@@ -207,17 +208,7 @@ export function SeasonServes({
         <input id="card-hours" maxLength={CARD_LIMITS.hours} value={hours} onChange={(e) => onHours(e.target.value)} placeholder={t({ message: "e.g. roughly 25 hours a week", context: "open proposal card" })} className={FIELD} />
         <p className="mt-1 text-xs text-muted-foreground">{t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season.`}</p>
       </div>
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
-          {t`I will sign the Love Letter, the village's membership agreement, before I am seated.`}
-        </label>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
-          {t`Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records.`}
-        </label>
-      </fieldset>
+      <ApplicationAgreements value={agreed} onChange={onAgreed} />
     </div>
   );
 }
@@ -329,7 +320,7 @@ export function CardSideBySide({
         {card.hours && <p className="mt-2 text-foreground">{t`Time they can give: ${card.hours}`}</p>}
         <p className="mt-2 text-foreground">
           {card.agreed.loveLetter && card.agreed.nda
-            ? t`They agreed to sign the Love Letter before seating, and the NDA once approved.`
+            ? t`They aligned with the Love Letter, and will align with the NDA once approved.`
             : t`They have not agreed to the Love Letter and the NDA.`}
         </p>
       </div>

@@ -488,7 +488,7 @@ export default function RoleDraft() {
                 <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
                   <li>{t`One role application carries all your picks, with the terms each role offers.`}</li>
                   <li>{t`Each role's circle is asked to consent, and a holder of the power to place people in roles adopts it, never their own.`}</li>
-                  <li>{t`Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
+                  <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
                     {t`Planning for next season instead? Propose my roles lets you change any words (your changes show in gold) and tie your season goals to the village's.`}{" "}
                     {picks[0] && (
@@ -503,8 +503,8 @@ export default function RoleDraft() {
                   <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
                   <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your application, and never their own.`}</li>
                   <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
-                  <li>{t`Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
-                  <li>{t`You sign the Love Letter, the village's membership agreement, before you are seated.`}</li>
+                  <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
                   <li>
                     {form?.term
                       ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each moon you lay out what you will contribute.`

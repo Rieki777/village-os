@@ -624,10 +624,6 @@ msgstr ""
 msgid "The village is deciding a change to this right now."
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
-msgstr ""
-
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
 msgstr ""
@@ -1440,6 +1436,10 @@ msgctxt "funding round stage"
 msgid "Choose"
 msgstr ""
 
+#: client/src/components/openProposal/ApplicationAgreements.tsx
+msgid "I align with the Love Letter, the village's membership agreement."
+msgstr ""
+
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "document title field"
 msgid "Title"
@@ -1704,6 +1704,10 @@ msgstr ""
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They aligned with the Love Letter, and will align with the NDA once approved."
+msgstr ""
+
 #: client/src/components/canvas/CanvasBlockCard.tsx
 msgctxt "label above the canvas's own question"
 msgid "The canvas asks"
@@ -1739,6 +1743,10 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "when the review time ends"
 msgid "Waits until {until}"
+msgstr ""
+
+#: client/src/components/openProposal/ApplicationAgreements.tsx
+msgid "Aligning is the village's way of signing."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -4625,10 +4633,6 @@ msgstr ""
 msgid "Move to its own change request"
 msgstr ""
 
-#: client/src/pages/RoleDraft.tsx
-msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."
-msgstr ""
-
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
 msgstr ""
@@ -5118,7 +5122,7 @@ msgctxt "Decision Matrix column, before its answer"
 msgid "Who approves it:"
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
+#: client/src/components/openProposal/ApplicationAgreements.tsx
 msgctxt "open proposal card"
 msgid "Agreements"
 msgstr ""
@@ -5297,10 +5301,6 @@ msgctxt "admin role characters"
 msgid "Characters saved"
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
-msgstr ""
-
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"
 msgid "The season"
@@ -5403,6 +5403,10 @@ msgstr ""
 msgid "Nothing changed: this is what the village already has on record."
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgid "You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing."
+msgstr ""
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
@@ -5492,6 +5496,10 @@ msgstr ""
 msgid "One thing would not work as set"
 msgstr ""
 
+#: client/src/components/openProposal/ApplicationAgreements.tsx
+msgid "Once approved into a role, I will align with the village's confidentiality agreement (NDA) before I see any confidential records."
+msgstr ""
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "In the village's own words"
 msgstr ""
@@ -5503,6 +5511,10 @@ msgstr ""
 #: client/src/components/admin/OpenProposalsPanel.tsx
 msgctxt "open proposals desk term"
 msgid "Proposals are for:"
+msgstr ""
+
+#: client/src/pages/RoleDraft.tsx
+msgid "Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -5870,10 +5882,6 @@ msgctxt "notebook add mode"
 msgid "Paste text"
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "I will sign the Love Letter, the village's membership agreement, before I am seated."
-msgstr ""
-
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"
 msgid "Save as Markdown"
@@ -5883,10 +5891,6 @@ msgstr ""
 #, fuzzy
 #~ msgid "Sign in or join"
 #~ msgstr "Iniciar sesión o unirse"
-
-#: client/src/pages/RoleDraft.tsx
-msgid "You sign the Love Letter, the village's membership agreement, before you are seated."
-msgstr ""
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "start a new change request"
