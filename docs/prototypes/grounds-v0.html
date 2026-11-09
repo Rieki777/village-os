@@ -3880,7 +3880,7 @@ function paintPoiArt(s,el){
     <g class="ic">${ICONS[base]||ICONS.hall}</g></svg>
     <svg class="iso" viewBox="0 0 64 70">${isoSVG(base)}</svg>
     ${(window.SPRITES&&SPRITES[base])?`<img class="sprite" src="${SPRITES[base]}" draggable="false" alt="">`:''}
-    ${(window.SPRITES_WIP&&SPRITES_WIP[base])?`<img class="sprite-wip" src="${SPRITES_WIP[base]}" draggable="false" alt="">`:''}
+    ${(window.SPRITES_WIP&&SPRITES_WIP[base])?`<img class="sprite-wip" src="${SPRITES_WIP[base]}" loading="lazy" decoding="async" draggable="false" alt="">`:''}
     <span class="rm" title="remove">✕</span>`;
   el.insertAdjacentHTML('beforeend','<span class="scaffold"><svg viewBox="0 0 64 64" aria-hidden="true">'+
     '<path class="lash" d="M14 60V12M50 60V16"/>'+
