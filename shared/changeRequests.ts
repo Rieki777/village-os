@@ -10,6 +10,8 @@
  */
 import { brandChangeKey } from "./brandVote";
 import { mintRuleCreateKey } from "./mintRuleKeys";
+import { VARIABLES_BY_KEY } from "./gameVariables";
+import { MODULES_BY_ID } from "./modules";
 
 export const CHANGE_REQUEST_TITLE_MAX = 120;
 export const CHANGE_REQUEST_WHY_MAX = 4000;
@@ -44,6 +46,37 @@ export function changeKeyOf(change: ChangeLike): string {
       // A dial, a minting-rule field, or the untyped `{ key, to }` pair.
       return s(c.key);
   }
+}
+
+const BRAND_SECTION_WORDS: Record<string, string> = {
+  project: "Village words",
+  currency: "Currency",
+  images: "Images",
+  theme: "Look",
+  identityPack: "Identity",
+};
+
+/** "shortName" -> "short name". */
+const words = (camel: string) => camel.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+
+/**
+ * The name a member reads for the setting a change touches: a dial's own
+ * label, a module's name, or a brand field's section and field in words.
+ * Never a raw key, unless nothing else is known.
+ */
+export function changeLabel(key: string): string {
+  const def = VARIABLES_BY_KEY[key];
+  if (def) return def.label;
+  if (key.startsWith("module:")) {
+    const mod = MODULES_BY_ID[key.slice("module:".length)];
+    return mod ? `${mod.name} (on or off)` : key;
+  }
+  if (key.startsWith("brand:")) {
+    const [section, field] = key.slice("brand:".length).split(".");
+    return field ? `${BRAND_SECTION_WORDS[section] ?? words(section)}: ${words(field)}` : key;
+  }
+  if (key === "governance.weight_mode") return "How votes are weighed";
+  return key;
 }
 
 /** Why a title and a why cannot stand, or null. */

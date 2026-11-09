@@ -40,7 +40,8 @@
 import zlib from "zlib";
 import { once } from "events";
 import { finished } from "stream/promises";
-import type { Express } from "express";
+import type { Express, Response } from "express";
+import type { Pool } from "mysql2/promise";
 
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
@@ -77,7 +78,7 @@ export function sizeWords(bytes: number): string {
 }
 
 /** Every admin, and every steward whose term has not lapsed. Examples never. */
-async function exportWitnesses(deps: Deps): Promise<string[]> {
+export async function exportWitnesses(deps: Pick<AppDeps, "members" | "getPool">): Promise<string[]> {
   const everyone = await deps.members.all();
   const real = new Map(everyone.filter((m: any) => m?.id && !m.isExample).map((m: any) => [String(m.id), m]));
   const out = new Set<string>();
@@ -90,9 +91,99 @@ async function exportWitnesses(deps: Deps): Promise<string[]> {
   return Array.from(out);
 }
 
-export function register(app: Express, deps: Deps): void {
-  let inFlight = false;
+/**
+ * ONE EXPORT AT A TIME PER INSTANCE, whichever door asked for it: the
+ * deployment's password here, or a vote the village carried
+ * (server/routes/exportVotes.ts). Two dumps at once would hold two snapshots
+ * and double the load for no reader's benefit.
+ */
+let inFlight = false;
+export function takeExportSlot(): boolean {
+  if (inFlight) return false;
+  inFlight = true;
+  return true;
+}
+export function giveBackExportSlot(): void {
+  inFlight = false;
+}
 
+export interface ServedDump {
+  outcome: DumpOutcome | null;
+  sentBytes: number;
+  failure: unknown;
+}
+
+/**
+ * Stream the whole village's database to `res` as one gzipped SQL file, the
+ * way both doors serve it: one snapshot, the size note in the headers, a stall
+ * timeout, and a stop when the reader hangs up. Never throws; a failure is in
+ * the result, and the response is ended or destroyed here.
+ */
+export async function serveVillageDump(res: Response, pool: Pool, takenAt: Date): Promise<ServedDump> {
+  let outcome: DumpOutcome | null = null;
+  let sentBytes = 0;
+  let failure: unknown = null;
+  try {
+    const estimate = await estimateDumpBytes(pool);
+    const day = takenAt.toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/gzip");
+    res.setHeader("Content-Disposition", `attachment; filename="village-export-${day}.sql.gz"`);
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("x-village-export-taken-at", takenAt.toISOString());
+    // The size note. Uncompressed and approximate, from the database's own
+    // statistics; the file itself is gzip and usually far smaller.
+    res.setHeader("x-village-export-estimate-bytes", String(estimate.bytes));
+    res.setHeader("x-village-export-tables", String(estimate.tables));
+
+    const gzip = zlib.createGzip();
+    gzip.on("data", (chunk: Buffer) => {
+      sentBytes += chunk.length;
+    });
+    gzip.pipe(res);
+    // A client that hangs up mid-file must stop the read. Without this the
+    // dump would wait forever for a drain that never comes, holding a
+    // connection and a snapshot open.
+    let hungUp = false;
+    res.once("close", () => {
+      if (!res.writableFinished) hungUp = true;
+    });
+    const gone = () => hungUp || res.destroyed;
+    outcome = await streamVillageDump(
+      pool,
+      async (chunk) => {
+        if (gone()) throw new Error("the client went away mid-export");
+        if (gzip.write(chunk)) return;
+        const stop = new AbortController();
+        let stalled = false;
+        const timer = setTimeout(() => {
+          stalled = true;
+          stop.abort();
+        }, STALL_MS);
+        try {
+          await Promise.race([once(gzip, "drain", { signal: stop.signal }), once(res, "close", { signal: stop.signal })]);
+        } catch (e) {
+          if (!stalled) throw e;
+        } finally {
+          clearTimeout(timer);
+          stop.abort();
+        }
+        if (stalled) throw new Error(`the client stopped reading for ${STALL_MS / 1000}s`);
+        if (gone()) throw new Error("the client went away mid-export");
+      },
+      { takenAt },
+    );
+    gzip.end();
+    await finished(res);
+  } catch (e) {
+    failure = e;
+    console.error("[export] whole-village export failed", e);
+    if (!res.headersSent) res.status(500).json({ error: "export failed" });
+    else res.destroy();
+  }
+  return { outcome, sentBytes, failure };
+}
+
+export function register(app: Express, deps: Deps): void {
   app.get("/api/admin/export/database", async (req, res) => {
     // The gate here is the password, not a session, and it still has to say a
     // gate ran or the default-deny under /api/admin refuses its own success.
@@ -113,76 +204,20 @@ export function register(app: Express, deps: Deps): void {
       }
       return res.status(401).json({ error: "auth_required" });
     }
-    if (inFlight) {
+    if (!takeExportSlot()) {
       return res.status(409).json({ error: "An export is already running on this instance." });
     }
 
-    inFlight = true;
     const pool = deps.getPool();
     const takenAt = new Date();
     const from = deps.clientIp(req);
-    let outcome: DumpOutcome | null = null;
-    let sentBytes = 0;
-    let failure: unknown = null;
+    let served: ServedDump;
     try {
-      const estimate = await estimateDumpBytes(pool);
-      const day = takenAt.toISOString().slice(0, 10);
-      res.setHeader("Content-Type", "application/gzip");
-      res.setHeader("Content-Disposition", `attachment; filename="village-export-${day}.sql.gz"`);
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("x-village-export-taken-at", takenAt.toISOString());
-      // The size note. Uncompressed and approximate, from the database's own
-      // statistics; the file itself is gzip and usually far smaller.
-      res.setHeader("x-village-export-estimate-bytes", String(estimate.bytes));
-      res.setHeader("x-village-export-tables", String(estimate.tables));
-
-      const gzip = zlib.createGzip();
-      gzip.on("data", (chunk: Buffer) => {
-        sentBytes += chunk.length;
-      });
-      gzip.pipe(res);
-      // A client that hangs up mid-file must stop the read. Without this the
-      // dump would wait forever for a drain that never comes, holding a
-      // connection and a snapshot open.
-      let hungUp = false;
-      res.once("close", () => {
-        if (!res.writableFinished) hungUp = true;
-      });
-      const gone = () => hungUp || res.destroyed;
-      outcome = await streamVillageDump(
-        pool,
-        async (chunk) => {
-          if (gone()) throw new Error("the client went away mid-export");
-          if (gzip.write(chunk)) return;
-          const stop = new AbortController();
-          let stalled = false;
-          const timer = setTimeout(() => {
-            stalled = true;
-            stop.abort();
-          }, STALL_MS);
-          try {
-            await Promise.race([once(gzip, "drain", { signal: stop.signal }), once(res, "close", { signal: stop.signal })]);
-          } catch (e) {
-            if (!stalled) throw e;
-          } finally {
-            clearTimeout(timer);
-            stop.abort();
-          }
-          if (stalled) throw new Error(`the client stopped reading for ${STALL_MS / 1000}s`);
-          if (gone()) throw new Error("the client went away mid-export");
-        },
-        { takenAt },
-      );
-      gzip.end();
-      await finished(res);
-    } catch (e) {
-      failure = e;
-      console.error("[export] whole-village export failed", e);
-      if (!res.headersSent) res.status(500).json({ error: "export failed" });
-      else res.destroy();
+      served = await serveVillageDump(res, pool, takenAt);
     } finally {
-      inFlight = false;
+      giveBackExportSlot();
     }
+    const { outcome, sentBytes, failure } = served;
 
     const seconds = Math.round((Date.now() - takenAt.getTime()) / 100) / 10;
     const complete = outcome !== null && failure === null;

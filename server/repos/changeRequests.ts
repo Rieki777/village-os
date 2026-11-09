@@ -39,10 +39,42 @@ export interface ChangeRequestRow {
   relatesTo: string | null;
   proposalId: string | null;
   closedReason: string | null;
+  /** When the review clock last started, or null before review. */
+  reviewOpenedAt: string | null;
+  /** The review length the village had when review opened (R20). */
+  reviewDaysAtOpen: number | null;
   createdAt: string;
   updatedAt: string;
   /** The changes of the current revision, in order. */
   changes: StoredChange[];
+}
+
+export type ReviewNoteKind = "question" | "concern" | "objection" | "edit" | "consent" | "answer" | "system";
+
+export interface ReviewNote {
+  id: string;
+  changeRequestId: string;
+  revision: number;
+  kind: ReviewNoteKind;
+  authorUserId: string | null;
+  position: number | null;
+  body: string;
+  proposedItem: Record<string, unknown> | null;
+  answersNoteId: string | null;
+  outcome: "open" | "taken_in" | "turned_down" | "answered";
+  createdAt: string;
+}
+
+export interface NewNote {
+  id: string;
+  changeRequestId: string;
+  revision: number;
+  kind: ReviewNoteKind;
+  authorUserId: string | null;
+  position?: number | null;
+  body: string;
+  proposedItem?: Record<string, unknown> | null;
+  answersNoteId?: string | null;
 }
 
 export interface NewChangeRequest {
@@ -70,8 +102,22 @@ export interface ChangeRequestStore {
   /** Everyone's in review or in a vote, newest first. */
   open(): Promise<ChangeRequestRow[]>;
   countGathering(userId: string): Promise<number>;
-  /** Moves a gathering change request to revision+1. False when it was not at `expected` or not gathering. */
+  /**
+   * Moves a change request that is gathering or in review to revision+1.
+   * In review, a revision that changes the changes or the why restarts the
+   * review clock (R3). False when it was not at `expected` or past review.
+   */
   revise(id: string, expected: number, next: Revision): Promise<boolean>;
+  /** Gathering to in review, starting the clock. False when it was not at `expected` or not gathering. */
+  openReview(id: string, expected: number, reviewDays: number): Promise<boolean>;
+  /** Review notes, oldest first. */
+  notesOf(id: string): Promise<ReviewNote[]>;
+  /** Adds a note, only while the change request is in review (R2). False otherwise. */
+  addNote(note: NewNote): Promise<boolean>;
+  /** Moves a note out of `open`. False when it was not open. */
+  settleNote(noteId: string, outcome: "taken_in" | "turned_down" | "answered"): Promise<boolean>;
+  /** How many change requests this member opened for review since an instant. */
+  openedForReviewSince(userId: string, since: Date): Promise<number>;
   /** Deletes a gathering change request. False when it was not at `expected` or not gathering. */
   remove(id: string, expected: number): Promise<boolean>;
 }
@@ -92,6 +138,8 @@ function rowOf(r: RowDataPacket, changes: StoredChange[]): ChangeRequestRow {
     relatesTo: r.relates_to ?? null,
     proposalId: r.proposal_id ?? null,
     closedReason: r.closed_reason ?? null,
+    reviewOpenedAt: r.review_opened_at ? iso(r.review_opened_at) : null,
+    reviewDaysAtOpen: r.review_days_at_open == null ? null : Number(r.review_days_at_open),
     createdAt: iso(r.created_at),
     updatedAt: iso(r.updated_at),
     changes,
@@ -99,7 +147,7 @@ function rowOf(r: RowDataPacket, changes: StoredChange[]): ChangeRequestRow {
 }
 
 const COLUMNS =
-  "id, author_user_id, author_kind, title, why, state, revision, relation, relates_to, proposal_id, closed_reason, created_at, updated_at";
+  "id, author_user_id, author_kind, title, why, state, revision, relation, relates_to, proposal_id, closed_reason, review_opened_at, review_days_at_open, created_at, updated_at";
 
 export function changeRequestStore(pool: () => Pool): ChangeRequestStore {
   async function changesOf(ids: { id: string; revision: number }[]): Promise<Map<string, StoredChange[]>> {
@@ -188,8 +236,12 @@ export function changeRequestStore(pool: () => Pool): ChangeRequestStore {
         const params: unknown[] = [];
         if (next.title !== undefined) { sets.push("title = ?"); params.push(next.title); }
         if (next.why !== undefined) { sets.push("why = ?"); params.push(next.why); }
+        // R3: in review, a new change list or a new why starts the clock again.
+        if (next.changes !== undefined || next.why !== undefined) {
+          sets.push("review_opened_at = CASE WHEN state = 'in_review' THEN CURRENT_TIMESTAMP ELSE review_opened_at END");
+        }
         const [r] = await conn.query<any>(
-          `UPDATE change_requests SET ${sets.join(", ")} WHERE id = ? AND revision = ? AND state = 'gathering'`,
+          `UPDATE change_requests SET ${sets.join(", ")} WHERE id = ? AND revision = ? AND state IN ('gathering','in_review')`,
           [...params, id, expected],
         );
         if (Number(r.affectedRows) === 0) {
@@ -210,6 +262,59 @@ export function changeRequestStore(pool: () => Pool): ChangeRequestStore {
       } finally {
         conn.release();
       }
+    },
+
+    async openReview(id, expected, reviewDays) {
+      const [r] = await pool().query<any>(
+        "UPDATE change_requests SET state = 'in_review', review_opened_at = CURRENT_TIMESTAMP, review_days_at_open = ? WHERE id = ? AND revision = ? AND state = 'gathering'",
+        [reviewDays, id, expected],
+      );
+      return Number(r.affectedRows) === 1;
+    },
+
+    async notesOf(id) {
+      const [rows] = await pool().query<RowDataPacket[]>(
+        "SELECT id, change_request_id, revision, kind, author_user_id, position, body, proposed_item, answers_note_id, outcome, created_at FROM change_request_notes WHERE change_request_id = ? ORDER BY created_at, id",
+        [id],
+      );
+      return rows.map((r) => ({
+        id: String(r.id),
+        changeRequestId: String(r.change_request_id),
+        revision: Number(r.revision),
+        kind: r.kind,
+        authorUserId: r.author_user_id ?? null,
+        position: r.position == null ? null : Number(r.position),
+        body: String(r.body ?? ""),
+        proposedItem: r.proposed_item == null ? null : json(r.proposed_item),
+        answersNoteId: r.answers_note_id ?? null,
+        outcome: r.outcome,
+        createdAt: iso(r.created_at),
+      }));
+    },
+
+    async addNote(n) {
+      // Guarded on the state in the same statement, so a note cannot slip in
+      // after the change request has gone to the vote (R2).
+      const [r] = await pool().query<any>(
+        "INSERT INTO change_request_notes (id, change_request_id, revision, kind, author_user_id, position, body, proposed_item, answers_note_id) " +
+          "SELECT ?,?,?,?,?,?,?,?,? FROM change_requests WHERE id = ? AND state = 'in_review'",
+        [n.id, n.changeRequestId, n.revision, n.kind, n.authorUserId, n.position ?? null, n.body, n.proposedItem ? JSON.stringify(n.proposedItem) : null, n.answersNoteId ?? null, n.changeRequestId],
+      );
+      return Number(r.affectedRows) === 1;
+    },
+
+    async settleNote(noteId, outcome) {
+      const [r] = await pool().query<any>("UPDATE change_request_notes SET outcome = ? WHERE id = ? AND outcome = 'open'", [outcome, noteId]);
+      return Number(r.affectedRows) === 1;
+    },
+
+    async openedForReviewSince(userId, since) {
+      const [rows] = await pool().query<RowDataPacket[]>(
+        "SELECT COUNT(*) AS n FROM change_request_notes n JOIN change_requests c ON c.id = n.change_request_id " +
+          "WHERE c.author_user_id = ? AND n.kind = 'system' AND n.body = 'opened for review' AND n.created_at > ?",
+        [userId, since],
+      );
+      return Number(rows[0]?.n ?? 0);
     },
 
     async remove(id, expected) {
