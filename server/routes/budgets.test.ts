@@ -43,6 +43,7 @@ import { createOrgRole } from "../lib/orgChart";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
 import type { SubjectCloser } from "../lib/applyDue";
 import type { SuggestionRow, SuggestionStatus, SuggestionStore } from "../repos/adminSuggestions";
+import { SUGGESTION_ROUTE, type SuggestionRoute } from "../../shared/suggestions";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 const configured = testDbConfigured();
@@ -69,6 +70,7 @@ let seats: Record<string, string[]>;
 let store: ReturnType<typeof memoryStore>;
 let closers: Record<string, SubjectCloser>;
 let limited: string[];
+let dial: Record<string, SuggestionRoute>;
 
 function memoryStore(): SuggestionStore & { rows: SuggestionRow[] } {
   const rows: SuggestionRow[] = [];
@@ -141,6 +143,7 @@ function wire() {
   closers = {};
   registerSuggestions(app, {
     ...common,
+    routes: () => dial as any,
     guardCapability: async (req: any, res: any, key: string) => {
       const ok = (holders[key] ?? []).includes(req.user?.id);
       if (!ok) res.status(403).json({ error: "forbidden" });
@@ -215,6 +218,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     launched = true;
     seats = {};
     limited = [];
+    dial = { ...SUGGESTION_ROUTE };
     opened.length = 0;
     wire();
     configureBudgets({ currentMoonId: () => MOON });
@@ -859,6 +863,21 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     holders = { "role.pay": ["u-hana", "u-hugo"] };
     seats = { "u-sam": ["r-gardener"] };
     expect((await suggest("u-sam", [{ ...gardener, label: "Gardener boots", category: "other" }])).body.route, "a member's own role goes to the holders").toBe("holders");
+  });
+
+  it("composes the suggestion dial with the payee routing: the dial picks holders or a vote, and of the holders only the unconflicted decide", async () => {
+    const gardener = { ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener" };
+    seats = { "u-hana": ["r-gardener"] };
+    dial = { ...SUGGESTION_ROUTE, "role.pay": "ballot" };
+    expect((await suggest("u-sam", [ROW])).body.route, "the dial sends the power to a vote").toBe("ballot");
+    expect((await suggest("u-sam", [{ ...gardener, label: "Gardener boots" }])).body.route, "a vote, with a payee or without").toBe("ballot");
+    dial = { ...SUGGESTION_ROUTE, "role.pay": "holders" };
+    const one = await suggest("u-sam", [gardener]);
+    expect(one.body.route, "holders, narrowed to the unconflicted").toBe("holders");
+    expect((await call("GET", "/api/admin/suggestions/queue", "u-hana")).body.suggestions).toEqual([]);
+    expect((await call("GET", "/api/admin/suggestions/queue", "u-hugo")).body.suggestions.map((x: any) => x.id)).toEqual([one.body.suggestion.id]);
+    seats = { "u-hana": ["r-gardener"], "u-hugo": ["r-gardener"] };
+    expect((await suggest("u-sam", [{ ...gardener, label: "Gardener tools", category: "materials" }])).body.route, "every holder conflicted: a vote").toBe("ballot");
   });
 
   it("nits: names circles and roles on a ballot by name, and checks a suggestion again when it goes to a vote", async () => {

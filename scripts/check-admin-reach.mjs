@@ -143,6 +143,8 @@ const ALLOWED = {
   "PUT /api/admin/budgets/notes/:period": "The cash budget, a note on how to read a period, server slice (PR 1a). Delete this line when the PR 1c page lands.",
   "POST /api/admin/budgets/sources/:source": "The cash budget, a source's standing switch, server slice (PR 1a); the puller that reads it is PR 2. Delete this line when the PR 1c page lands.",
   "PUT /api/admin/budgets/envelopes/:circleId/:periodKey": "The cash budget, a circle's envelope, server slice (PR 1a). Delete this line when the PR 1c page lands.",
+  "PUT /api/admin/suggestion-routes":
+    "The suggestion dial (§4.5), server slice, built apart from its screen the same way. Its control is a row on the Powers board, which the suggest-to-edit screens bring. Delete this line when that row lands.",
 };
 
 /**

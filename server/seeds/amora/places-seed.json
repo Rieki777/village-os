@@ -1,0 +1,1306 @@
+{
+  "version": 3,
+  "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists. Version 2 applies Rye's corrections of 9 Nov 2026 (plan v3.1).",
+  "registryDisputes": [],
+  "zones": [
+    {
+      "key": "public-edge",
+      "name": "Public edge",
+      "order": 1,
+      "positionText": "On the main road, at the entrance"
+    },
+    {
+      "key": "waterfall",
+      "name": "Waterfall and caretaker's house",
+      "order": 2,
+      "positionText": "Behind the entrance, by the waterfall"
+    },
+    {
+      "key": "gathering",
+      "name": "Gathering places today",
+      "order": 3,
+      "positionText": "The temporary ocean-view community center, and the Rancho"
+    },
+    {
+      "key": "village-heart",
+      "name": "Village heart",
+      "order": 4,
+      "positionText": "Between the school, the center river and the ponds"
+    },
+    {
+      "key": "food-forest",
+      "name": "Food and forest",
+      "order": 5,
+      "positionText": "Woven through the land"
+    },
+    {
+      "key": "ridge",
+      "name": "The ridge",
+      "order": 6,
+      "positionText": "Between the retreat center and the community center, ocean view"
+    },
+    {
+      "key": "community-center",
+      "name": "Ocean-view community center",
+      "order": 7,
+      "positionText": "The permanent heart, high on the land"
+    },
+    {
+      "key": "shared-systems",
+      "name": "Shared systems and stewards' homes",
+      "order": 8,
+      "positionText": "Utilities at the top of the land; stewards near the road"
+    },
+    {
+      "key": "wild-sacred",
+      "name": "Wild and sacred",
+      "order": 9,
+      "positionText": "The south-east forest edge and the remote parts"
+    },
+    {
+      "key": "outer-lots",
+      "name": "Outer lots",
+      "order": 10,
+      "positionText": "On the public roads, north and south"
+    }
+  ],
+  "places": [
+    {
+      "key": "whole-land",
+      "name": "The whole land",
+      "zone": null,
+      "kind": "land",
+      "stage": null,
+      "confirmed": true,
+      "positionText": "All of Amora's land, about 108 hectares",
+      "description": "Holds the land-wide permit chain (the D1 submission) that most buildings wait on."
+    },
+    {
+      "key": "gate",
+      "name": "The Gate",
+      "onMap": true,
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": true,
+      "positionText": "At the main entrance, and another into the inner village",
+      "description": "A welcoming gate at the main entrance and another into the inner village."
+    },
+    {
+      "key": "guard-stations",
+      "name": "Guard stations",
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "positionText": "One at the main entrance and one at the gate before the bridge into the inner village",
+      "description": "Two guard stations."
+    },
+    {
+      "key": "welcome",
+      "name": "Welcome Lodge",
+      "onMap": true,
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P4",
+      "confirmed": false,
+      "proposedMatch": "Reception and welcome center",
+      "positionText": "At the public edge",
+      "description": "Welcome, team workspace, art gallery and farm store in one building.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is the map's Welcome Lodge the planned reception and welcome center?",
+          "sources": [
+            "Live map: drawn as standing",
+            "Working list: planned P4"
+          ],
+          "toSettle": "Confirm the match"
+        }
+      ]
+    },
+    {
+      "key": "container-sales-office",
+      "name": "Container sales office",
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P0",
+      "confirmed": true,
+      "setAside": {
+        "reason": "Set aside in the April working list in favour of the reception and welcome center."
+      },
+      "positionText": "At the public edge",
+      "description": "A sales office in a container."
+    },
+    {
+      "key": "longevity-center",
+      "name": "Longevity center",
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "stewardRoleTitle": "Longevity Center Venture Steward",
+      "positionText": "Left of the entrance on the main road",
+      "description": "Treatment rooms, clinic, sauna and pool on the ground floor, about ten guest rooms above, a roof-deck shala. The November webinar calls it the heart-health healing center."
+    },
+    {
+      "key": "commercial-building",
+      "name": "Commercial building",
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P4-5",
+      "confirmed": true,
+      "stewardRoleTitle": "Regenerative Business Steward",
+      "positionText": "On the main road above the wellness center",
+      "description": "Rental space, possibly with worker apartments."
+    },
+    {
+      "key": "market",
+      "name": "Market Pavilion",
+      "onMap": true,
+      "zone": "public-edge",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": false,
+      "zoneProposed": true,
+      "positionText": "Where the live map draws it, at the arrival",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The Market Pavilion has no entry in Amora's records",
+          "sources": [
+            "Live map: drawn as funding",
+            "Working list: no market pavilion (a farm store sits in the welcome center)"
+          ],
+          "toSettle": "Confirm it, match it, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "caretakers-house",
+      "name": "Caretaker's house (the Rancho)",
+      "zone": "waterfall",
+      "kind": "building",
+      "stage": "in_use",
+      "confirmed": true,
+      "stewardRoleTitle": "Build & Project Steward",
+      "roleTitles": [
+        "School Steward",
+        "Land Liaison"
+      ],
+      "childSafeZone": true,
+      "positionText": "Right next to the cafe and the waterfall",
+      "description": "The caretaker's home, and the one home built today. Renovated (bath, casita and floor) for a summer program that is no longer coming. Proposed as the school for 10 to 15 children, adding tent classrooms as it grows (candidate proposal, 3 Nov). An April idea to replace it with a greenhouse medicine garden was set aside.",
+      "units": {
+        "homes": 1
+      },
+      "aliases": [
+        "rancho"
+      ]
+    },
+    {
+      "key": "container-area",
+      "name": "Container area",
+      "zone": "waterfall",
+      "kind": "garden",
+      "stage": "in_use",
+      "confirmed": true,
+      "temporary": {
+        "successor": null
+      },
+      "stewardRoleTitle": "Build & Project Steward",
+      "childSafeZone": true,
+      "positionText": "Beside the caretaker's house",
+      "description": "Shipping containers are being moved by backhoe. Proposed to become the school's playground and garden."
+    },
+    {
+      "key": "waterfall-cafe",
+      "name": "Waterfall Cafe",
+      "zone": "waterfall",
+      "kind": "building",
+      "stage": "built",
+      "confirmed": true,
+      "stewardRoleTitle": "Regenerative Business Steward",
+      "positionText": "Just inside the gate by the waterfalls",
+      "description": "An alcohol-free elixir bar, kitchen and event room by the waterfall, serving members and visitors. Standing."
+    },
+    {
+      "key": "waterfall-wellness",
+      "name": "Waterfall wellness center",
+      "zone": "waterfall",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "positionText": "Between the cafe and the waterfall",
+      "description": "Yoga deck, two treatment rooms, a birthing room, a cedar sauna and cold plunge."
+    },
+    {
+      "key": "temazcal-gardens",
+      "name": "Temazcal, red tent, fire pit and gardens",
+      "zone": "waterfall",
+      "kind": "garden",
+      "stage": "idea",
+      "phase": "P1-2",
+      "confirmed": true,
+      "positionText": "By the waterfall at the back of the caretaker's house",
+      "description": "A temazcal, a red tent, a fire pit and gardens."
+    },
+    {
+      "key": "waterfall-coworking",
+      "name": "Waterfall co-working",
+      "zone": "waterfall",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": true,
+      "positionText": "At the current kitchen's spot, by the waterfall",
+      "description": "Co-working by the waterfall. Named in recent tasks with a Rancho photo."
+    },
+    {
+      "key": "event-space",
+      "name": "Event space",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "building",
+      "phase": "P1",
+      "confirmed": true,
+      "targetDate": "2027-02-10",
+      "stewardRoleTitle": "Build & Project Steward",
+      "roleTitles": [
+        "Gatherings Steward"
+      ],
+      "temporary": {
+        "successor": "community"
+      },
+      "positionText": "At the ocean-view gathering place",
+      "description": "A large tent on an earth floor, replacing today's pop-up for potlucks, concerts and gatherings. The floor material (earth, part concrete or a hybrid, and its sealant) is still to be chosen."
+    },
+    {
+      "key": "kitchen",
+      "name": "Kitchen & Hearth",
+      "onMap": true,
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": true,
+      "positionText": "Where the live map draws it",
+      "description": "Feeds people at gatherings, a step up from the potluck.",
+      "phase": "P1",
+      "roleTitles": [
+        "Gatherings Steward"
+      ]
+    },
+    {
+      "key": "composting-toilets",
+      "name": "Composting toilets",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "built",
+      "phase": "P1",
+      "confirmed": true,
+      "stewardRoleTitle": "Build & Project Steward",
+      "roleTitles": [
+        "Land Liaison"
+      ],
+      "positionText": "At the gathering place",
+      "description": "Composting toilets at the gathering place.",
+      "disputes": [
+        {
+          "kind": "count",
+          "topic": "How many composting toilets stand",
+          "sources": [
+            "The ocean-view gathering place has one",
+            "Working list: composting toilets planned P1"
+          ],
+          "toSettle": "Count what stands"
+        }
+      ]
+    },
+    {
+      "key": "lotus-tent",
+      "name": "Lotus tent on a platform",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P1",
+      "confirmed": true,
+      "temporary": {
+        "successor": "community"
+      },
+      "positionText": "At the gathering place",
+      "description": "An octagonal platform holding a large tent: the temporary yoga shala and community center."
+    },
+    {
+      "key": "glamping-tents",
+      "name": "Glamping tents",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "built",
+      "confirmed": true,
+      "positionText": "At the top of the land, in the cleared opening with the best views",
+      "description": "Glamping tents for worker housing, retreats or events. Standing."
+    },
+    {
+      "key": "temporary-water-line",
+      "name": "Temporary water line",
+      "zone": "gathering",
+      "kind": "route",
+      "stage": "idea",
+      "phase": "P1",
+      "confirmed": true,
+      "temporary": {
+        "successor": "water"
+      },
+      "positionText": "From the local water association's (ASADA) system on the south side to the gathering place",
+      "description": "A temporary line from the ASADA supply."
+    },
+    {
+      "key": "ocean-view-gathering",
+      "name": "Ocean-view gathering place",
+      "zone": "gathering",
+      "kind": "building",
+      "stage": "in_use",
+      "confirmed": true,
+      "temporary": {
+        "successor": "community"
+      },
+      "positionText": "On the ocean-view ridge",
+      "description": "Potlucks, the view and a fire pit, with a composting toilet. Today's temporary community center."
+    },
+    {
+      "key": "council",
+      "name": "Council Fire",
+      "onMap": true,
+      "zone": "gathering",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": false,
+      "zoneProposed": true,
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The Council Fire has no entry in Amora's records",
+          "sources": [
+            "Live map: drawn as standing",
+            "Amora's records: the fire pit is at the ocean-view gathering place"
+          ],
+          "toSettle": "Confirm it, match it, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "studio-homes",
+      "name": "Studio homes",
+      "zone": "village-heart",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "In the village heart",
+      "description": "Fifteen one-floor, one-bedroom homes, for sale or shared ownership.",
+      "units": {
+        "homes": 15
+      }
+    },
+    {
+      "key": "small-homes",
+      "name": "Small homes",
+      "zone": "village-heart",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "In the village heart",
+      "description": "Twenty-one two-floor homes with two bedrooms.",
+      "units": {
+        "homes": 21
+      }
+    },
+    {
+      "key": "family-duplexes",
+      "name": "Family duplexes",
+      "zone": "village-heart",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "In the village heart",
+      "description": "Eighteen three-bedroom family homes, two to a shared wall.",
+      "units": {
+        "homes": 18
+      }
+    },
+    {
+      "key": "neighbourhood-commons",
+      "name": "Neighbourhood commons",
+      "zone": "village-heart",
+      "kind": "garden",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "positionText": "On the knoll at the middle of the home cluster",
+      "description": "BBQ, playground, gazebo, laundry and a dipping pool."
+    },
+    {
+      "key": "school-arts-center",
+      "name": "School and arts center",
+      "zone": "village-heart",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "stewardRoleTitle": "School Steward",
+      "childSafeZone": true,
+      "positionText": "In the village heart",
+      "description": "For Amora's children and enrolled families, with adult classes. Built in four stages."
+    },
+    {
+      "key": "studios",
+      "name": "Art studio, makerspace and music studio",
+      "zone": "village-heart",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2, P6, P3",
+      "confirmed": true,
+      "roleTitles": [
+        "School Steward"
+      ],
+      "positionText": "Near the school",
+      "description": "Pottery, art, music and fibre work for members, with workshops for visitors."
+    },
+    {
+      "key": "tea-house",
+      "name": "Tea house by the ponds",
+      "zone": "village-heart",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P6",
+      "confirmed": true,
+      "positionText": "By the ponds",
+      "description": "A place to sit, reflect and meet friends."
+    },
+    {
+      "key": "ponds",
+      "name": "The Ponds",
+      "onMap": true,
+      "zone": "village-heart",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": true,
+      "positionText": "Where the live map draws them",
+      "description": "The village heart lies between the school, the center river and the ponds."
+    },
+    {
+      "key": "pondhomes",
+      "name": "Pond Hamlet",
+      "onMap": true,
+      "zone": "village-heart",
+      "kind": "homes",
+      "stage": "idea",
+      "confirmed": false,
+      "isHome": true,
+      "zoneProposed": true,
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "Pond Hamlet has no entry in Amora's records",
+          "sources": [
+            "Live map: drawn as standing homes",
+            "Working list: no homes stand"
+          ],
+          "toSettle": "Match it to a homes group, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "library",
+      "name": "Library & Workshop",
+      "onMap": true,
+      "zone": "village-heart",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": false,
+      "zoneProposed": true,
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The Library & Workshop has no entry in Amora's records",
+          "sources": [
+            "Live map: drawn as building",
+            "Working list: a makerspace near the school; a workshop at the maintenance base"
+          ],
+          "toSettle": "Match it, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "greenhouse",
+      "name": "Greenhouse & Gardens",
+      "onMap": true,
+      "zone": "food-forest",
+      "kind": "garden",
+      "stage": "idea",
+      "phase": "P1",
+      "confirmed": true,
+      "positionText": "Where the live map draws it",
+      "description": "Nursery and starts for the food forest, gardens and landscaping.",
+      "roleTitles": [
+        "Land & Permaculture Steward"
+      ]
+    },
+    {
+      "key": "foodforest",
+      "name": "Food Forest",
+      "onMap": true,
+      "zone": "food-forest",
+      "kind": "garden",
+      "stage": "in_use",
+      "confirmed": true,
+      "stewardRoleTitle": "Land & Permaculture Steward",
+      "roleTitles": [
+        "Build & Project Steward"
+      ],
+      "positionText": "Woven through the land",
+      "description": "About 1,500 fruit trees and native hardwoods planted. The forestry plan sets management zones, riparian buffers, pollinator species, sacrificial fruit trees and a nursery."
+    },
+    {
+      "key": "new-food-forest",
+      "name": "New Food Forest",
+      "onMap": true,
+      "zone": "food-forest",
+      "kind": "garden",
+      "stage": "idea",
+      "confirmed": false,
+      "positionText": "Where the live map draws it",
+      "description": "Added to the live map after the master plan seed.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The New Food Forest has no entry in Amora's records",
+          "sources": [
+            "Live map: drawn as funding",
+            "Amora's records: one food forest"
+          ],
+          "toSettle": "Confirm it as part of the food forest, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "garden-temple",
+      "name": "Garden temple",
+      "zone": "food-forest",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "stewardRoleTitle": "Land & Permaculture Steward",
+      "positionText": "In the food and forest zone",
+      "description": "The hub for tools, supplies and planning for the village's food."
+    },
+    {
+      "key": "permaculture-education",
+      "name": "Permaculture education space",
+      "zone": "food-forest",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2-3",
+      "confirmed": true,
+      "positionText": "Open: near the ponds or the school",
+      "description": "Home for the lead permaculturist plus workshop space."
+    },
+    {
+      "key": "commercial-kitchen",
+      "name": "Commercial kitchen",
+      "zone": "food-forest",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P4",
+      "confirmed": true,
+      "positionText": "In the food and forest zone",
+      "description": "Preserving and adding value to food grown on the land; hours rented to local producers."
+    },
+    {
+      "key": "trailhead",
+      "name": "Pacific Trailhead",
+      "onMap": true,
+      "zone": "food-forest",
+      "kind": "route",
+      "stage": "idea",
+      "confirmed": false,
+      "proposedMatch": "Trails",
+      "stewardRoleTitle": "Land & Permaculture Steward",
+      "positionText": "About 3 km of trails in the forestry plan",
+      "description": "Trails in the forestry plan; mountain bike trails are being added to the infrastructure plan (20 Oct).",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is the map's Pacific Trailhead the trails of the forestry plan?",
+          "sources": [
+            "Live map: a trailhead",
+            "Forestry plan: about 3 km of trails"
+          ],
+          "toSettle": "Confirm the match"
+        }
+      ]
+    },
+    {
+      "key": "guest",
+      "name": "Retreat center",
+      "onMap": true,
+      "zone": "ridge",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "positionText": "On the ridge, ocean view",
+      "description": "Forty ocean-view villas for up to 100 guests, a yoga shala and a pool; runs as a hotel between retreats. Proposals are open: anyone may claim building it.",
+      "roleTitles": [
+        "Retreat Center Venture Steward"
+      ],
+      "showcase": true,
+      "aliases": [
+        "retreat-center"
+      ]
+    },
+    {
+      "key": "ridgeA",
+      "name": "Ridge Hamlet North",
+      "onMap": true,
+      "zone": "ridge",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3-4",
+      "confirmed": false,
+      "isHome": true,
+      "proposedMatch": "Ocean-view homes",
+      "positionText": "On the ridge, ocean view",
+      "description": "Ocean-view homes in clusters of three.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is Ridge Hamlet North part of the ocean-view homes?",
+          "sources": [
+            "Live map: drawn as building",
+            "Working list: planned P3-4"
+          ],
+          "toSettle": "Confirm the match"
+        }
+      ]
+    },
+    {
+      "key": "ridgeB",
+      "name": "Ridge Hamlet South",
+      "onMap": true,
+      "zone": "ridge",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3-4",
+      "confirmed": false,
+      "isHome": true,
+      "proposedMatch": "Ocean-view homes",
+      "positionText": "On the ridge, ocean view",
+      "description": "Ocean-view homes in clusters of three.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is Ridge Hamlet South part of the ocean-view homes?",
+          "sources": [
+            "Live map: drawn as funding",
+            "Working list: planned P3-4"
+          ],
+          "toSettle": "Confirm the match"
+        }
+      ]
+    },
+    {
+      "key": "forest-lots",
+      "name": "Forest lots",
+      "zone": "ridge",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "Along the road",
+      "description": "Nineteen plots where people build their own creative homes, approved in the D1 study.",
+      "units": {
+        "selfBuildLots": 19
+      }
+    },
+    {
+      "key": "forest-homes",
+      "name": "Forest homes",
+      "zone": "ridge",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P4-5",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "In the forest",
+      "description": "Four homes in the forest.",
+      "units": {
+        "homes": 4
+      }
+    },
+    {
+      "key": "retreat-homes",
+      "name": "Retreat center homes",
+      "zone": "ridge",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "Behind the ridge",
+      "description": "Six small homes for people who work at the retreat center.",
+      "units": {
+        "homes": 6
+      }
+    },
+    {
+      "key": "community",
+      "name": "Community Center",
+      "onMap": true,
+      "zone": "community-center",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P3-4",
+      "confirmed": false,
+      "proposedMatch": "Community center",
+      "positionText": "High on the land, ocean view",
+      "description": "A screen-free hub: pool, hot tub, sauna, gym, stage, kitchen, dining room, playground and fire pit. The successor to today's temporary gathering place.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "The live map draws the Community Center as thriving",
+          "sources": [
+            "Live map: thriving",
+            "Working list: planned P3-4; today's gathering place is temporary"
+          ],
+          "toSettle": "Confirm the match, and draw it planned"
+        }
+      ]
+    },
+    {
+      "key": "shala-coworking",
+      "name": "Yoga shala, co-working and team office",
+      "zone": "community-center",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P3-4",
+      "confirmed": true,
+      "positionText": "Below and beside the community center",
+      "description": "An open-air shala below; air-conditioned ocean-view co-working with a roof deck; a team office on the mound beside it."
+    },
+    {
+      "key": "center-homes",
+      "name": "Homes above and behind the center",
+      "zone": "community-center",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P3-5",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "Above the center, and behind it across the road",
+      "description": "Thirty apartments and two three-floor homes above the center; a cluster of five homes behind it.",
+      "units": {
+        "homes": 7,
+        "apartments": 30
+      }
+    },
+    {
+      "key": "water",
+      "name": "Water",
+      "zone": "shared-systems",
+      "kind": "system",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "stewardRoleTitle": "Development Steward",
+      "roleTitles": [
+        "Build & Project Steward"
+      ],
+      "vitals": [
+        "water_held_m3"
+      ],
+      "serves": [
+        "event-space",
+        "ocean-view-gathering",
+        "caretakers-house",
+        "waterfall-cafe",
+        "community",
+        "foodforest"
+      ],
+      "positionText": "A water facility at the top of the land",
+      "description": "Treatment, testing, storage and distribution. The south side is served through the local ASADA system; a well site for the north side is still being chosen. Roof rainwater harvesting is planned."
+    },
+    {
+      "key": "tank",
+      "name": "Water Tank",
+      "onMap": true,
+      "zone": "shared-systems",
+      "kind": "system",
+      "stage": "idea",
+      "confirmed": false,
+      "proposedMatch": "Water",
+      "partOf": "water",
+      "positionText": "Where the live map draws it",
+      "description": "A tank on the live map.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is the map's Water Tank part of the water system?",
+          "sources": [
+            "Live map: drawn as standing",
+            "Amora's records: the water facility is planned P2"
+          ],
+          "toSettle": "Confirm what stands"
+        }
+      ]
+    },
+    {
+      "key": "spring2",
+      "name": "Spring Two",
+      "onMap": true,
+      "zone": "shared-systems",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": false,
+      "zoneProposed": true,
+      "partOf": "water",
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The springs have no entry in Amora's records",
+          "sources": [
+            "Live map: four springs",
+            "Amora's records: a well site for the north side is still being chosen"
+          ],
+          "toSettle": "Confirm them"
+        }
+      ]
+    },
+    {
+      "key": "spring3",
+      "name": "Spring Three",
+      "onMap": true,
+      "zone": "shared-systems",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": false,
+      "zoneProposed": true,
+      "partOf": "water",
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The springs have no entry in Amora's records",
+          "sources": [
+            "Live map: four springs",
+            "Amora's records: a well site for the north side is still being chosen"
+          ],
+          "toSettle": "Confirm them"
+        }
+      ]
+    },
+    {
+      "key": "spring4",
+      "name": "Spring Four",
+      "onMap": true,
+      "zone": "shared-systems",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": false,
+      "zoneProposed": true,
+      "partOf": "water",
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The springs have no entry in Amora's records",
+          "sources": [
+            "Live map: four springs",
+            "Amora's records: a well site for the north side is still being chosen"
+          ],
+          "toSettle": "Confirm them"
+        }
+      ]
+    },
+    {
+      "key": "possiblespring",
+      "name": "A Possible Spring",
+      "onMap": true,
+      "zone": "shared-systems",
+      "kind": "feature",
+      "stage": null,
+      "confirmed": false,
+      "zoneProposed": true,
+      "partOf": "water",
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The springs have no entry in Amora's records",
+          "sources": [
+            "Live map: four springs",
+            "Amora's records: a well site for the north side is still being chosen"
+          ],
+          "toSettle": "Confirm them"
+        }
+      ]
+    },
+    {
+      "key": "power",
+      "name": "Power",
+      "zone": "shared-systems",
+      "kind": "system",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "stewardRoleTitle": "Development Steward",
+      "vitals": [
+        "solar_stored_kwh"
+      ],
+      "serves": [],
+      "positionText": "At the top of the land",
+      "description": "Battery banks, inverters and charge controllers for solar and other generation."
+    },
+    {
+      "key": "waste",
+      "name": "Waste",
+      "zone": "shared-systems",
+      "kind": "system",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "vitals": [
+        "compost_made_kg"
+      ],
+      "serves": [
+        "composting-toilets"
+      ],
+      "positionText": "At the top of the land",
+      "description": "Trash, recycling, reuse and compost. Composting and constructed wetlands are preferred over digesters (20 Oct)."
+    },
+    {
+      "key": "maintenance-base",
+      "name": "Workshop, sheds, storage, cart charging and parking",
+      "zone": "shared-systems",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2-3",
+      "confirmed": true,
+      "positionText": "Near the shared systems",
+      "description": "The maintenance base, open to members on request."
+    },
+    {
+      "key": "land-stewards-homes",
+      "name": "Land stewards' homes",
+      "zone": "shared-systems",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "isHome": true,
+      "positionText": "Between the Dominicalito road and the first river",
+      "description": "Twelve small dwellings.",
+      "units": {
+        "homes": 12
+      }
+    },
+    {
+      "key": "roads-crossings",
+      "name": "Roads and stream crossings",
+      "zone": "shared-systems",
+      "kind": "route",
+      "stage": "idea",
+      "confirmed": false,
+      "stewardRoleTitle": "Development Steward",
+      "positionText": "Across the land",
+      "description": "Improvements and new sections.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "Roads have no record",
+          "sources": [
+            "The work is coordinated in a chat group",
+            "Amora's memory: no record yet"
+          ],
+          "toSettle": "Give the roads a record"
+        }
+      ]
+    },
+    {
+      "key": "preserve",
+      "name": "The preserve",
+      "zone": "wild-sacred",
+      "kind": "preserve",
+      "stage": null,
+      "confirmed": true,
+      "stewardRoleTitle": "Land & Permaculture Steward",
+      "positionText": "About 70% of the land",
+      "description": "Nature preserve with a wildlife corridor."
+    },
+    {
+      "key": "forest-casitas",
+      "name": "Forest casitas",
+      "zone": "wild-sacred",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P2",
+      "confirmed": true,
+      "positionText": "On the south-east border",
+      "description": "Eight small casitas with a shared kitchen, for back-to-nature retreats and ceremony.",
+      "units": {
+        "casitas": 8
+      },
+      "isHome": true
+    },
+    {
+      "key": "vision-quest-platforms",
+      "name": "Vision quest platforms",
+      "zone": "wild-sacred",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P3",
+      "confirmed": true,
+      "positionText": "In the remote parts",
+      "description": "Four minimal platforms for solitary time in nature."
+    },
+    {
+      "key": "nature-temple",
+      "name": "Nature temple and treehouses",
+      "zone": "wild-sacred",
+      "kind": "building",
+      "stage": "idea",
+      "phase": "P6",
+      "confirmed": true,
+      "positionText": "In the jungle",
+      "description": "A contemplative space, and three treehouses for small groups."
+    },
+    {
+      "key": "sanctuary",
+      "name": "The Sanctuary",
+      "onMap": true,
+      "zone": "wild-sacred",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": false,
+      "proposedMatch": "Birthing sanctuary",
+      "positionText": "Where the live map draws it",
+      "description": "Listed in the working list without a description.",
+      "disputes": [
+        {
+          "kind": "match",
+          "topic": "Is the map's Sanctuary the birthing sanctuary?",
+          "sources": [
+            "Live map: drawn as funding",
+            "Working list: birthing sanctuary, no description"
+          ],
+          "toSettle": "Confirm the match"
+        }
+      ]
+    },
+    {
+      "key": "healing",
+      "name": "Healing Garden",
+      "onMap": true,
+      "zone": "wild-sacred",
+      "kind": "garden",
+      "stage": "idea",
+      "confirmed": false,
+      "zoneProposed": true,
+      "positionText": "Where the live map draws it",
+      "description": "On the live map only.",
+      "disputes": [
+        {
+          "kind": "exists",
+          "topic": "The Healing Garden has no entry in Amora's records",
+          "sources": [
+            "Live map: a blueprint, phase 3",
+            "Working list: no healing garden"
+          ],
+          "toSettle": "Match it, or set it aside"
+        }
+      ]
+    },
+    {
+      "key": "outer-lots",
+      "name": "Six outer lots",
+      "zone": "outer-lots",
+      "kind": "homes",
+      "stage": "idea",
+      "phase": "P1",
+      "confirmed": true,
+      "stewardRoleTitle": "Development Steward",
+      "roleTitles": [
+        "Land & Home Sales Steward",
+        "Legal & Structure Steward"
+      ],
+      "positionText": "On the public roads, north and south",
+      "description": "The first phase starts here. The lots are at different steps of segregation and water concessions, and that paperwork is the first gate on the whole land."
+    }
+  ],
+  "permits": [
+    {
+      "id": "d1-electrical-sketch",
+      "place": "whole-land",
+      "title": "Electrical distribution sketch",
+      "state": "needed"
+    },
+    {
+      "id": "d1-water-sketch",
+      "place": "whole-land",
+      "title": "Water distribution sketch",
+      "state": "needed"
+    },
+    {
+      "id": "d1-water-mapping",
+      "place": "whole-land",
+      "title": "Water mapping study",
+      "state": "needed"
+    },
+    {
+      "id": "d1-sociologist",
+      "place": "whole-land",
+      "title": "Sociologist's report",
+      "state": "needed"
+    },
+    {
+      "id": "d1-employer-registration",
+      "place": "whole-land",
+      "title": "Employer registration",
+      "state": "needed"
+    },
+    {
+      "id": "d1-power-letter",
+      "place": "whole-land",
+      "title": "Power availability letter",
+      "state": "needed",
+      "waitsOn": [
+        "d1-electrical-sketch"
+      ]
+    },
+    {
+      "id": "d1-water-letters",
+      "place": "whole-land",
+      "title": "Water availability letters",
+      "state": "needed",
+      "waitsOn": [
+        "d1-water-mapping"
+      ]
+    },
+    {
+      "id": "d1-master-plan-v8",
+      "place": "whole-land",
+      "title": "Compiled master plan version 8",
+      "state": "needed",
+      "waitsOn": [
+        "d1-electrical-sketch",
+        "d1-water-sketch",
+        "d1-water-mapping",
+        "d1-sociologist"
+      ]
+    },
+    {
+      "id": "d1-submission",
+      "place": "whole-land",
+      "title": "D1 permit submission",
+      "state": "needed",
+      "waitsOn": [
+        "d1-master-plan-v8",
+        "d1-power-letter",
+        "d1-water-letters",
+        "d1-employer-registration"
+      ]
+    }
+  ],
+  "settled": [
+    {
+      "topic": "Who the collaboration with the construction tool belongs to",
+      "answer": "ReGen Civics; Amora keeps its land data",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 10)"
+    },
+    {
+      "topic": "What module builders earn",
+      "answer": "ReGen from the ReGen Civics builders' pool; equity goes to people who back Amora's quests",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 10)"
+    },
+    {
+      "topic": "The cafe",
+      "answer": "The Waterfall Cafe is standing, just inside the gate by the waterfalls",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 1)"
+    },
+    {
+      "topic": "Tents",
+      "answer": "Glamping tents stand at the top of the land, in the cleared opening with the best views",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 2)"
+    },
+    {
+      "topic": "Greenhouse",
+      "answer": "Planned, open for a steward to claim and lead the quest to build it",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 3)"
+    },
+    {
+      "topic": "Retreat center size",
+      "answer": "40 villas, up to 100 guests",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 4)"
+    },
+    {
+      "topic": "Home count",
+      "answer": "The April working list: 93 homes, 30 apartments, 19 self-build forest lots, 8 forest casitas; one home built, the caretaker's home",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 5)"
+    },
+    {
+      "topic": "The Rancho and the caretaker's house",
+      "answer": "One place: the Rancho is the caretaker's home, right next to the cafe and the waterfall",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 6)"
+    },
+    {
+      "topic": "Waterfall co-working",
+      "answer": "At the current kitchen's spot; the kitchen stays its own place",
+      "by": "Rye, 9 Nov 2026 (plan v3.1, 7)"
+    },
+    {
+      "topic": "Is the map's Gate the planned entrance gates?",
+      "answer": "Yes, gate = gate",
+      "by": "Rye, 9 Nov 2026"
+    },
+    {
+      "topic": "Is the map's Kitchen & Hearth the planned kitchen?",
+      "answer": "Yes, kitchen = kitchen; it stays its own place, and the waterfall co-working sits at its spot",
+      "by": "Rye, 9 Nov 2026"
+    },
+    {
+      "topic": "Is the map's Guest Lodge the retreat center?",
+      "answer": "Yes",
+      "by": "Rye, 9 Nov 2026 (the suggested answer adopted)"
+    }
+  ],
+  "homesTarget": {
+    "homes": 93,
+    "apartments": 30,
+    "selfBuildLots": 19,
+    "casitas": 8
+  }
+}

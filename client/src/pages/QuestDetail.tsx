@@ -25,6 +25,7 @@ import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, v
 import WorkPayBlock from "@/components/WorkPayBlock";
 import NextStepBox from "@/components/NextStepBox";
 import QuestActions from "@/components/QuestActions";
+import TakeCurrentPrice from "@/components/TakeCurrentPrice";
 import QuestCrews from "@/components/QuestCrews";
 import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
@@ -429,6 +430,7 @@ export default function QuestDetail() {
                 pay={quest.pay}
                 onChanged={refreshClaims}
               />
+              <TakeCurrentPrice claim={claim} quest={quest} onTaken={refreshClaims} />
               {/* Who to talk to, the first task, the crew link and the date. */}
               {!quest.isExample && <NextStepBox questId={quest.id} claimStatus={claim?.status} />}
               {/* The chat everyone on this quest shares, once two people are on it. */}

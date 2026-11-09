@@ -59,7 +59,8 @@ import {
   type SuggestionBallotDeps,
 } from "../lib/adminSuggestions";
 import { suggestionStore, type SuggestionRow, type SuggestionStore } from "../repos/adminSuggestions";
-import { isVillageHeld, type CapabilityCtx } from "../../shared/capabilities";
+import { villageSuggestionRoutes } from "../lib/suggestionRoutes";
+import { isVillageHeld, type Capability, type CapabilityCtx } from "../../shared/capabilities";
 import { SUGGESTION_KIND_CONSEQUENCE, validateDraftPayload, type AdminEditPayload } from "../../shared/draftKinds";
 import {
   ADMIN_EDIT_CONTROLS,
@@ -88,6 +89,8 @@ type Deps = Pick<AppDeps, "authedUser" | "capabilityCtx" | "guardCapability" | "
   isFormerMember?(user: any): Promise<boolean>;
   /** The clock, for the 14-day wait. */
   now?(): Date;
+  /** The village's own SUGGESTION_ROUTE, the dial's table. Defaults to `villageSuggestionRoutes`. */
+  routes?(): Readonly<Record<Capability, SuggestionRoute>>;
 };
 
 const ASKS_PER_WINDOW = 10;
@@ -101,6 +104,7 @@ export function register(app: Express, deps: Deps): void {
   const store = deps.store ?? suggestionStore(() => getPool());
   const isFormer = deps.isFormerMember ?? ((user: any) => leftTheVillage(getPool(), user));
   const now = () => (deps.now ? deps.now() : new Date());
+  const routes = () => (deps.routes ? deps.routes() : villageSuggestionRoutes());
 
   const nameOf = async (userId: string): Promise<string> => {
     const m = await members.byId(userId);
@@ -159,14 +163,15 @@ export function register(app: Express, deps: Deps): void {
 
   const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[]; all: string[] }> => {
     const all = await liveHoldersOf(s.edit.capability);
-    // Only the holders who may decide it count: when every holder is conflicted (V10), nobody does, so the village decides it.
+    // The dial picks holders or a ballot for the power; of the holders, only those who may decide it count, and when
+    // every holder is conflicted (V10) nobody does, so the village decides it.
     const holders = await decidersOf(s, all);
     const route = routeSuggestion({
       capability: s.edit.capability,
       villageHolds: isVillageHeld(s.edit.capability, ctx.villageHeld),
       liveHolders: holders,
       passesPowers: ADMIN_EDIT_CONTROLS[s.edit.control]?.passesPowers ?? false,
-    });
+    }, routes());
     return { route, holders, all };
   };
 
@@ -354,7 +359,7 @@ export function register(app: Express, deps: Deps): void {
         villageHolds: isVillageHeld(s.edit.capability, who.ctx.villageHeld),
         liveHolders: holders,
         passesPowers: ADMIN_EDIT_CONTROLS[s.edit.control].passesPowers,
-      });
+      }, routes());
       if (route !== "holders") continue;
       const control = adminEditControl(s.edit.control);
       queue.push(view(s, { stale: control ? staleDifference(s, await currentFor(control, s)) : null, suggester: await nameOf(s.suggestedBy) }));

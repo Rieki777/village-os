@@ -88,6 +88,7 @@ describe.skipIf(!configured)("setting a role's pay with the Treasurer and the al
       },
       overLimit: async () => false,
       liveHoldersOf: async (cap: string) => holders[cap] ?? [],
+      capabilityCtx: async () => ({ villageHeld: [] }),
       projectCurrency: () => "CRC",
       eeMeaningWritten: () => true,
       // The scratch schema registers no tokens; the real check is the admin door's, exercised below by name.
