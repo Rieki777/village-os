@@ -39,6 +39,7 @@ import {
   GATHERING_LIMIT_DEFAULT,
   GATHERING_LIMIT_KEY,
   changeKeyOf,
+  changeLabel,
   changeRequestTextProblem,
   withChangeAdded,
   withChangeRemoved,
@@ -50,7 +51,10 @@ import { changeSetCapFrom, CHANGE_SET_CAP_KEY } from "../../shared/changeSetCap"
 import { leftTheVillage } from "../lib/formerMember";
 import { numberVar } from "../lib/variables";
 import { rolesHeldBy } from "../repos/companions";
-import { changeRequestStore, type ChangeRequestRow, type ChangeRequestStore, type StoredChange } from "../repos/changeRequests";
+import { changeRequestStore, type ChangeRequestRow, type ChangeRequestStore, type ReviewNote, type StoredChange } from "../repos/changeRequests";
+import { MODULES } from "../../shared/modules";
+import { REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY, notePostProblem, powersTouchedBy, readiness, reviewEndsAt, type NoteKind } from "../../shared/changeRequestReview";
+import type { Capability } from "../../shared/capabilities";
 
 /** What the shared validator answers: refusals, and each change with the value it starts from. */
 export interface ValidationResult {
@@ -68,6 +72,16 @@ type Deps = Pick<AppDeps, "authedUser" | "capabilityCtx" | "getPool" | "members"
   /** A number dial's value. Injected for the tests. */
   numberVar?: (key: string) => number;
   newId?: () => string;
+  /** Live holders of a power, bridged, no admin short-circuit (server/index.ts). */
+  liveHoldersOf?: (cap: Capability) => Promise<string[]>;
+  notify?: AppDeps["notify"];
+  /** When the current cycle began, for the flooding count. */
+  cycleStart?: () => Date;
+  /** Plain proposals this member opened since an instant (`proposalsOpenedSince`). */
+  proposalsOpenedSince?: (userId: string, since: Date) => Promise<number>;
+  /** True when the request comes from an agent acting for the member (R4). No agent session exists yet. */
+  byAgent?: (req: any) => boolean;
+  now?: () => Date;
 };
 
 const WRITES_PER_WINDOW = 120;
@@ -86,6 +100,57 @@ export function register(app: Express, deps: Deps): void {
     const n = Math.trunc(Number(readNumber(GATHERING_LIMIT_KEY)));
     return Number.isFinite(n) && n >= 1 ? n : GATHERING_LIMIT_DEFAULT;
   };
+
+  const now = () => (deps.now ? deps.now() : new Date());
+  const byAgent = deps.byAgent ?? (() => false);
+  const reviewDaysNow = () => {
+    const n = Math.trunc(Number(readNumber(REVIEW_DAYS_KEY)));
+    return Number.isFinite(n) && n >= 0 ? n : REVIEW_DAYS_DEFAULT;
+  };
+  const endsAt = (cr: ChangeRequestRow) =>
+    reviewEndsAt(new Date(cr.reviewOpenedAt ?? cr.updatedAt), cr.reviewDaysAtOpen ?? reviewDaysNow(), reviewDaysNow());
+
+  /** The capabilities of the module that owns a dial, or null (C9). */
+  const moduleCapsOf = (dialKey: string): readonly string[] | null => {
+    const owner = MODULES.find((m) => m.variableKeys.includes(dialKey));
+    return owner && owner.capabilities.length ? owner.capabilities : null;
+  };
+
+  /**
+   * REVIEW REQUESTS, LIKE CODE OWNERS (US4, C9, R3, R22). Every live holder of
+   * a power the changes touch is asked once per revision, never the author:
+   * one notice per person per revision, whatever number of those powers they
+   * hold. The notice names no person (III.2).
+   */
+  async function askReviewers(cr: ChangeRequestRow): Promise<void> {
+    if (!deps.liveHoldersOf || !deps.notify) return;
+    const powers = new Set<Capability>();
+    for (const c of cr.changes) for (const p of powersTouchedBy(c.item as any, moduleCapsOf)) powers.add(p);
+    const people = new Set<string>();
+    for (const p of Array.from(powers)) {
+      for (const holder of await deps.liveHoldersOf(p).catch(() => [] as string[])) {
+        if (holder !== cr.authorUserId) people.add(holder);
+      }
+    }
+    for (const userId of Array.from(people)) {
+      await deps
+        .notify({
+          userId,
+          type: "change_request_review",
+          title: `You are asked to review "${cr.title}"`,
+          body: `It changes ${cr.changes.length} setting${cr.changes.length === 1 ? "" : "s"}, and some touch what your role looks after. Ask, raise a concern or an objection, suggest an edit, or say you can live with it.`,
+          link: `/changes/${cr.id}`,
+          dedupeKey: `cr-review:${cr.id}:r${cr.revision}:${userId}`,
+        } as any)
+        .catch(() => undefined);
+    }
+  }
+
+  /** Tells one member about somebody else's act. Never the person who did it. */
+  async function tellUser(userId: string | null, actorId: string, title: string, body: string, crId: string, dedupeKey: string): Promise<void> {
+    if (!userId || userId === actorId || !deps.notify) return;
+    await deps.notify({ userId, type: "change_request", title, body, link: `/changes/${crId}`, dedupeKey } as any).catch(() => undefined);
+  }
 
   async function signedIn(req: any, res: any): Promise<any | null> {
     const user = await authedUser(req);
@@ -117,7 +182,7 @@ export function register(app: Express, deps: Deps): void {
   }
 
   /** The author's own gathering change request at the revision they read, or null after answering. */
-  async function editable(req: any, res: any, user: any): Promise<ChangeRequestRow | null> {
+  async function editable(req: any, res: any, user: any, states: readonly string[] = ["gathering", "in_review"]): Promise<ChangeRequestRow | null> {
     const cr = await store.byId(String(req.params.id ?? ""));
     if (!cr) {
       res.status(404).json({ error: "not_found", message: "There is no change request by that id." });
@@ -127,8 +192,14 @@ export function register(app: Express, deps: Deps): void {
       res.status(403).json({ error: "not_yours", message: "Only the member who started a change request edits it. Suggest an edit in its review instead." });
       return null;
     }
-    if (cr.state !== "gathering") {
-      res.status(409).json({ error: "not_gathering", message: "This change request has left gathering, so its changes are fixed." });
+    if (!states.includes(cr.state)) {
+      res.status(409).json({
+        error: cr.state === "in_review" ? "in_review" : "not_gathering",
+        message:
+          cr.state === "in_review"
+            ? "This change request is in review. Its changes can still be edited, and that starts the review again."
+            : "This change request is in the vote or closed, so its changes are fixed.",
+      });
       return null;
     }
     const read = Number(req.body?.revision ?? req.query?.revision);
@@ -187,7 +258,61 @@ export function register(app: Express, deps: Deps): void {
     return roles.length ? `${roles.join(", ")} (${first})` : first;
   }
 
+  /** Who wrote a note, by III.2: "Role (FirstName)" for a signed-in reader, at render time. */
+  async function personLabel(userId: string | null, cache: Map<string, string>): Promise<string> {
+    if (!userId) return "A former member";
+    const hit = cache.get(userId);
+    if (hit) return hit;
+    const m = await members.byId(userId);
+    let label = "A former member";
+    if (m) {
+      const first = holderFirstName(String(m.name ?? "")) || "A member";
+      const roles = await rolesOf(userId);
+      label = roles.length ? `${roles.join(", ")} (${first})` : first;
+    }
+    cache.set(userId, label);
+    return label;
+  }
+
+  async function reviewView(cr: ChangeRequestRow, viewerId: string) {
+    if (cr.state === "gathering") return { review: null };
+    const cache = new Map<string, string>();
+    const notes = await store.notesOf(cr.id);
+    const end = endsAt(cr);
+    const objections = notes
+      .filter((n) => n.kind === "objection")
+      .map((n) => ({ answered: n.outcome !== "open", postedAfterEnd: new Date(n.createdAt).getTime() > end.getTime() }));
+    const ready = readiness({ now: now(), endsAt: end, changes: cr.changes.length, objections, forAuthor: cr.authorUserId === viewerId });
+    const shown = [];
+    for (const n of notes) {
+      if (n.kind === "system") continue;
+      shown.push({
+        id: n.id,
+        kind: n.kind,
+        revision: n.revision,
+        position: n.position,
+        body: n.body,
+        proposed: n.proposedItem,
+        answers: n.answersNoteId,
+        outcome: n.outcome,
+        by: await personLabel(n.authorUserId, cache),
+        yours: n.authorUserId === viewerId,
+        at: n.createdAt,
+      });
+    }
+    return {
+      review: {
+        endsAt: end.toISOString(),
+        ready: ready.ready,
+        checklist: ready.lines,
+        consents: notes.filter((n) => n.kind === "consent" && n.revision === cr.revision).length,
+        notes: shown,
+      },
+    };
+  }
+
   const served = async (cr: ChangeRequestRow, viewerId: string) => ({
+    ...(await reviewView(cr, viewerId)),
     id: cr.id,
     title: cr.title,
     why: cr.why,
@@ -207,7 +332,7 @@ export function register(app: Express, deps: Deps): void {
         position: c.position,
         key: c.changeKey,
         kind: String(item.kind ?? "dial"),
-        label: def?.label ?? c.changeKey,
+        label: changeLabel(c.changeKey),
         withheld: !!def?.withheld,
         before: def?.withheld ? null : c.beforeValue,
         after: def?.withheld ? null : String(item.to ?? ""),
@@ -282,7 +407,7 @@ export function register(app: Express, deps: Deps): void {
   app.delete("/api/change-requests/:id", async (req, res) => {
     const user = await proposer(req, res);
     if (!user) return;
-    const cr = await editable(req, res, user);
+    const cr = await editable(req, res, user, ["gathering"]);
     if (!cr) return;
     if (!(await store.remove(cr.id, cr.revision))) return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
     res.json({ deleted: true });
@@ -294,7 +419,9 @@ export function register(app: Express, deps: Deps): void {
     if (!(await store.revise(cr.id, cr.revision, { changes }))) {
       return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
     }
-    res.json(await served((await store.byId(cr.id))!, String(user.id)));
+    const after = (await store.byId(cr.id))!;
+    if (after.state === "in_review") await askReviewers(after);
+    res.json(await served(after, String(user.id)));
   };
 
   const items = (cr: ChangeRequestRow) => cr.changes.map((c) => c.item as ChangeLike);
@@ -341,7 +468,7 @@ export function register(app: Express, deps: Deps): void {
   app.post("/api/change-requests/:id/changes/:position/split", async (req, res) => {
     const user = await proposer(req, res);
     if (!user) return;
-    const cr = await editable(req, res, user);
+    const cr = await editable(req, res, user, ["gathering"]);
     if (!cr) return;
     const at = position(req);
     const moved = cr.changes[at];
@@ -362,7 +489,7 @@ export function register(app: Express, deps: Deps): void {
       return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
     }
     const id = newId();
-    const label = VARIABLES_BY_KEY[moved.changeKey]?.label ?? moved.changeKey;
+    const label = changeLabel(moved.changeKey);
     const title = `${label}`.slice(0, 120);
     await store.create({
       id,
@@ -374,5 +501,198 @@ export function register(app: Express, deps: Deps): void {
       changes: [{ ...moved, position: 0 }],
     });
     res.status(201).json({ id, from: cr.id, revision: cr.revision + 1 });
+  });
+
+  // ── THE REVIEW ROUND (US3, R2, R3, R9, R40) ──────────────────────────────
+
+  app.post("/api/change-requests/:id/open-review", async (req, res) => {
+    const user = await proposer(req, res);
+    if (!user) return;
+    const cr = await editable(req, res, user, ["gathering"]);
+    if (!cr) return;
+    if (cr.changes.length === 0) return res.status(400).json({ error: "no_changes", message: "Add at least one change before the village reviews it." });
+    // Counted once, here, against the village's ceiling on proposals per cycle (R2).
+    const since = deps.cycleStart ? deps.cycleStart() : new Date(0);
+    const opened =
+      (await store.openedForReviewSince(String(user.id), since)) +
+      (deps.proposalsOpenedSince ? await deps.proposalsOpenedSince(String(user.id), since) : 0);
+    const ceiling = Math.max(1, Math.trunc(Number(readNumber("governance.proposals_per_member_per_cycle")) || 1));
+    if (opened >= ceiling) {
+      return res.status(429).json({
+        error: "cycle_ceiling",
+        message: `You have opened ${opened} this cycle, the village's ceiling. Reviewing and supporting other change requests is never limited.`,
+      });
+    }
+    const whole = await deps.validate(cr.changes.map((c) => c.item as ChangeLike));
+    if (whole.problems.length) {
+      return res.status(400).json({ error: "change_refused", message: whole.problems.map((p) => p.problem).join(". "), problems: whole.problems });
+    }
+    if (!(await store.openReview(cr.id, cr.revision, reviewDaysNow()))) {
+      return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
+    }
+    await store.addNote({ id: newId(), changeRequestId: cr.id, revision: cr.revision, kind: "system", authorUserId: String(user.id), body: "opened for review" });
+    const inReviewNow = (await store.byId(cr.id))!;
+    await askReviewers(inReviewNow);
+    res.json(await served(inReviewNow, String(user.id)));
+  });
+
+  /** Signed in and still in the village, or null after answering. Reviewing needs no rung (I.2). */
+  async function reviewer(req: any, res: any): Promise<any | null> {
+    const user = await signedIn(req, res);
+    if (!user) return null;
+    if (await isFormer(user)) {
+      res.status(403).json({ error: "former_member", message: "You left this village. You can read this, and posting is closed." });
+      return null;
+    }
+    if (await overLimit(`change-request-notes:${user.id}`, WRITES_PER_WINDOW, WINDOW_MS)) {
+      res.status(429).json({ error: "too_many", message: "That is a lot in one hour. Wait a little and try again." });
+      return null;
+    }
+    return user;
+  }
+
+  async function found(req: any, res: any): Promise<ChangeRequestRow | null> {
+    const cr = await store.byId(String(req.params.id ?? ""));
+    if (!cr) {
+      res.status(404).json({ error: "not_found", message: "There is no change request by that id." });
+      return null;
+    }
+    return cr;
+  }
+
+  app.post("/api/change-requests/:id/notes", async (req, res) => {
+    const user = await reviewer(req, res);
+    if (!user) return;
+    const cr = await found(req, res);
+    if (!cr) return;
+    const kind = String(req.body?.kind ?? "") as NoteKind;
+    const body = String(req.body?.body ?? "").trim();
+    const notes = await store.notesOf(cr.id);
+    const problem = notePostProblem({
+      kind,
+      body,
+      state: cr.state,
+      byAgent: byAgent(req),
+      openObjectionThisRevision: notes.some(
+        (n) => n.kind === "objection" && n.outcome === "open" && n.revision === cr.revision && n.authorUserId === String(user.id),
+      ),
+    });
+    if (problem) return res.status(cr.state === "in_review" ? 400 : 409).json({ error: "note_refused", message: problem });
+    if (kind === "consent" && notes.some((n) => n.kind === "consent" && n.revision === cr.revision && n.authorUserId === String(user.id))) {
+      return res.json(await served(cr, String(user.id)));
+    }
+    const at = req.body?.position === undefined || req.body?.position === null ? null : Number(req.body.position);
+    if (at !== null && (!Number.isInteger(at) || at < 0 || at >= cr.changes.length)) {
+      return res.status(400).json({ error: "note_refused", message: "There is no change at that place." });
+    }
+    const id = newId();
+    if (!(await store.addNote({ id, changeRequestId: cr.id, revision: cr.revision, kind, authorUserId: String(user.id), position: at, body }))) {
+      return res.status(409).json({ error: "note_refused", message: "This change request is not in review any more." });
+    }
+    if (kind !== "consent") {
+      const words = kind === "objection" ? "New objection" : kind === "question" ? "New question" : "New concern";
+      await tellUser(cr.authorUserId, String(user.id), `${words} on "${cr.title}"`, "Open the change request to read it and answer.", cr.id, `cr-note:${id}`);
+    }
+    res.status(201).json(await served((await store.byId(cr.id))!, String(user.id)));
+  });
+
+  /** "Suggest an edit": a proposed replacement, removal or addition the author may take in (US3.3). */
+  app.post("/api/change-requests/:id/suggestions", async (req, res) => {
+    const user = await reviewer(req, res);
+    if (!user) return;
+    const cr = await found(req, res);
+    if (!cr) return;
+    if (cr.state !== "in_review") return res.status(409).json({ error: "note_refused", message: "This change request is not in review." });
+    const op = String(req.body?.op ?? "");
+    const at = req.body?.position === undefined || req.body?.position === null ? null : Number(req.body.position);
+    const change = changeIn(req);
+    const body = String(req.body?.body ?? "").trim().slice(0, 2000);
+    if (!["replace", "remove", "add"].includes(op)) {
+      return res.status(400).json({ error: "note_refused", message: "Say whether to change, remove or add a change." });
+    }
+    if (op !== "add" && (at === null || !Number.isInteger(at) || at < 0 || at >= cr.changes.length)) {
+      return res.status(400).json({ error: "note_refused", message: "There is no change at that place." });
+    }
+    if (op !== "remove" && !change) return res.status(400).json({ error: "no_change", message: "Say which setting to change, and to what." });
+    const next =
+      op === "add" ? withChangeAdded(items(cr), change!) : op === "remove" ? withChangeRemoved(items(cr), at!) : withChangeReplaced(items(cr), at!, change!);
+    if (!next.ok) return res.status(400).json({ error: "change_refused", message: next.problem });
+    const v = await deps.validate(next.items);
+    if (v.problems.length) return res.status(400).json({ error: "change_refused", message: v.problems.map((p) => p.problem).join(". "), problems: v.problems });
+    const id = newId();
+    const proposedItem = { op, position: at, change: change ?? null } as Record<string, unknown>;
+    if (!(await store.addNote({ id, changeRequestId: cr.id, revision: cr.revision, kind: "edit", authorUserId: String(user.id), position: at, body, proposedItem }))) {
+      return res.status(409).json({ error: "note_refused", message: "This change request is not in review any more." });
+    }
+    await tellUser(cr.authorUserId, String(user.id), `A suggested edit on "${cr.title}"`, "Open the change request to take it in or turn it down.", cr.id, `cr-note:${id}`);
+    res.status(201).json(await served((await store.byId(cr.id))!, String(user.id)));
+  });
+
+  const noteOf = async (cr: ChangeRequestRow, noteId: string) => (await store.notesOf(cr.id)).find((n) => n.id === noteId) ?? null;
+
+  app.post("/api/change-requests/:id/suggestions/:noteId/take-in", async (req, res) => {
+    const user = await proposer(req, res);
+    if (!user) return;
+    const cr = await editable(req, res, user, ["in_review"]);
+    if (!cr) return;
+    const note = await noteOf(cr, String(req.params.noteId));
+    if (!note || note.kind !== "edit" || note.outcome !== "open") {
+      return res.status(404).json({ error: "not_found", message: "That suggested edit is not waiting." });
+    }
+    const p = note.proposedItem as any;
+    const op = String(p?.op);
+    const next =
+      op === "add"
+        ? withChangeAdded(items(cr), p.change)
+        : op === "remove"
+          ? withChangeRemoved(items(cr), Number(p.position))
+          : withChangeReplaced(items(cr), Number(p.position), p.change);
+    const changes = await checked(res, next, cr.changes, String(note.authorUserId ?? user.id));
+    if (!changes) return;
+    if (!(await store.revise(cr.id, cr.revision, { changes }))) {
+      return res.status(409).json({ error: "out_of_date", message: "This change request changed since you opened it. Reload it to see what is there now." });
+    }
+    await store.settleNote(note.id, "taken_in");
+    await tellUser(note.authorUserId, String(user.id), `Your edit to "${cr.title}" was taken in`, "The review starts again with it.", cr.id, `cr-taken:${note.id}`);
+    const after = (await store.byId(cr.id))!;
+    await askReviewers(after);
+    res.json(await served(after, String(user.id)));
+  });
+
+  app.post("/api/change-requests/:id/suggestions/:noteId/turn-down", async (req, res) => {
+    const user = await proposer(req, res);
+    if (!user) return;
+    const cr = await editable(req, res, user, ["in_review"]);
+    if (!cr) return;
+    const reason = String(req.body?.reason ?? "").trim();
+    if (!reason || /[\r\n]/.test(reason) || reason.length > 280) {
+      return res.status(400).json({ error: "reason", message: "Turning down an edit needs a one-line reason, at most 280 characters." });
+    }
+    const note = await noteOf(cr, String(req.params.noteId));
+    if (!note || note.kind !== "edit" || note.outcome !== "open") {
+      return res.status(404).json({ error: "not_found", message: "That suggested edit is not waiting." });
+    }
+    await store.addNote({ id: newId(), changeRequestId: cr.id, revision: cr.revision, kind: "answer", authorUserId: String(user.id), body: reason, answersNoteId: note.id });
+    await store.settleNote(note.id, "turned_down");
+    await tellUser(note.authorUserId, String(user.id), `Your edit to "${cr.title}" was turned down`, reason, cr.id, `cr-turned:${note.id}`);
+    res.json(await served((await store.byId(cr.id))!, String(user.id)));
+  });
+
+  /** The author answers a question, a concern or an objection. Every objection needs one before the vote (US3.4). */
+  app.post("/api/change-requests/:id/notes/:noteId/answer", async (req, res) => {
+    const user = await proposer(req, res);
+    if (!user) return;
+    const cr = await editable(req, res, user, ["in_review"]);
+    if (!cr) return;
+    const body = String(req.body?.body ?? "").trim();
+    if (!body || body.length > 2000) return res.status(400).json({ error: "answer", message: "Write an answer of up to 2000 characters." });
+    const note = await noteOf(cr, String(req.params.noteId));
+    if (!note || !["question", "concern", "objection"].includes(note.kind) || note.outcome !== "open") {
+      return res.status(404).json({ error: "not_found", message: "That note is not waiting for an answer." });
+    }
+    await store.addNote({ id: newId(), changeRequestId: cr.id, revision: cr.revision, kind: "answer", authorUserId: String(user.id), body, answersNoteId: note.id });
+    await store.settleNote(note.id, "answered");
+    await tellUser(note.authorUserId, String(user.id), `An answer on "${cr.title}"`, "Open the change request to read it.", cr.id, `cr-answer:${note.id}`);
+    res.json(await served((await store.byId(cr.id))!, String(user.id)));
   });
 }

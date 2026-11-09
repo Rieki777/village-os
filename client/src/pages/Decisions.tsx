@@ -45,6 +45,7 @@ import DecisionCard from "@/components/governance/DecisionCard";
 import MyStanding from "@/components/governance/MyStanding";
 import QuorumField from "@/components/governance/QuorumField";
 import WeightRecord from "@/components/governance/WeightRecord";
+import { AskForExport } from "@/components/governance/ExportByVote";
 import {
   fetchBallots,
   fetchStanding,
@@ -229,6 +230,8 @@ export default function Decisions() {
               />
               <Group title="Being decided" blurb="Open, and still taking votes." ballots={groups.running} />
               <Chronicle ballots={groups.decided} />
+              {/* One copy of the whole database, by the village's vote (Rye, 2026-11-06). */}
+              <AskForExport />
 
               {/* The rest of the record, when somebody wants it. No count, no
                   total and no sense of a page left unfinished: a village's

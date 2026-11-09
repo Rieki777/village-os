@@ -12,9 +12,24 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Concern"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "save a change"
+msgid "Save"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Kind of work"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -22,14 +37,61 @@ msgctxt "sera changes"
 msgid "Check again"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "Nothing is being weighed right now."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Not now"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "In review"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Reason"
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Co-sign the new key"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Pick a reason"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "What harm could this do to the village, or what would it stop us doing?"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of an answer box"
+msgid "Your answer"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Village signing key"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "Decided"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Nobody has written yet."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "starting a change request"
+msgid "Starting…"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -39,6 +101,10 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "{agent} answered at {askedAt}."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -56,6 +122,11 @@ msgctxt "sera changes"
 msgid "See which one"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "send a note"
+msgid "Send"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Paid {paidOn}"
@@ -67,6 +138,15 @@ msgctxt "site header"
 msgid "Open menu"
 msgstr "Abrir menú"
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value of a setting once changed"
+msgid "After"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Could not reach the server."
 msgstr ""
@@ -75,9 +155,44 @@ msgstr ""
 msgid "Review dates, sectors and role types {agent} keeps."
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote is open. <0>Read it and vote</0>."
+msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Wide range"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a suggested edit that adds a change"
+msgid "Add: {proposedTo}"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "the reason for a suggestion"
+msgid "Why"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "page heading"
+msgid "Change requests"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a suggestion being sent"
+msgid "Sending…"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "In the vote"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the new value of a setting"
+msgid "New value"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -85,6 +200,11 @@ msgstr ""
 msgctxt "language picker"
 msgid "Search languages"
 msgstr "Buscar idiomas"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Taken in"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -96,9 +216,28 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "Start a change request"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Conflicts"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Type \"{confirmWith}\" to confirm."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "accept a suggested edit"
+msgid "Take it in"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Editing a change starts the review again."
 msgstr ""
 
 #: client/src/components/review/SeraCompare.tsx
@@ -109,8 +248,26 @@ msgstr ""
 msgid "Hide how this was worked out"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Ask the village for one copy of its database"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "No steward is sitting now, so there is nobody to name."
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a suggestion was sent"
+msgid "Suggested."
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The key was not replaced"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -118,14 +275,46 @@ msgctxt "sera changes"
 msgid "See which {nAhead}"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "A worry you cannot point to yet."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Download the copy"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Can live with it"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Not in a circle"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "That did not load."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Showing {shownCount}: {shownWords}"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Edit the name or the why"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "delete a change request"
+msgid "Delete"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the suggest form"
+msgid "Suggest a change"
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -138,9 +327,18 @@ msgctxt "sera compare"
 msgid "Nothing here yet."
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Sending..."
+msgstr ""
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "{owner} version"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The steward who receives it"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -156,6 +354,15 @@ msgctxt "sera changes"
 msgid "Filter"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "retry a failed read"
+msgid "Try again"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Delete this change request? This cannot be undone."
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "Sera records that name no invoice here"
 msgstr ""
@@ -165,14 +372,42 @@ msgctxt "role pay"
 msgid "Show the suggestion"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Object"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Respond to this change request"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "{sera} {agent} changes"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of an objection box"
+msgid "The harm you see"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Say why"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "Your change requests"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Why the village needs it"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Ask a question"
 msgstr ""
 
 #: client/src/components/review/SeraCompare.tsx
@@ -184,8 +419,52 @@ msgstr ""
 msgid "Nothing has been read from {agent} yet."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a note about every change"
+msgid "The whole request"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The key is stored unsealed, so it travels in every database dump. Set VILLAGE_SECRETS_KEY and restart to seal it in place; that keeps the same key."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a change request you started"
+msgid "Yours"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "screen reader name of one change"
+msgid "{label}, from {before} to {after}"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "when the review time ends"
+msgid "Waits until {until}"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "an unknown date"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "an unknown time"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Opening..."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -207,6 +486,10 @@ msgstr ""
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "Counts for this version. An edit asks again."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {n} small changes for the chart"
 msgstr ""
@@ -215,8 +498,21 @@ msgstr ""
 msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "answer a note in a review"
+msgid "Answer"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {nChanges} for the chart"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "You have none yet. Gather several changes here and the village votes on them together."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "The village can ask, raise concerns and objections, and suggest edits. The people whose roles look after these settings are asked to look."
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -235,13 +531,33 @@ msgstr "Iniciar sesión"
 msgid "Work out this role's pay with the valuation engine"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the reader started this change request"
+msgid "You started this"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Decide it in the structure review"
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Withdraw the request"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "The list of changes did not load"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "decline a suggested edit"
+msgid "Turn it down"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request step"
+msgid "Gathering"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -251,6 +567,10 @@ msgstr ""
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Moved into a change request of its own."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -268,9 +588,33 @@ msgctxt "sera compare"
 msgid "removed:"
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Type the confirmation"
+msgstr ""
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Show less"
+msgstr ""
+
+#. placeholder {0}: c.changes
+#: client/src/pages/ChangeRequests.tsx
+msgid "{0, plural, one {# change} other {# changes}}"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Why not, in one line"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Answer"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the reason for a change request"
+msgid "Why"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -286,9 +630,51 @@ msgstr ""
 msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value of a setting today"
+msgid "Now"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Everyone in the village can read what you write here."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a request the server refused"
+msgid "That was refused."
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Asked for a co-sign. Another admin replaces the key from this card."
+msgstr ""
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "added:"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "who answered a note"
+msgid "{by} answered"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Objections answered"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Sign in to see what your village is weighing."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Give it a name and say why. Then add the changes, from here or from any setting with a Suggest button."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -296,8 +682,27 @@ msgctxt "sera changes"
 msgid "Read the list again"
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Keep this key"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Ask the village"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing here matches what is chosen above."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "({count} of at most {cap})"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "link back to the list"
+msgid "All change requests"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -311,13 +716,37 @@ msgctxt "valuation receipt"
 msgid "Paid as {paid}."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "Step {n} of 4: {words}. Review ends {ends}"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Withdrawn. The village keeps its key."
+msgstr ""
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Make a new key"
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Suggest an edit"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a switch setting"
+msgid "Off"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -329,6 +758,10 @@ msgstr ""
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Traducción automática"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
+msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -344,6 +777,11 @@ msgctxt "sera changes"
 msgid "Facts updated since yesterday: {nFacts}"
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Review it as one structure change"
@@ -355,8 +793,18 @@ msgctxt "language picker"
 msgid "Language: {current} ({code})"
 msgstr "Idioma: {current} ({code})"
 
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgid "That did not go through. Try again in a moment."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Turned down"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -368,13 +816,40 @@ msgstr ""
 msgid "Your saved numbers did not load."
 msgstr ""
 
+#. placeholder {0}: cr.review.consents
+#: client/src/pages/ChangeRequests.tsx
+msgid "{0, plural, one {# person can live with this version.} other {# people can live with this version.}}"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Skip to content"
 #~ msgstr "Ir al contenido"
 
+#: client/src/components/modules/SuggestDial.tsx
+msgid "The suggestion was refused."
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the proposal just made"
+msgid "See your proposal"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Set by the village"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A sync is already running. Try again in a minute."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "Share a concern"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Ready for the village to review?"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -382,6 +857,19 @@ msgstr ""
 msgctxt "language picker"
 msgid "Close"
 msgstr "Cerrar"
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "The village votes on this change by itself."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "start a change request"
+msgid "Start it"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -393,6 +881,11 @@ msgstr ""
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Cuenta de {firstName}"
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Ask for a new key"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Its {n} roles come with it, and leaving the circle out leaves them out too."
@@ -411,6 +904,20 @@ msgstr ""
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Replace the key"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Take this change out."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "pick a change to edit"
+msgid "Choose a change"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
@@ -421,8 +928,21 @@ msgctxt "sera changes"
 msgid "{agent} didn't answer at {lastAt}"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Time to review"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "A different value for one of the changes. The author may take it in."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy did not download"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -450,14 +970,37 @@ msgstr ""
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr ""
 
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Hide them"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Choose a sitting steward"
+msgstr ""
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
 msgid "Opening…"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "This deployment cannot open the key, so those pages answer 503. A restore under a different VILLAGE_SECRETS_KEY does this. If the old value is gone for good, make a new key here."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote did not open"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the list of changes"
+msgid "The changes"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -487,6 +1030,11 @@ msgstr ""
 msgid "Small changes apply by themselves: off"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Downloading..."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
@@ -497,9 +1045,19 @@ msgctxt "sera changes"
 msgid "Every circle"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Everything waiting"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "close a form without saving"
+msgid "Not now"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -517,6 +1075,11 @@ msgctxt "sera changes"
 msgid "Check first {nChecks}"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "open a change request for review"
+msgid "Open for review"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Circle"
@@ -526,9 +1089,43 @@ msgstr ""
 msgid "Nothing waits for you, and no draft is open."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the review feed"
+msgid "The review"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "One copy of the village's database"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading on the change requests page"
+msgid "In review across the village"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "remove one change"
+msgid "Remove"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the value a member suggests"
+msgid "Your value"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of a suggested edit's reason"
+msgid "Why (optional)"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "send one suggestion to a vote alone"
+msgid "Send it on its own"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -540,6 +1137,15 @@ msgctxt "review page"
 msgid "Review"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request checklist"
+msgid "Changes"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Move to its own change request"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
 msgstr ""
@@ -547,6 +1153,19 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Your figure"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Add to a new change request"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "add a suggestion to a change request"
+msgid "Add to {targetTitle}"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -583,9 +1202,18 @@ msgctxt "sera changes"
 msgid "{witness} finished Quest to witness"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Which changes"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Declined. The village keeps its key."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -596,6 +1224,21 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "The figure you set"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "heading of the checklist"
+msgid "Before the vote"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a setting whose value is hidden"
+msgid "Kept private"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Question"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -614,6 +1257,11 @@ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Arrived {at}, with {count} proposals."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a change was saved"
+msgid "Saved."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -645,14 +1293,33 @@ msgctxt "role pay"
 msgid "My own figure"
 msgstr ""
 
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "pick a change request to add to"
+msgid "Which change request"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
 msgid "Main Site"
 msgstr "Sitio principal"
 
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "a switch setting"
+msgid "On"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "The chart and {agent} are in step"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Anyone here can suggest a change. The village decides."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "who started a change request"
+msgid "Started by {author}"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -663,8 +1330,28 @@ msgstr ""
 msgid "See them at the bottom of this page."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a setting with no value"
+msgid "not set"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "open the change request just added to"
+msgid "Open it"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Nothing was declined"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Small changes applying by themselves: off."
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "the name of a change request"
+msgid "Name"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -691,9 +1378,27 @@ msgstr ""
 msgid "A draft from this queue is still open."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgid "That change request could not be started."
+msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Narrow range"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "heading over a module's settings"
+msgid "Its settings"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a suggested edit that changes a value"
+msgid "Change it to: {proposedTo}"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgid "Gather it with other changes and send them to one vote."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -731,11 +1436,31 @@ msgstr ""
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "label of a note box"
+msgid "Your words"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The village now signs with key {newKid}"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note outcome"
+msgid "Answered"
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "review response"
+msgid "I can live with this"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -746,6 +1471,21 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Use the suggestion, {0}"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "The village has launched, so another admin co-signs before the key is replaced."
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Decline"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "which step a change request is on"
+msgid "Step {n} of 4: {words}"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -777,13 +1517,47 @@ msgstr ""
 msgid "How this was worked out"
 msgstr ""
 
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Suggested edit"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgid "Something you want to understand before you decide."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign in or join"
 #~ msgstr "Iniciar sesión o unirse"
 
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "start a new change request"
+msgid "A new change request"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {n} small change for the chart"
+msgstr ""
+
+#: client/src/components/admin/SigningKeyCard.tsx
+msgctxt "signing key"
+msgid "Co-sign and replace"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "a page loading"
+msgid "Loading…"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "pick which change a note is about"
+msgid "Which change?"
+msgstr ""
+
+#: client/src/components/modules/SuggestDial.tsx
+msgctxt "default title of a suggestion"
+msgid "Change {label}"
 msgstr ""
 
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
@@ -804,4 +1578,14 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "{sera} {agent} change"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "change request note kind"
+msgid "Objection"
+msgstr ""
+
+#: client/src/pages/ChangeRequests.tsx
+msgctxt "edit one change"
+msgid "Edit"
 msgstr ""

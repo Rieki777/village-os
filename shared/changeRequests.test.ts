@@ -9,6 +9,7 @@ import {
   CHANGE_REQUEST_WHY_MAX,
   GATHERING_LIMIT_KEY,
   changeKeyOf,
+  changeLabel,
   changeRequestTextProblem,
   withChangeAdded,
   withChangeRemoved,
@@ -30,6 +31,15 @@ describe("changeKeyOf: the setting a change touches, in the keys the app already
     expect(changeKeyOf({ kind: "mode_switch", to: "token" })).toBe("governance.weight_mode");
     expect(changeKeyOf({ kind: "weight_allocation", userId: "u1", to: "3", note: "n" })).toBe("weight:u1");
     expect(changeKeyOf({ kind: "mint_rule_create", trigger: "quest", tokenSlug: "credits", amount: "5", ceiling: "0" })).toContain("quest:credits");
+  });
+});
+
+describe("changeLabel: the name a member reads", () => {
+  it("names dials, modules and brand fields in words, never as a raw key", () => {
+    expect(changeLabel("governance.vote_days")).toBe("How long a ballot stays open");
+    expect(changeLabel("brand:project.tagline")).toBe("Village words: tagline");
+    expect(changeLabel("brand:project.shortName")).toBe("Village words: short name");
+    expect(changeLabel("module:not-a-module")).toBe("module:not-a-module");
   });
 });
 

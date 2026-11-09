@@ -18,29 +18,72 @@ import type { Plugin } from "vite";
  * double-quoted message. A message that does not compile fails the build and
  * names its id, the same strictness the catalog build applies to translations.
  */
-/*
- * A JSX `<Trans>` with placeholders emits `values` (and, around an element,
- * `components`) BETWEEN the id and the message, so those keys may sit there.
- * Matching only an id directly before a message left every such message a
- * string, which the browser printed with its braces ("To decide {nDecide}").
- * The objects may nest three levels, enough for a component holding props.
+const ID = /\bid:\s*"[A-Za-z0-9_-]{6}",\s*/g;
+const MESSAGE = /^message:\s*("(?:[^"\\\n]|\\.)*")/;
+const VALUES = /^(?:values|components):\s*\{/;
+
+/**
+ * The end of a balanced `{ ... }` starting at `open` (the index of its `{`),
+ * skipping string literals, or -1 when it never closes. The macro emits
+ * `values` between `id` and `message` for a <Trans> or <Plural> with
+ * variables (`{id:"224D8v",values:{paidOn:o},message:"Paid {paidOn}"}`), and
+ * a value can be any expression, so a regex cannot step over it safely.
  */
-const DESCRIPTOR =
-  /(\bid:\s*"[A-Za-z0-9_-]{6}",(?:\s*(?:values|components):\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\},)*\s*message:\s*)("(?:[^"\\\n]|\\.)*")/g;
+function closeOf(code: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    const ch = code[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      for (i++; i < code.length && code[i] !== ch; i++) if (code[i] === "\\") i++;
+      continue;
+    }
+    if (ch === "{" || ch === "(" || ch === "[") depth++;
+    else if (ch === "}" || ch === ")" || ch === "]") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function compiledLiteral(literal: string, head: string): string {
+  const message = JSON.parse(literal) as string;
+  let compiled;
+  try {
+    compiled = compileMessageOrThrow(message);
+  } catch (err) {
+    const id = /"([A-Za-z0-9_-]{6})"/.exec(head)?.[1];
+    throw new Error(`Lingui message ${id} does not compile ("${message}"): ${(err as Error).message}`);
+  }
+  // A plain message compiles to itself; wrap it so the runtime sees "already compiled".
+  return JSON.stringify(typeof compiled === "string" ? [compiled] : compiled);
+}
 
 export function precompileMessages(code: string): string {
-  return code.replace(DESCRIPTOR, (_m, head: string, literal: string) => {
-    const message = JSON.parse(literal) as string;
-    let compiled;
-    try {
-      compiled = compileMessageOrThrow(message);
-    } catch (err) {
-      const id = /"([A-Za-z0-9_-]{6})"/.exec(head)?.[1];
-      throw new Error(`Lingui message ${id} does not compile ("${message}"): ${(err as Error).message}`);
+  let out = "";
+  let last = 0;
+  ID.lastIndex = 0;
+  for (let m = ID.exec(code); m; m = ID.exec(code)) {
+    const head = m[0];
+    let at = m.index + head.length;
+    // Step over `values: {...},` and `components: {...},` if the macro put them first.
+    for (let guard = 0; guard < 2; guard++) {
+      const v = VALUES.exec(code.slice(at));
+      if (!v) break;
+      const close = closeOf(code, at + v[0].length - 1);
+      if (close < 0) break;
+      const comma = /^\s*,\s*/.exec(code.slice(close + 1));
+      if (!comma) break;
+      at = close + 1 + comma[0].length;
     }
-    // A plain message compiles to itself; wrap it so the runtime sees "already compiled".
-    return `${head}${JSON.stringify(typeof compiled === "string" ? [compiled] : compiled)}`;
-  });
+    const msg = MESSAGE.exec(code.slice(at));
+    if (!msg) continue;
+    const literalStart = at + msg[0].length - msg[1].length;
+    out += code.slice(last, literalStart) + compiledLiteral(msg[1], head);
+    last = literalStart + msg[1].length;
+    ID.lastIndex = last;
+  }
+  return last === 0 ? code : out + code.slice(last);
 }
 
 export function precompileEnglish(): Plugin {
