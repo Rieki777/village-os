@@ -1487,7 +1487,7 @@ export const MODULES: ModuleDef[] = [
         id: "registry-keeper",
         kind: "hands",
         ref: "place.tend",
-        title: "Seat someone in a role that keeps the place registry, then import the village's places",
+        title: "Seat someone in a role that keeps the place registry, then load the village's places",
         scope: "village",
         phase: "before-enable",
         need: "recommended",

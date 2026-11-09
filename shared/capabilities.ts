@@ -344,7 +344,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
   "role.pay": "Set what a role is worth and pays, beside the valuation engine's suggestion",
   "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
-  "place.tend": "Keep the place registry: import it, confirm a place, set its readiness, and adopt a stage change",
+  "place.tend": "Keep the place registry: load it from the seed, confirm a place, set its readiness, and adopt a stage change",
   "place.permit": "Keep a place's permit checklist and its preserve and riparian answers",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",

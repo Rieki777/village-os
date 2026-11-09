@@ -119,11 +119,11 @@ export function register(app: Express, deps: Deps): void {
     if (!me) return res.status(401).json({ error: "auth_required" });
     if (!(await guardCapability(req, res, "place.tend"))) return;
     if (await overLimit(`place-import:${String(me.id)}`, IMPORTS_PER_HOUR, HOUR_MS)) {
-      return res.status(429).json({ error: "That is a lot of imports for one hour. Try again a little later." });
+      return res.status(429).json({ error: "That is a lot of seed loads for one hour. Try again a little later." });
     }
     const seed = req.body?.seed;
     if (JSON.stringify(seed ?? null).length > SEED_MAX_BYTES) {
-      return res.status(413).json({ error: "That seed is larger than an import reads." });
+      return res.status(413).json({ error: "That seed is larger than the registry reads." });
     }
     const pool = getPool();
     const scene = (await publishedScene(pool))?.scene ?? null;
@@ -135,7 +135,7 @@ export function register(app: Express, deps: Deps): void {
       roles: (await listOrgRoles(pool)).filter((r) => r.active && !r.isExample).map((r) => ({ id: r.id, name: r.name })),
       now: new Date(),
     });
-    if (!out.ok) return res.status(400).json({ error: "The seed was not imported.", problems: out.problems });
+    if (!out.ok) return res.status(400).json({ error: "The seed was not loaded.", problems: out.problems });
     res.status(201).json(out);
   });
 }

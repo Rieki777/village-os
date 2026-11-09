@@ -609,7 +609,7 @@ Every place on the land as a living invitation: what it is, which stage it has r
 | Variable keys it owns | `map.public_structure` |
 | API prefixes | `/api/place-registry` |
 | What a village plants | nothing beyond the platform's own layers |
-| What it needs from you | Seat someone in a role that keeps the place registry, then import the village's places (`hands`, `before-enable`, recommended) |
+| What it needs from you | Seat someone in a role that keeps the place registry, then load the village's places (`hands`, `before-enable`, recommended) |
 | Contract doc | [places.md](modules/places.md) |
 
 ### Governance

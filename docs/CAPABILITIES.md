@@ -260,7 +260,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `place.tend` | Keep the place registry: import it, confirm a place, set its readiness, and adopt a stage change | yes | yes | no | no rung | Living places |
+| `place.tend` | Keep the place registry: load it from the seed, confirm a place, set its readiness, and adopt a stage change | yes | yes | no | no rung | Living places |
 | `place.permit` | Keep a place's permit checklist and its preserve and riparian answers | yes | yes | no | no rung | Living places |
 
 ### `module`
@@ -830,7 +830,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "place.tend",
-      "label": "Keep the place registry: import it, confirm a place, set its readiness, and adopt a stage change",
+      "label": "Keep the place registry: load it from the seed, confirm a place, set its readiness, and adopt a stage change",
       "deniable": true,
       "transferable": false,
       "stageUnlock": null,
