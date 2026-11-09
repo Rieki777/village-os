@@ -35,7 +35,19 @@ function shortCode(tag: string): string {
 
 type Option = { value: string | null; label: string; tier?: LocaleTier; search: string };
 
-export function LanguagePicker({ villageDefault = null, className = "" }: { villageDefault?: string | null; className?: string }) {
+/**
+ * The trigger's look. `onDark` is the approved banner button (white on the
+ * teal header). `onLight` is the same button for the pages with no teal
+ * header (the 404, the consent page, change requests, Admin's night look),
+ * where white text would be invisible.
+ */
+export type PickerTone = "onDark" | "onLight";
+const TRIGGER_TONE: Record<PickerTone, string> = {
+  onDark: "bg-white/10 hover:bg-white/20 text-white",
+  onLight: "border border-stone-300 bg-white hover:bg-stone-100 text-stone-800",
+};
+
+export function LanguagePicker({ villageDefault = null, className = "", tone = "onDark" }: { villageDefault?: string | null; className?: string; tone?: PickerTone }) {
   const { t } = useLingui();
   const { locale, setLocale, supported } = useLocale();
   const [open, setOpen] = useState(false);
@@ -115,7 +127,7 @@ export function LanguagePicker({ villageDefault = null, className = "" }: { vill
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={t({ message: `Language: ${current} (${code})`, context: "language picker" })}
-        className="inline-flex items-center justify-center gap-1 min-w-11 min-h-11 px-1.5 rounded-[10px] bg-white/10 hover:bg-white/20 text-white text-xs font-semibold tracking-wide transition-colors"
+        className={`inline-flex items-center justify-center gap-1 min-w-11 min-h-11 px-1.5 rounded-[10px] ${TRIGGER_TONE[tone]} text-xs font-semibold tracking-wide transition-colors`}
       >
         <Globe className="w-5 h-5 max-[374px]:hidden" aria-hidden="true" />
         <span className="xl:hidden">{code}</span>
