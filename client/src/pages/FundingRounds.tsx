@@ -2,9 +2,11 @@
  * FUNDING ROUNDS, at /funding-rounds and /funding-rounds/:id.
  *
  * The village chooses together which quests the season funds, within a pot.
- * This page holds the seed stage today: members see the open round, share an
- * idea (named, or without a name by their own tick), and read the ideas
- * others have shared, each with its forum thread. The pot's holder (whoever
+ * Seed: members share an idea (named, or without a name by their own tick)
+ * and read the others, each with its forum thread. Grow: the author shapes
+ * their own into a quest. Choose: members tick every quest they would fund,
+ * privately. Harvest: the deciding count, the other count beside it, and any
+ * disagreement between them, with who chose what. The pot's holder (whoever
  * holds pot.steward, the Treasury role by default) opens a pot and a round
  * from the same page until the season board arrives.
  *
@@ -15,320 +17,23 @@
  * and every other language can translate it; values sit in variables first so
  * each placeholder has a name.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import ModuleGate, { SignInToSee } from "@/components/modules/ModuleGate";
-import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY } from "@/components/journal/ui";
+import { BTN_QUIET, BTN_SECONDARY } from "@/components/journal/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModules } from "@/modules/ModuleProvider";
 import { gameFetch } from "@/lib/gameApi";
-import { IDEA_LIMITS, ROUND_STAGES, type RoundStage } from "@shared/fundingRounds";
-
-interface Pot {
-  id: string;
-  name: string;
-  purpose: string | null;
-  unitKind: "currency" | "token";
-  unit: string;
-  balanceMinor: number;
-  freeMinor: number;
-}
-
-interface Round {
-  id: string;
-  potId: string;
-  title: string;
-  stage: RoundStage;
-  acceptsIdeas: boolean;
-  stageEndsAt: string | null;
-  ideasPerMember: number;
-  anonymousOffered: boolean;
-  ideaCount: number;
-}
-
-interface Idea {
-  id: string;
-  title: string;
-  what: string;
-  whoHelps: string | null;
-  roughCostMinor: number | null;
-  whoMight: string | null;
-  byline: { kind: "named" | "anonymous"; text: string };
-  mine: boolean;
-  threadId: string | null;
-}
-
-/**
- * The stage words, as a hook. The Lingui macro only transforms a `t` taken
- * from `useLingui()` in the same scope; a `t` passed in as an argument is left
- * as a plain call and renders nothing (found on this page, 2026-11-08).
- */
-function useStageText() {
-  const { t } = useLingui();
-  const word = (stage: RoundStage): string => {
-    const words: Record<RoundStage, string> = {
-      seed: t({ message: "Seed", context: "funding round stage" }),
-      grow: t({ message: "Grow", context: "funding round stage" }),
-      choose: t({ message: "Choose", context: "funding round stage" }),
-      harvest: t({ message: "Harvest", context: "funding round stage" }),
-      closed: t({ message: "Closed", context: "funding round stage" }),
-    };
-    return words[stage];
-  };
-  const line = (stage: RoundStage, endsAt: string | null): string => {
-    const day = endsAt ? new Date(endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : null;
-    const lines: Record<RoundStage, string> = {
-      seed: day ? t({ message: `Ideas welcome until ${day}`, context: "funding round stage" }) : t({ message: `Ideas welcome until the pot's holder sets the next stage`, context: "funding round stage" }),
-      grow: day ? t({ message: `Ideas are being shaped into quests until ${day}`, context: "funding round stage" }) : t({ message: `Ideas are being shaped into quests`, context: "funding round stage" }),
-      choose: day ? t({ message: `Choosing which quests to fund until ${day}`, context: "funding round stage" }) : t({ message: `Choosing which quests to fund`, context: "funding round stage" }),
-      harvest: t({ message: `The village has chosen`, context: "funding round stage" }),
-      closed: t({ message: `This round is closed`, context: "funding round stage" }),
-    };
-    return lines[stage];
-  };
-  return { word, line };
-}
-
-/** How many minor units one whole unit holds, for a currency; a token counts whole. */
-function minorDigits(unitKind: Pot["unitKind"], unit: string): number {
-  if (unitKind !== "currency") return 0;
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: unit }).resolvedOptions().maximumFractionDigits ?? 2;
-  } catch {
-    return 2;
-  }
-}
-
-function amount(minor: number, pot: Pick<Pot, "unitKind" | "unit">): string {
-  const digits = minorDigits(pot.unitKind, pot.unit);
-  if (pot.unitKind === "currency") {
-    try {
-      return new Intl.NumberFormat(undefined, { style: "currency", currency: pot.unit, maximumFractionDigits: 0 }).format(minor / 10 ** digits);
-    } catch {
-      /* falls through to the plain form */
-    }
-  }
-  return `${minor.toLocaleString()} ${pot.unit}`;
-}
-
-async function readJson(res: Response): Promise<any> {
-  try {
-    return await res.json();
-  } catch {
-    return {};
-  }
-}
-
-/** A server refusal a member can act on is a sentence; a code is not shown. */
-const sentenceOf = (body: any): string | null => (typeof body?.error === "string" && /\s/.test(body.error) ? body.error : null);
-
-const FIELD = "mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground";
-const LABEL = "block text-sm font-medium text-foreground";
-
-function StageRail({ stage }: { stage: RoundStage }) {
-  const { t } = useLingui();
-  const text = useStageText();
-  const shown = ROUND_STAGES.filter((s) => s !== "closed");
-  const at = shown.indexOf(stage as (typeof shown)[number]);
-  return (
-    <ol aria-label={t({ message: "Round stages", context: "funding rounds" })} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-      {shown.map((s, i) => (
-        <li key={s} className="flex items-center gap-2">
-          <span
-            aria-current={s === stage ? "step" : undefined}
-            className={
-              s === stage
-                ? "rounded-full bg-primary px-3 py-1 font-semibold text-primary-foreground"
-                : i < at
-                  ? "rounded-full bg-muted px-3 py-1 text-foreground"
-                  : "rounded-full border border-border px-3 py-1 text-muted-foreground"
-            }
-          >
-            {text.word(s)}
-          </span>
-          {i < shown.length - 1 && <span aria-hidden className="text-muted-foreground">·</span>}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function IdeaForm({ round, pot, onShared }: { round: Round; pot: Pot; onShared: () => void }) {
-  const { t } = useLingui();
-  const [title, setTitle] = useState("");
-  const [what, setWhat] = useState("");
-  const [whoHelps, setWhoHelps] = useState("");
-  const [cost, setCost] = useState("");
-  const [whoMight, setWhoMight] = useState("");
-  const [anonymous, setAnonymous] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const allowance = round.ideasPerMember;
-  const unit = pot.unit;
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setProblem(null);
-    const whole = cost.trim() === "" ? null : Number(cost.replace(/[\s,]/g, ""));
-    if (whole != null && (!Number.isFinite(whole) || whole < 0)) {
-      setProblem(t`The rough cost must be a number.`);
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await gameFetch(`/api/funding-rounds/rounds/${round.id}/ideas`, {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          what,
-          whoHelps,
-          whoMight,
-          roughCostMinor: whole == null ? null : Math.round(whole * 10 ** minorDigits(pot.unitKind, pot.unit)),
-          shownAs: anonymous ? "anonymous" : "named",
-          locale: typeof navigator !== "undefined" ? navigator.language : null,
-        }),
-      });
-      const body = await readJson(res);
-      if (!res.ok) {
-        setProblem(sentenceOf(body) ?? t`Your idea was not shared. Try again.`);
-        return;
-      }
-      setTitle("");
-      setWhat("");
-      setWhoHelps("");
-      setCost("");
-      setWhoMight("");
-      setAnonymous(false);
-      setDone(true);
-      onShared();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-5" aria-labelledby="share-idea">
-      <h2 id="share-idea" className="font-display text-xl font-semibold text-foreground">
-        <Trans context="funding rounds">Share an idea</Trans>
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        <Trans>A rough idea is enough. Each member may share {allowance} in this round.</Trans>
-      </p>
-      <label className={`${LABEL} mt-4`}>
-        <Trans context="funding rounds">A short name</Trans>
-        <input className={FIELD} value={title} maxLength={IDEA_LIMITS.title} onChange={(e) => setTitle(e.target.value)} required />
-      </label>
-      <label className={`${LABEL} mt-3`}>
-        <Trans>What would you do?</Trans>
-        <textarea className={FIELD} rows={4} value={what} maxLength={IDEA_LIMITS.what} onChange={(e) => setWhat(e.target.value)} required />
-      </label>
-      <label className={`${LABEL} mt-3`}>
-        <Trans context="funding rounds">Who would it help?</Trans>
-        <textarea className={FIELD} rows={2} value={whoHelps} maxLength={IDEA_LIMITS.whoHelps} onChange={(e) => setWhoHelps(e.target.value)} />
-      </label>
-      <label className={`${LABEL} mt-3`}>
-        <Trans>Roughly what would it cost, in {unit}?</Trans>
-        <input className={FIELD} inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} />
-      </label>
-      <label className={`${LABEL} mt-3`}>
-        <Trans context="funding rounds">Who might do it?</Trans>
-        <input className={FIELD} value={whoMight} maxLength={IDEA_LIMITS.whoMight} onChange={(e) => setWhoMight(e.target.value)} />
-      </label>
-      {round.anonymousOffered && (
-        <div className="mt-4 rounded-xl bg-muted/60 p-3">
-          <label className="flex items-start gap-2 text-sm text-foreground">
-            <input type="checkbox" className="mt-1" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
-            <span>
-              <Trans>
-                Share it without my name. It shows as "a member" everywhere, and its forum thread is posted for you. In a small
-                village people may still guess who wrote it.
-              </Trans>
-            </span>
-          </label>
-        </div>
-      )}
-      {problem && (
-        <p role="alert" className="mt-3 text-sm font-medium text-destructive">
-          {problem}
-        </p>
-      )}
-      {done && !problem && (
-        <p role="status" className="mt-3 text-sm text-foreground">
-          <Trans>Your idea is shared. Others can comment on it in its thread.</Trans>
-        </p>
-      )}
-      <button type="submit" className={`${BTN_PRIMARY} mt-4`} disabled={busy}>
-        {busy ? <Trans context="funding rounds">Sharing</Trans> : <Trans context="funding rounds">Share this idea</Trans>}
-      </button>
-    </form>
-  );
-}
-
-function IdeaCard({ idea, pot }: { idea: Idea; pot: Pot }) {
-  const author = idea.byline.text;
-  const cost = idea.roughCostMinor != null ? amount(idea.roughCostMinor, pot) : null;
-  return (
-    <li className="rounded-2xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-lg font-semibold text-foreground">{idea.title}</h3>
-        <span className="text-sm text-muted-foreground">
-          {idea.mine ? (
-            idea.byline.kind === "anonymous" ? (
-              <Trans>Yours, shared without your name</Trans>
-            ) : (
-              <Trans context="funding rounds">Yours</Trans>
-            )
-          ) : (
-            <Trans context="funding rounds">From {author}</Trans>
-          )}
-        </span>
-      </div>
-      <p className="mt-2 whitespace-pre-line text-sm text-foreground">{idea.what}</p>
-      {(idea.whoHelps || cost || idea.whoMight) && (
-        <dl className="mt-3 grid gap-1 text-sm">
-          {idea.whoHelps && (
-            <div>
-              <dt className="inline font-medium text-foreground">
-                <Trans context="funding rounds">Who it helps:</Trans>{" "}
-              </dt>
-              <dd className="inline text-foreground">{idea.whoHelps}</dd>
-            </div>
-          )}
-          {cost && (
-            <div>
-              <dt className="inline font-medium text-foreground">
-                <Trans context="funding rounds">Rough cost:</Trans>{" "}
-              </dt>
-              <dd className="inline text-foreground">{cost}</dd>
-            </div>
-          )}
-          {idea.whoMight && (
-            <div>
-              <dt className="inline font-medium text-foreground">
-                <Trans context="funding rounds">Who might do it:</Trans>{" "}
-              </dt>
-              <dd className="inline text-foreground">{idea.whoMight}</dd>
-            </div>
-          )}
-        </dl>
-      )}
-      {idea.threadId && (
-        <Link href={`/forum/${idea.threadId}`} className="mt-3 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline">
-          <Trans context="funding rounds">Talk about it</Trans>
-        </Link>
-      )}
-    </li>
-  );
-}
+import { FIELD, LABEL, readJson, sentenceOf, useStageText, type Detail, type Pot, type Round } from "@/components/fundingRounds/common";
+import { Ballot, IdeaCard, IdeaForm, Results, StageRail } from "@/components/fundingRounds/RoundParts";
 
 function RoundPage({ id }: { id: string }) {
   const { t } = useLingui();
   const stageText = useStageText();
-  const [data, setData] = useState<{ round: Round; pot: Pot; ideas: Idea[] } | null>(null);
+  const [data, setData] = useState<Detail | null>(null);
   const [missing, setMissing] = useState(false);
 
   const load = useCallback(async () => {
@@ -385,6 +90,8 @@ function RoundPage({ id }: { id: string }) {
       </section>
       <div className="container grid max-w-3xl gap-6 pb-16">
         {round.acceptsIdeas && <IdeaForm round={round} pot={pot} onShared={load} />}
+        {round.stage === "choose" && <Ballot detail={data} onChanged={load} />}
+        {(round.stage === "harvest" || round.stage === "closed") && <Results detail={data} />}
         <section aria-labelledby="ideas-heading">
           <h2 id="ideas-heading" className="font-display text-xl font-semibold text-foreground">
             <Plural value={count} one="# idea so far" other="# ideas so far" />
@@ -396,7 +103,7 @@ function RoundPage({ id }: { id: string }) {
           ) : (
             <ul className="mt-3 grid gap-3">
               {ideas.map((i) => (
-                <IdeaCard key={i.id} idea={i} pot={pot} />
+                <IdeaCard key={i.id} idea={i} pot={pot} stage={round.stage} onChanged={load} />
               ))}
             </ul>
           )}

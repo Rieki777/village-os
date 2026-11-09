@@ -22,6 +22,7 @@ import { useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
 import { capabilityLabel } from "@shared/capabilities";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 interface HoldingPayload {
   powers: Array<{ capability: string; title: string; consequence: string; heldBy: { roleName: string | null; roleId: string } | null }>;
@@ -82,7 +83,8 @@ export default function MemberAdminView({ userName, onSignOut }: { userName: str
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-teal-deep text-white">
-        <div className="mx-auto max-w-4xl px-4 py-6">
+        <div className="mx-auto flex max-w-4xl items-start justify-between gap-3 px-4 py-6">
+          <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm text-white">
             <Eye className="h-4 w-4" aria-hidden="true" />
             Reading the admin panel as {userName}
@@ -91,6 +93,9 @@ export default function MemberAdminView({ userName, onSignOut }: { userName: str
           <p className="mt-2 max-w-2xl text-sm text-white">
             Every member can read this. Changing any of it needs the power to change it, or a village vote.
           </p>
+          </div>
+          {/* The language selector (spec i18n US2): this view draws its own header. */}
+          <PageLanguageBar tone="onDark" className="shrink-0" />
         </div>
       </header>
 

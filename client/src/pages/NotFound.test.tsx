@@ -18,4 +18,9 @@ describe("NotFound landmarks", () => {
     expect(within(main).getByRole("button", { name: /back to the village/i })).toBeTruthy();
     expect(screen.getAllByRole("main")).toHaveLength(1);
   });
+
+  it("carries the language selector, because it renders without the shell (spec i18n US2)", () => {
+    render(<NotFound />);
+    expect(screen.getByRole("button", { name: /^Language: English \(EN\)/ })).toBeTruthy();
+  });
 });
