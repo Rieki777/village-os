@@ -6,6 +6,8 @@
  * on a page that draws its own filters, and lands in them. A page that adds a
  * filter bar puts `id={ADMIN_FILTERS_ID}` on it and its tab key here.
  */
+import { scrollBehavior } from "@/components/natural/scrollBehavior";
+
 export const ADMIN_FILTERS_ID = "admin-filters";
 
 const TABS_WITH_FILTERS: ReadonlySet<string> = new Set(["players"]);
@@ -18,7 +20,8 @@ export function tabHasFilters(tab: string): boolean {
 export function focusAdminFilters(doc: Document = document): boolean {
   const bar = doc.getElementById(ADMIN_FILTERS_ID);
   if (!bar) return false;
-  bar.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  // The shared helper, so a member who asked for less motion gets none.
+  bar.scrollIntoView?.({ block: "start", behavior: scrollBehavior() });
   const first = bar.querySelector<HTMLElement>("input, select, textarea, button");
   (first ?? bar).focus({ preventScroll: true });
   return true;
