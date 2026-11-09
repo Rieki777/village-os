@@ -237,6 +237,8 @@ describe.skipIf(!configured)("Edit this role", () => {
       const sera = await call("GET", `/api/org/role-edit/${id}/sera`, "holder-1");
       expect(sera.status).toBe(200);
       expect(sera.json).toHaveProperty("pay");
+      // The editor is told whether the reader holds terms.read, which the range needs; the route leaves the range out without it.
+      expect(typeof (await call("GET", `/api/org/role-edit/${id}`, "holder-1")).json.mayReadTerms).toBe("boolean");
       expect(await row(id)).toEqual(before);
       const [[drafts]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_draft_changes WHERE org_role_id = ? AND op = 'update_seat'", [id]);
       expect(drafts.n).toBe(0);

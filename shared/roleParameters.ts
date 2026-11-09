@@ -33,7 +33,8 @@ export const PARAMETER_KEYS = [
   "fundedFrom",
   "reviewAfterDays",
   "selectionCriteria",
-  "interviewerRoles",
+  "conversations",
+  "conversationMode",
   "accessBundle",
   "bookingUrl",
 ] as const;
@@ -51,13 +52,14 @@ export const PARAMETER_COLUMNS: Record<ParameterKey, string> = {
   fundedFrom: "funded_from",
   reviewAfterDays: "review_after_days",
   selectionCriteria: "selection_criteria",
-  interviewerRoles: "interviewer_roles",
+  conversations: "conversations",
+  conversationMode: "conversation_mode",
   accessBundle: "access_bundle",
   bookingUrl: "booking_url",
 };
 
 /** Keys whose column is stored as JSON text. */
-export const JSON_PARAMETERS: ReadonlySet<ParameterKey> = new Set<ParameterKey>(["languages", "villageGoals", "selectionCriteria", "interviewerRoles", "accessBundle"]);
+export const JSON_PARAMETERS: ReadonlySet<ParameterKey> = new Set<ParameterKey>(["languages", "villageGoals", "selectionCriteria", "conversations", "accessBundle"]);
 
 export const TRACKS = ["contractor", "volunteer", "employee", "ai"] as const;
 export type Track = (typeof TRACKS)[number];
@@ -67,6 +69,9 @@ export const TRACK_WORDS: Record<Track, string> = {
   employee: "Local employee",
   ai: "AI",
 };
+
+export const CONVERSATION_MODES = ["block", "separate"] as const;
+export type ConversationMode = (typeof CONVERSATION_MODES)[number];
 
 export const WHERE_WORKED = ["land", "remote", "both"] as const;
 export type WhereWorked = (typeof WHERE_WORKED)[number];
@@ -108,7 +113,8 @@ export type ParameterValues = {
   fundedFrom?: string | null;
   reviewAfterDays?: number | null;
   selectionCriteria?: string[];
-  interviewerRoles?: Interviewer[];
+  conversations?: Interviewer[];
+  conversationMode?: ConversationMode | null;
   accessBundle?: string[];
   bookingUrl?: string | null;
 };
@@ -248,7 +254,12 @@ export function readParameter(key: ParameterKey, raw: unknown, isRole: (id: stri
       }
       return ok(t);
     }
-    case "interviewerRoles":
+    case "conversationMode": {
+      if (raw === null || raw === undefined || raw === "") return ok(null);
+      const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+      return (CONVERSATION_MODES as readonly string[]).includes(v) ? ok(v as ConversationMode) : no("Conversations are held as a block or separately.");
+    }
+    case "conversations":
       return readInterviewers(raw, isRole);
   }
 }
@@ -321,7 +332,8 @@ export const PARAMETER_CARD_FIELDS: readonly ParameterCardSpec[] = [
   { key: "fundedFrom", heading: "Funded from", list: false, oneLine: true, aliases: [], limit: "A date, like 2027-01-15." },
   { key: "reviewAfterDays", heading: "Review after (days)", list: false, oneLine: true, aliases: ["review after"], limit: "Whole days, like 90." },
   { key: "selectionCriteria", heading: "Selection criteria", list: true, oneLine: false, aliases: [], limit: `${LIMITS_PARAMETERS.criteriaMin} to ${LIMITS_PARAMETERS.criteriaMax} lines.` },
-  { key: "interviewerRoles", heading: "Interviewers", list: true, oneLine: false, aliases: ["interview order"], limit: `In order, one per line: Role title | minutes | final approval (optional). Up to ${LIMITS_PARAMETERS.interviewersMax}.` },
+  { key: "conversations", heading: "Interviewers", list: true, oneLine: false, aliases: ["interview order"], limit: `In order, one per line: Role title | minutes | final approval (optional). Up to ${LIMITS_PARAMETERS.interviewersMax}.` },
+  { key: "conversationMode", heading: "Conversations held", list: false, oneLine: true, aliases: ["conversation mode"], limit: "Block (one sitting, back to back) or separate (one at a time, on different days)." },
   { key: "accessBundle", heading: "Access bundle", list: true, oneLine: false, aliases: [], limit: `Up to ${LIMITS_PARAMETERS.bundleItems} lines: the tools and places the role is given.` },
   { key: "bookingUrl", heading: "Booking link", list: false, oneLine: true, aliases: [], limit: "A web address that starts with https://." },
   { key: "pay", heading: "Pay on offer", list: true, oneLine: false, aliases: ["pay"], limit: "One line, like Range 1000 to 1500 USD per month, or Fixed 1200 USD per month, Honorary, In kind, Deferred, None. A Note: line may follow." },

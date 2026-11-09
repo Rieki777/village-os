@@ -27,7 +27,7 @@ const STATE = {
   archetypes: [],
 };
 
-function server(door: "power" | "admin" | null, calls: Array<{ url: string; method: string; body: any }> = []) {
+function server(door: "power" | "admin" | null, calls: Array<{ url: string; method: string; body: any }> = [], mayReadTerms = true) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -38,7 +38,7 @@ function server(door: "power" | "admin" | null, calls: Array<{ url: string; meth
       if (url.endsWith("/api/archetypes")) return json([]);
       if (url.endsWith("/sera")) return json({ differences: [], pay: { kind: "range", currency: "USD", minMinor: 100000, maxMinor: 100000, per: "month" }, payFrom: null, readAt: null });
       if (method === "POST") return json({ success: true, changed: ["Purpose"], state: { ...STATE, words: { ...STATE.words, aim: "New aim" } } });
-      return json({ state: STATE, door: "power", lacksToList: [], roles: [] });
+      return json({ state: STATE, door: "power", lacksToList: [], roles: [], mayReadTerms });
     }),
   );
 }
@@ -80,6 +80,14 @@ describe("Edit this role", () => {
     const save = calls.find((c) => c.method === "POST" && c.url.endsWith("/r1"))!;
     expect(save.body.words.aim).toBe("New aim");
     expect(save.body.parameters).toEqual({ recruiting: false });
+  });
+
+  it("hides 'Use Sera's range' from a reader without terms.read", async () => {
+    server("power", [], false);
+    render(<EditRoleButton roleId="r1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit this role" }));
+    await screen.findByLabelText("Purpose");
+    expect(screen.queryByRole("button", { name: "Use Sera's range" })).toBeNull();
   });
 
   it("'Use Sera's range' fills the form and sends no save", async () => {

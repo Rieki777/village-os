@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ROLE_CARD_FIELDS } from "@shared/roleCardText";
-import { interviewMinutesTotal, TRACKS, TRACK_WORDS, WHERE_WORKED, type Interviewer } from "@shared/roleParameters";
+import { CONVERSATION_MODES, interviewMinutesTotal, TRACKS, TRACK_WORDS, WHERE_WORKED, type Interviewer } from "@shared/roleParameters";
 import { PAY_KINDS, type PaySettings } from "@shared/seatSettings";
 import type { WordValue } from "@shared/roleProposals";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "@/components/roleProposal/parts";
@@ -50,6 +50,7 @@ interface Form {
   accessBundle: string;
   bookingUrl: string;
   interviewers: Interviewer[];
+  conversationMode: string;
   pay: PaySettings | null;
   tags: string[];
 }
@@ -70,7 +71,8 @@ function formOf(s: EditorState): Form {
     selectionCriteria: (p.selectionCriteria ?? []).join("\n"),
     accessBundle: (p.accessBundle ?? []).join("\n"),
     bookingUrl: p.bookingUrl ?? "",
-    interviewers: (p.interviewerRoles ?? []).map((x) => ({ ...x })),
+    interviewers: (p.conversations ?? []).map((x) => ({ ...x })),
+    conversationMode: p.conversationMode ?? "",
     pay: s.pay,
     tags: [...s.archetypes],
   };
@@ -91,7 +93,8 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   if (has("selectionCriteria")) parameters.selectionCriteria = lines(f.selectionCriteria);
   if (has("accessBundle")) parameters.accessBundle = lines(f.accessBundle);
   if (has("bookingUrl")) parameters.bookingUrl = f.bookingUrl.trim() || null;
-  if (has("interviewerRoles")) parameters.interviewerRoles = f.interviewers;
+  if (has("conversations")) parameters.conversations = f.interviewers;
+  if (has("conversationMode")) parameters.conversationMode = f.conversationMode || null;
   return { words: f.words, parameters, pay: f.pay, archetypes: f.tags };
 }
 
@@ -269,7 +272,7 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
           )}
         </section>
 
-        {(has("track") || has("selectionCriteria") || has("interviewerRoles")) && (
+        {(has("track") || has("selectionCriteria") || has("conversations")) && (
           <section className={`${PANEL} space-y-3`} aria-labelledby="re-params">
             <h3 id="re-params" className="font-display text-lg"><Trans context="role editor">Details on the card</Trans></h3>
             {has("track") && (
@@ -310,10 +313,20 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
           </section>
         )}
 
-        {has("interviewerRoles") && (
+        {has("conversations") && (
           <section className={`${PANEL} space-y-3`} aria-labelledby="re-interview">
             <h3 id="re-interview" className="font-display text-lg"><Trans context="role editor">Interviewers, in order</Trans></h3>
             <p className={LEDE}><Trans context="role editor">One role can give the final approval. The interviews take {minutes} minutes in all.</Trans></p>
+            {has("conversationMode") && (
+              <Frame label={t({ message: "How the conversations are held", context: "role editor" })} changed={form.conversationMode !== start.conversationMode}>
+                <select className={INPUT} value={form.conversationMode} onChange={(e) => set("conversationMode", e.target.value)} aria-label={t({ message: "How the conversations are held", context: "role editor" })}>
+                  <option value="">{"-"}</option>
+                  {CONVERSATION_MODES.map((k) => (
+                    <option key={k} value={k}>{k === "block" ? t({ message: "As a block, one sitting", context: "role editor" }) : t({ message: "Separately, one at a time", context: "role editor" })}</option>
+                  ))}
+                </select>
+              </Frame>
+            )}
             <Frame label={t({ message: "Who interviews", context: "role editor" })} changed={!same(form.interviewers, start.interviewers)}>
               <ol className="space-y-2">
                 {form.interviewers.map((x, i) => (
@@ -368,7 +381,7 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
               </select>
               <input className={`${INPUT} sm:col-span-2`} value={pay?.note ?? ""} aria-label={t({ message: "Note", context: "role editor" })} placeholder={t({ message: "Funding-dependent, if so", context: "role editor" })} onChange={(e) => setPay({ note: e.target.value || undefined })} />
             </div>
-            <UseSeraRange roleId={roleId} onPropose={proposePay} />
+            {open.mayReadTerms && <UseSeraRange roleId={roleId} onPropose={proposePay} />}
           </Frame>
         </section>
 

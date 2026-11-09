@@ -63,6 +63,8 @@ type Gate = {
   liveHoldersOf(capability: string): Promise<string[]>;
   publishDeps: PublishDeps;
   circleName(id: string): string | null;
+  /** Whether this person holds `terms.read`: Sera's pay range is the same class of fact as the terms. */
+  canReadTerms(req: any): Promise<boolean>;
   villageName?(): string | null;
 };
 
@@ -212,6 +214,7 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
       state,
       door: me.door,
       lacksToList: listingProblems(state),
+      mayReadTerms: await g.canReadTerms(req),
       roles: found.roles.filter((r) => !r.isExample && r.id !== found.role.id).map((r) => ({ id: r.id, name: r.name })),
       words: PARAMETER_CARD_FIELDS.map((f) => ({ key: f.key, heading: f.heading, limit: f.limit })),
     });
@@ -290,7 +293,10 @@ export function registerRoleEditRoutes(app: Express, g: Gate): void {
     const found = await roleOf(res, String(req.params.id ?? ""));
     if (!found) return;
     try {
-      res.set("Cache-Control", "no-store").json(await suggestionFor(g.getPool(), found.role.id));
+      const s = await suggestionFor(g.getPool(), found.role.id);
+      // The range is a term-class fact: without `terms.read` the differences stay and the pay is left out.
+      const terms = await g.canReadTerms(req);
+      res.set("Cache-Control", "no-store").json(terms ? s : { ...s, pay: null, payFrom: null });
     } catch {
       res.status(500).json({ error: "Could not read Sera's version." });
     }
@@ -374,7 +380,7 @@ function parameterLines(state: EditorState, roles: readonly OrgRole[]): Record<s
   if (p.fundedFrom) put("fundedFrom", [p.fundedFrom]);
   if (p.reviewAfterDays) put("reviewAfterDays", [String(p.reviewAfterDays)]);
   put("selectionCriteria", p.selectionCriteria ?? []);
-  put("interviewerRoles", interviewerToLines((p.interviewerRoles ?? []) as Interviewer[], titleOf));
+  put("conversations", interviewerToLines((p.conversations ?? []) as Interviewer[], titleOf));
   put("accessBundle", p.accessBundle ?? []);
   if (p.bookingUrl) put("bookingUrl", [p.bookingUrl]);
   put("pay", payToLines(state.pay));
@@ -411,7 +417,7 @@ async function parametersFromSection(lines: Record<string, string[]>, roles: rea
       continue;
     }
     let raw: unknown = spec.list ? given : given[0];
-    if (spec.key === "interviewerRoles") {
+    if (spec.key === "conversations") {
       const list: Interviewer[] = [];
       for (const line of given) {
         const it = interviewerFromLine(line);

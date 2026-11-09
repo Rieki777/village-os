@@ -33,6 +33,7 @@ function formPatch(key: string, after: unknown): Record<string, unknown> {
     case "recruiting":
       return { [key]: after === true };
     case "track":
+    case "conversationMode":
     case "whereWorked":
     case "budgetLine":
     case "fundedFrom":
@@ -45,7 +46,7 @@ function formPatch(key: string, after: unknown): Record<string, unknown> {
     case "selectionCriteria":
     case "accessBundle":
       return { [key]: list(after) };
-    case "interviewerRoles":
+    case "conversations":
       return { interviewers: Array.isArray(after) ? after : [] };
     default:
       return {};

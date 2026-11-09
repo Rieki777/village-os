@@ -69,6 +69,7 @@ import {
 import type { Pool } from "mysql2/promise";
 import { deadlineInVillage } from "../lib/villageReaders"; // R134: a deadline in the village's own zone
 import { registerRoleEditRoutes } from "./roleEdit";
+import { capabilityDecision } from "../../shared/capabilities";
 
 type Deps = Pick<
   AppDeps,
@@ -144,6 +145,10 @@ export function register(app: Express, deps: Deps): void {
     overLimit,
     liveHoldersOf,
     publishDeps,
+    canReadTerms: async (req) => {
+      const user = await authedUser(req);
+      return !!user && capabilityDecision("terms.read", await capabilityCtx(user)).allowed;
+    },
     circleName: (id) => {
       const row = (circlesRepo.all() as Array<Record<string, unknown>>).find((c) => String(c.id) === id);
       return row && typeof row.name === "string" ? row.name : null;

@@ -132,7 +132,7 @@ describe("the card text carries the parameters", () => {
           parameters: {
             track: ["contractor"],
             selectionCriteria: ["Reads closely", "Keeps promises", "Listens"],
-            interviewerRoles: ["Circle Lead | 20 minutes | final approval"],
+            conversations: ["Circle Lead | 20 minutes | final approval"],
             pay: ["Range 1000 to 1500 USD per month", "Note: Funding-dependent"],
           },
         },
@@ -145,7 +145,7 @@ describe("the card text carries the parameters", () => {
     expect(read.sections[0].parameters).toEqual({
       track: ["contractor"],
       selectionCriteria: ["Reads closely", "Keeps promises", "Listens"],
-      interviewerRoles: ["Circle Lead | 20 minutes | final approval"],
+      conversations: ["Circle Lead | 20 minutes | final approval"],
       pay: ["Range 1000 to 1500 USD per month", "Note: Funding-dependent"],
     });
     // The words still read as they did.

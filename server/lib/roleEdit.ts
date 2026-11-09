@@ -112,7 +112,7 @@ async function storedParameters(pool: Pool, roleId: string, live: readonly Param
     const v = row[PARAMETER_COLUMNS[k]];
     if (k === "listed") out[k] = v === null || v === undefined ? true : Number(v) === 1;
     else if (k === "languages" || k === "villageGoals" || k === "selectionCriteria" || k === "accessBundle") out[k] = asList(v).map(String);
-    else if (k === "interviewerRoles") out[k] = asList(v);
+    else if (k === "conversations") out[k] = asList(v);
     else if (k === "fundedFrom") out[k] = v ? (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10) : null;
     else out[k] = v ?? null;
   }
@@ -164,7 +164,7 @@ export function listingProblems(state: Pick<EditorState, "words" | "parameters" 
   if (!p.track) missing.push("Track");
   if (!(p.villageGoals && p.villageGoals.length)) missing.push("Village goals this role serves");
   if (!(p.selectionCriteria && p.selectionCriteria.length >= 3)) missing.push("Selection criteria");
-  if (!(p.interviewerRoles && p.interviewerRoles.length)) missing.push("Interviewers");
+  if (!(p.conversations && p.conversations.length)) missing.push("Interviewers");
   if (p.track === "contractor" && !(state.pay && (state.pay.kind === "fixed" || state.pay.kind === "range"))) missing.push("Pay on offer");
   return missing;
 }

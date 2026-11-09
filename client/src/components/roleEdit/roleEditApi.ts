@@ -52,6 +52,8 @@ export interface EditorOpen {
   state: EditorState;
   door: "power" | "admin";
   lacksToList: string[];
+  /** Whether the reader may read terms, which "Use Sera's range" needs. */
+  mayReadTerms: boolean;
   roles: Array<{ id: string; name: string }>;
 }
 
