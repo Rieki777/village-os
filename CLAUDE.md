@@ -557,7 +557,11 @@ pages — a fork REPLACES those wholesale, so its own name is not debt there; th
 script, and the line is drawn at product: anything a signed-in member coordinates through stays
 ratcheted), and HARD-CLEAN — everything else, where any brand hit fails. A genuine false
 positive takes an inline `brand-ok: <reason>` ON THE LINE ITSELF; a waiver on the line above
-does nothing. New code is born clean, everywhere.
+does nothing. New code is born clean, everywhere. The PUBLISHER's own name, in any spelling
+("ReGen Civics", "regen-civics", "ReGenCivics"), is allowed only in the files its `ATTRIBUTION`
+list names, up to the count each entry gives (the coordinator, 2026-11-08, R063): it names the
+publisher there (the profile import and its file format, the hub, the hosting path) and is residue
+anywhere a village's own name belongs.
 
 The comment stripping lives in `scripts/brand-strip.mjs` and is tested by
 `node scripts/check-brand-refs.test.mjs` — it was wrong twice, and both times the guard reported
