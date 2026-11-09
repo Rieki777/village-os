@@ -18,7 +18,15 @@ import type { Plugin } from "vite";
  * double-quoted message. A message that does not compile fails the build and
  * names its id, the same strictness the catalog build applies to translations.
  */
-const DESCRIPTOR = /(\bid:\s*"[A-Za-z0-9_-]{6}",\s*message:\s*)("(?:[^"\\\n]|\\.)*")/g;
+/*
+ * A JSX `<Trans>` with placeholders emits `values` (and, around an element,
+ * `components`) BETWEEN the id and the message, so those keys may sit there.
+ * Matching only an id directly before a message left every such message a
+ * string, which the browser printed with its braces ("To decide {nDecide}").
+ * The objects may nest three levels, enough for a component holding props.
+ */
+const DESCRIPTOR =
+  /(\bid:\s*"[A-Za-z0-9_-]{6}",(?:\s*(?:values|components):\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\},)*\s*message:\s*)("(?:[^"\\\n]|\\.)*")/g;
 
 export function precompileMessages(code: string): string {
   return code.replace(DESCRIPTOR, (_m, head: string, literal: string) => {
