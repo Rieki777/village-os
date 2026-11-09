@@ -82,7 +82,7 @@ export default function LetterDraftsPanel({ password }: { password: string }) {
       if (!r.ok) {
         toast.error(refusal(await r.json().catch(() => ({})), t`That could not be sent`));
       } else {
-        toast.success(t`Sent`);
+        toast.success(t({ message: `Sent`, context: "drafted letters" }));
       }
       await load();
     } finally {
@@ -100,9 +100,9 @@ export default function LetterDraftsPanel({ password }: { password: string }) {
   if (!letters) return null;
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-white p-4" aria-label={t`Drafted letters`}>
+    <div className="space-y-3 rounded-xl border border-border bg-white p-4" aria-label={t({ message: `Drafted letters`, context: "drafted letters" })}>
       <p className="text-sm font-semibold text-foreground">
-        <Trans>Drafted letters</Trans>
+        <Trans context="drafted letters">Drafted letters</Trans>
       </p>
       <p className="text-sm text-muted-foreground">
         <Trans>An agent drafted these and sent nothing. Read each one, change what you like, and send it or discard it.</Trans>
@@ -118,7 +118,7 @@ export default function LetterDraftsPanel({ password }: { password: string }) {
         return (
           <div key={l.id} className="space-y-2 border-t border-border pt-3" data-testid={`letter-${l.id}`}>
             <p className="text-xs text-muted-foreground">
-              {l.kind === "first_reply" ? <Trans>First reply</Trans> : <Trans>Decision letter</Trans>}
+              {l.kind === "first_reply" ? <Trans context="drafted letters">First reply</Trans> : <Trans context="drafted letters">Decision letter</Trans>}
               {" · "}
               {l.to ? l.to.email : <Trans>No address on this application</Trans>}
             </p>
@@ -128,22 +128,22 @@ export default function LetterDraftsPanel({ password }: { password: string }) {
               </p>
             )}
             <label className="block text-sm text-foreground">
-              <Trans>Subject</Trans>
+              <Trans context="drafted letters">Subject</Trans>
               <input className={field} value={e.subject} maxLength={160} onChange={(x) => setEdits((all) => ({ ...all, [l.id]: { ...e, subject: x.target.value } }))} />
             </label>
             <label className="block text-sm text-foreground">
-              <Trans>Letter</Trans>
+              <Trans context="drafted letters">Letter</Trans>
               <textarea className={field} rows={9} value={e.body} maxLength={6000} onChange={(x) => setEdits((all) => ({ ...all, [l.id]: { ...e, body: x.target.value } }))} />
             </label>
             <div className="flex flex-wrap gap-2">
               <button type="button" className={primary} disabled={busy === l.id || cannotSend} onClick={() => void act(l, "send")}>
-                <Trans>Send</Trans>
+                <Trans context="drafted letters">Send</Trans>
               </button>
               <button type="button" className={button} disabled={busy === l.id} onClick={() => void act(l, "save")}>
-                <Trans>Save changes</Trans>
+                <Trans context="drafted letters">Save changes</Trans>
               </button>
               <button type="button" className={button} disabled={busy === l.id} onClick={() => void act(l, "discard")}>
-                <Trans>Discard</Trans>
+                <Trans context="drafted letters">Discard</Trans>
               </button>
             </div>
           </div>

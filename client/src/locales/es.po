@@ -173,6 +173,10 @@ msgctxt "pricing desk"
 msgid "None yet"
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "No address on this application"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Reason"
@@ -350,6 +354,10 @@ msgstr ""
 msgid "Your numbers, from every source"
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "This address is on the suppression list, so nothing can be sent. Discard the letter, or reach the applicant another way."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "{agent} answered at {askedAt}."
@@ -385,6 +393,10 @@ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Draft with words only"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "No letters are waiting."
 msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
@@ -2400,6 +2412,10 @@ msgctxt "sera answers"
 msgid "{n} go into a draft. They go live when the draft is published."
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "That could not be sent"
+msgstr ""
+
 #: client/src/components/valuation/QuestEnginePrice.tsx
 msgctxt "quest editor"
 msgid "As much as"
@@ -2499,6 +2515,10 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "vendor support link"
 msgid "Support"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "An agent drafted these and sent nothing. Read each one, change what you like, and send it or discard it."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -2697,6 +2717,11 @@ msgstr ""
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Letter"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
@@ -3293,6 +3318,11 @@ msgctxt "funding round stage"
 msgid "Choosing which quests to fund until {day}"
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Discard"
+msgstr ""
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "You can also bring it to somebody outside the village"
 msgstr ""
@@ -3453,6 +3483,10 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasFrameSay.tsx
 msgid "The governing purpose statement"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "That could not be discarded"
 msgstr ""
 
 #: client/src/components/valuation/QuestEnginePrice.tsx
@@ -4196,6 +4230,11 @@ msgctxt "button that adds a conflict step"
 msgid "Add a step"
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Save changes"
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "(including 1 role inside a new circle)"
@@ -4381,6 +4420,10 @@ msgctxt "sera answers"
 msgid "The village is voting on it now."
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "The drafted letters could not be read. Reload to try again."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the list of changes"
 msgid "The changes"
@@ -4412,6 +4455,11 @@ msgstr ""
 
 #: client/src/components/journey/TestRun.tsx
 msgid "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Send"
 msgstr ""
 
 #: client/src/components/admin/ClosingPolicyEditor.tsx
@@ -4501,6 +4549,11 @@ msgstr ""
 #: client/src/components/companion/CompanionPanel.tsx
 msgctxt "decline the model consent line"
 msgid "Not now"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Sent"
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
@@ -4694,6 +4747,7 @@ msgid "it comes with its circle"
 msgstr ""
 
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
+#: client/src/components/admin/LetterDraftsPanel.tsx
 #: client/src/components/review/AgentProposalsCard.tsx
 msgid "That could not be saved"
 msgstr ""
@@ -5509,6 +5563,10 @@ msgstr ""
 msgid "Arrived {at}, with 1 proposal."
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgid "Saved. Nothing was sent."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "See them at the bottom of this page."
 msgstr ""
@@ -5596,6 +5654,11 @@ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "It leaves the village's notebook too."
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Subject"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -5884,6 +5947,11 @@ msgstr ""
 msgid "Where the Anchor decided this (the thread, the meeting or the date)"
 msgstr ""
 
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Drafted letters"
+msgstr ""
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgctxt "button that saves a canvas block's public line"
 msgid "Save the line"
@@ -5936,6 +6004,11 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "In the village's own words"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "First reply"
 msgstr ""
 
 #: client/src/components/governance/VillageConflictSteps.tsx
@@ -6118,6 +6191,11 @@ msgstr ""
 #: client/src/components/review/SeraMember.tsx
 msgctxt "sera answers"
 msgid "Put it to the village"
+msgstr ""
+
+#: client/src/components/admin/LetterDraftsPanel.tsx
+msgctxt "drafted letters"
+msgid "Decision letter"
 msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
