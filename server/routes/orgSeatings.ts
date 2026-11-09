@@ -32,11 +32,12 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { endSeating, forgetDocumentedHolder } from "../lib/orgChart";
+import { raiseRevokeTasks } from "../lib/roleAccess";
 
-type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "guardCapability" | "adminActor" | "getPool">;
+type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "guardCapability" | "adminActor" | "getPool" | "notify" | "notifyAdmins">;
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, authedUser, guardCapability, adminActor, getPool } = deps;
+  const { isAdmin, authedUser, guardCapability, adminActor, getPool, notify, notifyAdmins } = deps;
 
   app.delete("/api/admin/org/seatings/:id", async (req, res) => {
     if (!(await guardCapability(req, res, "org.seat"))) return;

@@ -59,6 +59,7 @@ import { ensureApplicationText, recordVillageAlignment, settleText } from "./ali
 import { civilDateKey } from "../../shared/lunar";
 import { APPLICATION_BALLOT_ACTOR } from "../../shared/seatApplications";
 import { applyProposalChanges } from "./roleProposals";
+import { raiseGrantTasks } from "./roleAccess";
 import { revertDraft } from "./orgDrafts";
 import { proposalsForApplications } from "../repos/roleProposals";
 import {
@@ -313,6 +314,8 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
       // The same type and key grammar every seating door uses, keyed on this seating.
       const title = s.renewed ? `Your role as ${name} was renewed on your new terms` : `You were seated as ${name}`;
       await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
+      // The role has started: one grant task per item on its card (L8). Best effort; the seating stands.
+      await raiseGrantTasks(pool, s.assignmentId, { notify: deps.notify, notifyAdmins: deps.notifyAdmins }).catch(() => 0);
     }
   }
   if (outcome.kind === "held-full") {

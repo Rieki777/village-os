@@ -141,7 +141,7 @@ import type { Criticality } from "../../shared/governanceEngine";
 import { HANDOVER_SET, type Capability } from "../../shared/capabilities";
 import { kindOfSet, kindOfSubject, type GovernanceKind } from "../../shared/governanceKinds";
 import { cycleBoundsFor, cycleStartMs } from "../../shared/lunar";
-import { clockFor, termWarningOpensAt, type CycleClock } from "../../shared/cycleClock";
+import { clockFor, termWarningOpensAt, termWarningOpensFor, type CycleClock } from "../../shared/cycleClock";
 import { SEASON_PLAN_MINE } from "../../shared/seasonPlanLinks";
 import { adoptedUnseatedSeats } from "../repos/seatRenewals";
 import {
@@ -2111,8 +2111,8 @@ export function villageClock(): CycleClock {
 export { termWarningOpensAt };
 
 /** True once the warning for a term ending at `termEndsAt` is due. */
-export function termWarningDue(termEndsAt: Date, now: Date, clock: CycleClock): boolean {
-  return now.getTime() >= termWarningOpensAt(termEndsAt, clock).getTime();
+export function termWarningDue(termEndsAt: Date, now: Date, clock: CycleClock, termStartsAt?: Date | null): boolean {
+  return now.getTime() >= termWarningOpensFor(termStartsAt, termEndsAt, clock).getTime();
 }
 
 /**
@@ -2190,7 +2190,7 @@ export interface TermWatchDeps {
    * its `termEndsAt` says the one-cycle warning is due; with no date there is
    * nothing to count down to, so it is not told.
    */
-  seatings: Array<{ id: string; orgRoleId?: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean; termEndsAt?: Date | string | null }>;
+  seatings: Array<{ id: string; orgRoleId?: string; holderKind: string; userId: string | null; roleName: string; daysLeft: number | null; lapsed?: boolean; termEndsAt?: Date | string | null; startedAt?: Date | string | null }>;
   /** The village clock. Defaults to the live `cycle.mode`; tests hand one in. */
   clock?: CycleClock;
   /**
@@ -2267,10 +2267,12 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
 
   // One cycle ahead, on the village's own clock (`termWarningOpensAt`).
   const clock = deps.clock ?? villageClock();
-  const due = (ends: Date | string | null | undefined): boolean => {
+  const due = (ends: Date | string | null | undefined, starts?: Date | string | null): boolean => {
     if (!ends) return false;
     const at = ends instanceof Date ? ends : new Date(String(ends));
-    return !Number.isNaN(at.getTime()) && termWarningDue(at, now, clock);
+    // A term shorter than two cycles warns in its last week (G11); the start is what says so.
+    const from = starts ? (starts instanceof Date ? starts : new Date(String(starts))) : null;
+    return !Number.isNaN(at.getTime()) && termWarningDue(at, now, clock, from);
   };
 
   /*
@@ -2293,18 +2295,26 @@ export async function runTermWatch(deps: TermWatchDeps): Promise<TermWatchReport
     if (a.holderKind !== "member" || !a.userId) continue;
     if (a.orgRoleId && renewing.has(`${a.userId}@${a.orgRoleId}`)) continue;
     const ended = !!a.lapsed;
-    if (!ended && !due(a.termEndsAt)) continue;
+    if (!ended && !due(a.termEndsAt, a.startedAt)) continue;
+    // A one-moon term is warned every moon on the same seating, so its key names the term it warns about.
+    const endsAtDate = a.termEndsAt ? new Date(String(a.termEndsAt instanceof Date ? a.termEndsAt.toISOString() : a.termEndsAt)) : null;
+    const startsAtDate = a.startedAt ? new Date(String(a.startedAt instanceof Date ? a.startedAt.toISOString() : a.startedAt)) : null;
+    const shortTerm = !!endsAtDate && !!startsAtDate && !Number.isNaN(endsAtDate.getTime()) && !Number.isNaN(startsAtDate.getTime()) &&
+      termWarningOpensFor(startsAtDate, endsAtDate, clock).getTime() !== termWarningOpensAt(endsAtDate, clock).getTime();
+    const termKey = shortTerm && endsAtDate ? `:${endsAtDate.toISOString().slice(0, 10)}` : "";
     const r = await deps.notify({
       userId: a.userId,
       type: "term_expiring",
       title: ended
         ? `Your term on ${a.roleName} has ended`
-        : `Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`,
+        : shortTerm
+          ? `Carry on into the next moon? Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`
+          : `Your term on ${a.roleName} ends in ${a.daysLeft} day(s)`,
       body: ended
         ? "The agreement to keep holding this role unasked has run out. This role carries no permissions of its own, so nothing has been switched off, and it is the moment to say whether you want to carry on."
         : "This is the nudge to say whether you want to carry on, while there is a whole cycle left to arrange it. Nothing renews on its own, and there is no limit on terms, so the village can seat you again.",
       link: a.orgRoleId ? `${SEASON_PLAN_MINE}?renew=${encodeURIComponent(a.orgRoleId)}` : SEASON_PLAN_MINE,
-      dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}`,
+      dedupeKey: `${ended ? "term-ended" : "term-soon"}:${a.id}${termKey}`,
     });
     if (r.fresh) report.holdersTold += 1;
   }
