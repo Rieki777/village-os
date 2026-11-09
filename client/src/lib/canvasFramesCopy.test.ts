@@ -79,7 +79,7 @@ const block = (id: BlockFramesPayload["block"]["id"], briefSections: string[] = 
   briefSections,
 });
 
-describe("a member's document offered to the village (9999_c)", () => {
+describe("a member's document offered to the village (0359)", () => {
   const doc = proposal({ target: "document", sectionId: null, change: { documentId: 4, title: "Circle notes" } });
   it("says what it is, what adopting it does, and never that it writes a setting", () => {
     expect(proposalHeadline(doc, titles)).toBe("A document for the village's notebook: Circle notes");

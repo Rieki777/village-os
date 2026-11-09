@@ -25274,7 +25274,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       memberIntents: await exportIntentsForMember(pool, user.id),
       onchainBalances: await mine("SELECT * FROM onchain_balances WHERE user_id = ?"),
       exits: await mine("SELECT * FROM exits WHERE user_id = ?"),
-      notebook: await notebookForExport(pool, user.id), // their own documents (9999_c), private and shared, and their picks
+      notebook: await notebookForExport(pool, user.id), // their own documents (0359), private and shared, and their picks
       /*
        * THE FACE, THE BUDGET IT COST, AND WHAT THE POOL CREDITED THEM.
        *

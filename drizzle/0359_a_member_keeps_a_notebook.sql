@@ -1,4 +1,4 @@
--- 9999_c: a member keeps a notebook of their own documents, may offer one to
+-- 0359: a member keeps a notebook of their own documents, may offer one to
 -- the village, and the village and each member keep a short list of canvas
 -- resources they picked.
 --

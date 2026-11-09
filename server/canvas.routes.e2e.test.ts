@@ -1,5 +1,5 @@
 /**
- * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (9999_a), against the built server.
+ * THE CANVAS PEN, DRIVEN THROUGH THE REAL GATE (0357), against the built server.
  *
  * server/routes/canvas.test.ts proves the routes against a real database with
  * a MODEL of `guardCapability`, because the real one lives inside
@@ -416,7 +416,7 @@ describe.skipIf(!DB_CONFIGURED)("the canvas, through the real gate", () => {
   });
 
   /*
-   * THE NOTEBOOK AND THE EXPORT (9999_c), through the registration in
+   * THE NOTEBOOK AND THE EXPORT (0359), through the registration in
    * server/index.ts and the real gate. By this point the village holds
    * `story.tell` and Wren's role carries it, so Wren is the pen and the
    * founder is not.
