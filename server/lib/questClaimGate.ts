@@ -7,7 +7,8 @@
 import type { Pool } from "mysql2/promise";
 import { questClaimGate, type ClaimRefusal } from "../../shared/questClaimGate";
 import { stageIndex } from "../../shared/gameConfig";
-import { effectiveMinAge } from "../../shared/ageBands";
+import { effectiveMinAge, MINIMUM_AGES_VARIABLE } from "../../shared/ageBands";
+import { boolVar } from "./variables";
 import { isExampleRow } from "./examples";
 import { questClosed } from "../repos/quests";
 import { ageBandOf, questSafetyOf, safetyBadgesHeld } from "../repos/questSafety";
@@ -16,7 +17,12 @@ export interface ClaimGateDeps {
   getPool(): Pool;
   stageOf(user: any): Promise<string>;
   roleIdsFor(userId: string): string[];
+  /** Whether quests may ask a minimum age. Defaults to the village setting, which ships off. */
+  minimumAgesOn?(): boolean;
 }
+
+/** The village's minimum-age setting, read at call time. */
+export const minimumAgesOnByDefault = (): boolean => boolVar(MINIMUM_AGES_VARIABLE);
 
 export async function claimRefusalFor(
   deps: ClaimGateDeps,
@@ -26,7 +32,7 @@ export async function claimRefusalFor(
   const pool = deps.getPool();
   const minStage = quest.minStage ?? null;
   const safety = await questSafetyOf(pool, quest.id);
-  const minAge = effectiveMinAge(safety);
+  const minAge = effectiveMinAge(safety, (deps.minimumAgesOn ?? minimumAgesOnByDefault)());
   const requiredBadges = safety?.requiredBadges ?? [];
   return questClaimGate({
     isExample: await isExampleRow(pool, "quests", quest.id),
@@ -45,7 +51,7 @@ export async function claimRefusalFor(
   });
 }
 
-/** Whether the quest asks anything of the body, so joining its crew runs the gate too (spec R2). */
+/** Whether the quest is hands-on, so joining its crew runs the gate too (spec R2). */
 export async function isPhysicalQuest(pool: Pool, questId: string): Promise<boolean> {
   return !!(await questSafetyOf(pool, questId))?.physical;
 }

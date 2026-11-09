@@ -124,6 +124,11 @@ msgctxt "label of an answer box"
 msgid "Your answer"
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "{a} and older"
+msgstr ""
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Village signing key"
@@ -345,9 +350,9 @@ msgid "Build a module"
 msgstr "Construye un módulo"
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "Physical work on site"
-msgstr ""
+#~ msgctxt "admin quest safety"
+#~ msgid "Physical work on site"
+#~ msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -1171,6 +1176,11 @@ msgstr ""
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Every quest is open to every age, and families are welcome. A village that wants minimum ages turns on Let quests ask a minimum age in Settings, under Quests."
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "What it is for"
@@ -1363,9 +1373,9 @@ msgid "No invoice has been sent yet."
 msgstr ""
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
-msgstr ""
+#~ msgctxt "admin quest safety"
+#~ msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
+#~ msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
@@ -1672,6 +1682,11 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Open to every age"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -2391,6 +2406,11 @@ msgstr ""
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Anyone here can suggest a change. The village decides."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Hands-on quest on site"
 msgstr ""
 
 #. placeholder {0}: counts.hours

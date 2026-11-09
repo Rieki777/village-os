@@ -1,9 +1,10 @@
 /**
  * AGE BANDS, never birth dates (build days S5, spec R10; Rye 2026-11-09).
  *
- * A physical build quest has a minimum age: 18, or 16 for light work beside a
- * named adult, never on machines or heights. To check it the village needs to
- * know only which side of 16 and 18 a member is on, so that is all it keeps.
+ * No quest has an age limit unless the village turns minimum ages on (Rye,
+ * 2026-11-09; Amora ships with them off). When they are on, a quest may ask 16
+ * or 18, and to check it the village needs to know only which side of 16 and
+ * 18 a member is on, so that is all it keeps.
  * The member says it once; a later change records who confirmed it.
  *
  * Personal data: read only by the member and the claim gate, wiped on
@@ -25,20 +26,25 @@ export function bandMeets(band: AgeBand, minAge: number): boolean {
   return BAND_FLOOR[band] >= minAge;
 }
 
-/** The default minimum age for a physical quest that names none (Rye, 2026-11-09). */
-export const PHYSICAL_MIN_AGE = 18;
+/**
+ * The ages a quest may ask, once the village turns minimum ages on: the two a
+ * band can answer. A minimum of 12 could never be checked against "under 16".
+ */
+export const MINIMUM_AGE_CHOICES = [16, 18] as const;
 
-/** The lowest a physical quest may set, and only for light work beside a named adult. */
-export const LIGHT_WORK_MIN_AGE = 16;
+export function isMinimumAgeChoice(v: unknown): v is (typeof MINIMUM_AGE_CHOICES)[number] {
+  return typeof v === "number" && (MINIMUM_AGE_CHOICES as readonly number[]).includes(v);
+}
+
+/** The village setting that lets a quest ask a minimum age. Off as shipped. */
+export const MINIMUM_AGES_VARIABLE = "quest.minimum_ages";
 
 /**
- * The minimum age a quest actually asks: its own, else 18 when it is physical,
- * else none. A physical quest can never ask below 16, whatever is stored.
+ * The minimum age a quest actually asks: none while the village has minimum
+ * ages off (Rye, 2026-11-09: families are encouraged), else the quest's own
+ * minimum, else none. Being hands-on adds no age of its own.
  */
-export function effectiveMinAge(safety: { physical: boolean; minAge: number | null } | null): number | null {
-  if (!safety) return null;
-  if (safety.minAge != null && Number.isFinite(safety.minAge)) {
-    return safety.physical ? Math.max(LIGHT_WORK_MIN_AGE, safety.minAge) : safety.minAge;
-  }
-  return safety.physical ? PHYSICAL_MIN_AGE : null;
+export function effectiveMinAge(safety: { physical: boolean; minAge: number | null } | null, minimumAgesOn: boolean): number | null {
+  if (!minimumAgesOn || !safety) return null;
+  return isMinimumAgeChoice(safety.minAge) ? safety.minAge : null;
 }
