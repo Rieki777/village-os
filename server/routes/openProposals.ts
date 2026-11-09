@@ -440,5 +440,6 @@ export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
   }
   // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
   const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised, ${cleared} reviews cleared`;
+  if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised`;
 }
