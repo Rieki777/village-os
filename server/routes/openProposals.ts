@@ -148,11 +148,17 @@ export function register(app: Express, deps: Deps): void {
    * the moon (from its new moon to the next) inside the season running now,
    * whose id the proposal carries so adoption finds the calendar it was made on.
    */
-  type Target = { season: { id: string; name: string | null; startsOn: string; endsOn: string | null }; term: OpenProposalTerm | null };
+  type Target = { season: { id: string; name: string | null; startsOn: string; endsOn: string | null }; term: OpenProposalTerm | null; goals: Array<{ id: string; text: string }> };
+  /** A season's goals for the village, as the Season tab writes them; done ones drop off. */
+  const goalsOf = (s: any): Array<{ id: string; text: string }> =>
+    (Array.isArray(s?.goals) ? s.goals : [])
+      .filter((g: any) => g && g.id && typeof g.text === "string" && g.text.trim() && !g.done)
+      .map((g: any) => ({ id: String(g.id), text: String(g.text).trim() }));
   function target(mode: OpenProposalTermMode): Target | null {
     if (mode !== "moon") {
       const s = nextSeason();
-      return s ? { season: s, term: null } : null;
+      const full = s ? (deps.seasonState().seasons ?? []).find((x: any) => x && String(x.id) === s.id) : null;
+      return s ? { season: s, term: null, goals: goalsOf(full) } : null;
     }
     const state = deps.seasonState();
     const cur = state.current;
@@ -160,6 +166,7 @@ export function register(app: Express, deps: Deps): void {
     return {
       season: { id: String(cur.id), name: String(cur.name ?? "").trim() || null, startsOn: String(cur.startsOn), endsOn: cur.endsOn ? String(cur.endsOn) : null },
       term: moonTermFor(now(), activeClock(), state.timezone || "UTC"),
+      goals: goalsOf(cur),
     };
   }
 
@@ -181,7 +188,16 @@ export function register(app: Express, deps: Deps): void {
     const live = new Map(circles.filter((c) => c.live).map((c) => [c.id, c.name]));
     return roles
       .filter((r) => r.active && !r.isExample && isListed(r) && r.circleId && live.has(r.circleId))
-      .map((r) => ({ id: r.id, name: r.name, circle: live.get(r.circleId as string) as string, aim: r.aim ?? null }));
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        circle: live.get(r.circleId as string) as string,
+        aim: r.aim ?? null,
+        // The open card's own sections, for the applicant to answer (shared/openProposalCard.ts).
+        accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
+        whyItMatters: r.whyItMatters ?? null,
+        timeCommitment: (r as any).timeCommitment ?? null,
+      }));
   }
 
   /** Whether the form opens for this request, and through which link. */
@@ -207,6 +223,7 @@ export function register(app: Express, deps: Deps): void {
       village: projectName(),
       season: t?.season ?? null,
       term: t?.term ?? null,
+      goals: t?.goals ?? [],
       ...(t ? {} : { message: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason }),
       roles: t ? await offered() : [],
     });
@@ -224,11 +241,20 @@ export function register(app: Express, deps: Deps): void {
     if (!t) return res.status(409).json({ error: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason });
     const season = t.season;
     const roles = await offered();
-    const parsed = parseOpenProposal(body, { roleIds: new Set(roles.map((r) => r.id)), address: singlePublicAddress });
+    const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
+    const parsed = parseOpenProposal(body, {
+      roleIds: new Set(roles.map((r) => r.id)),
+      address: singlePublicAddress,
+      accountabilitiesOf: (id) => outcomes.get(id) ?? [],
+      goalIds: new Set(t.goals.map((g) => g.id)),
+    });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     const { name, email } = parsed.value;
     // The term is the village's, set here and never taken from the form.
-    const proposal = { ...parsed.value.body, ...(t.term ? { term: t.term } : {}) };
+    // The goals' words are kept with the card as they read when it was sent, never taken from the form.
+    const goalText = new Map(t.goals.map((g) => [g.id, g.text]));
+    const card = parsed.value.body.card ? { ...parsed.value.body.card, serves: parsed.value.body.card.serves.map((x) => ({ ...x, goal: goalText.get(x.goalId) ?? "" })) } : undefined;
+    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}) };
     const emailKey = emailKeyOf(email);
     if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.

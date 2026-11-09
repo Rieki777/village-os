@@ -20,6 +20,7 @@
 
 /** The village's public link. */
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
+import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
@@ -110,6 +111,8 @@ export interface OpenProposalBody {
   aim: string;
   /** Set by the server when the village's proposals are for the moon (shared/openProposalTerm.ts). Absent: next season. */
   term?: OpenProposalTerm;
+  /** The applicant's own role card (shared/openProposalCard.ts). Absent on a proposal sent before it existed. */
+  card?: OpenProposalCard;
 }
 
 export interface OpenProposalInput {
@@ -135,6 +138,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     why: text(o.why, OPEN_WHY_MAX).slice(0, OPEN_WHY_MAX),
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
     ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
+    ...(cardOf(o.card) ? { card: cardOf(o.card) } : {}),
   };
 }
 
@@ -143,7 +147,10 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  * offering. `address` decides whether an address is one (shared/comms/address.ts
  * on the server). The first problem is answered, with the field it is on.
  */
-export function parseOpenProposal(raw: unknown, ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null }): Parsed<OpenProposalInput> {
+export function parseOpenProposal(
+  raw: unknown,
+  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string> },
+): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
   if (!name) return { ok: false, field: "name", error: OPEN_WORDS.needName };
@@ -167,6 +174,16 @@ export function parseOpenProposal(raw: unknown, ctx: { roleIds: ReadonlySet<stri
   if (why.length > OPEN_WHY_MAX) return { ok: false, field: "why", error: OPEN_WORDS.tooLong("Why you", OPEN_WHY_MAX) };
   const aim = text(o.aim, OPEN_AIM_MAX);
   if (aim.length > OPEN_AIM_MAX) return { ok: false, field: "aim", error: OPEN_WORDS.tooLong("Your aim", OPEN_AIM_MAX) };
+  // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
+  if (o.card !== undefined && o.card !== null) {
+    const card = parseCard(o.card, {
+      roleIds: new Set(roles.map((r) => r.roleId)),
+      accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
+      goalIds: ctx.goalIds ?? new Set(),
+    });
+    if (!card.ok) return { ok: false, field: card.field, error: card.error };
+    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card } } };
+  }
   return { ok: true, value: { name, email, body: { roles, why, aim } } };
 }
 
