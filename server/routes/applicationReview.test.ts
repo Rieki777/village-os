@@ -75,7 +75,7 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
   /** The listing lane adds these two columns in its own migration. This suite adds them to its scratch schema only when they are not there yet. */
   async function ensureRoleColumns() {
     const have = new Set((await q("SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'org_roles'")).map((r: any) => String(r.c)));
-    for (const col of ["interviewer_roles", "selection_criteria"]) if (!have.has(col)) await q(`ALTER TABLE org_roles ADD COLUMN ${col} text NULL`);
+    for (const col of ["conversations", "selection_criteria", "conversation_mode"]) if (!have.has(col)) await q(`ALTER TABLE org_roles ADD COLUMN ${col} text NULL`);
   }
 
   const setting = async (on: boolean) => {
@@ -96,10 +96,14 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
     roleC = await createOrgRole(pool, { id: "ar-role-c", name: "Build Role", seats: 1, circleId: "c-core", aim: "c" });
     roleD = await createOrgRole(pool, { id: "ar-role-d", name: "Anchor Role", seats: 1, circleId: "c-core", aim: "d" });
     founderRole = await createOrgRole(pool, { id: "ar-role-founder", name: "Founder", seats: 1, circleId: "c-core", aim: "Hold the village." });
+    // A role held by an AI agent, in the same circle (D31). It is never asked to consent.
+    const agentRole = await createOrgRole(pool, { id: "ar-role-agent", name: "Team Support Role", seats: 1, circleId: "c-core", aim: "Support the team." });
+    const agentSeated = await seatHolder(pool, agentRole, { displayName: "Support Agent", isAgent: true, agentSlug: "support" });
+    expect(agentSeated.ok).toBe(true);
     const until = new Date("2036-12-01T00:00:00Z");
     for (const [r, u] of [[roleA, IA], [roleB, IB], [roleC, IC], [roleD, ID], [founderRole, FOUNDER]] as const) await seatHolder(pool, r, { userId: u.id, seasonId: "s-now", termEndsAt: until });
     // The Lead Financial Steward's shape (Rye): 60 minutes, then three of 20, the last one the final approval. Two hours.
-    await q("UPDATE org_roles SET interviewer_roles = ?, selection_criteria = ? WHERE id = ?", [
+    await q("UPDATE org_roles SET conversations = ?, selection_criteria = ? WHERE id = ?", [
       JSON.stringify([
         { roleId: roleA, minutes: 60, final: false },
         { roleId: roleB, minutes: 20, final: false },
@@ -362,6 +366,58 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       expect(rows.length).toBeGreaterThan(0);
       expect(await stepKinds(id)).toEqual(expect.arrayContaining(["scores_in", "consent"]));
       expect(state.notices.some((n) => n.type === "open_role_proposal_consent_ask")).toBe(true);
+    });
+  });
+
+  describe("AI agents are skipped in consent rounds (D31)", () => {
+    it("asks no agent, says so in the ask, and keeps the human holders asked", async () => {
+      const { id } = await confirmed("agents@example.test", [roleA]);
+      const rows = await asks(id);
+      expect(rows.length).toBeGreaterThan(0);
+      // Every one asked is a member account: the agent has none.
+      const ids = rows.map((r: any) => String(r.user_id));
+      expect(ids).toContain(FOUNDER.id);
+      expect(await q("SELECT 1 FROM role_proposal_asks WHERE proposal_id = ? AND user_id NOT IN (SELECT id FROM users)", [id])).toEqual([]);
+      const ask = state.notices.find((n) => n.type === "open_role_proposal_consent_ask");
+      expect(ask?.body).toContain("Team Support Role is held by an AI agent and not asked: consent is a human act.");
+      // CONTROL: a circle with no agent says nothing about one.
+      const other = await createOrgRole(pool, { id: "ar-role-land", name: "Land Role", seats: 1, circleId: "c-land", aim: "l" });
+      state.notices.length = 0;
+      await confirmed("noagents@example.test", [other]);
+      expect(state.notices.filter((n) => n.type === "open_role_proposal_consent_ask").every((n) => !String(n.body).includes("AI agent"))).toBe(true);
+    });
+
+    it("says it again when the round opens after the conversations", async () => {
+      await setting(true);
+      const { id } = await confirmed("agents2@example.test");
+      await scoreAll(id);
+      const ask = state.notices.find((n) => n.type === "open_role_proposal_consent_ask");
+      expect(ask?.body).toContain("held by an AI agent");
+      expect((await q("SELECT detail_json FROM application_steps WHERE application_ref = ? AND kind = 'consent'", [id]))[0].detail_json).toContain("Team Support Role");
+    });
+  });
+
+  describe("the conversations are one block unless split (D30)", () => {
+    it("says one block through the first role by default, and splits on request, once", async () => {
+      const { id, confirm } = await confirmed("block@example.test");
+      const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
+      const before = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
+      expect(before.body.status.mode).toBe("block");
+      expect(before.body.status.booking).toContain("one block of 2 hours");
+      expect(before.body.status.booking).toContain("Channel Role");
+      const split = await call("POST", `/api/application-status/${id}/split?token=${token}`, {}, null);
+      expect(split.status).toBe(200);
+      const after = await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null);
+      expect(after.body.status.mode).toBe("split");
+      expect(after.body.status.booking).toContain("over several days");
+      // CONTROL: a wrong token cannot split, and the visitor path never reveals copy to a stranger.
+      expect((await call("POST", `/api/application-status/${id}/split?token=nope`, {}, null)).status).toBe(404);
+    });
+
+    it("stays as booked once a conversation has been held", async () => {
+      const { id } = await confirmed("late@example.test");
+      await score(id, Number((await interviews(id))[0].id), IA.id);
+      expect((await call("POST", `/api/governance/applications/${id}/split`, {}, IB.id)).status).toBe(409);
     });
   });
 

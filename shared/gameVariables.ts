@@ -2470,9 +2470,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "org.consent_after_interviews",
     category: "The village's people",
-    label: "Ask the circle to consent after the interviews",
+    label: "Ask the circle to consent after the conversations",
     description:
-      "Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every interview a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.",
+      "Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every conversation a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.",
     type: "boolean",
     default: "false",
   },

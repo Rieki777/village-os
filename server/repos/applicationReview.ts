@@ -49,6 +49,15 @@ export async function stampStep(db: Db, s: { ref: string; kind: StepKind; subjec
   return Number(r.affectedRows ?? 0) === 1;
 }
 
+/** Write the booking mode into the confirmed step's detail. True when it changed. */
+export async function setMode(db: Db, ref: string, mode: "block" | "split"): Promise<boolean> {
+  const [r] = await db.query<ResultSetHeader>(
+    "UPDATE application_steps SET detail_json = JSON_SET(COALESCE(detail_json, JSON_OBJECT()), '$.mode', ?) WHERE application_ref = ? AND kind = 'confirmed' AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(detail_json, '$.mode')), 'block') <> ?",
+    [mode, ref, mode],
+  );
+  return Number(r.affectedRows ?? 0) === 1;
+}
+
 export async function stepsOf(db: Db, ref: string): Promise<StoredStep[]> {
   const [rows] = await db.query<RowDataPacket[]>(
     "SELECT application_ref, kind, subject, UNIX_TIMESTAMP(stamped_at) AS at_s, actor_user_id, detail_json FROM application_steps WHERE application_ref = ? ORDER BY stamped_at, id",
@@ -226,14 +235,31 @@ export async function rolesHeldBy(db: Db, userId: string): Promise<string[]> {
 }
 
 /** A role's review setup from `org_roles`, when the columns exist (they arrive with the listing lane's migration). */
-export async function roleSetup(db: Db, roleId: string): Promise<{ interviewerRoles: unknown; criteria: unknown }> {
+export async function roleSetup(db: Db, roleId: string): Promise<{ interviewerRoles: unknown; criteria: unknown; mode: unknown }> {
+  // The list is `conversations` (brief v3), or `interviewer_roles` while the rename is in flight. Either, whichever exists.
   const [cols] = await db.query<RowDataPacket[]>(
-    "SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'org_roles' AND COLUMN_NAME IN ('interviewer_roles','selection_criteria')",
+    "SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'org_roles' AND COLUMN_NAME IN ('conversations','interviewer_roles','selection_criteria','conversation_mode')",
   );
   const have = new Set(cols.map((c: any) => String(c.c)));
-  const pick = [have.has("interviewer_roles") ? "interviewer_roles" : "NULL AS interviewer_roles", have.has("selection_criteria") ? "selection_criteria" : "NULL AS selection_criteria"];
+  const list = have.has("conversations") ? "conversations" : have.has("interviewer_roles") ? "interviewer_roles" : null;
+  const pick = [
+    list ? `${list} AS conv_list` : "NULL AS conv_list",
+    have.has("selection_criteria") ? "selection_criteria" : "NULL AS selection_criteria",
+    have.has("conversation_mode") ? "conversation_mode" : "NULL AS conversation_mode",
+  ];
   const [rows] = await db.query<RowDataPacket[]>(`SELECT ${pick.join(", ")} FROM org_roles WHERE id = ? LIMIT 1`, [roleId]);
-  return { interviewerRoles: rows[0]?.interviewer_roles ?? null, criteria: rows[0]?.selection_criteria ?? null };
+  return { interviewerRoles: rows[0]?.conv_list ?? null, criteria: rows[0]?.selection_criteria ?? null, mode: rows[0]?.conversation_mode ?? null };
+}
+
+/** The names of roles in these circles that an AI agent holds now. Consent is a human act (D31): they are never asked, and the round says so. */
+export async function agentRoleNamesInCircles(db: Db, circleIds: readonly string[]): Promise<string[]> {
+  if (!circleIds.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT DISTINCT r.name FROM org_role_assignments a JOIN org_roles r ON r.id = a.org_role_id " +
+      "WHERE a.ended_at IS NULL AND a.is_agent = 1 AND a.is_example = 0 AND r.is_example = 0 AND r.active = 1 AND r.circle_id IN (?) ORDER BY r.name",
+    [[...circleIds]],
+  );
+  return rows.map((r: any) => String(r.name));
 }
 
 export async function roleNamesById(db: Db, ids: readonly string[]): Promise<Map<string, string>> {

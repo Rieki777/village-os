@@ -6,6 +6,8 @@
  *
  *   GET  /api/application-status/:ref?token=                   the applicant's page, by the emailed link
  *   GET  /api/governance/applications/:ref/status              the applicant's page, signed in
+ *   POST /api/application-status/:ref/split?token=             the applicant asks for the conversations over days (D30)
+ *   POST /api/governance/applications/:ref/split               the same, signed in as the applicant or a holder
  *   GET  /api/governance/applications/:ref/scorecards          what this reader may read, and what they may write
  *   POST /api/governance/applications/:ref/interviews/:id/score  one interviewer's scorecard
  *   POST /api/governance/applications/:ref/recuse              one click, recorded
@@ -31,6 +33,7 @@ import {
   hasRecused,
   isApplicant,
   recuse,
+  requestSplit,
   reviewClockTick,
   scorecardsFor,
   stampFirstReply,
@@ -104,6 +107,35 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     const s = await statusOf(work, ref);
     if (!s) return res.status(404).json(NOT_HERE);
     res.set("Cache-Control", "no-store").json({ status: s });
+  });
+
+  // ── Splitting the conversations over days (D30) ───────────────────────────
+
+  app.post("/api/application-status/:ref/split", async (req, res) => {
+    const ref = refOf(req);
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    if (await overLimit(`application-split:${deps.clientIp ? deps.clientIp(req) : "x"}`, 10, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    // The link proves who asks, the way it does for the status page.
+    if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);
+    const out = await requestSplit(work, ref);
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    res.json({ success: true, message: REVIEW_WORDS.splitAsked });
+  });
+
+  app.post("/api/governance/applications/:ref/split", async (req, res) => {
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    const userId = String(viewer.id);
+    if (await overLimit(`application-split:${userId}`, 10, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
+    const ref = refOf(req);
+    if (!ref) return res.status(404).json(NOT_HERE);
+    // The applicant, or somebody who holds one of the conversation roles, may ask.
+    const mine = new Set(await repo.rolesHeldBy(getPool(), userId));
+    const holds = (await repo.interviewsOf(getPool(), ref)).some((i) => mine.has(i.roleId));
+    if (!holds && !(await isApplicant(work, ref, userId))) return res.status(404).json(NOT_HERE);
+    const out = await requestSplit(work, ref);
+    if (!out.ok) return res.status(out.status).json({ error: out.error });
+    res.json({ success: true, message: REVIEW_WORDS.splitAsked });
   });
 
   // ── Scorecards ────────────────────────────────────────────────────────────

@@ -335,7 +335,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} role proposals from outside the village wait on you.",
     celebrate: false,
   },
-  // Review, interviews and selection (role journey L5). Bell only. None of
+  // Review, conversations and selection (role journey L5). Bell only. None of
   // these carries a score, a name or an address; they say a role is waiting.
   application_interview_turn: {
     group: "decisions",

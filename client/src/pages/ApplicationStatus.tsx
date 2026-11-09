@@ -20,6 +20,8 @@ interface Served {
   by: string | null;
   roles: string[];
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
+  booking: string | null;
+  mode: "block" | "split";
 }
 
 export default function ApplicationStatus() {
@@ -27,6 +29,20 @@ export default function ApplicationStatus() {
   const ref = String(params.ref ?? "");
   const [s, setS] = useState<Served | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
+  const [said, setSaid] = useState<string | null>(null);
+  const token = typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("token") ?? "");
+
+  const split = async () => {
+    const url = token ? `/api/application-status/${encodeURIComponent(ref)}/split?token=${encodeURIComponent(token)}` : `/api/governance/applications/${encodeURIComponent(ref)}/split`;
+    try {
+      const res = await gameFetch(url, { method: "POST", body: "{}", cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      setSaid(String(data?.message ?? data?.error ?? ""));
+      if (res.ok) setS((cur) => (cur ? { ...cur, mode: "split" } : cur));
+    } catch {
+      setSaid(PANEL_WORDS.statusMissing);
+    }
+  };
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
@@ -76,6 +92,21 @@ export default function ApplicationStatus() {
                 </li>
               ))}
             </ol>
+            {s.booking && (
+              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-xl border border-stone-200 bg-white p-4">
+                <p className="text-stone-800">{s.booking}</p>
+                {s.mode === "block" && (
+                  <button
+                    type="button"
+                    onClick={() => void split()}
+                    className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-stone-400 px-4 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  >
+                    {PANEL_WORDS.splitAsk}
+                  </button>
+                )}
+                {said && <p role="status" className="mt-2 text-sm text-stone-700">{said}</p>}
+              </section>
+            )}
             <p className="text-sm text-stone-600">{PANEL_WORDS.statusPrivate}</p>
           </article>
         )}

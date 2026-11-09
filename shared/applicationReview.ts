@@ -56,11 +56,28 @@ export type StepKind = (typeof STEP_KINDS)[number];
 export const STEP_WORDS: Record<StepKind, string> = {
   confirmed: "Received",
   first_reply: "First reply",
-  interview: "Interview",
-  scores_in: "Interviews done",
+  interview: "Conversation",
+  scores_in: "Conversations done",
   consent: "The circle's consent",
   decided: "Decision",
 };
+
+// ── How the conversations are booked (D30) ──────────────────────────────────
+
+export const CONVERSATION_MODES = ["block", "split"] as const;
+export type ConversationMode = (typeof CONVERSATION_MODES)[number];
+
+/** A role's setting. By default one block through the first role's link, the others joining at set times; split over days on request. */
+export function parseConversationMode(raw: unknown): ConversationMode {
+  return raw === "split" ? "split" : "block";
+}
+
+/** The line the applicant reads about how their conversations are booked. */
+export function bookingWords(mode: ConversationMode, firstRoleName: string | null, total: number): string {
+  return mode === "block"
+    ? `The conversations are one block of ${minutesWords(total)}, booked through ${firstRoleName ?? "the first role"}, with the others joining at set times. Ask for them to be split over days if that suits you better.`
+    : `The conversations are booked one at a time, over several days, each through its own role.`;
+}
 
 // ── The interviewers a role names ───────────────────────────────────────────
 
@@ -71,8 +88,8 @@ export interface InterviewerRole {
 }
 
 export const INTERVIEW_MIN_MINUTES = 5;
-export const INTERVIEW_MAX_MINUTES = 180;
-export const INTERVIEW_MAX_COUNT = 8;
+export const INTERVIEW_MAX_MINUTES = 240;
+export const INTERVIEW_MAX_COUNT = 6;
 
 /**
  * The role's interviewer list, from the JSON the role stores. Entries without a
@@ -332,10 +349,13 @@ export const REVIEW_WORDS = {
   stale: (roleNames: readonly string[]) => `An application for ${roleNames.join(", ")} has not moved in ${STALE_DAYS} days`,
   interviewsDone: (roleNames: readonly string[]) => `Every conversation is written up for ${roleNames.join(", ")}`,
   consentWaitsForInterviews: "The circle will be asked once the conversations are written up.",
+  agentsSkipped: (names: readonly string[]) => `${names.join(", ")} ${names.length === 1 ? "is" : "are"} held by an AI agent and not asked: consent is a human act.`,
+  splitAsked: "Recorded. The conversations will be booked over several days.",
+  splitTooLate: "The conversations have started, so they stay as booked.",
   arrived: (roleNames: readonly string[]) => `An application arrived for ${roleNames.join(", ")}`,
   notYourTurn: "That conversation has not opened yet. It opens when the one before it is written up.",
   alreadyScored: "That scorecard is already in.",
-  notAnInterviewer: "Only a holder of the interviewing role can write this scorecard.",
+  notAnInterviewer: "Only a holder of the role this conversation is with can write this scorecard.",
   own: "Nobody scores their own application.",
   recused: "You stepped out of this one.",
   notFound: "That application is not here.",
@@ -396,5 +416,7 @@ export const PANEL_WORDS = {
   statusNext: "Who acts next",
   statusBy: (day: string) => `By ${day}`,
   statusMissing: "That link does not match an application. Check the link in your email.",
+  splitAsk: "Split the conversations over days",
+  bookingLabel: "How the conversations are booked",
   statusPrivate: "This page shows steps only. What the people who talk with you write down stays with them.",
 } as const;

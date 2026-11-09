@@ -69,7 +69,7 @@ import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
 import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
-import { stampStep } from "../repos/applicationReview";
+import { agentRoleNamesInCircles, stampStep } from "../repos/applicationReview";
 import { REVIEW_WORDS } from "../../shared/applicationReview";
 
 type Db = Pool | PoolConnection;
@@ -125,6 +125,8 @@ export interface Confirmed {
   own: string | null;
   /** The review begun at confirm: the role's interviewers, in order (role journey L5). */
   review?: ReviewStart;
+  /** Roles in the circles held by an AI agent: never asked, and the round says so (D31). */
+  skippedAgents?: string[];
 }
 
 /**
@@ -167,7 +169,8 @@ export async function confirmAndAsk(
       await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
       await stampStep(conn, { ref: proposal.id, kind: "consent", at });
     }
-    return { proposal, asked, closesAt, own, review };
+    const skippedAgents = await agentRoleNamesInCircles(conn, circles);
+    return { proposal, asked, closesAt, own, review, skippedAgents };
   });
 }
 
@@ -202,7 +205,7 @@ export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" 
       userId: a.userId,
       type: "open_role_proposal_consent_ask",
       title: CONSENT_WORDS.askTitle(names),
-      body: CONSENT_WORDS.askBody(closesOn),
+      body: `${CONSENT_WORDS.askBody(closesOn)}${c.skippedAgents?.length ? ` ${REVIEW_WORDS.agentsSkipped(c.skippedAgents)}` : ""}`,
       link,
       actorUserId: null,
       dedupeKey: `op:${c.proposal.id}:ask:${a.userId}`,

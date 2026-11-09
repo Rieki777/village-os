@@ -35,7 +35,10 @@ import {
   interviewsDone,
   isStale,
   kindOfRef,
+  bookingWords,
   mayReadScorecards,
+  minutesWords,
+  parseConversationMode,
   nextAfter,
   parseCriteria,
   parseInterviewerRoles,
@@ -43,6 +46,7 @@ import {
   REVIEW_WORDS,
   STALE_DAYS,
   statusFor,
+  type ConversationMode,
   type Criterion,
   type InterviewerRole,
   type Status,
@@ -85,6 +89,8 @@ export const scorecardHref = (ref: string): string => (kindOfRef(ref) === "open"
 export interface ReviewSetup {
   interviewers: InterviewerRole[];
   criteria: Criterion[];
+  /** How the conversations are booked (D30): one block by default, or split over days. */
+  mode: ConversationMode;
 }
 
 /** The first of the applicant's roles that names interviewers decides the path; the others are read in their own order later. */
@@ -94,10 +100,10 @@ export async function setupFor(db: Db, roleIds: readonly string[]): Promise<Revi
     const interviewers = parseInterviewerRoles(s.interviewerRoles);
     if (interviewers.length) {
       const criteria = parseCriteria(s.criteria);
-      return { interviewers, criteria: criteria.length ? criteria : [...FALLBACK_CRITERIA] };
+      return { interviewers, criteria: criteria.length ? criteria : [...FALLBACK_CRITERIA], mode: parseConversationMode(s.mode) };
     }
   }
-  return { interviewers: [], criteria: [] };
+  return { interviewers: [], criteria: [], mode: "block" };
 }
 
 // ── Beginning ───────────────────────────────────────────────────────────────
@@ -132,7 +138,7 @@ export async function beginReview(
     ref: p.ref,
     kind: "confirmed",
     at: p.at,
-    detail: { roleIds: p.roleIds, criteria: setup.criteria, holdConsent, applicantUserId: p.applicantUserId, statusHash: statusToken ? hashToken(statusToken) : null },
+    detail: { roleIds: p.roleIds, criteria: setup.criteria, mode: setup.mode, holdConsent, applicantUserId: p.applicantUserId, statusHash: statusToken ? hashToken(statusToken) : null },
   });
   await repo.insertInterviews(db, p.ref, setup.interviewers, p.at);
   if (!setup.interviewers.length) await repo.stampStep(db, { ref: p.ref, kind: "scores_in", at: p.at });
@@ -167,13 +173,14 @@ async function tellInterviewers(deps: Pick<ReviewDeps, "getPool" | "notify">, re
 
 export type ScoreOutcome = { ok: true; scoresIn: boolean } | { ok: false; status: number; error: string; field?: string };
 
-async function confirmedDetail(db: Db, ref: string): Promise<{ roleIds: string[]; criteria: Criterion[]; holdConsent: boolean; applicantUserId: string | null; statusHash: string | null; at: Date } | null> {
+async function confirmedDetail(db: Db, ref: string): Promise<{ roleIds: string[]; criteria: Criterion[]; mode: ConversationMode; holdConsent: boolean; applicantUserId: string | null; statusHash: string | null; at: Date } | null> {
   const step = (await repo.stepsOf(db, ref)).find((s) => s.kind === "confirmed");
   if (!step) return null;
   const d = step.detail ?? {};
   return {
     roleIds: Array.isArray(d.roleIds) ? d.roleIds.map(String) : [],
     criteria: parseCriteria(d.criteria),
+    mode: parseConversationMode(d.mode),
     holdConsent: d.holdConsent === true,
     applicantUserId: typeof d.applicantUserId === "string" ? d.applicantUserId : null,
     statusHash: typeof d.statusHash === "string" ? d.statusHash : null,
@@ -293,7 +300,9 @@ export async function openConsentRound(deps: ReviewDeps, ref: string): Promise<b
     }
   }
   await insertAsks(pool, asked.map((a) => ({ proposalId: ref, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
-  await repo.stampStep(pool, { ref, kind: "consent", at });
+  // An AI agent holding a role is never asked (D31); the round says so.
+  const agents = await repo.agentRoleNamesInCircles(pool, circles);
+  await repo.stampStep(pool, { ref, kind: "consent", at, detail: agents.length ? { skippedAgents: agents } : undefined });
   const names = await roleNamesOf(deps, ref);
   const closesOn = civilDateKey(new Date(closesAt.getTime() - 1), deps.calendar().timezone || "UTC");
   for (const a of asked) {
@@ -301,7 +310,7 @@ export async function openConsentRound(deps: ReviewDeps, ref: string): Promise<b
       userId: a.userId,
       type: "open_role_proposal_consent_ask",
       title: `Consent is asked for ${names.join(", ")}`,
-      body: `The conversations are written up. Consent or object by ${closesOn}.`,
+      body: `The conversations are written up. Consent or object by ${closesOn}.${agents.length ? ` ${REVIEW_WORDS.agentsSkipped(agents)}` : ""}`,
       link: openProposalHref(ref),
       actorUserId: null,
       dedupeKey: `op:${ref}:ask:${a.userId}`,
@@ -314,6 +323,8 @@ export async function openConsentRound(deps: ReviewDeps, ref: string): Promise<b
 
 export interface ScorecardView {
   criteria: Criterion[];
+  /** How the conversations are booked, in words, and which mode (D30). */
+  booking: { mode: ConversationMode; words: string };
   interviews: Array<{
     position: number;
     roleName: string;
@@ -354,8 +365,10 @@ export async function scorecardsFor(deps: ReviewDeps, ref: string, viewerId: str
   const names = await repo.roleNamesById(pool, interviews.map((i) => i.roleId));
   const cur = currentInterview(interviews);
   const mine = cur && heldRoles.has(cur.roleId) && !recused ? cur : null;
+  const total = interviews.reduce((n, i) => n + i.minutes, 0);
   return {
     criteria: d.criteria,
+    booking: { mode: d.mode, words: bookingWords(d.mode, names.get(interviews[0]?.roleId ?? "") ?? null, total) },
     mayRead,
     mayScore: mine ? { interviewId: mine.id, position: mine.position, minutes: mine.minutes } : null,
     interviews: interviews.map((i) => {
@@ -450,10 +463,28 @@ export async function interviewsAreIn(deps: Pick<ReviewDeps, "getPool">, ref: st
   return interviewsDone(await repo.interviewsOf(pool, ref));
 }
 
+// ── Splitting the conversations over days (D30) ─────────────────────────────
+
+/**
+ * The applicant or a holder asks for the conversations to be booked over days
+ * rather than as one block. Recorded on the "confirmed" step's detail, and only
+ * while no conversation has been held, so a block already under way stays as
+ * booked. Asking twice changes nothing.
+ */
+export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok: true; changed: boolean } | { ok: false; status: number; error: string }> {
+  const pool = deps.getPool();
+  const d = await confirmedDetail(pool, ref);
+  if (!d) return { ok: false, status: 404, error: REVIEW_WORDS.notFound };
+  if (await decided(pool, ref)) return { ok: false, status: 409, error: REVIEW_WORDS.gone };
+  const list = await repo.interviewsOf(pool, ref);
+  if (list.some((i) => i.state === "scored")) return { ok: false, status: 409, error: REVIEW_WORDS.splitTooLate };
+  return { ok: true, changed: await repo.setMode(pool, ref, "split") };
+}
+
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[] }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -475,7 +506,9 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   });
   const d = await confirmedDetail(pool, ref);
   const roleNames = await repo.roleNamesById(pool, d?.roleIds ?? []);
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id) };
+  const mode = d?.mode ?? "block";
+  const booking = interviews.length ? bookingWords(mode, names.get(interviews[0].roleId) ?? null, interviews.reduce((n, i) => n + i.minutes, 0)) : null;
+  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode };
 }
 
 /** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */

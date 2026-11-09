@@ -264,7 +264,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
-| Ask the circle to consent after the interviews | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
+| Ask the circle to consent after the conversations | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
 | The role that sends first replies to applicants | `org.onboarding_role` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
@@ -3349,9 +3349,9 @@ On, anyone can read the first names of the people holding each role on the Team,
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Ask the circle to consent after the interviews
+### Ask the circle to consent after the conversations
 
-Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every interview a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.
+Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every conversation a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.
 
 | Fact | Value |
 | --- | --- |

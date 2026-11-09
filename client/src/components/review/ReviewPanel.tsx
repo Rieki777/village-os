@@ -14,6 +14,7 @@ import { gameFetch } from "@/lib/gameApi";
 import { LEVEL_WORDS, PANEL_WORDS, SCORE_LEVELS, EVIDENCE_MAX, type Criterion, type ScoreLevel } from "@shared/applicationReview";
 
 interface Card {
+  booking?: { mode: "block" | "split"; words: string };
   criteria: Criterion[];
   mayRead: boolean;
   mayScore: { interviewId: number; position: number; minutes: number } | null;
@@ -106,6 +107,7 @@ export default function ReviewPanel({ applicationRef, onChanged, moonEnded, mayA
         {PANEL_WORDS.heading}
       </h2>
       <p className="mt-1 text-sm text-stone-700">{PANEL_WORDS.intro}</p>
+      {card.booking && <p className="mt-1 text-sm text-stone-700">{card.booking.words}</p>}
 
       <ol className="mt-4 space-y-3">
         {card.interviews.map((iv) => (
