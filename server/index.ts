@@ -164,6 +164,7 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -18753,6 +18754,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
+  const questNextStep = makeQuestNextStep({ getPool, circles: () => circlesRepo.all() as any[], crewsForQuest: (id) => crewsRepo.forQuest(id), lapseContext, memberName: async (id) => (await members.byId(id))?.name ?? null });
+  const nextOrNull = (quest: any, userId: string) => questNextStep(quest, userId).catch((err) => (console.error("[map] next-step box", err), null));
   app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
@@ -18862,7 +18865,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
         return reply({ ok: !!removed, state: removed ? "off" : "on", reason: removed ? undefined : "closed" });
       }
 
-      if (held) return reply({ ok: true, state: "on" });
+      if (held) return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
       // A closed quest is not taking claims, read exactly as the claim route
       // reads it: `closed` is this vocabulary's own "not taking answers".
       if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
@@ -18892,7 +18895,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
       // "already" is the answer `held` gives: the person's intent is satisfied.
       if (!taken.ok && taken.reason === "gone") return reply({ ok: false, state: "off", reason: "gone" });
-      return reply({ ok: true, state: "on" });
+      if (taken.ok) await bellQuestClaimed(notify, user.id, taken.claim.id, quest);
+      return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
     } catch (err) {
       // The map reverts and says so. A promise is not worth a 500 page inside
       // an iframe the person cannot see the console of.
@@ -18955,6 +18959,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // the one route here that rasters for an anonymous caller, so it refuses
     // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
     limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
+    questNextStep,
   });
 
   // Quests: team consent (value release is always human-gated)

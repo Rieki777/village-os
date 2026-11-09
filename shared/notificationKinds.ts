@@ -478,6 +478,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
 
   // ── Work ──────────────────────────────────────────────────────────────────
+  quest_claimed: {
+    group: "work",
+    blurb: "You took on a quest. The quest shows who to talk to, your first task, your crew link and the date.",
+    many: "You took on {n} quests.",
+    celebrate: false,
+  },
   quest_submitted: {
     group: "work",
     blurb: "Somebody finished work and it is waiting to be read. Value moves when a steward says so.",
