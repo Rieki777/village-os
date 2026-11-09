@@ -1037,6 +1037,17 @@ html {
   scroll-padding-bottom: calc(var(--tabbar-h) + 8px);
 }
 
+/* The same at the top, on the page with the outside service's list only: its
+   rows take focus from the keyboard and after each act, and the sticky header
+   (6rem) and the list's status strip while it shows would otherwise cover the
+   row focus lands on. Scoped to that page, so no other page's anchors move. */
+html:has(#sera-changes) {
+  scroll-padding-top: calc(6rem + 8px);
+}
+html:has(#sera-changes [data-sera-strip-on]) {
+  scroll-padding-top: calc(6rem + 5.5rem);
+}
+
 /*
  * The circle peek on the living map (`CirclePeek`, phones only) docks above
  * the tab bar while a circle is open, and the shortcuts button's corner is that

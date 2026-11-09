@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { announceThemeChange } from "@/lib/liveTheme";
 import { Image } from "@/components/Image";
 import { prepareImageForUpload } from "@/lib/imagePrep";
 
@@ -148,6 +149,7 @@ export default function IdentityPackPanel({ password }: { password: string }) {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setPack(data.brand?.identityPack ?? next);
+      announceThemeChange();
       toast.success("Identity pack saved");
     } catch { toast.error("Save failed"); }
     setSaving(false);

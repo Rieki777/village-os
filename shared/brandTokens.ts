@@ -336,6 +336,57 @@ export function deriveTheme(
   measured("muted text on mist-light", hslToHex(mutedFg), mistLight, AA_BODY, false);
   measured("white on brand-mid (large only)", "#ffffff", brandMid, AA_LARGE, false);
 
+  /*
+   * THE NIGHT, from the same seed. The role card (playerCard.css `.pc-night`),
+   * the owner's character sheet and Admin's Night look are one dark surface
+   * that reads the `--sheet-*` layer. index.css always documented that layer
+   * as the village's knob, and nothing wrote it, so every village's card was
+   * the approved forest and gold whatever its Look said (Rye, 2026-11-09: the
+   * role card must "pull from the same color palette being delivered by the
+   * admin section").
+   *
+   * The approved design is the template. Its grounds keep the design's
+   * lightness and (at most) its saturation, and take the seed's HUE, so a
+   * forest village gets the design back almost exactly and a blue village gets
+   * a blue night. The gold takes the accent's hue. Inks are then enforced
+   * against the lightest ground they sit on (the raised panel), at the floors
+   * the design was measured at: ink 7, dim and gold 4.5, edges 3.
+   * An unseeded village returns early above and keeps the design's literals,
+   * which are each `var(--sheet-*, <design>)`'s fallback.
+   */
+  const nightSat = Math.min(0.212, seed.s);
+  const nightHue = seed.h;
+  const nightGround = hslToHex({ h: nightHue, s: nightSat, l: 0.065 });
+  const nightPanel = hslToHex({ h: nightHue, s: nightSat, l: 0.11 });
+  const nightRaised = hslToHex({ h: nightHue, s: nightSat, l: 0.139 });
+  const nightLine = hslToHex({ h: nightHue, s: Math.min(0.157, seed.s), l: 0.2 });
+  const nightEdge = hslToHex(atContrast({ h: nightHue, s: Math.min(0.084, seed.s), l: 0.467 }, nightRaised, AA_LARGE, false));
+  const nightInk = hslToHex(atContrast({ h: nightHue, s: Math.min(0.22, seed.s), l: 0.92 }, nightRaised, 7, false));
+  const nightDim = hslToHex(atContrast({ h: nightHue, s: Math.min(0.112, seed.s), l: 0.651 }, nightRaised, AA_BODY, false));
+  const goldSat = Math.max(0.35, Math.min(0.8, sun.s * 1.3));
+  // The gold also sits on a 14% wash of itself (a proposal's changed words,
+  // playerCard.css `.pc-changed`), and that wash greys a ground whose hue is far
+  // from the gold's. So the gold rises until it clears its own wash too.
+  const washOf = (hex: string, alpha: number, under: string): string => {
+    const ch = (x: string, i: number) => parseInt(x.slice(1 + i * 2, 3 + i * 2), 16);
+    const mix = [0, 1, 2].map((i) => Math.round(ch(hex, i) * alpha + ch(under, i) * (1 - alpha)));
+    return `#${mix.map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+  };
+  const NIGHT_WASH = 0.14;
+  let goldL = hexToHsl(hslToHex(atContrast({ h: sun.h, s: goldSat, l: 0.588 }, nightRaised, AA_BODY, false)))!.l;
+  while (goldL < 0.97 && contrastRatio(hslToHex({ h: sun.h, s: goldSat, l: goldL }), washOf(hslToHex({ h: sun.h, s: goldSat, l: goldL }), NIGHT_WASH, nightRaised)) < AA_BODY) goldL += 0.005;
+  const nightGold = hslToHex({ h: sun.h, s: goldSat, l: goldL });
+  const nightGoldLit = hslToHex(atContrast({ h: sun.h, s: Math.min(0.85, goldSat * 1.16), l: Math.max(0.735, goldL) }, nightRaised, AA_BODY, false));
+  const rgbaOf = (hex: string, alpha: number) =>
+    `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${alpha})`;
+  const nightGoldDeep = hslToHex({ h: sun.h, s: Math.min(0.8, goldSat * 0.97), l: 0.251 });
+  measured("night ink on night raised", nightInk, nightRaised, AA_BODY, false);
+  measured("night ink-dim on night raised", nightDim, nightRaised, AA_BODY, false);
+  measured("night gold on night raised", nightGold, nightRaised, AA_BODY, false);
+  measured("night ground on night gold", nightGround, nightGold, AA_BODY, false);
+  measured("night edge on night raised", nightEdge, nightRaised, AA_LARGE, false);
+  measured("night gold on its own wash", nightGold, washOf(nightGold, NIGHT_WASH, nightRaised), AA_BODY, false);
+
   // Each pair now CARRIES the floor it was judged against. This used to sniff the
   // name for "large" or "accent", which happened to be right for the six pairings
   // that existed and would have quietly mis-scored the next one added: "accent
@@ -398,6 +449,22 @@ export function deriveTheme(
     "--chart-4": sunHex,
     "--chart-5": mistLight,
     "--radius": `${card.radiusRem}rem`,
+    // The night layer (role card, character sheet, Admin Night look). Derived above.
+    "--sheet-ground": nightGround,
+    "--sheet-panel": nightPanel,
+    "--sheet-panel-raised": nightRaised,
+    "--sheet-line": nightLine,
+    "--sheet-edge": nightEdge,
+    "--sheet-ink": nightInk,
+    "--sheet-ink-dim": nightDim,
+    "--sheet-earned": nightGold,
+    "--sheet-earned-highlight": nightGoldLit,
+    "--sheet-earned-shadow": nightGoldDeep,
+    // The gold washes the card lays under gold words (playerCard.css).
+    "--sheet-earned-wash": rgbaOf(nightGold, NIGHT_WASH),
+    "--sheet-earned-wash-soft": rgbaOf(nightGold, 0.06),
+    "--sheet-earned-highlight-wash": rgbaOf(nightGoldLit, 0.1),
+    "--sheet-earned-highlight-wash-soft": rgbaOf(nightGoldLit, 0.02),
   };
 
   return { vars, contrast, card, fonts: cardFontStacks(card) };

@@ -74,9 +74,9 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
 import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
-import { claimRefusalFor, isPhysicalQuest } from "../lib/questClaimGate";
+import { claimRefusalFor, isPhysicalQuest, minimumAgesOnByDefault } from "../lib/questClaimGate";
 import type { ClaimRefusal } from "../../shared/questClaimGate";
-import { effectiveMinAge, isAgeBand, LIGHT_WORK_MIN_AGE } from "../../shared/ageBands";
+import { effectiveMinAge, isAgeBand, isMinimumAgeChoice } from "../../shared/ageBands";
 import { ageBandOf, badgeNames, gateableBadgeIds, openClaimsOn, putQuestSafety, questSafetyOf, setAgeBand } from "../repos/questSafety";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
@@ -121,6 +121,8 @@ type Deps = Pick<
   limitState(bucket: string, max: number, windowMs: number): Promise<LimitState>;
   /** The next-step box after a claim (server/lib/questNextStep.ts). */
   questNextStep(quest: QuestRecord, userId: string): Promise<ResolvedNextStep>;
+  /** Whether quests may ask a minimum age; the village setting `quest.minimum_ages` when absent. */
+  minimumAgesOn?: () => boolean;
 };
 
 export function register(app: Express, deps: Deps): void {
@@ -146,6 +148,8 @@ export function register(app: Express, deps: Deps): void {
     limitState,
     projectCurrency,
   } = deps;
+  // Whether quests may ask a minimum age (shared/ageBands.ts). The village setting, ships off.
+  const minimumAgesOn: () => boolean = deps.minimumAgesOn ?? minimumAgesOnByDefault;
 
   // Quests: public list
   /*
@@ -813,7 +817,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isPhysicalQuest(getPool(), questId))) return null;
     const quest = await questsRepo.byId(questId);
     if (!quest) return null;
-    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor, minimumAgesOn }, quest, user);
     if (!refusal) return null;
     if (refusal.kind === "badge" || refusal.kind === "attest" || refusal.kind === "age") return safetyRefusalBody(refusal);
     return { error: "This crew's quest is not open to you yet.", refusal: refusal.kind };
@@ -822,11 +826,16 @@ export function register(app: Express, deps: Deps): void {
   /** What a quest asks of the body, for anyone reading it. */
   app.get("/api/game/quests/:id/safety", async (req, res) => {
     const safety = await questSafetyOf(getPool(), String(req.params.id));
-    if (!safety) return res.json({ physical: false, minAge: null, requiredBadges: [], safetyNote: null, estimateHours: null });
+    const on = minimumAgesOn();
+    if (!safety) return res.json({ physical: false, minAge: null, minAgeChosen: null, requiredBadges: [], safetyNote: null, estimateHours: null, minimumAgesOn: on });
     const names = await badgeNames(getPool(), safety.requiredBadges);
     res.json({
       physical: safety.physical,
-      minAge: effectiveMinAge(safety),
+      // The age in force, null while the village has minimum ages off. The
+      // quest's own choice is kept beside it for the editor.
+      minAge: effectiveMinAge(safety, on),
+      minAgeChosen: isMinimumAgeChoice(safety.minAge) ? safety.minAge : null,
+      minimumAgesOn: on,
       requiredBadges: safety.requiredBadges.map((id, i) => ({ id, name: names[i] })),
       safetyNote: safety.safetyNote,
       estimateHours: safety.estimateHours,
@@ -834,9 +843,10 @@ export function register(app: Express, deps: Deps): void {
   });
 
   /**
-   * Set what a quest asks of the body. The same hands that edit the quest
-   * (the admin route above) set it. Only earned or granted badges may gate,
-   * and a physical quest can never ask below 16 (Rye, 2026-11-09). Open claims
+   * Set what a hands-on quest asks. The same hands that edit the quest (the
+   * admin route above) set it. Only earned or granted badges may gate. A
+   * minimum age is 16 or 18, the two a band can answer, and it is asked only
+   * while the village has minimum ages on (Rye, 2026-11-09). Open claims
    * the new rules would refuse are named in the reply and on the record, so
    * whoever changed it sees who it now affects (spec R3).
    */
@@ -846,12 +856,9 @@ export function register(app: Express, deps: Deps): void {
     if (!quest) return res.status(404).json({ error: "Not found" });
     const b = req.body ?? {};
     const physical = b.physical === true;
-    const minAgeRaw = b.minAge == null || b.minAge === "" ? null : Math.trunc(Number(b.minAge));
-    if (minAgeRaw != null && (!Number.isFinite(minAgeRaw) || minAgeRaw < 0 || minAgeRaw > 120)) {
-      return res.status(400).json({ error: "The minimum age is a whole number of years." });
-    }
-    if (physical && minAgeRaw != null && minAgeRaw < LIGHT_WORK_MIN_AGE) {
-      return res.status(400).json({ error: `A physical quest asks at least ${LIGHT_WORK_MIN_AGE}, and that only for light work beside a named adult.` });
+    const minAgeRaw = b.minAge == null || b.minAge === "" ? null : Number(b.minAge);
+    if (minAgeRaw != null && !isMinimumAgeChoice(minAgeRaw)) {
+      return res.status(400).json({ error: "A quest can ask 16 or 18, or no age at all." });
     }
     const asked: string[] = Array.isArray(b.requiredBadges) ? b.requiredBadges.map(String).filter((x: string) => x.trim() !== "") : [];
     const gateable = await gateableBadgeIds(getPool(), asked);
@@ -867,7 +874,7 @@ export function register(app: Express, deps: Deps): void {
     const open = await openClaimsOn(getPool(), quest.id);
     const nowRefused: string[] = [];
     for (const c of open) {
-      if (await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, { id: c.userId })) nowRefused.push(c.id);
+      if (await claimRefusalFor({ getPool, stageOf, roleIdsFor, minimumAgesOn }, quest, { id: c.userId })) nowRefused.push(c.id);
     }
     await recordEvent(getPool(), {
       kind: "audit", text: `quest:safety:${quest.id}`, actorUserId: actor,
@@ -934,7 +941,7 @@ export function register(app: Express, deps: Deps): void {
     // rule: closing the board must never strand work already in flight.
     // Refusals name exactly what is missing, because "computer says no"
     // teaches nothing.
-    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor, minimumAgesOn }, quest, user);
     if (refusal?.kind === "example") return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     if (refusal?.kind === "closed") {
       return res.status(409).json({
