@@ -33,6 +33,36 @@ describe("precompileMessages: English compiled at build, so no compiler ships (s
     expect(out).toContain(JSON.stringify(compileMessage("{a} and {c}")));
   });
 
+  /*
+   * The macro single-quotes a message that holds a double quote, and pretty-
+   * prints a JSX descriptor across lines (@lingui/vite-plugin 6.12, probed
+   * 2026-11-08 on the Funding rounds page). A single-quoted message left as a
+   * string renders its placeholders raw, the same defect as the values case.
+   */
+  it("compiles a single-quoted message, with values first", () => {
+    const code = `<T {...{ id: "Loql8J", values: { allowance: allowance }, message: 'Share {allowance} "now"' }}/>`;
+    const out = precompileMessages(code);
+    expect(out).toContain(JSON.stringify(compileMessage(`Share {allowance} "now"`)));
+    expect(out).not.toMatch(/message: ['"]/);
+  });
+
+  it("compiles a pretty-printed JSX descriptor across lines", () => {
+    const code = `<Trans_ {.../*i18n*/ {
+        id: "Loql8J",
+        values: {
+            allowance: allowance
+        },
+        message: "Share {allowance} now",
+        context: "funding rounds"
+    }}/>`;
+    expect(precompileMessages(code)).toContain(`message: ${JSON.stringify(compileMessage("Share {allowance} now"))}`);
+  });
+
+  it("compiles a descriptor with JSX components between its id and message", () => {
+    const code = `<T {...{ id: "AbCdE1", values: { a: a }, components: { 0: <Link href={x} className={y({ z: 1 })} /> }, message: "Read <0>{a}</0>" }}/>`;
+    expect(precompileMessages(code)).toContain(JSON.stringify(compileMessage("Read <0>{a}</0>")));
+  });
+
   it("leaves code without macro descriptors untouched", () => {
     const code = `const message = "hello"; obj({ id: "toolong1", message: "nope" })`;
     expect(precompileMessages(code)).toBe(code);
