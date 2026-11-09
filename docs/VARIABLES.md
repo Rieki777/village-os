@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 203 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 204 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 225 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 226 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-252 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 34 choice, 39 text, 1 longtext.
+253 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 30 boolean, 34 choice, 39 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@ Each dial also says WHEN a change lands. 225 of them as soon as it is saved, and
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
-| Quests | 2 | 2 | 0 |
+| Quests | 3 | 3 | 0 |
 | Governance | 51 | 45 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
@@ -158,6 +158,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: session.template | `progression.unlock.session.template` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: companion.use | `progression.unlock.companion.use` | Progression | choice | `member` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
+| Let quests ask a minimum age | `quest.minimum_ages` | Quests | boolean | `false` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
 | The proposer bar: earned recognition to propose | `governance.hypha_threshold` | Governance | integer | `0` | the whole village |
@@ -1711,7 +1712,7 @@ What it may be set to:
 
 ## Quests
 
-2 dials. 2 for the whole village.
+3 dials. 3 for the whole village.
 
 ### Require submitted work before consent
 
@@ -1722,6 +1723,20 @@ When on, value can only be released for work that was actually filed. Turning th
 | Key | `quest.require_submission_before_consent` |
 | Type | boolean, on or off |
 | Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Let quests ask a minimum age
+
+Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.
+
+| Fact | Value |
+| --- | --- |
+| Key | `quest.minimum_ages` |
+| Type | boolean, on or off |
+| Default | `false` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
