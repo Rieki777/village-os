@@ -40,6 +40,8 @@ export interface LensCircle {
   parentCircleId: string | null;
   status: string;
   colour: string;
+  /** The building this circle calls home, or null (map lane R1). */
+  homeStructureKey: string | null;
 }
 
 export interface LensRole {
@@ -53,6 +55,8 @@ export interface LensRole {
   description: string;
   /** Names only, and only on the tier the server sends them to. */
   holders: string[];
+  /** The building this seat lives in, or null (map lane R1). */
+  structureKey: string | null;
 }
 
 export interface LensOrg {
@@ -67,6 +71,11 @@ export interface LensOrg {
  * Defensive on every field because the map is a separate document that trusts
  * nothing it is handed, and a row with no name has nothing to be drawn as.
  */
+/** A map structure key, or null: a string with something in it, at most 64 long as the column is. */
+function placeKey(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 64) : null;
+}
+
 export function lensFromOrg(body: any): LensOrg | null {
   if (!body || typeof body !== "object" || typeof body.version !== "string") return null;
   const str = (v: unknown) => (v == null ? "" : String(v));
@@ -79,6 +88,7 @@ export function lensFromOrg(body: any): LensOrg | null {
           parentCircleId: c.parentCircleId ? str(c.parentCircleId) : null,
           status: str(c.status || "active"),
           colour: /^#[0-9a-f]{6}$/i.test(str(c.colour)) ? str(c.colour) : "",
+          homeStructureKey: placeKey(c.homeStructureKey),
         }))
     : [];
   const roles: LensRole[] = Array.isArray(body.roles)
@@ -96,6 +106,7 @@ export function lensFromOrg(body: any): LensOrg | null {
           holders: Array.isArray(r.holders)
             ? r.holders.map((h: any) => str(h?.name)).filter(Boolean)
             : [],
+          structureKey: placeKey(r.structureKey),
         }))
     : [];
   return { version: body.version, circles, roles };
