@@ -16,6 +16,16 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr "Differs"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "It asks:"
+msgstr "It asks:"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pick a reason"
+msgstr "Pick a reason"
+
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Submitted work waiting for the human gate. Act in Admin → Quest Claims."
 msgstr "Submitted work waiting for the human gate. Act in Admin → Quest Claims."
@@ -100,6 +110,12 @@ msgctxt "next step box, copy the crew invite link"
 msgid "Copy the crew link"
 msgstr "Copy the crew link"
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As little as, for {0}"
+msgstr "As little as, for {0}"
+
 #: client/src/components/notebook/NotebookExport.tsx
 msgctxt "canvas export button"
 msgid "Build it again"
@@ -109,6 +125,15 @@ msgstr "Build it again"
 msgctxt "change request step"
 msgid "In review"
 msgstr "In review"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{spent} goes to these quests, held for them until each one is done. {left} stays in the pot."
+msgstr "{spent} goes to these quests, held for them until each one is done. {left} stays in the pot."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "None yet"
+msgstr "None yet"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -148,6 +173,11 @@ msgstr "Pick a reason"
 msgid "What this run did not test"
 msgstr "What this run did not test"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure"
+msgstr "Your figure"
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "tag on the season's next week"
 msgid "Next"
@@ -178,6 +208,10 @@ msgstr "The village's own rows"
 msgid "Load a different season file"
 msgstr "Load a different season file"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your pledge is withdrawn."
+msgstr "Your pledge is withdrawn."
+
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "How what is left is shared"
 msgstr "How what is left is shared"
@@ -187,14 +221,14 @@ msgctxt "label of an answer box"
 msgid "Your answer"
 msgstr "Your answer"
 
-#: client/src/components/admin/ConflictDoorFields.tsx
-#~ msgid "no cover role"
-#~ msgstr "no cover role"
-
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Village signing key"
 msgstr "Village signing key"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "What does it ask from the pot, in {unit}?"
+msgstr "What does it ask from the pot, in {unit}?"
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Delete it for good"
@@ -338,7 +372,11 @@ msgctxt "module library, builder step number"
 msgid "Step {n}"
 msgstr "Step {n}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, returned when the quest was not funded"
+msgstr "{who} pledged {much}, returned when the quest was not funded"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "A short name"
 msgstr "A short name"
@@ -348,10 +386,6 @@ msgstr "A short name"
 msgctxt "a risk tag on a decision"
 msgid "Risk: {tag}"
 msgstr "Risk: {tag}"
-
-#: client/src/components/notebook/NotebookAdd.tsx
-#~ msgid "Adding"
-#~ msgstr "Adding"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "the care role that hears a conflict first"
@@ -363,14 +397,19 @@ msgctxt "the canvas moon is being published"
 msgid "Publishing"
 msgstr "Publishing"
 
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Take the new price"
+msgstr "Take the new price"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Paid {paidOn}"
 msgstr "Paid {paidOn}"
 
-#: client/src/components/canvas/CanvasBlockFrames.tsx
-#~ msgid "Learn about {name}"
-#~ msgstr "Learn about {name}"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "What the village chose"
+msgstr "What the village chose"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
@@ -393,17 +432,20 @@ msgctxt "module health, demoted module"
 msgid "serving OFF, needs {0}"
 msgstr "serving OFF, needs {0}"
 
-#. placeholder {0}: m.consulted.ownRecord.join("; ")
-#: client/src/components/journey/LaunchGuide.tsx
-#~ msgid "Your calls: {0}."
-#~ msgstr "Your calls: {0}."
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "It changes something everyone shares, such as a path, the water or a common building."
+msgstr "It changes something everyone shares, such as a path, the water or a common building."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The amount must be a number above zero."
+msgstr "The amount must be a number above zero."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting once changed"
 msgid "After"
 msgstr "After"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share this idea"
 msgstr "Share this idea"
@@ -438,6 +480,11 @@ msgstr "Review dates, sectors and role types {agent} keeps."
 msgid "The change you propose"
 msgstr "The change you propose"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pricing desk"
+msgstr "Pricing desk"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr "The vote is open. <0>Read it and vote</0>."
@@ -450,13 +497,13 @@ msgstr "Nobody holds the {careName} role today, so a private intake would reach 
 msgid "For the decisions the platform does not run, the village writes who approves, who is asked first, who is told and how it is decided."
 msgstr "For the decisions the platform does not run, the village writes who approves, who is asked first, who is told and how it is decided."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Counted by Voice, with each person's share capped. One member, one vote is shown beside it."
+msgstr "Counted by Voice, with each person's share capped. One member, one vote is shown beside it."
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The line holds the name of someone in this village, so the public page hides it. Write it again with the role in place of the name."
 msgstr "The line holds the name of someone in this village, so the public page hides it. Write it again with the role in place of the name."
-
-#: client/src/components/journey/TestRun.tsx
-#~ msgid "Run the test"
-#~ msgstr "Run the test"
 
 #: client/src/pages/Governance.tsx
 msgid "Who approves each kind of decision, who is asked first, who is told, and how it is made. These answers come from the rules this village runs on today, so they change when the village changes them."
@@ -480,6 +527,10 @@ msgctxt "agreements whose vote is open"
 msgid "At a vote now"
 msgstr "At a vote now"
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Both counts agree."
+#~ msgstr "Both counts agree."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a suggested edit that adds a change"
 msgid "Add: {proposedTo}"
@@ -499,9 +550,9 @@ msgstr "Why"
 msgid "The village is deciding a change to this right now."
 msgstr "The village is deciding a change to this right now."
 
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Remove this row"
-#~ msgstr "Remove this row"
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "This quest has a new price."
+msgstr "This quest has a new price."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Leave empty if this village does not use this rung"
@@ -534,9 +585,9 @@ msgctxt "button that sends a private restorative intake"
 msgid "Send privately"
 msgstr "Send privately"
 
-#: client/src/components/companion/CompanionPanel.tsx
-#~ msgid "A question about {name}"
-#~ msgstr "A question about {name}"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Counted by one member, one vote. The count by Voice is shown beside it."
+msgstr "Counted by one member, one vote. The count by Voice is shown beside it."
 
 #. placeholder {0}: m.consulted.references.join("; ")
 #: client/src/components/journey/LaunchGuide.tsx
@@ -571,15 +622,11 @@ msgstr "Open a round for ideas"
 msgid "Across the whole run"
 msgstr "Across the whole run"
 
-#: client/src/components/journey/TestRun.tsx
-#~ msgid "Moon by moon"
-#~ msgstr "Moon by moon"
-
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Someone who reaches out hears back within {replyHours, plural, one {# hour} other {# hours}}."
 msgstr "Someone who reaches out hears back within {replyHours, plural, one {# hour} other {# hours}}."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is shared. Others can comment on it in its thread."
 msgstr "Your idea is shared. Others can comment on it in its thread."
 
@@ -587,10 +634,6 @@ msgstr "Your idea is shared. Others can comment on it in its thread."
 msgctxt "module library, builder section"
 msgid "Worked examples"
 msgstr "Worked examples"
-
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Loading the frames…"
-#~ msgstr "Loading the frames…"
 
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
@@ -626,10 +669,6 @@ msgstr "Build a module"
 msgid "{0} answers for the service."
 msgstr "{0} answers for the service."
 
-#: client/src/components/companion/CompanionPanel.tsx
-#~ msgid "Your question"
-#~ msgstr "Your question"
-
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Search languages"
@@ -644,10 +683,6 @@ msgctxt "module library, builder card link to the builder section"
 msgid "The five steps, and what to hand your agent ↓"
 msgstr "The five steps, and what to hand your agent ↓"
 
-#: client/src/components/canvas/CanvasSuggestionForm.tsx
-#~ msgid "It would change:"
-#~ msgstr "It would change:"
-
 #: client/src/components/canvas/RecordReadingForm.tsx
 msgctxt "the occasion of a canvas reading"
 msgid "The occasion"
@@ -657,6 +692,11 @@ msgstr "The occasion"
 msgctxt "change request note outcome"
 msgid "Taken in"
 msgstr "Taken in"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}, firm"
+msgstr "{who} pledged {much}, firm"
 
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "Start again from this choice's words"
@@ -675,11 +715,6 @@ msgstr "Turn modules on in <0>the Module Library</0>."
 #~ msgid "Sign in"
 #~ msgstr "Sign in"
 
-#. placeholder {0}: show(s.whoInRoom)
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "In the room: {0}"
-#~ msgstr "In the room: {0}"
-
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Chain: {there}."
@@ -688,10 +723,6 @@ msgstr "Chain: {there}."
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it."
 msgstr "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it."
-
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "Key moments"
-#~ msgstr "Key moments"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "The blocks below are in canvas order until a season is loaded again."
@@ -757,6 +788,11 @@ msgctxt "workbook section heading"
 msgid "The four foundations"
 msgstr "The four foundations"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Not funded this round"
+msgstr "Not funded this round"
+
 #: client/src/components/review/SeraCompare.tsx
 msgid "Struck words are only here. Underlined words are only in {theirsTitle}."
 msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
@@ -774,7 +810,7 @@ msgstr "Who is asked first"
 msgid "Everything has been touched recently."
 msgstr "Everything has been touched recently."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "The village has chosen"
 msgstr "The village has chosen"
@@ -782,11 +818,6 @@ msgstr "The village has chosen"
 #: client/src/components/canvas/CanvasFrameSay.tsx
 msgid "Your suggestion is open. It is listed under Adopt, with your name and today's date, until it is decided."
 msgstr "Your suggestion is open. It is listed under Adopt, with your name and today's date, until it is decided."
-
-#. placeholder {0}: m.consulted.brief.join("; ")
-#: client/src/components/journey/LaunchGuide.tsx
-#~ msgid "Your brief: {0}."
-#~ msgstr "Your brief: {0}."
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Ask the village for one copy of its database"
@@ -823,7 +854,12 @@ msgctxt "signing key"
 msgid "The key was not replaced"
 msgstr "The key was not replaced"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+msgstr "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 msgstr "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 
@@ -860,13 +896,13 @@ msgstr "You asked: {askedList}. Only you see this list."
 msgid "Added. It is private: only you can read it."
 msgstr "Added. It is private: only you can read it."
 
-#: client/src/components/notebook/NotebookDocument.tsx
-#~ msgid "Opening the document"
-#~ msgstr "Opening the document"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Back this quest, in {unit}"
+msgstr "Back this quest, in {unit}"
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "The five levels"
-#~ msgstr "The five levels"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "This disagreement stays in the round's record for everyone to see."
+msgstr "This disagreement stays in the round's record for everyone to see."
 
 #: client/src/components/journey/LaunchGuide.tsx
 msgid "The guide needs an Anthropic key. Set one in <0>Integrations</0>. The checklist above works fine without the guide."
@@ -881,10 +917,6 @@ msgstr "Can live with it"
 msgctxt "sera changes"
 msgid "Not in a circle"
 msgstr "Not in a circle"
-
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Their name"
-#~ msgstr "Their name"
 
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, builder section"
@@ -907,11 +939,6 @@ msgstr "That did not load."
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Nothing in this document matched a block of the canvas."
 msgstr "Nothing in this document matched a block of the canvas."
-
-#: client/src/components/canvas/CanvasSuggestionForm.tsx
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Who is told"
-#~ msgstr "Who is told"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "The agreement this vote would adopt"
@@ -958,11 +985,6 @@ msgctxt "delete a change request"
 msgid "Delete"
 msgstr "Delete"
 
-#: client/src/components/canvas/CanvasFrameSay.tsx
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "The conflict agreement"
-#~ msgstr "The conflict agreement"
-
 #: client/src/components/journey/TestRun.tsx
 msgid "What a member can give each moon"
 msgstr "What a member can give each moon"
@@ -970,6 +992,10 @@ msgstr "What a member can give each moon"
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Nobody can bring it back."
 msgstr "Nobody can bring it back."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Nobody has backed this yet."
+msgstr "Nobody has backed this yet."
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgctxt "the Sense frame of a canvas block"
@@ -984,6 +1010,16 @@ msgstr "Adopt: suggestions on {name}"
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told."
 msgstr "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Save"
+msgstr "Save"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set the prices"
+msgstr "Set the prices"
 
 #: client/src/components/canvas/CanvasBlockCard.tsx
 msgctxt "button asking the companion about a canvas block"
@@ -1016,14 +1052,6 @@ msgctxt "button that adds a practice that keeps tensions small"
 msgid "Add a practice"
 msgstr "Add a practice"
 
-#: client/src/pages/CanvasWorkbook.tsx
-#~ msgid "Paper size"
-#~ msgstr "Paper size"
-
-#: client/src/pages/CanvasWorkbook.tsx
-#~ msgid "Opening the workbook"
-#~ msgstr "Opening the workbook"
-
 #: client/src/pages/ExitPolicy.tsx
 msgid "Confirm with your password"
 msgstr "Confirm with your password"
@@ -1033,6 +1061,11 @@ msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set"
+msgstr "Set"
+
 #: client/src/components/companion/CompanionPanel.tsx
 msgctxt "send the question to the guide"
 msgid "Ask"
@@ -1041,14 +1074,6 @@ msgstr "Ask"
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "How widely it should be switched on"
 msgstr "How widely it should be switched on"
-
-#: client/src/components/notebook/NotebookDocument.tsx
-#~ msgid "Choose a block"
-#~ msgstr "Choose a block"
-
-#: client/src/components/notebook/NotebookPanel.tsx
-#~ msgid "Reading your notebook."
-#~ msgstr "Reading your notebook."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, no date on the quest"
@@ -1064,6 +1089,10 @@ msgctxt "my notebook documents"
 msgid "Yours"
 msgstr "Yours"
 
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "You took it on at its earlier price, and your claim keeps that one unless you choose the new price shown above."
+msgstr "You took it on at its earlier price, and your claim keeps that one unless you choose the new price shown above."
+
 #: client/src/components/review/SeraCompare.tsx
 msgctxt "sera compare"
 msgid "Nothing here yet."
@@ -1073,6 +1102,12 @@ msgstr "Nothing here yet."
 msgctxt "canvas export button"
 msgid "Build the pack"
 msgstr "Build the pack"
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}: waiting for a second Treasurer or a steward to sign."
+msgstr "{0}: waiting for a second Treasurer or a steward to sign."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Add a contact outside the village"
@@ -1101,6 +1136,13 @@ msgctxt "fallback when adopting or declining a canvas suggestion is refused"
 msgid "Nothing was decided."
 msgstr "Nothing was decided."
 
+#. placeholder {0}: money(p.s.range.lowTotalMinor)
+#. placeholder {1}: money(p.s.range.highTotalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Likely {0} to {1}"
+msgstr "Likely {0} to {1}"
+
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "Saved as a draft and not adopted yet, so the launch checklist and /exit-policy both read it as not named."
 msgstr "Saved as a draft and not adopted yet, so the launch checklist and /exit-policy both read it as not named."
@@ -1110,12 +1152,12 @@ msgctxt "sera compare"
 msgid "{owner} version"
 msgstr "{owner} version"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it?"
 msgstr "Who might do it?"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Roughly what would it cost, in {unit}?"
 msgstr "Roughly what would it cost, in {unit}?"
 
@@ -1123,13 +1165,10 @@ msgstr "Roughly what would it cost, in {unit}?"
 msgid "Parts of this agreement name people, so they show to members only."
 msgstr "Parts of this agreement name people, so they show to members only."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
 #: client/src/pages/FundingRounds.tsx
 msgid "That did not save. Try again."
 msgstr "That did not save. Try again."
-
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Tools: {tools}"
-#~ msgstr "Tools: {tools}"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The steward who receives it"
@@ -1155,10 +1194,6 @@ msgstr "Say: the village's answer on {name}"
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing from {agent} waits for the chart"
 msgstr "Nothing from {agent} waits for the chart"
-
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "No role chosen"
-#~ msgstr "No role chosen"
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
@@ -1190,11 +1225,17 @@ msgctxt "retry a failed read"
 msgid "Try again"
 msgstr "Try again"
 
+#. placeholder {0}: q.openClaims
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} open claims keep the price they were taken at."
+msgstr "{0} open claims keep the price they were taken at."
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Delete this change request? This cannot be undone."
 msgstr "Delete this change request? This cannot be undone."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choose"
 msgstr "Choose"
@@ -1274,6 +1315,11 @@ msgstr "When shaping starts (leave empty to keep the round in Seed)"
 msgid "When tension between people needs repair, these are the steps this village wrote for it:"
 msgstr "When tension between people needs repair, these are the steps this village wrote for it:"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Confirm the hours first"
+msgstr "Confirm the hours first"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading on the change requests page"
 msgid "Your change requests"
@@ -1296,7 +1342,7 @@ msgstr "Why the village needs it"
 msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 msgstr "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Talk about it"
 msgstr "Talk about it"
@@ -1306,9 +1352,10 @@ msgctxt "review response"
 msgid "Ask a question"
 msgstr "Ask a question"
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "The twelve blocks"
-#~ msgstr "The twelve blocks"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Send for signing"
+msgstr "Send for signing"
 
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run section toggle"
@@ -1344,6 +1391,12 @@ msgstr "Sign in to read the conflict agreement."
 msgid "Asking records that you asked, when, and which contact, and then shows you how to reach them. No words go anywhere, and nobody is sent a notice."
 msgstr "Asking records that you asked, when, and which contact, and then shows you how to reach them. No words go anywhere, and nobody is sent a notice."
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours for {0}"
+msgstr "Estimated hours for {0}"
+
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "label of the note box on a canvas suggestion"
 msgid "Your note (optional)"
@@ -1355,17 +1408,9 @@ msgid "Read both in full"
 msgstr "Read both in full"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Remove this contact"
-#~ msgstr "Remove this contact"
-
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "nobody chosen to hold a conflict involving power"
 msgid "Not named yet"
 msgstr "Not named yet"
-
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Save this season"
-#~ msgstr "Save this season"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing has been read from {agent} yet."
@@ -1389,14 +1434,20 @@ msgstr "A season file comes from whoever runs your season, or you can write your
 msgid "If it is still stuck, a circle hears it. In the room: the two of us, the care holder and the circle."
 msgstr "If it is still stuck, a circle hears it. In the room: the two of us, the care holder and the circle."
 
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Appeal: {appealShown}"
-#~ msgstr "Appeal: {appealShown}"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdraw my pledge"
+msgstr "Withdraw my pledge"
 
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook cover, a line for the date"
 msgid "On"
 msgstr "On"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Own figure"
+msgstr "Own figure"
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement close date missing"
@@ -1430,7 +1481,7 @@ msgctxt "a season week in the preview: number, date and title"
 msgid "Week {0}, {1}: {2}"
 msgstr "Week {0}, {1}: {2}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr "A rough idea is enough. Each member may share {allowance} in this round."
 
@@ -1443,6 +1494,11 @@ msgstr "The canvas asks"
 msgid "Draft with a model"
 msgstr "Draft with a model"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Funded"
+msgstr "Funded"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "screen reader name of one change"
 msgid "{label}, from {before} to {after}"
@@ -1451,11 +1507,6 @@ msgstr "{label}, from {before} to {after}"
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The public page names them by organisation or role. Members see the name and how to reach them, and can ask them to talk."
 msgstr "The public page names them by organisation or role. Members see the name and how to reach them, and can ask them to talk."
-
-#. placeholder {0}: doc.ownerName
-#: client/src/components/notebook/NotebookPanel.tsx
-#~ msgid ", from {0}"
-#~ msgstr ", from {0}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "when the review time ends"
@@ -1485,10 +1536,6 @@ msgctxt "signing key"
 msgid "an unknown time"
 msgstr "an unknown time"
 
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Who decides: {pen}"
-#~ msgstr "Who decides: {pen}"
-
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Where the words and the settings part"
 msgstr "Where the words and the settings part"
@@ -1496,6 +1543,11 @@ msgstr "Where the words and the settings part"
 #: client/src/pages/ExitPolicy.tsx
 msgid "Could not open the process"
 msgstr "Could not open the process"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
+msgstr "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Ideas other villages keep, added only if you tap one:"
@@ -1505,10 +1557,14 @@ msgstr "Ideas other villages keep, added only if you tap one:"
 msgid "Close the agreement's frames"
 msgstr "Close the agreement's frames"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "This round is closed"
 msgstr "This round is closed"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{n, plural, one {# person chose it.} other {# people chose it.}}"
+msgstr "{n, plural, one {# person chose it.} other {# people chose it.}}"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
@@ -1547,11 +1603,15 @@ msgstr "Load a season file"
 msgid "Adopted. The exit policy and the governance page read it from now on."
 msgstr "Adopted. The exit policy and the governance page read it from now on."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "No quest reached the ballot in this round."
+msgstr "No quest reached the ballot in this round."
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "Nobody holds the {intakeRoleLabel} today, so a private intake would reach nobody."
 msgstr "Nobody holds the {intakeRoleLabel} today, so a private intake would reach nobody."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Rough cost:"
 msgstr "Rough cost:"
@@ -1565,6 +1625,12 @@ msgstr "{agent} still didn't answer at {askedAt}."
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr "One of your numbers differs between sources. The Treasurer has been shown it."
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Reason for {0}"
+msgstr "Reason for {0}"
+
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid " (leave it empty to use the file's name)"
 msgstr " (leave it empty to use the file's name)"
@@ -1572,6 +1638,11 @@ msgstr " (leave it empty to use the file's name)"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Nothing yet"
+msgstr "Nothing yet"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{agent} suggests {n} small changes for the chart"
@@ -1609,7 +1680,7 @@ msgstr "Answer"
 msgid "Your note (optional to adopt, needed to decline)"
 msgstr "Your note (optional to adopt, needed to decline)"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Yours"
 msgstr "Yours"
@@ -1645,10 +1716,6 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Add a step"
-#~ msgstr "Add a step"
-
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Work out this role's pay with the valuation engine"
 msgstr "Work out this role's pay with the valuation engine"
@@ -1667,14 +1734,16 @@ msgctxt "sera changes"
 msgid "Decide it in the structure review"
 msgstr "Decide it in the structure review"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "From {author}"
 msgstr "From {author}"
 
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Change this row"
-#~ msgstr "Change this row"
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure for {0}"
+msgstr "Your figure for {0}"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "The round is open for ideas."
@@ -1695,16 +1764,15 @@ msgctxt "button that proposes a change to what closing means"
 msgid "Propose a change"
 msgstr "Propose a change"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdraw it"
+msgstr "Withdraw it"
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, open roles tagged for no character"
 msgid "Also open in the village, for anyone:"
 msgstr "Also open in the village, for anyone:"
-
-#. placeholder {0}: season.name
-#. placeholder {1}: season.timezone
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "<0>{0}</0>, {1} time."
-#~ msgstr "<0>{0}</0>, {1} time."
 
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run button, busy"
@@ -1724,6 +1792,11 @@ msgstr "Copied ✓"
 msgctxt "workbook block page, the quoted canvas question"
 msgid "The canvas asks"
 msgstr "The canvas asks"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Waiting for a signer"
+msgstr "Waiting for a signer"
 
 #. placeholder {0}: cycle.poolCredited
 #. placeholder {1}: cycle.poolToken ?? ""
@@ -1751,7 +1824,7 @@ msgstr "Not now"
 msgid "Reach {reachName} here: <0>{reachHow}</0>. The village has a note that you asked, and when. What you say to them is yours: nothing was sent."
 msgstr "Reach {reachName} here: <0>{reachHow}</0>. The village has a note that you asked, and when. What you say to them is yours: nothing was sent."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Harvest"
 msgstr "Harvest"
@@ -1783,10 +1856,6 @@ msgstr "Link copied"
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "Next new moon: {day}."
 msgstr "Next new moon: {day}."
-
-#: client/src/components/governance/VillageAgreements.tsx
-#~ msgid "The village's agreements"
-#~ msgstr "The village's agreements"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "label before a decision's note"
@@ -1849,6 +1918,11 @@ msgstr "Its role comes with it, and leaving the circle out leaves it out too."
 msgid "How to add it"
 msgstr "How to add it"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 quest still needs yours"
+msgstr "1 quest still needs yours"
+
 #: client/src/pages/ExitPolicy.tsx
 msgctxt "exit policy section heading"
 msgid "Repair before departure"
@@ -1879,11 +1953,7 @@ msgstr "How a departing member's contribution is valued"
 msgid "This village has not written its conflict steps yet."
 msgstr "This village has not written its conflict steps yet."
 
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Foundations: {foundations}"
-#~ msgstr "Foundations: {foundations}"
-
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Yours, shared without your name"
 msgstr "Yours, shared without your name"
 
@@ -2008,6 +2078,26 @@ msgstr "The people outside the village it names"
 msgid "What keeps small tensions small"
 msgstr "What keeps small tensions small"
 
+#. placeholder {0}: money(p.s.expected.totalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use {0}"
+msgstr "Use {0}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
+msgstr "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Cancel"
+msgstr "Cancel"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "When it is done:"
+msgstr "When it is done:"
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "You hear back within {replyHours, plural, one {# hour} other {# hours}}."
 msgstr "You hear back within {replyHours, plural, one {# hour} other {# hours}}."
@@ -2024,10 +2114,6 @@ msgstr "Answer"
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "Remove the row \"{subject}\" from the Decision Matrix? Everyone in the village stops seeing it."
 msgstr "Remove the row \"{subject}\" from the Decision Matrix? Everyone in the village stops seeing it."
-
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Withdraw my suggestion"
-#~ msgstr "Withdraw my suggestion"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reason for a change request"
@@ -2065,24 +2151,20 @@ msgctxt "funding rounds"
 msgid "What it is for"
 msgstr "What it is for"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Written"
+msgstr "Written"
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That was not saved."
 msgstr "That was not saved."
-
-#. placeholder {0}: f.name
-#: client/src/components/notebook/NotebookExport.tsx
-#~ msgid "Save {0}"
-#~ msgstr "Save {0}"
 
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "The canvas moon is on the village calendar."
 msgstr "The canvas moon is on the village calendar."
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Nothing waiting."
-#~ msgstr "Nothing waiting."
-
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
 msgstr "Ideas welcome until {day}"
@@ -2091,17 +2173,9 @@ msgstr "Ideas welcome until {day}"
 msgid "Change the public line"
 msgstr "Change the public line"
 
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Who is told:"
-#~ msgstr "Who is told:"
-
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
 msgstr "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
-
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Add a practice"
-#~ msgstr "Add a practice"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting today"
@@ -2121,10 +2195,6 @@ msgstr "· closed {closed}"
 msgctxt "signing key"
 msgid "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
 msgstr "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
-
-#: client/src/components/notebook/NotebookAdd.tsx
-#~ msgid "Add a file"
-#~ msgstr "Add a file"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -2153,10 +2223,6 @@ msgstr "That was refused."
 msgctxt "an outside contact's organisation"
 msgid "Organisation (optional)"
 msgstr "Organisation (optional)"
-
-#: client/src/pages/CanvasWorkbook.tsx
-#~ msgid "Save as Markdown"
-#~ msgstr "Save as Markdown"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2202,11 +2268,6 @@ msgctxt "change request checklist"
 msgid "Objections answered"
 msgstr "Objections answered"
 
-#. placeholder {0}: doc.title
-#: client/src/components/notebook/NotebookPanel.tsx
-#~ msgid "Open {0}"
-#~ msgstr "Open {0}"
-
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "When to call them"
 msgstr "When to call them"
@@ -2215,7 +2276,7 @@ msgstr "When to call them"
 msgid "Sign in to see what your village is weighing."
 msgstr "Sign in to see what your village is weighing."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Closed"
 msgstr "Closed"
@@ -2252,6 +2313,11 @@ msgctxt "signing key"
 msgid "Keep this key"
 msgstr "Keep this key"
 
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
+msgstr "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
+
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Ask the village"
@@ -2274,12 +2340,6 @@ msgstr "({count} of at most {cap})"
 msgctxt "a private intake was not sent"
 msgid "Could not send"
 msgstr "Could not send"
-
-#. placeholder {0}: c.closedAt ? new Date(c.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgctxt "settlement report cycle line"
-#~ msgid "· closed {0}"
-#~ msgstr "· closed {0}"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -2313,22 +2373,22 @@ msgstr "The public line for {name}"
 msgid "{quoted} <0>{creditText}</0>. The canvas lives at <1>{url}</1>. {ours}"
 msgstr "{quoted} <0>{creditText}</0>. The canvas lives at <1>{url}</1>. {ours}"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Find it on the quest board"
+msgstr "Find it on the quest board"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Sign out everywhere"
-
-#. placeholder {0}: m.consulted.references.join("; ")
-#: client/src/components/journey/LaunchGuide.tsx
-#~ msgid "References: {0}."
-#~ msgstr "References: {0}."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Paid as {paid}."
 msgstr "Paid as {paid}."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests until {day}"
 msgstr "Ideas are being shaped into quests until {day}"
@@ -2342,10 +2402,12 @@ msgctxt "a button that opens a new matrix row"
 msgid "Add a row"
 msgstr "Add a row"
 
-#. placeholder {0}: new Date(a.decidedAt).toLocaleDateString()
-#: client/src/components/governance/VillageAgreements.tsx
-#~ msgid "Adopted on {0}."
-#~ msgstr "Adopted on {0}."
+#. placeholder {0}: money(q.valueMinor)
+#. placeholder {1}: new Date(q.latest.at).toLocaleDateString()
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} · set {1}"
+msgstr "{0} · set {1}"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "button that checks a pasted season file"
@@ -2361,10 +2423,6 @@ msgstr "Withdrawn. The village keeps its key."
 msgctxt "next step box, the quest has no first step written"
 msgid "Read the quest above, then start with the first thing you can do today"
 msgstr "Read the quest above, then start with the first thing you can do today"
-
-#: client/src/components/canvas/CanvasFrameSay.tsx
-#~ msgid "The restorative steps"
-#~ msgstr "The restorative steps"
 
 #: client/src/components/canvas/CanvasFrameSay.tsx
 msgctxt "button that switches to the Adopt frame"
@@ -2444,6 +2502,10 @@ msgstr "You are signed in, so a block can also open the words the village keeps 
 msgid "The Game has started, so this path, the care and cover roles, the reply time and the outside contact change only by a village vote on its conflict agreement."
 msgstr "The Game has started, so this path, the care and cover roles, the reply time and the outside contact change only by a village vote on its conflict agreement."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
+msgstr "Tick every quest you would fund. Nobody sees your ticks until choosing closes; then they are shown with your name."
+
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "Reading the village's rows"
 msgstr "Reading the village's rows"
@@ -2456,6 +2518,15 @@ msgstr "The settings behind this block"
 msgctxt "the named role a private intake reaches"
 msgid "{intakeRoleName} role"
 msgstr "{intakeRoleName} role"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Only one member, one vote funds {title} ({cost})."
+msgstr "Only one member, one vote funds {title} ({cost})."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "All checked"
+msgstr "All checked"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "What each of these holds is in the list above, so none of it is offered here a second time."
@@ -2485,6 +2556,11 @@ msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Translated automatically"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{hoursLeft} quests still need yours"
+msgstr "{hoursLeft} quests still need yours"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
 msgstr "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
@@ -2511,10 +2587,6 @@ msgstr "Who is in the room"
 msgid "Not synced yet. Press Sync to read every source."
 msgstr "Not synced yet. Press Sync to read every source."
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "The canvas asks"
-#~ msgstr "The canvas asks"
-
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "A pot"
@@ -2540,6 +2612,10 @@ msgstr "Loading this village's conflict agreement…"
 msgid "Last written by {0} on {1}"
 msgstr "Last written by {0} on {1}"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The amount must be a number."
+msgstr "The amount must be a number."
+
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "decline a suggestion"
 msgid "Decline"
@@ -2556,24 +2632,24 @@ msgctxt "funding rounds"
 msgid "{potName}. {line}."
 msgstr "{potName}. {line}."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "The count is being made. Open this page again in a moment."
+msgstr "The count is being made. Open this page again in a moment."
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "This file cannot be loaded as it is:"
 msgstr "This file cannot be loaded as it is:"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund until {day}"
 msgstr "Choosing which quests to fund until {day}"
-
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "The {careShown} role."
-#~ msgstr "The {careShown} role."
 
 #: client/src/pages/ExitPolicy.tsx
 msgid "You can also bring it to somebody outside the village"
 msgstr "You can also bring it to somebody outside the village"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who might do it:"
 msgstr "Who might do it:"
@@ -2583,6 +2659,12 @@ msgctxt "sera changes"
 msgid "Facts updated since yesterday: {nFacts}"
 msgstr "Facts updated since yesterday: {nFacts}"
 
+#. placeholder {0}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} outside the band"
+msgstr "{0} outside the band"
+
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement table column"
 msgid "Credited"
@@ -2591,6 +2673,11 @@ msgstr "Credited"
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Your note (needed to decline)"
 msgstr "Your note (needed to decline)"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Chosen by {names}."
+msgstr "Chosen by {names}."
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2627,7 +2714,7 @@ msgctxt "sera changes"
 msgid "Review it as one structure change"
 msgstr "Review it as one structure change"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Sharing"
 msgstr "Sharing"
@@ -2681,10 +2768,6 @@ msgstr "{differs} of your numbers differ between sources. The Treasurer has been
 msgid "Built. Save the files to this device:"
 msgstr "Built. Save the files to this device:"
 
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Adopt it"
-#~ msgstr "Adopt it"
-
 #: client/src/components/canvas/CanvasBlockCard.tsx
 msgctxt "canvas block card button"
 msgid "Open this block"
@@ -2730,7 +2813,7 @@ msgstr "Invoice {ref}"
 msgid "Your saved numbers did not load."
 msgstr "Your saved numbers did not load."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Grow"
 msgstr "Grow"
@@ -2753,18 +2836,9 @@ msgstr "You hold the village's funding pots, so you can open a pot and a round."
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
 
-#. placeholder {0}: seasonDateLabel(entry.date)
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Canvas moon, {0}"
-#~ msgstr "Canvas moon, {0}"
-
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "That was not recorded."
 msgstr "That was not recorded."
-
-#: client/src/components/admin/ConflictDoorFields.tsx
-#~ msgid "Organisation (optional)"
-#~ msgstr "Organisation (optional)"
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Ask a question about {name}"
@@ -2774,13 +2848,17 @@ msgstr "Ask a question about {name}"
 msgid "Voting closes on {closesOn}. <0>Read the vote and cast yours</0>. The vote's page holds back anything that names a person, and the members-only parts. All of what it would adopt is here."
 msgstr "Voting closes on {closesOn}. <0>Read the vote and cast yours</0>. The vote's page holds back anything that names a person, and the members-only parts. All of what it would adopt is here."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your idea is withdrawn."
+msgstr "Your idea is withdrawn."
+
 #: client/src/components/modules/SuggestDial.tsx
 msgid "The suggestion was refused."
 msgstr "The suggestion was refused."
 
-#: client/src/components/admin/ConflictDoorFields.tsx
-#~ msgid "{name} (held by {holders} today)"
-#~ msgstr "{name} (held by {holders} today)"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
+msgstr "{title} is fully backed by pledges, so it goes ahead without the pot."
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgctxt "canvas suggestion form heading"
@@ -2795,6 +2873,11 @@ msgstr "Cycle settlement report"
 #: client/src/pages/ExitPolicy.tsx
 msgid "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
 msgstr "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Saved."
+msgstr "Saved."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the proposal just made"
@@ -2831,10 +2914,6 @@ msgstr "Our Canvas, Block by Block"
 msgid "When two of us disagree"
 msgstr "When two of us disagree"
 
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "Appeals go to:"
-#~ msgstr "Appeals go to:"
-
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "Share a concern"
@@ -2867,10 +2946,6 @@ msgctxt "language picker"
 msgid "Close"
 msgstr "Close"
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Milestones going quiet"
-#~ msgstr "Milestones going quiet"
-
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "a button that deletes a matrix row"
 msgid "Remove this row"
@@ -2885,6 +2960,13 @@ msgstr "Who Decides What"
 msgid "The village votes on this change by itself."
 msgstr "The village votes on this change by itself."
 
+#. placeholder {0}: read.model.currency
+#. placeholder {1}: read.model.version
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}, version {1}"
+msgstr "{0}, version {1}"
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "A draft the village has not adopted yet."
 msgstr "A draft the village has not adopted yet."
@@ -2893,6 +2975,10 @@ msgstr "A draft the village has not adopted yet."
 msgctxt "start a change request"
 msgid "Start it"
 msgstr "Start it"
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Chosen by {names}."
+#~ msgstr "Chosen by {names}."
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
@@ -2985,6 +3071,10 @@ msgstr "{name}, nobody holds it today"
 msgid "Background work over this span"
 msgstr "Background work over this span"
 
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "Saved."
+#~ msgstr "Saved."
+
 #. placeholder {0}: m.consulted.brief.join("; ")
 #: client/src/components/journey/LaunchGuide.tsx
 msgctxt "what the launch guide read"
@@ -2994,6 +3084,14 @@ msgstr "Your brief: {0}."
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
 
 #: client/src/components/journey/EconomicsView.tsx
 msgid "No cycle has closed yet."
@@ -3008,10 +3106,21 @@ msgstr "Replace the key"
 msgid "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 msgstr "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Give the hours"
+msgstr "Give the hours"
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, joins two links"
 msgid "or"
 msgstr "or"
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Kind of work for {0}"
+msgstr "Kind of work for {0}"
 
 #: client/src/components/journey/LaunchGuide.tsx
 msgid "Ask me about organizing: governance, conflict, membership, legal shells, internal economics. I read your village's brief first, then its own calls, and they outrank the books when they speak to it."
@@ -3065,6 +3174,10 @@ msgstr "Tools: {tools}"
 msgid "Take this change out."
 msgstr "Take this change out."
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Your choices are saved. You can change them until choosing closes."
+msgstr "Your choices are saved. You can change them until choosing closes."
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgctxt "a public line not written yet"
 msgid "Not written yet."
@@ -3074,11 +3187,6 @@ msgstr "Not written yet."
 msgctxt "next step box heading"
 msgid "Your next step"
 msgstr "Your next step"
-
-#. placeholder {0}: m.daysStale
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "{0}d quiet"
-#~ msgstr "{0}d quiet"
 
 #. placeholder {0}: CANVAS_CREDIT.text
 #: client/src/components/canvas/CanvasBaseline.tsx
@@ -3095,22 +3203,25 @@ msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr "Tokens, by source"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Check the hours"
+msgstr "Check the hours"
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "No season is loaded, so the blocks below are in canvas order. A season file names the blocks each week works on and puts them first. It never closes a block: every block stays open every week."
 msgstr "No season is loaded, so the blocks below are in canvas order. A season file names the blocks each week works on and puts them first. It never closes a block: every block stays open every week."
 
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "Decided by:"
-#~ msgstr "Decided by:"
+#. placeholder {0}: counts.waiting
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} waiting for a signer"
+msgstr "{0} waiting for a signer"
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgctxt "link to the page where a setting is set"
 msgid "Where it is set"
 msgstr "Where it is set"
-
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Copy for Hypha"
-#~ msgstr "Copy for Hypha"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -3131,15 +3242,14 @@ msgctxt "a part of the Say frame is loading"
 msgid "Opening"
 msgstr "Opening"
 
-#. placeholder {0}: readingDate(s.updatedAt)
-#: client/src/components/canvas/CanvasFrameSay.tsx
-#~ msgid "Last changed on {0}"
-#~ msgstr "Last changed on {0}"
-
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgctxt "label of the closing statement box"
 msgid "The village's words"
 msgstr "The village's words"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{differ, plural, one {Voice and one member, one vote disagree on # quest.} other {Voice and one member, one vote disagree on # quests.}}"
+msgstr "{differ, plural, one {Voice and one member, one vote disagree on # quest.} other {Voice and one member, one vote disagree on # quests.}}"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "an outside contact's name"
@@ -3160,20 +3270,15 @@ msgctxt "loading the canvas workbook page"
 msgid "Opening the workbook"
 msgstr "Opening the workbook"
 
-#. placeholder {0}: dayWords(a.reviewAt)
-#: client/src/components/governance/VillageAgreements.tsx
-#~ msgid "Review date: {0}."
-#~ msgstr "Review date: {0}."
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use the suggestion on all {0} inside the band"
+msgstr "Use the suggestion on all {0} inside the band"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
 msgstr "Saved. The role's pay is set."
-
-#. placeholder {0}: c.poolCredited
-#. placeholder {1}: c.poolToken
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "· pool released {0} {1}"
-#~ msgstr "· pool released {0} {1}"
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
@@ -3206,7 +3311,7 @@ msgstr "The run was refused"
 msgid "The copy did not download"
 msgstr "The copy did not download"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests"
 msgstr "Ideas are being shaped into quests"
@@ -3225,6 +3330,11 @@ msgctxt "tag on the canvas block of this season week"
 msgid "This week"
 msgstr "This week"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Save my choices"
+msgstr "Save my choices"
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that adds a conflict step"
 msgid "Add a step"
@@ -3234,6 +3344,14 @@ msgstr "Add a step"
 msgid "The block it speaks to"
 msgstr "The block it speaks to"
 
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This figure is outside the suggestion's band, so pick a reason."
 msgstr "This figure is outside the suggestion's band, so pick a reason."
@@ -3242,7 +3360,7 @@ msgstr "This figure is outside the suggestion's band, so pick a reason."
 msgid "Take the season off"
 msgstr "Take the season off"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Share an idea"
 msgstr "Share an idea"
@@ -3252,14 +3370,15 @@ msgctxt "a canvas suggestion was adopted"
 msgid "Adopted."
 msgstr "Adopted."
 
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Check the file"
-#~ msgstr "Check the file"
-
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 #: client/src/components/canvas/RecordReadingForm.tsx
 msgid "Why, in one sentence"
 msgstr "Why, in one sentence"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{done} prices set."
+msgstr "{done} prices set."
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
@@ -3273,10 +3392,6 @@ msgstr "Governance Canvas workbook"
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Hide the valuation engine"
 msgstr "Hide the valuation engine"
-
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "The practice"
-#~ msgstr "The practice"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "This round could not be found."
@@ -3295,18 +3410,15 @@ msgstr "Every village that follows this one will pause on the new key until some
 msgid "Save all four as one file"
 msgstr "Save all four as one file"
 
-#: client/src/components/canvas/CanvasBlockFrames.tsx
-#~ msgid "Sense: readings of {name}"
-#~ msgstr "Sense: readings of {name}"
-
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "Send privately"
-#~ msgstr "Send privately"
-
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgctxt "label of the intake role picker"
 msgid "Restorative intake role"
 msgstr "Restorative intake role"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 open claim keeps the price it was taken at."
+msgstr "1 open claim keeps the price it was taken at."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -3331,10 +3443,6 @@ msgstr "Adopt it"
 msgid "Change it in the agreement"
 msgstr "Change it in the agreement"
 
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Reading the season."
-#~ msgstr "Reading the season."
-
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Whoever runs this deployment answers for this one."
 msgstr "Whoever runs this deployment answers for this one."
@@ -3342,6 +3450,11 @@ msgstr "Whoever runs this deployment answers for this one."
 #: client/src/components/journey/EconomicsView.tsx
 msgid " The platform key is not provisioned here yet, so it answers 503."
 msgstr " The platform key is not provisioned here yet, so it answers 503."
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests"
+msgid "Price the quests on the pricing desk"
+msgstr "Price the quests on the pricing desk"
 
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
@@ -3356,10 +3469,6 @@ msgstr "This deployment cannot open the key, so those pages answer 503. A restor
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote did not open"
 msgstr "The vote did not open"
-
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Your note (optional)"
-#~ msgstr "Your note (optional)"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the list of changes"
@@ -3384,11 +3493,6 @@ msgstr "Try again"
 msgid "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
 msgstr "This writes nothing. No balance moves, no recognition is recorded, and nothing is issued. It reads your settings and works out what each moon would do."
 
-#. placeholder {0}: c.closedAt ? new Date(c.closedAt).toLocaleDateString() : t`date not recorded`
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "· closed {0}"
-#~ msgstr "· closed {0}"
-
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "The village adopts these words as what closing means here."
 msgstr "The village adopts these words as what closing means here."
@@ -3402,12 +3506,6 @@ msgstr "Asking now."
 msgid "The canvas radar, one axis per block"
 msgstr "The canvas radar, one axis per block"
 
-#. placeholder {0}: row.credited
-#. placeholder {1}: cycle.poolToken ?? ""
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid " → {0} {1} credited"
-#~ msgstr " → {0} {1} credited"
-
 #. placeholder {0}: money(s.range.lowTotalMinor)
 #. placeholder {1}: money(s.range.highTotalMinor)
 #. placeholder {2}: widthWords[s.range.width]
@@ -3415,6 +3513,11 @@ msgstr "The canvas radar, one axis per block"
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Likely {0} to {1}. {2}: {3}."
 msgstr "Likely {0} to {1}. {2}: {3}."
+
+#: client/src/components/admin/PricingDeskTab.tsx
+msgctxt "pricing desk"
+msgid "Open the desk as its own page, for a Treasurer who is not an admin"
+msgstr "Open the desk as its own page, for a Treasurer who is not an admin"
 
 #: client/src/components/canvas/DecisionMatrix.tsx
 msgid "For each kind of decision the canvas asks who approves it, who is asked first, who is told, and how it is made. For the decisions this platform runs, the answers are rules it already enforces, so it fills this half in itself."
@@ -3428,11 +3531,6 @@ msgstr "The Governance Canvas asks a group twelve questions about how it works t
 msgctxt "an outside contact you asked, and the day"
 msgid "{contact} on {when}"
 msgstr "{contact} on {when}"
-
-#. placeholder {0}: readingDate(answer.purposeStatement.writtenAt)
-#: client/src/components/canvas/CanvasFrameSay.tsx
-#~ msgid "Written on {0}"
-#~ msgstr "Written on {0}"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take this season off? The canvas goes back to canvas order, and every reading stays. The season itself is removed: to load it again you will need its file."
@@ -3463,10 +3561,6 @@ msgstr "The guide never changes the canvas. To change an answer, suggest it unde
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The vote is open until {closes}. Every member on the roll has been told."
 msgstr "The vote is open until {closes}. Every member on the roll has been told."
-
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Loading…"
-#~ msgstr "Loading…"
 
 #: client/src/components/companion/CompanionPanel.tsx
 msgctxt "decline the model consent line"
@@ -3511,6 +3605,11 @@ msgctxt "sera changes"
 msgid "Every circle"
 msgstr "Every circle"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "to"
+msgstr "to"
+
 #. placeholder {0}: doc.title
 #: client/src/components/notebook/NotebookPanel.tsx
 msgctxt "open a notebook document"
@@ -3537,26 +3636,31 @@ msgctxt "an empty choice in a list"
 msgid "Choose one"
 msgstr "Choose one"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "The rough cost must be a number."
 msgstr "The rough cost must be a number."
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "Governance Canvas workbook"
-#~ msgstr "Governance Canvas workbook"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "What will be done when it is finished?"
+msgstr "What will be done when it is finished?"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 msgstr "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Remove this step"
-#~ msgstr "Remove this step"
-
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr "Everything waiting"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Both counts agree."
+msgstr "Both counts agree."
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Your claim now pays the quest's new price."
+msgstr "Your claim now pays the quest's new price."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, nobody named on the quest"
@@ -3585,13 +3689,10 @@ msgctxt "the closing policy is being saved"
 msgid "Saving..."
 msgstr "Saving..."
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "What we say"
-#~ msgstr "What we say"
-
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Who approves it:"
-#~ msgstr "Who approves it:"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Hours"
+msgstr "Hours"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "No suggestions are open on {name}."
@@ -3608,15 +3709,16 @@ msgctxt "a canvas moon in the season's week map, with its date"
 msgid "Canvas moon, {0}"
 msgstr "Canvas moon, {0}"
 
-#: client/src/components/notebook/NotebookExport.tsx
-#~ msgid "Building the pack"
-#~ msgstr "Building the pack"
-
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "Decision Matrix column"
 msgid "Who approves it"
 msgstr "Who approves it"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Withdrawn"
+msgstr "Withdrawn"
 
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
@@ -3627,6 +3729,16 @@ msgstr "Not now"
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Reading the village's pay settings…"
 msgstr "Reading the village's pay settings…"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Choose what to fund"
+msgstr "Choose what to fund"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Its worker takes the new price here"
+msgstr "Its worker takes the new price here"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -3657,7 +3769,7 @@ msgstr "Circle"
 msgid "Nothing waits for you, and no draft is open."
 msgstr "Nothing waits for you, and no draft is open."
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea was not shared. Try again."
 msgstr "Your idea was not shared. Try again."
 
@@ -3682,6 +3794,11 @@ msgctxt "settlement text copied for Hypha"
 msgid " → {0} {1} credited"
 msgstr " → {0} {1} credited"
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "from"
+msgstr "from"
+
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Say in a sentence why this is declined. The note is public, like the suggestion."
 msgstr "Say in a sentence why this is declined. The note is public, like the suggestion."
@@ -3697,10 +3814,6 @@ msgstr "If the village asks someone to leave"
 msgctxt "notebook row kind, size and date"
 msgid "{0}, {1}, added {2}"
 msgstr "{0}, {1}, added {2}"
-
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "{intakeRoleName} role"
-#~ msgstr "{intakeRoleName} role"
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, the deadline"
@@ -3732,13 +3845,6 @@ msgstr "No ideas yet. The first one can be yours."
 msgid "Not written yet. What you see is drawn from the exit policy's restorative path."
 msgstr "Not written yet. What you see is drawn from the exit policy's restorative path."
 
-#. placeholder {0}: KIND_LABELS[doc.kind]
-#. placeholder {1}: sizeWords(doc.kind, doc.size)
-#. placeholder {2}: dayWords(doc.createdAt)
-#: client/src/components/notebook/NotebookPanel.tsx
-#~ msgid "{0}, {1}, added {2}"
-#~ msgstr "{0}, {1}, added {2}"
-
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
@@ -3753,10 +3859,6 @@ msgstr "In review across the village"
 msgctxt "remove one change"
 msgid "Remove"
 msgstr "Remove"
-
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Adopted."
-#~ msgstr "Adopted."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value a member suggests"
@@ -3777,20 +3879,15 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr "Send it on its own"
 
-#: client/src/components/journey/TestRun.tsx
-#~ msgid "Running"
-#~ msgstr "Running"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The village adopts them by vote"
+msgstr "The village adopts them by vote"
 
 #. placeholder {0}: answer.draft.noSection.map((b) => CANVAS_BLOCKS[b].name).join(", ")
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "{0} has no section of words to suggest into yet."
 msgstr "{0} has no section of words to suggest into yet."
-
-#. placeholder {0}: cycle.poolCredited
-#. placeholder {1}: cycle.poolToken ?? ""
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Pool released: {0} {1}"
-#~ msgstr "Pool released: {0} {1}"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "An example, to read and not to copy"
@@ -3803,6 +3900,11 @@ msgstr "Members see how many changes wait and who decides them. The changes them
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "Who is asked first:"
 msgstr "Who is asked first:"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Earned Equity meaning"
+msgstr "Earned Equity meaning"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "review page"
@@ -3892,17 +3994,18 @@ msgstr "The copy holds every member's data. If the village carries this at its h
 msgid "Take back my yes"
 msgstr "Take back my yes"
 
-#: client/src/components/canvas/CanvasBlockCard.tsx
-#: client/src/components/companion/CompanionPanel.tsx
-#~ msgid "Ask about {name}"
-#~ msgstr "Ask about {name}"
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As much as, for {0}"
+msgstr "As much as, for {0}"
 
 #: client/src/components/canvas/CanvasBlockCard.tsx
 msgctxt "a canvas block is loading"
 msgid "Opening {name}"
 msgstr "Opening {name}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What would you do?"
 msgstr "What would you do?"
 
@@ -3986,10 +4089,21 @@ msgctxt "sera changes"
 msgid "{witness} finished Quest to witness"
 msgstr "{witness} finished Quest to witness"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until the pot's holder sets the next stage"
 msgstr "Ideas welcome until the pot's holder sets the next stage"
+
+#: client/src/components/admin/PricingDeskTab.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Opening the pricing desk…"
+msgstr "Opening the pricing desk…"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pays today"
+msgstr "Pays today"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 msgid "A contact outside the village"
@@ -4017,6 +4131,11 @@ msgstr "Opening the round"
 msgctxt "funding rounds"
 msgid "Back to funding rounds"
 msgstr "Back to funding rounds"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}"
+msgstr "{who} pledged {much}"
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "a suggestion is being withdrawn"
@@ -4070,14 +4189,15 @@ msgctxt "the role a private intake reaches, when it has no name"
 msgid "intake role"
 msgstr "intake role"
 
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Nothing was decided."
-#~ msgstr "Nothing was decided."
-
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Show everything waiting"
 msgstr "Show everything waiting"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Shape your idea into a quest"
+msgstr "Shape your idea into a quest"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "No role is named yet."
@@ -4110,7 +4230,7 @@ msgctxt "button on a canvas suggestion its author made"
 msgid "Withdraw my suggestion"
 msgstr "Withdraw my suggestion"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who would it help?"
 msgstr "Who would it help?"
@@ -4137,9 +4257,9 @@ msgstr "The Governance Canvas, on Paper"
 msgid "Consequences, and how to appeal"
 msgstr "Consequences, and how to appeal"
 
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "Remove this practice"
-#~ msgstr "Remove this practice"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Only Voice funds {title} ({cost})."
+msgstr "Only Voice funds {title} ({cost})."
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "economics view heading"
@@ -4173,6 +4293,15 @@ msgstr "Could be as little as"
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The questions are quoted from the <0>{0}<1/></0>."
 msgstr "The questions are quoted from the <0>{0}<1/></0>."
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+msgstr "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
+msgstr "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
 
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement table column"
@@ -4226,10 +4355,6 @@ msgctxt "notebook add button, busy"
 msgid "Adding"
 msgstr "Adding"
 
-#: client/src/components/notebook/NotebookExport.tsx
-#~ msgid "Build it again"
-#~ msgstr "Build it again"
-
 #: client/src/components/canvas/CanvasView.tsx
 #: client/src/components/companion/CompanionPanel.tsx
 msgid "Ask about the canvas"
@@ -4252,6 +4377,12 @@ msgstr "Decided lately"
 msgid "Someone who reaches a contact outside the village hears back within {replyHours, plural, one {# hour} other {# hours}}."
 msgstr "Someone who reaches a contact outside the village hears back within {replyHours, plural, one {# hour} other {# hours}}."
 
+#. placeholder {0}: counts.hours
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} need your hours"
+msgstr "{0} need your hours"
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "It comes back for review on {reviewDay}."
 msgstr "It comes back for review on {reviewDay}."
@@ -4260,6 +4391,10 @@ msgstr "It comes back for review on {reviewDay}."
 msgctxt "who started a change request"
 msgid "Started by {author}"
 msgstr "Started by {author}"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "No quest gathered enough support to be funded."
+msgstr "No quest gathered enough support to be funded."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Arrived {at}, with 1 proposal."
@@ -4288,9 +4423,14 @@ msgctxt "a setting with no value"
 msgid "not set"
 msgstr "not set"
 
-#: client/src/components/canvas/DecisionMatrix.tsx
-#~ msgid "The Decision Matrix"
-#~ msgstr "The Decision Matrix"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Quest"
+msgstr "Quest"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{who} pledged {much}, then withdrew it"
+msgstr "{who} pledged {much}, then withdrew it"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
@@ -4306,13 +4446,14 @@ msgctxt "open the change request just added to"
 msgid "Open it"
 msgstr "Open it"
 
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Edit the agreement"
-#~ msgstr "Edit the agreement"
-
 #: client/src/pages/ExitPolicy.tsx
 msgid "Open my departure process"
 msgstr "Open my departure process"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Too few chose"
+msgstr "Too few chose"
 
 #: client/src/components/canvas/CanvasMoon.tsx
 msgctxt "a canvas moon gathering is being offered"
@@ -4332,10 +4473,6 @@ msgstr "It leaves the village's notebook too."
 msgctxt "signing key"
 msgid "Nothing was declined"
 msgstr "Nothing was declined"
-
-#: client/src/components/admin/ConflictDoorFields.tsx
-#~ msgid "Restorative intake role"
-#~ msgstr "Restorative intake role"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Small changes applying by themselves: off."
@@ -4363,10 +4500,6 @@ msgstr "Set this role's pay"
 msgid "Your departure process is open. The stewards will walk each step with you. Nothing happens automatically."
 msgstr "Your departure process is open. The stewards will walk each step with you. Nothing happens automatically."
 
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "intake role"
-#~ msgstr "intake role"
-
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, open the role proposal"
 msgid "Propose a new role"
@@ -4381,15 +4514,20 @@ msgctxt "the season is loading"
 msgid "Reading the season."
 msgstr "Reading the season."
 
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#: client/src/components/ClosingPolicyCard.tsx
-#~ msgid "Propose a change"
-#~ msgstr "Propose a change"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "Thank you. Your pledge is shown on this quest."
+msgstr "Thank you. Your pledge is shown on this quest."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "To decide"
 msgstr "To decide"
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} inside the band"
+msgstr "{0} inside the band"
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Anybody in the village can suggest a change to it under Say."
@@ -4404,10 +4542,6 @@ msgstr "Or as much as"
 msgid "Cover role, recorded only for now"
 msgstr "Cover role, recorded only for now"
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Copied ✓"
-#~ msgstr "Copied ✓"
-
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, link to open roles"
 msgid "See the open roles"
@@ -4418,14 +4552,14 @@ msgctxt "next frame"
 msgid "Next"
 msgstr "Next"
 
-#: client/src/components/canvas/CanvasSuggestionForm.tsx
-#: client/src/components/canvas/DecisionMatrixRows.tsx
-#~ msgid "Who approves it"
-#~ msgstr "Who approves it"
-
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgctxt "funding rounds"
+msgid "Pledge"
+msgstr "Pledge"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"
@@ -4462,16 +4596,16 @@ msgctxt "heading over a module's settings"
 msgid "Its settings"
 msgstr "Its settings"
 
-#. placeholder {0}: m.demotedBecause.join(", ")
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "serving OFF, needs {0}"
-#~ msgstr "serving OFF, needs {0}"
-
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "Decision Matrix column"
 msgid "Who is told"
 msgstr "Who is told"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Suggestion"
+msgstr "Suggestion"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Paste the season file, or choose it from this device. It is checked here first, and nothing is saved until you save it."
@@ -4507,6 +4641,10 @@ msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "the circle's lead role"
 
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You are backing this quest (pending). The Backer badge comes when the quest is done."
+msgstr "You are backing this quest (pending). The Backer badge comes when the quest is done."
+
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "Save what closing means"
 msgstr "Save what closing means"
@@ -4516,9 +4654,10 @@ msgctxt "next step box"
 msgid "this quest's circle"
 msgstr "this quest's circle"
 
-#: client/src/components/notebook/NotebookExport.tsx
-#~ msgid "Build the pack"
-#~ msgstr "Build the pack"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Write what it means first"
+msgstr "Write what it means first"
 
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "the workbook's paper size choices"
@@ -4539,10 +4678,6 @@ msgstr "Earlier {agent} arrivals, now listed above"
 msgctxt "no intake role chosen"
 msgid "none configured"
 msgstr "none configured"
-
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Cycle settlement report"
-#~ msgstr "Cycle settlement report"
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgctxt "button that saves a canvas block's public line"
@@ -4567,10 +4702,6 @@ msgctxt "the platform's half of the Decision Matrix"
 msgid "The Decision Matrix"
 msgstr "The Decision Matrix"
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "date not recorded"
-#~ msgstr "date not recorded"
-
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "A note for whoever decides (optional)"
 msgstr "A note for whoever decides (optional)"
@@ -4583,10 +4714,6 @@ msgstr "Bring it to the {intakeRoleLabel} and you hear back within {replyHours, 
 msgid "One thing would not work as set"
 msgstr "One thing would not work as set"
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Waiting on consent"
-#~ msgstr "Waiting on consent"
-
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "In the village's own words"
 msgstr "In the village's own words"
@@ -4594,10 +4721,6 @@ msgstr "In the village's own words"
 #: client/src/components/governance/VillageConflictSteps.tsx
 msgid "These steps are still a draft. The community has not yet adopted its exit policy."
 msgstr "These steps are still a draft. The community has not yet adopted its exit policy."
-
-#: client/src/components/canvas/DecisionMatrix.tsx
-#~ msgid "Reading the matrix"
-#~ msgstr "Reading the matrix"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "Round name, such as the season it funds"
@@ -4613,12 +4736,6 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Use my browser's language"
 
-#. placeholder {0}: villageMoonLabel(cycle.moon)
-#. placeholder {1}: cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : t`date not recorded`
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "{0} settlement (closed {1})"
-#~ msgstr "{0} settlement (closed {1})"
-
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Saved"
@@ -4627,22 +4744,6 @@ msgstr "Saved"
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
 msgstr "{error}. There may be changes waiting; this is not an empty list."
-
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Write the agreement"
-#~ msgstr "Write the agreement"
-
-#: client/src/components/journey/TestRun.tsx
-#~ msgid "Test run"
-#~ msgstr "Test run"
-
-#: client/src/components/canvas/CanvasBlockFrames.tsx
-#~ msgid "Earlier readings"
-#~ msgstr "Earlier readings"
-
-#: client/src/pages/Governance.tsx
-#~ msgid "Who Decides What"
-#~ msgstr "Who Decides What"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of a note box"
@@ -4657,10 +4758,6 @@ msgstr "Save this season"
 #: client/src/components/governance/VillageAgreements.tsx
 msgid "Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now."
 msgstr "Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now."
-
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "The week asks: "
-#~ msgstr "The week asks: "
 
 #: client/src/pages/FundingRounds.tsx
 msgid "{count, plural, one {# idea so far} other {# ideas so far}}"
@@ -4701,11 +4798,10 @@ msgctxt "a saved choice the picker no longer offers"
 msgid "No longer in the list. Choose another, or none"
 msgstr "No longer in the list. Choose another, or none"
 
-#. placeholder {0}: report.moons
-#. placeholder {1}: report.spanDays
-#: client/src/components/journey/TestRun.tsx
-#~ msgid "{0} moons, about {1} days."
-#~ msgstr "{0} moons, about {1} days."
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Past prices"
+msgstr "Past prices"
 
 #. placeholder {0}: agreed.at.slice(0, 10)
 #. placeholder {1}: agreed.provider
@@ -4726,6 +4822,10 @@ msgstr "Answered"
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "No language matches"
+
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
+msgstr "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "Nothing the village runs speaks to {name} yet."
@@ -4759,10 +4859,6 @@ msgctxt "sera changes"
 msgid "Conflict"
 msgstr "Conflict"
 
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgid "Module health"
-#~ msgstr "Module health"
-
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, link to the quest board"
 msgid "Try a quest on the board"
@@ -4783,6 +4879,12 @@ msgstr "The village has launched, so another admin co-signs before the key is re
 msgctxt "signing key"
 msgid "Decline"
 msgstr "Decline"
+
+#. placeholder {0}: counts.set
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} set"
+msgstr "{0} set"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "The cover role, which hears a request when the care role cannot"
@@ -4819,18 +4921,10 @@ msgctxt "role pay"
 msgid "A note (optional)"
 msgstr "A note (optional)"
 
-#: client/src/components/admin/ClosingPolicyEditor.tsx
-#~ msgid "Saving..."
-#~ msgstr "Saving..."
-
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "how someone appeals a consequence"
 msgid "Appeal: {appealShown}"
 msgstr "Appeal: {appealShown}"
-
-#: client/src/components/notebook/NotebookDocument.tsx
-#~ msgid "Delete this document"
-#~ msgstr "Delete this document"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgctxt "a role choice that keeps the current role"
@@ -4841,17 +4935,23 @@ msgstr "Leave it as it is"
 msgid "The promised reply time, in hours"
 msgstr "The promised reply time, in hours"
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Conditions for {0}"
+msgstr "Conditions for {0}"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 msgstr "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund"
 msgstr "Choosing which quests to fund"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Seed"
 msgstr "Seed"
@@ -4867,51 +4967,23 @@ msgstr "<0>{0}</0>: {1}, about {2} times"
 msgid "What the document does not answer yet"
 msgstr "What the document does not answer yet"
 
-#: client/src/components/canvas/CanvasSuggestionForm.tsx
-#~ msgid "Who decides: {penSentence}"
-#~ msgstr "Who decides: {penSentence}"
-
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Read every frame"
-#~ msgstr "Read every frame"
-
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 msgstr "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
-
-#: client/src/components/canvas/CanvasPublicLines.tsx
-#~ msgid "Save the line"
-#~ msgstr "Save the line"
-
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "Repair before departure"
-#~ msgstr "Repair before departure"
-
-#. placeholder {0}: KIND_LABELS[doc.kind]
-#. placeholder {1}: dayWords(doc.createdAt)
-#: client/src/components/notebook/NotebookDocument.tsx
-#~ msgid "{0}, added {1}."
-#~ msgstr "{0}, added {1}."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That did not reach the server, so nothing was saved."
 msgstr "That did not reach the server, so nothing was saved."
 
-#: client/src/components/ClosingPolicyCard.tsx
-#~ msgid "Ask the village"
-#~ msgstr "Ask the village"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pay settings adopted"
+msgstr "Pay settings adopted"
 
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Skip to content"
 msgstr "Skip to content"
-
-#. placeholder {0}: villageMoonLabel(cycle.moon)
-#. placeholder {1}: cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })
-#: client/src/components/journey/EconomicsView.tsx
-#~ msgctxt "settlement text copied for Hypha"
-#~ msgid "{0} settlement (closed {1})"
-#~ msgstr "{0} settlement (closed {1})"
 
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "notebook add mode"
@@ -4930,21 +5002,26 @@ msgstr "Add to my notebook"
 msgid "The agreement could not be read just now."
 msgstr "The agreement could not be read just now."
 
-#: client/src/components/notebook/NotebookAdd.tsx
-#~ msgid "Paste text"
-#~ msgstr "Paste text"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
+msgstr "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "That did not reach the server, so nothing was recorded."
 msgstr "That did not reach the server, so nothing was recorded."
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The desk could not be read."
+msgstr "The desk could not be read."
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "How this was worked out"
 msgstr "How this was worked out"
 
-#: client/src/components/canvas/CanvasFrameSay.tsx
-#~ msgid "Go to Adopt"
-#~ msgstr "Go to Adopt"
+#: client/src/components/fundingRounds/RoundParts.tsx
+msgid "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
+msgstr "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Ask to share it"
@@ -4964,14 +5041,6 @@ msgctxt "notebook add mode"
 msgid "Paste text"
 msgstr "Paste text"
 
-#: client/src/components/canvas/CanvasFrameAdopt.tsx
-#~ msgid "Adopt: suggestions on {name}"
-#~ msgstr "Adopt: suggestions on {name}"
-
-#: client/src/components/canvas/CanvasSeason.tsx
-#~ msgid "Loaded on {savedOn}."
-#~ msgstr "Loaded on {savedOn}."
-
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"
 msgid "Save as Markdown"
@@ -4980,10 +5049,6 @@ msgstr "Save as Markdown"
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in or join"
 #~ msgstr "Sign in or join"
-
-#: client/src/components/canvas/ConflictAgreementPublic.tsx
-#~ msgid "Ask to talk"
-#~ msgstr "Ask to talk"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "start a new change request"
@@ -5023,10 +5088,6 @@ msgid "When"
 msgstr "When"
 
 #: client/src/components/ClosingPolicyCard.tsx
-#~ msgid "Loading..."
-#~ msgstr "Loading..."
-
-#: client/src/components/ClosingPolicyCard.tsx
 msgid "Proposing a change puts it to a village vote, and this village has not turned governance on yet. Whoever keeps the exit policy can change these words, so say what you would change to them."
 msgstr "Proposing a change puts it to a village vote, and this village has not turned governance on yet. Whoever keeps the exit policy can change these words, so say what you would change to them."
 
@@ -5039,6 +5100,11 @@ msgstr "Which change?"
 msgctxt "default title of a suggestion"
 msgid "Change {label}"
 msgstr "Change {label}"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours"
+msgstr "Estimated hours"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Saved as a draft. The exit policy reads it from now on."
@@ -5061,7 +5127,7 @@ msgstr "The five levels"
 msgid "Publish the canvas moon"
 msgstr "Publish the canvas moon"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Round stages"
 msgstr "Round stages"
@@ -5071,10 +5137,6 @@ msgctxt "next step box, label before the first task"
 msgid "First:"
 msgstr "First:"
 
-#: client/src/components/canvas/ConflictAgreementEditor.tsx
-#~ msgid "How someone appeals"
-#~ msgstr "How someone appeals"
-
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "When it involves someone who holds power here"
 msgstr "When it involves someone who holds power here"
@@ -5083,6 +5145,15 @@ msgstr "When it involves someone who holds power here"
 msgctxt "a button that edits a matrix row"
 msgid "Change this row"
 msgstr "Change this row"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+msgstr "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "The new price was not taken."
+msgstr "The new price was not taken."
 
 #: client/src/components/governance/VillageAgreements.tsx
 msgid "The village has not adopted an agreement yet."
@@ -5098,7 +5169,7 @@ msgctxt "sera changes"
 msgid "To decide {nDecide}"
 msgstr "To decide {nDecide}"
 
-#: client/src/pages/FundingRounds.tsx
+#: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Who it helps:"
 msgstr "Who it helps:"
@@ -5107,10 +5178,6 @@ msgstr "Who it helps:"
 msgctxt "role pay"
 msgid "Responsibility"
 msgstr "Responsibility"
-
-#: client/src/pages/ExitPolicy.tsx
-#~ msgid "Choosing to leave"
-#~ msgstr "Choosing to leave"
 
 #. placeholder {0}: m.consulted.readers.join("; ")
 #: client/src/components/journey/LaunchGuide.tsx
@@ -5142,6 +5209,13 @@ msgctxt "change request note kind"
 msgid "Objection"
 msgstr "Objection"
 
+#. placeholder {0}: counts.ready
+#. placeholder {1}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} ready, {1} flagged"
+msgstr "{0} ready, {1} flagged"
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own."
 msgstr "If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own."
@@ -5151,6 +5225,7 @@ msgctxt "edit one change"
 msgid "Edit"
 msgstr "Edit"
 
-#: client/src/components/canvas/CanvasWorkbookSheet.tsx
-#~ msgid "The four foundations"
-#~ msgstr "The four foundations"
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "That price was not set."
+msgstr "That price was not set."

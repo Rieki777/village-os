@@ -31,6 +31,12 @@ export interface BoardQuest {
    * function the consent pays from. Absent from an older server.
    */
   pay?: WorkPay | null;
+  /** The quest's own terms (0265, 0285), compared with what an open claim kept (0342). */
+  valueMinor?: number | null;
+  valueCurrency?: string | null;
+  valueTokens?: { token: string; amount: number }[] | null;
+  cashMinor?: number | null;
+  cashCurrency?: string | null;
   duration?: string | null;
   difficulty?: string | null;
   circle?: string | null;

@@ -157,6 +157,8 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         // that paid it (0285, 2026-10-30). Beside the Ledger because it is the
         // other book a treasurer keeps, and it never touches the ledger.
         { key: "cash-payouts", label: "Cash To Pay Out", icon: Coins },
+        // The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
+        { key: "pricing-desk", label: "Pricing Desk", icon: Scale },
         { key: "cycles", label: "Cycle Close", icon: Moon },
         { key: "products", label: "Payments", icon: Handshake },
         { key: "resources-admin", label: "How Resources Flow", icon: Coins },

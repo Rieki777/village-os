@@ -234,6 +234,8 @@ const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
+// The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
+const PricingDeskPage = lazyPage(() => import("./pages/PricingDesk"));
 const Review = lazyPage(() => import("./pages/Review"));
 const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
@@ -334,6 +336,7 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/badges" component={Badges} />
       <Route path="/powers" component={Powers} />
+      <Route path="/pricing" component={PricingDeskPage} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
       {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
