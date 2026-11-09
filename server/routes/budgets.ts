@@ -12,6 +12,15 @@
  *   POST  /api/admin/budgets/lock-rates            the same for many lines: preview, then confirm the preview
  *   GET   /api/budgets/ahead?from=&count=          every member reads 1 to 12 moons ahead (R30)
  *   PUT   /api/admin/budgets/notes/:period         a note on how to read a period, through the same door (R32)
+ *   POST  /api/admin/budgets/sources/:source       turn a source on, off, or between auto and review (R18)
+ *
+ * A SOURCE'S STANDING SWITCH (v0.4, R18; Rye, 9 Nov). Turning a source on is
+ * an act of the same door, previewed with the share before and after, bound
+ * by revision and logged; every member reads who turned it on, by role. In
+ * `auto` mode what the source sends counts at once, as the holder's standing
+ * act; in `review` it waits for a person. `recheckSource` (server/lib/budgets.ts)
+ * turns the switch off when its setter no longer holds `role.pay`, and this
+ * module wires it to the live holders at boot.
  *
  * PROVENANCE (R29). An upload may name itself ("November budget sheet") and
  * link its sheet over https. The read names the newest import per source and
@@ -62,9 +71,11 @@ import {
   budgetCircleNames,
   budgetLines,
   budgetRateDrift,
+  budgetSourceStates,
   cashBudgetLeft,
   periodNote,
   setPeriodNote,
+  switchBudgetSource,
   configureBudgets,
   importBudgetLines,
   latestSyncs,
@@ -140,6 +151,9 @@ export function register(app: Express, deps: Deps): void {
   configureBudgets({
     currency: () => String(projectCurrency() ?? "").trim().toUpperCase(),
     seasons: () => (deps.seasonState().seasons ?? []).map((s: any) => ({ id: String(s.id), startsOn: s.startsOn ?? null, endsOn: s.endsOn ?? null })),
+    // The switch's re-check (R18) asks the live, bridged count, the same one the door asks.
+    holdsRolePay: async (userId: string) => (await liveHoldersOf("role.pay")).includes(userId),
+    launched: () => launched(),
   });
 
   /** The role a holder acts through, named for `changed_as` (R1): a role, never a person. */
@@ -360,6 +374,8 @@ export function register(app: Express, deps: Deps): void {
     const names = await budgetCircleNames(pool);
     const byCircle = moonPlan(all, span, village || null).byCircle.map((c) => ({ circleId: c.circleId, circleName: c.circleId ? names.get(c.circleId) ?? null : null, byCategory: c.byCategory, totalMinor: c.totalMinor }));
     const note = await periodNote(pool, moonId);
+    // Who switched each source on is read by role, never by account (R18).
+    const sources = (await budgetSourceStates(pool)).map(({ setBy: _setBy, ...s }) => s);
     res.json({
       moon: span,
       villageCurrency: village || null,
@@ -381,6 +397,7 @@ export function register(app: Express, deps: Deps): void {
       syncs,
       asOf: { planned: fedPlanned, committed: fedCommitted, left },
       byCircle,
+      sources,
       note: note ? { periodKey: note.periodKey, note: note.note, changedAt: note.changedAt, changedAs: note.changedAs } : null,
       mayReadCash,
       door: door.ok ? { mayWrite: true, via: door.via } : { mayWrite: false, code: door.body.code, message: door.body.error, suggest: door.body.suggest ?? null },
@@ -418,6 +435,46 @@ export function register(app: Express, deps: Deps): void {
     const out = await setPeriodNote(getPool(), { period: String(req.params.period), note: typeof req.body?.note === "string" ? req.body.note : "", by: String(who.user.id), byAs: door.byAs });
     if (!out.ok) return res.status(out.status).json({ error: out.code, message: out.message });
     res.json(out);
+  });
+
+  // ── A source's standing switch (R18) ──────────────────────────────────────
+
+  app.post("/api/admin/budgets/sources/:source", async (req, res) => {
+    markAdminGate(req); // a gate is consulted here: the default-deny under /api/admin needs to hear it
+    const who = await member(req, res);
+    if (!who) return;
+    const uid = String(who.user.id);
+    const body = req.body ?? {};
+    const dryRun = body.dryRun !== false;
+    if (await overLimit(`budget-${dryRun ? "preview" : "write"}:${uid}`, dryRun ? PREVIEWS_PER_WINDOW : WRITES_PER_WINDOW, WINDOW_MS)) {
+      return res.status(429).json({ error: "too_many", message: "That is a lot of budget changes in a few minutes. Wait a little and try again." });
+    }
+    const door = await budgetDoor(who.user, who.ctx);
+    if (!door.ok) {
+      const { suggest: _suggest, ...refused } = door.body;
+      return res.status(door.status).json(refused);
+    }
+    // The mode and the schedule are checked by `switchBudgetSource`, which refuses anything else by name.
+    const out = await switchBudgetSource(getPool(), {
+      source: String(req.params.source),
+      on: body.on === true,
+      mode: body.mode === undefined ? "auto" : body.mode,
+      schedule: body.schedule === undefined ? "daily" : body.schedule,
+      by: uid,
+      byAs: door.byAs,
+      dryRun,
+      revision: typeof body.revision === "string" ? body.revision : null,
+    });
+    if (!out.ok) return res.status(out.status).json({ error: out.code, message: out.message });
+    // A standing adoption that touches a role the writer is seated in goes to the village (R21's payee conflict).
+    const seated = new Set(await seatedRoleIds(uid));
+    if (rolesTouched(out.preview).some((id) => seated.has(id))) {
+      if (!dryRun) return res.status(409).json({ error: PAYEE_CONFLICT, code: "payee_conflict" });
+      return res.json({ ...out, door: { mayWrite: false, code: "payee_conflict", message: PAYEE_CONFLICT } });
+    }
+    const { preview: _preview, before, ...rest } = out;
+    const { setBy: _setBy, ...beforeView } = before;
+    res.json({ ...rest, before: beforeView, door: { mayWrite: true, via: door.via } });
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────
@@ -509,6 +566,10 @@ function circlesOf(raw: unknown): Array<string | null> | undefined {
 /** One line as a member reads it: never an account id, and spent only for `cash.pay` (R23, R25). */
 function lineView(l: StoredLine, mayReadCash: boolean, village: string, lockedAs: (userId: string | null | undefined) => string | null) {
   return {
+    // "Was X at the last sync" (R18), and the source's own "as of".
+    prevPlannedMinor: l.prevPlannedMinor ?? null,
+    prevSeenAt: l.prevSeenAt ?? null,
+    sourceChangedAt: l.sourceChangedAt,
     convertedMinor: village ? inVillageCurrency(l, village) : null,
     fx: l.fxRate ? { rate: l.fxRate, source: l.fxSource ?? null, asOf: l.fxAsOf ?? null, lockedAt: l.fxLockedAt ?? null, lockedAs: lockedAs(l.fxLockedBy) } : null,
     id: l.id,

@@ -32,6 +32,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
+  ADMIN_BEFORE_LAUNCH,
   BY_VILLAGE_VOTE,
   IMPORT_ROWS_MAX,
   LABEL_MAX,
@@ -79,7 +80,8 @@ import { budgetNameCheck, nameFindWords, type NameCheck } from "./budgetNames";
 import { cashKeys } from "./cashOwed";
 import { recordEvent } from "./events";
 import { dailyRatesUrl, latestRates } from "./fxRates";
-import { currentCycle } from "./gratitude-cycles";
+import { activeClock, currentCycle } from "./gratitude-cycles";
+import { launchedByVote } from "./orgDraftDecide";
 import { villageTimezone } from "./villageReaders";
 
 export { BY_VILLAGE_VOTE };
@@ -112,6 +114,10 @@ export interface BudgetEnv {
   /** The moon a write's share before and after is shown for (R10). */
   currentMoonId(): string;
   cashSetThisMoonUnowed: CashSetThisMoonUnowed;
+  /** Does this account hold `role.pay` now, the deny-aware live count (`liveHoldersOf`). For `recheckSource`. */
+  holdsRolePay(userId: string): Promise<boolean>;
+  /** Has the launch vote carried (`launchedByVote`). For `recheckSource`. */
+  launched(pool: Pool): Promise<boolean>;
   /**
    * The base still to set this moon, for the share in percent (R10). The
    * valuation lane owns it too; null until handed in, and then the preview
@@ -126,6 +132,9 @@ const DEFAULT_ENV: BudgetEnv = {
   seasons: () => [],
   currentMoonId: () => currentCycle().id,
   cashSetThisMoonUnowed: cashSetThisMoonUnowedNotYetAgreed,
+  // Fails closed: with nothing wired, nobody holds the power, so a re-check turns a source off.
+  holdsRolePay: async () => false,
+  launched: (pool) => launchedByVote(pool),
   baseToSet: async () => null,
 };
 
@@ -156,6 +165,9 @@ export interface StoredLine extends FigureLine {
   changedAt: string | null;
   changedBy: string | null;
   changedAs: string | null;
+  /** The amount before the last change, and when that amount was written (R18). */
+  prevPlannedMinor?: number | null;
+  prevSeenAt?: string | null;
 }
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
@@ -193,6 +205,8 @@ export function rowToLine(r: RowDataPacket): StoredLine {
     fxAsOf: r.fx_as_of_text ? String(r.fx_as_of_text) : null,
     fxLockedBy: str(r.fx_locked_by),
     fxLockedAt: iso(r.fx_locked_at),
+    prevPlannedMinor: r.prev_planned_minor === null || r.prev_planned_minor === undefined ? null : Number(r.prev_planned_minor),
+    prevSeenAt: iso(r.prev_seen_at),
   };
 }
 
@@ -252,10 +266,12 @@ export interface ImportRow {
    * otherwise `rate` and `sourceNote` are a rate a person typed. Locking a
    * locked line again re-locks it.
    */
-  action?: "withdraw" | "restore" | "lock";
+  action?: "withdraw" | "restore" | "lock" | "adopt";
   use?: "provider";
   rate?: string | number;
   sourceNote?: string;
+  /** For an adoption: what `adopted_as` says, "standing: <role>" under a source's switch. Defaults to the writer's role. */
+  adoptedAs?: string;
   period?: string;
   circle?: string | null;
   role?: string | null;
@@ -318,7 +334,7 @@ export interface Flag {
 }
 
 export interface PlanWrite {
-  op: "add" | "change" | "withdraw" | "restore" | "lock";
+  op: "add" | "change" | "withdraw" | "restore" | "lock" | "adopt";
   row: number | null;
   /** The line after the write. An added line's id is "" until it is written. */
   line: StoredLine;
@@ -355,6 +371,16 @@ export interface PlanInput {
   today: string;
   /** The newest stored rate from a currency into the village's, read on the server. Absent when no lock asks for one. */
   rates?: (from: string) => ProviderRate | null;
+  /**
+   * A source's standing switch (R18): `auto` lands its lines adopted at the
+   * read time as `adoptedAs`; `review` (and a source that is off) lands them
+   * waiting. Absent for the village's own imports.
+   */
+  standing?: { mode: "auto" | "review"; adoptedAs: string } | null;
+  /** When this import read its source, for `adopted_at` under the standing switch, and for an adoption. */
+  readAt: string;
+  /** The role the writer acts through, for an adoption's `adopted_as`. */
+  byAs: string | null;
 }
 
 /** A stored daily rate as a lock reads it: the rate (null past 14 days), its day and where it came from. */
@@ -535,6 +561,16 @@ const keptLock = (t: StoredLine): Pick<StoredLine, "fxRate" | "fxSource" | "fxAs
   fxLockedBy: t.fxLockedBy ?? null,
   fxLockedAt: t.fxLockedAt ?? null,
 });
+/**
+ * The amount before a change and when that amount was written (R18), kept
+ * for "was X at the last sync": set when the planned amount moves, and
+ * carried unchanged otherwise.
+ */
+function previousOf(t: StoredLine, next: StoredLine): Pick<StoredLine, "prevPlannedMinor" | "prevSeenAt"> {
+  if (next.plannedMinor !== t.plannedMinor) return { prevPlannedMinor: t.plannedMinor, prevSeenAt: t.changedAt };
+  return { prevPlannedMinor: t.prevPlannedMinor ?? null, prevSeenAt: t.prevSeenAt ?? null };
+}
+
 const RATE_UNLOCKED = "This line's currency or amount changed, so the rate locked on it no longer applies. Lock a rate again for it to count.";
 
 /** A typed rate: a plain decimal, above 0, at most 8 digits after the point. */
@@ -619,6 +655,23 @@ export function planImport(input: PlanInput): ImportPlan {
         plan.refused.push({ row: r.n, cell: "id", reason: "no_line", message: "There is no budget line with that id." });
         continue;
       }
+      if (r.row.action === "adopt") {
+        if (t.source !== "sera") {
+          plan.refused.push({ row: r.n, cell: "row", reason: "not_synced", message: "Only a line a source sent waits to be adopted. The village's own lines count as they are written." });
+          continue;
+        }
+        if (t.status === "withdrawn") {
+          plan.refused.push({ row: r.n, cell: "status", reason: "withdrawn", message: "Restore this line before adopting it." });
+          continue;
+        }
+        if (t.adoptedAt) {
+          plan.unchanged.push({ row: r.n, id: t.id });
+          continue;
+        }
+        const adoptedAs = (clean(r.row.adoptedAs) || input.byAs || "a holder of role.pay").slice(0, 120);
+        plan.writes.push({ op: "adopt", row: r.n, line: { ...t, adoptedAt: input.readAt, adoptedAs }, before: t, plannedCell: null, becomesManual: false, adoptionCleared: false });
+        continue;
+      }
       if (r.row.action === "lock") {
         if (t.status === "closed") {
           plan.refused.push({ row: r.n, cell: "status", reason: "closed", message: CLOSED });
@@ -687,6 +740,7 @@ export function planImport(input: PlanInput): ImportPlan {
         Object.assign(line, UNLOCKED);
         plan.flags.push({ row: r.n, cell: "currency", kind: "rate_unlocked", message: RATE_UNLOCKED, ids: [t.id] });
       }
+      Object.assign(line, previousOf(t, line));
       if (sameValues(line, t)) {
         plan.unchanged.push({ row: r.n, id: t.id });
         continue;
@@ -715,7 +769,10 @@ export function planImport(input: PlanInput): ImportPlan {
     }
     const t = r.target;
     const line: StoredLine = { ...cells.line, lineKey: r.key! };
+    const auto = input.source === "sera" && input.standing?.mode === "auto";
     if (!t) {
+      // Under a source's standing switch in auto mode, a synced line counts as soon as it lands (R18).
+      if (auto) Object.assign(line, { adoptedAt: input.readAt, adoptedAs: input.standing!.adoptedAs });
       plan.writes.push({ op: "add", row: r.n, line, before: null, plannedCell: cells.plannedCell, becomesManual: false, adoptionCleared: false });
       continue;
     }
@@ -729,11 +786,15 @@ export function planImport(input: PlanInput): ImportPlan {
       continue;
     }
     const next: StoredLine = { ...line, id: t.id, lineKey: t.lineKey, source: t.source, adoptedAt: t.adoptedAt, adoptedAs: t.adoptedAs, status: input.source === "sera" ? line.status : "approved" };
-    // The lock: the library changing the amount or the currency drops it; a writer here keeps it unless the currency moved.
-    const lockStays = !!t.fxRate && next.currency === t.currency && !(input.source === "sera" && next.plannedMinor !== t.plannedMinor);
-    Object.assign(next, lockStays ? keptLock(t) : UNLOCKED);
+    // The lock (spec 5a, guard 2): a new amount converts at the SAME locked rate, from a source or a writer here alike; a new currency drops it.
+    const lockStays = !!t.fxRate && next.currency === t.currency;
+    Object.assign(next, lockStays ? keptLock(t) : UNLOCKED, previousOf(t, next));
     if (t.fxRate && !lockStays) plan.flags.push({ row: r.n, cell: "row", kind: "rate_unlocked", message: RATE_UNLOCKED, ids: [t.id] });
-    const cleared = input.source === "sera" && !!t.adoptedAt && adoptionFacts(next) !== adoptionFacts(t);
+    const moved = adoptionFacts(next) !== adoptionFacts(t);
+    // Auto mode (R18): a changed line counts at its new values at once, under the standing switch, and a line that waited is adopted now.
+    if (auto && (moved || !t.adoptedAt)) Object.assign(next, { adoptedAt: input.readAt, adoptedAs: input.standing!.adoptedAs });
+    // Review mode, and a source that is off: a changed line stops counting until a person adopts it again.
+    const cleared = input.source === "sera" && !auto && !!t.adoptedAt && moved;
     if (cleared) {
       next.adoptedAt = null;
       next.adoptedAs = null;
@@ -1066,7 +1127,7 @@ export interface PreviewLine {
 }
 
 export interface PreviewChange extends PreviewLine {
-  op: "change" | "restore" | "withdraw" | "lock";
+  op: "change" | "restore" | "withdraw" | "lock" | "adopt";
   before: PreviewLine;
   becomesManual: boolean;
   adoptionCleared: boolean;
@@ -1094,6 +1155,12 @@ export interface ImportResult {
   withdrawSkipped: ImportPlan["withdrawSkipped"];
   shareBefore: ShareState;
   shareAfter: ShareState;
+  /** Each line whose planned amount moves, and by how much (R18). */
+  lineChanges: LineChange[];
+  /** Each moon whose counted total moves, and by how much (R18). */
+  moonChanges: MoonChange[];
+  /** A line or a moon moves more than 20%: a warning in the header, never a block (R18). */
+  swing: boolean;
   syncId: string | null;
   /** The ids written, an added line's included. */
   lineIds: string[];
@@ -1119,10 +1186,14 @@ const preview = (l: StoredLine, row: number | null, plannedCell: string | null, 
   status: l.status,
 });
 
-/** A row as the plan's digest reads it: what it does, never an id that does not exist yet. */
-const planDigest = (plan: ImportPlan) =>
+/**
+ * A row as the plan's digest reads it: what it does, never an id that does not
+ * exist yet, and the read time as one marker, so a preview and its confirm a
+ * moment later digest alike when the standing switch adopts at read time.
+ */
+const planDigest = (plan: ImportPlan, readAt: string) =>
   digest({
-    w: plan.writes.map((w) => [w.op, w.row, w.line.lineKey, valueOf(w.line).slice(2), w.becomesManual, w.adoptionCleared]),
+    w: plan.writes.map((w) => [w.op, w.row, w.line.lineKey, valueOf(w.line).slice(2).map((v) => (v === readAt ? "@read" : v)), w.becomesManual, w.adoptionCleared]),
     u: plan.unchanged,
     k: plan.kept,
     r: plan.refused,
@@ -1130,7 +1201,82 @@ const planDigest = (plan: ImportPlan) =>
     s: plan.withdrawSkipped,
   });
 
+export interface LineChange {
+  row: number | null;
+  id: string | null;
+  label: string;
+  currency: string;
+  prevMinor: number;
+  nextMinor: number;
+  /** Percent from the amount before, one decimal; null when it was 0. */
+  pct: number | null;
+  swing: boolean;
+}
+
+export interface MoonChange {
+  moonId: string;
+  beforeMinor: number;
+  afterMinor: number;
+  pct: number | null;
+  swing: boolean;
+}
+
+/** A move past this, either way, in one import, is a swing (R18). */
+export const SWING_PCT = 20;
+
+const pctOf = (before: number, after: number): number | null => (before > 0 ? Math.round(((after - before) / before) * 1000) / 10 : null);
+const swingOf = (before: number, after: number): boolean => {
+  const pct = pctOf(before, after);
+  return pct === null ? after !== before : Math.abs(pct) > SWING_PCT;
+};
+
+/** The moons a line's days cross, on the village's clock, at most 24. */
+function moonsOf(l: Pick<StoredLine, "startsOn" | "endsOn">): string[] {
+  const clock = activeClock();
+  const first = clock.boundsFor(new Date(`${l.startsOn}T12:00:00Z`)).cycleNumber;
+  const last = clock.boundsFor(new Date(`${l.endsOn}T12:00:00Z`)).cycleNumber;
+  const out: string[] = [];
+  for (let n = first; n <= last && out.length < 24; n++) out.push(boundsForNumber(n).id);
+  return out;
+}
+
+/** What an import moves (R18): each line's planned amount and each touched moon's counted total, before and after. */
+function changesOf(p: { existing: StoredLine[]; after: StoredLine[]; plan: ImportPlan }, village: string, timezone: string): { lineChanges: LineChange[]; moonChanges: MoonChange[]; swing: boolean } {
+  const lineChanges: LineChange[] = p.plan.writes
+    .filter((w) => w.before && w.op !== "withdraw" && w.before.plannedMinor !== w.line.plannedMinor)
+    .map((w) => ({
+      row: w.row,
+      id: w.line.id || null,
+      label: w.line.label,
+      currency: w.line.currency,
+      prevMinor: w.before!.plannedMinor,
+      nextMinor: w.line.plannedMinor,
+      pct: pctOf(w.before!.plannedMinor, w.line.plannedMinor),
+      swing: swingOf(w.before!.plannedMinor, w.line.plannedMinor),
+    }));
+  const ids = new Set<string>();
+  for (const w of p.plan.writes) {
+    for (const id of moonsOf(w.line)) ids.add(id);
+    if (w.before) for (const id of moonsOf(w.before)) ids.add(id);
+    if (ids.size > 60) break;
+  }
+  const moonChanges: MoonChange[] = [];
+  Array.from(ids)
+    .sort()
+    .forEach((id) => {
+      const m = moonPeriod(id, timezone);
+      if (!m) return;
+      const span = { id, startsOn: m.startsOn, endsOn: m.endsOn, days: m.days };
+      const beforeMinor = moonPlan(p.existing, span, village || null).totalMinor;
+      const afterMinor = moonPlan(p.after, span, village || null).totalMinor;
+      if (beforeMinor === afterMinor) return;
+      moonChanges.push({ moonId: id, beforeMinor, afterMinor, pct: pctOf(beforeMinor, afterMinor), swing: swingOf(beforeMinor, afterMinor) });
+    });
+  return { lineChanges, moonChanges, swing: lineChanges.some((c) => c.swing) || moonChanges.some((c) => c.swing) };
+}
+
 interface Prepared {
+  timezone: string;
   village: string;
   sourceLabel: string | null;
   sourceLink: string | null;
@@ -1152,8 +1298,15 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   };
   const names = budgetNameCheck(await rosterRows(db as Pool));
   const villageCurrency = e.currency();
+  const readAt = new Date().toISOString();
   const today = civilDateKey(new Date(), e.timezone());
   const rates = input.lines.some((r) => r && r.action === "lock" && r.use === "provider") ? await providerRates(db, existing, villageCurrency) : undefined;
+  // A source's standing switch (R18): only an `on` source in `auto` mode lands its lines counting.
+  let standing: PlanInput["standing"] = null;
+  if (input.source === "sera") {
+    const s = await repo.budgetSourceRow(db, input.source);
+    standing = s && Number(s.on) === 1 ? { mode: s.mode === "review" ? "review" : "auto", adoptedAs: `standing: ${str(s.set_as) ?? "a holder of role.pay"}`.slice(0, 120) } : { mode: "review", adoptedAs: "" };
+  }
   const plan = planImport({
     source: input.source,
     rows: input.lines,
@@ -1166,6 +1319,9 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     names,
     today,
     rates,
+    standing,
+    readAt,
+    byAs: input.byAs,
   });
   const own = sourceProblems(input, names);
   plan.refused.unshift(...own.refused);
@@ -1177,6 +1333,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   const base = await e.baseToSet(db, moonId);
   const state = stateRevision(existing);
   return {
+    timezone: e.timezone(),
     village: villageCurrency,
     sourceLabel: own.label,
     sourceLink: own.link,
@@ -1184,7 +1341,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     plan,
     after,
     stateRevision: state,
-    revision: digest([state, planDigest(plan)]),
+    revision: digest([state, planDigest(plan, readAt)]),
     shareBefore: shareState(moonId, figureFor(existing, moonId, committed, e), base),
     shareAfter: shareState(moonId, figureFor(after, moonId, committed, e), base),
   };
@@ -1215,6 +1372,7 @@ function result(p: Prepared, over: Partial<ImportResult>): ImportResult {
     withdrawSkipped: plan.withdrawSkipped,
     shareBefore: p.shareBefore,
     shareAfter: p.shareAfter,
+    ...changesOf(p, p.village, p.timezone),
     syncId: null,
     lineIds: [],
     ...over,
@@ -1226,11 +1384,11 @@ const refusal = (status: 400 | 409, code: ImportResult["code"], message: string,
   if (p) return result(p, { ok: false, status, code, message });
   return {
     ok: false, status, code, message, written: false, revision: "", stateRevision: "", added: [], changed: [], withdrawn: [], withdrawnLines: [], unchanged: 0,
-    kept: [], refused: [], held: [], flags: [], withdrawSkipped: null, shareBefore: empty, shareAfter: empty, syncId: null, lineIds: [],
+    kept: [], refused: [], held: [], flags: [], withdrawSkipped: null, shareBefore: empty, shareAfter: empty, lineChanges: [], moonChanges: [], swing: false, syncId: null, lineIds: [],
   };
 };
 
-const VERB: Record<PlanWrite["op"], string> = { add: "added", change: "changed", withdraw: "withdrawn", restore: "restored", lock: "rate-locked" };
+const VERB: Record<PlanWrite["op"], string> = { add: "added", change: "changed", withdraw: "withdrawn", restore: "restored", lock: "rate-locked", adopt: "adopted" };
 
 /** The members-visible line a write that moves the share records (R10). Fixed words, no figure, nobody named. */
 export const SHARE_MOVED_EVENT = "This moon's cash budget changed, and with it the share of work paid in cash.";
@@ -1309,6 +1467,8 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
         fxAsOf: line.fxAsOf ?? null,
         fxLockedBy: line.fxLockedBy ?? null,
         fxLockedAt: line.fxLockedAt ? new Date(line.fxLockedAt) : null,
+        prevPlannedMinor: line.prevPlannedMinor ?? null,
+        prevSeenAt: line.prevSeenAt ? new Date(line.prevSeenAt) : null,
       };
       if (w.op === "add") await repo.insertBudgetLine(conn, row);
       else await repo.updateBudgetLine(conn, row);
@@ -1425,6 +1585,134 @@ export async function budgetAhead(pool: Pool, fromMoonId: string, count: number,
     });
   }
   return { currentMoonId: current, villageCurrency: village, moons };
+}
+
+// ── A source's standing switch (v0.4, R18) ─────────────────────────────────
+
+export type SourceMode = "auto" | "review";
+export type SourceSchedule = "daily" | "hourly" | "off";
+
+export interface BudgetSourceState {
+  source: string;
+  on: boolean;
+  mode: SourceMode;
+  schedule: SourceSchedule;
+  /** An account id. The read route names `setAs` and never this. */
+  setBy: string | null;
+  setAs: string | null;
+  setAt: string | null;
+  offReason: string | null;
+}
+
+/** The sources a switch may name: every source a person does not write by hand. */
+const SWITCHABLE = ["sera"] as const;
+
+const sourceOf = (source: string, r: RowDataPacket | null): BudgetSourceState => ({
+  source,
+  on: !!r && Number(r.on) === 1,
+  mode: r?.mode === "review" ? "review" : "auto",
+  schedule: r?.schedule === "hourly" ? "hourly" : r?.schedule === "off" ? "off" : "daily",
+  setBy: r ? str(r.set_by) : null,
+  setAs: r ? str(r.set_as) : null,
+  setAt: r ? iso(r.set_at) : null,
+  offReason: r ? str(r.off_reason) : null,
+});
+
+/** One source's switch, or the default for one never switched: off, auto, daily. */
+export async function budgetSourceState(pool: Pool, source: string): Promise<BudgetSourceState> {
+  return sourceOf(source, await repo.budgetSourceRow(pool, source));
+}
+
+export async function budgetSourceStates(pool: Pool): Promise<BudgetSourceState[]> {
+  const rows = new Map((await repo.budgetSourceRows(pool)).map((r) => [String(r.source), r]));
+  return SWITCHABLE.map((s) => sourceOf(s, rows.get(s) ?? null));
+}
+
+export interface SwitchInput {
+  source: string;
+  on: boolean;
+  mode: SourceMode;
+  schedule: SourceSchedule;
+  by: string | null;
+  byAs: string | null;
+  dryRun: boolean;
+  revision?: string | null;
+}
+
+export type SwitchResult =
+  | {
+      ok: true;
+      written: boolean;
+      revision: string;
+      before: BudgetSourceState;
+      after: Omit<BudgetSourceState, "setBy" | "setAt" | "offReason">;
+      /** How many lines the source already sent that count from now (auto, turned on). */
+      adopts: number;
+      shareBefore: ShareState;
+      shareAfter: ShareState;
+      /** The lines the adoption touches, for the route's payee conflict. */
+      preview: Pick<ImportResult, "added" | "changed">;
+    }
+  | { ok: false; status: 400 | 404 | 409; code: string; message: string };
+
+/**
+ * TURNING A SOURCE ON, OFF, OR BETWEEN MODES (R18): an act of the R21 door,
+ * which the caller has already passed. Previewed with the share before and
+ * after, bound by revision, logged. Turning it on in `auto` adopts what the
+ * source already sent, through `importBudgetLines` (an adoption is a budget
+ * write like any other), as "standing: <role>". Turning it off removes
+ * nothing: lines already counted keep counting at their last values.
+ */
+export async function switchBudgetSource(pool: Pool, input: SwitchInput): Promise<SwitchResult> {
+  if (!(SWITCHABLE as readonly string[]).includes(input.source)) return { ok: false, status: 404, code: "unknown_source", message: "There is no budget source by that name." };
+  if (input.mode !== "auto" && input.mode !== "review") return { ok: false, status: 400, code: "mode", message: "A source applies its lines at once (auto) or waits for review (review)." };
+  if (!["daily", "hourly", "off"].includes(input.schedule)) return { ok: false, status: 400, code: "schedule", message: "A source is read daily, hourly, or only when somebody presses Sync." };
+  const before = await budgetSourceState(pool, input.source);
+  const adoptedAs = `standing: ${input.byAs ?? "a holder of role.pay"}`.slice(0, 120);
+  const pending = input.on && input.mode === "auto"
+    ? (await budgetLines(pool)).filter((l) => l.source === input.source && !l.adoptedAt && (l.status === "approved" || l.status === "closed"))
+    : [];
+  const rows: ImportRow[] = pending.map((l) => ({ id: l.id, action: "adopt", adoptedAs }));
+  const base: ImportInput = { source: "manual", lines: rows, by: input.by, byAs: input.byAs, dryRun: true };
+  const p = await importBudgetLines(pool, base);
+  const after = { source: input.source, on: input.on, mode: input.mode, schedule: input.schedule, setAs: input.byAs };
+  const revision = digest([p.revision, before.on, before.mode, before.schedule, before.setAs, after]);
+  const out = { ok: true as const, written: false, revision, before, after, adopts: p.changed.length, shareBefore: p.shareBefore, shareAfter: p.shareAfter, preview: { added: p.added, changed: p.changed } };
+  if (input.dryRun) return out;
+  if (input.revision !== revision) return { ok: false, status: 409, code: "stale", message: "The budget or the source changed since this preview. Read the fresh preview, then confirm again." };
+  if (rows.length) {
+    const done = await importBudgetLines(pool, { ...base, dryRun: false, revision: p.revision });
+    if (!done.ok) return { ok: false, status: done.status === 200 ? 409 : done.status, code: done.code ?? "refused", message: done.message ?? "The adoption could not be written." };
+  }
+  await repo.upsertBudgetSource(pool, { source: input.source, on: input.on, mode: input.mode, schedule: input.schedule, setBy: input.by, setAs: input.byAs });
+  void recordEvent(pool, { kind: "audit", text: `budget:source:${input.source}:${input.on ? "on" : "off"}:${input.mode}`, actorUserId: input.by, entityType: "budget_source", entityRef: input.source, audience: "admin" });
+  return { ...out, written: true };
+}
+
+/**
+ * THE SWITCH, RE-CHECKED ON EVERY PULL (R18). The puller (PR 2) calls this
+ * before each read. The source stays on while the person who turned it on
+ * still holds `role.pay`; an admin who turned it on before launch keeps it on
+ * only until a launch vote carries; a setter who has left keeps it on never.
+ * Otherwise it turns itself off with the reason, recorded, and says so, so
+ * the caller can tell the door's holders. Nothing it already counted is
+ * removed.
+ */
+export async function recheckSource(pool: Pool, source: string, over: Partial<BudgetEnv> = {}): Promise<{ on: boolean; mode: SourceMode; offReason: string | null; turnedOff: boolean }> {
+  const e = { ...env, ...over };
+  const s = await budgetSourceState(pool, source);
+  if (!s.on) return { on: false, mode: s.mode, offReason: s.offReason, turnedOff: false };
+  let reason: string | null = null;
+  if (!s.setBy) reason = "The person who turned this source on has left the village. A holder of the budget power turns it on again.";
+  else if (s.setAs === ADMIN_BEFORE_LAUNCH) {
+    if (await e.launched(pool)) reason = "An admin turned this source on before the launch vote, and the launch vote has since carried. A holder of the budget power turns it on again.";
+  } else if (!(await e.holdsRolePay(s.setBy))) {
+    reason = "The person who turned this source on no longer holds the budget power. A holder turns it on again.";
+  }
+  if (!reason) return { on: true, mode: s.mode, offReason: null, turnedOff: false };
+  const turnedOff = await repo.turnBudgetSourceOff(pool, source, reason);
+  if (turnedOff) void recordEvent(pool, { kind: "audit", text: `budget:source:${source}:turned-off`, entityType: "budget_source", entityRef: source, audience: "admin" });
+  return { on: false, mode: s.mode, offReason: reason, turnedOff };
 }
 
 // ── Stored rates, read on the server (spec 5a) ──────────────────────────────

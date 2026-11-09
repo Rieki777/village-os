@@ -831,6 +831,8 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     await line("bl-own-3", "own-bd-ash", leaver.id);
     await q("INSERT INTO budget_syncs (id, source, `by`, by_as, ok) VALUES ('bs-own-1', 'upload', ?, 'Treasury', 1), ('bs-own-2', 'upload', 'own-bd-ash', 'Treasury', 1)", [leaver.id]);
     await q("INSERT INTO budget_period_notes (period_key, note, changed_by, changed_as) VALUES ('2026-11', 'Read this moon slowly', ?, 'Treasury'), ('2026-12', 'Ash wrote this one', 'own-bd-ash', 'Treasury')", [leaver.id]);
+    await q("DELETE FROM budget_sources");
+    await q("INSERT INTO budget_sources (source, `on`, mode, set_by, set_as, set_at) VALUES ('sera', 1, 'auto', ?, 'Treasury', NOW()), ('other-source', 1, 'review', 'own-bd-ash', 'Treasury', NOW())", [leaver.id]);
 
     await anonymizeMember(pool, leaver, "admin-1", deps());
 
@@ -846,6 +848,10 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     expect(await q("SELECT period_key, note, changed_by, changed_as FROM budget_period_notes ORDER BY period_key"), "a period note stays, without the leaver's id").toEqual([
       { period_key: "2026-11", note: "Read this moon slowly", changed_by: null, changed_as: "Treasury" },
       { period_key: "2026-12", note: "Ash wrote this one", changed_by: "own-bd-ash", changed_as: "Treasury" },
+    ]);
+    expect(await q("SELECT source, set_by, set_as FROM budget_sources ORDER BY source"), "a source's switch stays, without the leaver's id; the re-check then turns it off").toEqual([
+      { source: "other-source", set_by: "own-bd-ash", set_as: "Treasury" },
+      { source: "sera", set_by: null, set_as: "Treasury" },
     ]);
     expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
   });

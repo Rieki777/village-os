@@ -32,6 +32,9 @@ import {
   budgetSource,
   budgetAhead,
   budgetRateDrift,
+  budgetSourceState,
+  recheckSource,
+  switchBudgetSource,
   cashSetThisMoonUnowedNotYetAgreed,
   periodNote,
   setPeriodNote,
@@ -44,7 +47,7 @@ import { insertCashOwedRow } from "../repos/cashOwed";
 import { usersRepo } from "../repos/users";
 import { createOrgRole } from "./orgChart";
 import { LUNAR_CLOCK, boundsForNumber, parseId } from "../../shared/cycleClock";
-import { convertAtRate, moonPeriod } from "../../shared/budgets";
+import { ADMIN_BEFORE_LAUNCH, convertAtRate, moonPeriod } from "../../shared/budgets";
 
 const configured = testDbConfigured();
 const TZ = "America/Costa_Rica";
@@ -94,7 +97,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates", "budget_period_notes"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates", "budget_period_notes", "budget_sources"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     configureBudgets({
       currency: () => "CRC",
@@ -467,22 +470,6 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     expect(await fxOf(id)).toMatchObject({ fx_rate: null, fx_source: null, fx_as_of: null, fx_locked_by: null });
   });
 
-  it("drops the lock and the adoption when the library changes a line's amount or currency, and keeps both when it sends the line unchanged", async () => {
-    const sera = (plannedMinor: number, currency = "USD"): ImportRow => ({ sourceRef: "rec-fx", period: MOON, category: "role_pay", label: "Library dollars", currency, plannedMinor });
-    const read = (r: ImportRow) => confirm({ source: "sera", by: null, byAs: null, lines: [r] });
-    const id = (await read(sera(120_000))).lineIds[0];
-    await q("UPDATE budget_lines SET adopted_at = NOW(), adopted_as = 'Treasury' WHERE id = ?", [id]);
-    await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] });
-    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(60_000_000);
-    expect((await read(sera(120_000))).changed, "the same line again changes nothing").toEqual([]);
-    expect((await fxOf(id)).fx_rate).toBe("500.00000000");
-    const moved = await read(sera(130_000));
-    expect(moved.flags.map((f) => f.kind).sort()).toEqual(["adoption_cleared", "rate_unlocked"]);
-    expect((await fxOf(id)).fx_rate).toBeNull();
-    expect((await q("SELECT adopted_at FROM budget_lines WHERE id = ?", [id]))[0].adopted_at).toBeNull();
-    expect(await cashBudgetLeft(pool, MOON), "it stops counting until adopted again").toBeNull();
-  });
-
   it("reads each locked line's drift at today's stored rate, for display only, and flags it past 5%", async () => {
     await q("DELETE FROM fx_rates");
     await storeDaily(today(), 1, 530);
@@ -518,7 +505,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     const changed = (await q("SELECT changed_at FROM budget_lines"))[0].changed_at as Date;
     const owed = (await q("SELECT owed_at FROM cash_owed WHERE id = 'co-asof'"))[0].owed_at as Date;
     expect(f.working.committed.asOf).toBe(owed.toISOString());
-    const ahead = await budgetAhead(pool, MOON, 1);
+    const ahead = (await budgetAhead(pool, MOON, 1))!;
     expect(ahead.moons[0].plannedAsOf).toBe(changed.toISOString());
   });
 
@@ -527,7 +514,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     await confirm({ lines: [row({ planned: "100" }), row({ label: "Materials next moon", period: next, category: "materials", planned: "40" }), row({ label: "Draft", category: "other", planned: "1" })] });
     await q("UPDATE budget_lines SET status = 'draft' WHERE label = 'Draft'");
     await insertCashOwedRow(pool, { id: "co-ahead", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-ana"), userId: "u-ana", workKind: "role", workRef: "r", workTitle: "r", amountMinor: 700, currency: "CRC" });
-    const a = await budgetAhead(pool, MOON, 3);
+    const a = (await budgetAhead(pool, MOON, 3))!;
     expect(a.moons.map((m) => m.moonId)).toEqual([MOON, next, boundsForNumber(NOW.cycleNumber + 2).id]);
     expect(a.moons[0]).toMatchObject({ byCategory: { role_pay: 10_000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 10_000, committedMinor: 700 });
     expect(a.moons[1]).toMatchObject({ byCategory: { role_pay: 0, quest_pay: 0, materials: 4000, other: 0 }, totalMinor: 4000, committedMinor: null });
@@ -546,6 +533,118 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = ?", [`budget:note:${MOON}`]))[0].n).toBe(1), { timeout: 3000 });
     expect(await setPeriodNote(pool, { period: MOON, note: "", by: "u-treasurer", byAs: "Treasury" })).toMatchObject({ ok: true });
     expect(await periodNote(pool, MOON), "an empty note clears it").toBeNull();
+  });
+
+  // ── A source that feeds the budget (v0.4, R18) ────────────────────────────
+
+  const seraRow = (over: ImportRow = {}): ImportRow => ({ sourceRef: "rec-s", period: MOON, category: "role_pay", label: "Library pay", plannedMinor: 100_000, ...over });
+  const sync = (rows: ImportRow[], whole = false) => confirm({ source: "sera", by: null, byAs: null, scope: { whole }, lines: rows });
+  const sourceOn = (mode: "auto" | "review", setBy: string | null = "u-treasurer", setAs = "Treasury") =>
+    q("INSERT INTO budget_sources (source, `on`, mode, set_by, set_as, set_at) VALUES ('sera', 1, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE `on` = 1, mode = VALUES(mode), set_by = VALUES(set_by), set_as = VALUES(set_as), off_reason = NULL", [mode, setBy, setAs]);
+
+  it("lands a synced line adopted under the standing switch in auto mode, counting at once, and a changed line at its new values", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("auto");
+    const first = await sync([seraRow()]);
+    expect((await lines())[0]).toMatchObject({ label: "Library pay", adopted_at: expect.any(Date) });
+    expect((await q("SELECT adopted_as FROM budget_lines"))[0].adopted_as).toBe("standing: Treasury");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(100_000);
+    const moved = await sync([seraRow({ plannedMinor: 110_000 })]);
+    expect(moved.flags.map((f) => f.kind), "auto mode never asks for adoption again").not.toContain("adoption_cleared");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(110_000);
+    expect(first.added[0].label).toBe("Library pay");
+  });
+
+  it("lands a synced line unadopted in review mode, and when the source is off, and a changed line stops counting until adopted again", async () => {
+    await q("DELETE FROM budget_sources");
+    await sync([seraRow()]);
+    expect(await cashBudgetLeft(pool, MOON), "no source row: review").toBeNull();
+    await sourceOn("review");
+    await sync([seraRow({ sourceRef: "rec-r", label: "Second" })]);
+    expect((await q("SELECT COUNT(*) AS n FROM budget_lines WHERE adopted_at IS NULL"))[0].n).toBe(2);
+    await q("UPDATE budget_lines SET adopted_at = NOW(), adopted_as = 'Treasury'");
+    const moved = await sync([seraRow({ plannedMinor: 90_000 })]);
+    expect(moved.flags.map((f) => f.kind)).toContain("adoption_cleared");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "only the unchanged line still counts").toBe(100_000);
+  });
+
+  it("converts a locked synced line at the same locked rate when the source changes its amount, and drops the lock when it changes the currency", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("auto");
+    const id = (await sync([seraRow({ currency: "USD", plannedMinor: 1000 })])).lineIds[0];
+    expect(await cashBudgetLeft(pool, MOON), "a synced line in another currency waits for a person to lock a rate").toBeNull();
+    await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] });
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(500_000);
+    const moved = await sync([seraRow({ currency: "USD", plannedMinor: 1200 })]);
+    expect(moved.flags.map((f) => f.kind)).not.toContain("rate_unlocked");
+    expect((await fxOf(id)).fx_rate).toBe("500.00000000");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "the new amount at the same locked rate").toBe(600_000);
+    const recurrency = await sync([seraRow({ currency: "EUR", plannedMinor: 1200 })]);
+    expect(recurrency.flags.map((f) => f.kind)).toContain("rate_unlocked");
+    expect((await fxOf(id)).fx_rate).toBeNull();
+    expect(await cashBudgetLeft(pool, MOON), "not counted yet again").toBeNull();
+  });
+
+  it("keeps the amount before a change and when it was seen, and reports each line's and each moon's change with a swing past 20%", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("auto");
+    await sync([seraRow(), seraRow({ sourceRef: "rec-t", label: "Steady", plannedMinor: 1_000_000 })]);
+    const small = await sync([seraRow({ plannedMinor: 110_000 }), seraRow({ sourceRef: "rec-t", label: "Steady", plannedMinor: 1_000_000 })]);
+    expect(small.lineChanges).toEqual([expect.objectContaining({ label: "Library pay", prevMinor: 100_000, nextMinor: 110_000, pct: 10, swing: false })]);
+    expect(small.moonChanges).toEqual([expect.objectContaining({ moonId: MOON, beforeMinor: 1_100_000, afterMinor: 1_110_000, swing: false })]);
+    expect(small.swing).toBe(false);
+    const row1 = (await q("SELECT prev_planned_minor, prev_seen_at FROM budget_lines WHERE source_ref = 'rec-s'"))[0];
+    expect(row1.prev_planned_minor).toBe(100_000);
+    expect(row1.prev_seen_at).toEqual(expect.any(Date));
+    const big = await sync([seraRow({ plannedMinor: 200_000 }), seraRow({ sourceRef: "rec-t", label: "Steady", plannedMinor: 1_000_000 })]);
+    expect(big.lineChanges[0]).toMatchObject({ prevMinor: 110_000, nextMinor: 200_000, swing: true });
+    expect(big.moonChanges[0]).toMatchObject({ swing: false });
+    expect(big.swing, "a line past 20% is a swing, though the moon moved less").toBe(true);
+    const moon = await sync([seraRow({ plannedMinor: 200_000 }), seraRow({ sourceRef: "rec-t", label: "Steady", plannedMinor: 400_000 })]);
+    expect(moon.moonChanges[0]).toMatchObject({ beforeMinor: 1_200_000, afterMinor: 600_000, pct: -50, swing: true });
+  });
+
+  it("turns a source on through a preview of the share change bound by revision, adopting what it already sent, and off without removing anything", async () => {
+    await q("DELETE FROM budget_sources");
+    await sync([seraRow()]);
+    const before = (await switchBudgetSource(pool, { source: "sera", on: true, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: true })) as Extract<Awaited<ReturnType<typeof switchBudgetSource>>, { ok: true }>;
+    expect(before).toMatchObject({ ok: true, written: false, adopts: 1, shareBefore: { set: false }, shareAfter: { set: true, leftMinor: 100_000 } });
+    expect(await cashBudgetLeft(pool, MOON), "a preview adopts nothing").toBeNull();
+    expect(await switchBudgetSource(pool, { source: "sera", on: true, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: false, revision: "old" })).toMatchObject({ ok: false, status: 409, code: "stale" });
+    const on = await switchBudgetSource(pool, { source: "sera", on: true, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: false, revision: before.revision });
+    expect(on).toMatchObject({ ok: true, written: true });
+    expect(await budgetSourceState(pool, "sera")).toMatchObject({ on: true, mode: "auto", schedule: "daily", setBy: "u-treasurer", setAs: "Treasury", offReason: null });
+    expect((await q("SELECT adopted_as FROM budget_lines"))[0].adopted_as).toBe("standing: Treasury");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(100_000);
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = 'budget:source:sera:on:auto'"))[0].n).toBe(1), { timeout: 3000 });
+    const offPreview = (await switchBudgetSource(pool, { source: "sera", on: false, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: true })) as Extract<Awaited<ReturnType<typeof switchBudgetSource>>, { ok: true }>;
+    await switchBudgetSource(pool, { source: "sera", on: false, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: false, revision: offPreview.revision });
+    expect((await budgetSourceState(pool, "sera")).on).toBe(false);
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "turning it off removes nothing").toBe(100_000);
+    expect(await switchBudgetSource(pool, { source: "upload", on: true, mode: "auto", schedule: "daily", by: "u-treasurer", byAs: "Treasury", dryRun: true })).toMatchObject({ ok: false, code: "unknown_source" });
+  });
+
+  it("re-checks the switch: it stays on while the setter holds the power, and turns itself off with the reason when they do not, when an admin set it before a launch vote that has since carried, or when the setter has left", async () => {
+    await q("DELETE FROM budget_sources");
+    const holders = new Set(["u-treasurer"]);
+    let launchedNow = false;
+    configureBudgets({ holdsRolePay: async (uid) => holders.has(uid), launched: async () => launchedNow });
+    await sourceOn("auto");
+    expect(await recheckSource(pool, "sera")).toMatchObject({ on: true, turnedOff: false });
+    holders.clear();
+    const off = await recheckSource(pool, "sera");
+    expect(off).toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("no longer holds") });
+    expect(await budgetSourceState(pool, "sera")).toMatchObject({ on: false, offReason: off.offReason });
+    expect(await recheckSource(pool, "sera"), "an off source stays off, and is not turned off twice").toMatchObject({ on: false, turnedOff: false });
+
+    await sourceOn("auto", "u-ada", ADMIN_BEFORE_LAUNCH);
+    expect(await recheckSource(pool, "sera"), "an admin before launch, no launch yet").toMatchObject({ on: true });
+    launchedNow = true;
+    expect(await recheckSource(pool, "sera")).toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("launch vote") });
+
+    await sourceOn("auto", null);
+    expect(await recheckSource(pool, "sera")).toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("left") });
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = 'budget:source:sera:turned-off'"))[0].n).toBe(3), { timeout: 3000 });
   });
 
   it("refuses more than 2000 rows in one import", async () => {

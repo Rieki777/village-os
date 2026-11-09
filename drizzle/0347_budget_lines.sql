@@ -1,4 +1,4 @@
--- 0347: a village writes down its cash budget, line by line, every import of it, and a note per period.
+-- 0347: a village writes down its cash budget, line by line, every import of it, a note per period, and the sources that feed it.
 --
 -- WHAT THIS IS FOR.
 -- Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can
@@ -30,8 +30,11 @@
 -- Money is an integer count of minor units, never negative. `spent_minor` is
 -- NULL unless a person typed it or the library sent it.
 --
--- A line is withdrawn, never deleted, and can be restored. A line the library
--- sent counts only once a person adopts it (`adopted_at`, `adopted_as`).
+-- A line is withdrawn, never deleted, and can be restored. A line a source
+-- sent counts once it is adopted (`adopted_at`, `adopted_as`): by a person,
+-- line by line, or at once under the source's standing switch in `auto` mode.
+-- `prev_planned_minor` and `prev_seen_at` keep the amount before the last
+-- change and when that amount was written, for "was X at the last sync".
 --
 -- `changed_by` is an account id, de-attributed to NULL when that member is
 -- erased; `changed_as` is the role they acted through, or "admin, before
@@ -49,13 +52,21 @@
 -- budget word; `source_link` is an optional https address of that sheet, which
 -- only the people who keep the budget and those who pay cash ever read back.
 --
+-- `budget_sources`, ONE ROW PER SOURCE THAT FEEDS THE BUDGET (the knowledge
+-- library first): whether it is on, whether what it sends counts at once
+-- (`auto`) or waits for a person (`review`), how often it is read, and who
+-- turned it on and through which role. A source re-checks its setter on every
+-- read and turns itself off with `off_reason` when they no longer hold the
+-- power. `set_by` is de-attributed on erasure; `set_as` names a role and stays.
+-- `on` is a reserved word, so every statement names it in backticks.
+--
 -- `budget_period_notes`, HOW TO READ A PERIOD: one note per period key,
 -- written by the people who keep the budget and read by every member.
 -- `changed_by` is de-attributed on erasure; `changed_as` names a role and
 -- stays.
 --
 -- EXPAND ONLY, AND THE ROLLBACK HOLDS.
--- Three new tables. Nothing the previous release reads or writes changes, so it
+-- Four new tables. Nothing the previous release reads or writes changes, so it
 -- keeps working if it is put back over a migrated database. The UNIQUE key is on
 -- a new table only. No SQL function is called here.
 
@@ -90,6 +101,8 @@ CREATE TABLE IF NOT EXISTS `budget_lines` (
   `fx_as_of` date NULL,
   `fx_locked_by` varchar(64) NULL,
   `fx_locked_at` timestamp NULL,
+  `prev_planned_minor` bigint NULL,
+  `prev_seen_at` timestamp NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `budget_lines_line_key` (`line_key`),
@@ -119,6 +132,19 @@ CREATE TABLE IF NOT EXISTS `budget_syncs` (
   PRIMARY KEY (`id`),
   KEY `budget_syncs_source_at` (`source`, `at`),
   KEY `budget_syncs_by` (`by`)
+);
+
+CREATE TABLE IF NOT EXISTS `budget_sources` (
+  `source` varchar(32) NOT NULL,
+  `on` tinyint(1) NOT NULL DEFAULT 0,
+  `mode` enum('auto','review') NOT NULL DEFAULT 'auto',
+  `set_by` varchar(64) NULL,
+  `set_as` varchar(120) NULL,
+  `set_at` timestamp NULL,
+  `off_reason` varchar(500) NULL,
+  `schedule` enum('daily','hourly','off') NOT NULL DEFAULT 'daily',
+  PRIMARY KEY (`source`),
+  KEY `budget_sources_set_by` (`set_by`)
 );
 
 CREATE TABLE IF NOT EXISTS `budget_period_notes` (

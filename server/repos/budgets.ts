@@ -47,17 +47,20 @@ export interface BudgetLineRow {
   fxAsOf: string | null;
   fxLockedBy: string | null;
   fxLockedAt: Date | null;
+  /** The amount before the last change, and when that amount was written (v0.4, R18). */
+  prevPlannedMinor: number | null;
+  prevSeenAt: Date | null;
 }
 
 const COLUMNS =
   "`id`, `line_key`, `source`, `source_ref`, `source_changed_at`, `period_kind`, `period_key`, `starts_on`, `ends_on`, " +
   "`circle_id`, `role_id`, `matched`, `category`, `planned_minor`, `spent_minor`, `currency`, `label`, `source_label`, `note`, " +
-  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`";
+  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`, `prev_planned_minor`, `prev_seen_at`";
 
 const values = (r: BudgetLineRow): unknown[] => [
   r.id, r.lineKey, r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
   r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
-  r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt,
+  r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt,
 ];
 
 /**
@@ -75,7 +78,7 @@ export async function budgetLineRows(db: Db): Promise<RowDataPacket[]> {
 
 export async function insertBudgetLine(db: Db, r: BudgetLineRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
-    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 30 }, () => "?").join(", ")})`,
+    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 32 }, () => "?").join(", ")})`,
     [...values(r), new Date()],
   );
   return res;
@@ -87,11 +90,11 @@ export async function updateBudgetLine(db: Db, r: BudgetLineRow): Promise<Result
     "UPDATE `budget_lines` SET `source` = ?, `source_ref` = ?, `source_changed_at` = ?, `period_kind` = ?, `period_key` = ?, `starts_on` = ?, `ends_on` = ?, " +
       "`circle_id` = ?, `role_id` = ?, `matched` = ?, `category` = ?, `planned_minor` = ?, `spent_minor` = ?, `currency` = ?, `label` = ?, `source_label` = ?, `note` = ?, " +
       "`status` = ?, `adopted_at` = ?, `adopted_as` = ?, `changed_by` = ?, `changed_as` = ?, " +
-      "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `changed_at` = ? WHERE `id` = ?",
+      "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `prev_planned_minor` = ?, `prev_seen_at` = ?, `changed_at` = ? WHERE `id` = ?",
     [
       r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
       r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
-      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, new Date(), r.id,
+      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt, new Date(), r.id,
     ],
   );
   return res;
@@ -196,6 +199,38 @@ export async function forgetBudgetAttributionOf(db: Db, userId: string): Promise
   await db.query("UPDATE `budget_lines` SET `fx_locked_by` = NULL WHERE `fx_locked_by` = ?", [userId]);
   await db.query("UPDATE `budget_syncs` SET `by` = NULL WHERE `by` = ?", [userId]);
   await db.query("UPDATE `budget_period_notes` SET `changed_by` = NULL WHERE `changed_by` = ?", [userId]);
+  await db.query("UPDATE `budget_sources` SET `set_by` = NULL WHERE `set_by` = ?", [userId]);
+}
+
+/** One source's switch (v0.4, R18), or none. */
+export async function budgetSourceRow(db: Db, source: string): Promise<RowDataPacket | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `budget_sources` WHERE `source` = ?", [source]);
+  return rows[0] ?? null;
+}
+
+export async function budgetSourceRows(db: Db): Promise<RowDataPacket[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `budget_sources` ORDER BY `source`");
+  return rows;
+}
+
+/** Write one source's switch whole: on or off, its mode and schedule, who set it and through which role. */
+export async function upsertBudgetSource(
+  db: Db,
+  r: { source: string; on: boolean; mode: "auto" | "review"; schedule: "daily" | "hourly" | "off"; setBy: string | null; setAs: string | null },
+): Promise<ResultSetHeader> {
+  const [res] = await db.query<ResultSetHeader>(
+    "INSERT INTO `budget_sources` (`source`, `on`, `mode`, `schedule`, `set_by`, `set_as`, `set_at`, `off_reason`) VALUES (?, ?, ?, ?, ?, ?, ?, NULL) " +
+      "ON DUPLICATE KEY UPDATE `on` = VALUES(`on`), `mode` = VALUES(`mode`), `schedule` = VALUES(`schedule`), `set_by` = VALUES(`set_by`), " +
+      "`set_as` = VALUES(`set_as`), `set_at` = VALUES(`set_at`), `off_reason` = NULL",
+    [r.source, r.on ? 1 : 0, r.mode, r.schedule, r.setBy, r.setAs, new Date()],
+  );
+  return res;
+}
+
+/** A source turns itself off, with the reason, only while it is on: true when this call turned it off. */
+export async function turnBudgetSourceOff(db: Db, source: string, reason: string): Promise<boolean> {
+  const [res] = await db.query<ResultSetHeader>("UPDATE `budget_sources` SET `on` = 0, `off_reason` = ? WHERE `source` = ? AND `on` = 1", [reason.slice(0, 500), source]);
+  return res.affectedRows > 0;
 }
 
 /** The notes for these period keys (R32). */

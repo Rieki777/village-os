@@ -34,7 +34,7 @@ import { register as registerSuggestions } from "./adminSuggestions";
 import { adminGateWasConsulted } from "../lib/adminGate";
 import { ADMIN_BEFORE_LAUNCH, BY_VILLAGE_VOTE } from "../../shared/budgets";
 import { ADMIN_EDIT } from "../../shared/ballotSubjects";
-import { resetBudgetEnv, configureBudgets } from "../lib/budgets";
+import { configureBudgets, importBudgetLines, recheckSource, resetBudgetEnv } from "../lib/budgets";
 import { cashKeys } from "../lib/cashOwed";
 import { insertCashOwedRow } from "../repos/cashOwed";
 import { createOrgRole } from "../lib/orgChart";
@@ -199,7 +199,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes", "budget_sources"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"] };
     villageHeld = [];
@@ -438,6 +438,53 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     const ahead = await call("GET", "/api/budgets/ahead", "u-sam", {}, {}, { from: MOON, count: "1" });
     expect(ahead.body.moons[0].note).toMatchObject({ note: "The harvest pays out late this moon.", changedAs: "Treasury" });
     expect(JSON.stringify(read.body) + JSON.stringify(ahead.body)).not.toContain("u-hana");
+  });
+
+  // ── A source's standing switch (v0.4, R18) ────────────────────────────────
+
+  const syncSera = async (plannedMinor = 100_000) => {
+    const input = { source: "sera" as const, by: null, byAs: null, dryRun: true, lines: [{ sourceRef: "rec-r", period: MOON, category: "role_pay", label: "Library pay", plannedMinor }] };
+    const p = await importBudgetLines(pool, input);
+    return importBudgetLines(pool, { ...input, dryRun: false, revision: p.revision });
+  };
+
+  it("switches a source through the same door with a preview of the share change, and every member reads the switch by role", async () => {
+    await syncSera();
+    const path = "/api/admin/budgets/sources/:source";
+    const body = { on: true, mode: "auto", schedule: "daily" };
+    expect((await call("POST", path, "u-sam", body, { source: "sera" })).status, "the R21 door").toBe(403);
+    expect((await call("POST", path, "u-hana", { ...body, mode: "sometimes" }, { source: "sera" })).status).toBe(400);
+    expect((await call("POST", path, "u-hana", body, { source: "upload" })).status).toBe(404);
+    const p = await call("POST", path, "u-hana", body, { source: "sera" });
+    expect(p.status).toBe(200);
+    expect(p.gated).toBe(true);
+    expect(p.body).toMatchObject({ written: false, adopts: 1, shareBefore: { set: false }, shareAfter: { set: true, leftMinor: 100_000 } });
+    expect((await call("POST", path, "u-hana", { ...body, dryRun: false, revision: "old" }, { source: "sera" })).status).toBe(409);
+    const on = await call("POST", path, "u-hana", { ...body, dryRun: false, revision: p.body.revision }, { source: "sera" });
+    expect(on.status).toBe(200);
+    expect(on.body.written).toBe(true);
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.sources).toEqual([{ source: "sera", on: true, mode: "auto", schedule: "daily", setAs: "Treasury", setAt: expect.any(String), offReason: null }]);
+    expect(read.body.figure.plannedMinor).toBe(100_000);
+    expect(JSON.stringify(read.body), "the switch is read by role, never by account").not.toContain("u-hana");
+    // A later sync counts at its new value at once, and the line says what it was.
+    await syncSera(150_000);
+    const after = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(after.body.figure.plannedMinor).toBe(150_000);
+    expect(after.body.lines[0]).toMatchObject({ plannedMinor: 150_000, prevPlannedMinor: 100_000, prevSeenAt: expect.any(String) });
+  });
+
+  it("wires the re-check to the live holders: the source turns itself off when its setter no longer holds the power", async () => {
+    await syncSera();
+    const path = "/api/admin/budgets/sources/:source";
+    const p = await call("POST", path, "u-hana", { on: true, mode: "auto", schedule: "daily" }, { source: "sera" });
+    await call("POST", path, "u-hana", { on: true, mode: "auto", schedule: "daily", dryRun: false, revision: p.body.revision }, { source: "sera" });
+    expect(await recheckSource(pool, "sera")).toMatchObject({ on: true });
+    holders = { "role.pay": ["u-hugo"] };
+    expect(await recheckSource(pool, "sera")).toMatchObject({ on: false, turnedOff: true });
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.sources[0]).toMatchObject({ on: false, offReason: expect.stringContaining("no longer holds") });
+    expect(read.body.figure.plannedMinor, "nothing already counted is removed").toBe(100_000);
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────
