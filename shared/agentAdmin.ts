@@ -61,30 +61,43 @@ export const DEFAULT_AGENT_ADMIN_PATHS: AgentAdminPathsDoc = {
 };
 
 /** The things an agent never does through the connector, whatever the allow-list says. */
-export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: (method: string, path: string) => boolean }> = [
+export type PersonMode =
+  /** Refused for every method. */
+  | "always"
+  /** Refused for a write; a GET answers once an admin has put the path on the list. */
+  | "writes"
+  /** Applicant and member personal data: a write is always refused, and a GET waits for the Anchor's approval of AI agents. */
+  | "personal";
+
+export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; mode: PersonMode; test: (method: string, path: string) => boolean }> = [
   {
     key: "erasure",
+    mode: "always",
     words: "Erasing or anonymising a member is always a person's act.",
     test: (m, p) => /anonymi[sz]|erase|erasure|forget/i.test(p) || (m === "DELETE" && /^\/api\/admin\/(players|users|members)\/[^/]+$/.test(p)),
   },
   {
     key: "powers",
+    mode: "writes",
     words: "Power handover, the break-glass, power groups and capabilities are always a person's act.",
     test: (_m, p) => /power|break-?glass|override|capabilit|badge|handover|veto|steward|admin-access|governance|\/org\/(drafts|seatings|roles)|\/roles(\/|$)|\/stages?(\/|$)/i.test(p),
   },
   {
     key: "money",
+    mode: "always",
     words: "Payers, pay routes, and the moon review's approvals, invoices and payments are always a person's act.",
     test: (_m, p) =>
-      /payer|pay-?route|\/pay(\/|$)|invoice|payout|payment|cash|settle|ledger|wallet|treasury|exchange|mint|approv|refund|\/comps?(\/|$)|purchase|budget|\/cycles?(\/|$)|economy|owed|\/api\/admin\/tokens|token-jobs|\/moon-review\/(?!rhythm$)/i.test(p),
+      /payer|pay-?route|\/pay(\/|$)|invoice|payout|payment|cash|settle|ledger|wallet|treasury|exchange|mint|approv|refund|\/comps?(\/|$)|purchase|budget|\/cycles?(\/|$)|economy|owed|\/api\/admin\/tokens|token-jobs|role-?pay|\/terms?(\/|$)|terms-?offer|\/moon-review\/(?!rhythm$)/i.test(p),
   },
   {
     key: "members",
+    mode: "writes",
     words: "Letting a member in, a member leaving, and removing one are always a person's act.",
-    test: (_m, p) => /join-?requests?|\/exits?(\/|$|-)|hard-?delete|invit/i.test(p),
+    test: (_m, p) => /\/exits?(\/|$|-)|hard-?delete|invit/i.test(p),
   },
   {
     key: "settings",
+    mode: "writes",
     words: "Sending letters and email, and the village's modules, variables and settings, are always a person's act.",
     test: (_m, p) => /\/letters?(\/|$)|\/send(\/|$)|email-?config|\/comms(\/|$)|\/modules?(\/|$)|variables|settings|\/brand(\/|$)|\/launch(\/|$)/i.test(p),
   },
@@ -92,21 +105,32 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
     // Role journey L13, tier C: the acts a machine only ever proposes. Adopting an application, seating, publishing a draft,
     // sending a first reply or a decision letter, and setting a role's pay or terms (the 24 Sept ruling: a person or a vote adopts).
     key: "tier_c",
+    mode: "writes",
     words: "Adopting, seating, publishing, changing powers, sending, setting pay or terms, inviting and erasing are always a person's act. A connector proposes them and a person does them.",
-    test: (_m, p) => /adopt|seat-?claims?|seatings?|publish|first-?repl|decision-?letter|letter-?drafts?|role-?pay|\/terms?(\/|$)|terms-?offer|\/hold(s|ers)(\/|$)/i.test(p),
+    test: (_m, p) => /adopt|seat-?claims?|seatings?|publish|first-?repl|decision-?letter|letter-?drafts?|\/hold(s|ers)(\/|$)/i.test(p),
+  },
+  {
+    // Applicant and member personal data (role journey L13, part B). Reads open only with the Anchor's approval of AI agents.
+    key: "personal",
+    mode: "personal",
+    words: "Applicant and member personal data (open proposals, applications, scores, join requests, member details) is closed to agents until the Anchor records its approval of AI agents, and changing it is always a person's act.",
+    test: (_m, p) => /join-?requests?|open-?proposals?|applications?|scorecards?|\/scores?(\/|$)|interviews?|recusals?|\/(players|users|members)(\/|$)/i.test(p),
   },
   {
     key: "secrets",
+    mode: "always",
     words: "Secrets and integration keys are always a person's act.",
     test: (_m, p) => /secret|integration|api-?key|credential|\/keys?(\/|$)/i.test(p),
   },
   {
     key: "accounts",
+    mode: "always",
     words: "A member's admin flag, sign-in and sessions are always a person's act.",
     test: (_m, p) => /\/(users|players|members)\/[^/]+\/(role|revoke-sessions|send-password-link|password|email)$/i.test(p),
   },
   {
     key: "agents",
+    mode: "always",
     words: "The agent accounts, their admin flag and their tokens are always a person's act.",
     test: (_m, p) => /\/agent(s)?(\/|$)|agent-admin-paths|agent-accounts|agent-actions|ai-?agents?-?approval|agent-proposals|\/api\/agent\//i.test(p),
   },
@@ -151,9 +175,20 @@ export function pathMatches(pattern: string, path: string): boolean {
 }
 
 /** The first always-a-person rule this path falls under, or null. */
-export function alwaysAPerson(method: string, path: string, selfUserId?: string | null): { key: string; words: string } | null {
+export function alwaysAPerson(
+  method: string,
+  path: string,
+  selfUserId?: string | null,
+  opts: { applicantDataOpen?: boolean } = {},
+): { key: string; words: string } | null {
   const m = String(method ?? "").toUpperCase();
-  for (const r of ALWAYS_A_PERSON) if (r.test(m, path)) return { key: r.key, words: r.words };
+  for (const r of ALWAYS_A_PERSON) {
+    if (!r.test(m, path)) continue;
+    // A read of a "writes" rule answers once an admin has listed it. Personal data reads wait for the Anchor's switch.
+    if (m === "GET" && r.mode === "writes") continue;
+    if (m === "GET" && r.mode === "personal" && opts.applicantDataOpen === true) continue;
+    return { key: r.key, words: r.words };
+  }
   if (selfUserId && path.split("/").includes(selfUserId)) {
     return { key: "agents", words: "An agent never acts on its own account through the connector." };
   }
@@ -165,13 +200,13 @@ export type AdminRequestDecision =
   | { ok: false; code: "bad_path" | "always_a_person" | "not_allowed"; words: string };
 
 /** Whether an agent may call `method path` through `admin_request`, and who confirms it. */
-export function adminRequestDecision(method: string, path: string, doc: AgentAdminPathsDoc, selfUserId?: string | null): AdminRequestDecision {
+export function adminRequestDecision(method: string, path: string, doc: AgentAdminPathsDoc, selfUserId?: string | null, opts: { applicantDataOpen?: boolean } = {}): AdminRequestDecision {
   const m = String(method ?? "").toUpperCase();
   if (!(ADMIN_METHODS as readonly string[]).includes(m)) return { ok: false, code: "bad_path", words: `method is one of ${ADMIN_METHODS.join(", ")}.` };
   const bare = String(path ?? "");
   // The path is dispatched exactly as given, so a query string or a fragment is refused, never trimmed.
   if (/[?#%]/.test(bare) || !segmentsOf(bare)) return { ok: false, code: "bad_path", words: "path is a plain path starting with /api/, with no query string and no dots." };
-  const person = alwaysAPerson(m, bare, selfUserId);
+  const person = alwaysAPerson(m, bare, selfUserId, opts);
   if (person) return { ok: false, code: "always_a_person", words: person.words };
   const entry = doc.paths.find((e) => e.method === m && pathMatches(e.path, bare));
   if (!entry) {
@@ -196,7 +231,7 @@ export function parseAgentAdminPaths(raw: unknown): { ok: true; value: AgentAdmi
     const segs = patternSegments(path);
     if (!segs) return { ok: false, error: `Path ${i + 1}: write it as /api/... with :name for one part, and no query string.` };
     if (tooOpen(segs)) return { ok: false, error: `Path ${i + 1}: name the route itself. A :name may only stand for one member or one thing, after the words that say what the route is.` };
-    const person = alwaysAPerson(method, path.replace(/:[A-Za-z][A-Za-z0-9]*/g, "x"));
+    const person = alwaysAPerson(method, path.replace(/:[A-Za-z][A-Za-z0-9]*/g, "x"), null, { applicantDataOpen: true });
     if (person) return { ok: false, error: `Path ${i + 1}: ${person.words}` };
     const confirm: AdminConfirm = x.confirm === "agent" ? "agent" : "person";
     const label = String(x.label ?? "").trim().slice(0, 120);

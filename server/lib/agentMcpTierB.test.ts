@@ -308,3 +308,44 @@ describe("draft_letter", () => {
     expect(parseLetter({ applicationRef: "r", kind: "decision", subject: "s", body: "x".repeat(40) }).ok).toBe(true);
   });
 });
+
+describe("admin_request reads of applicant data wait on the Anchor's switch", () => {
+  const doc: AgentAdminPathsDoc = {
+    paths: [
+      { method: "GET", path: "/api/admin/open-proposals", confirm: "agent", label: "Open proposals" },
+      { method: "GET", path: "/api/admin/org/drafts", confirm: "agent", label: "Org drafts" },
+    ],
+  };
+  function admin(open: boolean) {
+    const h = holder();
+    const ctx: ToolContext = {
+      ...h.ctx,
+      adminPaths: async () => doc,
+      applicantDataOpen: async () => open,
+      recordAction: async () => undefined,
+      dispatch: async (method, path, body) => {
+        h.calls.push({ method, path, body });
+        return { status: 200, body: { ok: true } };
+      },
+    };
+    return { calls: h.calls, ctx };
+  }
+
+  it("refuses the GET while the switch is off, calling no route", async () => {
+    const a = admin(false);
+    const r = await ask(rpc("admin_request", { method: "GET", path: "/api/admin/open-proposals" }), ["admin"], a.ctx);
+    expect(r.result.isError).toBe(true);
+    expect(payload(r).detail.code).toBe("always_a_person");
+    expect(a.calls).toEqual([]);
+  });
+
+  it("answers the same GET after the switch, and an org draft GET either way", async () => {
+    const on = admin(true);
+    const r = await ask(rpc("admin_request", { method: "GET", path: "/api/admin/open-proposals" }), ["admin"], on.ctx);
+    expect(r.result.isError).toBe(false);
+    expect(on.calls.map((c) => c.path)).toEqual(["/api/admin/open-proposals"]);
+    const off = admin(false);
+    const d = await ask(rpc("admin_request", { method: "GET", path: "/api/admin/org/drafts" }), ["admin"], off.ctx);
+    expect(d.result.isError).toBe(false);
+  });
+});
