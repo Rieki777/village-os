@@ -52,17 +52,27 @@ export interface BudgetLineRow {
   /** The amount before the last change, and when that amount was written (v0.4, R18). */
   prevPlannedMinor: number | null;
   prevSeenAt: Date | null;
+  /** The currency a locked rate converts into, and the role it was locked as (M4, S10). */
+  fxInto: string | null;
+  fxLockedAs: string | null;
+  /** An import withdrew it, so an import may restore it (M7). */
+  withdrawnBySource: boolean;
+  /** A source's words may name a member: out of the figure and the member view until renamed (M9). */
+  nameHeld: boolean;
+  labelOverride: string | null;
 }
 
 const COLUMNS =
   "`id`, `line_key`, `source`, `source_ref`, `source_changed_at`, `period_kind`, `period_key`, `starts_on`, `ends_on`, " +
   "`circle_id`, `role_id`, `matched`, `source_village_wide`, `category`, `planned_minor`, `spent_minor`, `currency`, `label`, `source_label`, `note`, " +
-  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`, `prev_planned_minor`, `prev_seen_at`";
+  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`, `prev_planned_minor`, `prev_seen_at`, " +
+  "`fx_into`, `fx_locked_as`, `withdrawn_by_source`, `name_held`, `label_override`";
 
 const values = (r: BudgetLineRow): unknown[] => [
   r.id, r.lineKey, r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
   r.circleId, r.roleId, r.matched ? 1 : 0, r.sourceVillageWide ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
   r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt,
+  r.fxInto, r.fxLockedAs, r.withdrawnBySource ? 1 : 0, r.nameHeld ? 1 : 0, r.labelOverride,
 ];
 
 /**
@@ -80,7 +90,7 @@ export async function budgetLineRows(db: Db): Promise<RowDataPacket[]> {
 
 export async function insertBudgetLine(db: Db, r: BudgetLineRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
-    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 33 }, () => "?").join(", ")})`,
+    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 38 }, () => "?").join(", ")})`,
     [...values(r), new Date()],
   );
   return res;
@@ -92,11 +102,13 @@ export async function updateBudgetLine(db: Db, r: BudgetLineRow): Promise<Result
     "UPDATE `budget_lines` SET `source` = ?, `source_ref` = ?, `source_changed_at` = ?, `period_kind` = ?, `period_key` = ?, `starts_on` = ?, `ends_on` = ?, " +
       "`circle_id` = ?, `role_id` = ?, `matched` = ?, `source_village_wide` = ?, `category` = ?, `planned_minor` = ?, `spent_minor` = ?, `currency` = ?, `label` = ?, `source_label` = ?, `note` = ?, " +
       "`status` = ?, `adopted_at` = ?, `adopted_as` = ?, `changed_by` = ?, `changed_as` = ?, " +
-      "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `prev_planned_minor` = ?, `prev_seen_at` = ?, `changed_at` = ? WHERE `id` = ?",
+      "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `prev_planned_minor` = ?, `prev_seen_at` = ?, " +
+      "`fx_into` = ?, `fx_locked_as` = ?, `withdrawn_by_source` = ?, `name_held` = ?, `label_override` = ?, `changed_at` = ? WHERE `id` = ?",
     [
       r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
       r.circleId, r.roleId, r.matched ? 1 : 0, r.sourceVillageWide ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
-      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt, new Date(), r.id,
+      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, r.prevPlannedMinor, r.prevSeenAt,
+      r.fxInto, r.fxLockedAs, r.withdrawnBySource ? 1 : 0, r.nameHeld ? 1 : 0, r.labelOverride, new Date(), r.id,
     ],
   );
   return res;
@@ -133,11 +145,24 @@ export async function insertBudgetSync(db: Db, r: BudgetSyncRow): Promise<Result
   return res;
 }
 
-/** The newest import per source: what "last synced" reads (R5). */
+/** The newest import per source that LANDED: what "last synced" reads (R5, S4). A refused import is no header. */
 export async function latestBudgetSyncs(db: Db): Promise<RowDataPacket[]> {
   const [rows] = await db.query<RowDataPacket[]>(
-    "SELECT s.* FROM `budget_syncs` s JOIN (SELECT `source`, MAX(`at`) AS `at` FROM `budget_syncs` GROUP BY `source`) n " +
-      "ON n.`source` = s.`source` AND n.`at` = s.`at` ORDER BY s.`source`, s.`id` DESC",
+    "SELECT s.* FROM `budget_syncs` s JOIN (SELECT `source`, MAX(`at`) AS `at` FROM `budget_syncs` WHERE `ok` = 1 GROUP BY `source`) n " +
+      "ON n.`source` = s.`source` AND n.`at` = s.`at` WHERE s.`ok` = 1 ORDER BY s.`source`, s.`id` DESC",
+  );
+  return rows;
+}
+
+/**
+ * The moon's share moving, newest first (S5): the fixed line the one write
+ * path records for admins, read back for members through the member-gated
+ * budget read, never through the public pulse.
+ */
+export async function budgetShareEvents(db: Db, text: string, limit = 20): Promise<RowDataPacket[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT `at`, `entity_ref` FROM `health_events` WHERE `kind` = 'budget' AND `text` = ? ORDER BY `at` DESC, `id` DESC LIMIT ?",
+    [text, limit],
   );
   return rows;
 }

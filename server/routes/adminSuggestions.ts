@@ -53,6 +53,7 @@ import {
   acceptSuggestion,
   adminEditCloser,
   adminEditControl,
+  currentFor,
   putSuggestionToVillage,
   staleDifference,
   type SuggestionBallotDeps,
@@ -152,6 +153,8 @@ export function register(app: Express, deps: Deps): void {
 
   const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[] }> => {
     const holders = await liveHoldersOf(s.edit.capability);
+    // A control may send a suggestion to a vote whoever holds the power: a payee conflict (R21).
+    if (adminEditControl(s.edit.control)?.forcesBallot?.(s.edit.payload)) return { route: "ballot", holders };
     const route = routeSuggestion({
       capability: s.edit.capability,
       villageHolds: isVillageHeld(s.edit.capability, ctx.villageHeld),
@@ -267,12 +270,19 @@ export function register(app: Express, deps: Deps): void {
       base: current.value,
       payload: body.payload,
     };
-    // The form names the version it was opened on, the way a direct save does.
-    if (typeof body.was === "string" && body.was && body.was !== current.version) {
+    // The form names the version it was opened on, the way a direct save does. A control that binds
+    // a suggestion to the rows it touches judges that itself, below.
+    if (!control.versionFor && typeof body.was === "string" && body.was && body.was !== current.version) {
       return res.status(409).json({ error: "stale", message: "These words changed since this page was opened. Reload it to see them, then suggest your change again." });
     }
     const shape = validateDraftPayload("admin_edit", edit) ?? control.problem(edit.payload);
     if (shape) return res.status(400).json({ error: "refused", message: shape });
+    if (control.prepare) {
+      const prepared = await control.prepare(edit.payload, userId);
+      if (prepared.problem) return res.status(400).json({ error: "refused", message: prepared.problem });
+      edit.payload = prepared.payload;
+      if (prepared.version) edit.version = prepared.version;
+    }
 
     const made = await store.create({ edit, why, suggestedBy: userId });
     const { route, holders } = await routeNow(made, who.ctx);
@@ -318,6 +328,8 @@ export function register(app: Express, deps: Deps): void {
       if (!holdersByCap.has(s.edit.capability)) holdersByCap.set(s.edit.capability, await liveHoldersOf(s.edit.capability));
       const holders = holdersByCap.get(s.edit.capability)!;
       if (!holders.includes(userId)) continue;
+      // A suggestion its control sends to a vote is in nobody's queue.
+      if (adminEditControl(s.edit.control)?.forcesBallot?.(s.edit.payload)) continue;
       const route = routeSuggestion({
         capability: s.edit.capability,
         villageHolds: isVillageHeld(s.edit.capability, who.ctx.villageHeld),
@@ -326,7 +338,7 @@ export function register(app: Express, deps: Deps): void {
       });
       if (route !== "holders") continue;
       const control = adminEditControl(s.edit.control);
-      queue.push(view(s, { stale: control ? staleDifference(s, await control.read()) : null, suggester: await nameOf(s.suggestedBy) }));
+      queue.push(view(s, { stale: control ? staleDifference(s, await currentFor(control, s)) : null, suggester: await nameOf(s.suggestedBy) }));
     }
     res.json({ suggestions: queue });
   });

@@ -24,6 +24,8 @@ import {
   resolvePeriod,
   shareMoved,
   shareState,
+  VILLAGE_WIDE,
+  whyNotCounted,
   type FigureLine,
   type MoonSpan,
 } from "./budgets";
@@ -49,7 +51,7 @@ const line = (over: Partial<FigureLine> = {}): FigureLine => ({
   periodKey: "x",
   startsOn: "2026-01-01",
   endsOn: "2026-12-31",
-  circleId: null,
+  circleId: VILLAGE_WIDE,
   roleId: null,
   matched: true,
   category: "role_pay",
@@ -213,17 +215,6 @@ describe("precedence by moon and scope (R4)", () => {
   });
 });
 
-describe("the village's own circle stands where village-wide stood (R34, R4)", () => {
-  it("lets the village's own line on the village's circle drop every source line in its category, and a line on another circle drop only that circle's", () => {
-    const own = line({ id: "own-v", source: "upload", circleId: "c-village" });
-    const seraElsewhere = line({ id: "sera-k", source: "sera", circleId: "c-kitchen", adoptedAt: "2026-11-01" });
-    const seraVillage = line({ id: "sera-v", source: "sera", circleId: "c-village", sourceVillageWide: true, adoptedAt: "2026-11-01" });
-    expect(precedence([own, seraElsewhere, seraVillage], "c-village").dropped.map((d) => [d.id, d.by])).toEqual([["sera-k", "village_line"], ["sera-v", "village_line"]]);
-    // Read without knowing the village's circle, the same line is only a circle line.
-    expect(precedence([own, seraElsewhere, seraVillage], null).dropped.map((d) => [d.id, d.by])).toEqual([["sera-v", "circle_line"]]);
-  });
-});
-
 describe("the moon's figure, with null and 0 kept apart (R7, R8)", () => {
   const m = moonAt("2026-11-15T12:00:00Z");
   const moonLine = (over: Partial<FigureLine> = {}) => line({ periodKind: "moon", periodKey: m.id, startsOn: m.startsOn, endsOn: m.endsOn, ...over });
@@ -326,20 +317,20 @@ describe("a rate a person locks on a line (spec 5a, option b; R8)", () => {
 
   it("counts a line in another currency once a rate is locked on it, converted, and pro-rated after conversion", () => {
     expect(budgetFigure([usd()], m, "CRC", NO_COMMITMENTS, "r"), "no lock, not counted yet").toBeNull();
-    const locked = usd({ fxRate: "509.86000000", fxSource: "daily rate, open.er-api.com", fxAsOf: "2026-11-09", fxLockedBy: "u-1", fxLockedAt: "2026-11-09T10:00:00.000Z" });
+    const locked = usd({ fxRate: "509.86000000", fxInto: "CRC", fxSource: "daily rate, open.er-api.com", fxAsOf: "2026-11-09", fxLockedBy: "u-1", fxLockedAt: "2026-11-09T10:00:00.000Z" });
     const f = budgetFigure([locked], m, "CRC", NO_COMMITMENTS, "r")!;
     expect(f.plannedMinor).toBe(61_183_200);
     expect(f.working.lines[0]).toMatchObject({ currency: "USD", plannedMinor: 120_000, convertedMinor: 61_183_200 });
     expect(f.working.lines[0].fx).toEqual({ rate: "509.86000000", source: "daily rate, open.er-api.com", asOf: "2026-11-09", lockedBy: "u-1", lockedAt: "2026-11-09T10:00:00.000Z" });
     // A line across two moons: converted first, then floor(converted x shared / line days).
-    const long = usd({ periodKind: "span", periodKey: "s", startsOn: m.startsOn, endsOn: addDaysForTest(m.endsOn, 10), plannedMinor: 333, fxRate: "3.33333333" });
+    const long = usd({ periodKind: "span", periodKey: "s", startsOn: m.startsOn, endsOn: addDaysForTest(m.endsOn, 10), plannedMinor: 333, fxRate: "3.33333333", fxInto: "CRC" });
     const g = budgetFigure([long], m, "CRC", NO_COMMITMENTS, "r")!;
     const converted = convertAtRate(333, "USD", "CRC", "3.33333333")!;
     expect(g.plannedMinor).toBe(Math.floor((converted * m.days) / (m.days + 10)));
   });
 
   it("measures drift at today's rate for display only, and warns past 5%", () => {
-    const locked = usd({ fxRate: "500.00000000" });
+    const locked = usd({ fxRate: "500.00000000", fxInto: "CRC" });
     expect(rateDrift(locked, "CRC", 515)).toMatchObject({ lockedMinor: 60_000_000, todayMinor: 61_800_000, pct: 3, overThreshold: false });
     expect(rateDrift(locked, "CRC", 530)).toMatchObject({ todayMinor: 63_600_000, pct: 6, overThreshold: true });
     expect(rateDrift(locked, "CRC", 470)).toMatchObject({ pct: -6, overThreshold: true });
@@ -361,7 +352,7 @@ describe("the moon's plan by category and by circle, and moons ahead (R30, R31)"
         moonLine({ id: "a", plannedMinor: 1000 }),
         moonLine({ id: "b", circleId: "c-garden", plannedMinor: 500 }),
         moonLine({ id: "c", circleId: "c-garden", category: "materials", plannedMinor: 200 }),
-        moonLine({ id: "d", circleId: "c-kitchen", category: "quest_pay", currency: "USD", plannedMinor: 10, fxRate: "500" }),
+        moonLine({ id: "d", circleId: "c-kitchen", category: "quest_pay", currency: "USD", plannedMinor: 10, fxRate: "500", fxInto: "CRC" }),
         moonLine({ id: "e", source: "sera", adoptedAt: "2026-11-01", plannedMinor: 9999 }),
         moonLine({ id: "f", status: "draft", plannedMinor: 7777 }),
       ],
@@ -372,7 +363,7 @@ describe("the moon's plan by category and by circle, and moons ahead (R30, R31)"
     expect(p.cashPlannedMinor).toBe(6500);
     expect(p.totalMinor).toBe(6700);
     expect(p.byCircle).toEqual([
-      { circleId: null, byCategory: { role_pay: 1000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 1000 },
+      { circleId: VILLAGE_WIDE, byCategory: { role_pay: 1000, quest_pay: 0, materials: 0, other: 0 }, totalMinor: 1000 },
       { circleId: "c-garden", byCategory: { role_pay: 500, quest_pay: 0, materials: 200, other: 0 }, totalMinor: 700 },
       { circleId: "c-kitchen", byCategory: { role_pay: 0, quest_pay: 5000, materials: 0, other: 0 }, totalMinor: 5000 },
     ]);
@@ -399,12 +390,13 @@ describe("the moon's plan by category and by circle, and moons ahead (R30, R31)"
         lines.push(line({
           id: `l-${i}-${k}`,
           category: cats[Math.floor(rand() * 4)],
-          circleId: rand() < 0.5 ? null : "c-x",
+          circleId: rand() < 0.5 ? VILLAGE_WIDE : "c-x",
           startsOn: new Date(Date.UTC(2026, 0, 1 + off)).toISOString().slice(0, 10),
           endsOn: new Date(Date.UTC(2026, 0, off + len)).toISOString().slice(0, 10),
           plannedMinor: Math.floor(rand() * 5_000_000),
           currency: usd ? "USD" : "CRC",
           fxRate: usd ? "512.34567891" : null,
+          fxInto: usd ? "CRC" : null,
         }));
       }
       const held = lines.reduce((n, l) => n + inVillageCurrency(l, "CRC")!, 0);
@@ -412,5 +404,80 @@ describe("the moon's plan by category and by circle, and moons ahead (R30, R31)"
       expect(plans.reduce((n, p) => n + p.totalMinor, 0), `lines set ${i}`).toBeLessThanOrEqual(held);
       moons.forEach((mo, j) => expect(plans[j].cashPlannedMinor).toBe(budgetFigure(lines, mo, "CRC", NO_COMMITMENTS, "r")?.plannedMinor ?? 0));
     }
+  });
+});
+
+describe("the review round: amounts (M5)", () => {
+  it("refuses letters that are not a three-letter code, so 100k, 2M and 1.5bn are never read as 100, 2 and 1.5", () => {
+    for (const cell of ["100k", "2M", "1.5bn", "50 mil", "No. 5", "0x10", "1_000", "1e5"]) {
+      expect(readAmount(cell, "CRC", EN), cell).toMatchObject({ ok: false });
+    }
+    expect(readAmount("\u20a1100k", "CRC", EN)).toMatchObject({ ok: false });
+    expect(readAmount("CRC 1,000.00", "CRC", EN)).toMatchObject({ ok: true, minor: 100_000 });
+  });
+
+  it("maps an unambiguous currency symbol and refuses one that is not the line's currency", () => {
+    expect(readAmount("$1,200.00", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });
+    expect(readAmount("\u20ac1,200.00", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });
+    expect(readAmount("1,200.00 USD", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });
+    expect(readAmount("$1,200.00", "USD", EN)).toMatchObject({ ok: true, minor: 120_000 });
+    expect(readAmount("\u20ac1.200,00", "EUR", ES)).toMatchObject({ ok: true, minor: 120_000 });
+    expect(readAmount("\u00a31,200.00", "GBP", EN)).toMatchObject({ ok: true, minor: 120_000 });
+    expect(readAmount("\u00a5100", "JPY", EN)).toMatchObject({ ok: true, minor: 100 });
+    expect(readAmount("\u20a1509.000,00", "CRC", ES)).toMatchObject({ ok: true, minor: 50_900_000 });
+  });
+
+  it("reads a space as a thousands separator, never a decimal mark, whatever the format", () => {
+    expect(readAmount("1 234", "CRC", EN_DEFAULT)).toMatchObject({ ok: true, minor: 123_400 });
+    expect(readAmount("1\u00a0234", "CRC", EN)).toMatchObject({ ok: true, minor: 123_400 });
+    expect(readAmount("1\u202f234,50", "CRC", { locale: "fr", chosen: false })).toMatchObject({ ok: true, minor: 123_450 });
+    expect(readAmount("12 345 678.90", "CRC", EN)).toMatchObject({ ok: true, minor: 1_234_567_890 });
+  });
+
+  it("reads large amounts exactly, with no float in between, and refuses past what a number holds", () => {
+    expect(readAmount("80000000000000.07", "CRC", EN)).toMatchObject({ ok: true, minor: 8_000_000_000_000_007 });
+    expect(readAmount("90071992547409.91", "CRC", EN)).toMatchObject({ ok: true, minor: 9_007_199_254_740_991 });
+    expect(readAmount("90071992547409.93", "CRC", EN)).toMatchObject({ ok: false, reason: "too_large" });
+    expect(readAmount(1e21, "JPY", EN)).toMatchObject({ ok: false, reason: "too_large" });
+    expect(readAmount(80000000000000.07, "CRC", EN), "a JSON number past exact float digits is sent as text").toMatchObject({ ok: false });
+    expect(readAmount(1234.5, "CRC", EN)).toMatchObject({ ok: true, minor: 123_450 });
+  });
+});
+
+describe("the review round: what counts (M2, M4, M6, M9, M10)", () => {
+  const m = moonAt("2026-11-15T12:00:00Z");
+  const moonLine = (over: Partial<FigureLine> = {}) => line({ periodKind: "moon", periodKey: m.id, startsOn: m.startsOn, endsOn: m.endsOn, circleId: VILLAGE_WIDE, ...over });
+
+  it("treats village-wide as its own scope, whatever circle the village's dial names (M2)", () => {
+    const own = moonLine({ id: "own" });
+    const seraAnywhere = moonLine({ id: "sera-k", source: "sera", circleId: "c-kitchen", adoptedAt: "2026-11-01" });
+    expect(precedence([own, seraAnywhere]).dropped).toEqual([{ id: "sera-k", by: "village_line" }]);
+    // A line of the village's own people on a named circle is a circle line, never village-wide.
+    const onCircle = moonLine({ id: "own-c", circleId: "c-link" });
+    const seraLink = moonLine({ id: "sera-l", source: "sera", circleId: "c-link", adoptedAt: "2026-11-01" });
+    expect(precedence([onCircle, seraLink, seraAnywhere]).dropped).toEqual([{ id: "sera-l", by: "circle_line" }]);
+  });
+
+  it("drops a source's (circle, role) line for the village's own line of that role, and every source line of a circle for the village's own circle line (M6)", () => {
+    const ownRole = moonLine({ id: "own-r", circleId: "c-garden", roleId: "r-g" });
+    const seraSameRole = moonLine({ id: "sera-r", source: "sera", circleId: "c-garden", roleId: "r-g", adoptedAt: "2026-11-01" });
+    const seraOtherRole = moonLine({ id: "sera-o", source: "sera", circleId: "c-garden", roleId: "r-h", adoptedAt: "2026-11-01" });
+    expect(precedence([ownRole, seraSameRole, seraOtherRole]).dropped).toEqual([{ id: "sera-r", by: "role_line" }]);
+    const ownCircle = moonLine({ id: "own-c", circleId: "c-garden" });
+    expect(precedence([ownCircle, seraSameRole, seraOtherRole]).dropped.map((d) => d.id)).toEqual(["sera-r", "sera-o"]);
+    expect(budgetFigure([ownRole, seraSameRole], m, "CRC", NO_COMMITMENTS, "r")!.plannedMinor, "never counted twice").toBe(100_000);
+  });
+
+  it("converts a locked rate only into the currency it was locked into (M4)", () => {
+    const eur = moonLine({ currency: "EUR", plannedMinor: 100_000, fxRate: "560", fxInto: "CRC" });
+    expect(inVillageCurrency(eur, "CRC")).toBe(56_000_000);
+    expect(inVillageCurrency(eur, "USD"), "a CRC rate is no USD rate").toBeNull();
+    expect(budgetFigure([eur], m, "USD", NO_COMMITMENTS, "r")).toBeNull();
+  });
+
+  it("never counts a line with no circle, or one held for a name (M9, M10)", () => {
+    expect(whyNotCounted(moonLine({ circleId: null }), "CRC")).toBe("no_circle");
+    expect(whyNotCounted(moonLine({ nameHeld: true }), "CRC")).toBe("name_held");
+    expect(whyNotCounted(moonLine(), "CRC")).toBeNull();
   });
 });

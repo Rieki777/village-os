@@ -31,12 +31,14 @@ vi.mock("../lib/ballots", async (orig) => ({
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import { register as registerBudgets } from "./budgets";
 import { register as registerSuggestions } from "./adminSuggestions";
+import { register as registerPulse } from "./pulse";
 import { adminGateWasConsulted } from "../lib/adminGate";
 import { ADMIN_BEFORE_LAUNCH, BY_VILLAGE_VOTE } from "../../shared/budgets";
 import { ADMIN_EDIT } from "../../shared/ballotSubjects";
 import { configureBudgets, importBudgetLines, recheckSource, resetBudgetEnv } from "../lib/budgets";
 import { cashKeys } from "../lib/cashOwed";
 import { insertCashOwedRow } from "../repos/cashOwed";
+import { usersRepo } from "../repos/users";
 import { createOrgRole } from "../lib/orgChart";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
 import type { SubjectCloser } from "../lib/applyDue";
@@ -66,6 +68,7 @@ let launched: boolean;
 let seats: Record<string, string[]>;
 let store: ReturnType<typeof memoryStore>;
 let closers: Record<string, SubjectCloser>;
+let limited: string[];
 
 function memoryStore(): SuggestionStore & { rows: SuggestionRow[] } {
   const rows: SuggestionRow[] = [];
@@ -121,7 +124,7 @@ function wire() {
     authedUser: async (req: any) => req.user ?? null,
     capabilityCtx: ctxOf,
     getPool: () => pool,
-    overLimit: async () => false,
+    overLimit: async (key: string) => limited.some((p) => key.startsWith(p)),
     liveHoldersOf: async (cap: string) => [...(holders[cap] ?? [])],
   };
   registerBudgets(app, {
@@ -153,6 +156,7 @@ function wire() {
     store,
     isFormerMember: async (u: any) => !!u.former,
   } as any);
+  registerPulse(app, { getPool: () => pool } as any);
 }
 
 async function call(method: string, path: string, user: string | null, body: unknown = {}, params: Record<string, string> = {}, query: Record<string, string> = {}) {
@@ -192,6 +196,9 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     // The village's own circle (R34), where a line for the whole village sits.
     await q("INSERT INTO circles (id, name, layer) VALUES ('c-village', 'The Village', 'link')");
     await createOrgRole(pool, { id: "r-gardener", name: "Gardener", circleId: "c-garden", seats: 1 });
+    // Two members on the roster, so the name check has names to find (R15).
+    await usersRepo(pool).add({ id: "u-wren", name: "Wren Halloway", handle: "wrenh", email: "wren@example.test", passwordHash: "x", paths: [] } as any);
+    await usersRepo(pool).add({ id: "u-ana", name: "Anabel Quintero", email: "anabel@example.test", passwordHash: "x", paths: [] } as any);
   }, 180_000);
 
   afterAll(async () => {
@@ -207,6 +214,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     villageHeld = [];
     launched = true;
     seats = {};
+    limited = [];
     opened.length = 0;
     wire();
     configureBudgets({ currentMoonId: () => MOON });
@@ -553,12 +561,15 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect((await q("SELECT source, `by`, ok FROM budget_syncs"))[0]).toEqual({ source: "upload", by: "u-hana", ok: 1 });
   });
 
-  it("refuses an Accept once the budget moved under the suggestion, and one that touches the accepter's own role", async () => {
+  it("refuses an Accept once the lines it touches moved, never for a change elsewhere in the budget, and one that touches the accepter's own role (S7)", async () => {
     const made = await suggest("u-sam");
-    await importAs("u-hugo", [{ ...ROW, label: "Something else" }]);
+    await importAs("u-hugo", [{ ...ROW, planned: "90,000" }]);
     const stale = await call("POST", "/api/admin/suggestions/:id/accept", "u-hana", {}, { id: made.body.suggestion.id });
     expect(stale.status).toBe(409);
     expect(stale.body.code).toBe("stale");
+    const tools = await suggest("u-sam", [{ ...ROW, label: "Tools", category: "materials", planned: "1,000" }]);
+    await importAs("u-hugo", [{ ...ROW, label: "Something else" }]);
+    expect((await call("POST", "/api/admin/suggestions/:id/accept", "u-hana", {}, { id: tools.body.suggestion.id })).status, "a line it does not touch moved").toBe(200);
 
     seats = { "u-hana": ["r-gardener"] };
     const mine = await suggest("u-sam", [{ ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener" }]);
@@ -566,7 +577,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect(conflict.status).toBe(409);
     expect(conflict.body.code).toBe("payee_conflict");
     expect((await store.byId(mine.body.suggestion.id))!.status, "a refused Accept leaves the suggestion waiting").toBe("proposed");
-    expect((await stored()).map((l) => l.label)).toEqual(["Something else"]);
+    expect((await stored()).map((l) => l.label)).toEqual(["Garden crew pay", "Something else", "Tools"]);
   });
 
   it("puts a suggestion to a vote when nobody holds the power, and the carried vote's closer writes it as the village", async () => {
@@ -580,5 +591,164 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     const out = await closers[ADMIN_EDIT].execute!(ballot, "system");
     expect(out.applied).toEqual([`admin_edit:${made.body.suggestion.id}`]);
     expect(await stored()).toEqual([{ label: "Garden crew pay", status: "approved", planned_minor: 10_000_000, spent_minor: null, changed_by: null, changed_as: BY_VILLAGE_VOTE }]);
+  });
+
+  // ── The review round (B1 to B3, S5, S7, S9, S10, the nits) ────────────────
+
+  const seraHeld = async () => {
+    const input = { source: "sera" as const, by: null, byAs: null, dryRun: true, lines: [{ sourceRef: "rec-h", period: MOON, category: "role_pay", label: "Anabel's crew", plannedMinor: 40_000 }] };
+    const p = await importBudgetLines(pool, input);
+    await importBudgetLines(pool, { ...input, dryRun: false, revision: p.revision });
+    return (await q("SELECT id FROM budget_lines WHERE source_ref = 'rec-h'"))[0].id as string;
+  };
+
+  it("B1: refuses a switch that would adopt a line naming the switcher's own role before anything is written, and the answer carries no revision, setter or preview", async () => {
+    seats = { "u-hana": ["r-gardener"] };
+    const input = { source: "sera" as const, by: null, byAs: null, dryRun: true, lines: [{ sourceRef: "rec-g", period: MOON, category: "role_pay", label: "Gardener pay", roleId: "r-gardener", plannedMinor: 100_000 }] };
+    const p0 = await importBudgetLines(pool, input);
+    await importBudgetLines(pool, { ...input, dryRun: false, revision: p0.revision });
+    const path = "/api/admin/budgets/sources/:source";
+    const body = { on: true, mode: "auto", schedule: "daily" };
+    const p = await call("POST", path, "u-hana", body, { source: "sera" });
+    expect(p.status).toBe(409);
+    expect(p.body).toEqual({ error: expect.any(String), code: "payee_conflict", suggest: { path: "/api/admin/suggestions", control: "budget_sources" } });
+    const c = await call("POST", path, "u-hana", { ...body, dryRun: false, revision: "anything" }, { source: "sera" });
+    expect(c.status).toBe(409);
+    expect(c.body.code).toBe("payee_conflict");
+    expect(await q("SELECT COUNT(*) AS n FROM budget_sources"), "nothing was written").toEqual([{ n: 0 }]);
+    expect((await q("SELECT adopted_at FROM budget_lines"))[0].adopted_at).toBeNull();
+    // Another holder, seated nowhere in it, may switch it on.
+    expect((await call("POST", path, "u-hugo", body, { source: "sera" })).status).toBe(200);
+  });
+
+  it("B2: shapes every preview for its reader: spent never reaches a member through a preview, a change's before, or a stale confirm's refresh, nor a held line's words", async () => {
+    await importAs("u-hana", [{ ...ROW, spent: "1,234.56" }]);
+    const id = (await q("SELECT id FROM budget_lines"))[0].id;
+    const path = "/api/admin/budgets/lines/:id";
+    const member = await call("PATCH", path, "u-sam", { changes: { planned: "90,000" }, format: FORMAT }, { id });
+    expect(member.status).toBe(200);
+    expect(member.body.changed[0]).toMatchObject({ spentMinor: null, before: { spentMinor: null } });
+    const add = await call("POST", "/api/admin/budgets/import", "u-sam", { lines: [{ ...ROW, label: "Tools", category: "materials", spent: "1,234.56" }], format: FORMAT });
+    expect(add.body.added[0].spentMinor).toBeNull();
+    // A holder without cash.pay meets the same shape on a stale confirm's refresh.
+    const stale = await call("PATCH", path, "u-hana", { changes: { planned: "90,000" }, format: FORMAT, dryRun: false, revision: "old" }, { id });
+    expect(stale.status).toBe(409);
+    expect(stale.body.changed[0].before.spentMinor).toBeNull();
+    expect(JSON.stringify([member.body, add.body, stale.body]), "spent never leaves").not.toContain("123456");
+    const cash = await call("PATCH", path, "u-cass", { changes: { planned: "90,000" }, format: FORMAT }, { id });
+    expect(cash.body.changed[0].before.spentMinor, "a cash.pay holder reads it").toBe(123_456);
+
+    // A source's line held for its words: out of the members' view, and out of their previews.
+    const held = await seraHeld();
+    const rename = await call("PATCH", path, "u-sam", { changes: { label: "Garden crew" }, format: FORMAT }, { id: held });
+    expect(rename.status).toBe(200);
+    expect(JSON.stringify(rename.body)).not.toContain("Anabel");
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.lines.map((l: any) => l.label)).toEqual(["Garden crew pay"]);
+    const door = await call("GET", "/api/budgets", "u-hana", {}, {}, { moon: MOON });
+    expect(door.body.lines.find((l: any) => l.id === held)).toMatchObject({ label: "Anabel's crew", nameHeld: true });
+  });
+
+  it("B3: gives a circle's envelope, a period's note and a source's switch a vote path: each refusal names its control, a holder's Accept and a carried vote apply through the same function", async () => {
+    const envPath = "/api/admin/budgets/envelopes/:circleId/:periodKey";
+    const env = await call("PUT", envPath, "u-sam", { planned: "250", format: FORMAT }, { circleId: "c-garden", periodKey: MOON });
+    expect(env.status).toBe(403);
+    expect(env.body.suggest).toEqual({ path: "/api/admin/suggestions", control: "budget_envelopes" });
+    const note = await call("PUT", "/api/admin/budgets/notes/:period", "u-sam", { note: "Late" }, { period: MOON });
+    expect(note.body.suggest).toEqual({ path: "/api/admin/suggestions", control: "budget_notes" });
+    const sw = await call("POST", "/api/admin/budgets/sources/:source", "u-sam", { on: true }, { source: "sera" });
+    expect(sw.body.suggest).toEqual({ path: "/api/admin/suggestions", control: "budget_sources" });
+
+    const suggestOf = (control: string, payload: unknown) => call("POST", "/api/admin/suggestions", "u-sam", { control, payload, why: "For the harvest" });
+    const e = await suggestOf("budget_envelopes", { circleId: "c-garden", period: MOON, planned: "250", goalNote: "One gardener", format: FORMAT });
+    expect(e.status).toBe(201);
+    expect(e.body.route).toBe("holders");
+    expect(await q("SELECT COUNT(*) AS n FROM budget_envelopes"), "a suggestion changes nothing").toEqual([{ n: 0 }]);
+    expect((await call("POST", "/api/admin/suggestions/:id/accept", "u-hana", {}, { id: e.body.suggestion.id })).status).toBe(200);
+    expect(await q("SELECT circle_id, planned_minor, goal_note, changed_by, changed_as FROM budget_envelopes")).toEqual([{ circle_id: "c-garden", planned_minor: 25_000, goal_note: "One gardener", changed_by: "u-hana", changed_as: "Treasury" }]);
+    expect((await suggestOf("budget_envelopes", { circleId: "c-garden", period: MOON, planned: "250", goalNote: "For Wren Halloway" })).status, "checked at creation").toBe(400);
+
+    const n = await suggestOf("budget_notes", { period: MOON, note: "The harvest pays out late." });
+    expect((await call("POST", "/api/admin/suggestions/:id/accept", "u-hugo", {}, { id: n.body.suggestion.id })).status).toBe(200);
+    expect(await q("SELECT period_key, note, changed_as FROM budget_period_notes")).toEqual([{ period_key: MOON, note: "The harvest pays out late.", changed_as: "Treasury" }]);
+
+    // Nobody holds the power: the switch goes to a vote, and the carried vote turns the source on as the village.
+    await syncSera();
+    holders = { "role.pay": [] };
+    const s = await suggestOf("budget_sources", { source: "sera", on: true, mode: "auto", schedule: "daily" });
+    expect(s.status).toBe(201);
+    expect(s.body.route).toBe("ballot");
+    expect(opened[0].docMarkdown, "the ballot says what changes in words").toContain("Turns sera on");
+    const out = await closers[ADMIN_EDIT].execute!({ id: "bal-1", subjectRef: s.body.suggestion.id, title: opened[0].title } as any, "system");
+    expect(out.applied).toEqual([`admin_edit:${s.body.suggestion.id}`]);
+    expect(await q("SELECT `on`, mode, set_by, set_as FROM budget_sources")).toEqual([{ on: 1, mode: "auto", set_by: null, set_as: BY_VILLAGE_VOTE }]);
+    expect((await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON })).body.figure.plannedMinor, "the switch adopted what the source sent").toBe(100_000);
+  });
+
+  it("S5: keeps the share moving off the public pulse, and gives every member its history", async () => {
+    await q("DELETE FROM health_events");
+    await importAs("u-hana");
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE kind = 'budget'"))[0].n).toBeGreaterThan(0), { timeout: 3000 });
+    const pulse = await call("GET", "/api/game/pulse", null);
+    expect(pulse.status).toBe(200);
+    expect(pulse.body.filter((e: any) => e.type === "budget" || /budget/i.test(e.text)), "never a budget kind on the public pulse").toEqual([]);
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.shareHistory).toEqual(expect.arrayContaining([expect.objectContaining({ moonId: MOON, text: expect.stringContaining("cash budget changed") })]));
+  });
+
+  it("S7: words a ballot by each act and every field that differs with the cash share before and after, strips what a suggestion may not carry, and refuses rows that cannot apply", async () => {
+    await importAs("u-hana", [ROW, { ...ROW, label: "Tools", category: "materials", planned: "1,000" }]);
+    const ids = Object.fromEntries((await q("SELECT id, label FROM budget_lines")).map((r: any) => [r.label, r.id]));
+    holders = { "role.pay": [] };
+    const make = (lines: unknown[], source = "manual", scope?: unknown) => call("POST", "/api/admin/suggestions", "u-sam", { control: "budget_lines", payload: { source, lines, format: FORMAT, ...(scope ? { scope } : {}) }, why: "Trim the moon" });
+    expect((await make([{ ...ROW, label: "Pay Wren Halloway" }])).status, "a refused row").toBe(400);
+    expect((await make([{ ...ROW, label: "Anabel's crew" }])).status, "a held row").toBe(400);
+    expect(store.rows, "nothing stored").toHaveLength(0);
+    const made = await make([{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew", action: "adopt", adoptedAs: "Treasury" }]);
+    expect(made.status).toBe(201);
+    expect(made.body.route).toBe("ballot");
+    expect(store.rows[0].edit.payload, "an action and an adoption's words are taken off").toEqual({ source: "manual", lines: [{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew" }], scope: null, format: FORMAT });
+    const text = opened[0].docMarkdown as string;
+    expect(text).toContain('Changes "Garden crew pay": label from Garden crew pay to Garden crew; planned from');
+    expect(text).toContain("This moon's cash budget:");
+    const whole = await make([ROW, { ...ROW, label: "Seeds", planned: "500" }], "upload", { whole: true });
+    expect(whole.status).toBe(201);
+    const words = opened[1].docMarkdown as string;
+    expect(words).toContain('Adds "Seeds"');
+    expect(words).toContain('Withdraws "Tools"');
+  });
+
+  it("S9: sends a suggestion that touches its suggester's own role straight to a vote, even from the lone holder", async () => {
+    holders = { "role.pay": ["u-hana"] };
+    seats = { "u-hana": ["r-gardener"] };
+    const made = await suggest("u-hana", [{ ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener" }]);
+    expect(made.status).toBe(201);
+    expect(made.body.route, "never to the holders, who are the payee").toBe("ballot");
+    expect(opened).toHaveLength(1);
+    expect(store.rows[0].edit.payload).toMatchObject({ payeeConflict: true });
+    expect(await stored()).toEqual([]);
+  });
+
+  it("S10: shows the role a rate was locked as, kept as written when the roles change", async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    await q("INSERT INTO fx_rates (quote, rate, as_of, source) VALUES ('USD', 1, ?, 'ecb'), ('CRC', 500, ?, 'ecb') ON DUPLICATE KEY UPDATE rate = VALUES(rate)", [day, day]);
+    const id = (await importAs("u-hana", [{ ...ROW, label: "Dollars", currency: "USD", planned: "10.00" }])).c.body.lineIds[0];
+    await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-hana", { use: "provider" }, { id });
+    expect((await q("SELECT fx_locked_as, fx_into FROM budget_lines WHERE id = ?", [id]))[0]).toEqual({ fx_locked_as: "Treasury", fx_into: "CRC" });
+    await q("UPDATE budget_lines SET fx_locked_as = 'Treasury, last season' WHERE id = ?", [id]);
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.body.lines[0].fx).toMatchObject({ lockedAs: "Treasury, last season", into: "CRC" });
+    expect(read.body.figure.working.lines[0].fx).toMatchObject({ lockedAs: "Treasury, last season" });
+  });
+
+  it("nits: names roles and never accounts in a refusal, and rate-limits the reads like their neighbours", async () => {
+    const { c } = await importAs("u-sam");
+    expect(c.status).toBe(403);
+    expect(c.body.holdersAs).toEqual(["Treasury"]);
+    expect(JSON.stringify(c.body)).not.toMatch(/u-hana|u-hugo/);
+    limited = ["budget-read:"];
+    for (const path of ["/api/budgets", "/api/budgets/ahead", "/api/budgets/circles"]) {
+      expect((await call("GET", path, "u-sam", {}, {}, { moon: MOON, from: MOON, count: "1" })).status, path).toBe(429);
+    }
   });
 });

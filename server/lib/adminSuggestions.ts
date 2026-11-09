@@ -60,6 +60,26 @@ export interface AdminEditControl {
    * says it in words; without this the ballot shows the leaf difference.
    */
   describe?(payload: unknown): string[] | Promise<string[]>;
+  /**
+   * At creation, before anything is stored: the control checks the payload
+   * the way its own door would (a dry run), refuses one that would not apply,
+   * returns it cleaned (fields a suggestion may not carry taken off, and a
+   * payee conflict flagged), and may name the version it binds to.
+   */
+  prepare?(payload: unknown, suggestedBy: string): Promise<{ problem: string | null; payload: unknown; version?: string }>;
+  /**
+   * The version THIS payload binds to now, when it is narrower than `read()`'s
+   * (the rows it touches, never the whole document). Stale is judged on it.
+   */
+  versionFor?(payload: unknown): Promise<string>;
+  /** This suggestion goes to a village vote whoever holds the power: a payee conflict (R21). */
+  forcesBallot?(payload: unknown): boolean;
+}
+
+/** The control's value now, with the version this suggestion's payload binds to. */
+export async function currentFor(control: AdminEditControl, s: Pick<SuggestionRow, "edit">): Promise<{ value: unknown; version: string }> {
+  const now = await control.read();
+  return control.versionFor ? { value: now.value, version: await control.versionFor(s.edit.payload) } : now;
 }
 
 const CONTROLS = new Map<AdminEditControlId, AdminEditControl>();
@@ -109,7 +129,7 @@ export async function acceptSuggestion(
 ): Promise<{ ok: true } | Refusal> {
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const stale = staleDifference(s, await control.read());
+  const stale = staleDifference(s, await currentFor(control, s));
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
   const problem = control.problem(s.edit.payload);
   if (problem) return { ok: false, status: 400, body: { error: problem, code: "payload_refused" } };
@@ -190,7 +210,7 @@ export async function putSuggestionToVillage(
   if (s.status !== "proposed") return { ok: false, status: 409, body: { error: `This suggestion is already ${s.status}.`, code: "not_waiting" } };
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const now = await control.read();
+  const now = await currentFor(control, s);
   const stale = staleDifference(s, now);
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
   const { setup } = input;

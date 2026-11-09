@@ -23,13 +23,20 @@
 -- it (a moon id, a month, a season id, two dates), and its first and last civil
 -- day in the village's zone, inclusive, which is what pro-rating reads.
 --
--- Every line that counts names a circle (budgets spec R34): a line for the
--- whole village sits on the village's own circle (the `budgets.village_circle_id`
--- setting, or the chart's link circle, its lead circle, or its one root).
--- `circle_id` is NULL only for a line a source sent whose circle this chart
--- does not have: `matched` is false for it, and it never counts.
--- `source_village_wide` marks a source's line that named no circle and so
--- landed on the village's circle.
+-- Every line that counts names a circle or the village-wide scope (budgets
+-- spec R34): a line for the whole village holds the fixed marker `@village`,
+-- never the circle the `budgets.village_circle_id` dial names today, so moving
+-- the dial moves no line, no key and no figure; the circles view puts those
+-- lines on the village's circle only when it is read. `circle_id` is NULL only
+-- for a line a source sent whose circle this chart does not have: `matched` is
+-- false for it, and it never counts. `source_village_wide` marks a source's
+-- line that named no circle.
+--
+-- `withdrawn_by_source` says a withdrawal was an import's (a whole read or a
+-- whole upload no longer listing the line), which a later import may undo; a
+-- person's withdrawal is never undone by an import. `name_held` keeps a
+-- source's line whose words may name a member out of the figure and the
+-- member view until a holder renames it with `label_override`.
 --
 -- Money is an integer count of minor units, never negative. `spent_minor` is
 -- NULL unless a person typed it or the library sent it.
@@ -44,9 +51,10 @@
 -- erased; `changed_as` is the role they acted through, or "admin, before
 -- launch", and it stays.
 --
--- The five `fx_` columns are a rate a person locks on a line in another
--- currency. They stay NULL until the village chooses to build that (budgets
--- spec 5a, option b); today only lines in the village's own currency count.
+-- The `fx_` columns are a rate a person locks on a line in another currency
+-- (budgets spec 5a, option b): the rate, its source and day, the currency it
+-- converts INTO (a rate converts into nothing else), who locked it and the
+-- role they locked it as (kept as written, never read back off today's roles).
 --
 -- `budget_syncs`, ONE ROW PER IMPORT, whatever its source: who, when, through
 -- which role, over what scope, and what it added, changed, withdrew and
@@ -112,6 +120,11 @@ CREATE TABLE IF NOT EXISTS `budget_lines` (
   `fx_as_of` date NULL,
   `fx_locked_by` varchar(64) NULL,
   `fx_locked_at` timestamp NULL,
+  `fx_into` char(3) NULL,
+  `fx_locked_as` varchar(120) NULL,
+  `withdrawn_by_source` tinyint(1) NOT NULL DEFAULT 0,
+  `name_held` tinyint(1) NOT NULL DEFAULT 0,
+  `label_override` varchar(120) NULL,
   `prev_planned_minor` bigint NULL,
   `prev_seen_at` timestamp NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

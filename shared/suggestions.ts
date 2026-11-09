@@ -164,6 +164,27 @@ export const ADMIN_EDIT_CONTROLS = {
     label: "the village's cash budget",
     passesPowers: false,
   },
+  /*
+   * The rest of the budget's writes have the same vote path (B3): a circle's
+   * envelope, a period's note, and a source's standing switch. Each Accept and
+   * ballot closer calls the very function its direct route calls
+   * (`setEnvelope`, `setPeriodNote`, `switchBudgetSource`).
+   */
+  budget_envelopes: {
+    capability: "role.pay",
+    label: "a circle's cash envelope",
+    passesPowers: false,
+  },
+  budget_notes: {
+    capability: "role.pay",
+    label: "the note on how to read a budget period",
+    passesPowers: false,
+  },
+  budget_sources: {
+    capability: "role.pay",
+    label: "whether a source feeds the cash budget",
+    passesPowers: false,
+  },
 } as const satisfies Record<string, AdminEditControlSpec>;
 
 export type AdminEditControlId = keyof typeof ADMIN_EDIT_CONTROLS;
