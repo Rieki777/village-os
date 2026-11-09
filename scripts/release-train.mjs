@@ -135,7 +135,9 @@ function prLines(prs) {
  *  machine can answer honestly: the migrations, and the pull requests. */
 export function rollChangelog(text, { version, date, prs, migrations }) {
   const src = String(text).replace(/\r\n/g, "\n");
-  if (new RegExp(`^## ${version.replace(/\./g, "\\.")}( |$)`, "m").test(src)) {
+  if (!/^\d+\.\d+\.\d+$/.test(String(version))) throw new Error(`not a version: ${version}`);
+  const heading = `## ${version}`;
+  if (src.split("\n").some((line) => line === heading || line.startsWith(`${heading} `))) {
     throw new Error(`CHANGELOG.md already has a section for ${version}`);
   }
   const start = src.search(/^## Unreleased[ \t]*$/m);

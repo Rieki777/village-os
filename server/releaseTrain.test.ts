@@ -192,6 +192,12 @@ describe("rollChangelog: the entry", () => {
     expect(() => rollChangelog("# Changelog\n\n## 1.2.0\n", { version: "1.3.0", date: "d", prs: [], migrations: [] })).toThrow();
     expect(() => rollChangelog(CHANGELOG, { version: "1.2.0", date: "d", prs: [], migrations: [] })).toThrow();
   });
+
+  it("refuses anything but a plain x.y.z version", () => {
+    for (const version of ["1.3", "1.3.0-rc.1", "1\\.3.0", "1.3.0\n## Unreleased"]) {
+      expect(() => rollChangelog(CHANGELOG, { version, date: "d", prs: [], migrations: [] })).toThrow(/not a version/);
+    }
+  });
 });
 
 describe("bumpVersionFiles: every place release.yml compares", () => {
