@@ -206,17 +206,8 @@ export function planKinds(tools: readonly ToolInfo[] | null, failure?: string): 
     );
   }
 
-  // Rule 1: an enum that names one of our kinds. Where any property carries a
-  // familiar argument name, only those are candidates, so a filter or a sort
-  // order that happens to list "role" never outranks a plain `kind`. Among
-  // candidates the believed order breaks a tie.
-  const familiar = Object.keys(props).filter((name) => rank(name) < ARGUMENT_NAMES.length);
-  const candidates = familiar.length > 0 ? familiar : Object.keys(props);
-  const withEnum = candidates
-    .map((name) => ({ name, values: acceptedValues(props[name], schema) }))
-    .filter((p): p is { name: string; values: string[] } => p.values !== null && p.values.some(namesOneOfOurs))
-    .sort((a, b) => rank(a.name) - rank(b.name));
-  const chosen = withEnum[0];
+  // Rule 1: an enum that names one of our kinds.
+  const chosen = kindArgumentFor(schema, namesOneOfOurs);
   if (chosen) {
     const spelling = new Map<HeldKind, string>();
     for (const kind of HELD_KINDS) {
@@ -256,6 +247,32 @@ export function planKinds(tools: readonly ToolInfo[] | null, failure?: string): 
     `list_records names no argument that reads as a kind (it takes: ${Object.keys(props).join(", ")}), so the kinds its mail names were asked for under "${DEFAULT_ARGUMENT}".`,
   );
 }
+
+/**
+ * RULE 1 ON ITS OWN: the property of a tool's input schema whose declared
+ * values name a kind `isOurs` accepts, with every value it declares, or null.
+ * Where any property carries a familiar argument name, only those are
+ * candidates, so a filter or a sort order that happens to list "role" never
+ * outranks a plain `kind`. Among candidates the believed order breaks a tie.
+ *
+ * Exported for a reader of a kind kept OUT of `HELD_KINDS` (the budget puller,
+ * `server/lib/saberraBudgetRecords.ts`), so the structure read and the budget
+ * read find the kind argument in one schema by one rule.
+ */
+export function kindArgumentFor(schema: Record<string, unknown>, isOurs: (value: string) => boolean): { name: string; values: string[] } | null {
+  const props = asObject(schema.properties);
+  if (!props) return null;
+  const familiar = Object.keys(props).filter((name) => rank(name) < ARGUMENT_NAMES.length);
+  const candidates = familiar.length > 0 ? familiar : Object.keys(props);
+  const withEnum = candidates
+    .map((name) => ({ name, values: acceptedValues(props[name], schema) }))
+    .filter((p): p is { name: string; values: string[] } => p.values !== null && p.values.some(isOurs))
+    .sort((a, b) => rank(a.name) - rank(b.name));
+  return withEnum[0] ?? null;
+}
+
+/** The comparable form of a kind name, for a reader outside this file (the budget puller). */
+export { comparable as comparableKindName };
 
 /** Where a name sits in the believed order, unknown names last. */
 function rank(name: string): number {

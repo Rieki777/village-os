@@ -13,6 +13,7 @@
  *   GET   /api/budgets/ahead?from=&count=          every member reads 1 to 12 moons ahead (R30)
  *   PUT   /api/admin/budgets/notes/:period         a note on how to read a period, through the same door (R32)
  *   POST  /api/admin/budgets/sources/:source       turn a source on, off, or between auto and review (R18)
+ *   POST  /api/admin/budgets/sync/:source          Sync budget: read a source now (R19, PR 2, server/routes/budgetSync.ts)
  *   GET   /api/budgets/circles?moon=               every circle on the chart with its plan and envelope (R31)
  *   PUT   /api/admin/budgets/envelopes/:circleId/:periodKey   a circle's envelope, through the same door (R35)
  *
@@ -113,6 +114,7 @@ import {
 } from "../lib/budgets";
 import { leftTheVillage } from "../lib/formerMember";
 import { holderOnlyDecision } from "../lib/holderOnly";
+import { register as registerBudgetSync } from "./budgetSync";
 import { listOrgAssignments } from "../lib/orgChart";
 import { launchedByVote } from "../lib/orgDraftDecide";
 import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, VILLAGE_WIDE, inVillageCurrency, lineShareOfMoon, moonPeriod, moonPlan, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
@@ -441,6 +443,9 @@ export function register(app: Express, deps: Deps): void {
     }),
   );
 
+  // Sync budget, the schedule and the on-open read (R19, PR 2), through this file's one door.
+  const seraReads = registerBudgetSync(app, { getPool, overLimit, doorFor: (req, res) => doorFor(req, res, BUDGET_CONTROL) });
+
   // ── Reading (R23) ─────────────────────────────────────────────────────────
 
   app.get("/api/budgets", async (req, res) => {
@@ -532,6 +537,8 @@ export function register(app: Express, deps: Deps): void {
       mayReadCash,
       door: door.ok ? { mayWrite: true, via: door.via } : { mayWrite: false, code: door.body.code, message: door.body.error, suggest: door.body.suggest ?? null },
     });
+    // Opening the section queues a read of the sources, after the answer and never holding it up (R19).
+    seraReads.opened();
   });
 
   // ── Moons ahead (R30) ─────────────────────────────────────────────────────

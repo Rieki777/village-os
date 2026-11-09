@@ -143,6 +143,7 @@ const ALLOWED = {
   "PUT /api/admin/budgets/notes/:period": "The cash budget, a note on how to read a period, server slice (PR 1a). Delete this line when the PR 1c page lands.",
   "POST /api/admin/budgets/sources/:source": "The cash budget, a source's standing switch, server slice (PR 1a); the puller that reads it is PR 2. Delete this line when the PR 1c page lands.",
   "PUT /api/admin/budgets/envelopes/:circleId/:periodKey": "The cash budget, a circle's envelope, server slice (PR 1a). Delete this line when the PR 1c page lands.",
+  "POST /api/admin/budgets/sync/:source": "The cash budget's Sync budget press, the Sera puller (PR 2); its button is on the PR 1c page. Delete this line when that page lands.",
 };
 
 /**

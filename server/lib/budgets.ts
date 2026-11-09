@@ -174,6 +174,9 @@ export function resetBudgetEnv(): void {
 
 const periodEnvOf = (e: BudgetEnv): PeriodEnv => ({ timezone: e.timezone(), seasons: e.seasons() });
 
+/** What a puller reads its source's lines in (PR 2): the zone and seasons every import resolves a period in, and the village's currency. */
+export const budgetPullEnv = (): { period: PeriodEnv; currency: string } => ({ period: periodEnvOf(env), currency: env.currency() });
+
 // ── A stored line ───────────────────────────────────────────────────────────
 
 export interface StoredLine extends FigureLine {
@@ -369,6 +372,13 @@ export interface ImportRow {
   sourceLabel?: string | null;
   matched?: boolean;
   status?: string;
+  /**
+   * A source's own refusals of one record (R15, PR 2's puller): a fractional
+   * amount, an unknown currency, an id that is not an id. The row is refused
+   * with exactly these, never read, and still counts as listed by `sourceRef`,
+   * so its last good version stays. Read for a source's import only.
+   */
+  refusedBySource?: Array<{ cell: string; reason: string; message: string }>;
 }
 
 /**
@@ -803,7 +813,10 @@ export function planImport(input: PlanInput): ImportPlan {
       const target = byId.get(String(row.id)) ?? null;
       return { n, row, key: target ? `id:${target.id}` : `id:${String(row.id)}`, cells: null, target };
     }
-    const cells = readCells(n, row ?? {}, null, input);
+    const own = sera && Array.isArray(row?.refusedBySource) && row.refusedBySource.length ? row.refusedBySource : null;
+    const cells: Cells = own
+      ? { ok: false, refused: own.map((x) => ({ row: n, cell: String(x.cell), reason: String(x.reason), message: String(x.message) })), held: [] }
+      : readCells(n, row ?? {}, null, input);
     if (!cells.ok) {
       // A source's record that refused still names itself, so it counts as listed (R3).
       const ref = sera ? clean(row?.sourceRef) : "";
