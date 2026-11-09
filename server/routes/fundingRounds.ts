@@ -11,6 +11,8 @@
  *   PATCH /api/funding-rounds/ideas/:id             the author shapes their idea, in seed or grow (S3)
  *   POST  /api/funding-rounds/ideas/:id/withdraw    the author withdraws it, before choosing opens (S3)
  *   PUT   /api/funding-rounds/rounds/:id/marks      a member's ticks, replaced whole, while choosing (S3)
+ *   POST  /api/funding-rounds/ideas/:id/pledges     back a quest with a pledge, at any stage (S3b)
+ *   DELETE /api/funding-rounds/pledges/:id          the backer withdraws it, until choosing closes (S3b)
  *
  * Harvest has no door of its own: the first read of a round past its harvest
  * date runs the count, once (`harvestIfDue`), so no job and no person has to
@@ -24,7 +26,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import {
-  createPot, growIdea, ideaView, openRound, overview, roundDetail, roundView, seedIdea, setMarks, setRoundDates, withdrawIdea, MODULE_ID,
+  createPot, growIdea, ideaView, openRound, overview, pledgeToIdea, roundDetail, roundView, seedIdea, setMarks, setRoundDates, withdrawIdea, withdrawPledge, MODULE_ID,
   type HarvestDeps,
 } from "../lib/fundingRounds";
 import { requireModule } from "../lib/modules";
@@ -105,6 +107,26 @@ export function register(app: Express, deps: Deps): void {
     const out = await setMarks(getPool(), uid, String(req.params.id), req.body, new Date());
     if (!out.ok) return res.status(out.status).json({ error: out.problem });
     res.json({ myMarks: out.myMarks });
+  });
+
+  app.post("/api/funding-rounds/ideas/:id/pledges", async (req, res) => {
+    const me = await authedUser(req);
+    if (!me) return res.status(401).json({ error: "auth_required" });
+    const uid = String(me.id);
+    if (await overLimit(`funding-change:${uid}`, CHANGES_PER_HOUR, HOUR_MS)) {
+      return res.status(429).json({ error: "That is a lot of changes for one hour. Try again a little later." });
+    }
+    const out = await pledgeToIdea(getPool(), uid, String(req.params.id), req.body, new Date());
+    if (!out.ok) return res.status(out.status).json({ error: out.problem });
+    res.status(201).json({ pledge: out.pledge });
+  });
+
+  app.delete("/api/funding-rounds/pledges/:id", async (req, res) => {
+    const me = await authedUser(req);
+    if (!me) return res.status(401).json({ error: "auth_required" });
+    const out = await withdrawPledge(getPool(), String(me.id), String(req.params.id), new Date());
+    if (!out.ok) return res.status(out.status).json({ error: out.problem });
+    res.json({ pledge: out.pledge });
   });
 
   app.post("/api/funding-rounds/rounds/:id/ideas", async (req, res) => {
