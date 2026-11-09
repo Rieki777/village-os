@@ -1,3 +1,4 @@
+import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 /** The link from a circle's group to its own card (`/circles/:id`). */
@@ -251,6 +252,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
                   {STATE_WORDS[role.status]}
                 </span>
+                <NotListedChip role={role.raw} />
               </div>
               <p className="text-xs text-muted-foreground">
                 {role.group}

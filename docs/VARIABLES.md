@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 202 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 203 open and 49 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 224 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 225 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-251 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 34 choice, 38 text, 1 longtext.
+252 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 30 boolean, 34 choice, 38 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ Each dial also says WHEN a change lands. 224 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 2 | 1 | 1 |
+| The village's people | 3 | 2 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -259,6 +259,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
+| Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
@@ -3244,7 +3245,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-2 dials. 1 for the whole village, 1 for the founder or an admin.
+3 dials. 2 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3257,6 +3258,20 @@ On, anyone can read the first names of the people holding each role on the Team,
 | Default | `true` |
 | Range | on or off |
 | Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Roles accepted from a sync start unlisted
+
+On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.sync_starts_unlisted` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 

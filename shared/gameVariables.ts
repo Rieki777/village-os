@@ -2447,6 +2447,15 @@ export const VARIABLES: VariableDef[] = [
     ring: "founder",
   },
   {
+    key: "org.sync_starts_unlisted",
+    category: "The village's people",
+    label: "Roles accepted from a sync start unlisted",
+    description:
+      "On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.",
+    type: "boolean",
+    default: "false",
+  },
+  {
     key: "org.ccos_terms",
     category: "The village's people",
     label: "Show the CCOS term on circle and role card headings",

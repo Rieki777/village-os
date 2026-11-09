@@ -101,6 +101,8 @@ import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
+import { planListOnly } from "../../shared/roleListing";
+import { applyListOnly, readListingRecords, undoListOnly } from "../repos/roleListingRecords";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
 type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
@@ -921,6 +923,52 @@ export function register(app: Express, deps: Deps): void {
       audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, id });
+  });
+
+  /*
+   * ── LISTING (role journey PR-A) ───────────────────────────────────────
+   *
+   * A steward lists the roles a visitor may discover. "List only these" lists
+   * the roles named and unlists every other one, and keeps what each read as
+   * before so the run can be put back. The door is an admin or a holder of the
+   * power to decide the village's structure.
+   */
+  app.get("/api/admin/org/listing", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    res.json({ records: await readListingRecords(getPool()) });
+  });
+
+  app.post("/api/admin/org/listing/only", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const raw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = raw.filter((x: unknown): x is string => typeof x === "string" && x.trim() !== "").map((x: string) => x.trim());
+    if (!ids.length) return res.status(400).json({ error: "Name at least one role to list. Listing none would empty every list." });
+    const roles = (await listOrgRoles(getPool())).filter((r) => !r.isExample);
+    const known = new Set(roles.map((r) => r.id));
+    const unknown = ids.filter((id: string) => !known.has(id));
+    if (unknown.length) return res.status(400).json({ error: "Those roles are not here: " + unknown.slice(0, 5).join(", ") });
+    const plan = planListOnly(roles, ids);
+    const record = await applyListOnly(getPool(), plan, ids);
+    await recordEvent(getPool(), {
+      kind: "org", text: `listing: ${plan.list.length} listed, ${plan.unlist.length} unlisted`,
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: ids[0],
+      audience: "public",
+    });
+    res.json({ success: true, listed: plan.list.length, unlisted: plan.unlist.length, record });
+  });
+
+  app.post("/api/admin/org/listing/undo", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const record = await undoListOnly(getPool());
+    if (!record) return res.status(409).json({ error: "There is no earlier listing to put back." });
+    await recordEvent(getPool(), {
+      kind: "org", text: "listing: the earlier listing was put back",
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: record.kept[0] ?? "listing",
+      audience: "public",
+    });
+    res.json({ success: true, record });
   });
 
   app.put("/api/admin/org/roles/:id", async (req, res) => {
