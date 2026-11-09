@@ -33,6 +33,8 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
   ADMIN_BEFORE_LAUNCH,
+  ADMIN_NO_STEWARD,
+  BREAK_GLASS,
   BUDGET_CATEGORIES,
   BY_VILLAGE_VOTE,
   VILLAGE_WIDE,
@@ -122,6 +124,8 @@ export interface BudgetEnv {
   rolePayHolders(): Promise<string[]>;
   /** Does this account hold `role.pay` now. Defaults to reading `rolePayHolders`. */
   holdsRolePay(userId: string): Promise<boolean>;
+  /** Who sits in the steward's seat now (`liveHoldersOf(BREAK_GLASS_SEAT)`), for an admin's or a broken glass's switch. */
+  stewardHolders(): Promise<string[]>;
   /** The org roles this account is seated in: a line naming one of the setter's never lands adopted under their switch (P1). */
   seatedRoleIds(userId: string): Promise<string[]>;
   /** Has the launch vote carried (`launchedByVote`). For `recheckSource`. */
@@ -147,6 +151,8 @@ const DEFAULT_ENV: BudgetEnv = {
   // Fails closed: with nothing wired, nobody holds the power, so a re-check turns a source off.
   rolePayHolders: async () => [],
   holdsRolePay: async (userId) => (await env.rolePayHolders()).includes(userId),
+  // Fails closed: with nothing wired, a steward is taken to sit, so an admin's switch after launch turns off.
+  stewardHolders: async () => ["(not wired)"],
   seatedRoleIds: async () => [],
   launched: (pool) => launchedByVote(pool),
   villageCircleSetting: () => {
@@ -2436,9 +2442,16 @@ async function switchOffReason(s: BudgetSourceState, e: BudgetEnv, pool: Pool): 
   // A switch the village voted on is the village's standing act: no one person's power ends it (R22).
   if (s.setAs === BY_VILLAGE_VOTE) return null;
   if (!s.setBy) return "The person who turned this source on has left the village. A holder of the budget power turns it on again.";
-  if (s.setAs === ADMIN_BEFORE_LAUNCH) {
-    if (await e.launched(pool)) return "An admin turned this source on before the launch vote, and the launch vote has since carried. A holder of the budget power turns it on again.";
-    if ((await e.rolePayHolders()).length > 0) return "An admin turned this source on while nobody held the budget power, and somebody holds it now. A holder turns it on again.";
+  // An admin's switch stands while an admin's door stands (`holderDoor`): before the
+  // launch vote, and after it while nobody sits in the steward's seat.
+  if (s.setAs === ADMIN_BEFORE_LAUNCH || s.setAs === ADMIN_NO_STEWARD) {
+    if ((await e.launched(pool)) && (await e.stewardHolders()).length > 0) {
+      return "An admin turned this source on, and since then the launch vote has carried with a steward seated. A holder of the budget power turns it on again.";
+    }
+    return null;
+  }
+  if (s.setAs === BREAK_GLASS) {
+    if (!(await e.stewardHolders()).includes(s.setBy)) return "The steward who broke the glass to turn this source on no longer sits in the steward's seat. A holder of the budget power turns it on again.";
     return null;
   }
   if (!(await e.holdsRolePay(s.setBy))) return "The person who turned this source on no longer holds the budget power. A holder turns it on again.";
