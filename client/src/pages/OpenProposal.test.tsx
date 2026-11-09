@@ -14,7 +14,7 @@
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CONSENT_WORDS, type ConsentState } from "@shared/roleProposalConsent";
 import { DECIDE_WORDS, DOOR } from "@shared/openProposalDecide";
 import { consentOf } from "@/test/roleProposalFixture";
@@ -198,5 +198,30 @@ describe("the open proposal page", () => {
     expect(await screen.findByRole("heading", { name: DECIDE_WORDS.membersOnly })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(`/login?next=/open-proposals/${ID}`);
     await waitFor(() => expect(asked).toEqual([]));
+  });
+});
+
+describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
+  it("sets what the role asks beside what they offer, and names the gaps", async () => {
+    answer = () =>
+      json({
+        proposal: served({
+          roles: [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: ["Open at dawn", "Close at dusk"], timeCommitment: "10 hours a week" }],
+          card: { roles: [{ roleId: "role-gate", moves: [{ text: "Open at dawn", target: "every day" }], firstMoon: [] }], serves: [], hours: "8 a week", agreed: { loveLetter: true, nda: true } },
+        }),
+      });
+    render(<OpenProposal />);
+    expect(await screen.findByRole("heading", { name: "Their card beside the open card" })).toBeTruthy();
+    const row = document.querySelector('[data-side-by-side="role-gate"]') as HTMLElement;
+    expect(within(row).getByText(/I'll move: Open at dawn/)).toBeTruthy();
+    expect(within(row).getByText("(not picked)")).toBeTruthy();
+    const gaps = document.querySelector("[data-card-gaps]") as HTMLElement;
+    expect(gaps.textContent).toContain("No first-moon quest for Gate Keeper");
+    expect(gaps.textContent).toContain("No season goal served");
+  });
+
+  it("says when a proposal predates the applicant's card", async () => {
+    render(<OpenProposal />);
+    expect(await screen.findByText(/sent before applicants wrote their own role card/)).toBeTruthy();
   });
 });
