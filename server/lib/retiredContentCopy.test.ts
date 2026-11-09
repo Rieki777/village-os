@@ -8,7 +8,7 @@
  * "Earn Hearts for contributions" into "Earn Gratitude for contributions"
  * (Gratitude as pay for work) and "Hearts Economy" into "Gratitude Economy"
  * (Gratitude as the name of the village's economy). A swap may only write a
- * string a fresh village's own content seed already ships, or one that does
+ * string the content seed villages were born on already shipped, or one that does
  * not say Gratitude at all.
  *
  * #781 moved the step into server/lib/retiredContentCopy.ts with main's
@@ -23,7 +23,14 @@ import { GRATITUDE_PAY_COPY_RETIRED, RETIRED_CONTENT_COPY, retireContentCopy } f
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 
-/** Every string value in the content seed a fresh village is born with. */
+/**
+ * Every string value in the content seed villages were handed until 2026-11-05.
+ * A fresh fork now ships `{}` (Rye, 2026-10-01, platform-wide: no other village's
+ * story), so the seed under server/seeds holds nothing to compare against. The
+ * villages this step rewrites are the ones born on the former seed, and
+ * `__fixtures__/former-content-seed.json` is that file, byte for byte as main
+ * last shipped it.
+ */
 function seededStrings(): Set<string> {
   const out = new Set<string>();
   const walk = (node: unknown) => {
@@ -31,7 +38,7 @@ function seededStrings(): Set<string> {
     else if (Array.isArray(node)) node.forEach(walk);
     else if (node && typeof node === "object") Object.values(node).forEach(walk);
   };
-  walk(JSON.parse(fs.readFileSync(path.join(ROOT, "server", "seeds", "content-seed.json"), "utf8")));
+  walk(JSON.parse(fs.readFileSync(path.join(ROOT, "shared", "__fixtures__", "former-content-seed.json"), "utf8")));
   return out;
 }
 
@@ -62,7 +69,7 @@ describe("retiring seeded strings in a content document", () => {
     for (const to of RETIRED_CONTENT_COPY.values()) expect(RETIRED_CONTENT_COPY.has(to), to).toBe(false);
   });
 
-  it("writes Gratitude only where a fresh village's own seed already says it, word for word", () => {
+  it("writes Gratitude only where the seed a village was born on already says it, word for word", () => {
     const seed = seededStrings();
     expect(seed.size).toBeGreaterThan(100);
     const offenders = [...RETIRED_CONTENT_COPY]
@@ -71,7 +78,7 @@ describe("retiring seeded strings in a content document", () => {
     expect(offenders, "Gratitude is the recognition token's name, never pay and never the economy (Rye, 2026-11-01)").toEqual([]);
   });
 
-  it("turns the old contribution line into the one a fresh village ships", () => {
+  it("turns the old contribution line into the one the seed shipped", () => {
     expect(seededStrings().has(RETIRED_CONTENT_COPY.get("Earn Hearts for contributions") ?? "")).toBe(true);
   });
 });

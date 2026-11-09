@@ -436,7 +436,7 @@ describe("which bell rows carry the buttons", () => {
   });
 
   it("bellTaskOf reads only single task rows with a task link", () => {
-    const row = { key: "k", items: [], type: "session_action_held", title: "", detail: "", link: taskBoardLink(9), at, unread: 0, batched: false };
+    const row = { key: "k", items: [], type: "session_action_held", title: "", detail: "", link: taskBoardLink(9), at, unread: 0, batched: false, whole: false };
     expect(bellTaskOf(row)).toBe(9);
     expect(bellTaskOf({ ...row, batched: true })).toBeNull();
     expect(bellTaskOf({ ...row, link: "/profile#my-tasks" })).toBeNull();
