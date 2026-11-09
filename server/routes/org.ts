@@ -69,9 +69,12 @@ import {
   orgRoleHistory,
   seatHolder,
   statusOverrideProblem,
+  characterTagsFrom,
   unclaimedSeatingsFor,
   updateOrgRole,
 } from "../lib/orgChart";
+import { listArchetypeRows } from "../repos/archetypes";
+import { villageId } from "../lib/economy";
 import {
   addChange,
   createDraft,
@@ -933,6 +936,13 @@ export function register(app: Express, deps: Deps): void {
     // column lets a village declare.
     const badState = statusOverrideProblem(req.body?.statusOverride);
     if (badState) return res.status(400).json({ error: badState });
+    // Which characters the role suits: only the village's own cast (role draft board, 9 Nov).
+    if (req.body?.archetypes !== undefined) {
+      const cast = (await listArchetypeRows(getPool(), villageId())).map((a) => a.key);
+      const tags = characterTagsFrom(req.body.archetypes, cast);
+      if (!tags.ok) return res.status(400).json({ error: tags.error, field: "archetypes" });
+      req.body.archetypes = tags.tags;
+    }
     // Described BEFORE the write, while the old values still exist. The
     // generic admin audit records "PUT /api/admin/org/roles/x", which cannot
     // answer "what has already been tried with this seat".

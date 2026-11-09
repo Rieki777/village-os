@@ -811,6 +811,56 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     ]);
   });
 
+  /*
+   * The cash budget (0360, budgets spec R26). A leaver's account id comes off
+   * the lines they changed, the rates they locked and the imports they ran;
+   * the role they acted as stays, and so does every row, and a bystander's
+   * attribution does not move.
+   */
+  it("de-attributes the budget lines, rate locks and imports a leaver made, keeps the role they acted as, and leaves a bystander's rows", async () => {
+    const leaver = await member("own-leaver-bd", "Wren Halloway");
+    await member("own-bd-ash", "Ash Moreno");
+    const line = (id: string, by: string, lockedBy: string | null) =>
+      q(
+        "INSERT INTO budget_lines (id, line_key, source, period_kind, period_key, starts_on, ends_on, category, planned_minor, currency, label, changed_by, changed_as, fx_locked_by) " +
+          "VALUES (?, ?, 'manual', 'month', '2026-11', '2026-11-01', '2026-11-30', 'role_pay', 1000, 'CRC', ?, ?, 'Treasury', ?)",
+        [id, `manual:${id}`, `Line ${id}`, by, lockedBy],
+      );
+    await line("bl-own-1", leaver.id, leaver.id);
+    await line("bl-own-2", "own-bd-ash", "own-bd-ash");
+    await line("bl-own-3", "own-bd-ash", leaver.id);
+    await q("INSERT INTO budget_syncs (id, source, `by`, by_as, ok) VALUES ('bs-own-1', 'upload', ?, 'Treasury', 1), ('bs-own-2', 'upload', 'own-bd-ash', 'Treasury', 1)", [leaver.id]);
+    await q("INSERT INTO budget_period_notes (period_key, note, changed_by, changed_as) VALUES ('2026-11', 'Read this moon slowly', ?, 'Treasury'), ('2026-12', 'Ash wrote this one', 'own-bd-ash', 'Treasury')", [leaver.id]);
+    await q("DELETE FROM budget_sources");
+    await q("INSERT INTO budget_envelopes (circle_id, period_kind, period_key, starts_on, ends_on, planned_minor, currency, changed_by, changed_as) VALUES ('c-a', 'month', '2026-11', '2026-11-01', '2026-11-30', 100, 'CRC', ?, 'Treasury'), ('c-b', 'month', '2026-11', '2026-11-01', '2026-11-30', 100, 'CRC', 'own-bd-ash', 'Treasury')", [leaver.id]);
+    await q("INSERT INTO budget_sources (source, `on`, mode, set_by, set_as, set_at) VALUES ('sera', 1, 'auto', ?, 'Treasury', NOW()), ('other-source', 1, 'review', 'own-bd-ash', 'Treasury', NOW())", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id, changed_by, changed_as, fx_locked_by, planned_minor FROM budget_lines WHERE id LIKE 'bl-own-%' ORDER BY id"), "every line stays, without the leaver's id").toEqual([
+      { id: "bl-own-1", changed_by: null, changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+      { id: "bl-own-2", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: "own-bd-ash", planned_minor: 1000 },
+      { id: "bl-own-3", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+    ]);
+    expect(await q("SELECT id, `by`, by_as FROM budget_syncs WHERE id LIKE 'bs-own-%' ORDER BY id")).toEqual([
+      { id: "bs-own-1", by: null, by_as: "Treasury" },
+      { id: "bs-own-2", by: "own-bd-ash", by_as: "Treasury" },
+    ]);
+    expect(await q("SELECT period_key, note, changed_by, changed_as FROM budget_period_notes ORDER BY period_key"), "a period note stays, without the leaver's id").toEqual([
+      { period_key: "2026-11", note: "Read this moon slowly", changed_by: null, changed_as: "Treasury" },
+      { period_key: "2026-12", note: "Ash wrote this one", changed_by: "own-bd-ash", changed_as: "Treasury" },
+    ]);
+    expect(await q("SELECT source, set_by, set_as FROM budget_sources ORDER BY source"), "a source's switch stays, without the leaver's id; the re-check then turns it off").toEqual([
+      { source: "other-source", set_by: "own-bd-ash", set_as: "Treasury" },
+      { source: "sera", set_by: null, set_as: "Treasury" },
+    ]);
+    expect(await q("SELECT circle_id, changed_by, changed_as FROM budget_envelopes ORDER BY circle_id"), "an envelope stays, without the leaver's id").toEqual([
+      { circle_id: "c-a", changed_by: null, changed_as: "Treasury" },
+      { circle_id: "c-b", changed_by: "own-bd-ash", changed_as: "Treasury" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
+  });
+
   it("de-attributes their answers to the outside service's differences and the links they set, keeping the rows and everyone else's", async () => {
     const leaver = await member("own-leaver-sera", "Wren Halloway");
     await member("own-sera-ash", "Ash Moreno");

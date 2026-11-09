@@ -40,9 +40,14 @@ type Option = { value: string | null; label: string; tier?: LocaleTier; search: 
  * teal header). `onLight` is the same button for the pages with no teal
  * header (the 404, the consent page, change requests, Admin's night look),
  * where white text would be invisible.
+ *
+ * `onSheet` paints with the sheet tokens instead of fixed colours, for a
+ * header that follows a night sheet (Admin's header since 2026-11-09). There
+ * `onLight` drew stone-800 text on the night card and the button vanished.
  */
-export type PickerTone = "onDark" | "onLight";
+export type PickerTone = "onDark" | "onLight" | "onSheet";
 const TRIGGER_TONE: Record<PickerTone, string> = {
+  onSheet: "border border-border bg-card hover:bg-muted text-card-foreground",
   onDark: "bg-white/10 hover:bg-white/20 text-white",
   onLight: "border border-stone-300 bg-white hover:bg-stone-100 text-stone-800",
 };

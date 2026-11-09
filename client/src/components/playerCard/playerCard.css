@@ -49,16 +49,16 @@
  */
 
 .pc-night {
-  --pc-ground: #0d1411;
-  --pc-panel: #16221c;
-  --pc-raised: #1c2b23;
-  --pc-line: #2b3b32;
-  --pc-edge: #6d8175;
-  --pc-ink: #e9efe6;
-  --pc-dim: #9cb0a3;
-  --pc-gold: #dfab4d;
-  --pc-gold-lit: #f2ce85;
-  --pc-gold-deep: #6b4a15;
+  --pc-ground: var(--sheet-ground, #0d1411);
+  --pc-panel: var(--sheet-panel, #16221c);
+  --pc-raised: var(--sheet-panel-raised, #1c2b23);
+  --pc-line: var(--sheet-line, #2b3b32);
+  --pc-edge: var(--sheet-edge, #6d8175);
+  --pc-ink: var(--sheet-ink, #e9efe6);
+  --pc-dim: var(--sheet-ink-dim, #9cb0a3);
+  --pc-gold: var(--sheet-earned, #dfab4d);
+  --pc-gold-lit: var(--sheet-earned-highlight, #f2ce85);
+  --pc-gold-deep: var(--sheet-earned-shadow, #6b4a15);
   --pc-living: #6fc48f;
   --pc-warn: #e0a35e;
   --pc-display: "Marcellus", Georgia, serif;
@@ -588,7 +588,7 @@ button.pc-sign:hover {
   border-radius: 14px;
   border: 1px solid var(--pc-gold-deep);
   border-left: 4px solid var(--pc-gold);
-  background: linear-gradient(120deg, rgba(242, 206, 133, 0.1), rgba(242, 206, 133, 0.02));
+  background: linear-gradient(120deg, var(--sheet-earned-highlight-wash, rgba(242, 206, 133, 0.1)), var(--sheet-earned-highlight-wash-soft, rgba(242, 206, 133, 0.02)));
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -888,7 +888,7 @@ a.pc-app:hover {
   height: 13px;
   border-radius: 50%;
   background: var(--pc-gold-lit);
-  box-shadow: 0 0 10px rgba(242, 206, 133, 0.5);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--pc-gold-lit) 50%, transparent);
 }
 .pc-mk.pc-inv {
   width: 9px;
@@ -1208,7 +1208,7 @@ a.pc-chip:hover {
 /* A role proposal's changed words, in the design's gold. */
 .pc-changed {
   border: 1px solid var(--pc-gold);
-  background: linear-gradient(120deg, rgba(223, 171, 77, 0.14), rgba(223, 171, 77, 0.06)), var(--pc-panel);
+  background: linear-gradient(120deg, var(--sheet-earned-wash, rgba(223, 171, 77, 0.14)), var(--sheet-earned-wash-soft, rgba(223, 171, 77, 0.06))), var(--pc-panel);
 }
 .pc-chip.pc-changed {
   border-color: var(--pc-gold);

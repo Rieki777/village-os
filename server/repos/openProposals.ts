@@ -216,6 +216,21 @@ export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): P
   return Number(result.affectedRows ?? 0);
 }
 
+/**
+ * Close every confirmed proposal nobody decided before `before`, as withdrawn,
+ * and take its name and address off in the same write. The form promises the
+ * name and address go 90 days on; a proposal left waiting that long is as
+ * good as a no. How many.
+ */
+export async function expireUndecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+      "WHERE status = 'confirmed' AND confirmed_at < ? AND anonymised_at IS NULL",
+    [now, now, before],
+  );
+  return Number(result.affectedRows ?? 0);
+}
+
 // ── Links made for one person ───────────────────────────────────────────────
 
 export interface StoredOpenLink {
