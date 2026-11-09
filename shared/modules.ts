@@ -1500,7 +1500,7 @@ export const MODULES: ModuleDef[] = [
     tier: "included",
     // A place is village content: its name, zone, stage and words. Who holds
     // its roles is read from the org chart and sent only on the map's own
-    // viewPeople tier, and no child's location is ever stored (0346).
+    // viewPeople tier, and no child's location is ever stored (0354).
     dataClass: "village-content",
     group: "know-and-decide",
     setup: "none",

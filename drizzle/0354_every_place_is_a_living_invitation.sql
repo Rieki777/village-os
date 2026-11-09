@@ -1,4 +1,4 @@
--- 0346: the place registry. Every place on a village's land, from an idea to a
+-- 0354: the place registry. Every place on a village's land, from an idea to a
 -- building that needs care, kept as a row a member can read and a village can
 -- change by its own powers (living places, spec v0.3, S2).
 --

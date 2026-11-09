@@ -49,6 +49,7 @@ import { limitNav, simpleNav } from "@/components/admin/adminFeelState";
 import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
+const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7970,6 +7971,7 @@ export default function Admin() {
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
+          {activeTab === "pricing-desk" && <Suspense fallback={null}><PricingDeskTab password={password} /></Suspense>}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}
           {activeTab === "failures" && <FailuresTab password={password} />}

@@ -2116,6 +2116,6 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 
 - No env var. The Treasury role gains `pot.steward` two ways: `server/seeds/roles-seed.json` for a new village, and the `runOnce` step `pot-steward-to-treasury-2026-11-06` (`POT_STEWARD_GRANTS`, `server/lib/starterRoles.ts`) for a village that booted earlier and still has the seeded `treasury` role. The module ships off; a pot and its rounds are opened from `/funding-rounds` by a `pot.steward` holder.
 
-## Living places (module `places`, migration 0346)
+## Living places (module `places`, migration 0354)
 
 - No env var and nothing at boot. A village's places start as a seed file beside its other records (Amora's is `server/seeds/amora/places-seed.json`); a holder of `place.tend` imports it by posting `{ seed }` to `POST /api/place-registry/import`, which refuses the whole seed, naming every problem, when it drops a key on the published map or claims a standing stage for an unconfirmed place. A second import adds only what is new. The module ships off.

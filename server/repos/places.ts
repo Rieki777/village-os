@@ -1,5 +1,5 @@
 /**
- * Every statement against the place registry's tables (drizzle/0346), and the
+ * Every statement against the place registry's tables (drizzle/0354), and the
  * few reads it makes of other modules' tables by place key.
  *
  * Raw SQL, one place: the lib and the routes never query these tables

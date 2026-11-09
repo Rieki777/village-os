@@ -30,6 +30,8 @@ import type { WorkInputs } from "../../shared/valuation";
 import { suggestValuation, type PayeeSuggestion } from "../../shared/valuationEngine";
 import { calibrate, combineSetting, settingRecord, storedPayFor, topUpProblem, widenRange, type InputChange } from "../../shared/valuationSetting";
 import { addChange, createDraft } from "../lib/orgDrafts";
+import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
+import { registerQuestPay, writeQuestPay } from "./questPay";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> & {
   /** Who holds a power through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
@@ -42,6 +44,9 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLi
   tokenName?: (slug: string) => string;
   /** Why a pay line cannot be stored, or null. Defaults to the admin door's own check (`payLineProblem`). */
   payLineCheck?: (rules: Awaited<ReturnType<typeof rolePayRules>>, token: string) => string | null;
+  /** The quest stores, for a quest's pay door (quest re-price Q2). Absent: no quest door. */
+  quests?: QuestsRepo;
+  claims?: ClaimsRepo;
 };
 
 /** Where a figure goes when no second signer can sign it: the village, by an org draft (constitution 0.3, 0.4). */
@@ -298,16 +303,23 @@ export function register(app: Express, deps: Deps): void {
     if (refused) return res.status(403).json({ error: refused, proposeInstead: ROLE_PAY_VOTE_PATH });
     // Claimed first (compare-and-set), so two signers can never both write the pay.
     if (!(await signSetting(getPool(), s.id, me))) return res.status(409).json({ error: "Someone signed this figure a moment ago." });
-    const problem = s.workKind === "role" ? await writeRolePay(s.workRef, s.setMinor, undefined, s.eeHeld) : null;
+    const problem =
+      s.workKind === "role" ? await writeRolePay(s.workRef, s.setMinor, undefined, s.eeHeld) :
+      s.workKind === "quest" && deps.quests ? (await writeQuestPay({ getPool, quests: deps.quests, currency, payLineCheck: deps.payLineCheck }, s.workRef, s.setMinor, { eeHeld: s.eeHeld })).problem :
+      null;
     if (problem) return res.status(400).json({ error: problem });
     await recordEvent(getPool(), {
-      kind: "org",
-      text: "a role's pay figure was signed by a second signer",
+      kind: s.workKind === "quest" ? "quest" : "org",
+      text: s.workKind === "quest" ? "a quest's price was signed by a second signer" : "a role's pay figure was signed by a second signer",
       actorUserId: me,
-      entityType: "org_role",
+      entityType: s.workKind === "quest" ? "quest" : "org_role",
       entityRef: s.workRef,
       audience: "public",
     });
     res.json({ success: true });
   });
+
+  if (deps.quests && deps.claims) {
+    registerQuestPay(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, eeMeaningWritten, currency, quests: deps.quests, claims: deps.claims, payLineCheck: deps.payLineCheck });
+  }
 }

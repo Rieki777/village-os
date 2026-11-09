@@ -563,7 +563,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // being paid is sent to the village instead (the conflict rule).
   "role.pay": true,
   "pot.steward": true,
-  // Living places (0346). FALSE until Rye says otherwise (spec C8, I.10): the
+  // Living places (0354). FALSE until Rye says otherwise (spec C8, I.10): the
   // two keys are new, and joining the handover set is his word to give. With
   // no live holder the village still decides by its vote path (Article 0.3).
   "place.tend": false,
@@ -780,7 +780,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 2026-11-06, relayed: a funding pot is a power the Treasurer holds by default
  * and can be handed to another role or the village. That moved only the first:
  * 30 and 21.
- * `place.tend` and `place.permit` (Living places, 0346) were born held back
+ * `place.tend` and `place.permit` (Living places, 0354) were born held back
  * until Rye gives his word on them (the places spec, C8), which moved only the
  * second: 30 and 23.
  *

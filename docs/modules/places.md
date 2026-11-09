@@ -4,7 +4,7 @@ Provenance: platform
 
 > Registry id `places`, named "Living places". The rules are `shared/places.ts`; the reads and the import are
 > `server/lib/places.ts`; every statement is in `server/repos/places.ts`; the routes are
-> `server/routes/placeRegistry.ts`; the schema is `drizzle/0346_every_place_is_a_living_invitation.sql`.
+> `server/routes/placeRegistry.ts`; the schema is `drizzle/0354_every_place_is_a_living_invitation.sql`.
 
 **Every place on the land as a living invitation: what it is, the stage it has reached from idea to built,
 which permits it waits on, the roles that care for it, and how to step forward as its steward.**

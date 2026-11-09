@@ -1,7 +1,7 @@
 /**
  * LIVING PLACES (S2): the place registry's reads and its seed import.
  *
- * Every place on the land is a row in `places` (drizzle/0346), keyed on the
+ * Every place on the land is a row in `places` (drizzle/0354), keyed on the
  * map's own `structure_key`. This file turns those rows, the published scene's
  * anchors and the org chart into the two answers the living map and the
  * Places page read: the INDEX (every place, two tiers) and the CARD (one
