@@ -69,6 +69,7 @@ import {
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
 import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { exitChangeKey, exitChangeOf, judgeMatrixItem, matrixChangeKey, type ExitVoteDoor } from "./consequenceVote";
 import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
 import {
   changeSetCapFrom,
@@ -163,7 +164,30 @@ export interface RoleItem {
   userId?: string;
 }
 
+/**
+ * THE CONSEQUENCE PEN'S VOTE (canvas follow-up G.1, G.2): a change to the
+ * exit terms, or to the care door while Conflict Evolution is off. `change`
+ * holds the fields as the canvas suggestion spells them
+ * (`exitChangeOf`, server/lib/consequenceVote.ts).
+ */
+export interface ExitItem {
+  kind: "exit_terms" | "exit_restorative";
+  change: Record<string, unknown>;
+}
+
+/** One human row of the Decision Matrix, added, changed or removed (G.1). */
+export interface MatrixRowItem {
+  kind: "matrix_row";
+  act: "insert" | "update" | "remove";
+  /** The row, for a change or a removal. */
+  rowId?: number;
+  /** What the row would say, for an addition or a change. */
+  row?: Record<string, unknown>;
+}
+
 export type ChangeItem =
+  | ExitItem
+  | MatrixRowItem
   | DialItem
   | MintRuleItem
   | MintRuleCreateItem
@@ -446,7 +470,7 @@ export interface ProposedChange {
    * executor reads it back as a `module_lifecycle` item and never as a dial:
    * `asChangeItem` takes any change carrying a `kind` exactly as written.
    */
-  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create";
+  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create" | "exit_terms" | "exit_restorative" | "matrix_row";
   moduleId?: string;
   /** Present on a brand change only: the `section.field` it writes. */
   field?: string;
@@ -455,6 +479,12 @@ export interface ProposedChange {
   tokenSlug?: string;
   amount?: string;
   ceiling?: string;
+  /** Present on an exit change only: the fields it sets (server/lib/consequenceVote.ts). */
+  change?: Record<string, unknown>;
+  /** Present on a matrix change only. */
+  act?: "insert" | "update" | "remove";
+  rowId?: number;
+  row?: Record<string, unknown>;
 }
 
 /** The key a module switch is filed under on a proposal: `module:<id>`. */
@@ -560,6 +590,10 @@ export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<Change
   "mode_switch",
   "module_lifecycle",
   "brand_field",
+  // The consequence pen after the Birthing (canvas follow-up G.1, G.2).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ]);
 
 /**
@@ -612,6 +646,12 @@ export interface ValidateChangeSetOptions {
    * without a server. Absent, a new rule is refused.
    */
   newMintRuleProblem?: (draft: MintRuleDraft) => Promise<string | null>;
+  /**
+   * The exit policy's judge for an `exit_terms` or `exit_restorative` item:
+   * every refusal the policy's own save makes, writing nothing
+   * (`exitVoteDoor`, server/routes/exits.ts). Absent, the item is refused.
+   */
+  exitVote?: Pick<ExitVoteDoor, "judge">;
 }
 
 export async function validateChangeSet(
@@ -682,6 +722,53 @@ export async function validateChangeSet(
 
   const seen = new Set<string>();
   for (const item of items) {
+    if (item.kind === "exit_terms" || item.kind === "exit_restorative") {
+      const key = exitChangeKey(item.kind);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same part of the exit policy appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const parsed = exitChangeOf(item.kind, item.change);
+      if (!parsed.ok) {
+        problems.push({ key, problem: parsed.error.replace(/.$/, "") });
+        continue;
+      }
+      if (!options?.exitVote) {
+        problems.push({ key, problem: "This build cannot read the village's exit policy from here" });
+        continue;
+      }
+      const judged = await options.exitVote.judge(item.kind, parsed.change);
+      if (typeof judged === "string") {
+        problems.push({ key, problem: judged });
+        continue;
+      }
+      normalized.push({ key, from: judged.from, to: judged.to, kind: item.kind, change: parsed.change });
+      continue;
+    }
+    if (item.kind === "matrix_row") {
+      const key = matrixChangeKey(item);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same matrix row appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const judged = await judgeMatrixItem(pool, item);
+      if (!judged.ok) {
+        problems.push({ key, problem: judged.problem });
+        continue;
+      }
+      normalized.push({
+        key,
+        from: judged.from,
+        to: judged.to,
+        kind: "matrix_row",
+        act: judged.act,
+        ...(judged.rowId ? { rowId: judged.rowId } : {}),
+        ...(judged.row ? { row: judged.row as unknown as Record<string, unknown> } : {}),
+      });
+      continue;
+    }
     if (item.kind === "module_lifecycle") {
       const checked = await moduleSwitchProblem(item, seen, options);
       if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });

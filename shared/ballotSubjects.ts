@@ -874,6 +874,9 @@ export function evaluationRulesFor(
  *   module_lifecycle  a part of the Game is turned on, opened or closed.
  *   brand_field       a name, a word or an image the village calls itself by.
  *   role              a role is declared, seated or handed back.
+ *   exit_terms        the exit policy's voluntary and involuntary terms.
+ *   exit_restorative  the care door, while Conflict Evolution is off.
+ *   matrix_row        a human row of the Decision Matrix is added, changed or removed.
  *
  * Each kind names the subject that prices it, so a bundle is priced at the
  * highest floor among its elements with no second table to keep in step.
@@ -889,6 +892,10 @@ export const CHANGE_ITEM_KINDS = [
   "module_lifecycle",
   "brand_field",
   "role",
+  // The consequence pen after the Birthing (canvas follow-up G.1 and G.2, server/lib/consequenceVote.ts).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ] as const;
 export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 
@@ -907,6 +914,9 @@ export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
   module_lifecycle: "mechanics",
   brand_field: "mechanics",
   role: "mechanics",
+  exit_terms: "mechanics",
+  exit_restorative: "mechanics",
+  matrix_row: "mechanics",
 };
 
 /**
@@ -926,6 +936,10 @@ export const CRITICALITY_FOR_ITEM_KIND: Readonly<Record<Exclude<ChangeItemKind, 
   module_lifecycle: "structural",
   brand_field: "routine",
   role: "structural",
+  // Plan 2.3: the consequence pen, after the Birthing, is a vote at the structural tier.
+  exit_terms: "structural",
+  exit_restorative: "structural",
+  matrix_row: "structural",
 };
 
 /** The tier of a bundle: its most critical element, `routine` when empty. */

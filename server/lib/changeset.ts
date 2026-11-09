@@ -98,6 +98,7 @@ import { raiseCanvasRevisitForLifecycle } from "./canvasRevisit";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
 import { BRAND_CURRENCY_FIELD, brandFieldValue, brandVoteProblem, currencyChangeSentence, withBrandField } from "../../shared/brandVote";
+import { exitChangeKey, exitChangeOf, judgeMatrixItem, writeMatrixItem, type ExitVoteDoor } from "./consequenceVote";
 
 /**
  * Modules whose lifecycle a change set may never move, whatever the vote said.
@@ -125,6 +126,12 @@ export const WRITE_ORDER: readonly string[] = [
   "weight_allocation",
   "mode_switch",
   "brand_field",
+  // The consequence pen (canvas follow-up G.1, G.2): each is moved back by
+  // another vote, and the exit policy and the matrix are what a member reads
+  // about leaving and deciding, so they land after the Game's own settings.
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ];
 
 const rankOf = (kind: string): number => {
@@ -165,6 +172,13 @@ export interface ChangesetDeps {
    * the item is refused before anything is written.
    */
   brand?: { read: () => unknown; write: (next: unknown) => Promise<void> };
+  /**
+   * The exit policy's side of the consequence vote (`exitVoteDoor`,
+   * server/routes/exits.ts): the policy's own save with no administrator
+   * check. Absent means this build cannot write the exit policy from here, and
+   * an exit item is refused before anything is written.
+   */
+  exitVote?: ExitVoteDoor;
 }
 
 export interface ValidatedElement {
@@ -357,6 +371,45 @@ export async function validateElements(
           field === BRAND_CURRENCY_FIELD
             ? currencyChangeSentence(before, String(item.to))
             : `the village's ${field} changes from "${before}" to "${String(item.to)}"`,
+      });
+      continue;
+    }
+
+    if (item.kind === "exit_terms" || item.kind === "exit_restorative") {
+      if (!deps.exitVote) return refuse(index, item.kind, "this build cannot write the village's exit policy from here");
+      const parsed = exitChangeOf(item.kind, item.change);
+      if (!parsed.ok) return refuse(index, item.kind, parsed.error.charAt(0).toLowerCase() + parsed.error.slice(1).replace(/.$/, ""));
+      // Judged again against the policy as it stands at landing: a role or a
+      // circle can go, or the conflict agreement take the care door, between
+      // the vote opening and closing.
+      const judged = await deps.exitVote.judge(item.kind, parsed.change);
+      if (typeof judged === "string") return refuse(index, item.kind, judged.charAt(0).toLowerCase() + judged.slice(1));
+      elements.push({
+        index,
+        item: { kind: item.kind, change: parsed.change },
+        kind,
+        oldValue: judged.from,
+        newValue: judged.to,
+        sentence: `${item.kind === "exit_terms" ? "the exit terms" : "the care door"} change from "${judged.from}" to "${judged.to}"`,
+      });
+      continue;
+    }
+
+    if (item.kind === "matrix_row") {
+      const judged = await judgeMatrixItem(deps.pool, item);
+      if (!judged.ok) return refuse(index, item.kind, judged.problem.charAt(0).toLowerCase() + judged.problem.slice(1));
+      elements.push({
+        index,
+        item,
+        kind,
+        oldValue: judged.from,
+        newValue: judged.to,
+        sentence:
+          judged.act === "insert"
+            ? `the Decision Matrix gains a row: ${judged.to}`
+            : judged.act === "remove"
+              ? `the Decision Matrix loses row ${judged.rowId}: ${judged.from}`
+              : `row ${judged.rowId} of the Decision Matrix changes from "${judged.from}" to "${judged.to}"`,
       });
       continue;
     }
@@ -723,6 +776,64 @@ export async function applyChangeSet(deps: ChangesetDeps, input: ApplySetInput):
       });
       applied.push(`brand:${field}`);
       touchedCaches = true;
+      continue;
+    }
+
+    if (item.kind === "exit_terms" || item.kind === "exit_restorative") {
+      const key = exitChangeKey(item.kind);
+      if (landedBefore.has(`${item.kind}:${el.index}`)) {
+        applied.push(key);
+        continue;
+      }
+      if (!deps.exitVote) {
+        failed.push({ key, problem: "this build cannot write the village's exit policy from here" });
+        continue;
+      }
+      const out = await deps.exitVote.write(item.kind, item.change);
+      if (!out.ok) {
+        failed.push({ key, problem: out.problem });
+        continue;
+      }
+      await recordElement(deps.pool, {
+        ballotId: input.ballotId,
+        proposalId: input.proposalRef,
+        elementIndex: el.index,
+        writeSeq,
+        elementKind: item.kind,
+        sentence: el.sentence,
+        wroteTable: "app_config",
+        wroteId: "exit-policy",
+        oldValue: out.from,
+        newValue: out.to,
+      });
+      applied.push(key);
+      continue;
+    }
+
+    if (item.kind === "matrix_row") {
+      // A row added twice is two rows, so a retried landing skips what the first attempt wrote.
+      if (landedBefore.has(`matrix_row:${el.index}`)) {
+        applied.push(`matrix:${el.index}`);
+        continue;
+      }
+      const out = await writeMatrixItem(deps.pool, item, input.actor ?? "governance");
+      if (!out.ok) {
+        failed.push({ key: `matrix:${el.index}`, problem: out.problem });
+        continue;
+      }
+      await recordElement(deps.pool, {
+        ballotId: input.ballotId,
+        proposalId: input.proposalRef,
+        elementIndex: el.index,
+        writeSeq,
+        elementKind: item.kind,
+        sentence: el.sentence,
+        wroteTable: "decision_matrix_rows",
+        wroteId: String(out.rowId),
+        oldValue: el.oldValue,
+        newValue: el.newValue,
+      });
+      applied.push(`matrix:row:${out.rowId}`);
       continue;
     }
 

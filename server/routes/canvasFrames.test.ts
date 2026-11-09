@@ -44,7 +44,7 @@ import { PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { NOTE_IS_PUBLIC } from "../../shared/powerHands";
 import { calendarUpsert } from "../lib/calendar";
 import { STEWARD_ROLE_ID, capabilityHoldings, moveCapabilityToVillage } from "../lib/capabilityHolding";
-import { recordMechanicsChangeRow } from "../lib/changeset";
+import { applyChangeSet, recordMechanicsChangeRow } from "../lib/changeset";
 import { DEFAULT_EXIT_POLICY, withPolicyDefaults } from "../lib/exitPolicy";
 import { recordGameStart } from "../lib/gameStart";
 import { governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
@@ -61,12 +61,14 @@ import { canvasProposalById, insertCanvasProposal } from "../repos/canvasProposa
 import { documentById, insertTextDocument } from "../repos/villageDocuments";
 import { dbDocument } from "../repos/store-db";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
+import { exitVoteDoor, type ExitPolicySaveDeps } from "./exits";
 import {
   CARE_DOOR_HELD_BY_AGREEMENT,
   CARE_DOOR_IN_AGREEMENT,
   CARE_DOOR_IS_THE_AGREEMENT_VOTE,
-  CONSEQUENCE_VOTE_NOT_BUILT,
+  CONSEQUENCE_VOTE,
   FILED_BY_PROPOSER,
+  MECHANICS_PROPOSAL_DOOR,
   PEN_REFUSALS,
   PURPOSE_CHANGE_DOOR,
   register,
@@ -107,6 +109,10 @@ let HOLDERS: IntakeHolding[] = [];
 let QUALIFIED = true;
 /** Whether the village has saved a conflict agreement, which then holds the restorative block. False unless a test says so. */
 let AGREEMENT_STORED = false;
+/** Whether Conflict Evolution is on. On unless a test switches it off (G.2). */
+let CE_ON = true;
+/** The exit policy's save deps, shared by the canvas door and the carried vote. */
+let EXIT_DEPS: ExitPolicySaveDeps;
 /** Every notice the routes send, as `notify` receives it. */
 const NOTICES: NotifyInput[] = [];
 
@@ -168,6 +174,17 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
     const app = express();
     app.use(express.json({ limit: "1mb" })); // the limit server/index.ts sets
     const isAdmin = async (req: express.Request) => ["admin", "founder"].includes(who(req)?.role ?? "");
+    EXIT_DEPS = {
+      isAdmin,
+      getPool: () => pool,
+      loadRoles: () => ROLES as any,
+      circlesRepo: { all: () => [] } as any,
+      exitPolicyRepo: exitPolicyRepo() as any,
+      readExitPolicy: () => withPolicyDefaults(exitPolicyRepo().get()),
+      // No conflict agreement unless a test stores one: the save then judges the exit policy's own restorative block.
+      agreementStored: () => AGREEMENT_STORED,
+      conflictEvolutionOn: () => CE_ON,
+    };
     const addActivity = async (_kind: string, text: string) => {
       activity.push(text);
     };
@@ -194,16 +211,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         return { fresh: true };
       },
       roleHolders: () => HOLDERS,
-      exitPolicy: {
-        isAdmin,
-        getPool: () => pool,
-        loadRoles: () => ROLES as any,
-        circlesRepo: { all: () => [] } as any,
-        exitPolicyRepo: exitPolicyRepo() as any,
-        readExitPolicy: () => withPolicyDefaults(exitPolicyRepo().get()),
-        // No conflict agreement unless a test stores one: the save then judges the exit policy's own restorative block.
-        agreementStored: () => AGREEMENT_STORED,
-      },
+      exitPolicy: EXIT_DEPS,
       dialWrite: {
         mayAct: async (req, cap: Capability) => {
           const user = who(req);
@@ -235,7 +243,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
         // No module switch rides in these change sets, so the readers answer
         // the plain case and nobody holding a switch is told.
-        moduleChangeReaders: { moduleLifecycleOf: () => "off", openModuleProposal: async () => null, foundersHold: async () => true },
+        moduleChangeReaders: { moduleLifecycleOf: () => "off", openModuleProposal: async () => null, foundersHold: async () => true, exitVote: exitVoteDoor(EXIT_DEPS) },
         tellSwitchHolders: async () => 0,
       },
       sharedPasswordPosture: async () => false,
@@ -888,21 +896,96 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       }
     });
 
-    it("the care door is sent to the conflict agreement's own vote, the matrix waits for one nothing builds yet, and nothing moves", async () => {
+    /** The change-set executor a carried proposal lands through, with the exit policy's own save as its writer. */
+    const land = async (proposalId: string) => {
+      const filed = await proposalById(pool, proposalId);
+      return applyChangeSet(
+        { pool, recordMechanicsChange: async () => {}, reloadCaches: async () => {}, sharedPasswordPosture: () => false, exitVote: exitVoteDoor(EXIT_DEPS) },
+        { ballotId: `bal-fixture-${proposalId}`.slice(0, 64), proposalRef: `gm:${proposalId}`, actor: filed!.proposerUserId, changes: filed!.changeSet },
+      );
+    };
+
+    it("the care door is sent to the conflict agreement's own vote while Conflict Evolution is on, and nothing moves", async () => {
       const p = (await propose("member", {
         blockId: "conflict", target: "setting", door: "exit:restorative", servesPurpose: LINE,
         change: { replyHours: 24 }, body: "A day, not two.",
       })).body.proposal;
       expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot", ballotBuilt: false, youMayAdopt: false });
       expect(await adopt("admin", p.id)).toEqual({ status: 409, body: { error: CARE_DOOR_IS_THE_AGREEMENT_VOTE } });
+      expect(await adopt("member", p.id)).toEqual({ status: 409, body: { error: CARE_DOOR_IS_THE_AGREEMENT_VOTE } });
       await exitPolicyRepo().load();
       expect((exitPolicyRepo().get() as any).restorative.replyHours).toBe(48);
       expect((await block("admin", "conflict")).body.proposals.map((x: any) => x.id)).toContain(p.id);
+    });
 
+    it("the matrix rows' own routes refuse, naming the vote that gets past them (G.1)", async () => {
       const row = { subject: "Hiring", approval: "The circle", consultation: "Everyone", information: "Everyone" };
-      const refused = await call("POST", "/api/canvas/decision-matrix/rows", "admin", row);
-      expect(refused.status).toBe(409);
-      expect(refused.body.error).toContain(CONSEQUENCE_VOTE_NOT_BUILT);
+      for (const [method, path] of [["POST", "/api/canvas/decision-matrix/rows"], ["PUT", "/api/canvas/decision-matrix/rows/1"], ["DELETE", "/api/canvas/decision-matrix/rows/1"]]) {
+        const refused = await call(method, path, "admin", row);
+        expect(refused.status, `${method} ${path}`).toBe(409);
+        expect(refused.body.error).toContain(CONSEQUENCE_VOTE);
+        expect(refused.body.door).toBe(MECHANICS_PROPOSAL_DOOR);
+        expect(JSON.stringify(refused.body)).not.toMatch(/not built/);
+      }
+    });
+
+    it("an exit-term suggestion is filed by its author as a structural vote, and the carried vote writes the terms (AC1.1)", async () => {
+      const p = (await propose("member", {
+        blockId: "team", target: "setting", door: "exit:terms", change: { noticePeriodDays: 45 }, body: "Six weeks to say goodbye.",
+      })).body.proposal;
+      expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot", ballotBuilt: true, youMayAdopt: true });
+      expect((await block("admin", "team")).body.proposals.find((x: any) => x.id === p.id).pen).toMatchObject({ youMayAdopt: false });
+      expect(await adopt("admin", p.id)).toEqual({ status: 403, body: { error: FILED_BY_PROPOSER } });
+      const r = await adopt("member", p.id);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body.outcome).toMatchObject({ filed: "mechanics-proposal", status: "open" });
+      expect(JSON.stringify(r.body)).not.toMatch(/not built/);
+      const filed = await proposalById(pool, String(r.body.outcome.id));
+      expect(filed?.proposerUserId).toBe("cf-member");
+      expect(filed?.changeSet).toEqual([
+        { key: "exit:terms", from: "noticePeriodDays: 30", to: "noticePeriodDays: 45", kind: "exit_terms", change: { noticePeriodDays: 45 } },
+      ]);
+      // Filing moves nothing: the village has not voted.
+      expect((exitPolicyRepo().get() as any).voluntary.noticePeriodDays).toBe(30);
+      // The vote carries, and the executor writes the terms through the policy's own save.
+      const landed = await land(String(r.body.outcome.id));
+      expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, applied: ["exit:terms"], refusal: null });
+      expect((exitPolicyRepo().get() as any).voluntary.noticePeriodDays).toBe(45);
+    });
+
+    it("a matrix-row suggestion is filed by its author, and the carried vote adds the row (AC1.1)", async () => {
+      const row = { subject: "Choosing a builder", approval: "The land circle", consultation: "Neighbours", information: "Everyone", method: "Consent", riskTags: ["money"] };
+      const p = (await propose("member", { blockId: "power", target: "matrix", change: row, servesPurpose: LINE, body: "Who picks who builds." })).body.proposal;
+      expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot", ballotBuilt: true, youMayAdopt: true });
+      const r = await adopt("member", p.id);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const filed = await proposalById(pool, String(r.body.outcome.id));
+      expect(filed?.changeSet[0]).toMatchObject({ kind: "matrix_row", act: "insert", row: { subject: "Choosing a builder", approval: "The land circle" } });
+      expect((await allDecisionMatrixRows(pool)).map((x) => x.subject)).not.toContain("Choosing a builder");
+      const landed = await land(String(r.body.outcome.id));
+      expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, refusal: null });
+      const written = (await allDecisionMatrixRows(pool)).find((x) => x.subject === "Choosing a builder");
+      expect(written).toMatchObject({ approval: "The land circle", method: "Consent", riskTags: ["money"], updatedBy: "cf-member" });
+    });
+
+    it("with Conflict Evolution off, the care door files the same consequence vote and the carried vote writes it (AC1.3)", async () => {
+      CE_ON = false;
+      try {
+        const p = (await propose("member", {
+          blockId: "conflict", target: "setting", door: "exit:restorative", servesPurpose: LINE,
+          change: { replyHours: 24 }, body: "A day is long enough to wait.",
+        })).body.proposal;
+        expect(p.pen).toMatchObject({ pen: "consequence", how: "ballot", ballotBuilt: true, youMayAdopt: true });
+        const r = await adopt("member", p.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        const filed = await proposalById(pool, String(r.body.outcome.id));
+        expect(filed?.changeSet[0]).toMatchObject({ key: "exit:restorative", kind: "exit_restorative", change: { replyHours: 24 } });
+        expect((exitPolicyRepo().get() as any).restorative.replyHours).toBe(48);
+        expect(await land(String(r.body.outcome.id))).toMatchObject({ ok: true, applied: ["exit:restorative"] });
+        expect((exitPolicyRepo().get() as any).restorative.replyHours).toBe(24);
+      } finally {
+        CE_ON = true;
+      }
     });
 
     it("the part of the Game that holds the vote stays the administrators' to switch, because no vote can move it", async () => {
@@ -928,7 +1011,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       const r = (await block("member", "power")).body;
       expect(r.birthed).toBe(true);
       expect(r.pens.dial).toMatchObject({ how: "ballot", youMayAdopt: true });
-      expect(r.pens.consequence).toMatchObject({ how: "ballot", ballotBuilt: false });
+      expect(r.pens.consequence).toMatchObject({ how: "ballot", ballotBuilt: true });
       expect(r.observed.find((f: any) => f.id === "birthing").text).toMatch(/^The Game started on /);
     });
 

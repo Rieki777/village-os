@@ -109,13 +109,17 @@ describe("what adopting does, before the Birthing and after it", () => {
     expect(adoptLabel(after)).toBe("File it as a proposal");
   });
 
-  it("writes the exit policy before the Game starts, and says the vote is not built after", () => {
+  it("writes the exit policy before the Game starts, and files it in its author's name as a structural vote after", () => {
     const terms = proposal({ blockId: "team", target: "setting", sectionId: null, door: "exit:terms", change: { noticePeriodDays: 30 }, pen: pen({ pen: "consequence", who: "admins" }) });
     expect(adoptEffect(terms, false, titles)).toBe("The Game has not started, so adopting writes this into the exit policy straight away.");
-    const after = { ...terms, pen: pen({ pen: "consequence", how: "ballot", who: "any-member", ballotBuilt: false }) };
+    const after = { ...terms, pen: pen({ pen: "consequence", how: "ballot", who: "any-member", ballotBuilt: true }) };
     expect(adoptEffect(after, true, titles)).toBe(
-      "The Game has started, so this goes to a vote of the whole village at the structural tier. That vote is not built yet, so this suggestion stays open until it is.",
+      "The Game has started, so adopting files this as a proposal in Sage's name, and the village votes on it at the structural tier. Only the member who suggested it can file it.",
     );
+    expect(adoptEffect({ ...after, youProposedIt: true }, true, titles)).toContain("in your name");
+    // With Conflict Evolution off the care door goes to the same vote (G.2).
+    const care = { ...after, door: "exit:restorative", change: { replyHours: 24 } };
+    expect(adoptEffect(care, true, titles, null, false)).toBe(adoptEffect(after, true, titles));
   });
 
   it("sends the care door to the conflict agreement's own vote after the Birthing", () => {
@@ -474,10 +478,12 @@ describe("what the suggestion box says will become of a suggestion", () => {
     expect(suggestionFate({ target: "words" }, undefined)).toBeNull();
   });
 
-  it("after the Birthing says the exit terms' and the matrix's vote is not built", () => {
-    const line = "That vote is not built yet, so a suggestion here stays open until it is.";
+  it("after the Birthing says the exit terms and the matrix are filed by their author as a structural vote", () => {
+    const line = "The Game has started, so the member who suggests this files it as a proposal, and the village votes on it at the structural tier.";
     expect(suggestionFate({ target: "setting", door: "exit:terms" }, consequence(true))?.text).toBe(line);
     expect(suggestionFate({ target: "matrix" }, consequence(true))?.text).toBe(line);
+    // With Conflict Evolution off the care door is filed the same way (G.2).
+    expect(suggestionFate({ target: "setting", door: "exit:restorative" }, consequence(true), false, false)?.text).toBe(line);
   });
 
   it("after the Birthing sends the care door to the agreement's own vote, and never calls that vote unbuilt", () => {

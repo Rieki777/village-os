@@ -6,8 +6,8 @@
  * what adopting it would do TODAY, and who decides. What adopting does
  * changes at the Birthing, and the frame says which side of it the village is
  * on: before it, a suggestion that names a setting writes the setting; after
- * it, a dial suggestion is filed as a proposal in its author's name, and the
- * consequence pen's vote is not built yet, which is said instead of offered
+ * it, a dial, module, exit-term or matrix suggestion is filed as a proposal in
+ * its author's name, and only the author is offered that button
  * (`adoptEffect`, client/src/lib/canvasFramesCopy.ts).
  *
  * BUTTONS ONLY WHERE THEY WILL WORK. The server answers `pen.youMayAdopt` for

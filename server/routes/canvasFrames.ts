@@ -49,7 +49,8 @@
  *   the purpose `writeGoverningPurpose`, after `founderPenRefusal`, behind the
  *   statement   same `isAdmin` test `PUT /api/admin/purpose` applies
  *   a matrix    `writeDecisionMatrixRow`, behind the consequence pen
- *   row
+ *   row         (after the Birthing the direct row routes answer 409 and
+ *               name the vote, which a suggestion's author files)
  *   a document  `markDocumentShared` (server/repos/villageDocuments.ts), after
  *               `story.tell` is asked of the gate: "Share with the village",
  *               filed only by the documents route for the document's owner
@@ -69,10 +70,12 @@
  * suggestion's author presses that Adopt (`FILED_BY_PROPOSER`): the proposal
  * carries its filer's name, standing and per-cycle count, and a member who
  * filed somebody else's words could then withdraw them, leaving the canvas
- * saying "adopted" for a change nobody voted on. The
- * consequence pen's vote (the exit terms, the care door and the matrix, at the
- * structural tier) has no machinery yet, so those answer 409 and say so; the
- * purpose statement's vote already has its own route and the answer names it.
+ * saying "adopted" for a change nobody voted on. The consequence pen's
+ * doors (the exit terms, the matrix, and the care door while Conflict
+ * Evolution is off) file the same way, as change-set items priced at the
+ * structural tier (server/lib/consequenceVote.ts, canvas follow-up G.1); the
+ * care door with the module on is the conflict agreement's own vote, and the
+ * purpose statement's vote has its own route; each answer names its door.
  *
  * ── A DECISION IS READ BACK ────────────────────────────────────────────────
  *
@@ -157,6 +160,7 @@ import { documentById, markDocumentShared } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
 import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
+import { CONSEQUENCE_VOTE, MECHANICS_PROPOSAL_DOOR } from "../lib/consequenceVote";
 
 export interface CanvasFrameDeps
   extends Pick<
@@ -198,10 +202,13 @@ export const PEN_REFUSALS: Record<CanvasPen, string> = {
   admin: "This section stays with the administrators. You can suggest words, and they decide.",
 };
 
-/** The consequence pen's vote for the exit terms and the matrix, which nothing builds yet. */
-export const CONSEQUENCE_VOTE_NOT_BUILT =
-  "The Game has started, so this goes to a vote of the whole village at the structural tier. " +
-  "That vote is not built yet, so this suggestion stays open until it is.";
+/**
+ * The consequence pen's vote for the exit terms, the matrix and (with
+ * Conflict Evolution off) the care door: a change set the suggestion's
+ * author files, landed by the change-set executor (server/lib/consequenceVote.ts,
+ * canvas follow-up G.1). Re-exported for the matrix routes' refusal.
+ */
+export { CONSEQUENCE_VOTE, MECHANICS_PROPOSAL_DOOR };
 
 /**
  * The care door's vote IS built: it is the conflict agreement's change vote
@@ -247,8 +254,14 @@ export const FILED_BY_PROPOSER =
   "The Game has started, so this is filed as a proposal in the name of the member who suggested it, and only they can file it. " +
   "You can suggest your own version.";
 
-/** A pen whose adoption files a mechanics proposal in the adopter's name. */
-const filesAProposal = (rule: CanvasAdoptionRule): boolean => rule.how === "ballot" && (rule.pen === "dial" || rule.pen === "module");
+/**
+ * A pen whose adoption files a mechanics proposal in the adopter's name: a
+ * dial, a module, and the consequence pen (G.1). The care door is the one
+ * consequence door that does not while Conflict Evolution is on, because its
+ * vote is the conflict agreement's, which carries the whole agreement.
+ */
+const filesAProposal = (rule: CanvasAdoptionRule, careDoorByAgreement = false): boolean =>
+  rule.how === "ballot" && (rule.pen === "dial" || rule.pen === "module" || (rule.pen === "consequence" && !careDoorByAgreement));
 
 function blockView(id: CanvasBlockId) {
   const b = CANVAS_BLOCKS[id];
@@ -386,16 +399,20 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
    * (`FILED_BY_PROPOSER`); on a block's own pens it is absent, and the answer
    * is whether this person may file suggestions of their own.
    */
-  const penView = async (req: Request, user: any, rule: CanvasAdoptionRule, proposedBy?: string) => {
+  const penView = async (req: Request, user: any, rule: CanvasAdoptionRule, proposedBy?: string, careDoorByAgreement = false) => {
     // A vote is "built" when the machinery it files into can carry it out:
-    // a dial through a mechanics proposal, the purpose statement through its
-    // own change vote, and a module only once the mechanics executor carries a
-    // lifecycle change (`EXECUTABLE_ITEM_KINDS`), which it does not today.
+    // a dial, a module, the exit terms, the matrix and the care door (with
+    // Conflict Evolution off) through a mechanics proposal the change-set
+    // executor lands (`EXECUTABLE_ITEM_KINDS`), and the purpose statement
+    // through its own change vote. The care door with the module on is the
+    // conflict agreement's whole-agreement vote, which no canvas suggestion
+    // can be filed into, so it reads as not built from here.
     const ballotBuilt =
       rule.how === "act" ||
       rule.pen === "dial" ||
       rule.pen === "purpose" ||
-      (rule.pen === "module" && EXECUTABLE_ITEM_KINDS.has("module_lifecycle"));
+      (rule.pen === "module" && EXECUTABLE_ITEM_KINDS.has("module_lifecycle")) ||
+      (rule.pen === "consequence" && !careDoorByAgreement && EXECUTABLE_ITEM_KINDS.has("exit_terms") && EXECUTABLE_ITEM_KINDS.has("matrix_row"));
     return {
       pen: rule.pen,
       how: rule.how,
@@ -404,9 +421,12 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       ballotBuilt,
       youMayAdopt:
         ballotBuilt &&
-        (proposedBy !== undefined && filesAProposal(rule) ? String(user.id) === proposedBy : await mayTake(req, user, rule)),
+        (proposedBy !== undefined && filesAProposal(rule, careDoorByAgreement) ? String(user.id) === proposedBy : await mayTake(req, user, rule)),
     };
   };
+
+  /** The care door, after the Birthing, while its vote is the conflict agreement's (Conflict Evolution on). */
+  const careDoorByAgreementVote = (p: { door?: string | null }) => p.door === "exit:restorative" && (deps.exitPolicy.conflictEvolutionOn?.() ?? true);
 
   /** A suggestion as the page renders it. The purpose line is absent where the field does not exist. */
   const proposalView = async (req: Request, user: any, p: CanvasProposalRow, facts: CanvasPenFacts) => {
@@ -437,7 +457,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
           }
         : {}),
       ...(careDoorHeld ? { cannotAdopt: CARE_DOOR_HELD_BY_AGREEMENT } : {}),
-      pen: await penView(req, user, rule, p.proposedBy),
+      pen: await penView(req, user, rule, p.proposedBy, careDoorByAgreementVote(p)),
       youProposedIt: String(user.id) === p.proposedBy,
     };
   };
@@ -601,7 +621,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       pens.module = await penView(req, user, ruleFor({ target: "setting", door: d.id }, facts));
     }
     if (id === "power" || doorsForBlock(id).some((d) => d.kind === "exit-policy")) {
-      pens.consequence = await penView(req, user, whoAdoptsCanvasAnswer("consequence", facts));
+      const careDoorOnly = id !== "power" && doorsForBlock(id).filter((d) => d.kind === "exit-policy").every((d) => d.id === "exit:restorative");
+      pens.consequence = await penView(req, user, whoAdoptsCanvasAnswer("consequence", facts), undefined, careDoorOnly && careDoorByAgreementVote({ door: "exit:restorative" }));
     }
 
     const hasStatement = hasGoverningPurpose(purposeDoc ?? (await governingPurpose(pool)));
@@ -884,9 +905,27 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
 
     // The consequence pen: the exit terms, the care door and the matrix.
     if (rule.how === "ballot") {
-      // The agreement's vote is Conflict Evolution's route, so with that module off the care door waits like the other exit terms.
-      const agreementVote = p.door === "exit:restorative" && (deps.exitPolicy.conflictEvolutionOn?.() ?? true);
-      return { ok: false, status: 409, body: { error: agreementVote ? CARE_DOOR_IS_THE_AGREEMENT_VOTE : CONSEQUENCE_VOTE_NOT_BUILT } };
+      // The agreement's vote is Conflict Evolution's route; with that module
+      // off, the care door goes to the consequence vote like the exit terms (G.2).
+      if (careDoorByAgreementVote(p)) return { ok: false, status: 409, body: { error: CARE_DOOR_IS_THE_AGREEMENT_VOTE } };
+      // After the Birthing: the change set that would make the change, filed
+      // by the suggestion's author, as for a dial (G.1).
+      if (p.proposedBy !== String(user.id)) return { ok: false, status: 403, body: { error: FILED_BY_PROPOSER } };
+      const changes =
+        p.target === "matrix"
+          ? [{ kind: "matrix_row", act: "insert", row: (({ rowId: _notHonoured, ...row }) => row)((p.change ?? {}) as unknown as MatrixRowChange) }]
+          : [{ kind: p.door === "exit:terms" ? "exit_terms" : "exit_restorative", change: p.change ?? {} }];
+      const filed = await openMechanicsProposal(deps.mechanicsPropose, user, {
+        title: `${block.name}: ${p.target === "matrix" ? "a Decision Matrix row" : CANVAS_DOORS[p.door!].label}`.slice(0, 200),
+        rationale: rationaleFor(p),
+        changes,
+      });
+      if (filed.status !== 200) return { ok: false, status: filed.status, body: filed.body };
+      return {
+        ok: true,
+        outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
+        message: filedMessage(filed.body),
+      };
     }
     if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.consequence } };
     if (p.target === "matrix") {
@@ -1011,8 +1050,10 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     if (!user) return null;
     const rule = whoAdoptsCanvasAnswer("consequence", await penFacts());
     if (rule.how === "ballot") {
+      // Article 0: the refusal names the vote that gets past it.
       res.status(409).json({
-        error: `${CONSEQUENCE_VOTE_NOT_BUILT} Suggest the row on the Power block in the meantime.`,
+        error: `${CONSEQUENCE_VOTE} A matrix row is suggested on the Power block.`,
+        door: MECHANICS_PROPOSAL_DOOR,
       });
       return null;
     }

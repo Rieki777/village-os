@@ -46,7 +46,8 @@ import { conflictDoorFacts } from "../lib/launchGovernance";
 import { BALLOT_NAME_WITHHELD, register } from "./conflictAgreement";
 import { GPS_DOC_KEY, PURPOSE_EXAMPLE } from "../../shared/governingPurpose";
 import { writeGoverningPurpose } from "../lib/governingPurpose";
-import { register as registerExits } from "./exits";
+import { EXIT_TERMS_ARE_A_VOTE, RESTORATIVE_IS_A_CONSEQUENCE_VOTE, register as registerExits } from "./exits";
+import { MECHANICS_PROPOSAL_DOOR } from "../lib/consequenceVote";
 
 const configured = testDbConfigured();
 if (!configured) console.warn("[conflictAgreement.routes] TEST_DATABASE_URL not set - DB-backed tests SKIPPED.");
@@ -66,6 +67,8 @@ const PEOPLE: Record<string, Person> = {
 /** Who holds each role today. The care role is held unless a case empties it. */
 const HELD = [{ roleId: "ca-care", userId: "ca-admin", termEndsAt: null }];
 let HOLDERS: Array<{ roleId: string; userId: string; termEndsAt: null }> = HELD;
+/** Whether Conflict Evolution is on, as the exit policy's save is told. On unless a case switches it off. */
+let CE_ON = true;
 
 const ROLES = [
   { id: "ca-care", name: "Care Holder" },
@@ -212,6 +215,7 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       notifyAdmins: async () => {},
       agreementStored: () => agreementRepo.exists(),
       agreementDoc: () => agreementRepo.get(),
+      conflictEvolutionOn: () => CE_ON,
       readExitPolicy,
       exitPolicyRepo,
     } as any);
@@ -622,17 +626,59 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
     it("after the Birthing, with no agreement stored, the exit policy's own save cannot change the conflict path, and stores nothing", async () => {
       await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
       const served = readExitPolicy() as any;
-      const same = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, voluntary: { ...served.voluntary, noticePeriodDays: 14 } });
-      expect(same.status).toBe(200);
+      // Saving the policy as it stands still goes through: nothing it holds moved.
+      const same = await call("PUT", "/api/admin/exit-policy", "admin", { ...served });
+      expect(same.status, JSON.stringify(same.body)).toBe(200);
 
       const changed = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, restorative: { ...served.restorative, steps: ["The administrators decide"] } });
       expect(changed.status).toBe(409);
       expect(changed.body).toMatchObject({ error: "restorative_is_a_vote", door: "/api/governance/conflict-agreement-changes" });
       const stored = await readConfigDocument<any>(pool, "exit-policy");
       expect(stored.restorative.steps).toEqual(OLD_POLICY.restorative.steps);
-      expect(stored.voluntary.noticePeriodDays).toBe(14);
       // Departures is told, so it stops offering the fields.
       expect((await call("GET", "/api/admin/exits", "admin")).body.gameStarted).toBe(true);
+    });
+
+    /*
+     * G.1's hole (AC1.2): after the Birthing the exit terms are the village's
+     * consequence vote, so an administrator's save that changes them is
+     * refused, naming that vote, and nothing is stored.
+     */
+    it("after the Birthing, the exit policy's own save refuses a change to the exit terms, naming the vote (AC1.2)", async () => {
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      const served = readExitPolicy() as any;
+      for (const body of [
+        { ...served, voluntary: { ...served.voluntary, noticePeriodDays: 14 } },
+        { ...served, involuntary: { ...served.involuntary, process: "The administrators decide alone." } },
+      ]) {
+        const refused = await call("PUT", "/api/admin/exit-policy", "admin", body);
+        expect(refused.status).toBe(409);
+        expect(refused.body).toEqual({ error: "exit_terms_are_a_vote", message: EXIT_TERMS_ARE_A_VOTE, door: MECHANICS_PROPOSAL_DOOR });
+      }
+      const stored = await readConfigDocument<any>(pool, "exit-policy");
+      expect(stored.voluntary.noticePeriodDays).toBe(OLD_POLICY.voluntary.noticePeriodDays);
+      expect(stored.involuntary.process).toBe(OLD_POLICY.involuntary.process);
+    });
+
+    /*
+     * G.2 (AC1.3): with Conflict Evolution off the agreement's vote is gone,
+     * and the care door's vote is the consequence vote. The Birthing still
+     * locks the block, and the refusal names that vote instead.
+     */
+    it("after the Birthing with Conflict Evolution off, the save still refuses the restorative block, naming the consequence vote (AC1.3)", async () => {
+      await recordGameStart(pool, { ballotId: "b-birth", startedBy: "ca-admin", note: "The village began." });
+      CE_ON = false;
+      try {
+        const served = readExitPolicy() as any;
+        const changed = await call("PUT", "/api/admin/exit-policy", "admin", { ...served, restorative: { ...served.restorative, replyHours: 2 } });
+        expect(changed).toEqual({
+          status: 409,
+          body: { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_CONSEQUENCE_VOTE, door: MECHANICS_PROPOSAL_DOOR },
+        });
+        expect((await readConfigDocument<any>(pool, "exit-policy")).restorative.replyHours ?? null).toBeNull();
+      } finally {
+        CE_ON = true;
+      }
     });
   });
 
