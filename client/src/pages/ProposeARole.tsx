@@ -18,7 +18,7 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
-import { EMPTY_ROLE_CARD, NextForRoles, Practicalities, RoleAsks, SeasonServes, browserTimeZone, type Practical, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
+import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -28,6 +28,8 @@ import { ArrowRight, MailCheck } from "lucide-react";
 import Layout from "@/components/Layout";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
+// Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
+import { NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -124,10 +126,10 @@ export default function ProposeARole() {
   const [sent, setSent] = useState<string | null>(null);
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
+  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
   const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
   const [agreed, setAgreed] = useState({ loveLetter: false, nda: false });
-  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
   /** How many of the roles the link named the village no longer offers. */
   const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
@@ -200,13 +202,13 @@ export default function ProposeARole() {
                 firstMoon: c.quests.filter((q) => q.quest.trim()),
               };
             }),
-            serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
-            hours,
-            agreed,
             timeZone: practical.timeZone.trim(),
             windows: practical.windows,
             earliestStart: practical.earliestStart,
             terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
+            serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
+            hours,
+            agreed,
           },
         }),
       });
@@ -356,7 +358,6 @@ export default function ProposeARole() {
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
           </div>
-          <Practicalities value={practical} onChange={setPractical} />
           <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed} onAgreed={setAgreed} />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">
@@ -374,6 +375,7 @@ export default function ProposeARole() {
               {OPEN_WORDS.keptFor}
             </p>
           </div>
+          <Practicalities value={practical} onChange={setPractical} />
           {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
           <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>
             <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />

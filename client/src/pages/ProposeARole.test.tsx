@@ -75,11 +75,11 @@ describe("the form", () => {
     const gate = document.querySelector('[data-role="r-gate"]') as HTMLElement;
     fireEvent.change(within(gate).getByLabelText(/What you bring to this role/), { target: { value: "I open gates for a living." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
     // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
@@ -88,6 +88,7 @@ describe("the form", () => {
     expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/open-proposals");
+    expect(posted[0].body.card.terms).toEqual({ choice: "accept", note: "" });
     expect(posted[0].body).toMatchObject({
       name: "Rowan Field",
       email: "rowan@example.test",
@@ -97,7 +98,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: expect.objectContaining({ roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true }, terms: { choice: "accept", note: "" } }),
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
     });
   });
 
@@ -247,10 +248,10 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.click(screen.getByLabelText("Investor ready"));
     fireEvent.change(screen.getByLabelText("How your work serves: Investor ready"), { target: { value: "One set of numbers" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
-    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
     fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
     fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
