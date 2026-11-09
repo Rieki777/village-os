@@ -25,7 +25,13 @@ import { register } from "./grounds";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "grounds-gate-"));
 const groundsFile = path.join(dir, "grounds-v0.html");
-fs.writeFileSync(groundsFile, "<!doctype html><title>A map</title><p>drawing code</p>");
+/* One embedded image, big enough to be lifted out of the page (server/lib/groundsSplit.ts). */
+const sprite = Buffer.alloc(4000, 7);
+fs.writeFileSync(
+  groundsFile,
+  "<!doctype html><title>A map</title><p>drawing code</p><script>window.SPRITES={barn:'data:image/png;base64," +
+    sprite.toString("base64") + "'}</script>",
+);
 
 let base = "";
 let server: ReturnType<express.Express["listen"]> | undefined;
@@ -129,6 +135,53 @@ describe("a village whose map is public", () => {
     const res = await get("/grounds/grounds-000000000000.html");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toMatch(/^\/grounds\/grounds-[0-9a-f]{12}\.html$/);
+  });
+});
+
+describe("the images lifted out of the page (map speed plan S1)", () => {
+  beforeEach(() => mapIs("public"));
+
+  /** The asset path the served page names in place of the embedded image. */
+  async function assetPath(): Promise<string> {
+    const html = await (await get("/grounds/index.html")).text();
+    const m = html.match(/\/grounds\/a\/[0-9a-f]{16}\.png/);
+    expect(m, "the served page should name the lifted image").not.toBeNull();
+    expect(html).not.toContain(sprite.toString("base64"));
+    return m![0];
+  }
+
+  it("serves both pages with the image swapped for its own URL", async () => {
+    const p = await assetPath();
+    const hashed = await (await get(await hashedUrl())).text();
+    expect(hashed).toContain(p);
+  });
+
+  it("serves the image byte for byte, cached for a year", async () => {
+    const res = await get(await assetPath());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("cache-control")).toContain("immutable");
+    expect(Buffer.from(await res.arrayBuffer()).equals(sprite)).toBe(true);
+  });
+
+  it("404s a name it does not hold, and never falls through to another file", async () => {
+    for (const p of ["/grounds/a/0000000000000000.png", "/grounds/a/..%2Fgrounds-v0.html", "/grounds/a/x.png"]) {
+      expect((await get(p)).status, p).toBe(404);
+    }
+  });
+
+  it("follows the map module like the pages: off hides the images too", async () => {
+    const p = await assetPath();
+    await mapIs(null);
+    const res = await get(p);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "module_disabled", module: "map" });
+  });
+
+  it("still serves the images to a stranger on a members-only map, as it serves the page the iframe loads", async () => {
+    const p = await assetPath();
+    await mapIs("members");
+    expect((await get(p)).status).toBe(200);
   });
 });
 

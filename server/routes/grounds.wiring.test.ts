@@ -50,7 +50,7 @@ describe("the map artifact's routes", () => {
 
   it("each name the map gate as their first handler", () => {
     const home = registrations.filter((r) => r.file === HOME);
-    expect(home.map((r) => r.where)).toHaveLength(3);
+    expect(home.map((r) => r.where)).toHaveLength(4);
     for (const r of home) {
       expect(r.rest, r.where).toMatch(/^,\s*(mapNotOff|requireModule\("map"\)),/);
     }
