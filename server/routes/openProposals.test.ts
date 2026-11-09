@@ -375,6 +375,33 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     });
   });
 
+  describe("proposals for this moon (Rye, 9 Nov 2026)", () => {
+    it("an admin switches public proposals to the moon; the form offers it, and a proposal carries its days and this season", async () => {
+      state.viewer = ADMIN;
+      const switched = await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" });
+      expect(switched.status).toBe(200);
+      expect(switched.body).toMatchObject({ term: "moon", publicLink: true });
+      expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "decade" })).status).toBe(400);
+      state.viewer = null;
+      state.clock = new Date("2026-11-09T18:00:00Z");
+      try {
+        const form = await call("GET", "/api/open-proposals/form");
+        expect(form.body).toMatchObject({ open: true, season: { id: "s-now" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-09" } });
+        expect(form.body.roles.length).toBeGreaterThan(0);
+        const { id, mail } = await send();
+        expect(mail.text).toContain("in Test Village for this moon, from 9 November 2026 to 9 December 2026.");
+        const row = await readOpenProposal(pool, id);
+        expect(row?.targetSeasonId).toBe("s-now");
+        expect(row?.body.term).toEqual({ kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-09" });
+      } finally {
+        state.clock = null;
+        state.viewer = ADMIN;
+        await call("PUT", "/api/admin/open-proposals/settings", { term: "season" });
+        state.viewer = null;
+      }
+    });
+  });
+
   describe("the desk", () => {
     it("asks the gate on intake.moderate for every desk door", async () => {
       state.viewer = MEMBER;

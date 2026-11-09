@@ -27,6 +27,8 @@
  *   - DECLINING sets decided_at, so the tidy job finds it, and sends a kind no.
  *   - The task board: an asked holder's consent row, a decider's adopt row.
  */
+import { moonTermFor } from "../../shared/openProposalTerm";
+import { activeClock } from "../lib/gratitude-cycles";
 import http from "node:http";
 import express from "express";
 import type mysql from "mysql2/promise";
@@ -605,6 +607,33 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       const { id } = await confirmed(HIGH.email, [gate]);
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
       expect((await usersRepo(pool).byId(HIGH.id))?.stageGranted).toBe("co-creator");
+    });
+  });
+
+  describe("a proposal for this moon (Rye, 9 Nov 2026)", () => {
+    it("is adopted into this season, starting now, with its term ending on the moon's last day", async () => {
+      state.viewer = FOUNDER.id;
+      expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" }, FOUNDER.id)).status).toBe(200);
+      try {
+        const moon = moonTermFor(new Date(), activeClock(), "UTC");
+        const MOONER = { id: "u-mooner", email: "mooner@example.test" };
+        await usersRepo(pool).add({ id: MOONER.id, name: "Mo Oner", email: MOONER.email, passwordHash: "x", paths: [] } as any);
+        const { id } = await confirmed(MOONER.email, [gate]);
+        const before = Date.now();
+        const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        const apps = await q("SELECT status, term_season_id, UNIX_TIMESTAMP(starts_at) AS starts_s, DATE_FORMAT(term_ends_at, '%Y-%m-%d') AS ends_on FROM seat_applications WHERE candidate_user_id = ? ORDER BY created_at DESC", [MOONER.id]);
+        expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-now" });
+        // Starts at adoption (never before the moon's first day), not on next season's first day.
+        expect(Number(apps[0].starts_s) * 1000).toBeGreaterThanOrEqual(Math.floor(before / 1000) * 1000 - 1000);
+        expect(Number(apps[0].starts_s) * 1000).toBeLessThan(Date.now() + 60_000);
+        expect(apps[0].ends_on).toBe(moon.endsOn);
+        const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
+        expect(mail?.text).toContain("this moon");
+        expect(mail?.text).not.toContain("next season");
+      } finally {
+        await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
+      }
     });
   });
 

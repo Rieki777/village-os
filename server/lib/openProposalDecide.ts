@@ -229,10 +229,23 @@ export async function placeOnRoles(
   const tz = calendar.timezone || "UTC";
   const now = deps.now();
   const season = calendar.seasons.find((s) => s.id === p.proposal.targetSeasonId);
-  const startsAt = season ? civilDateInstant(season.startsOn, tz) : null;
+  const term = p.proposal.body.term;
+  // A season proposal starts on the season's first day. A moon proposal starts
+  // at adoption, never before the moon's first day, and ends on its last day
+  // (shared/openProposalTerm.ts, Rye 9 Nov 2026).
+  const moonStart = term ? civilDateInstant(term.startsOn, tz) : null;
+  const startsAt = term ? (moonStart && moonStart.getTime() > now.getTime() ? moonStart : now) : season ? civilDateInstant(season.startsOn, tz) : null;
   if (!season || !startsAt) return { ok: false, code: "cannot", error: "The season this proposal was for is no longer on the village's calendar, so nothing was changed." };
+  if (term && civilDateKey(now, tz) > term.endsOn) {
+    return { ok: false, code: "cannot", error: "The moon this proposal was for has ended, so nothing was changed. Ask them to propose again for this moon." };
+  }
   const seatIds = p.proposal.body.roles.map((r) => r.roleId);
-  const parsed = parseApplicationInput({ seatIds, note: p.proposal.body.why || null, deliverables: p.proposal.body.aim || null });
+  const parsed = parseApplicationInput({
+    seatIds,
+    note: p.proposal.body.why || null,
+    deliverables: p.proposal.body.aim || null,
+    ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
+  });
   if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   const seats = await seatsForUpdate(pool, seatIds);
   for (const id of seatIds) {

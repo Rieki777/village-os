@@ -146,6 +146,11 @@ msgstr "Village signing key"
 msgid "What does it ask from the pot, in {unit}?"
 msgstr "What does it ask from the pot, in {unit}?"
 
+#: client/src/components/admin/OpenProposalsPanel.tsx
+msgctxt "open proposals desk term"
+msgid "Public proposals are for"
+msgstr "Public proposals are for"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "Decided"
@@ -483,6 +488,10 @@ msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
 msgctxt "role draft step"
 msgid "Scout the open roles"
 msgstr "Scout the open roles"
+
+#: client/src/pages/RoleDraft.tsx
+msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
+msgstr "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
@@ -876,6 +885,10 @@ msgctxt "pricing desk"
 msgid "Own figure"
 msgstr "Own figure"
 
+#: client/src/pages/ProposeARole.tsx
+msgid "{unoffered} roles you picked are not open any more. Pick from the roles below."
+msgstr "{unoffered} roles you picked are not open any more. Pick from the roles below."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a note about every change"
 msgid "The whole request"
@@ -1140,6 +1153,11 @@ msgstr "Turn it down"
 msgctxt "change request step"
 msgid "Gathering"
 msgstr "Gathering"
+
+#: client/src/components/admin/OpenProposalsPanel.tsx
+msgctxt "open proposals desk term"
+msgid "next season"
+msgstr "next season"
 
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card section heading"
@@ -2317,10 +2335,6 @@ msgctxt "heading of the review feed"
 msgid "The review"
 msgstr "The review"
 
-#: client/src/pages/ProposeARole.tsx
-msgid "{unoffered} roles you picked are not open for next season any more. Pick from the roles below."
-msgstr "{unoffered} roles you picked are not open for next season any more. Pick from the roles below."
-
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "from"
@@ -2377,6 +2391,10 @@ msgstr "Send it on its own"
 msgctxt "pricing desk"
 msgid "The village adopts them by vote"
 msgstr "The village adopts them by vote"
+
+#: client/src/pages/ProposeARole.tsx
+msgid "1 role you picked is not open any more. Pick from the roles below."
+msgstr "1 role you picked is not open any more. Pick from the roles below."
 
 #: client/src/components/admin/AgeBandCorrection.tsx
 #: client/src/components/QuestSafety.tsx
@@ -2680,10 +2698,6 @@ msgctxt "pricing desk"
 msgid "{0} need your hours"
 msgstr "{0} need your hours"
 
-#: client/src/pages/ProposeARole.tsx
-msgid "1 role you picked is not open for next season any more. Pick from the roles below."
-msgstr "1 role you picked is not open for next season any more. Pick from the roles below."
-
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "who started a change request"
 msgid "Started by {author}"
@@ -2900,6 +2914,11 @@ msgstr "Earlier {agent} arrivals, now listed above"
 #: client/src/components/Layout.tsx
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Your account, {firstName}"
+
+#: client/src/components/admin/OpenProposalsPanel.tsx
+msgctxt "open proposals desk term"
+msgid "Proposals are for:"
+msgstr "Proposals are for:"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "Round name, such as the season it funds"
@@ -3233,6 +3252,11 @@ msgstr "Objection"
 msgctxt "pricing desk"
 msgid "{0} ready, {1} flagged"
 msgstr "{0} ready, {1} flagged"
+
+#: client/src/components/admin/OpenProposalsPanel.tsx
+msgctxt "open proposals desk term"
+msgid "this moon (from its new moon to the next)"
+msgstr "this moon (from its new moon to the next)"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "edit one change"

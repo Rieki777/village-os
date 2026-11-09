@@ -91,8 +91,10 @@ export const DOOR = { villageHolds: "village-holds-it", nobodyHolds: "nobody-hol
 
 export const DECIDE_WORDS = {
   // The page.
-  heading: (proposer: string | null, roles: readonly string[]) => `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} next season`,
+  heading: (proposer: string | null, roles: readonly string[], moon = false) =>
+    `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} ${moon ? "this moon" : "next season"}`,
   fromOutside: "Proposed through the village's public page. Adopted, they hold these roles from the season's first day.",
+  fromOutsideMoon: (from: string, to: string) => `Proposed through the village's public page, for this moon. Adopted, they hold these roles from adoption (never before ${from}) to the next new moon, ${to}.`,
   rolesHeading: "The roles",
   wordsHeading: "In their words",
   why: "Why them, and why now",
@@ -175,10 +177,14 @@ export interface AdoptLetterIn {
   season: string | null;
   /** The season's first day, in words ("1 January 2099"). */
   startsOn: string;
+  /** A moon proposal's days, in words; absent for a season one. */
+  moon?: { from: string; to: string } | null;
 }
 
 const hello = (firstName: string | null) => (firstName ? `Hi ${firstName},` : "Hi,");
-const whenRolesStart = (i: AdoptLetterIn) => `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
+const whenRolesStart = (i: AdoptLetterIn) =>
+  i.moon ? `Your roles run from ${i.moon.from} to the next new moon, ${i.moon.to}.` : `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
+const forWhen = (i: AdoptLetterIn) => (i.moon ? "this moon" : "next season");
 
 /** The yes, with the invitation, for an address with no account here. */
 export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string } {
@@ -187,7 +193,7 @@ export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: num
     text: [
       hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} next season.`,
+      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
       "",
       "Here is your invitation. Open it to make your account:",
       i.link,
@@ -205,7 +211,7 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
     text: [
       hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} next season.`,
+      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
       "",
       `Sign in with this address to see your roles. ${whenRolesStart(i)}`,
       i.signIn,

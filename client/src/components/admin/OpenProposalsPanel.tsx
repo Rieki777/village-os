@@ -9,6 +9,7 @@
  * answers and a holder of the power that seats people adopts or declines it
  * (open proposals part B, client/src/pages/OpenProposal.tsx).
  */
+import { useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Copy, Link2 } from "lucide-react";
@@ -35,6 +36,8 @@ interface DeskProposal {
 
 interface Desk {
   publicLink: boolean;
+  /** What public proposals are for: next season (default) or this moon. */
+  term?: "season" | "moon";
   publicPath: string;
   links: DeskLink[];
   proposals: DeskProposal[];
@@ -54,6 +57,7 @@ export default function OpenProposalsPanel({ password }: { password: string }) {
   const [label, setLabel] = useState("");
   const [made, setMade] = useState<{ label: string; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const { t } = useLingui();
 
   const call = useCallback(
     async (url: string, method = "GET", body?: unknown) => {
@@ -116,6 +120,26 @@ export default function OpenProposalsPanel({ password }: { password: string }) {
             />
             The public link is on: anyone with it can propose
           </label>
+          {/* What public proposals are for (Rye, 9 Nov 2026): next season, or this moon (shared/openProposalTerm.ts). */}
+          <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground">
+            <legend className="sr-only">{t({ message: "Public proposals are for", context: "open proposals desk term" })}</legend>
+            <span className="font-medium">{t({ message: "Proposals are for:", context: "open proposals desk term" })}</span>
+            {(["season", "moon"] as const).map((m) => (
+              <label key={m} className="inline-flex min-h-10 items-center gap-2">
+                <input
+                  type="radio"
+                  name="open-proposals-term"
+                  className="size-4 accent-teal-deep"
+                  checked={(desk.term ?? "season") === m}
+                  disabled={busy}
+                  onChange={() => void act(() => call(`${API_BASE}/admin/open-proposals/settings`, "PUT", { term: m }))}
+                />
+                {m === "season"
+                  ? t({ message: "next season", context: "open proposals desk term" })
+                  : t({ message: "this moon (from its new moon to the next)", context: "open proposals desk term" })}
+              </label>
+            ))}
+          </fieldset>
           <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 break-all rounded bg-gray-50 px-2 py-1 text-sm text-gray-800">{publicUrl}</code>
             <button type="button" className={BUTTON} onClick={() => copy(publicUrl)}>

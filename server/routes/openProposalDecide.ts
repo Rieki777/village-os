@@ -219,7 +219,12 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   /** What the letters say about the season the roles start in. */
   const seasonWords = (p: store.StoredOpenProposal) => {
     const s = seasonOf(p);
-    return { season: s?.name ? String(s.name) : null, startsOn: s?.startsOn ? civilDayWords(String(s.startsOn)) : "the season's first day" };
+    const t = p.body.term;
+    return {
+      season: s?.name ? String(s.name) : null,
+      startsOn: t ? civilDayWords(t.startsOn) : s?.startsOn ? civilDayWords(String(s.startsOn)) : "the season's first day",
+      moon: t ? { from: civilDayWords(t.startsOn), to: civilDayWords(t.endsOn) } : null,
+    };
   };
 
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -255,6 +260,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         statusWords: p.decision.words ?? STATUS_WORDS[p.status as keyof typeof STATUS_WORDS] ?? "",
         proposer: greetingName(p.name),
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
+        term: p.body.term ?? null,
         roles,
         why: p.body.why,
         aim: p.body.aim,
