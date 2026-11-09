@@ -104,6 +104,8 @@ export const SOURCES = [
   // constant from here.
   "shared/conflictAgreement.ts",
   "shared/closingPolicies.ts",
+  // The village agreement subject (`agreement`), priced structural since D8.
+  "shared/agreements.ts",
   // Added with the village's own seasons: `validateVariable` refuses a
   // `calendar.seasons` list through the grammar this file holds.
   "shared/villageSeasons.ts",

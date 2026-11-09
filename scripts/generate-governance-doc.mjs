@@ -133,6 +133,8 @@ export const SOURCES = [
   // SUBJECT_CLOSERS) is read out of here, one import away, like the three above.
   "shared/conflictAgreement.ts",
   "shared/closingPolicies.ts",
+  // The village agreement subject (`agreement`), priced structural since D8.
+  "shared/agreements.ts",
   // Every route module, walked as a directory rather than named one by one.
   // The three-file list this replaced made `server/routes/delegation.ts`,
   // `governanceVetoes.ts` and `governanceLanding.ts` invisible, and the

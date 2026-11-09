@@ -99,7 +99,7 @@
   "client/src/components/admin/ProfileImport.tsx": 58,
   "client/src/components/admin/ProfileImportDoor.tsx": 3,
   "client/src/components/admin/ProposalAcceptCash.tsx": 3,
-  "client/src/components/admin/PurposeStatementPanel.tsx": 10,
+  "client/src/components/admin/PurposeStatementPanel.tsx": 9,
   "client/src/components/admin/QuestsTab.tsx": 52,
   "client/src/components/admin/RaisedHandTerm.tsx": 1,
   "client/src/components/admin/RelationsEditor.tsx": 24,
