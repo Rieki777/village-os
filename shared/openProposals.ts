@@ -12,8 +12,8 @@
  * to each and why, and gives their name and address. Nothing reaches anybody
  * until the address answers a confirmation email: an unconfirmed proposal is
  * deleted after 48 hours. Once confirmed it waits for the village, and only an
- * adoption makes an account, at the Member stage, with its roles starting at
- * the season's start (the adoption half is a later change).
+ * adoption makes an account, with its roles waiting. Member comes with the
+ * signed Love Letter, never with an adoption (shared/openProposalDecide.ts).
  *
  * In the 2026-10-02 voice: the next step, never the machinery.
  */
@@ -51,12 +51,26 @@ export const OPEN_CONFIRM_HOURS = 48;
  */
 export const OPEN_GLOBAL_HOURLY = 60;
 
-/** The address as the per-address cap counts it: folded, without a "+tag". */
+/**
+ * One person's address, however they dressed it: folded to lower case,
+ * without a "+tag", and for Gmail without the dots it ignores and with
+ * googlemail.com read as gmail.com. Used where "the same person" matters: the
+ * per-address flood cap, and the rule that an approver is never the applicant.
+ */
+export function identityKey(email: string): string {
+  const e = String(email ?? "").trim().toLowerCase();
+  const at = e.lastIndexOf("@");
+  if (at <= 0) return e;
+  let local = e.slice(0, at).split("+")[0] || e.slice(0, at);
+  let domain = e.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") local = local.replace(/\./g, "");
+  return `${local}@${domain}`;
+}
+
+/** The address as the per-address cap counts it (see identityKey). */
 export function limiterAddressKey(emailKey: string): string {
-  const at = emailKey.lastIndexOf("@");
-  if (at <= 0) return emailKey;
-  const local = emailKey.slice(0, at).split("+")[0] || emailKey.slice(0, at);
-  return `${local}${emailKey.slice(at)}`;
+  return identityKey(emailKey);
 }
 
 /** The connection as the per-connection cap counts it: IPv4 as is, IPv6 by its /64. */

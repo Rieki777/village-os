@@ -63,7 +63,6 @@ import { isTombstone } from "./oauthAccounts";
 import { listOrgRoles, type LapseContext } from "./orgChart";
 import { adoptApplication, settleDepsOf, tellOutcome } from "./seatApplicationCloser";
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
-import { grantStage } from "./stageGrant";
 import { inTransaction } from "../repos/liveSessions";
 import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
@@ -282,7 +281,11 @@ export async function placeOnRoles(
   );
   if (app) await tellOutcome(deps, app, outcome, "open", p.adopterId);
   if (textId) await settleText(settleDepsOf(deps, deps.now), textId);
-  await grantStage(deps, p.account, "member", "a role proposal was adopted", { raiseOnly: true });
+  // NO STAGE GRANT HERE (Rye's ruling: Voice is only for people who signed the
+  // membership agreement). A stage grant at Member is an admission
+  // (server/lib/admission.ts), and it opened ballots to somebody who had signed
+  // nothing. The seat is placed; Member comes when their signed Love Letter is
+  // accepted, which the adoption letter asks for.
   return { ok: true, applicationId: id, outcome: outcome.kind };
 }
 

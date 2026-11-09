@@ -365,6 +365,15 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(mine.status).toBe(403);
       expect(mine.body.message).toBe(DECIDE_WORDS.ownProposal);
       expect((await page(own.id, FOUNDER.id)).body.proposal.you).toMatchObject({ mayAdopt: false, own: true });
+
+      // The same person behind a +tag or a changed case is still the applicant: never their own approver.
+      for (const alias of ["founder+roles@example.test", "Founder+x@Example.TEST"]) {
+        const disguised = await confirmed(alias);
+        const tried = await call("POST", `/api/governance/open-proposals/${disguised.id}/adopt`, {}, FOUNDER.id);
+        expect(tried.status, alias).toBe(403);
+        expect(tried.body.message).toBe(DECIDE_WORDS.ownProposal);
+        expect((await readOpenProposal(pool, disguised.id))?.status).toBe("confirmed");
+      }
     });
 
     it("a former member's address is refused: nothing is granted, seated or invited, and declining it still works", async () => {
@@ -478,7 +487,10 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email: "arrives@example.test", passwordHash: "x", paths: [] } as any);
       await door.welcome(inviter as string, newcomer);
 
-      expect((await usersRepo(pool).byId(newcomer))?.stageGranted).toBe("member");
+      // Rye's ruling: Voice is only for people who signed the membership agreement. Adoption admits nobody;
+      // the signed Love Letter does (server/lib/admission.ts).
+      expect((await usersRepo(pool).byId(newcomer))?.stageGranted ?? null).not.toBe("member");
+      expect((await usersRepo(pool).byId(newcomer))?.membershipGranted ?? false).toBeFalsy();
       const apps = await q("SELECT id, status, seat_ids, term_season_id, adopted_via, adopted_ref, authority_ref, UNIX_TIMESTAMP(starts_at) AS starts_s FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
       expect(apps).toHaveLength(1);
       expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-next", adopted_via: "holder", adopted_ref: FOUNDER.id, authority_ref: `org.seat@${founderRole}` });
@@ -586,21 +598,23 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   });
 
   describe("adopting, for an address with an account", () => {
-    it("raises it to the Member stage and gives it the roles for the target season, with no invitation", async () => {
+    it("gives it the roles for the target season, with no invitation, and admits nobody before the Love Letter", async () => {
       const { id } = await confirmed(HAS.email, [well]);
       const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       expect(r.body).toMatchObject({ success: true, status: "adopted", account: true, invitation: null });
       expect(r.body.message).toBe(`${DECIDE_WORDS.adoptedAccount} ${DECIDE_WORDS.accountTold}`);
       expect(await q("SELECT id FROM member_invites WHERE id = ?", [openInviteId(id)])).toEqual([]);
-      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted).toBe("member");
-      expect(state.stageEvents).toEqual([expect.objectContaining({ userId: HAS.id, to: "member" })]);
+      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted ?? null).not.toBe("member");
+      expect(state.stageEvents).toEqual([]);
       const apps = await q("SELECT status, seat_ids, term_season_id, adopted_ref FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
       expect(apps).toEqual([expect.objectContaining({ status: "adopted", term_season_id: "s-next", adopted_ref: FOUNDER.id })]);
       expect(idsOf(apps[0].seat_ids)).toEqual([well]);
       const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
       expect(mail?.text).toContain(`${ORIGIN}/profile`);
       expect(mail?.text).not.toContain("invite");
+      // The letter says what comes before seating and voting.
+      expect(mail?.text).toContain(`${ORIGIN}/love-letter`);
     });
 
     it("never lowers a stage granted above Member", async () => {

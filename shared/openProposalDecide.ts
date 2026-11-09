@@ -21,9 +21,10 @@
  *      never on their own proposal (`adoptRefusal`). Once the village holds
  *      that power nobody adopts one at the door, and the page says so.
  *   4. ADOPTING makes the person's place: an address that already has an
- *      account here is given the Member stage and the roles; any other address
- *      is sent a one-use invitation, and the account it makes starts at the
- *      Member stage with the roles waiting for the target season's first day.
+ *      account here is given the roles; any other address is sent a one-use
+ *      invitation, and the account it makes has the roles waiting. Adoption
+ *      admits nobody: Member, and with it a vote, comes with the signed Love
+ *      Letter (Rye's ruling; server/lib/admission.ts), which the letters ask for.
  *   5. DECLINING sends a short, kind no.
  *
  * In the 2026-10-02 voice: say what happens next, never how.
@@ -181,7 +182,15 @@ export interface AdoptLetterIn {
   startsOn: string;
   /** A moon proposal's days, in words; absent for a season one. */
   moon?: { from: string; to: string } | null;
+  /** Where the membership agreement is signed (/love-letter), when the village serves it. */
+  loveLetter?: string | null;
 }
+
+/** Signing comes before seating and before any vote (Rye's ruling; the role card's Agreements). */
+const signFirst = (i: AdoptLetterIn): string[] =>
+  i.loveLetter
+    ? ["", "Before you are seated, sign the Love Letter, the village's membership agreement. Signing it is what makes you a member, with a voice in the village's decisions:", i.loveLetter]
+    : [];
 
 const hello = (firstName: string | null) => (firstName ? `Hi ${firstName},` : "Hi,");
 const whenRolesStart = (i: AdoptLetterIn) =>
@@ -201,6 +210,7 @@ export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: num
       i.link,
       "",
       `It works once and lasts ${i.days} days. ${whenRolesStart(i)}`,
+      ...signFirst(i),
       "",
     ].join("\n"),
   };
@@ -217,6 +227,7 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
       "",
       `Sign in with this address to see your roles. ${whenRolesStart(i)}`,
       i.signIn,
+      ...signFirst(i),
       "",
     ].join("\n"),
   };
