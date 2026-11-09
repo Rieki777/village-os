@@ -859,6 +859,47 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       { circle_id: "c-b", changed_by: "own-bd-ash", changed_as: "Treasury" },
     ]);
     expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
+
+  it("de-attributes their answers to the outside service's differences and the links they set, keeping the rows and everyone else's", async () => {
+    const leaver = await member("own-leaver-sera", "Wren Halloway");
+    await member("own-sera-ash", "Ash Moreno");
+    const answer = (key: string, actor: string) =>
+      q("INSERT INTO saberra_settled (difference_key, sera_hash, ours_hash, answer, door, actor_user_id) VALUES (?, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'kept', 'power', ?)", [key, actor]);
+    await answer("role:own-sera-1:aim", leaver.id);
+    await answer("role:own-sera-2:aim", "own-sera-ash");
+    await q("INSERT INTO saberra_links (subject_kind, page_key, our_id, set_by, actor_user_id) VALUES ('role', 'own-sera-1', 'r-1', 'keep', ?), ('role', 'own-sera-2', 'r-2', 'keep', 'own-sera-ash')", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT difference_key, answer, actor_user_id FROM saberra_settled WHERE difference_key LIKE 'role:own-sera-%' ORDER BY difference_key")).toEqual([
+      { difference_key: "role:own-sera-1:aim", answer: "kept", actor_user_id: null },
+      { difference_key: "role:own-sera-2:aim", answer: "kept", actor_user_id: "own-sera-ash" },
+    ]);
+    expect(await q("SELECT page_key, our_id, actor_user_id FROM saberra_links WHERE page_key LIKE 'own-sera-%' ORDER BY page_key")).toEqual([
+      { page_key: "own-sera-1", our_id: "r-1", actor_user_id: null },
+      { page_key: "own-sera-2", our_id: "r-2", actor_user_id: "own-sera-ash" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("sera-answers-after-tombstone");
+  });
+
+  it("clears their id from the retirements they chose in a draft, and leaves everyone else's choice (review 15)", async () => {
+    const leaver = await member("own-leaver-rest", "Wren Halloway");
+    await member("own-rest-ash", "Ash Moreno");
+    await q("INSERT INTO org_drafts (id, title, status, source_kind) VALUES ('own-rest-d', 'Retire', 'open', 'agent')");
+    await q(
+      "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, sort_order) VALUES ('own-rest-1', 'own-rest-d', 'rest_seat', 'r-1', ?, 1), ('own-rest-2', 'own-rest-d', 'rest_circle', 'circle:c-1', ?, 2), ('own-rest-3', 'own-rest-d', 'rest_seat', 'r-2', ?, 3)",
+      [JSON.stringify({ chosenBy: leaver.id, retiring: "sera" }), JSON.stringify({ chosenBy: leaver.id, retiring: "old-chart" }), JSON.stringify({ chosenBy: "own-rest-ash", retiring: "sera" })],
+    );
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    const rows = await q("SELECT id, payload FROM org_draft_changes WHERE id LIKE 'own-rest-%' ORDER BY id");
+    const pay = (r: any) => (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload);
+    expect(rows.map((r) => [r.id, pay(r).chosenBy, pay(r).chosenByDeparted ?? false])).toEqual([
+      ["own-rest-1", null, true],
+      ["own-rest-2", null, true],
+      ["own-rest-3", "own-rest-ash", false],
+    ]);
   });
 
   it("runs every new step after the tombstone, between the role tensions and the role proposals, and runs clean twice", async () => {
