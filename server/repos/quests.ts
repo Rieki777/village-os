@@ -708,6 +708,16 @@ export interface ClaimsRepo {
    * a submitted or consented claim has work or recognition attached to it.
    */
   remove(id: string): Promise<ClaimRecord | null>;
+  /**
+   * THE WORKER TAKES THE QUEST'S PRICE AS IT STANDS NOW (valuation spec C8).
+   * A claim keeps the terms it was taken at (0342); only the worker's agreement
+   * or a vote changes them. This is the worker's agreement: on their own open
+   * claim, it replaces the kept terms with the quest's current ones, under both
+   * row locks. Refuses anybody else's claim and a resolved one.
+   */
+  takeCurrentPrice(id: string, userId: string): Promise<ClaimMoveOutcome | { ok: false; reason: "not_yours" }>;
+  /** Who holds an open claim on a quest (picked up or handed in), so a price is never set by the person it pays. */
+  openClaimantsOf(questId: string): Promise<string[]>;
   /** Stage rules read this on hot paths â€” a COUNT, never a full scan. */
   consentedCount(userId: string): Promise<number>;
   /** One grouped query for listing N members (admin players view). */
@@ -989,6 +999,54 @@ export function claimsRepo(pool: Pool): ClaimsRepo {
 
     async consentOnce(id, from, mutate, post) {
       return moveUnderLock(pool, id, from, mutate, post);
+    },
+
+    async openClaimantsOf(questId) {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT DISTINCT user_id FROM quest_claims WHERE quest_id = ? AND status IN ('claimed','submitted')",
+        [questId],
+      );
+      return rows.map((r) => String(r.user_id));
+    },
+
+    async takeCurrentPrice(id, userId) {
+      return withDeadlockRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          const [rows] = await conn.query<RowDataPacket[]>(`${CLAIM_SELECT} WHERE id = ? FOR UPDATE`, [id]);
+          if (!rows[0]) {
+            await conn.rollback();
+            return { ok: false, reason: "missing" } as const;
+          }
+          const claim = rowToClaim(rows[0]);
+          if (claim.userId !== userId) {
+            await conn.rollback();
+            return { ok: false, reason: "not_yours" } as const;
+          }
+          if (!OPEN_CLAIM.includes(claim.status)) {
+            await conn.rollback();
+            return { ok: false, reason: "status", status: claim.status } as const;
+          }
+          const [quest] = await conn.query<RowDataPacket[]>(
+            "SELECT id, value_minor, value_currency, value_tokens, cash_minor, cash_currency, stay_credit_reward FROM quests WHERE id = ? FOR UPDATE",
+            [claim.questId],
+          );
+          if (!quest[0]) {
+            await conn.rollback();
+            return { ok: false, reason: "missing" } as const;
+          }
+          claim.payTerms = termsOfQuestRow(quest[0]);
+          await conn.query("UPDATE quest_claims SET pay_terms = ? WHERE id = ?", [JSON.stringify(claim.payTerms), id]);
+          await conn.commit();
+          return { ok: true, claim } as const;
+        } catch (e) {
+          await conn.rollback();
+          throw e;
+        } finally {
+          conn.release();
+        }
+      });
     },
 
     async declineOnce(id, at) {
