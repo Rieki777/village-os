@@ -24,14 +24,29 @@ describe("the line", () => {
     expect(borrowed.sentence).toContain("on a key Hosting Co-op shares with Riverbend.");
   });
 
-  it("names the member's own note when it would ride along, and the yes stays keyed on who and which key", () => {
+  it("names the member's own note when it would ride along, and a yes without it does not cover it", () => {
     const plain = companionDisclosure("village", null, "Riverbend", {});
     const noted = companionDisclosure("village", null, "Riverbend", {}, { note: true });
     expect(plain.sentence).not.toContain("your note");
     expect(noted.sentence).toBe(
       "To answer in its own words, the guide sends your question, your note to your agent, and what it reads from the village's record for you, to Anthropic, on Riverbend's own key.",
     );
-    expect({ ...noted, sentence: "" }).toEqual({ ...plain, sentence: "" });
+    expect({ ...noted, sentence: "" }).toEqual({ ...plain, sentence: "", note: true });
+    const yesToPlain = withConsent({}, plain, "2026-11-05T00:00:00.000Z");
+    expect(consentFor(yesToPlain, plain)).not.toBeNull();
+    expect(consentFor(yesToPlain, noted)).toBeNull();
+    const yesToNoted = withConsent({}, noted, "2026-11-05T00:00:00.000Z");
+    expect(consentFor(yesToNoted, noted)).not.toBeNull();
+    expect(consentFor(yesToNoted, plain)).not.toBeNull();
+  });
+
+  it("names a shared Gene Keys result the same way, and asks again before it first rides", () => {
+    const noted = companionDisclosure("village", null, "Riverbend", {}, { note: true });
+    const both = companionDisclosure("village", null, "Riverbend", {}, { note: true, geneKeys: true });
+    expect(both.sentence).toContain("your note to your agent, the Gene Keys result you chose to share with it, and what it reads");
+    const yesToNoted = withConsent({}, noted, "2026-11-05T00:00:00.000Z");
+    expect(consentFor(yesToNoted, both)).toBeNull();
+    expect(consentFor(withConsent({}, both, "2026-11-05T00:00:00.000Z"), both)).not.toBeNull();
   });
 
   it("says so when a borrowed key's operator is not named, and never invents one", () => {

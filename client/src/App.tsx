@@ -192,6 +192,7 @@ const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
 const SetupGame = lazyPage(() => import("./pages/SetupGame"));
+const CanvasWorkbook = lazyPage(() => import("./pages/CanvasWorkbook"));
 const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -281,6 +282,9 @@ function Router() {
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
       <Route path="/setup-game" component={SetupGame} />
+      {/* The Governance Canvas on paper. Public and read-only: it shows the
+          village's name and nothing else the village holds. */}
+      <Route path="/canvas/workbook" component={CanvasWorkbook} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />

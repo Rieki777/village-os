@@ -46,6 +46,8 @@ import { numberVar, stringVar } from "../lib/variables";
 import { weekAhead } from "../lib/villageReaders";
 import { listBudgets } from "../lib/resources";
 import { treasuryTokenFor } from "../lib/circleTreasury";
+import { saberraAgentName, saberraGuideReach } from "../lib/saberraGuide";
+import { companionGuideOf } from "../../shared/guideChoice";
 import {
   answerQuestion,
   armyView,
@@ -164,6 +166,9 @@ export function register(app: Express, deps: Deps): void {
       ceiling: Math.max(0, Math.min(MAX_QUESTIONS_PER_DAY, Math.trunc(numberVar("companions.max_questions_per_day")))),
       roleScope: stringVar("companions.role_ids"),
       guideName: v.guideName,
+      outsideGuideName: saberraAgentName(),
+      // The member's own guide (prefs.guide, saved by the chooser at /api/guide), read fresh each time.
+      guideOf: async (userId) => companionGuideOf((await members.byId(userId))?.prefs?.guide, saberraGuideReach().available),
       timeZone: v.timeZone,
       villageName: v.name,
     };
@@ -302,10 +307,10 @@ export function register(app: Express, deps: Deps): void {
     }
     if (b.provider !== undefined) {
       if (!(COMPANION_PROVIDERS as readonly string[]).includes(String(b.provider))) return res.status(400).json({ error: "That engine is not one this village knows." });
-      // The contract's question 1: a personal companion stays with the village guide, so no
-      // member's identity crosses to the outside service on purpose.
-      if (c.scope === "personal" && b.provider !== "village") {
-        return res.status(400).json({ error: "Your personal companion speaks through the village guide." });
+      // A personal companion follows the member's own chosen guide (Rye, 2026-11-06), so it
+      // moves with the guide chooser and never on its own: two places to set one thing would disagree.
+      if (c.scope === "personal" && b.provider !== c.provider) {
+        return res.status(400).json({ error: "Your personal companion speaks through the guide you chose. Change who you talk to, and it follows." });
       }
       patch.provider = b.provider;
     }
@@ -361,7 +366,7 @@ export function register(app: Express, deps: Deps): void {
     }
     const e = env();
     // The outside engine has no chat yet (its `companion_chat` is a seam), so every chat runs on the village guide.
-    const engine = engineName("village", e.guideName);
+    const engine = engineName("village", e);
     const line = await villageLine(user);
     if (!line) return res.status(409).json({ error: `${engine} has no key in this village yet, so companions cannot talk in their own words.`, engine });
     if (!consentFor(user.prefs, line.disclosure)) {

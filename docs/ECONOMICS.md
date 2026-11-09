@@ -3186,6 +3186,9 @@ forever. Re-running it moves nothing.
 
 ### Who can trigger it
 
+Every route below lives in `server/routes/exits.ts`, moved out of `server/index.ts`
+on 2026-09-27 with no change to what any of them does.
+
 - **A member can open their own exit**: `POST /api/profile/request-exit`,
   password-confirmed, refused if they would strand the village.
 - **An admin can open one** for somebody else, voluntary or involuntary:
@@ -3411,6 +3414,21 @@ the flag while any of the four terms in `EXIT_POLICY_TERMS` still matches the
 platform's words, naming every field that does. Adopting the platform's meaning is
 still available; adopting its wording while claiming the community decided it is
 not.
+
+The same comparison now reaches the public by KEY. `platformDefaultTermKeys` is the
+list `platformDefaultTerms` labels, and `GET /api/exit-policy` answers it as
+`platformWording`. `/governance` and `/roles` print the restorative steps as the
+village's conflict process only when `restorativeSteps` is absent from that list,
+and say the village has not written its steps otherwise. Nothing about value,
+settlement or any balance reads it: it decides which words a public page may call
+the village's own.
+
+The restorative block also carries the conflict door (2026-09-27): a cover role,
+a promised reply time in hours with no platform default, and a named contact
+outside the village. The launch checklist's `conflict-door` row reads them
+(`server/lib/launchGovernance.ts`), and `restorativeDoorProblem` refuses a
+malformed save. None of the three is a term the publish gate compares, and none
+of them touches a value, a settlement or a balance.
 
 So the state today is exact, **and the sentence that used to stand here is not,
 because the levers landed under it.** It read: no code pays them out, converts
@@ -4072,6 +4090,25 @@ conflict is the part worth holding: buying governance weight with money is
 exactly what they were written to stop, so R5 is a ruling that reopens a hole
 somebody closed on purpose, and it needs the founder's word about what it may
 reopen and what it may not.
+
+**2026-11-08: the founder's word arrived, and it keeps those three functions.**
+Rye answered through the master coordinator: Voice comes from value at the
+village model's `voicePerUnit`; a donation earns Voice at that rate, an
+investment buys equity at face value and earns Voice at a tenth of it, and
+nothing else earns Voice, not dues, shop goods, stays nor credit packs. Voice
+stays off the exchange, so `tradingProblem`, `weightTokenListingProblem` and
+`weightTokenProblem` do not change. Money reaches Voice only through a gift the
+Treasurer records, never through a purchase.
+
+The first piece is a read. `workEarnedVoice` (`server/lib/voiceProvenance.ts`)
+answers how much of a member's Voice came from work, so a ballot can count only
+that and Funding rounds can keep money and backing Voice out of pot ballots. It
+is the member's balance times the share of Voice minted to them from work
+sources (an allow-list in `shared/voiceFromMoney.ts`: a source nobody named is
+never work), each source net of its own clawbacks. To net a clawback against
+the posting it undoes, `originalKeyOf` in `server/lib/ledger.ts` is now
+exported; what it does is unchanged. Decay takes the same share of every
+holder, which is why a share of the balance is the right count.
 
 ---
 
