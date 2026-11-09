@@ -119,6 +119,7 @@ import { hasGoverningPurpose } from "../../shared/governingPurpose";
 import {
   canvasPenSentence,
   NOTE_IS_PUBLIC,
+  PEN_HOLDER_KEYS,
   whoAdoptsCanvasAnswer,
   type CanvasAdoptionRule,
   type CanvasPen,
@@ -131,7 +132,6 @@ import { writeDial, type DialWriteDeps } from "../lib/dialWrite";
 import { recordEvent } from "../lib/events";
 import { readGameStart } from "../lib/gameStart";
 import { founderPenRefusal, governingPurpose, writeGoverningPurpose } from "../lib/governingPurpose";
-import { NEVER_BY_CHANGESET } from "../lib/changeset";
 import { EXECUTABLE_ITEM_KINDS } from "../lib/mechanics";
 import { openMechanicsProposal, type MechanicsProposeDeps } from "../lib/mechanicsPropose";
 import { setModuleLifecycle } from "../lib/modules";
@@ -177,6 +177,12 @@ export interface CanvasFrameDeps
   mechanicsPropose: MechanicsProposeDeps;
   /** The lifecycle route's own posture check: true while no admin has a real credential. */
   sharedPasswordPosture(): Promise<boolean>;
+  /**
+   * Every live holder of a capability, counted without the admin
+   * short-circuit, as the module library counts them (canvas follow-up D1):
+   * a pen whose key somebody holds asks them (`PEN_HOLDER_KEYS`).
+   */
+  liveHoldersOf(capability: string): Promise<string[]>;
   addActivity(
     kind: string,
     text: string,
@@ -201,6 +207,10 @@ export const PEN_REFUSALS: Record<CanvasPen, string> = {
   module: "Switching a part of the Game on or off is for the founders before the Game starts. You can suggest it, and they decide.",
   admin: "This section stays with the administrators. You can suggest words, and they decide.",
 };
+
+/** Said after the Birthing, while somebody holds `module.switch` live, to anybody else who presses Adopt on a module door (D1). */
+export const MODULE_HOLDERS_REFUSAL =
+  "Switching a part of the Game on or off is for whoever holds the power to switch modules now. You can suggest it, and they decide.";
 
 /**
  * The consequence pen's vote for the exit terms, the matrix and (with
@@ -364,19 +374,25 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
   const penFacts = async (): Promise<CanvasPenFacts> => {
     const pool = getPool();
     const [start, handover] = await Promise.all([readGameStart(pool), villageHandoverState(pool)]);
-    return { birthed: start.started, handoverComplete: handover.complete };
+    // Who holds each pen's key live, asked once per pen (D1). Each pen's rule
+    // decides when its holders count: the module pen's only after the Birthing.
+    const holders: NonNullable<CanvasPenFacts["holders"]> = {};
+    for (const [pen, key] of Object.entries(PEN_HOLDER_KEYS) as Array<[CanvasPen, string]>) holders[pen] = await deps.liveHoldersOf(key);
+    return { birthed: start.started, handoverComplete: handover.complete, holders };
   };
 
   /**
-   * The pen a suggestion needs, asked of the one predicate. A module door adds
-   * whether a vote could carry it at all: the module the vote runs on is never
-   * moved by a change set, so it stays with the administrators.
+   * The pen a suggestion needs, asked of the one predicate. Every module door
+   * is votable since G.3: the module the vote runs on moves at the highest
+   * tier, and the change set itself refuses the one narrowing that would
+   * strand the vote (`voteModuleSwitchProblem`, shared/moduleSwitch.ts).
    */
-  const ruleFor = (p: { target: CanvasProposalRow["target"]; sectionId?: string | null; door?: string | null }, facts: CanvasPenFacts) => {
-    const door = p.door && isCanvasDoorId(p.door) ? CANVAS_DOORS[p.door] : null;
-    const withVote = door?.kind === "module" ? { ...facts, votable: !NEVER_BY_CHANGESET.has(String(door.moduleId)) } : facts;
-    return whoAdoptsCanvasAnswer(penForProposal(p), withVote);
-  };
+  const ruleFor = (p: { target: CanvasProposalRow["target"]; sectionId?: string | null; door?: string | null }, facts: CanvasPenFacts) =>
+    whoAdoptsCanvasAnswer(penForProposal(p), facts);
+
+  /** Whether this person is one of the live holders a rule names (D1). */
+  const isHolder = (user: any, rule: CanvasAdoptionRule): boolean =>
+    rule.who === "live-holders" && !!user && (rule.holders ?? []).includes(String(user.id));
 
   /**
    * Whether this person may take the step the rule names, asked without the
@@ -389,6 +405,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       return capabilityDecision(rule.capability as Capability, await capabilityCtx(user)).allowed;
     }
     if (rule.who === "admins" || rule.who === "founders") return isAdmin(req);
+    if (rule.who === "live-holders") return isHolder(user, rule);
     if (rule.who === "any-member") return mayReadCanvas(deps, req, user);
     return false;
   };
@@ -870,7 +887,11 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       const to = String((p.change as { to?: unknown } | null)?.to ?? "");
       if (rule.how === "act") {
         // Before the Birthing: the lifecycle route's own guard, then its write.
-        if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.module } };
+        // Before the Birthing the administrators; after it, a live holder of
+        // `module.switch`, as the module library asks after launch (D1).
+        if (!(await mayTake(req, user, rule))) {
+          return { ok: false, status: 403, body: { error: rule.who === "live-holders" ? MODULE_HOLDERS_REFUSAL : PEN_REFUSALS.module } };
+        }
         const sharedOnly = await deps.sharedPasswordPosture();
         const result = await setModuleLifecycle(String(door.moduleId), to as any, String(user.id), { sharedPasswordPosture: () => sharedOnly });
         if (!result.ok) {
@@ -1016,6 +1037,8 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         if (rule.who === "the-gate" && rule.capability) {
           const refusal = rule.capability === "story.tell" ? PEN_REFUSALS.prose : PEN_REFUSALS.dial;
           if (!(await guardCapability(req, res, rule.capability, { status: 403, body: { error: refusal } }))) return "answered" as const;
+        } else if (rule.who === "live-holders") {
+          if (!isHolder(user, rule)) return { status: 403, body: { error: rule.pen === "module" ? MODULE_HOLDERS_REFUSAL : PEN_REFUSALS[rule.pen] } };
         } else if (!(await isAdmin(req))) {
           return { status: 403, body: { error: PEN_REFUSALS[rule.pen] } };
         }

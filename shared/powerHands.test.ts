@@ -248,6 +248,19 @@ describe("who adopts a canvas answer", () => {
     expect(whoAdoptsCanvasAnswer("consequence", { ...after, votable: false })).toMatchObject({ how: "ballot" });
   });
 
+  it("after the Birthing a live holder of module.switch holds the module pen, and with none the village votes (D1)", () => {
+    const held = { ...after, holders: { module: ["u-holder"] } };
+    const rule = whoAdoptsCanvasAnswer("module", held);
+    expect(rule).toMatchObject({ how: "act", who: "live-holders", because: "a-role-holds-it", holders: ["u-holder"] });
+    expect(canvasPenSentence(rule)).toBe("Whoever holds the power to switch modules switches this part of the Game on or off.");
+    // Before the Birthing the administrators keep it, holder or not.
+    expect(whoAdoptsCanvasAnswer("module", { ...before, holders: { module: ["u-holder"] } })).toMatchObject({ how: "act", who: "admins" });
+    // Nobody seated: the village's vote, as before.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, holders: { module: [""] } })).toMatchObject({ how: "ballot", who: "any-member" });
+    // Another pen's holders are not the module pen's.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, holders: { admin: ["u-holder"] } })).toMatchObject({ how: "ballot" });
+  });
+
   it("the administrators' sections stay theirs whatever happens", () => {
     for (const facts of [before, after, handedOver]) {
       expect(whoAdoptsCanvasAnswer("admin", facts)).toMatchObject({ how: "act", who: "admins" });

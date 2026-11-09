@@ -69,6 +69,7 @@ import {
   CONSEQUENCE_VOTE,
   FILED_BY_PROPOSER,
   MECHANICS_PROPOSAL_DOOR,
+  MODULE_HOLDERS_REFUSAL,
   PEN_REFUSALS,
   PURPOSE_CHANGE_DOOR,
   register,
@@ -84,11 +85,16 @@ const PEOPLE: Record<string, { id: string; name: string; role: string; membershi
   admin: { id: "cf-admin", name: "Moss Fielding", role: "admin", membershipGranted: false },
   founder: { id: "cf-founder", name: "Ivy Holloway", role: "founder", membershipGranted: true },
   stranger: { id: "cf-stranger", name: "Rook Talbot", role: "member", membershipGranted: false },
+  // Seated in a role carrying module.switch only where a case says so (LIVE below).
+  switcher: { id: "cf-switcher", name: "Fern Lowe", role: "member", membershipGranted: true },
 };
 type Who = keyof typeof PEOPLE;
 
 /** What each person's roles carry, as `roleCapabilitiesFor` would answer. */
 const ROLE_CAPS: Record<string, string[]> = { "cf-teller": ["story.tell"] };
+
+/** Who holds each key live, as `liveHoldersOf` answers. Nobody unless a case seats somebody. */
+let LIVE: Record<string, string[]> = {};
 
 const ROLES = [
   { id: "cf-care", name: "Care Holder" },
@@ -211,6 +217,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
         return { fresh: true };
       },
       roleHolders: () => HOLDERS,
+      liveHoldersOf: async (capability: string) => LIVE[capability] ?? [],
       exitPolicy: EXIT_DEPS,
       dialWrite: {
         mayAct: async (req, cap: Capability) => {
@@ -988,16 +995,41 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       }
     });
 
-    it("the part of the Game that holds the vote stays the administrators' to switch, because no vote can move it", async () => {
-      const p = (await propose("member", {
+    it("the part of the Game that holds the vote goes to the village's vote now, filed by its author (AC1.4)", async () => {
+      // The teller files it: the member has used this cycle's proposals on the cases above.
+      const p = (await propose("teller", {
         blockId: "power", target: "setting", door: "module:governance", change: { to: "public" }, servesPurpose: LINE, body: "Open governance to everyone.",
       })).body.proposal;
-      expect(p.pen).toMatchObject({ pen: "module", how: "act", who: "admins", youMayAdopt: false });
-      expect(await adopt("member", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.module } });
+      expect(p.pen).toMatchObject({ pen: "module", how: "ballot", who: "any-member", ballotBuilt: true, youMayAdopt: true });
+      expect(await adopt("admin", p.id)).toEqual({ status: 403, body: { error: FILED_BY_PROPOSER } });
+      const r = await adopt("teller", p.id);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const filed = await proposalById(pool, String(r.body.outcome.id));
+      expect(filed?.changeSet[0]).toMatchObject({ kind: "module_lifecycle", moduleId: "governance", to: "public" });
+      // Filing moves nothing: the village has not voted.
       expect(effectiveLifecycle("governance")).toBe("members");
-      const r = await adopt("admin", p.id);
-      expect(r.status).toBe(200);
-      expect(effectiveLifecycle("governance")).toBe("public");
+    });
+
+    it("once somebody holds module.switch live, the module pen is theirs, and an unseated admin is refused (D1, AC2.1)", async () => {
+      LIVE = { "module.switch": ["cf-switcher"] };
+      try {
+        const p = (await propose("member", {
+          blockId: "power", target: "setting", door: "module:governance", change: { to: "public" }, servesPurpose: LINE, body: "Let visitors see how we decide.",
+        })).body.proposal;
+        const seenBy = async (as: Who) => (await block(as, "power")).body.proposals.find((x: any) => x.id === p.id).pen;
+        expect(await seenBy("switcher")).toMatchObject({ pen: "module", how: "act", who: "live-holders", youMayAdopt: true });
+        expect(await seenBy("admin")).toMatchObject({ pen: "module", how: "act", who: "live-holders", youMayAdopt: false });
+        expect((await block("admin", "power")).body.pens.module).toMatchObject({ who: "live-holders", youMayAdopt: false });
+        expect(await adopt("admin", p.id)).toEqual({ status: 403, body: { error: MODULE_HOLDERS_REFUSAL } });
+        expect(await adopt("member", p.id)).toEqual({ status: 403, body: { error: MODULE_HOLDERS_REFUSAL } });
+        expect(effectiveLifecycle("governance")).toBe("members");
+        const r = await adopt("switcher", p.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        expect(r.body.outcome).toMatchObject({ wrote: "module-lifecycle", module: "governance", lifecycle: "public" });
+        expect(effectiveLifecycle("governance")).toBe("public");
+      } finally {
+        LIVE = {};
+      }
     });
 
     it("words are still the story's holder's to adopt", async () => {

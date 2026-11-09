@@ -164,10 +164,16 @@ describe("what adopting does, before the Birthing and after it", () => {
     expect(changeLines(dial)).toEqual(["New value: consent"]);
   });
 
-  it("keeps the governance module with the administrators after the Birthing, and says why", () => {
+  it("after the Birthing, a module is its live holder's to switch, or the village's vote (D1, G.3)", () => {
     const mod = proposal({ target: "setting", sectionId: null, door: "module:governance", change: { to: "members" }, pen: pen({ pen: "module", who: "admins" }) });
     expect(adoptEffect(mod, false, titles)).toBe("The Game has not started, so adopting switches this on for members straight away.");
-    expect(adoptEffect(mod, true, titles)).toContain("stays with the administrators after the Game starts");
+    const held = { ...mod, pen: pen({ pen: "module", who: "live-holders" }) };
+    expect(adoptEffect(held, true, titles)).toBe(
+      "Adopting switches this on for members straight away. Since the Game started, whoever holds the power to switch modules does this, and with nobody holding it the village votes.",
+    );
+    const voted = { ...mod, pen: pen({ pen: "module", how: "ballot", who: "any-member" }) };
+    expect(adoptEffect(voted, true, titles)).toBe("The Game has started, so adopting files this as a proposal in its author's name, and the village votes on it.");
+    expect(adoptEffect(mod, true, titles)).not.toContain("stays with the administrators");
   });
 
   it("writes words into their section on either side of the Birthing", () => {

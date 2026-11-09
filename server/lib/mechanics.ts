@@ -68,7 +68,8 @@ import {
 } from "../../shared/mintRuleKeys";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
-import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { VOTE_RUNS_ON, isLifecycle, lifecycleWords, voteModuleSwitchProblem } from "../../shared/moduleSwitch";
+import { highestTierFrom, type ThresholdSettings as HighestTierSettings } from "../../shared/ballotSubjects";
 import { exitChangeKey, exitChangeOf, judgeMatrixItem, matrixChangeKey, type ExitVoteDoor } from "./consequenceVote";
 import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
 import {
@@ -233,8 +234,17 @@ export function asChangeItem(input: ChangeInput): ChangeItem {
  * declared, and the kind's tier is the fallback for a kind whose subject sets
  * no floor of its own.
  */
-export function pricingOf(item: ChangeItem): { subject: string; criticality: Criticality } {
+export function pricingOf(item: ChangeItem, settings?: HighestTierSettings): { subject: string; criticality: Criticality } {
   const subject = SUBJECT_FOR_ITEM_KIND[item.kind];
+  /*
+   * THE MODULE THE VOTE RUNS ON MOVES ONLY AT THE HIGHEST TIER (canvas
+   * follow-up G.3, Article 0): the village's own `governance.highest_tier`
+   * when the settings are to hand, and the top of the ladder when they are
+   * not, which is `highestTierFrom`'s own answer for an unread setting.
+   */
+  if (item.kind === "module_lifecycle" && VOTE_RUNS_ON.has(String(item.moduleId))) {
+    return { subject, criticality: settings ? settings.highest : highestTierFrom() };
+  }
   if (item.kind === "dial") {
     const def = VARIABLES_BY_KEY[item.key];
     return { subject, criticality: def ? criticalityOf(def) : "routine" };
@@ -391,7 +401,7 @@ export function priceChangeSetItems(
   settings?: ThresholdSettings,
 ): ChangeSetItemsPrice {
   const items = changes.map(asChangeItem);
-  const priced = items.map(pricingOf);
+  const priced = items.map((item) => pricingOf(item, settings));
   const subjects = priced.map((p) => p.subject);
   const criticality = criticalityOfItems(priced.map((p) => p.criticality));
   const { method: fixed, conflict } = methodForSubjects(subjects);
@@ -639,6 +649,12 @@ export interface ValidateChangeSetOptions {
    * two ways.
    */
   foundersHold?: () => Promise<boolean>;
+  /**
+   * Somebody holds `module.switch` live right now. Asked only of a set that
+   * would take the module the vote runs on below members (G.3,
+   * `voteModuleSwitchProblem`). Absent reads as nobody, which refuses.
+   */
+  anySwitchHolder?: () => Promise<boolean>;
   /**
    * Why this new minting rule could not be created, or null. The registry's
    * half lives in server/lib/mintRuleCreate.ts (`newMintRuleProblem`) and is
@@ -936,7 +952,6 @@ async function moduleSwitchProblem(
   const def = MODULES_BY_ID[moduleId];
   if (!def) return "There is no module by that name";
   if (def.core) return `${def.name} is always on`;
-  if (NEVER_BY_CHANGESET.has(moduleId)) return `${def.name} holds the vote itself, so a vote cannot switch it`;
   if (!isLifecycle(to)) return "A module can be off, in preview, on for members, or on for everyone";
   if (seen.has(key)) return "The same module appears twice in this proposal";
   seen.add(key);
@@ -944,6 +959,11 @@ async function moduleSwitchProblem(
   const from = options.moduleLifecycleOf(moduleId);
   if (from === to) return `${def.name} is already at ${lifecycleWords(to).toLowerCase()}`;
   if (def.withdrawn && from === "off") return `${def.name} is no longer offered, so it cannot be turned on`;
+  // The module the vote runs on: widening always, narrowing below members only while a holder could turn it back on.
+  if (VOTE_RUNS_ON.has(moduleId)) {
+    const stranded = voteModuleSwitchProblem(moduleId, from, to, options.anySwitchHolder ? await options.anySwitchHolder() : false);
+    if (stranded) return stranded.replace(/[.]$/, "");
+  }
   const open = options.openModuleProposal ? await options.openModuleProposal(moduleId) : null;
   if (open) return `A proposal to switch ${def.name} is already open. Back that one instead`;
   return { key, from, to, kind: "module_lifecycle", moduleId };

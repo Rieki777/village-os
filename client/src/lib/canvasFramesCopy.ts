@@ -427,7 +427,7 @@ export function adoptEffect(
     const to = LIFECYCLE_WORDS[(p.change as ModuleChange | null)?.to ?? "off"];
     if (pen.how === "act") {
       return birthed
-        ? `Adopting switches this ${to} straight away. No vote can move the module a vote runs on, so it stays with the administrators after the Game starts.`
+        ? `Adopting switches this ${to} straight away. Since the Game started, whoever holds the power to switch modules does this, and with nobody holding it the village votes.`
         : `The Game has not started, so adopting switches this ${to} straight away.`;
     }
     return "The Game has started, so adopting files this as a proposal in its author's name, and the village votes on it.";

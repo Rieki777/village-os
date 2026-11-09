@@ -304,12 +304,13 @@ export function whoMayPutHandToVillage(
  *                server/routes/canvasFrames.ts).
  *   module       a module switched on or off (governance, on the Power
  *                block). Before the Birthing, the administrators, which is the
- *                lifecycle route's own guard; after, a mechanics proposal
- *                carrying the lifecycle change, which the village decides.
- *                Unless no vote can carry it (`votable: false`): the module
- *                the vote itself runs on is never moved by a change set
- *                (`NEVER_BY_CHANGESET`, server/lib/changeset.ts), so it stays
- *                with the administrators after the Birthing too.
+ *                lifecycle route's own guard. After it, whoever holds
+ *                `module.switch` live switches it, as the module library lets
+ *                them (canvas follow-up D1, 2026-11-09); with no holder, a
+ *                mechanics proposal carrying the lifecycle change, which the
+ *                village decides. Governance itself is votable since G.3, at
+ *                the highest tier. `votable: false` is kept for a module no
+ *                vote could carry, and then the administrators keep it.
  *   admin        `people`, `legal`, `land` and `constraints`. Plan 2.3 keeps
  *                these with administrators for reading and writing, before
  *                the Birthing and after it.
@@ -334,7 +335,20 @@ export interface CanvasPenFacts {
    * administrators after the Birthing, because a vote would have nowhere to go.
    */
   votable?: boolean;
+  /**
+   * Who holds a pen's power live, by pen (canvas follow-up D1): the members
+   * seated in a role carrying the key the pen names (`PEN_HOLDER_KEYS`),
+   * counted the way the gate counts. Absent or empty means nobody. Only the
+   * pens that read it ask: the module pen after the Birthing today.
+   */
+  holders?: Partial<Record<CanvasPen, readonly string[]>>;
 }
+
+/**
+ * The key whose live holders hold a pen, by pen. The module pen asks
+ * `module.switch`, which is what the module library asks after launch.
+ */
+export const PEN_HOLDER_KEYS: Partial<Record<CanvasPen, string>> = { module: "module.switch" };
 
 export interface CanvasAdoptionRule {
   pen: CanvasPen;
@@ -344,6 +358,8 @@ export interface CanvasAdoptionRule {
   because: HandOpenerReason;
   /** The capability the gate is asked, when `who` is `the-gate`. */
   capability?: "story.tell" | "dial.set";
+  /** Who may act, when `who` is `live-holders`. */
+  holders?: readonly string[];
 }
 
 /** Which power a canvas answer's adoption needs, as one rule. Pure. */
@@ -353,7 +369,12 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     prose: () => whoMayPutHandToVillage(false, [], "the-gate"),
     consequence: () => whoMayPutHandToVillage(facts.birthed, [], "admins"),
     dial: () => whoMayPutHandToVillage(facts.birthed, [], "the-gate"),
-    module: () => whoMayPutHandToVillage(facts.birthed && facts.votable !== false, [], "admins"),
+    module: () => {
+      if (!facts.birthed) return whoMayPutHandToVillage(false, [], "admins");
+      const holders = (facts.holders?.module ?? []).filter((h) => h !== "");
+      // A live holder switches it; with none, the village votes, unless no vote can carry it.
+      return whoMayPutHandToVillage(holders.length === 0 && facts.votable !== false, holders, "admins");
+    },
     admin: () => whoMayPutHandToVillage(false, [], "admins"),
   };
   const rule = asked[pen]();
@@ -364,6 +385,7 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     who: rule.who,
     because: rule.because,
     ...(capability ? { capability } : {}),
+    ...(rule.who === "live-holders" ? { holders: rule.holders } : {}),
   };
 }
 
@@ -383,7 +405,11 @@ export function canvasPenSentence(rule: CanvasAdoptionRule): string {
   if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
   if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
   if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
-  if (rule.pen === "module") return "The administrators switch this part of the Game on or off in the module library.";
+  if (rule.pen === "module") {
+    return rule.who === "live-holders"
+      ? "Whoever holds the power to switch modules switches this part of the Game on or off."
+      : "The administrators switch this part of the Game on or off in the module library.";
+  }
   return "The founders adopt this before the Game starts.";
 }
 

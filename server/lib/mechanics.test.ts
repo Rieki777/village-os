@@ -22,7 +22,9 @@ import {
   EXECUTABLE_ITEM_KINDS,
   type ChangeItem,
   type MintRuleValues,
+  type ValidateChangeSetOptions,
 } from "./mechanics";
+import { GOVERNANCE_NARROWING_NEEDS_A_HOLDER } from "../../shared/moduleSwitch";
 import {
   CHANGE_ITEM_KINDS,
   GOVERNANCE_MODE,
@@ -881,13 +883,40 @@ describe("a module switch inside a change set (Rye, 2026-10-09)", () => {
     expect(asChangeItem(normalized[0] as any).kind).toBe("module_lifecycle");
   });
 
-  it("refuses a core module, the vote's own module, an unknown one and a no-op", async () => {
+  it("refuses a core module, an unknown one and a no-op", async () => {
     const run = async (item: ChangeItem) =>
       (await validateChangeSet(noPool, [item], () => "", 0, undefined, opts)).problems.map((p) => p.problem).join(" ");
     expect(await run(sw("quests", "members"))).toContain("always on");
-    expect(await run(sw("governance", "off"))).toContain("cannot switch it");
     expect(await run(sw("nothing-here", "members"))).toContain("no module by that name");
     expect(await run(sw("forum", "members"))).toContain("already");
+  });
+
+  /*
+   * G.3 (canvas follow-up, Article 0): the vote's own module is votable. It
+   * widens freely, and goes below members only while somebody holds
+   * module.switch live; the refusal names the seat vote that gets past it.
+   */
+  it("takes the vote's own module to a vote, except below members with nobody to switch it back (AC1.4)", async () => {
+    const at = (lc: "members" | "off") => ({ ...opts, moduleLifecycleOf: (id: string) => (id === "governance" ? lc : lifecycleOf(id)) });
+    const problems = async (to: string, o: ValidateChangeSetOptions) =>
+      (await validateChangeSet(noPool, [sw("governance", to)], () => "", 0, undefined, o)).problems.map((p) => p.problem);
+    expect(await problems("public", at("members"))).toEqual([]);
+    expect(await problems("members", at("off"))).toEqual([]);
+    expect(await problems("off", at("members"))).toEqual([GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(0, -1)]);
+    expect(await problems("preview", { ...at("members"), anySwitchHolder: async () => false })).toEqual([GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(0, -1)]);
+    expect(await problems("off", { ...at("members"), anySwitchHolder: async () => true })).toEqual([]);
+  });
+
+  it("prices a switch of the vote's own module at the village's highest tier (AC1.4)", () => {
+    const village = { unityPct: 0, quorumPct: 0 };
+    const top = priceChangeSet([sw("governance", "public")], "custom", village);
+    expect(top.criticality).toBe("constitutional");
+    const forum = priceChangeSet([sw("forum", "public")], "custom", village);
+    expect(forum.criticality).toBe("structural");
+    // A village whose highest tier is structural prices it there, and no lower.
+    const settings = thresholdSettingsFrom(() => 0, (key) => (key === "governance.highest_tier" ? "structural" : ""));
+    expect(priceChangeSet([sw("governance", "public")], "custom", village, settings).criticality).toBe("structural");
+    expect(top.dials.unityPct).toBeGreaterThan(forum.dials.unityPct);
   });
 
   it("refuses a second proposal while one is still asking about the same module", async () => {

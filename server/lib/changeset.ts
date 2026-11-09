@@ -47,12 +47,16 @@
  * is to undo, and a set applies in that order so a failure halfway leaves the
  * cheapest half standing rather than the dearest.
  *
- * ── WHAT A CHANGE SET MAY NEVER DO ─────────────────────────────────────────
+ * ── THE MODULE THE VOTE RUNS ON ────────────────────────────────────────────
  *
- * Switch the governance module off. A change set that turned governance off
- * would strand every open ballot behind a 404 while the landing job kept
- * running, and the vote that turned it back on could not be held. The module id
- * is on `NEVER_BY_CHANGESET` and the refusal names it.
+ * A change set that turned governance off would strand every open ballot
+ * behind a 404 while the landing job kept running, and the vote that turned it
+ * back on could not be held. It used to be refused outright
+ * (`NEVER_BY_CHANGESET`). Article 0 (canvas follow-up G.3, 2026-11-09): a set
+ * may switch it now, priced at the highest tier; widening always lands, and
+ * narrowing below members lands only while somebody holds `module.switch`
+ * live, who could turn it back on, and the refusal names the seat vote that
+ * gets past it (`voteModuleSwitchProblem`, shared/moduleSwitch.ts).
  *
  * ── WHERE THE STATEMENTS LIVE, AND WHY IN FIVE FILES ───────────────────────
  *
@@ -96,17 +100,15 @@ import { setWeight, weightChangeProblem, weightTokenProblem } from "./governance
 import { effectiveLifecycle, setModuleLifecycle } from "./modules";
 import { raiseCanvasRevisitForLifecycle } from "./canvasRevisit";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
-import { NEVER_BY_CHANGESET } from "../../shared/moduleSwitch";
+import { VOTE_RUNS_ON, isLifecycle, voteModuleSwitchProblem } from "../../shared/moduleSwitch";
 import { BRAND_CURRENCY_FIELD, brandFieldValue, brandVoteProblem, currencyChangeSentence, withBrandField } from "../../shared/brandVote";
 import { exitChangeKey, exitChangeOf, judgeMatrixItem, writeMatrixItem, type ExitVoteDoor } from "./consequenceVote";
 
 /**
- * Modules whose lifecycle a change set may never move, whatever the vote said.
- * One entry, and it is the module the vote itself runs on. Held in
- * `shared/moduleSwitch.ts` now, so the validator that refuses a proposal and
- * this executor read one set.
+ * The module the vote itself runs on. Held in `shared/moduleSwitch.ts`, so the
+ * validator that refuses a proposal and this executor read one set.
  */
-export { NEVER_BY_CHANGESET };
+export { VOTE_RUNS_ON };
 
 /**
  * The kinds this build can actually carry out, in the order they are applied.
@@ -179,6 +181,11 @@ export interface ChangesetDeps {
    * an exit item is refused before anything is written.
    */
   exitVote?: ExitVoteDoor;
+  /**
+   * Somebody holds `module.switch` live right now (G.3). Absent reads as
+   * nobody, which refuses a set taking governance below members.
+   */
+  anySwitchHolder?: () => Promise<boolean>;
 }
 
 export interface ValidatedElement {
@@ -335,14 +342,14 @@ export async function validateElements(
     if (item.kind === "module_lifecycle") {
       const def = MODULES_BY_ID[item.moduleId];
       if (!def) return refuse(index, item.kind, `there is no part of the Game called ${item.moduleId}`);
-      if (NEVER_BY_CHANGESET.has(item.moduleId)) {
-        return refuse(
-          index,
-          item.kind,
-          "the part of the Game that holds the vote cannot be switched by a vote. Open ballots would have nowhere to live and the vote to switch it back could not be held",
-        );
-      }
       const before = effectiveLifecycle(item.moduleId);
+      // The module the vote runs on (G.3): asked again at landing, because a
+      // holder of `module.switch` can be unseated while the vote runs.
+      if (VOTE_RUNS_ON.has(item.moduleId) && isLifecycle(item.to)) {
+        const anyHolder = deps.anySwitchHolder ? await deps.anySwitchHolder() : false;
+        const stranded = voteModuleSwitchProblem(item.moduleId, before, item.to, anyHolder);
+        if (stranded) return refuse(index, item.kind, stranded.charAt(0).toLowerCase() + stranded.slice(1).replace(/[.]$/, ""));
+      }
       elements.push({
         index,
         item,
