@@ -206,6 +206,11 @@ msgctxt "treasury sync"
 msgid "Your invoices"
 msgstr "Your invoices"
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm a changed age band"
+msgstr "Confirm a changed age band"
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
@@ -339,6 +344,11 @@ msgstr "Keep {n}"
 msgid "Counted by one member, one vote. The count by Voice is shown beside it."
 msgstr "Counted by one member, one vote. The count by Voice is shown beside it."
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Safety saved"
+msgstr "Safety saved"
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "Words written here"
@@ -383,6 +393,11 @@ msgstr "New value"
 msgctxt "module library, builder section heading"
 msgid "Build a module"
 msgstr "Build a module"
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Physical work on site"
+msgstr "Physical work on site"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -569,6 +584,12 @@ msgctxt "module library, builder section"
 msgid "Copy it into the AI you build with, then add what your module should do."
 msgstr "Copy it into the AI you build with, then add what your module should do."
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+#: client/src/components/QuestSafety.tsx
+msgctxt "age band option"
+msgid "16 or 17"
+msgstr "16 or 17"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr "That did not load."
@@ -620,6 +641,11 @@ msgstr "Suggest a change"
 msgctxt "sera answers"
 msgid "A decision. It goes into a draft before it is live."
 msgstr "A decision. It goes into a draft before it is live."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Badges a member needs"
+msgstr "Badges a member needs"
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -860,6 +886,11 @@ msgstr "Send for signing"
 #: client/src/pages/FundingRounds.tsx
 msgid "The pot is open."
 msgstr "The pot is open."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Safety note, shown as written"
+msgstr "Safety note, shown as written"
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -1131,6 +1162,11 @@ msgctxt "pricing desk"
 msgid "Your figure for {0}"
 msgstr "Your figure for {0}"
 
+#: client/src/components/QuestSafety.tsx
+msgctxt "quest safety heading"
+msgid "Before you come to the site"
+msgstr "Before you come to the site"
+
 #. placeholder {0}: named.join(", ")
 #. placeholder {0}: s.leftOut.join("; ")
 #: client/src/components/review/SeraActs.tsx
@@ -1366,6 +1402,11 @@ msgctxt "pricing desk"
 msgid "Written"
 msgstr "Written"
 
+#: client/src/components/power/SeatAction.tsx
+msgctxt "role card button, signed out"
+msgid "Apply for {seatName}"
+msgstr "Apply for {seatName}"
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Ideas welcome until {day}"
@@ -1428,6 +1469,12 @@ msgstr "added:"
 msgctxt "who answered a note"
 msgid "{by} answered"
 msgstr "{by} answered"
+
+#: client/src/components/admin/AgeBandCorrection.tsx
+#: client/src/components/QuestSafety.tsx
+msgctxt "age band option"
+msgid "18 or older"
+msgstr "18 or older"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
@@ -1555,6 +1602,11 @@ msgstr "Next build day: {at}"
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
 msgstr "No invoice has been sent yet."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
+msgstr "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
@@ -1738,6 +1790,12 @@ msgctxt "quest editor"
 msgid "Use this price"
 msgstr "Use this price"
 
+#. placeholder {0}: label[band]
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm {name}'s age band as {0}? The change is recorded with your name."
+msgstr "Confirm {name}'s age band as {0}? The change is recorded with your name."
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -1775,6 +1833,11 @@ msgctxt "sera answers"
 msgid "Added to the draft. It goes live when the draft is published."
 msgstr "Added to the draft. It goes live when the draft is published."
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Age band confirmed"
+msgstr "Age band confirmed"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Your idea is withdrawn."
 msgstr "Your idea is withdrawn."
@@ -1791,6 +1854,11 @@ msgstr "{title} is fully backed by pledges, so it goes ahead without the pot."
 msgctxt "sera answers"
 msgid "{n} changes are in a draft, waiting to be published."
 msgstr "{n} changes are in a draft, waiting to be published."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "That did not save. Try again."
+msgstr "That did not save. Try again."
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -1917,6 +1985,16 @@ msgctxt "pricing desk"
 msgid "Give the hours"
 msgstr "Give the hours"
 
+#: client/src/components/QuestSafety.tsx
+msgctxt "quest safety, ask for the age band"
+msgid "Say your age band once. The village keeps the band, never your birth date."
+msgstr "Say your age band once. The village keeps the band, never your birth date."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Hours it takes"
+msgstr "Hours it takes"
+
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, joins two links"
 msgid "or"
@@ -1964,6 +2042,11 @@ msgstr "Your words"
 msgctxt "pick a change to edit"
 msgid "Choose a change"
 msgstr "Choose a change"
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Minimum age"
+msgstr "Minimum age"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -2331,6 +2414,16 @@ msgctxt "open a change request for review"
 msgid "Open for review"
 msgstr "Open for review"
 
+#: client/src/components/QuestSafety.tsx
+msgctxt "quest safety, minimum age"
+msgid "Everyone on this quest is at least {minAge}."
+msgstr "Everyone on this quest is at least {minAge}."
+
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "Confirm"
+msgstr "Confirm"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Circle"
@@ -2407,6 +2500,12 @@ msgctxt "sera answers"
 msgid "The line that follows has Undo, to bring them back."
 msgstr "The line that follows has Undo, to bring them back."
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+#: client/src/components/QuestSafety.tsx
+msgctxt "age band option"
+msgid "Under 16"
+msgstr "Under 16"
+
 #: client/src/components/review/SeraMember.tsx
 msgid "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
 msgstr "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
@@ -2440,6 +2539,11 @@ msgstr "Edit: start from ours"
 msgctxt "change request checklist"
 msgid "Changes"
 msgstr "Changes"
+
+#: client/src/components/QuestSafety.tsx
+msgctxt "quest safety, age band"
+msgid "That did not save. Try again."
+msgstr "That did not save. Try again."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Move to its own change request"
@@ -2857,6 +2961,11 @@ msgctxt "heading over a module's settings"
 msgid "Its settings"
 msgstr "Its settings"
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Save safety"
+msgstr "Save safety"
+
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Someone here renamed it on {at}."
@@ -2866,6 +2975,11 @@ msgstr "Someone here renamed it on {at}."
 msgctxt "pricing desk"
 msgid "Suggestion"
 msgstr "Suggestion"
+
+#: client/src/components/QuestSafety.tsx
+msgctxt "quest safety, badges needed"
+msgid "You need: {badges}"
+msgstr "You need: {badges}"
 
 #. placeholder {0}: filled.unoffered.map(tokenName).join(", ")
 #: client/src/components/valuation/QuestEnginePrice.tsx
@@ -3094,6 +3208,11 @@ msgctxt "funding round stage"
 msgid "Seed"
 msgstr "Seed"
 
+#: client/src/components/admin/AgeBandCorrection.tsx
+msgctxt "admin age band"
+msgid "That did not save. Try again."
+msgstr "That did not save. Try again."
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Pay settings adopted"
@@ -3173,6 +3292,11 @@ msgctxt "quest editor"
 msgid "Kind of work"
 msgstr "Kind of work"
 
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quest safety"
+msgid "Safety on site: age, badges and note"
+msgstr "Safety on site: age, badges and note"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "pick which change a note is about"
 msgid "Which change?"
@@ -3236,6 +3360,10 @@ msgstr "No longer suggested"
 msgctxt "next step box"
 msgid "Ask in {circle}"
 msgstr "Ask in {circle}"
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgid "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
+msgstr "{refused, plural, one {# open claim on this quest no longer meets these rules. Talk with whoever holds it.} other {# open claims on this quest no longer meet these rules. Talk with whoever holds them.}}"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"

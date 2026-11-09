@@ -36,10 +36,91 @@ export function applyDocumentLocale(locale: string, doc: Document | undefined = 
   return dir;
 }
 
+/**
+ * ENGLISH THE BUILD MOVED OUT OF THE CHUNKS (copySplit.ts), kept for the life
+ * of the page. A lazy chunk awaits its part before it runs; a boot chunk
+ * pushes its English inline. Either way it lands here, and it is merged
+ * UNDER whatever language is active, now and on every switch: Lingui 6 has no
+ * fallback chain, so a message the active catalog lacks would otherwise
+ * render as its id. A translation always wins over the English beneath it.
+ */
+const movedEnglish: CompiledCatalog = {};
+
+function mergeEnglishUnder(messages: CompiledCatalog): void {
+  const active = i18n.messages as CompiledCatalog;
+  const missing: CompiledCatalog = {};
+  let any = false;
+  for (const [id, compiled] of Object.entries(messages)) {
+    if (Object.prototype.hasOwnProperty.call(active, id)) continue;
+    missing[id] = compiled;
+    any = true;
+  }
+  if (any) i18n.load(i18n.locale, missing as never);
+}
+
+export function registerEnglish(messages: CompiledCatalog): void {
+  Object.assign(movedEnglish, messages);
+  mergeEnglishUnder(messages);
+}
+
+/** A part: moved Lingui messages by id, and the chunk's moved plain strings by index (copySplit.ts). */
+type PartBody = { messages: CompiledCatalog; texts?: readonly string[] };
+type PartFetcher = (part: string) => Promise<PartBody>;
+
+/** Same-origin and default credentials, which is what route-preload.js's `as=fetch` link asks for, so it is reused. */
+const fetchPart: PartFetcher = async (part) => {
+  const res = await fetch(`/api/i18n/catalog/en/part/${encodeURIComponent(part)}`);
+  if (!res.ok) throw new Error(`copy part ${part}: ${res.status}`);
+  return (await res.json()) as PartBody;
+};
+
+const parts = new Map<string, Promise<readonly string[]>>();
+
+/**
+ * Load one part of the moved English, once, however many chunks await it, and
+ * resolve to its plain texts, which the chunk reads its long literals from.
+ * One retry, then the promise rejects, so the chunk's import fails the way a
+ * missing chunk does and the error boundary takes it: an id is never shown,
+ * and neither is an empty string where a sentence belonged.
+ */
+export function loadCopy(part: string, fetcher: PartFetcher = fetchPart): Promise<readonly string[]> {
+  let pending = parts.get(part);
+  if (!pending) {
+    pending = fetcher(part)
+      .catch(() => fetcher(part))
+      .then((body) => {
+        registerEnglish(body.messages ?? {});
+        return body.texts ?? [];
+      });
+    pending.catch(() => parts.delete(part));
+    parts.set(part, pending);
+  }
+  return pending;
+}
+
+type InlineQueue = { push: (messages: CompiledCatalog) => unknown };
+
+/** Register what boot chunks queued, and take every later push straight in. */
+export function drainInlineCopy(): void {
+  const g = globalThis as { __villageCopyInline?: InlineQueue | CompiledCatalog[] };
+  const queued = Array.isArray(g.__villageCopyInline) ? g.__villageCopyInline : [];
+  g.__villageCopyInline = {
+    push: (messages: CompiledCatalog) => {
+      registerEnglish(messages);
+      return 0;
+    },
+  };
+  for (const messages of queued) registerEnglish(messages);
+}
+
+(globalThis as { __villageCopyLoad?: (part: string) => Promise<readonly string[]> }).__villageCopyLoad = (part) => loadCopy(part);
+drainInlineCopy();
+
 /** Switch the whole app to `locale`, with `catalog` already fetched (empty for English). */
 export function activateLocale(locale: string, catalog: CompiledCatalog, formatting?: string): void {
   formattingLocale = formatting && sameLanguage(formatting, locale) ? formatting : locale;
-  i18n.loadAndActivate({ locale, messages: catalog as never, locales: [formattingLocale, locale] });
+  // The moved English first, the language's own catalog over it.
+  i18n.loadAndActivate({ locale, messages: { ...movedEnglish, ...catalog } as never, locales: [formattingLocale, locale] });
   applyDocumentLocale(locale);
 }
 
