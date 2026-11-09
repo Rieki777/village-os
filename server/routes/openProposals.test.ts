@@ -25,7 +25,7 @@ import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
-import { OPEN_WORDS } from "../../shared/openProposals";
+import { OPEN_GLOBAL_HOURLY, OPEN_WORDS } from "../../shared/openProposals";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
@@ -329,6 +329,44 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(state.sent.filter((m) => m.to.email.toLowerCase() === "target@example.test")).toHaveLength(3);
     });
 
+    it("ATTACK: plus-addressing does not reset the cap on an address (red team, 9 Nov)", async () => {
+      state.counting = true;
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: `victim+${i}@example.test` }), `192.0.2.${120 + i}`)).status);
+      expect(statuses).toEqual([200, 200, 200, 429, 429, 429]);
+    });
+
+    it("ATTACK: one IPv6 /64 is one connection for the cap", async () => {
+      state.counting = true;
+      const statuses: number[] = [];
+      for (let i = 0; i < 7; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: `six${i}@example.test` }), `2001:db8:abcd:12::${(i + 1).toString(16)}`)).status);
+      expect(statuses.filter((x) => x === 200)).toHaveLength(5);
+      // Another /64 is another connection.
+      expect((await call("POST", "/api/open-proposals", proposal({ email: "other64@example.test" }), "2001:db8:abcd:13::1")).status).toBe(200);
+    });
+
+    it("ATTACK: an overall hourly cap on confirmation email, whatever the connections and addresses", async () => {
+      state.counting = true;
+      let ok = 0;
+      let refused = 0;
+      for (let i = 0; i < OPEN_GLOBAL_HOURLY + 3; i += 1) {
+        const r = await call("POST", "/api/open-proposals", proposal({ email: `crowd${i}@example.test` }), `198.18.${Math.floor(i / 200)}.${(i % 200) + 1}`);
+        if (r.status === 200) ok += 1;
+        else if (r.status === 429) refused += 1;
+      }
+      expect(ok).toBe(OPEN_GLOBAL_HOURLY);
+      expect(refused).toBe(3);
+      expect(state.sent).toHaveLength(OPEN_GLOBAL_HOURLY);
+    });
+
+    it("ATTACK: the sender cannot choose the greeting's words, only a name", async () => {
+      const { mail } = await send({ name: "evil.example/login Smith" });
+      expect(mail.text.startsWith("Hi,\n")).toBe(true);
+      expect(mail.text).not.toContain("evil.example");
+      const { mail: plain } = await send({ name: "Rowan Field", email: "plain@example.test" });
+      expect(plain.text.startsWith("Hi Rowan,")).toBe(true);
+    });
+
     it.each([
       ["no name", { name: "  " }, "name", OPEN_WORDS.needName],
       ["no address", { email: "" }, "email", OPEN_WORDS.needEmail],
@@ -349,6 +387,15 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
   });
 
   describe("the tidy job (sheet 19i)", () => {
+    it("closes a confirmed proposal nobody decided within 90 days, and takes its name and address off (red team, 9 Nov)", async () => {
+      const { id, token } = await send({ email: "waiting@example.test" });
+      expect((await call("POST", "/api/open-proposals/confirm", { token })).status).toBe(200);
+      await q("UPDATE open_role_proposals SET confirmed_at = ? WHERE id = ?", [new Date(Date.now() - 91 * 24 * 60 * 60_000), id]);
+      await tidyOpenProposals(pool, new Date());
+      const row = await readOpenProposal(pool, id);
+      expect(row).toMatchObject({ status: "withdrawn", name: null, email: null });
+    });
+
     it("deletes what was never confirmed after 48 hours, and takes the name and address off what was declined or withdrawn after 90 days", async () => {
       const fresh = await send({ email: "fresh@example.test" });
       const old = await send({ email: "old@example.test" });
@@ -362,7 +409,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       await q("UPDATE open_role_proposals SET status = 'withdrawn', decided_at = ? WHERE id = ?", [new Date(Date.now() - 10 * 24 * 60 * 60_000), recent.id]);
 
       const said = await tidyOpenProposals(pool, new Date());
-      expect(said).toMatch(/^\d+ unconfirmed deleted, \d+ anonymised$/);
+      expect(said).toMatch(/^\d+ unconfirmed deleted, \d+ undecided closed, \d+ anonymised$/);
       expect(await readOpenProposal(pool, old.id)).toBeNull();
       expect((await readOpenProposal(pool, fresh.id))?.status).toBe("unconfirmed");
       // Confirmed is never deleted, however old.
