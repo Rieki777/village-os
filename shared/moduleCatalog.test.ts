@@ -141,9 +141,16 @@ describe("moduleCatalog", () => {
      * until a village writes its own, so the drop in works everywhere before
      * anybody has touched either.
      */
+    /*
+     * Living places joined on 2026-11-09 with one shared dial,
+     * `map.public_structure`, which it reads and the map owns too. Its default
+     * (true) lets a visitor see the places' public tier the day the module is
+     * switched on, and a village that keeps its org chart private turns it
+     * off for both at once.
+     */
     expect(claiming).toEqual([
       "feed", "forum", "governance", "gratitude",
-      "introductions", "journal", "messaging", "progression", "quests", "sessions",
+      "introductions", "journal", "messaging", "places", "progression", "quests", "sessions",
     ]);
   });
 
