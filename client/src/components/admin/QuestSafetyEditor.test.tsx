@@ -30,7 +30,8 @@ describe("QuestSafetyEditor", () => {
       return ok({});
     });
     render(<QuestSafetyEditor questId="q1" password="pw" />);
-    fireEvent.click(await screen.findByLabelText("Physical work on site"));
+    fireEvent.click(await screen.findByLabelText("Hands-on quest on site"));
+    expect(screen.queryByLabelText("Minimum age"), "no age is asked while the village has minimum ages off").toBeNull();
     expect(await screen.findByLabelText("Saw ticket")).toBeTruthy();
     expect(screen.queryByLabelText("Likes tools"), "a badge members give themselves gates nothing").toBeNull();
     fireEvent.click(screen.getByLabelText("Saw ticket"));
@@ -41,5 +42,23 @@ describe("QuestSafetyEditor", () => {
     const [, init] = fetchMock.mock.calls.find(([u, i]) => String(u).endsWith("/admin/quests/q1/safety") && i?.method === "PUT")!;
     expect(JSON.parse(String(init.body))).toEqual({ physical: true, minAge: null, requiredBadges: ["saw"], safetyNote: "Boots on site.", estimateHours: null });
     expect(await screen.findByText(/1 open claim/)).toBeTruthy();
+  });
+
+  it("offers 16 or 18 only once the village turns minimum ages on, and keeps the quest's choice", async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith("/game/quests/q2/safety")) return ok({ physical: true, minAge: 16, minAgeChosen: 16, minimumAgesOn: true, requiredBadges: [], safetyNote: null, estimateHours: null });
+      if (url.endsWith("/admin/badges")) return ok({ badges: [] });
+      if (init?.method === "PUT") return ok({ saved: true, openClaimsNowRefused: [] });
+      return ok({});
+    });
+    render(<QuestSafetyEditor questId="q2" password="pw" />);
+    const age = (await screen.findByLabelText("Minimum age")) as HTMLSelectElement;
+    expect(age.value).toBe("16");
+    expect(Array.from(age.options).map((o) => o.value)).toEqual(["", "16", "18"]);
+    fireEvent.change(age, { target: { value: "18" } });
+    fireEvent.click(screen.getByText("Save safety"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, i]) => i?.method === "PUT")).toBe(true));
+    const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === "PUT")!;
+    expect(JSON.parse(String(init.body)).minAge).toBe(18);
   });
 });

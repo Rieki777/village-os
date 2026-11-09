@@ -193,8 +193,10 @@ import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
 import { forgetOnboardingForMember } from "../repos/onboarding";
+import { forgetSeraActor } from "../repos/seraSettled";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
+import { forgetBudgetAttributionOf } from "../repos/budgets";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -1723,6 +1725,26 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * The cash budget (0360, budgets spec R26): their account id comes off
+       * every budget line they changed (`changed_by`), every rate they locked
+       * (`fx_locked_by`), every import they ran (`budget_syncs.by`), every
+       * period note they wrote (`budget_period_notes.changed_by`), every
+       * source they switched (`budget_sources.set_by`) and every circle
+       * envelope they set (`budget_envelopes.changed_by`). The rows stay, as the
+       * village's record of its plan, and `changed_as` and `set_as` stay too,
+       * because they name the role the person acted through and never a person.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a budget
+       * write still lands for anybody signed in until the sessions die. Keyed
+       * on the member, so a resume or a second run finds nothing to change.
+       */
+      name: "budget-attribution-after-tombstone",
+      run: async () => {
+        await forgetBudgetAttributionOf(pool, target.id);
+      },
+    },
+    {
+      /*
        * THE MEMBER'S OWN NOTEBOOK (0359, plan 5.5): every document they kept
        * private, with its stored bytes, and their own list of picked
        * resources. A document the village's pen ADOPTED stays, because it is
@@ -1751,6 +1773,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions-after-tombstone",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * How they answered the outside service's differences (`a_sera_difference_is_answered`): the
+       * answers and the page-id links stay as the village's record of what
+       * was decided, and no longer say who gave them. Hashes and ids only, so
+       * there are no words to clear (spec R27).
+       */
+      name: "sera-answers-after-tombstone",
+      run: async () => {
+        await forgetSeraActor(pool, target.id);
       },
     },
     {
@@ -2294,6 +2328,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "reward-moments-after-tombstone",
+  "budget-attribution-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
@@ -2305,6 +2340,8 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
 export const BACKFILL_LEAVES_OUT: Readonly<Record<string, string>> = {
   "alignment-names-after-tombstone":
     "it finds the member in other people's words by the name and handle the tombstone took, and a finished record holds neither",
+  "sera-answers-after-tombstone":
+    "its two tables are new in the a_sera_difference_is_answered migration, so no member whose erasure finished before them can have answered there",
   audit: "the sweep wrote its line when it finished, and a second would say the erasure happened twice",
   [EXTERNAL_STEP]: "the outside stores were asked when the sweep finished, and asking them again is the /review button's job",
 };

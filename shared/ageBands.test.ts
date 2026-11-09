@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandMeets, effectiveMinAge, isAgeBand } from "./ageBands";
+import { bandMeets, effectiveMinAge, isAgeBand, isMinimumAgeChoice } from "./ageBands";
 
 describe("age bands", () => {
   it("knows only the three bands", () => {
@@ -15,12 +15,23 @@ describe("age bands", () => {
     expect(bandMeets("under16", 16)).toBe(false);
   });
 
-  it("asks 18 of a physical quest that names no age, never below 16 for one that does, and nothing of the rest", () => {
-    expect(effectiveMinAge({ physical: true, minAge: null })).toBe(18);
-    expect(effectiveMinAge({ physical: true, minAge: 16 })).toBe(16);
-    expect(effectiveMinAge({ physical: true, minAge: 12 })).toBe(16);
-    expect(effectiveMinAge({ physical: false, minAge: null })).toBeNull();
-    expect(effectiveMinAge({ physical: false, minAge: 14 })).toBe(14);
-    expect(effectiveMinAge(null)).toBeNull();
+  it("asks no age of any quest while the village's minimum-age setting is off (Rye, 2026-11-09: families are encouraged)", () => {
+    expect(effectiveMinAge({ physical: true, minAge: null }, false)).toBeNull();
+    expect(effectiveMinAge({ physical: true, minAge: 18 }, false)).toBeNull();
+    expect(effectiveMinAge({ physical: false, minAge: 16 }, false)).toBeNull();
+  });
+
+  it("asks only the minimum a quest sets once the setting is on, and nothing by default, physical or not", () => {
+    expect(effectiveMinAge({ physical: true, minAge: null }, true)).toBeNull();
+    expect(effectiveMinAge({ physical: true, minAge: 16 }, true)).toBe(16);
+    expect(effectiveMinAge({ physical: false, minAge: 18 }, true)).toBe(18);
+    expect(effectiveMinAge(null, true)).toBeNull();
+  });
+
+  it("lets a quest ask only an age a band can answer: 16 or 18", () => {
+    expect(isMinimumAgeChoice(16)).toBe(true);
+    expect(isMinimumAgeChoice(18)).toBe(true);
+    expect(isMinimumAgeChoice(12)).toBe(false);
+    expect(isMinimumAgeChoice(null)).toBe(false);
   });
 });
