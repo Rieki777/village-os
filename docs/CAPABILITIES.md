@@ -259,7 +259,7 @@ Four columns need a word before the tables:
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
 | --- | --- | --- | --- | --- | --- | --- |
-| `role.pay` | Set what a role is worth and pays, beside the valuation engine's suggestion | yes | no | yes | no rung | no module |
+| `role.pay` | Keep the village's cash budget, and set what a role is worth and pays | yes | no | yes | no rung | no module |
 
 ### `pot`
 
@@ -838,7 +838,7 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     },
     {
       "key": "role.pay",
-      "label": "Set what a role is worth and pays, beside the valuation engine's suggestion",
+      "label": "Keep the village's cash budget, and set what a role is worth and pays",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,
