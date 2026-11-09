@@ -53,6 +53,13 @@ export const IMPORT_ROWS_MAX = 2000;
 
 /** What `changed_as` says for an admin who wrote before the launch vote carried (R1, R21). */
 export const ADMIN_BEFORE_LAUNCH = "admin, before launch";
+/**
+ * What `changed_as` says for an admin who wrote after the launch vote, while
+ * nobody sat in the steward's seat (the shared rule, `holderDoor`).
+ */
+export const ADMIN_NO_STEWARD = "admin, no steward seated";
+/** What `changed_as` says for the founder-steward who broke the glass on a power the village holds. */
+export const BREAK_GLASS = "steward, glass broken";
 /** What `changed_as` says when a village vote carried the change (R22). */
 export const BY_VILLAGE_VOTE = "the village, by a vote";
 
