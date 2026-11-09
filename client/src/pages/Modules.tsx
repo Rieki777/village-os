@@ -19,10 +19,12 @@
  * never `user.role`.
  */
 import InfoTip from "@/components/InfoTip";
+import { Trans } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import ModuleCard from "@/components/modules/ModuleCard";
 import ModuleShelf from "@/components/modules/ModuleShelf";
 import PoolStatement from "@/components/modules/PoolStatement";
+import BuilderJourney, { BUILDER_JOURNEY_ID } from "@/components/modules/BuilderJourney";
 import PlanBasketPanel from "@/components/modules/PlanBasketPanel";
 import StarterSets from "@/components/modules/StarterSets";
 import { useAdminModules, useCatalog, viewerOf } from "@/components/modules/catalog";
@@ -64,6 +66,12 @@ function BuilderCard({ guideUrl, poolUrl }: { guideUrl: string; poolUrl: string 
           className="text-sm font-medium text-teal-deep underline min-h-[44px] inline-flex items-center"
         >
           See the builders' pool ↗
+        </a>
+        <a
+          href={`#${BUILDER_JOURNEY_ID}`}
+          className="text-sm font-medium text-teal-deep underline min-h-[44px] inline-flex items-center"
+        >
+          <Trans context="module library, builder card link to the builder section">The five steps, and what to hand your agent ↓</Trans>
         </a>
       </div>
     </div>
@@ -228,6 +236,7 @@ export default function Modules() {
                 </ModuleShelf>
               );
             })}
+            {!isFiltered(f) && <BuilderJourney />}
             <PoolStatement />
           </>
         )}

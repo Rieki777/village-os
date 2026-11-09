@@ -164,6 +164,9 @@ import { resolveSeatTerm, type SeatCalendar } from "../shared/seatTerms";
 import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewardSeatRefusal } from "./lib/roleGrants";
 import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
+import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
+import { claimRefusalFor } from "./lib/questClaimGate";
+import { MAP_REASON_FOR } from "../shared/questClaimGate";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -211,6 +214,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
+import { exportMemberFundingRounds, fundingRoundsOpenState, register as registerFundingRoundsRoutes } from "./routes/fundingRounds";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { register as registerI18nRoutes } from "./routes/i18n";
 import { setShellLang, shellLocale } from "./lib/i18nShell";
@@ -484,7 +488,7 @@ import {
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
-import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
+import { addCharacter, avatarFor, listArchetypes, openNowCounts, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
@@ -711,7 +715,7 @@ import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { register as registerVillageExportRoutes } from "./routes/villageExport";
 import { register as registerSigningKeyRoutes } from "./routes/signingKey";
-import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, POT_STEWARD_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
@@ -1984,6 +1988,7 @@ async function ensureDataFiles() {
   await runOnce("role-pay-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, ROLE_PAY_GRANTS, "role.pay on the Treasury role (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("steward-circle-role-powers-2026-11-05", () => grantMoonReviewKeys(rolesRepo, STEWARD_CIRCLE_GRANTS, "Steward Circle's role and adoption powers (Rye, 2026-11-01)").then(() => undefined));
   await runOnce("redemption-ceilings-blank-2026-11-05", () => blankZeroRedemptionCeilings(getPool()).then((keys) => { if (keys.length) console.log(`[redemption] a stored 0 ceiling became blank, which is no ceiling: ${keys.join(", ")}`); })); // Rye, 2026-11-05: 0 now means zero
+  await runOnce("pot-steward-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, POT_STEWARD_GRANTS, "the funding pots power, pot.steward (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -5696,6 +5701,7 @@ async function startServer() {
   MODULES_BY_ID["exchange"].openStateCheck = () => exchangeOpenState(getPool());
   MODULES_BY_ID["badges"].openStateCheck = () => badgesOpenState(getPool());
   MODULES_BY_ID["library"].openStateCheck = () => libraryOpenState(getPool());
+  MODULES_BY_ID["funding-rounds"].openStateCheck = () => fundingRoundsOpenState(getPool());
   /*
    * Commerce was the only funds-bearing module without one. Turning it off
    * unmounts the checkout AND the webhook route, so a purchase that had been
@@ -18225,6 +18231,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
+  registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
@@ -18749,6 +18756,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
    * /api/game/quests/:id/claim reads them. A promise route that invented its
    * own permission check would be a second gate.
    */
+  const questNextStep = makeQuestNextStep({ getPool, circles: () => circlesRepo.all() as any[], crewsForQuest: (id) => crewsRepo.forQuest(id), lapseContext, memberName: async (id) => (await members.byId(id))?.name ?? null });
+  const nextOrNull = (quest: any, userId: string) => questNextStep(quest, userId).catch((err) => (console.error("[map] next-step box", err), null));
   app.post("/api/map/promise", async (req, res) => { // limit-ok: a signed-out caller is answered reason "anonymous" before any work (a 200 the map reads, so no 401 for the gate to see); it read as guarded only because an unrelated `reply` helper's span in this file borrowed a 401
     const kind = req.body?.kind;
     const mapKey = sanitiseMapKey(req.body?.id);
@@ -18858,21 +18867,13 @@ Send an empty drafts array when you are still listening. A role payload is {name
         return reply({ ok: !!removed, state: removed ? "off" : "on", reason: removed ? undefined : "closed" });
       }
 
-      if (held) return reply({ ok: true, state: "on" });
+      if (held) return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
       // A closed quest is not taking claims, read exactly as the claim route
       // reads it: `closed` is this vocabulary's own "not taking answers".
-      if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
-        return reply({ ok: false, state: "off", reason: "closed" });
-      }
-      if (quest.minStage) {
-        const needed = stageIndex(quest.minStage);
-        if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-          return reply({ ok: false, state: "off", reason: "not-yet" });
-        }
-      }
-      if (quest.requiresRole && !roleIdsFor(user.id).includes(quest.requiresRole)) {
-        return reply({ ok: false, state: "off", reason: "not-yet" });
-      }
+      // The one claim gate both doors ask (shared/questClaimGate.ts), worded in
+      // the map's short vocabulary.
+      const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+      if (refusal) return reply({ ok: false, state: "off", reason: MAP_REASON_FOR[refusal.kind] });
       // The same locked insert the claim route takes: `held` above is a read
       // several awaits back, and two taps can pass it together.
       const taken = await claimsRepo.openClaim({
@@ -18888,7 +18889,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
       });
       // "already" is the answer `held` gives: the person's intent is satisfied.
       if (!taken.ok && taken.reason === "gone") return reply({ ok: false, state: "off", reason: "gone" });
-      return reply({ ok: true, state: "on" });
+      if (taken.ok) await bellQuestClaimed(notify, user.id, taken.claim.id, quest);
+      return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
     } catch (err) {
       // The map reverts and says so. A promise is not worth a 500 page inside
       // an iframe the person cannot see the console of.
@@ -18951,6 +18953,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     // the one route here that rasters for an anonymous caller, so it refuses
     // when the guard cannot check rather than serving unguarded (Rye, 2026-09-23).
     limitState: (bucket: string, max: number, windowMs: number) => limitState(getPool(), bucket, max, windowMs),
+    questNextStep,
   });
 
   // Quests: team consent (value release is always human-gated)
@@ -19332,7 +19335,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
+    const list = await listArchetypes(getPool(), villageId());
+    const open = await openNowCounts(getPool(), list.map((a) => a.key)).catch(() => null); // the cards still draw without a count
+    res.json(list.map((a) => (open ? { ...a, openNow: open.byKey[a.key] ?? 0, openToAll: open.untagged } : a)));
   });
 
   // ── The Player Profile ────────────────────────────────────────────────────
@@ -25564,7 +25569,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
+  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
@@ -25998,6 +26003,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
+      fundingRounds: await exportMemberFundingRounds(pool, user.id), // their ideas, anonymous ones included since they are theirs, and their interaction rows (server/lib/fundingRounds.ts)
       memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
       moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
       /*

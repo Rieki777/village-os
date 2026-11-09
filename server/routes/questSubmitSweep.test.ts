@@ -107,7 +107,11 @@ describe.skipIf(!configured)("what a failing bell costs a submission (MySQL)", (
       claimsRepo: claims,
       crewsRepo: {},
       firstName: (n: string) => String(n).split(" ")[0],
-      notify: async (n: { userId: string }) => {
+      notify: async (n: { userId: string; type?: string }) => {
+        // This suite's subject is the SUBMISSION bell. The claim rings its own
+        // bell to the claimer (quest_claimed, the next-step box); it is not
+        // what a failing steward bell costs, so it is not counted here.
+        if (n.type !== "quest_submitted") return;
         if (ctl.failAll || n.userId === ctl.failFor) throw new Error(`the bell for ${n.userId} could not be delivered`);
         ctl.rung.push(n.userId);
       },

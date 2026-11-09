@@ -2112,3 +2112,6 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The invoice rails and the treasury sync (0335, 2026-11-06)
 
 - To have a sent invoice emailed to Sera, an admin or the `cash.pay` holder sets **Sera's inbox** in Admin, End-of-moon review settings, Village settings (moon-review setting `seraInbox`, blank on the platform, so nothing is emailed until a village names one). The daily `treasury-sync` job needs no setup: it retries emails the provider refused, reads Sera's `list_invoices` once Saberra offers it (until then the Sera source reads "Sera does not report invoices yet"), and re-syncs every member with an invoice.
+## Funding rounds (module `funding-rounds`, migration 0338)
+
+- No env var. The Treasury role gains `pot.steward` two ways: `server/seeds/roles-seed.json` for a new village, and the `runOnce` step `pot-steward-to-treasury-2026-11-06` (`POT_STEWARD_GRANTS`, `server/lib/starterRoles.ts`) for a village that booted earlier and still has the seeded `treasury` role. The module ships off; a pot and its rounds are opened from `/funding-rounds` by a `pot.steward` holder.

@@ -56,7 +56,9 @@ import {
   type SyncLog,
 } from "./saberraPolling";
 import { proposeStructure, type VendorRecord } from "./saberraProposals";
-import type { SaberraRecordKind } from "./saberraRecords";
+import { editedAtOf, type SaberraRecordKind } from "./saberraRecords";
+import { idShapeOk, pageIdOf } from "./saberraRelations";
+import { writeSnapshot } from "./saberraSnapshot";
 import { proposalKindFor, splitStreams } from "./saberraStreams";
 import { schedulerEnabled } from "./scheduler";
 import { secretStatus, secretValue, villageSecretsConfigured, villageSecretsKeyProblem } from "./secrets";
@@ -98,14 +100,19 @@ function serviceUrl(): string | null {
 function asVendorRecord(kind: SaberraRecordKind, raw: unknown): VendorRecord | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
-  const id = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
-  if (id === "") return null;
+  const sent = typeof r.id === "string" && r.id.trim() !== "" ? r.id.trim() : "";
+  // An id is an id: a page address carries the page title, and is refused here (R10).
+  if (sent === "" || !idShapeOk(sent)) return null;
+  // An id cut from the end of one keeps only its page id, never the title before it (review #5).
+  const id = pageIdOf(sent);
   const fields =
     r.fields && typeof r.fields === "object" && !Array.isArray(r.fields)
       ? (r.fields as Record<string, unknown>)
       : r;
   const url = typeof r.url === "string" ? r.url : undefined;
-  return { id, kind, fields, url };
+  // When the service last edited it, through the boundary's own door (never who).
+  const editedAt = editedAtOf(r);
+  return { id, kind, fields, url, ...(editedAt ? { editedAt } : {}) };
 }
 
 function sameName(a: string, b: string): boolean {
@@ -160,6 +167,8 @@ export function preflight(): Preflight {
 interface Fetched {
   plan: KindPlan;
   records: VendorRecord[];
+  /** Records dropped because their id was not shaped like one (R10), such as a page address. */
+  refusedIds?: number;
   failures: { kind: HeldKind; label: string; why: CallFailure["why"]; detail: string }[];
   truncated: HeldKind[];
 }
@@ -179,6 +188,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
   const plan = listing.ok ? planKinds(listing.tools) : planKinds(null, listing.detail);
 
   const records: VendorRecord[] = [];
+  let refusedIds = 0;
   const failures: Fetched["failures"] = [];
   const truncated: HeldKind[] = [];
   for (const { kind, wire } of plan.ask) {
@@ -197,6 +207,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
       for (const raw of r.records) {
         const rec = asVendorRecord(kind, raw);
         if (rec) records.push(rec);
+        else if (raw && typeof raw === "object" && typeof (raw as { id?: unknown }).id === "string" && (raw as { id: string }).id.trim() !== "") refusedIds += 1;
       }
       cursor = r.cursor;
       pages += 1;
@@ -208,7 +219,7 @@ async function readService(client: ClientOptions, sessionId: string): Promise<Fe
       }
     } while (cursor);
   }
-  return { plan, records, failures, truncated };
+  return { plan, records, refusedIds, failures, truncated };
 }
 
 // ── The landing ─────────────────────────────────────────────────────────────
@@ -225,6 +236,8 @@ type SyncAnswer = Record<string, unknown> & {
   held: unknown[];
   addressesSeen: unknown[];
   circles: ReturnType<typeof proposeStructure>["circles"] | null;
+  /** Records dropped because their id was not shaped like one (R10). */
+  refusedIds: number;
 };
 
 /** Where a one-apiece suggestion points back to, and so what makes two of them about the same record. */
@@ -389,6 +402,7 @@ async function landRead(pool: Pool, fetched: Fetched, sessionId: string): Promis
     facts: reading.facts.length,
     attached: reading.facts.filter((f) => f.vendorKind !== "circle" && seatIdFor(f.attachesTo)).length,
     held: reading.held,
+    refusedIds: fetched.refusedIds ?? 0,
     unmapped: reading.unmapped,
     addressesSeen: reading.addressesSeen,
     truncated: truncated.map((k) => KIND_LABEL[k]),
@@ -427,7 +441,8 @@ function describeLanding(run: SyncRun, answer: SyncAnswer): SyncRun {
   run.superseded = answer.superseded;
   run.rebatched = answer.rebatched;
   run.gone = answer.gone;
-  run.held = answer.held.length;
+  // A record dropped for its id is held back too, so the log counts it there.
+  run.held = answer.held.length + (answer.refusedIds ?? 0);
   run.addresses = answer.addressesSeen.length;
   run.circles = answer.circles
     ? {
@@ -463,32 +478,101 @@ async function runLocked(
     await writeSyncLog(pool, { runs: appendRun(log.runs, run), landedFingerprint });
     return run;
   };
+  /*
+   * A SERVICE THAT NEVER ANSWERED IS KEPT AS A READ TOO (review C6): both kinds
+   * failed and carried from the read before (R5), so the list's newest read is
+   * this attempt and it can say "didn't answer at 14:05; this list is from the
+   * last full check, at 09:00" (`lastWhole`), never an older time or "in step".
+   * Only before the service answered: once it has, its own read is kept, and a
+   * later failure is ours, never a read that failed. Never stops the sync.
+   */
+  let answered = false;
+  const keepUnanswered = () =>
+    writeSnapshot(pool, { asked: ["circle", "role"], failed: ["circle", "role"], truncated: [], records: [] }, trigger, at).catch(() => undefined);
 
   try {
     const sessionId = await openSession(client);
     if (!sessionId) {
+      await keepUnanswered();
       const run = await finish(blankRun(at, trigger, "failed", "no-session"));
       return { status: 502, body: { error: NO_SESSION_SENTENCE }, run };
     }
     const fetched = await readService(client, sessionId);
+    answered = true;
     const fingerprint = fingerprintRead(fetched.records);
+
+    /*
+     * EVERY READ KEEPS A SNAPSHOT, whether or not it lands anything. The
+     * differences list counts consecutive WHOLE reads (R4), and an unchanged
+     * scheduled read is a whole read that lands nothing, so keeping only landed
+     * reads would let a dropped record go missing once and never twice. A kind
+     * that failed or was cut short carries the snapshot before it forward (R5),
+     * so a partial read is safe to keep too.
+     *
+     * KEPT AT THE END OF THE READ, after any landing, and stamped with the time
+     * it is kept, on the clock the run started on: so no batch this run landed
+     * is newer than its own read (the list folds a waiting batch only when the
+     * newest read is newer than its newest item, review K6). "Last checked" is
+     * when the read ended, seconds after it started. An attempt the service
+     * never answered keeps the time it started (`keepUnanswered`).
+     *
+     * A SNAPSHOT THAT CANNOT BE KEPT NEVER STOPS THE SYNC. The proposals still
+     * land and the run is still logged; the differences list reads the snapshot
+     * before, and the next read writes a whole one again, so a skipped row loses
+     * nothing a later read cannot replace. It is said once in the server's log
+     * and once to the admins, by its error code only. A landing that throws
+     * still keeps the read it landed from.
+     */
+    const keepRead = async () => {
+      try {
+        await writeSnapshot(
+          pool,
+          {
+            asked: fetched.plan.ask.map((a) => a.kind),
+            failed: fetched.failures.map((f) => f.kind),
+            truncated: fetched.truncated,
+            records: fetched.records,
+          },
+          trigger,
+          new Date(at.getTime() + (Date.now() - started)),
+        );
+      } catch (e) {
+        const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
+        console.warn(`[saberra] the sync kept no snapshot this time (${code}); the differences list reads the one before`);
+        void recordEvent(pool, {
+          kind: "external_proposal",
+          text: `the sync kept no snapshot this time (${code.slice(0, 40)}); the differences list reads the one before`,
+          actorKind: "agent",
+          originModuleId: MODULE_ID,
+          audience: "admin",
+        });
+      }
+    };
 
     if (trigger === "scheduled") {
       if (fetched.failures.length > 0) {
+        await keepRead();
         const run = await finish(describeRead(blankRun(at, trigger, "failed", "kind-failed"), fetched));
         return { status: 200, body: {}, run };
       }
       if (fingerprint === log.landedFingerprint) {
+        await keepRead();
         const run = await finish(describeRead(blankRun(at, trigger, "no-change", null), fetched));
         return { status: 200, body: {}, run };
       }
     }
 
-    const answer = await landRead(pool, fetched, sessionId);
+    let answer: SyncAnswer;
+    try {
+      answer = await landRead(pool, fetched, sessionId);
+    } finally {
+      await keepRead();
+    }
     const reason = fetched.failures.length > 0 ? "partial" : null;
     const run = await finish(describeLanding(describeRead(blankRun(at, trigger, "landed", reason), fetched), answer), fingerprint);
     return { status: 200, body: answer, run };
   } catch (e) {
+    if (!answered) await keepUnanswered();
     await finish(blankRun(at, trigger, "failed", "error")).catch(() => undefined);
     throw e;
   }
