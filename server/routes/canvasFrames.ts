@@ -156,6 +156,8 @@ import { withNamedLock } from "../repos/namedLock";
 import { documentById, markDocumentShared } from "../repos/villageDocuments";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 import { saveExitPolicy, type ExitPolicySaveDeps } from "./exits";
+import { adoptClosing } from "./closingPolicy";
+import type { ClosingChange } from "../../shared/canvasFrames";
 import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
 
 export interface CanvasFrameDeps
@@ -234,6 +236,14 @@ const WITHDRAWN_NOTE = "Withdrawn by the member who suggested it.";
 
 /** A suggestion somebody else is deciding at this moment. */
 export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Look again in a moment.";
+
+/** The closing words' vote (D6), which a canvas suggestion is pointed to after the Birthing (D3). */
+export const CLOSING_CHANGE_DOOR = "/api/governance/closing-policy-changes";
+
+/** Said when adopting a closing suggestion after the Birthing: the words change only by the closing policy vote. */
+export const CLOSING_DOOR_IS_THE_CLOSING_VOTE =
+  "The Game has started, so what closing the village means changes only by a closing policy vote at the structural tier. " +
+  "A member who can open votes opens it from the exit policy page, /exit-policy, with these words.";
 
 /** The purpose statement's vote has its own door. */
 export const PURPOSE_CHANGE_DOOR = "/api/governance/purpose-changes";
@@ -879,6 +889,28 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
         ok: true,
         outcome: { filed: "mechanics-proposal", id: filed.body.id, status: filed.body.status },
         message: filedMessage(filed.body),
+      };
+    }
+
+    // ── The closing words' door (D3), kept apart from the consequence branch below.
+    // Before the Birthing the exit policy's writers adopt through `adoptClosing`,
+    // the admin PUT's own adoption; after it the words change only by the D6 vote.
+    if (p.door === "exit:closing") {
+      if (rule.how === "ballot") {
+        return { ok: false, status: 409, body: { error: CLOSING_DOOR_IS_THE_CLOSING_VOTE, door: CLOSING_CHANGE_DOOR } };
+      }
+      if (!(await isAdmin(req))) return { ok: false, status: 403, body: { error: PEN_REFUSALS.consequence } };
+      const c = (p.change ?? {}) as Partial<ClosingChange>;
+      const closing = await adoptClosing(
+        { getPool, exitPolicy: deps.exitPolicy.exitPolicyRepo },
+        { policyId: c.policyId, statement: c.statement, adopt: true },
+        String(user.id),
+      );
+      if (closing.status !== 200) return { ok: false, status: closing.status, body: closing.body };
+      return {
+        ok: true,
+        outcome: { wrote: "exit-policy", door: p.door, fields: ["closing"] },
+        message: `Adopted. ${CANVAS_DOORS["exit:closing"].label} now reads as suggested.`,
       };
     }
 
