@@ -1000,7 +1000,7 @@ describe("S6: the name check reads a line the way a member sees it", () => {
   it("refuses an invisible format character, drops other ignorables, and folds compatibility forms", () => {
     expect(check("Pay Wren\u200b Halloway"), "a zero-width space").toEqual({ kind: "refused", what: "hidden_characters" });
     expect(check("Garden\u00ad crew"), "a soft hyphen").toEqual({ kind: "refused", what: "hidden_characters" });
-    expect(check("Pay Wren Hallo\u034fway"), "a combining grapheme joiner is dropped").toEqual({ kind: "refused", what: "full_name" });
+    expect(check("Pay Wren Hallo\u3164way"), "a Hangul filler, which draws as nothing, is dropped").toEqual({ kind: "refused", what: "full_name" });
     expect(check("Pay \uff37ren Halloway"), "a full-width letter is its plain letter").toEqual({ kind: "refused", what: "full_name" });
   });
 

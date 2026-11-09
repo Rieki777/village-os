@@ -409,9 +409,13 @@ describe("the moon's plan by category and by circle, and moons ahead (R30, R31)"
 
 describe("the review round: amounts (M5)", () => {
   it("refuses letters that are not a three-letter code, so 100k, 2M and 1.5bn are never read as 100, 2 and 1.5", () => {
-    for (const cell of ["100k", "2M", "1.5bn", "50 mil", "No. 5", "0x10", "1_000", "1e5"]) {
-      expect(readAmount(cell, "CRC", EN), cell).toMatchObject({ ok: false });
+    // The refusal says what to write instead (R12): the whole amount in figures.
+    for (const cell of ["100k", "2M", "1.5bn", "No. 5", "0x10", "1e5"]) {
+      expect(readAmount(cell, "CRC", EN), cell).toMatchObject({ ok: false, reason: "unreadable", message: expect.stringContaining("no k, M or bn") });
     }
+    // Three letters after a number read as a currency code, so "mil" is refused as a currency that is not the line's.
+    expect(readAmount("50 mil", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });
+    expect(readAmount("1_000", "CRC", EN)).toMatchObject({ ok: false });
     expect(readAmount("\u20a1100k", "CRC", EN)).toMatchObject({ ok: false });
     expect(readAmount("CRC 1,000.00", "CRC", EN)).toMatchObject({ ok: true, minor: 100_000 });
   });
