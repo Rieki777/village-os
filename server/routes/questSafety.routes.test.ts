@@ -1,10 +1,12 @@
 /**
- * Safety on physical quests, through the real routes against a real MySQL
- * (build days S5; spec US5, R2, R3, R10, R12; Rye 2026-11-09: 18, or 16 for
- * light work beside a named adult, never machines or heights).
+ * Safety on hands-on quests, through the real routes against a real MySQL
+ * (build days S5; spec US5, R2, R3, R10, R12). Rye, 2026-11-09: no quest has
+ * an age limit ("It's not 'work', it's fun and families are encouraged"); a
+ * village may turn on minimum ages, and Amora ships with them off.
  *
- *  - a physical quest asks 18 of a member who has not said their band, and
- *    refuses one whose band is younger;
+ *  - with minimum ages off, a hands-on quest asks no age of anybody;
+ *  - with them on, a quest that sets 18 asks a member who has not said their
+ *    band, and refuses one whose band is younger;
  *  - a member says their band once, and cannot change it alone;
  *  - a quest asking a safety badge refuses until the member holds it,
  *    unexpired, and only an earned or granted badge may gate;
@@ -43,6 +45,7 @@ let base = "";
 let quests: QuestsRepo;
 let signedIn: Person = ADA;
 let admin = false;
+let minimumAgesOn = false;
 
 const call = async (method: string, path: string, body?: unknown) => {
   const r = await fetch(`${base}${path}`, { // module-review-ok: the suite's own in-process server on 127.0.0.1, never an outbound call, so there is no correlation id to carry
@@ -96,6 +99,7 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
       projectCurrency: () => "USD",
       limitState: async () => "ok",
       questNextStep: async () => null,
+      minimumAgesOn: () => minimumAgesOn,
     };
     const app = express();
     app.use(express.json());
@@ -119,11 +123,21 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
   beforeEach(() => {
     signedIn = ADA;
     admin = false;
+    minimumAgesOn = true;
   });
 
-  it("asks 18 of a physical quest's claimer who has not said their band, then lets an adult through", async () => {
+  it("asks no age on any quest while the village has minimum ages off, which is how a village ships", async () => {
+    minimumAgesOn = false;
+    signedIn = { id: "u-kid", name: "Kit Young" };
+    await add("s-family");
+    await putQuestSafety(pool, { questId: "s-family", physical: true, minAge: 18, requiredBadges: [], safetyNote: "Bring a hat.", estimateHours: 3 }, "admin");
+    expect((await call("POST", "/api/game/quests/s-family/claim")).status, "families are encouraged").toBe(200);
+    expect((await call("GET", "/api/game/quests/s-family/safety")).body).toMatchObject({ minAge: null, minimumAgesOn: false });
+  });
+
+  it("asks a quest's minimum of a claimer who has not said their band, then lets an adult through", async () => {
     await add("s-floor");
-    await putQuestSafety(pool, { questId: "s-floor", physical: true, minAge: null, requiredBadges: [], safetyNote: "Boots on site.", estimateHours: 6 }, "admin");
+    await putQuestSafety(pool, { questId: "s-floor", physical: true, minAge: 18, requiredBadges: [], safetyNote: "Boots on site.", estimateHours: 6 }, "admin");
     const first = await call("POST", "/api/game/quests/s-floor/claim");
     expect(first.status).toBe(403);
     expect(first.body).toMatchObject({ minAge: 18, needsAgeBand: true });
@@ -135,7 +149,7 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
   it("refuses a member whose band is younger than the quest asks, and the band cannot be changed alone", async () => {
     signedIn = TEO;
     await add("s-roof");
-    await putQuestSafety(pool, { questId: "s-roof", physical: true, minAge: null, requiredBadges: [], safetyNote: null, estimateHours: null }, "admin");
+    await putQuestSafety(pool, { questId: "s-roof", physical: true, minAge: 18, requiredBadges: [], safetyNote: null, estimateHours: null }, "admin");
     expect((await call("POST", "/api/me/age-band", { band: "16to17" })).status).toBe(200);
     const r = await call("POST", "/api/game/quests/s-roof/claim");
     expect(r.status).toBe(403);
@@ -146,7 +160,7 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
     expect(await ageBandOf(pool, TEO.id)).toBe("16to17");
   });
 
-  it("lets a 16-year-old onto light work that asks 16, and refuses a physical quest set below 16", async () => {
+  it("lets a 16-year-old onto a quest that asks 16, and takes only an age a band can answer", async () => {
     signedIn = TEO;
     await add("s-light");
     admin = true;
@@ -180,9 +194,9 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
     expect(r.body.refused).toEqual(["i-like-tools"]);
   });
 
-  it("runs the gate when someone joins a crew on a physical quest by its invite", async () => {
+  it("runs the gate when someone joins a crew on a hands-on quest by its invite", async () => {
     await add("s-crew");
-    await putQuestSafety(pool, { questId: "s-crew", physical: true, minAge: null, requiredBadges: [], safetyNote: null, estimateHours: null }, "admin");
+    await putQuestSafety(pool, { questId: "s-crew", physical: true, minAge: 18, requiredBadges: [], safetyNote: null, estimateHours: null }, "admin");
     signedIn = ADA; // an adult, band set above
     const formed = await call("POST", "/api/quests/s-crew/crews", { name: "Floor crew" });
     expect(formed.status).toBe(200);
@@ -198,7 +212,7 @@ describe.skipIf(!configured)("safety on physical quests (MySQL)", () => {
     signedIn = TEO;
     expect((await call("POST", "/api/game/quests/s-change/claim")).status).toBe(200);
     admin = true;
-    const r = await call("PUT", "/api/admin/quests/s-change/safety", { physical: true });
+    const r = await call("PUT", "/api/admin/quests/s-change/safety", { physical: true, minAge: 18 });
     expect(r.status).toBe(200);
     expect(r.body.openClaimsNowRefused).toHaveLength(1);
   });

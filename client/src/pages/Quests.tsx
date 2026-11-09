@@ -213,7 +213,7 @@ export default function Quests() {
             className="text-center mb-6"
           >
             <div className="w-16 h-16 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-6">
-              <Compass className="w-8 h-8 text-teal-700" />
+              <Compass className="w-8 h-8 text-teal-deep" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
               The Quest Board
@@ -388,7 +388,7 @@ export default function Quests() {
         <div className="container">
           <div className="max-w-2xl mx-auto bg-card border border-teal/20 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center gap-4 text-left mt-6">
             <div className="w-12 h-12 rounded-xl bg-amber/15 flex items-center justify-center shrink-0">
-              <Lightbulb className="w-6 h-6 text-amber-600" />
+              <Lightbulb className="w-6 h-6 text-amber-ink" />
             </div>
             <div className="flex-1">
               <h2 className="font-display text-lg font-bold text-foreground">
