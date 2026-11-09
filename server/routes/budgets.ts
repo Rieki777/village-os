@@ -47,14 +47,13 @@
  * Every write goes through `importBudgetLines` (server/lib/budgets.ts), the
  * one write path, and through ONE door (R21), `budgetDoorOf` below:
  *
- *   holder     a live holder of `role.pay`, asked the deny-aware way
- *              (`holderOnlyDecision`, the gate with the admin short-circuit
- *              taken out), writes, recorded as the role they hold it through;
- *   admin      before the launch vote carries (`launchedByVote`), with nobody
- *              holding the power and the village not holding it, an admin
- *              writes, recorded as "admin, before launch";
- *   refused    anything else, with the suggestion path named: after launch
- *              with nobody holding it, or with the village holding it, the
+ *   decided by `holderDoor`, the village's one check for `role.pay`:
+ *   holder     a live holder writes, recorded as the role they hold it through;
+ *   admin      before the launch vote, or after it while nobody sits in the
+ *              steward's seat, an admin writes, recorded as which of the two;
+ *   glass      the founder-steward who broke the glass on a village-held power;
+ *   refused    anything else, with the suggestion path named: with nobody
+ *              holding it after launch, or with the village holding it, the
  *              change is a suggestion (R22), which goes to a vote. A refusal
  *              names roles, never an account.
  *
@@ -74,6 +73,7 @@
  * and it shows spent only to `cash.pay` holders, like every other read (B2).
  */
 import type { Express } from "express";
+import type { Pool } from "mysql2/promise";
 import type { AppDeps } from "../lib/appDeps";
 import { markAdminGate } from "../lib/adminGate";
 import { registerAdminEditControl, type Refusal } from "../lib/adminSuggestions";
@@ -112,16 +112,16 @@ import {
   type StoredLine,
 } from "../lib/budgets";
 import { leftTheVillage } from "../lib/formerMember";
-import { holderOnlyDecision } from "../lib/holderOnly";
+import { holderDoor, holderStanding, type HolderDoorDeps, type HolderRefusal } from "../lib/holderDoor";
 import { listOrgAssignments } from "../lib/orgChart";
 import { launchedByVote } from "../lib/orgDraftDecide";
-import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, VILLAGE_WIDE, inVillageCurrency, lineShareOfMoon, moonPeriod, moonPlan, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
-import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
+import { ADMIN_BEFORE_LAUNCH, ADMIN_NO_STEWARD, BREAK_GLASS, CASH_CATEGORIES, IMPORT_ROWS_MAX, VILLAGE_WIDE, inVillageCurrency, lineShareOfMoon, moonPeriod, moonPlan, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
+import { BREAK_GLASS_SEAT, hasCapability, isVillageHeld, type CapabilityCtx } from "../../shared/capabilities";
 import { formatMoney } from "../../shared/money";
 import { currentCycle } from "../lib/gratitude-cycles";
 import { villageTimezone } from "../lib/villageReaders";
 
-type Deps = Pick<AppDeps, "authedUser" | "capabilityCtx" | "getPool" | "overLimit" | "seasonState"> & {
+type Deps = Pick<AppDeps, "authedUser" | "capabilityCtx" | "getPool" | "overLimit" | "seasonState" | "guardCapability"> & {
   /** Who holds a power live, the admin short-circuit excluded (`liveHoldersOf`, server/index.ts). */
   liveHoldersOf(capability: string): Promise<string[]>;
   /** The village's currency as configured, "" when it is not set (R8). */
@@ -154,36 +154,46 @@ const WINDOW_MS = 10 * 60 * 1000;
 
 /** The door's answer for one person (R21). A refusal names roles, never an account. */
 type BudgetDoor =
-  | { ok: true; via: "holder" | "admin_before_launch"; byAs: string }
-  | { ok: false; status: 401 | 403 | 409; body: { error: string; code: string; suggest?: Suggest; holdersAs?: string[] } };
+  | { ok: true; via: "holder" | "admin_before_launch" | "admin_no_steward" | "break_glass"; byAs: string }
+  | {
+      ok: false;
+      status: 401 | 403 | 409;
+      body: { error: string; code: string; suggest?: Suggest; holdersAs?: string[]; gate?: Record<string, unknown> };
+    };
 
 interface BudgetDoorDeps {
   liveHoldersOf(capability: string): Promise<string[]>;
   rolesCarrying(capability: string): Array<{ id: string; name: string }>;
   roleHolders(): Array<{ roleId: string; userId: string }>;
   launched(): Promise<boolean>;
+  authedUser(req: any): Promise<any | null>;
+  getPool(): Pool;
+  capabilityCtx(user: any): Promise<CapabilityCtx>;
+  guardCapability: HolderDoorDeps["guardCapability"];
 }
 
 /**
- * THE BUDGET'S DOOR FOR `role.pay` (R21). `actingAs` names
- * the role a holder acts through, for `changed_as`: a role's label, never a
- * person and never the machine key. `door(user, ctx)` answers one person:
- * deny-aware first, then a live holder, then the admin's fallback until the
- * launch vote (and only while nobody holds the power and the village does not),
- * otherwise a refusal naming the suggestion path.
+ * THE BUDGET'S DOOR FOR `role.pay` (R21), ON THE VILLAGE'S ONE CHECK. Who may
+ * change the budget is decided by `holderDoor` (server/lib/holderDoor.ts), the
+ * same answer every other `role.pay` door gives (coordinator ruling,
+ * 2026-11-09, G-B3), so a budget write and a role's pay can never say yes and
+ * no to the same person. This door only answers in the budget's own shapes:
+ * each refusal names its suggestion path, per control (B3).
  *
- * NOT `holderDoor` YET, ON PURPOSE (the coordinator, 2026-11-09). The village's
- * one shared check for `role.pay` is `holderDoor` (server/lib/holderDoor.ts,
- * on main), but its `refuse` option (PR #1031), which lets this route answer in
- * its own 409 shapes with a `suggest` per control, is not. So this door stays
- * for now, and it refuses everywhere `holderDoor` refuses: it is STRICTER,
- * failing closed for an admin while a holder exists and for an admin after the
- * launch vote, where `holderDoor` lets an admin through. Moving the holder and
- * admin part onto `holderDoor` is a follow-up once #1031 lands; the budget's
- * own checks (the payee conflict, ended moons, the suggestion path) stay on
- * top of it.
+ *   - A WRITE (`req` given) asks `holderDoor` itself: the gate, its 409 on a
+ *     power the village holds (carried as `gate`, break-glass offer and all),
+ *     and the founder-steward who broke the glass.
+ *   - A PREVIEW or a page (no `req`) asks `holderStanding`, the same decision
+ *     without a request, so the banner never offers a door that is shut.
+ *
+ * `actingAs` names the role a holder acts through, for `changed_as`: a role's
+ * label, never a person and never the machine key. The budget's own checks
+ * (the payee conflict, ended moons, the suggestion path) stay on top.
  */
-function budgetDoorOf(deps: BudgetDoorDeps): { door(user: any, ctx: CapabilityCtx | null, control?: string): Promise<BudgetDoor>; actingAs(userId: string): string } {
+function budgetDoorOf(deps: BudgetDoorDeps): {
+  door(user: any, ctx: CapabilityCtx | null, control?: string, req?: any): Promise<BudgetDoor>;
+  actingAs(userId: string): string;
+} {
   const actingAs = (userId: string): string => {
     const held = new Set(deps.roleHolders().filter((h) => String(h.userId) === userId).map((h) => String(h.roleId)));
     const names = deps.rolesCarrying("role.pay").filter((r) => held.has(String(r.id))).map((r) => r.name);
@@ -193,35 +203,62 @@ function budgetDoorOf(deps: BudgetDoorDeps): { door(user: any, ctx: CapabilityCt
     const roles = deps.rolesCarrying("role.pay").map((r) => r.name);
     return roles.length ? roles : [BUDGET_KEEPER];
   };
-  async function door(user: any, ctx: CapabilityCtx | null, control = BUDGET_CONTROL): Promise<BudgetDoor> {
+  const standingDeps = { getPool: deps.getPool, liveHoldersOf: deps.liveHoldersOf, launchedByVote: deps.launched, capabilityCtx: deps.capabilityCtx };
+  const refusal = (reason: HolderRefusal["reason"], holders: readonly string[], launched: boolean, control: string, gate?: Record<string, unknown>): BudgetDoor => {
     const suggest = suggestOn(control);
-    // Deny-aware first: a warning badge on the power refuses a holder and the admin fallback alike.
-    if ((ctx?.badgeDenies ?? []).includes("role.pay")) {
+    if (reason === "denied") {
       return { ok: false, status: 403, body: { error: "A warning badge takes the budget power from you, so you cannot change the budget. Suggest the change instead.", code: "denied", suggest } };
     }
-    const holders = await deps.liveHoldersOf("role.pay");
-    const ans = holderOnlyDecision({ capability: "role.pay", ctx, liveHolders: holders, label: "the cash budget" });
-    if (ans.ok && ans.via === "holder") return { ok: true, via: "holder", byAs: actingAs(String(user.id)) };
-    if (ans.ok) {
-      // The operator fallback: an admin, nobody holding the power, the village not holding it.
-      if (await deps.launched()) {
-        return {
-          ok: false,
-          status: 409,
-          body: { error: "Nobody holds the budget power since the launch vote, so a change to the budget goes to the village. Suggest the change, and it goes to a vote.", code: "nobody_holds_it", suggest },
-        };
-      }
-      return { ok: true, via: "admin_before_launch", byAs: ADMIN_BEFORE_LAUNCH };
+    if (reason === "village-holds-it") {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: "The village holds the budget power, so a change to the budget goes to a vote. Suggest the change.", code: "village_holds_it", suggest, ...(gate ? { gate } : {}) },
+      };
     }
-    if (ans.body.code === "auth_required") return { ok: false, status: 401, body: { error: "Sign in first.", code: "auth_required" } };
-    if (ans.body.code === "village_holds_it") {
-      return { ok: false, status: 409, body: { error: "The village holds the budget power, so a change to the budget goes to a vote. Suggest the change.", code: "village_holds_it", suggest } };
+    if (holders.length === 0 && launched) {
+      return {
+        ok: false,
+        status: 409,
+        body: { error: "Nobody holds the budget power since the launch vote, so a change to the budget goes to the village. Suggest the change, and it goes to a vote.", code: "nobody_holds_it", suggest },
+      };
     }
     return {
       ok: false,
       status: 403,
       body: { error: "Only the people who hold the budget power change the budget. Suggest the change, and it goes to them.", code: "holders_only", suggest, holdersAs: holdersAs() },
     };
+  };
+  /** How a person the door let through is recorded. Null standing after a pass is the glass broken. */
+  const through = async (user: any, ctx: CapabilityCtx | null): Promise<BudgetDoor> => {
+    const standing = await holderStanding(standingDeps, { id: user.id, isAdmin: !!ctx?.isAdmin }, "role.pay");
+    if (standing === "holder") return { ok: true, via: "holder", byAs: actingAs(String(user.id)) };
+    if (standing === "admin-before-launch") return { ok: true, via: "admin_before_launch", byAs: ADMIN_BEFORE_LAUNCH };
+    if (standing === "admin-no-steward") return { ok: true, via: "admin_no_steward", byAs: ADMIN_NO_STEWARD };
+    return { ok: true, via: "break_glass", byAs: BREAK_GLASS };
+  };
+  async function door(user: any, ctx: CapabilityCtx | null, control = BUDGET_CONTROL, req?: any): Promise<BudgetDoor> {
+    if (!user) return { ok: false, status: 401, body: { error: "Sign in first.", code: "auth_required" } };
+    const holders = (await deps.liveHoldersOf("role.pay")).filter((h) => h !== "");
+    if (req) {
+      // A write: the village's one check decides, the gate included.
+      let refused: HolderRefusal | null = null;
+      const sink: any = { status: () => sink, json: () => sink };
+      // `launchedByVote` named outright: without it the door reads the vote from the pool, and the
+      // route's own launch check (the one the preview asks) would not be the one deciding the write.
+      const gateDeps: HolderDoorDeps = { ...deps, launchedByVote: deps.launched };
+      const passed = await holderDoor(req, sink, gateDeps, "role.pay", { refuse: (_res, r) => { refused = r; } });
+      if (passed) return through(user, ctx);
+      const r = refused as HolderRefusal | null;
+      if (!r) return { ok: false, status: 401, body: { error: "Sign in first.", code: "auth_required" } };
+      return refusal(r.reason, r.holders, await deps.launched(), control, r.reason === "village-holds-it" ? r.body : undefined);
+    }
+    // A preview or a page: the same decision, asked without a request.
+    if ((ctx?.badgeDenies ?? []).includes("role.pay")) return refusal("denied", holders, false, control);
+    const standing = await holderStanding(standingDeps, { id: user.id, isAdmin: !!ctx?.isAdmin }, "role.pay");
+    if (standing) return through(user, ctx);
+    if (isVillageHeld("role.pay", ctx?.villageHeld)) return refusal("village-holds-it", holders, false, control);
+    return refusal("not-a-holder", holders, await deps.launched(), control);
   }
   return { door, actingAs };
 }
@@ -278,12 +315,12 @@ const PAYEE_CONFLICT =
   "This changes a budget line for a role you hold, so you cannot make it yourself. Suggest it: it goes to the holders who hold no role it pays, or to a village vote when every holder holds one.";
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, capabilityCtx, getPool, overLimit, liveHoldersOf, projectCurrency, rolesCarrying, roleHolders } = deps;
+  const { authedUser, capabilityCtx, getPool, overLimit, liveHoldersOf, projectCurrency, rolesCarrying, roleHolders, guardCapability } = deps;
   const launched = deps.launched ?? (() => launchedByVote(getPool()));
   const isFormer = deps.isFormerMember ?? ((user: any) => leftTheVillage(getPool(), user));
   const seatedRoleIds =
     deps.seatedRoleIds ?? (async (userId: string) => (await listOrgAssignments(getPool())).filter((a) => String(a.userId ?? "") === userId).map((a) => a.orgRoleId));
-  const { door: budgetDoor, actingAs } = budgetDoorOf({ liveHoldersOf, rolesCarrying, roleHolders, launched });
+  const { door: budgetDoor, actingAs } = budgetDoorOf({ liveHoldersOf, rolesCarrying, roleHolders, launched, authedUser, getPool, capabilityCtx, guardCapability });
 
   configureBudgets({
     currency: () => String(projectCurrency() ?? "").trim().toUpperCase(),
@@ -291,6 +328,7 @@ export function register(app: Express, deps: Deps): void {
     // The switch's re-check (R18, P1) asks the live, bridged count, the same one the door asks.
     rolePayHolders: () => liveHoldersOf("role.pay"),
     holdsRolePay: async (userId: string) => (await liveHoldersOf("role.pay")).includes(userId),
+    stewardHolders: () => liveHoldersOf(BREAK_GLASS_SEAT),
     seatedRoleIds,
     launched: () => launched(),
     ...(deps.revisionSecret ? { revisionSecret: () => String(deps.revisionSecret) } : {}),
@@ -381,10 +419,12 @@ export function register(app: Express, deps: Deps): void {
         : { mayWrite: true, via: door.via }
       : { mayWrite: false, code: door.body.code, message: door.body.error, suggest: door.body.suggest ?? null };
     if (dryRun) return res.json({ ...view(preview), door: doorView });
-    if (!door.ok) return res.status(door.status).json(door.body);
+    // The write asks the village's one check itself, the gate included.
+    const writeDoor = await budgetDoor(who.user, who.ctx, BUDGET_CONTROL, req);
+    if (!writeDoor.ok) return res.status(writeDoor.status).json(writeDoor.body);
     if (conflict) return res.status(409).json({ error: PAYEE_CONFLICT, code: "payee_conflict", suggest: SUGGEST });
     const revision = typeof body.revision === "string" && body.revision ? body.revision : null;
-    const done = await importBudgetLines(getPool(), { ...input, dryRun: false, revision, stateRevision: null });
+    const done = await importBudgetLines(getPool(), { ...input, byAs: writeDoor.byAs, dryRun: false, revision, stateRevision: null });
     res.status(done.status).json({ ...view(done), door: doorView });
   }
 
@@ -567,7 +607,7 @@ export function register(app: Express, deps: Deps): void {
       tooMany(res);
       return null;
     }
-    const door = await budgetDoor(who.user, who.ctx, control);
+    const door = await budgetDoor(who.user, who.ctx, control, dryRun ? undefined : req);
     if (!door.ok) {
       res.status(door.status).json(door.body);
       return null;
