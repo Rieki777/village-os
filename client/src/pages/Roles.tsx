@@ -68,10 +68,10 @@ interface SheetSource {
 // term reached its date used to fall through to "Open Role" here.
 const statusBadge: Record<SeatStateWord, string> = {
   filled: "bg-sage/15 text-sage border border-sage/30",
-  open: "bg-amber/15 text-amber-700 border border-amber/40",
+  open: "bg-amber/15 text-amber-ink border border-amber/40",
   forming: "bg-teal/15 text-teal-deep border border-teal/30",
-  partial: "bg-gold/20 text-amber-800 border border-gold/40",
-  expired: "bg-gold/20 text-amber-800 border border-gold/40",
+  partial: "bg-gold/20 text-foreground border border-gold/40",
+  expired: "bg-gold/20 text-foreground border border-gold/40",
 };
 
 function normalizeStatus(s: unknown): SeatStateWord {
