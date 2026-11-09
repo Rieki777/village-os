@@ -77,7 +77,7 @@ export default function DiscoverStep({
         </button>
         <p className="text-sm text-muted-foreground">{t`Optional. You can skip it.`}</p>
         {opened && (
-          <Suspense fallback={<p className="mt-3 text-sm text-muted-foreground">{t`Loading…`}</p>}>
+          <Suspense fallback={<p className="mt-3 text-sm text-muted-foreground">{t({ message: "Loading…", context: "role draft discover" })}</p>}>
             <HumanDesignStep cast={cast} chars={chars} onToggle={onToggleChar} />
           </Suspense>
         )}

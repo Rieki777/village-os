@@ -118,7 +118,7 @@ export default function IkigaiDoor({
         ) : (
           <p className="text-sm text-muted-foreground">{DISCOVER_WORDS.signInToAsk}</p>
         )}
-        {busy && <p role="status" className="mt-2 text-sm text-muted-foreground">{t`Asking the guide…`}</p>}
+        {busy && <p role="status" className="mt-2 text-sm text-muted-foreground">{t({ message: "Asking the guide…", context: "role draft discover" })}</p>}
         {note && <p role="alert" className="mt-2 text-sm">{note}</p>}
         {out && (
           <div className="mt-2" aria-live="polite">
@@ -131,7 +131,7 @@ export default function IkigaiDoor({
                   <li key={s.roleId} className="text-sm">
                     <strong>{nameOf(s.roleId)}</strong>: {s.why}{" "}
                     <button type="button" onClick={() => onDraft(s.roleId)} className="min-h-11 font-semibold underline underline-offset-2">
-                      {t`Draft this role`}
+                      {t({ message: "Draft this role", context: "role draft discover" })}
                     </button>
                   </li>
                 ))}

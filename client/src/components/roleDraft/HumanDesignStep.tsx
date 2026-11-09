@@ -85,16 +85,16 @@ export default function HumanDesignStep({
           onClick={() => setReading({ type: mine.type, lines: mine.lines })}
           className="min-h-11 rounded-full border border-border px-4 font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
         >
-          {t`Use my profile`}
+          {t({ message: "Use my profile", context: "role draft discover" })}
         </button>
       )}
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
-          {t`Birth date`}
+          {t({ message: "Birth date", context: "role draft discover" })}
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={FIELD} />
         </label>
         <label className="flex flex-col gap-1">
-          {t`Birth time`}
+          {t({ message: "Birth time", context: "role draft discover" })}
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={FIELD} />
         </label>
         <button type="button" onClick={compute} className="min-h-11 rounded-full border border-border px-4 font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
