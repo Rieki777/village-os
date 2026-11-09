@@ -579,8 +579,12 @@ export default function StructureReview() {
                     const renamed = theirName.trim() !== "" && theirName !== liveName;
                     const moves = !!s.circleId && s.circleId !== live.circleId;
                     const updateSays = [
-                      renamed ? t`${liveName} is renamed ${theirName}.` : null,
-                      moves ? (renamed ? t`It moves into ${theirCircle}.` : t`${liveName} moves into ${theirCircle}.`) : null,
+                      renamed ? t({ message: `${liveName} is renamed ${theirName}.`, context: "a live role takes the name an outside service sent" }) : null,
+                      moves
+                        ? renamed
+                          ? t`It moves into ${theirCircle}.`
+                          : t({ message: `${liveName} moves into ${theirCircle}.`, context: "a live role moves into the circle an outside service sent" })
+                        : null,
                       t`${source}'s wording replaces ours wherever ${source} sent some, and the rest stays ours.`,
                       live.holders ? t`Whoever holds it keeps it.` : t`Nobody holds it yet.`,
                     ]
@@ -620,7 +624,7 @@ export default function StructureReview() {
                               pick: () => choose(s, { choice: "rename", name: choice?.choice === "rename" ? choice.name : "" }),
                             },
                             {
-                              label: t`Skip for now`,
+                              label: t({ message: "Skip for now", context: "leave an outside service's role waiting, change nothing" }),
                               says: t`Nothing changes. ${liveName} stays as it is, and ${source}'s version waits in the queue for later.`,
                               on: false,
                               disabled: false,

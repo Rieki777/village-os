@@ -1979,8 +1979,8 @@ msgid "Roles this character could open. Propose one and the village decides:"
 msgstr "Roles que este personaje podría abrir. Propón uno y la aldea decide:"
 
 #: client/src/pages/StructureReview.tsx
-msgid "{liveName} is renamed {theirName}."
-msgstr ""
+#~ msgid "{liveName} is renamed {theirName}."
+#~ msgstr ""
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "button that proposes a change to what closing means"
@@ -2105,6 +2105,11 @@ msgstr ""
 
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "The village has not written any rows of its own yet."
+msgstr ""
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role takes the name an outside service sent"
+msgid "{liveName} is renamed {theirName}."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
@@ -2508,8 +2513,8 @@ msgid "Organisation (optional)"
 msgstr ""
 
 #: client/src/pages/StructureReview.tsx
-msgid "Skip for now"
-msgstr ""
+#~ msgid "Skip for now"
+#~ msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -3166,6 +3171,11 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement report cycle line"
 msgid "· pool released {0} {1}"
+msgstr ""
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role moves into the circle an outside service sent"
+msgid "{liveName} moves into {theirCircle}."
 msgstr ""
 
 #. placeholder {0}: label[band]
@@ -4161,6 +4171,11 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Everything waiting"
+msgstr ""
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "leave an outside service's role waiting, change nothing"
+msgid "Skip for now"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -5182,8 +5197,8 @@ msgid "Characters saved"
 msgstr ""
 
 #: client/src/pages/StructureReview.tsx
-msgid "{liveName} moves into {theirCircle}."
-msgstr ""
+#~ msgid "{liveName} moves into {theirCircle}."
+#~ msgstr ""
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"

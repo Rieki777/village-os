@@ -1973,8 +1973,8 @@ msgid "Roles this character could open. Propose one and the village decides:"
 msgstr "Roles this character could open. Propose one and the village decides:"
 
 #: client/src/pages/StructureReview.tsx
-msgid "{liveName} is renamed {theirName}."
-msgstr "{liveName} is renamed {theirName}."
+#~ msgid "{liveName} is renamed {theirName}."
+#~ msgstr "{liveName} is renamed {theirName}."
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "button that proposes a change to what closing means"
@@ -2100,6 +2100,11 @@ msgstr "Turn it down"
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "The village has not written any rows of its own yet."
 msgstr "The village has not written any rows of its own yet."
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role takes the name an outside service sent"
+msgid "{liveName} is renamed {theirName}."
+msgstr "{liveName} is renamed {theirName}."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
@@ -2501,8 +2506,8 @@ msgid "Organisation (optional)"
 msgstr "Organisation (optional)"
 
 #: client/src/pages/StructureReview.tsx
-msgid "Skip for now"
-msgstr "Skip for now"
+#~ msgid "Skip for now"
+#~ msgstr "Skip for now"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -3157,6 +3162,11 @@ msgstr "A role card shows the work the village needs done. Your application is t
 msgctxt "settlement report cycle line"
 msgid "· pool released {0} {1}"
 msgstr "· pool released {0} {1}"
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role moves into the circle an outside service sent"
+msgid "{liveName} moves into {theirCircle}."
+msgstr "{liveName} moves into {theirCircle}."
 
 #. placeholder {0}: label[band]
 #: client/src/components/admin/AgeBandCorrection.tsx
@@ -4149,6 +4159,11 @@ msgstr "No changes yet. Open any setting with a Suggest button, such as those in
 msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr "Everything waiting"
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "leave an outside service's role waiting, change nothing"
+msgid "Skip for now"
+msgstr "Skip for now"
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
@@ -5164,8 +5179,8 @@ msgid "Characters saved"
 msgstr "Characters saved"
 
 #: client/src/pages/StructureReview.tsx
-msgid "{liveName} moves into {theirCircle}."
-msgstr "{liveName} moves into {theirCircle}."
+#~ msgid "{liveName} moves into {theirCircle}."
+#~ msgstr "{liveName} moves into {theirCircle}."
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"
