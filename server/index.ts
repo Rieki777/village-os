@@ -710,6 +710,7 @@ import { RENDERERS, renderWeeklyBrief, type Rendered } from "./lib/assistantTemp
 import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { register as registerVillageExportRoutes } from "./routes/villageExport";
+import { register as registerSigningKeyRoutes } from "./routes/signingKey";
 import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
@@ -7473,6 +7474,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
 
   // The whole village as one SQL file, for whoever runs the deployment (R071).
   // Gated by ADMIN_PASSWORD alone, audited and announced; server/routes/villageExport.ts.
+  registerSigningKeyRoutes(app, { isAdmin, authedUser, adminActor, getPool, notify, members, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET) }); // R069: rotate the village signing key from Admin; two signers after launch
   registerVillageExportRoutes(app, {
     getPool, notify, members, overLimit, clientIp, secretEquals,
     adminPassword: () => (adminPasswordIsUsable ? ADMIN_PASSWORD : null),
