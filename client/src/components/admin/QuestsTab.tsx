@@ -28,6 +28,7 @@ import WorkValueEditor, { draftFrom, draftToBody, usePayOptions, type WorkValueD
 import QuestEnginePrice, { type EngineUse } from "@/components/valuation/QuestEnginePrice";
 import { usePrefill } from "@/lib/profilePrefill";
 import { linesToList, listToLines } from "@/lib/questBoard";
+import QuestSafetyEditor from "@/components/admin/QuestSafetyEditor";
 
 export default function QuestsTab({ password }: { password: string }) {
   const { t } = useLingui();
@@ -329,6 +330,18 @@ export default function QuestsTab({ password }: { password: string }) {
                     A poster comes through the village's own upload, so its path starts with /api/uploads/. Leave it empty and the card paints a scene from the quest's circle.
                   </p>
                 </details>
+                {/* What it asks of the body (build days S5): its own Save, so a
+                    safety change never rides an unrelated edit. */}
+                {!q.isExample && (
+                  <details className="mt-3 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2">
+                    <summary className="text-xs font-semibold text-gray-600 cursor-pointer select-none">
+                      <Trans context="admin quest safety">Safety on site: age, badges and note</Trans>
+                    </summary>
+                    <div className="mt-3">
+                      <QuestSafetyEditor questId={q.id} password={password} />
+                    </div>
+                  </details>
+                )}
                 {q.isExample ? (
                   <div className="flex flex-wrap items-center gap-3 mt-3">
                     <button
