@@ -1,0 +1,185 @@
+# The daily release train. Rye, 2026-11-06: Village OS cuts a release every
+# day, villages on the platform team's hosting upgrade automatically, and a red
+# main is never released.
+#
+# THREE WORKFLOWS, ONE GATE. This file only OPENS a release pull request:
+#
+#   1. daily-release.yml (this file), once a day: if main has commits since
+#      the last release tag and ci on main's tip concluded success, it opens a
+#      pull request on release/vX.Y.Z that moves the version (package.json,
+#      PLATFORM_VERSION, docker-compose.yml, START_HERE.md) and rolls
+#      CHANGELOG.md, with the merged pull requests and the migrations listed.
+#   2. release-train-land.yml, when ci passes on that pull request, merges it;
+#      when ci then passes on main, it pushes the annotated tag vX.Y.Z.
+#   3. release.yml, unchanged, is triggered by that tag. It asks ci again,
+#      runs the rollback check, builds, boots, and only then publishes
+#      ghcr.io/<owner>/village-os:X.Y.Z and :stable, and the GitHub release.
+#
+# Skipped days print why: nothing new, main red or unfinished, a release
+# pull request still open, or a version already on main awaiting its tag.
+# The decisions are scripts/release-train.mjs, held by
+# server/releaseTrain.test.ts.
+#
+# INERT UNTIL SWITCHED ON. Two things, both Rye's, both in the repository's
+# Settings > Secrets and variables > Actions:
+#
+#   secret   RELEASE_BOT_TOKEN   a fine-grained token on this repository with
+#                                Contents: read and write, Pull requests: read
+#                                and write. A token, not the built-in
+#                                GITHUB_TOKEN, because GitHub does not start
+#                                workflows for pushes and pull requests made
+#                                with GITHUB_TOKEN: ci would never run on the
+#                                release pull request and release.yml would
+#                                never see the tag.
+#   variable RELEASE_TRAIN       set to `on`. Anything else (or unset) pauses
+#                                the train: every run says it is paused and
+#                                does nothing. This is the pause switch.
+#
+# Until both exist every run ends green with a notice, never red.
+#
+# #431 (the move to the ReGen-Civics organisation) changes no line here: the
+# image owner is read by release.yml, and scripts/release-train.mjs moves the
+# compose image whatever its owner is. The token has to be recreated on the
+# new repository, and RELEASE_TRAIN set there.
+#
+# BEFORE THE MOVE, merging to main deploys the first village's production
+# from main directly, so a release pull request merging is also a production
+# deploy of a version-number change. That is why the train stays off until
+# the migration sitting.
+
+name: daily-release
+
+on:
+  schedule:
+    # 05:17 UTC, daily. Off the hour because the hour is when everyone's cron
+    # fires and Actions queues; before the working day in Costa Rica and
+    # Europe both, so a skipped or failed day is read the same morning.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: daily-release
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Is the train switched on
+        id: on
+        env:
+          SWITCH: ${{ vars.RELEASE_TRAIN }}
+          HAS_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          ready=true
+          if [ "${SWITCH:-}" != "on" ]; then
+            msg="The release train is paused: the repository variable RELEASE_TRAIN is '${SWITCH:-unset}', not 'on'. Nothing was released."
+            ready=false
+          elif [ "$HAS_TOKEN" != "true" ]; then
+            msg="The release train is on but the RELEASE_BOT_TOKEN secret is missing, so it cannot open a pull request that ci would run on. Nothing was released."
+            ready=false
+          fi
+          if [ "$ready" = "false" ]; then
+            echo "::notice::${msg}"
+            { echo "### Daily release: skipped"; echo; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "ready=${ready}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.on.outputs.ready == 'true'
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_BOT_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        if: steps.on.outputs.ready == 'true'
+        with:
+          node-version: 22
+
+      - name: Gather the facts
+        if: steps.on.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          sha=$(git rev-parse HEAD)
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' HEAD 2>/dev/null || true)
+          if [ -n "$last" ]; then
+            commits=$(git rev-list --count "${last}..HEAD")
+            git log --first-parent --format='%s%x1f%b%x1e' "${last}..HEAD" > log.txt
+            git diff --name-only --diff-filter=A "${last}" HEAD -- 'drizzle/*.sql' > migrations.txt
+          else
+            commits=0; : > log.txt; : > migrations.txt
+          fi
+          node scripts/release-train.mjs prs < log.txt > prs-bare.json
+          # Labels drive major and patch (release:major, release:patch).
+          jq -c '.[]' prs-bare.json | while read -r pr; do
+            n=$(printf '%s' "$pr" | jq -r .number)
+            labels=$(gh pr view "$n" --json labels --jq '[.labels[].name]' 2>/dev/null || echo '[]')
+            printf '%s' "$pr" | jq -c --argjson l "${labels:-[]}" '. + {labels: $l}'
+          done | jq -s . > prs.json
+          # ci's verdict on main's tip: the newest completed push run of ci
+          # on exactly this commit. No run, an unfinished run, a cancelled run
+          # and a red run all read as not green.
+          ci=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&branch=main&per_page=20" \
+                 --jq '[.workflow_runs[] | select(.status == "completed")] | sort_by(.created_at) | last | .conclusion // ""')
+          open=$(gh pr list --state open --base main --json number,headRefName \
+                   --jq '[.[] | select(.headRefName | startswith("release/v"))][0].number // empty')
+          pkg=$(node -p "require('./package.json').version")
+          jq -n --arg lastTag "$last" --arg pkg "$pkg" --argjson commits "$commits" \
+                --arg ci "$ci" --arg open "$open" --slurpfile prs prs.json \
+            '{lastTag: $lastTag, packageVersion: $pkg, commitsSinceTag: $commits, ciConclusion: $ci,
+              openReleasePr: (if $open == "" then null else ($open | tonumber) end), prs: $prs[0]}' \
+            > facts.json
+          echo "main ${sha}"; cat facts.json
+
+      - name: Decide
+        id: plan
+        if: steps.on.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/release-train.mjs plan --facts facts.json > plan.json
+          cat plan.json
+          echo "release=$(jq -r .release plan.json)" >> "$GITHUB_OUTPUT"
+          echo "version=$(jq -r '.version // ""' plan.json)" >> "$GITHUB_OUTPUT"
+          reason=$(jq -r .reason plan.json)
+          if [ "$(jq -r .release plan.json)" != "true" ]; then
+            echo "::notice::No release today. ${reason}"
+            { echo "### Daily release: skipped"; echo; echo "$reason"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open the release pull request
+        if: steps.on.outputs.ready == 'true' && steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="release/v${VERSION}"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "::error::${branch} already exists on origin with no open pull request. Delete it or open its pull request by hand; the train will not overwrite it."
+            exit 1
+          fi
+          git switch -c "$branch"
+          node scripts/release-train.mjs apply --version "$VERSION" --date "$(date -u +%F)" \
+            --prs prs.json --migrations migrations.txt
+          git add CHANGELOG.md START_HERE.md docker-compose.yml package.json server/lib/identity.ts
+          # The commit's identity is the Actions bot, set for this one command.
+          # Nothing here touches a repository-level git identity.
+          git -c user.name="village-os release train" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "release: v${VERSION}"
+          git push origin "refs/heads/${branch}:refs/heads/${branch}"
+          node scripts/release-train.mjs notes --prs prs.json --migrations migrations.txt > body.md
+          url=$(gh pr create --base main --head "$branch" --title "release: v${VERSION}" --body-file body.md)
+          echo "::notice::Opened ${url}"
+          { echo "### Daily release: v${VERSION}"; echo; echo "Opened ${url}. It merges when ci passes, and the tag follows when ci passes on main."; } >> "$GITHUB_STEP_SUMMARY"

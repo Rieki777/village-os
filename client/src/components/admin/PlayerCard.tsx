@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CheckCircle2, Circle, LogOut, MinusCircle, Search, Trash2 } from "lucide-react";
 import type { PathLadder } from "@shared/pathLadders";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -345,6 +346,7 @@ export function PlayerCard({
   onStage,
   onSignOut,
   onDelete,
+  footerExtra,
 }: {
   player: Player;
   /** Undefined while it loads. */
@@ -359,6 +361,8 @@ export function PlayerCard({
   onStage: (stageId: string | null) => void;
   onSignOut: () => void;
   onDelete: () => void;
+  /** More actions for the footer, drawn before Sign out everywhere. */
+  footerExtra?: ReactNode;
 }) {
   const access = accessOf(p.role);
   const ladderTitle = useGameConfig()?.ladder?.title;
@@ -458,6 +462,7 @@ export function PlayerCard({
       </div>
 
       <footer className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-5 py-2.5">
+        {footerExtra}
         <button
           type="button"
           onClick={onSignOut}

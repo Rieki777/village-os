@@ -30,8 +30,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Hand, Mail } from "lucide-react";
+import { useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { SHEET_WORDS } from "@shared/roleSheet";
+import { openProposalHref } from "@shared/openProposals";
 import SeatTermField, { MAP_TERM_LOOK, type SeatTermLook } from "./SeatTermField";
 import { useSeatCardSlot } from "./seatCardSlot";
 
@@ -73,6 +75,7 @@ export default function SeatAction({
   applyHref?: string | null;
 }) {
   const slot = useSeatCardSlot();
+  const { t } = useLingui();
   const [location] = useLocation();
   const [composing, setComposing] = useState(false);
   const [raising, setRaising] = useState(false);
@@ -173,17 +176,39 @@ export default function SeatAction({
   if (view.kind === "signIn") {
     const here =
       typeof window === "undefined" ? location : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    /*
+     * A STRANGER APPLIES; A MEMBER SIGNS IN (role journey, 2026-11-09). This
+     * view is only drawn for a role that invites somebody in (roleSheet's
+     * actionFor). Registration is by invitation, so a person with no account
+     * who followed a shared role card had only "Sign in", a door drawn on a
+     * wall. Applying is the open proposal, the account-free application the
+     * circle card already links (shared/circleCard.ts, `openProposalHref`):
+     * name, email and why, confirmed by email, consented by the circle, and on
+     * adoption the invitation is emailed and the role placed once they join
+     * (server/lib/openProposalDecide.ts). Sign-in stays below it for a member
+     * who already has an account.
+     */
+    const seatName = view.seatName;
+    const applyLabel = t({ message: `Apply for ${seatName}`, context: "role card button, signed out" });
     return (
-      <Link
+      <div className="flex flex-col gap-2">
+        {seatId && (
+          <a href={openProposalHref(seatId)} className={`${GOLD} w-full`}>
+            <Hand className="size-[17px] shrink-0" aria-hidden="true" />
+            {applyLabel}
+          </a>
+        )}
+        <Link
         ref={(el: HTMLAnchorElement | null) => {
           doorRef.current = el;
         }}
         href={`/login?next=${encodeURIComponent(safeNext(here))}`}
-        className={`${GOLD} w-full`}
+        className={`${seatId ? LINE : GOLD} w-full`}
       >
         <Hand className="size-[17px] shrink-0" aria-hidden="true" />
         {view.label}
       </Link>
+      </div>
     );
   }
 

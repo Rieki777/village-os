@@ -1,5 +1,5 @@
 import { lingui } from "@lingui/vite-plugin";
-import { precompileEnglish } from "./precompileEnglish";
+import { precompileEnglish, type LongCopySink } from "./precompileEnglish";
 
 /**
  * The Lingui macro transform, shared by vite.config.ts and vitest.config.ts so
@@ -12,8 +12,13 @@ import { precompileEnglish } from "./precompileEnglish";
  * route chunks instead of piling into one catalog on the first page.
  * `precompileEnglish` then compiles each of those messages at build time, so
  * the browser never needs Lingui's ICU compiler.
+ *
+ * `splitLongEnglish` (vite.config.ts only, never vitest) takes the LONG
+ * messages back out of the lazy chunks in a production build, into parts the
+ * chunk loads before it runs: client/src/i18n/copySplit.ts. Boot chunks keep
+ * theirs inline, so the first page still downloads no catalog.
  */
-export function linguiMacros() {
+export function linguiMacros(splitLongEnglish?: LongCopySink) {
   return [
     lingui({
       macroTransform: {
@@ -24,6 +29,6 @@ export function linguiMacros() {
         },
       },
     }),
-    precompileEnglish(),
+    precompileEnglish(splitLongEnglish),
   ];
 }

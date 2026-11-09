@@ -140,4 +140,27 @@ describe("routePreloadTable and the emitted script", () => {
     expect(run("/")).toEqual([]);
     expect(run("/nowhere")).toEqual([]);
   });
+
+  /*
+   * A chunk whose long English moved to a part (client/src/i18n/copySplit.ts)
+   * awaits that part before it runs. Fetching it beside the JS keeps the move
+   * free of an extra round trip. `crossOrigin = ""` is "anonymous", which is
+   * what a plain same-origin fetch() asks for, so the preload is reused.
+   */
+  it("preloads the English parts of a route's chunks as fetches", () => {
+    const withParts: ChunkFacts[] = chunks.map((c) =>
+      c.fileName === "assets/QuestCard-K.js" ? { ...c, copyParts: ["Part_K-12345"] } : c.fileName === "assets/index-E.js" ? { ...c, copyParts: ["BootPart0000"] } : c,
+    );
+    const t = routePreloadTable(routes, withParts);
+    const ids = t.routes.find(([re]) => new RegExp(re, "i").test("/quests"))![1];
+    expect(ids.map((i) => t.files[i])).toContain("api/i18n/catalog/en/part/Part_K-12345");
+    expect(t.files).not.toContain("api/i18n/catalog/en/part/BootPart0000");
+    const added: Array<Record<string, string>> = [];
+    vm.runInNewContext(routePreloadScript(t, "/"), {
+      location: { pathname: "/quests" },
+      document: { createElement: () => ({}), head: { appendChild: (l: Record<string, string>) => added.push(l) } },
+    });
+    const part = added.find((l) => l.href.includes("/part/"))!;
+    expect([part.rel, part.as, part.href, part.crossOrigin]).toEqual(["preload", "fetch", "/api/i18n/catalog/en/part/Part_K-12345", ""]);
+  });
 });
