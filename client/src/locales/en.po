@@ -32,6 +32,11 @@ msgctxt "signing key"
 msgid "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
 msgstr "You asked for a new key at {askedAt}. It waits for another admin to co-sign it, until {lapsesAt}."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check again"
+msgstr "Check again"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Nothing is being weighed right now."
 msgstr "Nothing is being weighed right now."
@@ -93,6 +98,11 @@ msgstr "Starting…"
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} answered at {askedAt}."
+msgstr "{agent} answered at {askedAt}."
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
@@ -106,6 +116,11 @@ msgstr "Your invoices"
 msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
 msgstr "Every invoice, sent to paid"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "See which one"
+msgstr "See which one"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "send a note"
@@ -130,6 +145,14 @@ msgstr "After"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
 msgstr "Gather connected changes to the village's settings, say why once, let the village review them, and send them to one vote."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Could not reach the server."
+msgstr "Could not reach the server."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Review dates, sectors and role types {agent} keeps."
+msgstr "Review dates, sectors and role types {agent} keeps."
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
@@ -195,6 +218,11 @@ msgctxt "heading on the change requests page"
 msgid "Start a change request"
 msgstr "Start a change request"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflicts"
+msgstr "Conflicts"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Type \"{confirmWith}\" to confirm."
@@ -208,6 +236,10 @@ msgstr "Take it in"
 #: client/src/pages/ChangeRequests.tsx
 msgid "Editing a change starts the review again."
 msgstr "Editing a change starts the review again."
+
+#: client/src/components/review/SeraCompare.tsx
+msgid "Struck words are only here. Underlined words are only in {theirsTitle}."
+msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
@@ -235,6 +267,11 @@ msgctxt "signing key"
 msgid "The key was not replaced"
 msgstr "The key was not replaced"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "See which {nAhead}"
+msgstr "See which {nAhead}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "A worry you cannot point to yet."
 msgstr "A worry you cannot point to yet."
@@ -249,9 +286,19 @@ msgctxt "change request note kind"
 msgid "Can live with it"
 msgstr "Can live with it"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Not in a circle"
+msgstr "Not in a circle"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr "That did not load."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Showing {shownCount}: {shownWords}"
+msgstr "Showing {shownCount}: {shownWords}"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Edit the name or the why"
@@ -272,18 +319,37 @@ msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr "First seen {seen}."
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Nothing here yet."
+msgstr "Nothing here yet."
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Sending..."
 msgstr "Sending..."
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "{owner} version"
+msgstr "{owner} version"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The steward who receives it"
 msgstr "The steward who receives it"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing from {agent} waits for the chart"
+msgstr "Nothing from {agent} waits for the chart"
+
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
 msgstr "Cash still owed to you, from this village's records: {owedWords}"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Filter"
+msgstr "Filter"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "retry a failed read"
@@ -312,6 +378,11 @@ msgstr "Object"
 msgid "Respond to this change request"
 msgstr "Respond to this change request"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{sera} {agent} changes"
+msgstr "{sera} {agent} changes"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an objection box"
 msgid "The harm you see"
@@ -335,6 +406,15 @@ msgstr "Why the village needs it"
 msgctxt "review response"
 msgid "Ask a question"
 msgstr "Ask a question"
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Read both in full"
+msgstr "Read both in full"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing has been read from {agent} yet."
+msgstr "Nothing has been read from {agent} yet."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a note about every change"
@@ -384,10 +464,19 @@ msgctxt "database export"
 msgid "Opening..."
 msgstr "Opening..."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The check did not run ({status})."
+msgstr "The check did not run ({status})."
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Close menu"
 msgstr "Close menu"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} still didn't answer at {askedAt}."
+msgstr "{agent} still didn't answer at {askedAt}."
 
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
@@ -397,6 +486,10 @@ msgstr "One of your numbers differs between sources. The Treasurer has been show
 msgid "Counts for this version. An edit asks again."
 msgstr "Counts for this version. An edit asks again."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {n} small changes for the chart"
+msgstr "{agent} suggests {n} small changes for the chart"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
 msgstr "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
@@ -405,6 +498,10 @@ msgstr "Nobody else can sign this figure, so it goes to the village. Put the cha
 msgctxt "answer a note in a review"
 msgid "Answer"
 msgstr "Answer"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {nChanges} for the chart"
+msgstr "{agent} suggests {nChanges} for the chart"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "You have none yet. Gather several changes here and the village votes on them together."
@@ -433,10 +530,19 @@ msgctxt "the reader started this change request"
 msgid "You started this"
 msgstr "You started this"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Decide it in the structure review"
+msgstr "Decide it in the structure review"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Withdraw the request"
 msgstr "Withdraw the request"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The list of changes did not load"
+msgstr "The list of changes did not load"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "decline a suggested edit"
@@ -448,6 +554,10 @@ msgctxt "change request step"
 msgid "Gathering"
 msgstr "Gathering"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Its role comes with it, and leaving the circle out leaves it out too."
+msgstr "Its role comes with it, and leaving the circle out leaves it out too."
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
@@ -457,15 +567,30 @@ msgstr "Invoices, by source"
 msgid "Moved into a change request of its own."
 msgstr "Moved into a change request of its own."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflicts {nConflicts}"
+msgstr "Conflicts {nConflicts}"
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "This village's records: {here}."
 msgstr "This village's records: {here}."
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "removed:"
+msgstr "removed:"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Type the confirmation"
 msgstr "Type the confirmation"
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Show less"
+msgstr "Show less"
 
 #. placeholder {0}: c.changes
 #: client/src/pages/ChangeRequests.tsx
@@ -494,6 +619,10 @@ msgstr "Why"
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
+msgstr "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value of a setting today"
 msgid "Now"
@@ -518,6 +647,11 @@ msgctxt "signing key"
 msgid "Asked for a co-sign. Another admin replaces the key from this card."
 msgstr "Asked for a co-sign. Another admin replaces the key from this card."
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "added:"
+msgstr "added:"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "who answered a note"
 msgid "{by} answered"
@@ -536,6 +670,11 @@ msgstr "Sign in to see what your village is weighing."
 msgid "Give it a name and say why. Then add the changes, from here or from any setting with a Suggest button."
 msgstr "Give it a name and say why. Then add the changes, from here or from any setting with a Suggest button."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Read the list again"
+msgstr "Read the list again"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Keep this key"
@@ -545,6 +684,10 @@ msgstr "Keep this key"
 msgctxt "database export"
 msgid "Ask the village"
 msgstr "Ask the village"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing here matches what is chosen above."
+msgstr "Nothing here matches what is chosen above."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "({count} of at most {cap})"
@@ -598,6 +741,10 @@ msgctxt "a switch setting"
 msgid "Off"
 msgstr "Off"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "What each of these holds is in the list above, so none of it is offered here a second time."
+msgstr "What each of these holds is in the list above, so none of it is offered here a second time."
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Translated automatically"
@@ -616,10 +763,20 @@ msgstr "Medium range"
 msgid "Not synced yet. Press Sync to read every source."
 msgstr "Not synced yet. Press Sync to read every source."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Facts updated since yesterday: {nFacts}"
+msgstr "Facts updated since yesterday: {nFacts}"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
 msgstr "{asker} asked for a new key at {askedAt}. Your co-sign replaces it now. If you did not expect this, decline it: an admin account may be in the wrong hands."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Review it as one structure change"
+msgstr "Review it as one structure change"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -671,6 +828,10 @@ msgstr "See your proposal"
 msgid "Set by the village"
 msgstr "Set by the village"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "A sync is already running. Try again in a minute."
+msgstr "A sync is already running. Try again in a minute."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
 msgid "Share a concern"
@@ -698,6 +859,11 @@ msgstr "Start it"
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
 msgstr "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Show"
+msgstr "Show"
+
 #: client/src/components/Layout.tsx
 msgctxt "site header"
 msgid "Your account, {firstName}"
@@ -707,6 +873,19 @@ msgstr "Your account, {firstName}"
 msgctxt "signing key"
 msgid "Ask for a new key"
 msgstr "Ask for a new key"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Its {n} roles come with it, and leaving the circle out leaves them out too."
+msgstr "Its {n} roles come with it, and leaving the circle out leaves them out too."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{witness} finished Quests to witness"
+msgstr "{witness} finished Quests to witness"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Until it is on, each small change waits for you in this list."
+msgstr "Until it is on, each small change waits for you in this list."
 
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
@@ -731,6 +910,11 @@ msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr "Tokens, by source"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} didn't answer at {lastAt}"
+msgstr "{agent} didn't answer at {lastAt}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Time to review"
@@ -747,6 +931,15 @@ msgstr "A different value for one of the changes. The author may take it in."
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The copy did not download"
 msgstr "The copy did not download"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "No arrival from {agent} waits in the structure review right now."
+msgstr "No arrival from {agent} waits in the structure review right now."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check first"
+msgstr "Check first"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This figure is outside the suggestion's band, so pick a reason."
@@ -768,6 +961,11 @@ msgstr "The village has not set its rates yet. Set them on the economics page, t
 msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
 msgstr "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Hide them"
+msgstr "Hide them"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"
@@ -792,10 +990,20 @@ msgctxt "heading of the list of changes"
 msgid "The changes"
 msgstr "The changes"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Back to all {headCount}"
+msgstr "Back to all {headCount}"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Try again"
 msgstr "Try again"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Asking now."
+msgstr "Asking now."
 
 #. placeholder {0}: money(s.range.lowTotalMinor)
 #. placeholder {1}: money(s.range.highTotalMinor)
@@ -804,6 +1012,10 @@ msgstr "Try again"
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Likely {0} to {1}. {2}: {3}."
 msgstr "Likely {0} to {1}. {2}: {3}."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Small changes apply by themselves: off"
+msgstr "Small changes apply by themselves: off"
 
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
@@ -815,9 +1027,19 @@ msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr "Last synced {syncedAt}"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Every circle"
+msgstr "Every circle"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
 msgstr "No changes yet. Open any setting with a Suggest button, such as those in <0>Game Mechanics</0>, and add it here."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Everything waiting"
+msgstr "Everything waiting"
 
 #: client/src/components/modules/SuggestDial.tsx
 #: client/src/pages/ChangeRequests.tsx
@@ -834,10 +1056,24 @@ msgctxt "language picker"
 msgid "Now in {announced}"
 msgstr "Now in {announced}"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check first {nChecks}"
+msgstr "Check first {nChecks}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "open a change request for review"
 msgid "Open for review"
 msgstr "Open for review"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Circle"
+msgstr "Circle"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing waits for you, and no draft is open."
+msgstr "Nothing waits for you, and no draft is open."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading of the review feed"
@@ -878,6 +1114,15 @@ msgctxt "send one suggestion to a vote alone"
 msgid "Send it on its own"
 msgstr "Send it on its own"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
+msgstr "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "review page"
+msgid "Review"
+msgstr "Review"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Changes"
@@ -909,6 +1154,20 @@ msgctxt "add a suggestion to a change request"
 msgid "Add to {targetTitle}"
 msgstr "Add to {targetTitle}"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Small changes {nSmall}"
+msgstr "Small changes {nSmall}"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Small changes"
+msgstr "Small changes"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "These reach you as a draft to publish, once someone who reads the list puts them in one."
+msgstr "These reach you as a draft to publish, once someone who reads the list puts them in one."
+
 #: client/src/components/TreasurySync.tsx
 msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
 msgstr "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
@@ -923,14 +1182,29 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr "Reading the invoice tracks."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{witness} finished Quest to witness"
+msgstr "{witness} finished Quest to witness"
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
 msgstr "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Which changes"
+msgstr "Which changes"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Declined. The village keeps its key."
 msgstr "Declined. The village keeps its key."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Compare them"
+msgstr "Compare them"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -956,15 +1230,29 @@ msgstr "Question"
 msgid "This is inside the suggestion's band, so your word sets it."
 msgstr "This is inside the suggestion's band, so your word sets it."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Show everything waiting"
+msgstr "Show everything waiting"
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
 msgstr "Reading your saved numbers."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Arrived {at}, with {count} proposals."
+msgstr "Arrived {at}, with {count} proposals."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a change was saved"
 msgid "Saved."
 msgstr "Saved."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Waiting for you:"
+msgstr "Waiting for you:"
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -978,6 +1266,11 @@ msgstr "Could be as little as"
 #: client/src/components/Layout.tsx
 #~ msgid "Sign out everywhere"
 #~ msgstr "Sign out everywhere"
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Here now"
+msgstr "Here now"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -999,6 +1292,10 @@ msgctxt "a switch setting"
 msgid "On"
 msgstr "On"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The chart and {agent} are in step"
+msgstr "The chart and {agent} are in step"
+
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Anyone here can suggest a change. The village decides."
 msgstr "Anyone here can suggest a change. The village decides."
@@ -1007,6 +1304,14 @@ msgstr "Anyone here can suggest a change. The village decides."
 msgctxt "who started a change request"
 msgid "Started by {author}"
 msgstr "Started by {author}"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Arrived {at}, with 1 proposal."
+msgstr "Arrived {at}, with 1 proposal."
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "See them at the bottom of this page."
+msgstr "See them at the bottom of this page."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a setting with no value"
@@ -1023,6 +1328,10 @@ msgctxt "signing key"
 msgid "Nothing was declined"
 msgstr "Nothing was declined"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Small changes applying by themselves: off."
+msgstr "Small changes applying by themselves: off."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the name of a change request"
 msgid "Name"
@@ -1033,6 +1342,11 @@ msgctxt "role pay"
 msgid "Set this role's pay"
 msgstr "Set this role's pay"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "To decide"
+msgstr "To decide"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Or as much as"
@@ -1041,6 +1355,10 @@ msgstr "Or as much as"
 #: client/src/components/Layout.tsx
 #~ msgid "Close menu"
 #~ msgstr "Close menu"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "A draft from this queue is still open."
+msgstr "A draft from this queue is still open."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "That change request could not be started."
@@ -1074,6 +1392,11 @@ msgctxt "invoice desk"
 msgid "Sera: {there}."
 msgstr "Sera: {there}."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Earlier {agent} arrivals, now listed above"
+msgstr "Earlier {agent} arrivals, now listed above"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Your account, {firstName}"
@@ -1087,6 +1410,10 @@ msgstr "Use my browser's language"
 msgctxt "role pay"
 msgid "Saved"
 msgstr "Saved"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{error}. There may be changes waiting; this is not an empty list."
+msgstr "{error}. There may be changes waiting; this is not an empty list."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of a note box"
@@ -1113,6 +1440,11 @@ msgctxt "review response"
 msgid "I can live with this"
 msgstr "I can live with this"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflict"
+msgstr "Conflict"
+
 #. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -1133,6 +1465,11 @@ msgstr "Decline"
 msgctxt "which step a change request is on"
 msgid "Step {n} of 4: {words}"
 msgstr "Step {n} of 4: {words}"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Showing all {nShown} waiting changes"
+msgstr "Showing all {nShown} waiting changes"
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -1175,6 +1512,10 @@ msgctxt "start a new change request"
 msgid "A new change request"
 msgstr "A new change request"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {n} small change for the chart"
+msgstr "{agent} suggests {n} small change for the chart"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Co-sign and replace"
@@ -1200,10 +1541,20 @@ msgstr "Change {label}"
 msgid "Your own figure was {0}."
 msgstr "Your own figure was {0}."
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "To decide {nDecide}"
+msgstr "To decide {nDecide}"
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Responsibility"
 msgstr "Responsibility"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{sera} {agent} change"
+msgstr "{sera} {agent} change"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
