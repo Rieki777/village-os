@@ -479,7 +479,7 @@ const REVERSAL_KEY_PREFIX = "reversal:";
  * key name" has to be exact or the answer is a guess. A key that is in the
  * namespace loosely but not exactly names no original, so it is refused.
  */
-function originalKeyOf(mirrorKey: string): string | null {
+export function originalKeyOf(mirrorKey: string): string | null {
   if (!mirrorKey.startsWith(REVERSAL_KEY_PREFIX)) return null;
   const rest = mirrorKey.slice(REVERSAL_KEY_PREFIX.length);
   const cut = rest.indexOf(":");
