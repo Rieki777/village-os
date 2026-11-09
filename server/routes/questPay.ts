@@ -26,8 +26,11 @@ import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
 import type { WorkInputs } from "../../shared/valuation";
 import { suggestValuation, type PayeeSuggestion } from "../../shared/valuationEngine";
 import { combineSetting, settingRecord, storedPayFor, type InputChange } from "../../shared/valuationSetting";
+import { holderDoor, holderStanding } from "../lib/holderDoor";
 
-export interface QuestPayDeps extends Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> {
+export interface QuestPayDeps extends Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit" | "capabilityCtx"> {
+  /** Whether the launch vote has carried (`launchedByVote`). Defaults to the pool's own read; a test seam. */
+  launchedByVote?: () => Promise<boolean>;
   liveHoldersOf: (capability: string) => Promise<string[]>;
   eeMeaningWritten: () => boolean;
   currency: () => string;
@@ -89,7 +92,7 @@ export function registerQuestPay(app: Express, deps: QuestPayDeps): void {
   const { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, eeMeaningWritten, currency, quests, claims } = deps;
 
   app.put("/api/quests/:id/pay", async (req, res) => {
-    if (!(await guardCapability(req, res, "role.pay"))) return;
+    if (!(await holderDoor(req, res, deps, "role.pay"))) return;
     const actor = await authedUser(req);
     if (!actor) return res.status(401).json({ error: "auth_required" });
     const quest: any = await quests.byId(String(req.params.id));
@@ -165,9 +168,11 @@ export function registerQuestPay(app: Express, deps: QuestPayDeps): void {
    * the server did not suggest.
    */
   app.get("/api/quests/pricing-desk", async (req, res) => {
-    if (!(await guardCapability(req, res, "role.pay"))) return;
-    if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
+    if (!(await holderDoor(req, res, deps, "role.pay"))) return;
+    const reader = await authedUser(req);
+    if (!reader) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
+    const payDoor = await holderStanding(deps, { id: reader.id, isAdmin: !!(await deps.capabilityCtx(reader)).isAdmin }, "role.pay");
     const model = await currentModel(pool, currency());
     const rules = await questPayRules(pool);
     const all = (await quests.all()).filter((q: any) => !q.isExample && PRICEABLE.has(String(q.status ?? "Open")));
@@ -198,7 +203,7 @@ export function registerQuestPay(app: Express, deps: QuestPayDeps): void {
     } catch {
       cash = null;
     }
-    res.json({ model, eeMeaningWritten: eeMeaningWritten(), modelAdopted: model.version > 0, cashBudgetLeft: cash, quests: rows });
+    res.json({ model, payDoor, eeMeaningWritten: eeMeaningWritten(), modelAdopted: model.version > 0, cashBudgetLeft: cash, quests: rows });
   });
 
   app.get("/api/quests/:id/pay/settings", async (req, res) => {

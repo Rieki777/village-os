@@ -32,8 +32,11 @@ import { calibrate, combineSetting, settingRecord, storedPayFor, topUpProblem, w
 import { addChange, createDraft } from "../lib/orgDrafts";
 import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
 import { registerQuestPay, writeQuestPay } from "./questPay";
+import { holderDoor, holderStanding } from "../lib/holderDoor";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "guardCapability" | "overLimit" | "capabilityCtx"> & {
+  /** Whether the launch vote has carried (`launchedByVote`). Defaults to the pool's own read; a test seam. */
+  launchedByVote?: () => Promise<boolean>;
   /** Who holds a power through a role or a badge, admins left out (`liveHoldersOf`, server/index.ts). */
   liveHoldersOf: (capability: string) => Promise<string[]>;
   /** The village's currency (`project.fiatCurrency`). */
@@ -75,11 +78,15 @@ export function register(app: Express, deps: Deps): void {
   const currency = () => defaultDisplayCurrency({ fiatCurrency: projectCurrency() });
 
   app.get("/api/valuation/model", async (req, res) => {
-    if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
     const model = await currentModel(getPool(), currency());
     const name = deps.tokenName ?? ((s: string) => s);
+    // Which door this reader sets pay through, so the page can say so (holderDoor, G-B3).
+    const payDoor = await holderStanding(deps, { id: user.id, isAdmin: !!(await deps.capabilityCtx(user)).isAdmin }, "role.pay");
     res.json({
       model,
+      payDoor,
       eeMeaningWritten: eeMeaningWritten(),
       tokenNames: { [model.tokens.credits]: name(model.tokens.credits), [model.tokens.equity]: name(model.tokens.equity), [model.tokens.voice]: name(model.tokens.voice) },
     });
@@ -159,7 +166,8 @@ export function register(app: Express, deps: Deps): void {
   };
 
   app.put("/api/org/roles/:id/pay", async (req, res) => {
-    if (!(await guardCapability(req, res, "role.pay"))) return;
+    // One answer for the pay power, before and after launch (server/lib/holderDoor.ts, G-B3).
+    if (!(await holderDoor(req, res, deps, "role.pay"))) return;
     const actor = await authedUser(req);
     if (!actor) return res.status(401).json({ error: "auth_required" });
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
@@ -320,6 +328,6 @@ export function register(app: Express, deps: Deps): void {
   });
 
   if (deps.quests && deps.claims) {
-    registerQuestPay(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, eeMeaningWritten, currency, quests: deps.quests, claims: deps.claims, payLineCheck: deps.payLineCheck });
+    registerQuestPay(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, capabilityCtx: deps.capabilityCtx, launchedByVote: deps.launchedByVote, eeMeaningWritten, currency, quests: deps.quests, claims: deps.claims, payLineCheck: deps.payLineCheck });
   }
 }
