@@ -1,7 +1,7 @@
 /**
  * A MEMBER'S NOTEBOOK AND THE RESOURCE PICKS: every statement that touches
  * `village_documents`, `village_document_files` and `canvas_resource_picks`
- * (0326), and the one read of the export's audit row.
+ * (9999_c), and the one read of the export's audit row.
  *
  * ALL of the SQL for these tables lives here. The raw-SQL burn-down register
  * is at its ceiling, so the route and the libraries hold none, and this file

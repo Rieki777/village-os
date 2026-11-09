@@ -1701,7 +1701,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * THE MEMBER'S OWN NOTEBOOK (0326, plan 5.5): every document they kept
+       * THE MEMBER'S OWN NOTEBOOK (9999_c, plan 5.5): every document they kept
        * private, with its stored bytes, and their own list of picked
        * resources. A document the village's pen ADOPTED stays, because it is
        * the village's material now; its owner reads as "a departed member"

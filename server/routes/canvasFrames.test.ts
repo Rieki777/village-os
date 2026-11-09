@@ -515,7 +515,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
     });
   });
 
-  describe("share with the village: a member's document (0326)", () => {
+  describe("share with the village: a member's document (9999_c)", () => {
     /** A document and its owner's ask, filed the way the documents route files one. */
     const askToShare = async (ownerId: string, title: string) => {
       const documentId = await insertTextDocument(pool, ownerId, { title, kind: "paste", body: `${title}: the words.` });

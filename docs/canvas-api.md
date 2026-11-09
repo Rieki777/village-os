@@ -346,7 +346,7 @@ The four key moments themselves have no route: each is raised where it happens
 (`raiseCanvasRevisit`, server/lib/canvasRevisit.ts) and lands as a `canvas_revisit` notification in
 the daily digest. See that file's header for who hears which.
 
-## A member's notebook, the picks and the export pack (Wave 4, 0326)
+## A member's notebook, the picks and the export pack (Wave 4, 9999_c)
 
 Served by `server/routes/villageDocuments.ts`; the vocabulary is `shared/villageDocuments.ts` and
 `shared/documentDraft.ts`. Every route answers `401` to a visitor with no session and `403` with

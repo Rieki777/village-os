@@ -827,7 +827,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     expect((await unfinishedErasures(pool)).map((r) => r.userId)).toContain(id);
   });
 
-  it("takes the member's private documents, their stored bytes and their own picks, and leaves what the village adopted (0326)", async () => {
+  it("takes the member's private documents, their stored bytes and their own picks, and leaves what the village adopted (9999_c)", async () => {
     const id = "er-notebook-1";
     const target = await seedMember(id);
     const kept = await insertTextDocument(pool, id, { title: "Shared notes", kind: "paste", body: "The village adopted these." });
