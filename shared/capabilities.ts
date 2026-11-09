@@ -134,6 +134,7 @@ export type Capability =
   // budget sets how much of each moon's work is paid in cash, so one power gives
   // one answer. Every budget write goes through its door (server/routes/budgets.ts).
   | "role.pay" // keep the cash budget, and set what a role is worth and pays
+  | "pot.steward" // hold a funding pot: open its rounds, set their dates, rule on whether an idea fits
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -268,6 +269,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "redemption.confirm",
   "cash.pay",
   "role.pay",
+  "pot.steward",
   "module.switch",
   "steward.veto",
   "comms.manage",
@@ -341,6 +343,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
   "role.pay": "Keep the village's cash budget, and set what a role is worth and pays",
+  "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
@@ -557,6 +560,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // valuation engine. Its route asks `guardCapability`, and a holder of the role
   // being paid is sent to the village instead (the conflict rule).
   "role.pay": true,
+  "pot.steward": true,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
@@ -723,12 +727,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 29 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 30 keys
  * today. The other 21 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 29 in the founding seat and has
+ * Read this way, a launched village holds all 30 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -765,6 +769,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * (the same build) were born transferable too, for the same ruling: 28 and 21.
  * `role.pay` (Rye, 2026-11-06, the valuation lane's C2) was born transferable,
  * the Treasurer's power to set role pay, which moved only the first: 29 and 21.
+ * `pot.steward` (Funding rounds, 0338) was born transferable with Rye's word of
+ * 2026-11-06, relayed: a funding pot is a power the Treasurer holds by default
+ * and can be handed to another role or the village. That moved only the first:
+ * 30 and 21.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -964,6 +972,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "cash.pay": true,
   // The same: a warning takes away setting other people's pay.
   "role.pay": true,
+  "pot.steward": true,
   // A job as well. Pausing it stops somebody switching modules on alone; the
   // village can still propose one, and the vote decides.
   "module.switch": true,
@@ -1133,6 +1142,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // Not by badge: "the Treasurer" is a holder through the Treasury role
   // (coordinator, 2026-11-06), so a badge is not an honest way to hand it over.
   "role.pay": false,
+  "pot.steward": true,
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,

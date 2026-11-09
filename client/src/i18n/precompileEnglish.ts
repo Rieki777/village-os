@@ -15,11 +15,13 @@ import type { Plugin } from "vite";
  * a compiler: catalogs from the server arrive compiled too.
  *
  * The match is the macro's exact output shape: a 6-character id followed by a
- * double-quoted message. A message that does not compile fails the build and
+ * message, double-quoted, or single-quoted when it holds a double quote
+ * (found 2026-11-08 on the Funding rounds page, where such a message
+ * rendered its placeholders raw). A message that does not compile fails the build and
  * names its id, the same strictness the catalog build applies to translations.
  */
 const ID = /\bid:\s*"[A-Za-z0-9_-]{6}",\s*/g;
-const MESSAGE = /^message:\s*("(?:[^"\\\n]|\\.)*")/;
+const MESSAGE = /^message:\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')/;
 const VALUES = /^(?:values|components):\s*\{/;
 
 /**
@@ -46,8 +48,29 @@ function closeOf(code: string, open: number): number {
   return -1;
 }
 
+/** The text a JS string literal holds, double- or single-quoted. */
+function literalText(literal: string): string {
+  if (literal.startsWith('"')) return JSON.parse(literal) as string;
+  // Single-quoted: unescape \' and escape each bare " so JSON can read the rest.
+  let json = "";
+  const body = literal.slice(1, -1);
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "\\" && body[i + 1] === "'") {
+      json += "'";
+      i++;
+    } else if (c === "\\") {
+      json += c + (body[i + 1] ?? "");
+      i++;
+    } else {
+      json += c === '"' ? '\\"' : c;
+    }
+  }
+  return JSON.parse(`"${json}"`) as string;
+}
+
 function compiledLiteral(literal: string, head: string): string {
-  const message = JSON.parse(literal) as string;
+  const message = literalText(literal);
   let compiled;
   try {
     compiled = compileMessageOrThrow(message);
