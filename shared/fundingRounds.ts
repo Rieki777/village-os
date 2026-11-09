@@ -137,6 +137,50 @@ export function parseIdea(body: unknown): { ok: true; idea: IdeaInput } | { ok: 
   };
 }
 
+/** Grow's field limits, the same on the client and the server. */
+export const GROW_LIMITS = { deliverable: 2000 } as const;
+
+export interface GrowInput {
+  title?: string;
+  what?: string;
+  /** Absent means unchanged; null clears it. */
+  deliverable?: string | null;
+  askMinor?: number | null;
+  sharedImpact?: boolean;
+}
+
+/** Read grow's changes from a request body. Only the fields sent change. */
+export function parseGrow(body: unknown): { ok: true; grow: GrowInput } | { ok: false; problem: string } {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const grow: GrowInput = {};
+  if ("title" in b) {
+    const t = text(b.title, IDEA_LIMITS.title);
+    if (!t) return { ok: false, problem: "Give your idea a short name." };
+    grow.title = t;
+  }
+  if ("what" in b) {
+    const w = text(b.what, IDEA_LIMITS.what);
+    if (!w) return { ok: false, problem: "Say what you would do." };
+    grow.what = w;
+  }
+  if ("deliverable" in b) grow.deliverable = optional(b.deliverable, GROW_LIMITS.deliverable);
+  if ("askMinor" in b) {
+    if (b.askMinor == null || b.askMinor === "") grow.askMinor = null;
+    else {
+      const n = Number(b.askMinor);
+      if (!Number.isInteger(n) || n <= 0) return { ok: false, problem: "The amount you ask for must be a whole amount above zero." };
+      grow.askMinor = n;
+    }
+  }
+  if ("sharedImpact" in b) grow.sharedImpact = b.sharedImpact === true;
+  return { ok: true, grow };
+}
+
+/** An idea is ready for the ballot once it says what it delivers and what it asks. */
+export function isGrown(idea: { deliverable: string | null; askMinor: number | null }): boolean {
+  return Boolean(idea.deliverable) && idea.askMinor != null && idea.askMinor > 0;
+}
+
 /** Below this many members, the anonymous tick is not offered: anonymity cannot hold (plan Q6). */
 export const ANONYMOUS_MIN_MEMBERS = 8;
 
