@@ -52,6 +52,11 @@ export interface MapOrgCircle {
   order: number;
   /** A hex from the map's own palette, so a circle is the same hue on both views. */
   colour: string;
+  /**
+   * The building this circle calls home (circles.home_structure_key, 0060).
+   * Its seats with no building of their own sit there. Null when unplaced.
+   */
+  homeStructureKey: string | null;
 }
 
 /** Who sits in a seat. Only ever sent on the viewPeople tier. */
@@ -73,6 +78,11 @@ export interface MapOrgRole {
   /** The seat's aim, in the village's own words. */
   description: string;
   holders: MapOrgHolder[];
+  /**
+   * The building this seat lives in (org_roles.structure_key, 0060). Sent on
+   * every tier: where a seat sits is structure, never a person.
+   */
+  structureKey: string | null;
 }
 
 export interface MapOrgSnapshot {
@@ -115,6 +125,7 @@ export function projectMapOrg(input: MapOrgInput): MapOrgSnapshot {
       status: strOrNull(c.status) ?? "active",
       order: Number(c.order) || 0,
       colour: colourForCircle({ id: str(c.id), color: c.color ?? null }),
+      homeStructureKey: strOrNull(c.homeStructureKey),
     }))
     .sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
@@ -138,6 +149,7 @@ export function projectMapOrg(input: MapOrgInput): MapOrgSnapshot {
         state: seatState(r, held, input.now),
         archetypes: Array.isArray(r.archetypes) ? r.archetypes.map(String) : [],
         description: r.aim ?? "",
+        structureKey: strOrNull(r.structureKey),
         holders: input.viewPeople
           ? held.map((h) => ({
               // A documented holder is a real person with no account yet, so

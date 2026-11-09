@@ -35,6 +35,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/circles": "Circles",
   "/quests": "Quests",
   "/propose-quest": "Propose a quest",
+  "/pricing": "Pricing desk",
   "/roles": "Roles",
   "/forum": "Forum",
   "/messages": "Messages",
@@ -89,6 +90,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/photographs": "Every photograph",
   "/admin": "Village settings",
   "/journal": "Journal",
+  "/funding-rounds": "Funding rounds",
   // One line covers the list and every room, by the longest-prefix rule.
   "/sessions": "Live sessions",
   // The shopfront pages (shared/brochure.ts). They had no entry, so their

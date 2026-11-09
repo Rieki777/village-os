@@ -84,6 +84,7 @@ export const ADMIN_TABS: AdminTabEntry[] = [
   entry("tokens", "village", "Tokens", "The tokens this village uses."),
   entry("ledger", "village", "Ledger", "Where value moved."),
   entry("cash-payouts", "village", "Cash to pay out", "Cash the village owes, and what has been paid."),
+  entry("pricing-desk", "village", "Pricing desk", "Every open quest beside the engine's suggestion, priced by the Treasurer."),
   entry("cycles", "village", "Cycle close", "Closing a cycle, which is a human act."),
   entry("products", "village", "Payments", "Products and the payments around them."),
   entry("resources-admin", "village", "How resources flow", "How resources move through the village."),

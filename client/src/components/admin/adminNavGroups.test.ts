@@ -123,7 +123,7 @@ describe("navGroups", () => {
       "stays-admin", "exchange-admin", "crowdpool-admin", "calls-admin", "intents-admin",
       "health-admin",
     ]],
-    ["Money and agreements", ["tokens", "ledger", "cash-payouts", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
+    ["Money and agreements", ["tokens", "ledger", "cash-payouts", "pricing-desk", "cycles", "products", "resources-admin", "exits-admin", "settings"]],
     ["Day to day", ["submissions", "feedback", "quest-claims", "forum-moderation", "message-reports", "drafts", "brain", "failures"]],
     // Village Comms (the comms build spec 6): after the week's queues.
     ["Comms", ["comms-overview", "comms-journeys", "comms-words", "comms-people", "comms-letters", "comms-sent", "comms-settings"]],
@@ -178,6 +178,8 @@ describe("navGroups", () => {
       "paths-stages",
       // Cash to pay out, 2026-10-30: the treasurer's record of bank transfers (0285).
       "cash-payouts",
+      // Pricing desk, 2026-11-09: the Treasurer prices each quest beside the engine (quest re-price Q3).
+      "pricing-desk",
       // Home, the start page. The side rail stays one tap away.
       "home",
     ];

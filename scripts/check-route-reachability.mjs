@@ -73,6 +73,11 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // One funding round (0338). Its doors are the round cards on /funding-rounds and
+  // the link every idea's forum thread carries, which the server writes into the
+  // thread body, so the scan cannot see the second one.
+  "/funding-rounds/:id": "reached from its card on /funding-rounds and from the link in each idea's forum thread",
+
   // Open role proposals (sheet 19i): both arrive by a link somebody was sent,
   // never by a link on the site. The confirm page is the link in the
   // confirmation email, and a token page is a link an admin made for one person.

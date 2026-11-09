@@ -115,6 +115,7 @@ import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./route
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
 import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
+import { register as registerSuggestionRouteDial, loadSuggestionRoutes } from "./routes/suggestionRoutes"; // where suggestions on each power go, turned by power.assign (4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
 import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
@@ -215,6 +216,7 @@ import { register as registerBrandUploadRoutes } from "./routes/brandUploads";
 import { register as registerNeedsRoutes } from "./routes/needs";
 import { exportMemberJournal, register as registerJournalRoutes } from "./routes/journal";
 import { exportMemberGeneKeys, geneKeysForAssistant, geneKeysMissing, register as registerGeneKeysRoutes } from "./routes/geneKeys";
+import { exportMemberFundingRounds, fundingRoundsOpenState, register as registerFundingRoundsRoutes } from "./routes/fundingRounds";
 import { register as registerGuideChoiceRoutes } from "./routes/guideChoice";
 import { register as registerI18nRoutes } from "./routes/i18n";
 import { setShellLang, shellLocale } from "./lib/i18nShell";
@@ -488,7 +490,7 @@ import {
 } from "./lib/spending";
 import { seatChargeFor, seatEscrowDrift, seatPriceFor, settleFinishedSeats } from "./lib/eventSeats";
 import { allowanceFor, applyMintRuleChanges, checkIn, cycleWindow, economyReady, finerThanScale, fromLedgerUnits, give, HEARTS, mintRulesByIds, mintView, publicRules, publicSupply, queueRuleChange, rulesFor, runSettlement, toLedgerUnits, villageId, type StageMultiplierFor } from "./lib/economy";
-import { addCharacter, avatarFor, listArchetypes, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
+import { addCharacter, avatarFor, listArchetypes, openNowCounts, openPathsFor, partyFor, removeCharacter, setPrimary } from "./lib/characters";
 import { livingHandle, loadGratitude, loadProfile, loadStanding, publicView, userIdForHandle } from "./lib/profile";
 import { loadInventory } from "./repos/profileInventory";
 import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivacy";
@@ -715,7 +717,7 @@ import { guardedFetchJson } from "./lib/toolcheck";
 import { register as registerTokenEditRoutes } from "./routes/tokenEdit";
 import { register as registerVillageExportRoutes } from "./routes/villageExport";
 import { register as registerSigningKeyRoutes } from "./routes/signingKey";
-import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
+import { grantCashPayToTreasury, grantMoonReviewKeys, MOON_REVIEW_GRANTS, POT_STEWARD_GRANTS, ROLE_PAY_GRANTS, seedStarterRoles, STEWARD_CIRCLE_GRANTS } from "./lib/starterRoles";
 import { endAgentReach, withAgentReachEnded } from "./lib/agentTokens"; // a new password and an admin's revoke end what the agent holds too
 import { proveAddress, raiseToFounder, sendPasswordEndedLetter, sendVerifyLetter } from "./lib/emailVerification"; // R104: an address is proved before its password is trusted
 import { isUnprovedRaise, UNPROVED_RAISE_REFUSAL } from "./lib/founderGrant";
@@ -1561,7 +1563,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()), loadSuggestionRoutes(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -1988,6 +1990,7 @@ async function ensureDataFiles() {
   await runOnce("role-pay-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, ROLE_PAY_GRANTS, "role.pay on the Treasury role (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("steward-circle-role-powers-2026-11-05", () => grantMoonReviewKeys(rolesRepo, STEWARD_CIRCLE_GRANTS, "Steward Circle's role and adoption powers (Rye, 2026-11-01)").then(() => undefined));
   await runOnce("redemption-ceilings-blank-2026-11-05", () => blankZeroRedemptionCeilings(getPool()).then((keys) => { if (keys.length) console.log(`[redemption] a stored 0 ceiling became blank, which is no ceiling: ${keys.join(", ")}`); })); // Rye, 2026-11-05: 0 now means zero
+  await runOnce("pot-steward-to-treasury-2026-11-06", () => grantMoonReviewKeys(rolesRepo, POT_STEWARD_GRANTS, "the funding pots power, pot.steward (Rye, 2026-11-06)").then(() => undefined));
   await runOnce("comms-path-backfill-2026-10", async () => { await backfillPathEnrollments({ getPool, members }); }); // Village Comms 5.11: records paths, sends nothing
 
   // 0054: a starter relationship vocabulary, into an EMPTY table only. Same
@@ -5700,6 +5703,7 @@ async function startServer() {
   MODULES_BY_ID["exchange"].openStateCheck = () => exchangeOpenState(getPool());
   MODULES_BY_ID["badges"].openStateCheck = () => badgesOpenState(getPool());
   MODULES_BY_ID["library"].openStateCheck = () => libraryOpenState(getPool());
+  MODULES_BY_ID["funding-rounds"].openStateCheck = () => fundingRoundsOpenState(getPool());
   /*
    * Commerce was the only funds-bearing module without one. Turning it off
    * unmounts the checkout AND the webhook route, so a purchase that had been
@@ -18229,6 +18233,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
+  registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members, questsRepo, electorate: buildElectorate });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
@@ -18257,7 +18262,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
-  registerValuationRoutes(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s }); // 0336
+  registerValuationRoutes(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
   const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
   registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
   registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, notify, inboxSigners: async () => [...(await liveHoldersOf("cash.pay")), ...(await liveHoldersOf("steward.veto"))] }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
@@ -19332,7 +19337,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   /** The five classes, as this village names them. Public: it is the front door. */
   app.get("/api/archetypes", async (_req, res) => {
-    res.json(await listArchetypes(getPool(), villageId()));
+    const list = await listArchetypes(getPool(), villageId());
+    const open = await openNowCounts(getPool(), list.map((a) => a.key)).catch(() => null); // the cards still draw without a count
+    res.json(list.map((a) => (open ? { ...a, openNow: open.byKey[a.key] ?? 0, openToAll: open.untagged } : a)));
   });
 
   // ── The Player Profile ────────────────────────────────────────────────────
@@ -22550,6 +22557,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerSuggestionRouteDial(app, { authedUser, capabilityCtx, liveHoldersOf, getPool });
 
 
   /**
@@ -25564,7 +25572,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     isAdmin, authedUser, guardCapability, mayAct, mayStillSee, adminActor, getPool, members, questsRepo, circlesRepo, seasonState, notify, firstName, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency,
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
-  registerSaberraRoutes(app, { guardCapability, getPool, authedUser });
+  registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
@@ -25999,6 +26007,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       journal: await exportMemberJournal(pool, user.id), // entries, pulse, the feedback yes, sent feedback, and received feedback with no author at any depth (server/lib/journal.ts)
       sessions: await exportMemberSessions(pool, user.id), // live sessions they joined, entries they wrote or hold, and their own answers; arrival words are already erased from closed ones (server/lib/liveSessions.ts)
       geneKeys: await exportMemberGeneKeys(pool, user.id), // their saved Gene Keys result and settings; no birth data exists to export (server/lib/geneKeys.ts)
+      fundingRounds: await exportMemberFundingRounds(pool, user.id), // their ideas, anonymous ones included since they are theirs, and their interaction rows (server/lib/fundingRounds.ts)
       memberTasks: await exportMemberTasks(pool, user.id), // their own list, private detail and tombstones included (server/repos/memberTasks.ts)
       moonReviews: await exportMoonReviews(pool, user.id), // their moon recaps, items, invoices, pay route and review events (server/repos/moonRecaps.ts)
       /*

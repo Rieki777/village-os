@@ -532,7 +532,14 @@ export function register(app: Express, deps: Deps): void {
      *
      * `quests.gratitude` stays on the row, read by nothing that pays.
      */
-    const consentedQuest = await questsRepo.byId(claim.questId);
+    /*
+     * THE CLAIM PAYS THE TERMS IT WAS TAKEN AT (0342; valuation spec C8). Once
+     * a member takes a quest on, its price is fixed, so a re-price of the
+     * board after the claim changes nothing here. A claim taken before 0342
+     * kept no terms and pays the quest as it stands, as it always did.
+     */
+    const questNow = await questsRepo.byId(claim.questId);
+    const consentedQuest = questNow && claim.payTerms ? { ...questNow, ...claim.payTerms } : questNow;
     const stayReward = Math.max(0, Math.floor(Number(consentedQuest?.stayCreditReward ?? 0)));
     /*
      * ISSUANCE WAITS FOR THE VILLAGE (R67), ASKED BEFORE ANY WORK IS DONE.

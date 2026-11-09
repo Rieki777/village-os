@@ -125,6 +125,8 @@ const ALLOWED = {
   "POST /api/admin/suggestions/:id/decline": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
   "POST /api/admin/suggestions/:id/send-to-vote": "Suggest-to-edit review queue, next slice. Delete this line when the queue screen lands.",
   "POST /api/admin/suggestions/:id/raise": "Suggest-to-edit, the suggester's own list, next slice. Delete this line when it lands.",
+  "PUT /api/admin/suggestion-routes":
+    "The suggestion dial (§4.5), server slice, built apart from its screen the same way. Its control is a row on the Powers board, which the suggest-to-edit screens bring. Delete this line when that row lands.",
 };
 
 /**

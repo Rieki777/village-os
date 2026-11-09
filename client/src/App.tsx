@@ -233,6 +233,8 @@ const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
+// The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
+const PricingDeskPage = lazyPage(() => import("./pages/PricingDesk"));
 const Review = lazyPage(() => import("./pages/Review"));
 const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
@@ -244,6 +246,7 @@ const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
+const FundingRounds = lazyPage(() => import("./pages/FundingRounds"));
 const Sessions = lazyPage(() => import("./pages/Sessions"));
 const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
@@ -329,6 +332,7 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/badges" component={Badges} />
       <Route path="/powers" component={Powers} />
+      <Route path="/pricing" component={PricingDeskPage} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
       <Route path="/review" component={Review} />
       {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
@@ -412,6 +416,10 @@ function Router() {
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
       <Route path="/journal" component={Journal} />
+      {/* The village chooses which quests to fund, within a pot. Behind
+          ModuleGate("funding-rounds") and sign-in. */}
+      <Route path="/funding-rounds" component={FundingRounds} />
+      <Route path="/funding-rounds/:id" component={FundingRounds} />
       {/* A circle's live calls: the list, then one room. Both behind
           ModuleGate("sessions") and sign-in; members only, no guests. The
           list is declared before the room for the reason /decisions gives. */}
