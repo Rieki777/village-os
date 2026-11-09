@@ -42,8 +42,8 @@ interface FormRole {
   /** The open card's own sections, to answer with the applicant's card (shared/openProposalCard.ts). */
   accountabilities?: string[];
   timeCommitment?: string | null;
-  /** Filled by the role-interviews lane and PR-A; nothing shows until they are. */
-  interviews?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
+  /** Filled by the role-conversations lane and PR-A; nothing shows until they are. */
+  conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
   bookingUrl?: string | null;
 }
 
@@ -252,7 +252,7 @@ export default function ProposeARole() {
       <Shell>
         <Notice title="Check your email">
           <p>{sent}</p>
-          {/* The steps after confirming, for the roles picked (Rye's answer 7): interviews in order, the booking link. */}
+          {/* The steps after confirming, for the roles picked (Rye's answer 7): conversations in order, the booking link. */}
           {form.kind === "open" && <NextForRoles roles={form.roles.filter((r) => r.id in picked)} />}
         </Notice>
       </Shell>

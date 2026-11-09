@@ -23,8 +23,6 @@
  * application's own words (`cardSummary`, server/lib/openProposalDecide.ts).
  */
 
-import { agreedOf, parseAgreements, type ApplicationAgreed } from "./openProposalAgreements";
-
 export const CARD_LIMITS = {
   movesPerRole: 3,
   moveText: 200,
@@ -71,7 +69,7 @@ export interface OpenProposalCard {
   /** `goal` is the goal's words when the proposal was sent, written by the server, never the form. */
   serves: Array<{ goalId: string; how: string; goal?: string }>;
   hours: string;
-  agreed: ApplicationAgreed;
+  agreed: { loveLetter: boolean; nda: boolean };
   /** Form v2 (brief v2, 5.4). Optional on a card sent before them. */
   timeZone?: string;
   windows?: CardWindow[];
@@ -169,16 +167,15 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   if (note.length > L.termsNote) return { ok: false, field: "terms", error: CARD_WORDS.tooLong("Your note on the terms", L.termsNote) };
   const hours = str(o.hours);
   if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
-  // The agreements are their own file and their own lane (shared/openProposalAgreements.ts).
-  const agreements = parseAgreements(o.agreed);
-  if (!agreements.ok) return agreements;
+  const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
+  if (agreed.loveLetter !== true || agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
   return {
     ok: true,
     card: {
       roles,
       serves,
       hours,
-      agreed: agreements.agreed,
+      agreed: { loveLetter: true, nda: true },
       ...(timeZone ? { timeZone } : {}),
       ...(windows.length ? { windows } : {}),
       ...(earliestStart ? { earliestStart } : {}),
@@ -207,7 +204,7 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       .map((s: any) => ({ goalId: cut(s?.goalId, 64), how: cut(s?.how, L.how), ...(str(s?.goal) ? { goal: cut(s?.goal, 300) } : {}) }))
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
-    agreed: agreedOf(o.agreed),
+    agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
     ...(isTimeZone(str(o.timeZone)) ? { timeZone: str(o.timeZone) } : {}),
     ...(list(o.windows).some((w) => (CARD_WINDOWS as readonly unknown[]).includes(w))
       ? { windows: list(o.windows).filter((w): w is CardWindow => (CARD_WINDOWS as readonly unknown[]).includes(w)) }

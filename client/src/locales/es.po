@@ -665,6 +665,10 @@ msgstr ""
 msgid "The village is deciding a change to this right now."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
+msgstr ""
+
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
 msgstr ""
@@ -1572,10 +1576,6 @@ msgctxt "funding round stage"
 msgid "Choose"
 msgstr ""
 
-#: client/src/components/openProposal/ApplicationAgreements.tsx
-msgid "I align with the Love Letter, the village's membership agreement."
-msgstr ""
-
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "document title field"
 msgid "Title"
@@ -1875,10 +1875,6 @@ msgstr ""
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They aligned with the Love Letter, and will align with the NDA once approved."
-msgstr ""
-
 #: client/src/components/canvas/CanvasBlockCard.tsx
 msgctxt "label above the canvas's own question"
 msgid "The canvas asks"
@@ -1919,10 +1915,6 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Edit"
-msgstr ""
-
-#: client/src/components/openProposal/ApplicationAgreements.tsx
-msgid "Aligning is the village's way of signing."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -3931,11 +3923,6 @@ msgctxt "sera answers"
 msgid "Nothing was taken."
 msgstr ""
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal interviews"
-msgid "{minutes} minutes with {who}"
-msgstr ""
-
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Saved."
 #~ msgstr ""
@@ -4014,11 +4001,6 @@ msgstr "Tu navegador bloqueó la copia. Selecciona el texto de arriba y cópialo
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that removes a contact from the agreement"
 msgid "Remove this contact"
-msgstr ""
-
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal interviews"
-msgid "{minutes} minutes with {who}, the final approval"
 msgstr ""
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
@@ -4496,6 +4478,11 @@ msgstr ""
 #: client/src/components/review/SeraKeys.tsx
 msgctxt "sera answers"
 msgid "Keyboard keys"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal conversations"
+msgid "{minutes} minutes with {who}"
 msgstr ""
 
 #: client/src/components/review/useSeraActs.ts
@@ -5669,7 +5656,7 @@ msgctxt "Decision Matrix column, before its answer"
 msgid "Who approves it:"
 msgstr ""
 
-#: client/src/components/openProposal/ApplicationAgreements.tsx
+#: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal card"
 msgid "Agreements"
 msgstr ""
@@ -5860,6 +5847,10 @@ msgstr ""
 #: client/src/components/admin/RoleCharacterTags.tsx
 msgctxt "admin role characters"
 msgid "Characters saved"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
 msgstr ""
 
 #: client/src/components/canvas/CanvasSeason.tsx
@@ -6090,10 +6081,6 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Cancel"
-msgstr ""
-
-#: client/src/components/openProposal/ApplicationAgreements.tsx
-msgid "Once approved into a role, I will align with the village's confidentiality agreement (NDA) before I see any confidential records."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -6433,6 +6420,10 @@ msgstr ""
 msgid "You meet the people the role works with, in the order the role sets, when it sets one."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "The village has not set its goals for this season yet. You can still apply: say in your aim what you would bring."
+msgstr ""
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 msgstr ""
@@ -6522,6 +6513,10 @@ msgstr ""
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "notebook add mode"
 msgid "Paste text"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "I will sign the Love Letter, the village's membership agreement, before I am seated."
 msgstr ""
 
 #: client/src/pages/CanvasWorkbook.tsx
@@ -6662,6 +6657,11 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal conversations"
+msgid "{minutes} minutes with {who}, the final approval"
 msgstr ""
 
 #: client/src/components/TakeCurrentPrice.tsx

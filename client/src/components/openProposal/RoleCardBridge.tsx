@@ -16,7 +16,6 @@
  */
 import { useLingui } from "@lingui/react/macro";
 import { CARD_LIMITS, CARD_WINDOWS } from "@shared/openProposalCard";
-import ApplicationAgreements from "./ApplicationAgreements";
 
 export interface RoleCardState {
   /** Outcome text -> target. */
@@ -159,6 +158,12 @@ export function SeasonServes({
   const full = Object.keys(serves).length >= CARD_LIMITS.serves;
   return (
     <div className="grid gap-5">
+      {/* Brief v3: a season with no goals yet says so, and never blocks applying. */}
+      {goals.length === 0 && (
+        <p className="rounded-lg bg-muted p-3 text-sm text-foreground" data-no-season-goals="">
+          {t`The village has not set its goals for this season yet. You can still apply: say in your aim what you would bring.`}
+        </p>
+      )}
       {goals.length > 0 && (
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-semibold text-card-foreground">
@@ -208,7 +213,17 @@ export function SeasonServes({
         <input id="card-hours" maxLength={CARD_LIMITS.hours} value={hours} onChange={(e) => onHours(e.target.value)} placeholder={t({ message: "e.g. roughly 25 hours a week", context: "open proposal card" })} className={FIELD} />
         <p className="mt-1 text-xs text-muted-foreground">{t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season.`}</p>
       </div>
-      <ApplicationAgreements value={agreed} onChange={onAgreed} />
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
+        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
+          {t`I will sign the Love Letter, the village's membership agreement, before I am seated.`}
+        </label>
+        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
+          {t`Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records.`}
+        </label>
+      </fieldset>
     </div>
   );
 }
@@ -248,9 +263,9 @@ export function CardSideBySide({
     if (asks.length && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No outcome of ${roleName} picked`);
     if (!(mine?.firstMoon ?? []).length) gaps.push(t`No first-moon quest for ${roleName}`);
   }
+  if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);
   if (!card.serves.length) gaps.push(t`No season goal served`);
   if (!card.agreed.loveLetter || !card.agreed.nda) gaps.push(t`The agreements are not given`);
-  if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);
   const tz = card.timeZone ?? "";
   const start = card.earliestStart ?? "";
   const windowList = (card.windows ?? []).join(", ");
@@ -339,7 +354,7 @@ export function CardSideBySide({
         ) : null}
         <p className="mt-2 text-foreground">
           {card.agreed.loveLetter && card.agreed.nda
-            ? t`They aligned with the Love Letter, and will align with the NDA once approved.`
+            ? t`They agreed to sign the Love Letter before seating, and the NDA once approved.`
             : t`They have not agreed to the Love Letter and the NDA.`}
         </p>
       </div>
@@ -382,7 +397,7 @@ export interface Practical {
  * FORM V2's PRACTICALITIES (role journey brief v2, 5.4): the time zone (from
  * the browser, editable), the usual times they can meet, the earliest start,
  * and the terms on offer: accepted, or a wish to talk about them, which every
- * reviewer sees flagged. Interviews are booked across time zones, so the zone
+ * reviewer sees flagged. Conversations are booked across time zones, so the zone
  * leads.
  */
 export function Practicalities({ value, onChange }: { value: Practical; onChange: (next: Practical) => void }) {
@@ -464,36 +479,36 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
 
 /**
  * WHAT HAPPENS NEXT, for the roles picked (brief v2, 13.6; Rye's answer 7):
- * the interviews in order, with their length and which is the final approval,
- * when a role carries them (the role-interviews lane fills `interviews`), and
+ * the conversations in order, with their length and which is the final approval,
+ * when a role carries them (the role-conversations lane fills `conversations`), and
  * the booking link when the role has one (`bookingUrl`, PR-A).
  */
 export function NextForRoles({
   roles,
 }: {
-  roles: ReadonlyArray<{ id: string; name: string; interviews?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null }>;
+  roles: ReadonlyArray<{ id: string; name: string; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null }>;
 }) {
   const { t } = useLingui();
-  const withSteps = roles.filter((r) => (r.interviews?.length ?? 0) > 0 || r.bookingUrl);
+  const withSteps = roles.filter((r) => (r.conversations?.length ?? 0) > 0 || r.bookingUrl);
   if (!withSteps.length) return null;
   return (
     <div className="mt-4 grid gap-3 text-left" data-next-for-roles="">
       {withSteps.map((r) => {
         const roleName = r.name;
-        const interviews = r.interviews ?? [];
+        const conversations = r.conversations ?? [];
         return (
           <div key={r.id} className="rounded-xl border border-border p-3">
             <p className="text-sm font-semibold text-card-foreground">{t`For ${roleName}, if the village takes your application forward:`}</p>
-            {interviews.length > 0 && (
+            {conversations.length > 0 && (
               <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm text-foreground">
-                {interviews.map((i, n) => {
+                {conversations.map((i, n) => {
                   const who = i.role;
                   const minutes = i.minutes;
                   return (
                     <li key={n}>
                       {i.finalApproval
-                        ? t({ message: `${minutes} minutes with ${who}, the final approval`, context: "open proposal interviews" })
-                        : t({ message: `${minutes} minutes with ${who}`, context: "open proposal interviews" })}
+                        ? t({ message: `${minutes} minutes with ${who}, the final approval`, context: "open proposal conversations" })
+                        : t({ message: `${minutes} minutes with ${who}`, context: "open proposal conversations" })}
                     </li>
                   );
                 })}

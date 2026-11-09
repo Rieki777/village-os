@@ -193,7 +193,7 @@ describe("the draft", () => {
 });
 
 describe("what happens next", () => {
-  it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, interviews, consent, invitation, NDA", async () => {
+  it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, conversations, consent, invitation, NDA", async () => {
     serve();
     render(<RoleDraft />);
     const steps = await screen.findByRole("list", { name: "After you apply" });
