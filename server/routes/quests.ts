@@ -74,7 +74,10 @@ import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
 import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
 import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
-import { claimRefusalFor } from "../lib/questClaimGate";
+import { claimRefusalFor, isPhysicalQuest } from "../lib/questClaimGate";
+import type { ClaimRefusal } from "../../shared/questClaimGate";
+import { effectiveMinAge, isAgeBand, LIGHT_WORK_MIN_AGE } from "../../shared/ageBands";
+import { ageBandOf, badgeNames, gateableBadgeIds, openClaimsOn, putQuestSafety, questSafetyOf, setAgeBand } from "../repos/questSafety";
 import { captureIntoCurrentPattern } from "../lib/seasonPatterns";
 import { payBadgeBoosts, payLineProblem, payableTokens, questPay, questPayRules, rolePayRules, withPayBadges } from "../lib/workPay";
 import { seasonallyDormantBadgeIds } from "../lib/seasonPatterns";
@@ -562,6 +565,8 @@ export function register(app: Express, deps: Deps): void {
     const quest: any = await questsRepo.byId(String(req.params.id));
     if (!quest) return res.status(404).json({ error: "Quest not found" });
     if (quest.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const gated = await crewGateRefusal(quest.id, user);
+    if (gated) return res.status(403).json(gated);
     const name = cleanCrewName(req.body?.name);
     if (!name) return res.status(400).json({ error: "Give the crew a name" });
     const maxSize = Math.max(2, Math.min(CREW_MAX_SIZE, Number(req.body?.maxSize) || 5));
@@ -584,6 +589,8 @@ export function register(app: Express, deps: Deps): void {
     if (!crew || crew.status === "disbanded") {
       return res.status(404).json({ error: "That invite is no longer open" });
     }
+    const gated = await crewGateRefusal(crew.questId, user);
+    if (gated) return res.status(403).json(gated);
     const outcome = await crewsRepo.join(crew.id, user.id);
     if (outcome === "full") return res.status(409).json({ error: "That crew is full" });
     if (outcome === "gone") return res.status(404).json({ error: "That invite is no longer open" });
@@ -773,6 +780,136 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true });
   });
 
+  /**
+   * The words for a safety refusal (build days S5). Each names its way past:
+   * the badge's grant, the member's own age band, or the board's other quests.
+   */
+  async function safetyRefusalBody(refusal: ClaimRefusal): Promise<Record<string, unknown>> {
+    if (refusal.kind === "badge") {
+      const names = await badgeNames(getPool(), refusal.missing);
+      return {
+        error: `This quest asks for ${names.join(", ")}. Whoever grants it can give it to you, often at the site huddle.`,
+        missingBadges: refusal.missing,
+      };
+    }
+    if (refusal.kind === "attest") {
+      return {
+        error: `Everyone on this quest is at least ${refusal.minAge}. Say your age band once, then take it on.`,
+        minAge: refusal.minAge,
+        needsAgeBand: true,
+      };
+    }
+    if (refusal.kind === "age") {
+      return {
+        error: `Everyone on this quest is at least ${refusal.minAge}. The board has other quests open to you.`,
+        minAge: refusal.minAge,
+      };
+    }
+    return { error: "This quest is not open to you yet.", refusal: refusal.kind };
+  }
+
+  /** Joining or forming a crew on a physical quest asks the same gate a claim does (spec R2). */
+  async function crewGateRefusal(questId: string, user: { id: string }): Promise<Record<string, unknown> | null> {
+    if (!(await isPhysicalQuest(getPool(), questId))) return null;
+    const quest = await questsRepo.byId(questId);
+    if (!quest) return null;
+    const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+    if (!refusal) return null;
+    if (refusal.kind === "badge" || refusal.kind === "attest" || refusal.kind === "age") return safetyRefusalBody(refusal);
+    return { error: "This crew's quest is not open to you yet.", refusal: refusal.kind };
+  }
+
+  /** What a quest asks of the body, for anyone reading it. */
+  app.get("/api/game/quests/:id/safety", async (req, res) => {
+    const safety = await questSafetyOf(getPool(), String(req.params.id));
+    if (!safety) return res.json({ physical: false, minAge: null, requiredBadges: [], safetyNote: null, estimateHours: null });
+    const names = await badgeNames(getPool(), safety.requiredBadges);
+    res.json({
+      physical: safety.physical,
+      minAge: effectiveMinAge(safety),
+      requiredBadges: safety.requiredBadges.map((id, i) => ({ id, name: names[i] })),
+      safetyNote: safety.safetyNote,
+      estimateHours: safety.estimateHours,
+    });
+  });
+
+  /**
+   * Set what a quest asks of the body. The same hands that edit the quest
+   * (the admin route above) set it. Only earned or granted badges may gate,
+   * and a physical quest can never ask below 16 (Rye, 2026-11-09). Open claims
+   * the new rules would refuse are named in the reply and on the record, so
+   * whoever changed it sees who it now affects (spec R3).
+   */
+  app.put("/api/admin/quests/:id/safety", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const quest = await questsRepo.byId(String(req.params.id));
+    if (!quest) return res.status(404).json({ error: "Not found" });
+    const b = req.body ?? {};
+    const physical = b.physical === true;
+    const minAgeRaw = b.minAge == null || b.minAge === "" ? null : Math.trunc(Number(b.minAge));
+    if (minAgeRaw != null && (!Number.isFinite(minAgeRaw) || minAgeRaw < 0 || minAgeRaw > 120)) {
+      return res.status(400).json({ error: "The minimum age is a whole number of years." });
+    }
+    if (physical && minAgeRaw != null && minAgeRaw < LIGHT_WORK_MIN_AGE) {
+      return res.status(400).json({ error: `A physical quest asks at least ${LIGHT_WORK_MIN_AGE}, and that only for light work beside a named adult.` });
+    }
+    const asked: string[] = Array.isArray(b.requiredBadges) ? b.requiredBadges.map(String).filter((x: string) => x.trim() !== "") : [];
+    const gateable = await gateableBadgeIds(getPool(), asked);
+    const refused = asked.filter((x) => !gateable.includes(x));
+    if (refused.length) {
+      return res.status(400).json({ error: "Only an earned or granted badge can gate a quest. A badge members give themselves gates nothing.", refused });
+    }
+    const note = b.safetyNote == null ? null : String(b.safetyNote).trim().slice(0, 2000) || null;
+    const hoursRaw = b.estimateHours == null || b.estimateHours === "" ? null : Number(b.estimateHours);
+    const estimateHours = hoursRaw != null && Number.isFinite(hoursRaw) && hoursRaw >= 0 ? Math.round(hoursRaw * 100) / 100 : null;
+    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
+    await putQuestSafety(getPool(), { questId: quest.id, physical, minAge: minAgeRaw, requiredBadges: gateable, safetyNote: note, estimateHours }, actor);
+    const open = await openClaimsOn(getPool(), quest.id);
+    const nowRefused: string[] = [];
+    for (const c of open) {
+      if (await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, { id: c.userId })) nowRefused.push(c.id);
+    }
+    await recordEvent(getPool(), {
+      kind: "audit", text: `quest:safety:${quest.id}`, actorUserId: actor,
+      entityType: "quest", entityRef: quest.id, audience: "admin",
+    });
+    res.json({ saved: true, openClaimsNowRefused: nowRefused });
+  });
+
+  /** The member's own band, or null. Only they read it here. */
+  app.get("/api/me/age-band", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    res.json({ band: await ageBandOf(getPool(), user.id) });
+  });
+
+  /** A member says their age band once (spec R10). A band is never a birth date. */
+  app.post("/api/me/age-band", async (req, res) => {
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const band = req.body?.band;
+    if (!isAgeBand(band)) return res.status(400).json({ error: "Choose under 16, 16 to 17, or 18 or older." });
+    const set = await setAgeBand(getPool(), user.id, band, null);
+    if (!set) {
+      return res.status(409).json({ error: "Your age band is already set. To change it, ask an admin to confirm the change." });
+    }
+    res.json({ band });
+  });
+
+  /** A confirmed change to a member's band, recorded with who confirmed it. */
+  app.put("/api/admin/members/:id/age-band", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const band = req.body?.band;
+    if (!isAgeBand(band)) return res.status(400).json({ error: "Choose under16, 16to17 or 18plus." });
+    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? "admin";
+    await setAgeBand(getPool(), String(req.params.id), band, actor);
+    await recordEvent(getPool(), {
+      kind: "audit", text: "member:age-band-confirmed", actorUserId: actor,
+      entityType: "member", entityRef: String(req.params.id), audience: "admin",
+    });
+    res.json({ band });
+  });
+
   /** The box, or null when gathering it failed. Logged loudly; never fails the claim. */
   async function nextStepOrNull(quest: QuestRecord, userId: string, claimId: string): Promise<ResolvedNextStep | null> {
     try {
@@ -818,6 +955,7 @@ export function register(app: Express, deps: Deps): void {
         requiresRole: refusal.requiresRole,
       });
     }
+    if (refusal) return res.status(403).json(await safetyRefusalBody(refusal));
 
     /*
      * ONE CLAIM PER MEMBER PER QUEST, DECIDED UNDER A LOCK.

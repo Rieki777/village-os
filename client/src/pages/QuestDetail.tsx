@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import NextStepBox from "@/components/NextStepBox";
+import QuestSafety from "@/components/QuestSafety";
 import QuestActions from "@/components/QuestActions";
 import TakeCurrentPrice from "@/components/TakeCurrentPrice";
 import QuestCrews from "@/components/QuestCrews";
@@ -440,6 +441,9 @@ export default function QuestDetail() {
                 </div>
               )}
             </div>
+
+            {/* What a physical quest asks of the body, before anyone claims. */}
+            {!quest.isExample && <QuestSafety questId={quest.id} signedIn={!!user} />}
 
             {/* The gate, in full color, saying what opens it */}
             {gateText && (
