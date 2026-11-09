@@ -8,6 +8,16 @@
  *   PATCH /api/admin/budgets/lines/:id             one line edited by hand
  *   POST  /api/admin/budgets/lines/:id/withdraw    withdrawn, never deleted (R3)
  *   POST  /api/admin/budgets/lines/:id/restore     and back
+ *   POST  /api/admin/budgets/lines/:id/lock-rate   a person locks a rate on a line in another currency (spec 5a)
+ *   POST  /api/admin/budgets/lock-rates            the same for many lines: preview, then confirm the preview
+ *
+ * A LOCKED RATE (spec 5a, option b; Rye, 9 Nov). `{ use: "provider" }` locks
+ * the newest stored daily rate, read here on the server through
+ * `latestRates`; `{ rate, sourceNote }` locks a rate a person typed. Refused
+ * with no stored rate, or one older than 14 days. Rates are never read by the
+ * client, and `fx_rates` stays display-only: a lock is a person's act, the
+ * same door as every other budget write, and the line counts at the locked
+ * rate until a person locks again. Drift is shown, never applied.
  *
  * Every write goes through `importBudgetLines` (server/lib/budgets.ts), the
  * one write path, and through ONE door (R21), `budgetDoor` below:
@@ -41,6 +51,7 @@ import { registerAdminEditControl, type Refusal } from "../lib/adminSuggestions"
 import {
   BY_VILLAGE_VOTE,
   budgetLines,
+  budgetRateDrift,
   cashBudgetLeft,
   configureBudgets,
   importBudgetLines,
@@ -56,7 +67,7 @@ import { leftTheVillage } from "../lib/formerMember";
 import { holderOnlyDecision } from "../lib/holderOnly";
 import { listOrgAssignments } from "../lib/orgChart";
 import { launchedByVote } from "../lib/orgDraftDecide";
-import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, lineShareOfMoon, moonPeriod, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
+import { ADMIN_BEFORE_LAUNCH, CASH_CATEGORIES, IMPORT_ROWS_MAX, inVillageCurrency, lineShareOfMoon, moonPeriod, sharedDays, type NumberFormatChoice } from "../../shared/budgets";
 import { hasCapability, type CapabilityCtx } from "../../shared/capabilities";
 import { formatMoney } from "../../shared/money";
 import { currentCycle } from "../lib/gratitude-cycles";
@@ -255,8 +266,12 @@ export function register(app: Express, deps: Deps): void {
     run(req, res, (body) => ({ source: "manual", lines: [{ ...one(body.changes ?? {}), id: String(req.params.id) }], scope: null })),
   );
 
-  /** Withdraw and restore: restorable by design, so a press previews and confirms at once unless a revision is named. */
-  async function flip(req: any, res: any, action: "withdraw" | "restore") {
+  /**
+   * One press on one line: withdraw, restore, or lock a rate. Each is undone
+   * by another press, so the press previews and confirms at once, unless the
+   * caller names a revision or asks for the preview.
+   */
+  async function onePress(req: any, res: any, row: ImportRow) {
     const body = req.body ?? {};
     if (body.dryRun === undefined && !body.revision) {
       markAdminGate(req);
@@ -265,13 +280,28 @@ export function register(app: Express, deps: Deps): void {
       if (await overLimit(`budget-preview:${String(who.user.id)}`, PREVIEWS_PER_WINDOW, WINDOW_MS)) {
         return res.status(429).json({ error: "too_many", message: "That is a lot of budget changes in a few minutes. Wait a little and try again." });
       }
-      const p = await importBudgetLines(getPool(), { source: "manual", lines: [{ id: String(req.params.id), action }], by: String(who.user.id), byAs: null, dryRun: true });
+      const p = await importBudgetLines(getPool(), { source: "manual", lines: [row], by: String(who.user.id), byAs: null, dryRun: true });
       req.body = { ...body, dryRun: false, revision: p.revision };
     }
-    return run(req, res, () => ({ source: "manual", lines: [{ id: String(req.params.id), action }], scope: null }));
+    return run(req, res, () => ({ source: "manual", lines: [row], scope: null }));
   }
-  app.post("/api/admin/budgets/lines/:id/withdraw", (req, res) => flip(req, res, "withdraw"));
-  app.post("/api/admin/budgets/lines/:id/restore", (req, res) => flip(req, res, "restore"));
+  app.post("/api/admin/budgets/lines/:id/withdraw", (req, res) => onePress(req, res, { id: String(req.params.id), action: "withdraw" }));
+  app.post("/api/admin/budgets/lines/:id/restore", (req, res) => onePress(req, res, { id: String(req.params.id), action: "restore" }));
+
+  /** A lock row from a body: the stored daily rate, or a typed rate with where it comes from. */
+  const lockRow = (id: string, body: any): ImportRow =>
+    body?.use === "provider"
+      ? { id, action: "lock", use: "provider" }
+      : { id, action: "lock", rate: typeof body?.rate === "number" || typeof body?.rate === "string" ? body.rate : "", sourceNote: typeof body?.sourceNote === "string" ? body.sourceNote : "" };
+  app.post("/api/admin/budgets/lines/:id/lock-rate", (req, res) => onePress(req, res, lockRow(String(req.params.id), req.body)));
+  app.post("/api/admin/budgets/lock-rates", (req, res) =>
+    run(req, res, (body) => {
+      const ids = Array.isArray(body.ids) ? body.ids.filter((x: unknown) => typeof x === "string" && x).map(String) : [];
+      if (!ids.length) return { problem: "Name the lines to lock a rate on." };
+      if (ids.length > IMPORT_ROWS_MAX) return { problem: `Lock at most ${IMPORT_ROWS_MAX} lines at once.` };
+      return { source: "manual", lines: ids.map((id: string) => lockRow(id, body)), scope: null };
+    }),
+  );
 
   // ── Reading (R23) ─────────────────────────────────────────────────────────
 
@@ -291,19 +321,32 @@ export function register(app: Express, deps: Deps): void {
     const village = String(projectCurrency() ?? "").trim().toUpperCase();
     const sourceTotals: Record<string, Record<string, number>> = {};
     for (const l of touching) {
-      if (l.status === "withdrawn" || l.status === "draft" || !CASH_CATEGORIES.includes(l.category) || l.currency !== village) continue;
+      const converted = village ? inVillageCurrency(l, village) : null;
+      if (l.status === "withdrawn" || l.status === "draft" || !CASH_CATEGORIES.includes(l.category) || converted === null) continue;
       const bySource = (sourceTotals[l.source] = sourceTotals[l.source] ?? {});
-      bySource[l.category] = (bySource[l.category] ?? 0) + lineShareOfMoon(l, span).countedMinor;
+      bySource[l.category] = (bySource[l.category] ?? 0) + lineShareOfMoon({ ...l, plannedMinor: converted }, span).countedMinor;
     }
     const door = await budgetDoor(who.user, who.ctx);
+    // Who locked a rate is named by the role they hold it through, never by account (R25).
+    const lockedAs = (userId: string | null | undefined): string | null => (userId ? actingAs(String(userId)) : null);
+    const drift = (await budgetRateDrift(pool)).filter((d) => touching.some((l) => l.id === d.id));
     res.json({
       moon: span,
       villageCurrency: village || null,
       stateRevision: stateRevision(all),
-      lines: touching.map((l) => lineView(l, mayReadCash)),
+      lines: touching.map((l) => lineView(l, mayReadCash, village, lockedAs)),
       figure: figure
-        ? { ...figure, working: { ...figure.working, committed: mayReadCash ? figure.working.committed : null } }
+        ? {
+            ...figure,
+            working: {
+              ...figure.working,
+              lines: figure.working.lines.map(({ fx, ...l }) => ({ ...l, fx: fx ? { rate: fx.rate, source: fx.source, asOf: fx.asOf, lockedAt: fx.lockedAt, lockedAs: lockedAs(fx.lockedBy) } : null })),
+              committed: mayReadCash ? figure.working.committed : null,
+            },
+          }
         : null,
+      drift,
+      driftWarning: drift.some((d) => d.overThreshold),
       sourceTotals,
       syncs: await latestSyncs(pool),
       mayReadCash,
@@ -398,8 +441,10 @@ function circlesOf(raw: unknown): Array<string | null> | undefined {
 }
 
 /** One line as a member reads it: never an account id, and spent only for `cash.pay` (R23, R25). */
-function lineView(l: StoredLine, mayReadCash: boolean) {
+function lineView(l: StoredLine, mayReadCash: boolean, village: string, lockedAs: (userId: string | null | undefined) => string | null) {
   return {
+    convertedMinor: village ? inVillageCurrency(l, village) : null,
+    fx: l.fxRate ? { rate: l.fxRate, source: l.fxSource ?? null, asOf: l.fxAsOf ?? null, lockedAt: l.fxLockedAt ?? null, lockedAs: lockedAs(l.fxLockedBy) } : null,
     id: l.id,
     label: l.label,
     note: l.note,

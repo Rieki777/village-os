@@ -199,7 +199,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"] };
     villageHeld = [];
@@ -335,6 +335,55 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     await importAs("u-hana", [{ ...ROW, planned: "1" }]);
     await insertCashOwedRow(pool, { id: "co-2", occurrenceKey: cashKeys.role(MOON, "seat-1", "u-hugo"), userId: "u-hugo", workKind: "role", workRef: "r", workTitle: "r", amountMinor: 999, currency: "CRC" });
     expect((await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON })).body.figure).toMatchObject({ leftMinor: 0 });
+  });
+
+  // ── A rate a person locks (spec 5a, option b) ─────────────────────────────
+
+  const storeDaily = async (usd = 1, crc = 500) => {
+    const day = new Date().toISOString().slice(0, 10);
+    await q("INSERT INTO fx_rates (quote, rate, as_of, source) VALUES ('USD', ?, ?, 'ecb'), ('CRC', ?, ?, 'ecb') ON DUPLICATE KEY UPDATE rate = VALUES(rate)", [usd, day, crc, day]);
+  };
+  const usdLine = async (label: string, planned = "1,200.00") => (await importAs("u-hana", [{ ...ROW, label, currency: "USD", planned }])).c.body.lineIds[0] as string;
+  const fxOf = async (id: string) => (await q("SELECT fx_rate, fx_source, fx_locked_by FROM budget_lines WHERE id = ?", [id]))[0];
+
+  it("locks a rate on one line in one press through the same door, re-locks it, and locks many with a preview bound by revision", async () => {
+    await storeDaily();
+    const a = await usdLine("A dollars");
+    const b = await usdLine("B dollars", "300.00");
+    const refused = await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-sam", { use: "provider" }, { id: a });
+    expect(refused.status, "the R21 door: a member who does not hold the power").toBe(403);
+    expect(refused.body.suggest).toMatchObject({ control: "budget_lines" });
+    const one = await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-hana", { use: "provider" }, { id: a });
+    expect(one.status).toBe(200);
+    expect(one.gated).toBe(true);
+    expect(await fxOf(a)).toEqual({ fx_rate: "500.00000000", fx_source: "daily rate, open.er-api.com", fx_locked_by: "u-hana" });
+    expect((await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-hana", { rate: "512.25", sourceNote: "Bank quote, 9 Nov" }, { id: a })).status).toBe(200);
+    expect(await fxOf(a)).toMatchObject({ fx_rate: "512.25000000", fx_source: "typed: Bank quote, 9 Nov" });
+    expect((await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-hana", { use: "provider" }, { id: "bl-nowhere" })).status).toBe(404);
+
+    const p = await call("POST", "/api/admin/budgets/lock-rates", "u-hana", { ids: [a, b], use: "provider" });
+    expect(p.status).toBe(200);
+    expect(p.body.changed.map((c: any) => [c.label, c.convertedMinor])).toEqual([["A dollars", 60_000_000], ["B dollars", 15_000_000]]);
+    expect((await fxOf(b)).fx_rate, "a preview locks nothing").toBeNull();
+    expect((await call("POST", "/api/admin/budgets/lock-rates", "u-hana", { ids: [a, b], use: "provider", dryRun: false, revision: "old" })).status).toBe(409);
+    expect((await call("POST", "/api/admin/budgets/lock-rates", "u-hana", { ids: [a, b], use: "provider", dryRun: false, revision: p.body.revision })).status).toBe(200);
+    expect((await fxOf(b)).fx_rate).toBe("500.00000000");
+  });
+
+  it("shows every member a locked line's rate, source, date and the role that locked it, never the account, and the drift at today's rate", async () => {
+    await storeDaily(1, 530);
+    const a = await usdLine("A dollars");
+    await call("POST", "/api/admin/budgets/lines/:id/lock-rate", "u-hana", { rate: "500", sourceNote: "Bank quote, 9 Nov" }, { id: a });
+    const read = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(read.status).toBe(200);
+    expect(read.body.lines[0]).toMatchObject({ currency: "USD", plannedMinor: 120_000, convertedMinor: 60_000_000 });
+    expect(read.body.lines[0].fx).toMatchObject({ rate: "500.00000000", source: "typed: Bank quote, 9 Nov", lockedAs: "Treasury" });
+    expect(read.body.figure.plannedMinor).toBe(60_000_000);
+    expect(read.body.figure.working.lines[0].fx).toMatchObject({ rate: "500.00000000", lockedAs: "Treasury" });
+    expect(read.body.figure.working.lines[0].fx.lockedBy).toBeUndefined();
+    expect(read.body.drift).toEqual([expect.objectContaining({ id: a, lockedMinor: 60_000_000, todayMinor: 63_600_000, pct: 6, overThreshold: true })]);
+    expect(read.body.driftWarning).toBe(true);
+    expect(JSON.stringify(read.body), "no account id leaves").not.toContain("u-hana");
   });
 
   // ── The suggestion control (R22) ──────────────────────────────────────────

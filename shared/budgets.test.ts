@@ -8,12 +8,15 @@
 import { describe, expect, it } from "vitest";
 import {
   budgetFigure,
+  convertAtRate,
   isFormulaCell,
   lineShareOfMoon,
   moonCashTerms,
   moonPeriod,
   NO_COMMITMENTS,
   precedence,
+  rateDrift,
+  rateUnits,
   readAmount,
   readCategory,
   resolvePeriod,
@@ -287,3 +290,50 @@ describe("what a caller hands the engine (R7)", () => {
     expect(shareState(m.id, f, 200_000).sharePct).toBe(50);
   });
 });
+
+describe("a rate a person locks on a line (spec 5a, option b; R8)", () => {
+  const m = moonAt("2026-11-15T12:00:00Z");
+  const usd = (over: Partial<FigureLine> = {}) => line({ periodKind: "moon", periodKey: m.id, startsOn: m.startsOn, endsOn: m.endsOn, currency: "USD", plannedMinor: 120_000, ...over });
+
+  it("converts in minor units at the locked rate, read exactly off its decimal text, and floors the result", () => {
+    // $1,200.00 at 509.86 colones per dollar.
+    expect(convertAtRate(120_000, "USD", "CRC", "509.86000000")).toBe(61_183_200);
+    // A rate float arithmetic gets wrong by a hair still lands exactly.
+    expect(convertAtRate(10, "USD", "CRC", "0.29")).toBe(2);
+    expect(convertAtRate(3, "USD", "CRC", "0.33333333")).toBe(0);
+    // Exponents differ: yen have none, dinars have three.
+    expect(convertAtRate(1000, "JPY", "CRC", "3.4")).toBe(340_000);
+    expect(convertAtRate(12_345, "USD", "JPY", "150.5")).toBe(18_579);
+    expect(convertAtRate(1_000, "KWD", "USD", "3.25")).toBe(325);
+    expect(convertAtRate(100, "USD", "CRC", "0")).toBeNull();
+    expect(convertAtRate(100, "USD", "CRC", "-1")).toBeNull();
+    expect(rateUnits("509.86")).toEqual(BigInt("50986000000"));
+    expect(rateUnits(509.86)).toEqual(BigInt("50986000000"));
+  });
+
+  it("counts a line in another currency once a rate is locked on it, converted, and pro-rated after conversion", () => {
+    expect(budgetFigure([usd()], m, "CRC", NO_COMMITMENTS, "r"), "no lock, not counted yet").toBeNull();
+    const locked = usd({ fxRate: "509.86000000", fxSource: "daily rate, open.er-api.com", fxAsOf: "2026-11-09", fxLockedBy: "u-1", fxLockedAt: "2026-11-09T10:00:00.000Z" });
+    const f = budgetFigure([locked], m, "CRC", NO_COMMITMENTS, "r")!;
+    expect(f.plannedMinor).toBe(61_183_200);
+    expect(f.working.lines[0]).toMatchObject({ currency: "USD", plannedMinor: 120_000, convertedMinor: 61_183_200 });
+    expect(f.working.lines[0].fx).toEqual({ rate: "509.86000000", source: "daily rate, open.er-api.com", asOf: "2026-11-09", lockedBy: "u-1", lockedAt: "2026-11-09T10:00:00.000Z" });
+    // A line across two moons: converted first, then floor(converted x shared / line days).
+    const long = usd({ periodKind: "span", periodKey: "s", startsOn: m.startsOn, endsOn: addDaysForTest(m.endsOn, 10), plannedMinor: 333, fxRate: "3.33333333" });
+    const g = budgetFigure([long], m, "CRC", NO_COMMITMENTS, "r")!;
+    const converted = convertAtRate(333, "USD", "CRC", "3.33333333")!;
+    expect(g.plannedMinor).toBe(Math.floor((converted * m.days) / (m.days + 10)));
+  });
+
+  it("measures drift at today's rate for display only, and warns past 5%", () => {
+    const locked = usd({ fxRate: "500.00000000" });
+    expect(rateDrift(locked, "CRC", 515)).toMatchObject({ lockedMinor: 60_000_000, todayMinor: 61_800_000, pct: 3, overThreshold: false });
+    expect(rateDrift(locked, "CRC", 530)).toMatchObject({ todayMinor: 63_600_000, pct: 6, overThreshold: true });
+    expect(rateDrift(locked, "CRC", 470)).toMatchObject({ pct: -6, overThreshold: true });
+    expect(rateDrift(locked, "CRC", null)).toMatchObject({ todayMinor: null, pct: null, overThreshold: false });
+  });
+});
+
+function addDaysForTest(day: string, n: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+}

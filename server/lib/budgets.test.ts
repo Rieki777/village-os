@@ -30,6 +30,7 @@ import {
   latestSyncs,
   registerBudgetSource,
   budgetSource,
+  budgetRateDrift,
   resetBudgetEnv,
   type ImportInput,
   type ImportRow,
@@ -39,7 +40,7 @@ import { insertCashOwedRow } from "../repos/cashOwed";
 import { usersRepo } from "../repos/users";
 import { createOrgRole } from "./orgChart";
 import { LUNAR_CLOCK, boundsForNumber, parseId } from "../../shared/cycleClock";
-import { moonPeriod } from "../../shared/budgets";
+import { convertAtRate, moonPeriod } from "../../shared/budgets";
 
 const configured = testDbConfigured();
 const TZ = "America/Costa_Rica";
@@ -89,7 +90,7 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
   });
 
   beforeEach(async () => {
-    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events"]) await q(`DELETE FROM \`${t}\``);
+    for (const t of ["budget_lines", "budget_syncs", "cash_owed", "health_events", "fx_rates"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
     configureBudgets({
       currency: () => "CRC",
@@ -375,6 +376,112 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     expect(f.working.lines).toHaveLength(1);
     expect(f.plannedMinor).toBe(Math.floor((100_000 * moon.days) / lineDays));
     expect(f.revision).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  // ── A rate a person locks (spec 5a, option b; R8) ─────────────────────────
+
+  const today = () => new Date().toISOString().slice(0, 10);
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+  /** EUR-based rows, the shape the daily job stores: 1 EUR = 1.08 USD = 550.65 CRC. */
+  const storeDaily = async (asOf: string, usd = 1.08, crc = 550.65) =>
+    q("INSERT INTO fx_rates (quote, rate, as_of, source) VALUES ('USD', ?, ?, 'ecb'), ('CRC', ?, ?, 'ecb') ON DUPLICATE KEY UPDATE rate = VALUES(rate)", [usd, asOf, crc, asOf]);
+  const usdLine = async (label = "Library dollars", planned = "1,200.00") => {
+    const r = await confirm({ source: "manual", lines: [row({ label, currency: "USD", planned })] });
+    return r.lineIds[0];
+  };
+  const fxOf = async (id: string) =>
+    (await q("SELECT fx_rate, fx_source, DATE_FORMAT(fx_as_of, '%Y-%m-%d') AS fx_as_of, fx_locked_by, fx_locked_at IS NOT NULL AS locked_at_set FROM budget_lines WHERE id = ?", [id]))[0];
+
+  it("locks the newest stored daily rate, read on the server, and counts the line converted, naming the rate, its source, its date and who locked it", async () => {
+    await q("DELETE FROM fx_rates");
+    await storeDaily(today());
+    const id = await usdLine();
+    expect(await cashBudgetLeft(pool, MOON), "not counted yet: in USD").toBeNull();
+    const p = await upload([{ id, action: "lock", use: "provider" }], { source: "manual" });
+    const rate = (550.65 / 1.08).toFixed(8);
+    expect(p.changed[0]).toMatchObject({ op: "lock", convertedMinor: convertAtRate(120_000, "USD", "CRC", rate) });
+    await upload([{ id, action: "lock", use: "provider" }], { source: "manual", dryRun: false, revision: p.revision });
+    expect(await fxOf(id)).toEqual({ fx_rate: rate, fx_source: "daily rate, open.er-api.com", fx_as_of: today(), fx_locked_by: "u-treasurer", locked_at_set: 1 });
+    const f = (await cashBudgetLeft(pool, MOON))!;
+    expect(f.plannedMinor).toBe(convertAtRate(120_000, "USD", "CRC", rate));
+    expect(f.working.lines[0].fx).toMatchObject({ rate, source: "daily rate, open.er-api.com", asOf: today(), lockedBy: "u-treasurer" });
+    await vi.waitFor(async () => expect((await q("SELECT COUNT(*) AS n FROM health_events WHERE text = ?", [`budget:rate-locked:${id}`]))[0].n).toBe(1), { timeout: 3000 });
+  });
+
+  it("refuses a provider lock with no stored rate or only one older than 14 days, and a lock on a line already in the village's currency", async () => {
+    await q("DELETE FROM fx_rates");
+    const id = await usdLine();
+    expect((await upload([{ id, action: "lock", use: "provider" }], { source: "manual" })).refused.map((r) => r.reason)).toEqual(["no_rate"]);
+    await storeDaily(daysAgo(20));
+    const stale = await upload([{ id, action: "lock", use: "provider" }], { source: "manual" });
+    expect(stale.refused.map((r) => r.reason)).toEqual(["stale_rate"]);
+    expect(stale.refused[0].message).toContain(daysAgo(20));
+    const crc = (await confirm({ lines: [row({ label: "Colones" })] })).lineIds[0];
+    expect((await upload([{ id: crc, action: "lock", use: "provider" }], { source: "manual" })).refused.map((r) => r.reason)).toEqual(["same_currency"]);
+  });
+
+  it("locks a typed rate with its source note, and refuses one with no note or a rate that is not a positive decimal", async () => {
+    const id = await usdLine();
+    const ok = await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500.5", sourceNote: "Bank transfer quote of 9 Nov" }] });
+    expect(ok.written).toBe(true);
+    expect(await fxOf(id)).toMatchObject({ fx_rate: "500.50000000", fx_source: "typed: Bank transfer quote of 9 Nov", fx_locked_by: "u-treasurer" });
+    const bad = await upload([{ id, action: "lock", rate: "500.5" }, { id: await usdLine("Other dollars"), action: "lock", rate: "-3", sourceNote: "A typed quote" }], { source: "manual" });
+    expect(bad.refused.map((r) => [r.row, r.reason])).toEqual([[1, "source_note"], [2, "rate"]]);
+  });
+
+  it("previews a bulk lock with every figure before anything is locked, and binds it by revision", async () => {
+    await q("DELETE FROM fx_rates");
+    await storeDaily(today());
+    const a = await usdLine("A dollars", "100.00");
+    const b = await usdLine("B dollars", "200.00");
+    const rows: ImportRow[] = [{ id: a, action: "lock", use: "provider" }, { id: b, action: "lock", use: "provider" }];
+    const p = await upload(rows, { source: "manual" });
+    expect(p.changed.map((c) => [c.label, c.convertedMinor !== null])).toEqual([["A dollars", true], ["B dollars", true]]);
+    expect((await fxOf(a)).fx_rate, "a preview locks nothing").toBeNull();
+    expect((await upload(rows, { source: "manual", dryRun: false, revision: "old" })).code).toBe("stale");
+    expect((await upload(rows, { source: "manual", dryRun: false, revision: p.revision })).written).toBe(true);
+    expect([(await fxOf(a)).fx_rate, (await fxOf(b)).fx_rate].every((r) => r !== null)).toBe(true);
+  });
+
+  it("keeps the lock when a writer here changes the amount and shows the new converted figure, and drops it when the currency changes", async () => {
+    const id = await usdLine();
+    await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] });
+    const edit = await upload([{ id, planned: "1,000.00" }], { source: "manual" });
+    expect(edit.changed[0]).toMatchObject({ op: "change", plannedMinor: 100_000, convertedMinor: 50_000_000 });
+    await upload([{ id, planned: "1,000.00" }], { source: "manual", dryRun: false, revision: edit.revision });
+    expect((await fxOf(id)).fx_rate).toBe("500.00000000");
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(50_000_000);
+    const recurrency = await upload([{ id, currency: "EUR", planned: "900.00" }], { source: "manual" });
+    expect(recurrency.flags.map((f) => f.kind)).toContain("rate_unlocked");
+    await upload([{ id, currency: "EUR", planned: "900.00" }], { source: "manual", dryRun: false, revision: recurrency.revision });
+    expect(await fxOf(id)).toMatchObject({ fx_rate: null, fx_source: null, fx_as_of: null, fx_locked_by: null });
+  });
+
+  it("drops the lock and the adoption when the library changes a line's amount or currency, and keeps both when it sends the line unchanged", async () => {
+    const sera = (plannedMinor: number, currency = "USD"): ImportRow => ({ sourceRef: "rec-fx", period: MOON, category: "role_pay", label: "Library dollars", currency, plannedMinor });
+    const read = (r: ImportRow) => confirm({ source: "sera", by: null, byAs: null, lines: [r] });
+    const id = (await read(sera(120_000))).lineIds[0];
+    await q("UPDATE budget_lines SET adopted_at = NOW(), adopted_as = 'Treasury' WHERE id = ?", [id]);
+    await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] });
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor).toBe(60_000_000);
+    expect((await read(sera(120_000))).changed, "the same line again changes nothing").toEqual([]);
+    expect((await fxOf(id)).fx_rate).toBe("500.00000000");
+    const moved = await read(sera(130_000));
+    expect(moved.flags.map((f) => f.kind).sort()).toEqual(["adoption_cleared", "rate_unlocked"]);
+    expect((await fxOf(id)).fx_rate).toBeNull();
+    expect((await q("SELECT adopted_at FROM budget_lines WHERE id = ?", [id]))[0].adopted_at).toBeNull();
+    expect(await cashBudgetLeft(pool, MOON), "it stops counting until adopted again").toBeNull();
+  });
+
+  it("reads each locked line's drift at today's stored rate, for display only, and flags it past 5%", async () => {
+    await q("DELETE FROM fx_rates");
+    await storeDaily(today(), 1, 530);
+    const id = await usdLine();
+    await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] });
+    const before = (await cashBudgetLeft(pool, MOON))!.plannedMinor;
+    const drift = await budgetRateDrift(pool);
+    expect(drift).toEqual([expect.objectContaining({ id, lockedMinor: 60_000_000, todayRate: 530, todayMinor: 63_600_000, pct: 6, overThreshold: true })]);
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "drift never moves the figure").toBe(before);
   });
 
   it("refuses more than 2000 rows in one import", async () => {

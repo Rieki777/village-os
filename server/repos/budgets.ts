@@ -41,17 +41,23 @@ export interface BudgetLineRow {
   adoptedAs: string | null;
   changedBy: string | null;
   changedAs: string | null;
+  /** A rate a person locked (spec 5a): decimal text, its source, its day, who and when. */
+  fxRate: string | null;
+  fxSource: string | null;
+  fxAsOf: string | null;
+  fxLockedBy: string | null;
+  fxLockedAt: Date | null;
 }
 
 const COLUMNS =
   "`id`, `line_key`, `source`, `source_ref`, `source_changed_at`, `period_kind`, `period_key`, `starts_on`, `ends_on`, " +
   "`circle_id`, `role_id`, `matched`, `category`, `planned_minor`, `spent_minor`, `currency`, `label`, `source_label`, `note`, " +
-  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`";
+  "`status`, `adopted_at`, `adopted_as`, `changed_by`, `changed_as`, `fx_rate`, `fx_source`, `fx_as_of`, `fx_locked_by`, `fx_locked_at`";
 
 const values = (r: BudgetLineRow): unknown[] => [
   r.id, r.lineKey, r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
   r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
-  r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs,
+  r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt,
 ];
 
 /**
@@ -69,7 +75,7 @@ export async function budgetLineRows(db: Db): Promise<RowDataPacket[]> {
 
 export async function insertBudgetLine(db: Db, r: BudgetLineRow): Promise<ResultSetHeader> {
   const [res] = await db.query<ResultSetHeader>(
-    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO \`budget_lines\` (${COLUMNS}, \`changed_at\`) VALUES (${Array.from({ length: 30 }, () => "?").join(", ")})`,
     [...values(r), new Date()],
   );
   return res;
@@ -80,11 +86,12 @@ export async function updateBudgetLine(db: Db, r: BudgetLineRow): Promise<Result
   const [res] = await db.query<ResultSetHeader>(
     "UPDATE `budget_lines` SET `source` = ?, `source_ref` = ?, `source_changed_at` = ?, `period_kind` = ?, `period_key` = ?, `starts_on` = ?, `ends_on` = ?, " +
       "`circle_id` = ?, `role_id` = ?, `matched` = ?, `category` = ?, `planned_minor` = ?, `spent_minor` = ?, `currency` = ?, `label` = ?, `source_label` = ?, `note` = ?, " +
-      "`status` = ?, `adopted_at` = ?, `adopted_as` = ?, `changed_by` = ?, `changed_as` = ?, `changed_at` = ? WHERE `id` = ?",
+      "`status` = ?, `adopted_at` = ?, `adopted_as` = ?, `changed_by` = ?, `changed_as` = ?, " +
+      "`fx_rate` = ?, `fx_source` = ?, `fx_as_of` = ?, `fx_locked_by` = ?, `fx_locked_at` = ?, `changed_at` = ? WHERE `id` = ?",
     [
       r.source, r.sourceRef, r.sourceChangedAt, r.periodKind, r.periodKey, r.startsOn, r.endsOn,
       r.circleId, r.roleId, r.matched ? 1 : 0, r.category, r.plannedMinor, r.spentMinor, r.currency, r.label, r.sourceLabel, r.note,
-      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, new Date(), r.id,
+      r.status, r.adoptedAt, r.adoptedAs, r.changedBy, r.changedAs, r.fxRate, r.fxSource, r.fxAsOf, r.fxLockedBy, r.fxLockedAt, new Date(), r.id,
     ],
   );
   return res;
@@ -138,6 +145,24 @@ export async function budgetChartRows(db: Db): Promise<{ circles: RowDataPacket[
   const [circles] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `is_example` FROM `circles`");
   const [roles] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `circle_id`, `active`, `is_example` FROM `org_roles`");
   return { circles, roles };
+}
+
+/**
+ * The newest stored day and source of each quote, with no 14-day window, so
+ * a lock refused for a stale rate can say which day the newest one is from.
+ * The RATE itself is read through `latestRates` (server/lib/fxRates.ts),
+ * which keeps 14 days; this only dates it. A read, never a write: `fx_rates`
+ * stays the daily job's to write (visionNeverApplies.test.ts).
+ */
+export async function fxQuoteDays(db: Db, quotes: readonly string[]): Promise<RowDataPacket[]> {
+  if (!quotes.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT f.`quote`, DATE_FORMAT(f.`as_of`, '%Y-%m-%d') AS `as_of`, f.`source` FROM `fx_rates` f " +
+      "JOIN (SELECT `quote`, MAX(`as_of`) AS `as_of` FROM `fx_rates` WHERE `quote` IN (?) GROUP BY `quote`) n " +
+      "ON n.`quote` = f.`quote` AND n.`as_of` = f.`as_of`",
+    [quotes],
+  );
+  return rows;
 }
 
 /** LIKE's own wildcards, escaped, so a key prefix matches only itself. */

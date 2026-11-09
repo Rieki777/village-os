@@ -37,10 +37,15 @@ import {
   LABEL_MAX,
   NOTE_MAX,
   NO_COMMITMENTS,
+  PROVIDER_RATE_MAX_DAYS,
+  RATE_DIGITS,
   budgetFigure,
+  inVillageCurrency,
   isBudgetSource,
   isFormulaCell,
   moonPeriod,
+  rateDrift,
+  rateUnits,
   readAmount,
   readCategory,
   resolvePeriod,
@@ -57,15 +62,20 @@ import {
   type NumberFormatChoice,
   type PeriodEnv,
   type PeriodKind,
+  type RateDrift,
   type SeasonLike,
   type ShareState,
 } from "../../shared/budgets";
 import { boundsForNumber, parseId } from "../../shared/cycleClock";
+import { civilDateKey } from "../../shared/lunar";
+import { FX_BASE, crossRate } from "../../shared/money";
+import { daysInclusive } from "../../shared/moonRecap";
 import * as repo from "../repos/budgets";
 import { rosterRows } from "../repos/peopleRoster";
 import { budgetNameCheck, nameFindWords, type NameCheck } from "./budgetNames";
 import { cashKeys } from "./cashOwed";
 import { recordEvent } from "./events";
+import { dailyRatesUrl, latestRates } from "./fxRates";
 import { currentCycle } from "./gratitude-cycles";
 import { villageTimezone } from "./villageReaders";
 
@@ -173,6 +183,10 @@ export function rowToLine(r: RowDataPacket): StoredLine {
     changedBy: str(r.changed_by),
     changedAs: str(r.changed_as),
     fxRate: str(r.fx_rate),
+    fxSource: str(r.fx_source),
+    fxAsOf: r.fx_as_of_text ? String(r.fx_as_of_text) : null,
+    fxLockedBy: str(r.fx_locked_by),
+    fxLockedAt: iso(r.fx_locked_at),
   };
 }
 
@@ -182,6 +196,7 @@ const digest = (v: unknown): string => createHash("sha256").update(JSON.stringif
 const valueOf = (l: StoredLine) => [
   l.id, l.lineKey, l.source, l.sourceRef, l.sourceChangedAt, l.periodKind, l.periodKey, l.startsOn, l.endsOn, l.circleId, l.roleId,
   l.matched, l.category, l.plannedMinor, l.spentMinor, l.currency, l.label, l.sourceLabel, l.note, l.status, l.adoptedAt,
+  l.fxRate ?? null, l.fxSource ?? null, l.fxAsOf ?? null,
 ];
 
 /** The budget as it stands, as one digest: what the figure names as its `revision` (R7). */
@@ -225,7 +240,16 @@ export function budgetLineKey(m: KeyMaterial): string {
  */
 export interface ImportRow {
   id?: string;
-  action?: "withdraw" | "restore";
+  /**
+   * `lock` puts a rate on a line in another currency (spec 5a, option b):
+   * `use: "provider"` locks the newest stored daily rate, read on the server;
+   * otherwise `rate` and `sourceNote` are a rate a person typed. Locking a
+   * locked line again re-locks it.
+   */
+  action?: "withdraw" | "restore" | "lock";
+  use?: "provider";
+  rate?: string | number;
+  sourceNote?: string;
   period?: string;
   circle?: string | null;
   role?: string | null;
@@ -277,7 +301,7 @@ export interface Held {
   message: string;
 }
 
-export type FlagKind = "formula" | "overlap" | "kept_last_good" | "becomes_manual" | "adoption_cleared";
+export type FlagKind = "formula" | "overlap" | "kept_last_good" | "becomes_manual" | "adoption_cleared" | "rate_unlocked";
 
 export interface Flag {
   row: number | null;
@@ -288,7 +312,7 @@ export interface Flag {
 }
 
 export interface PlanWrite {
-  op: "add" | "change" | "withdraw" | "restore";
+  op: "add" | "change" | "withdraw" | "restore" | "lock";
   row: number | null;
   /** The line after the write. An added line's id is "" until it is written. */
   line: StoredLine;
@@ -321,6 +345,17 @@ export interface PlanInput {
   villageCurrency: string;
   periodEnv: PeriodEnv;
   names: NameCheck;
+  /** The village's civil day, for a typed rate's date and a stored rate's age. */
+  today: string;
+  /** The newest stored rate from a currency into the village's, read on the server. Absent when no lock asks for one. */
+  rates?: (from: string) => ProviderRate | null;
+}
+
+/** A stored daily rate as a lock reads it: the rate (null past 14 days), its day and where it came from. */
+export interface ProviderRate {
+  rate: number | null;
+  asOf: string | null;
+  source: string;
 }
 
 const clean = (v: unknown): string => (typeof v === "string" ? v.normalize("NFC").replace(/\s+/g, " ").trim() : "");
@@ -478,8 +513,50 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
       changedBy: base?.changedBy ?? null,
       changedAs: base?.changedAs ?? null,
       fxRate: base?.fxRate ?? null,
+      fxSource: base?.fxSource ?? null,
+      fxAsOf: base?.fxAsOf ?? null,
+      fxLockedBy: base?.fxLockedBy ?? null,
+      fxLockedAt: base?.fxLockedAt ?? null,
     },
   };
+}
+
+const UNLOCKED: Pick<StoredLine, "fxRate" | "fxSource" | "fxAsOf" | "fxLockedBy" | "fxLockedAt"> = { fxRate: null, fxSource: null, fxAsOf: null, fxLockedBy: null, fxLockedAt: null };
+const keptLock = (t: StoredLine): Pick<StoredLine, "fxRate" | "fxSource" | "fxAsOf" | "fxLockedBy" | "fxLockedAt"> => ({
+  fxRate: t.fxRate ?? null,
+  fxSource: t.fxSource ?? null,
+  fxAsOf: t.fxAsOf ?? null,
+  fxLockedBy: t.fxLockedBy ?? null,
+  fxLockedAt: t.fxLockedAt ?? null,
+});
+const RATE_UNLOCKED = "This line's currency or amount changed, so the rate locked on it no longer applies. Lock a rate again for it to count.";
+
+/** A typed rate: a plain decimal, above 0, at most 8 digits after the point. */
+const TYPED_RATE = /^\d{1,10}(?:\.\d{1,8})?$/;
+
+/** The rate one lock row asks for, or why it cannot be had (spec 5a, guard 1). */
+function lockFor(n: number, row: ImportRow, t: StoredLine, input: PlanInput): { ok: true; rate: string; source: string; asOf: string } | { ok: false; refused?: Refused; held?: Held } {
+  const refuse = (cell: string, reason: string, message: string) => ({ ok: false as const, refused: { row: n, cell, reason, message } });
+  if (row.use === "provider") {
+    const r = input.rates?.(t.currency) ?? null;
+    const age = r?.asOf ? daysInclusive(r.asOf, input.today) - 1 : null;
+    if (r?.asOf && age !== null && age > PROVIDER_RATE_MAX_DAYS) {
+      return refuse("rate", "stale_rate", `The newest stored rate for ${t.currency} is from ${r.asOf}, more than ${PROVIDER_RATE_MAX_DAYS} days ago. Type a rate with its source instead.`);
+    }
+    if (!r || r.rate === null || !r.asOf || rateUnits(r.rate) === null) {
+      return refuse("rate", "no_rate", `There is no stored rate for ${t.currency} from the last ${PROVIDER_RATE_MAX_DAYS} days. Type a rate with its source instead.`);
+    }
+    return { ok: true, rate: r.rate.toFixed(RATE_DIGITS), source: r.source.slice(0, 120), asOf: r.asOf };
+  }
+  const text = typeof row.rate === "number" ? String(row.rate) : clean(row.rate);
+  const units = TYPED_RATE.test(text) ? rateUnits(text) : null;
+  if (units === null || Number(text) > 1e9) return refuse("rate", "rate", `Type the rate as ${input.villageCurrency.toUpperCase()} per one ${t.currency}, a number above 0 with at most ${RATE_DIGITS} digits after the point.`);
+  const note = clean(row.sourceNote);
+  if (Array.from(note).length < 3 || Array.from(note).length > 100) return refuse("source_note", "source_note", "Say where this rate comes from, in a few words, so everyone reading the budget can check it.");
+  const find = input.names(note);
+  if (find?.kind === "refused") return refuse("source_note", `name_${find.what}`, nameFindWords(find));
+  if (find?.kind === "held") return { ok: false, held: { row: n, cell: "source_note", message: nameFindWords(find) } };
+  return { ok: true, rate: (Number(units) / 10 ** RATE_DIGITS).toFixed(RATE_DIGITS), source: `typed: ${note}`.slice(0, 120), asOf: input.today };
 }
 
 /** Whether two lines say the same thing to the budget, whatever their id, key and source. */
@@ -536,6 +613,34 @@ export function planImport(input: PlanInput): ImportPlan {
         plan.refused.push({ row: r.n, cell: "id", reason: "no_line", message: "There is no budget line with that id." });
         continue;
       }
+      if (r.row.action === "lock") {
+        if (t.status === "closed") {
+          plan.refused.push({ row: r.n, cell: "status", reason: "closed", message: CLOSED });
+          continue;
+        }
+        const village = input.villageCurrency.toUpperCase();
+        if (!village) {
+          plan.refused.push({ row: r.n, cell: "currency", reason: "no_currency", message: "This village has no currency set yet, so there is nothing to lock a rate into." });
+          continue;
+        }
+        if (t.currency.toUpperCase() === village) {
+          plan.refused.push({ row: r.n, cell: "currency", reason: "same_currency", message: "This line is already in the village's currency, so it needs no rate." });
+          continue;
+        }
+        const fx = lockFor(r.n, r.row, t, input);
+        if (!fx.ok) {
+          if (fx.refused) plan.refused.push(fx.refused);
+          if (fx.held) plan.held.push(fx.held);
+          continue;
+        }
+        if (t.fxRate === fx.rate && t.fxSource === fx.source && t.fxAsOf === fx.asOf) {
+          plan.unchanged.push({ row: r.n, id: t.id });
+          continue;
+        }
+        const line: StoredLine = { ...t, fxRate: fx.rate, fxSource: fx.source, fxAsOf: fx.asOf };
+        plan.writes.push({ op: "lock", row: r.n, line, before: t, plannedCell: null, becomesManual: false, adoptionCleared: false });
+        continue;
+      }
       if (r.row.action === "withdraw" || r.row.action === "restore") {
         const restoring = r.row.action === "restore";
         if (t.status === "closed") {
@@ -571,6 +676,11 @@ export function planImport(input: PlanInput): ImportPlan {
         continue;
       }
       const line: StoredLine = { ...cells.line, id: t.id, lineKey: t.lineKey, source: "manual" };
+      // A writer here keeps the lock on a new amount (the preview shows the new converted figure); a new currency drops it.
+      if (t.fxRate && line.currency !== t.currency) {
+        Object.assign(line, UNLOCKED);
+        plan.flags.push({ row: r.n, cell: "currency", kind: "rate_unlocked", message: RATE_UNLOCKED, ids: [t.id] });
+      }
       if (sameValues(line, t)) {
         plan.unchanged.push({ row: r.n, id: t.id });
         continue;
@@ -613,6 +723,10 @@ export function planImport(input: PlanInput): ImportPlan {
       continue;
     }
     const next: StoredLine = { ...line, id: t.id, lineKey: t.lineKey, source: t.source, adoptedAt: t.adoptedAt, adoptedAs: t.adoptedAs, status: input.source === "sera" ? line.status : "approved" };
+    // The lock: the library changing the amount or the currency drops it; a writer here keeps it unless the currency moved.
+    const lockStays = !!t.fxRate && next.currency === t.currency && !(input.source === "sera" && next.plannedMinor !== t.plannedMinor);
+    Object.assign(next, lockStays ? keptLock(t) : UNLOCKED);
+    if (t.fxRate && !lockStays) plan.flags.push({ row: r.n, cell: "row", kind: "rate_unlocked", message: RATE_UNLOCKED, ids: [t.id] });
     const cleared = input.source === "sera" && !!t.adoptedAt && adoptionFacts(next) !== adoptionFacts(t);
     if (cleared) {
       next.adoptedAt = null;
@@ -867,6 +981,9 @@ export interface ImportInput {
 
 export interface PreviewLine {
   row: number | null;
+  /** The planned amount in the village's currency: itself, or converted at the locked rate; null when not counted yet. */
+  convertedMinor: number | null;
+  fx: { rate: string; source: string | null; asOf: string | null } | null;
   id: string | null;
   label: string;
   category: BudgetCategory;
@@ -884,7 +1001,7 @@ export interface PreviewLine {
 }
 
 export interface PreviewChange extends PreviewLine {
-  op: "change" | "restore" | "withdraw";
+  op: "change" | "restore" | "withdraw" | "lock";
   before: PreviewLine;
   becomesManual: boolean;
   adoptionCleared: boolean;
@@ -917,8 +1034,10 @@ export interface ImportResult {
   lineIds: string[];
 }
 
-const preview = (l: StoredLine, row: number | null, plannedCell: string | null): PreviewLine => ({
+const preview = (l: StoredLine, row: number | null, plannedCell: string | null, village: string): PreviewLine => ({
   row,
+  convertedMinor: village ? inVillageCurrency(l, village) : null,
+  fx: l.fxRate ? { rate: l.fxRate, source: l.fxSource ?? null, asOf: l.fxAsOf ?? null } : null,
   id: l.id || null,
   label: l.label,
   category: l.category,
@@ -947,6 +1066,7 @@ const planDigest = (plan: ImportPlan) =>
   });
 
 interface Prepared {
+  village: string;
   existing: StoredLine[];
   plan: ImportPlan;
   after: StoredLine[];
@@ -965,6 +1085,8 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   };
   const names = budgetNameCheck(await rosterRows(db as Pool));
   const villageCurrency = e.currency();
+  const today = civilDateKey(new Date(), e.timezone());
+  const rates = input.lines.some((r) => r && r.action === "lock" && r.use === "provider") ? await providerRates(db, existing, villageCurrency) : undefined;
   const plan = planImport({
     source: input.source,
     rows: input.lines,
@@ -975,6 +1097,8 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     villageCurrency,
     periodEnv: periodEnvOf(e),
     names,
+    today,
+    rates,
   });
   const after = applyPlan(existing, plan.writes);
   plan.flags.push(...overlapFlags(after, plan.writes, villageCurrency));
@@ -983,6 +1107,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   const base = await e.baseToSet(db, moonId);
   const state = stateRevision(existing);
   return {
+    village: villageCurrency,
     existing,
     plan,
     after,
@@ -1004,10 +1129,10 @@ function result(p: Prepared, over: Partial<ImportResult>): ImportResult {
     written: false,
     revision: p.revision,
     stateRevision: p.stateRevision,
-    added: plan.writes.filter((w) => w.op === "add").map((w) => preview(w.line, w.row, w.plannedCell)),
+    added: plan.writes.filter((w) => w.op === "add").map((w) => preview(w.line, w.row, w.plannedCell, p.village)),
     changed: plan.writes
       .filter((w) => w.op !== "add")
-      .map((w) => ({ ...preview(w.line, w.row, w.plannedCell), op: w.op as PreviewChange["op"], before: preview(w.before!, w.row, null), becomesManual: w.becomesManual, adoptionCleared: w.adoptionCleared })),
+      .map((w) => ({ ...preview(w.line, w.row, w.plannedCell, p.village), op: w.op as PreviewChange["op"], before: preview(w.before!, w.row, null, p.village), becomesManual: w.becomesManual, adoptionCleared: w.adoptionCleared })),
     withdrawn: withdrawnLines.map((l) => l.label),
     withdrawnLines,
     unchanged: plan.unchanged.length,
@@ -1033,7 +1158,7 @@ const refusal = (status: 400 | 409, code: ImportResult["code"], message: string,
   };
 };
 
-const VERB: Record<PlanWrite["op"], string> = { add: "added", change: "changed", withdraw: "withdrawn", restore: "restored" };
+const VERB: Record<PlanWrite["op"], string> = { add: "added", change: "changed", withdraw: "withdrawn", restore: "restored", lock: "rate-locked" };
 
 /** The members-visible line a write that moves the share records (R10). Fixed words, no figure, nobody named. */
 export const SHARE_MOVED_EVENT = "This moon's cash budget changed, and with it the share of work paid in cash.";
@@ -1094,12 +1219,17 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     const ids: string[] = [];
     const written: Array<{ op: PlanWrite["op"]; id: string }> = [];
     for (const w of p.plan.writes) {
-      const line = { ...w.line, changedBy: input.by, changedAs: input.byAs };
+      const line = { ...w.line, changedBy: input.by, changedAs: input.byAs, ...(w.op === "lock" ? { fxLockedBy: input.by, fxLockedAt: new Date().toISOString() } : {}) };
       const row: repo.BudgetLineRow = {
         ...line,
         id: line.id || `bl-${randomUUID()}`,
         sourceChangedAt: line.sourceChangedAt ? new Date(line.sourceChangedAt) : null,
         adoptedAt: line.adoptedAt ? new Date(line.adoptedAt) : null,
+        fxRate: line.fxRate ?? null,
+        fxSource: line.fxSource ?? null,
+        fxAsOf: line.fxAsOf ?? null,
+        fxLockedBy: line.fxLockedBy ?? null,
+        fxLockedAt: line.fxLockedAt ? new Date(line.fxLockedAt) : null,
       };
       if (w.op === "add") await repo.insertBudgetLine(conn, row);
       else await repo.updateBudgetLine(conn, row);
@@ -1123,6 +1253,57 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     if (locked) await repo.releaseBudgetLock(conn).catch(() => undefined);
     conn.release();
   }
+}
+
+// ── Stored rates, read on the server (spec 5a) ──────────────────────────────
+
+/** What a stored rate's source says on the line: the daily provider, or a row typed into the rate table by hand. */
+function providerName(sources: readonly string[]): string {
+  if (sources.some((s) => s === "manual")) return "the rate table, a rate typed there by hand";
+  let host = "the daily rate provider";
+  try {
+    host = new URL(dailyRatesUrl()).host;
+  } catch {
+    // The URL is a literal; a parse failure keeps the generic name.
+  }
+  return `daily rate, ${host}`;
+}
+
+/**
+ * The newest stored rate from each line currency into the village's, for a
+ * lock that asks for one. The rate comes through `latestRates` and
+ * `crossRate`, which keep 14 days; its day and source come from the rows it
+ * was made of. Rates are read here, on the server, and never by the client.
+ */
+async function providerRates(db: Pool | PoolConnection, lines: readonly StoredLine[], village: string): Promise<(from: string) => ProviderRate | null> {
+  const to = village.toUpperCase();
+  if (!to) return () => null;
+  const table = await latestRates(db as Pool);
+  const quotes = Array.from(new Set(lines.map((l) => l.currency.toUpperCase()).concat(to))).filter((q) => q !== FX_BASE);
+  const days = new Map((await repo.fxQuoteDays(db, quotes)).map((r) => [String(r.quote), { asOf: String(r.as_of), source: String(r.source) }]));
+  return (from: string) => {
+    const used = Array.from(new Set([from.toUpperCase(), to])).filter((q) => q !== FX_BASE);
+    const dated = used.map((q) => days.get(q));
+    if (dated.some((d) => !d)) return null;
+    const asOf = dated.map((d) => d!.asOf).sort()[0] ?? null;
+    return { rate: crossRate(table.rates, from.toUpperCase(), to), asOf, source: providerName(dated.map((d) => d!.source)) };
+  };
+}
+
+/**
+ * DRIFT, DISPLAY ONLY (spec 5a, guard 2): each locked line's figure at
+ * today's stored rate beside the figure at its locked rate, and the percent
+ * between them. Nothing here moves a figure or a lock; over 5% feeds the
+ * members-only Health warning (wired with the page, PR 1c).
+ */
+export async function budgetRateDrift(pool: Pool, over: Partial<BudgetEnv> = {}): Promise<RateDrift[]> {
+  const e = { ...env, ...over };
+  const village = e.currency().toUpperCase();
+  if (!village) return [];
+  const locked = (await budgetLines(pool)).filter((l) => l.fxRate && l.status !== "withdrawn" && l.currency.toUpperCase() !== village);
+  if (!locked.length) return [];
+  const table = await latestRates(pool);
+  return locked.map((l) => rateDrift(l, village, crossRate(table.rates, l.currency.toUpperCase(), village)));
 }
 
 // ── The sources a puller plugs into ─────────────────────────────────────────

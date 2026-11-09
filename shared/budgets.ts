@@ -295,8 +295,104 @@ export interface FigureLine {
   currency: string;
   status: LineStatus;
   adoptedAt: string | null;
-  /** A locked rate (spec 5a). Null for every line until that is built; unused by the figure today. */
+  /**
+   * A rate a person locked on a line in another currency (spec 5a, option b):
+   * village-currency units per one unit of the line's currency, as stored
+   * text (decimal(18,8)). Null when nothing is locked.
+   */
   fxRate?: string | null;
+  /** Where the rate came from: the stored daily rate and its provider, or a typed rate and its note. */
+  fxSource?: string | null;
+  /** The day the rate is from. */
+  fxAsOf?: string | null;
+  /** Who locked it. An account id: the read route names the role instead, never the id. */
+  fxLockedBy?: string | null;
+  fxLockedAt?: string | null;
+}
+
+// ── A locked rate (spec 5a, option b) ───────────────────────────────────────
+
+/** The digits a stored rate keeps after the decimal mark (decimal(18,8)). */
+export const RATE_DIGITS = 8;
+/** A stored daily rate older than this is no rate at all (`latestRates` keeps 14 days). */
+export const PROVIDER_RATE_MAX_DAYS = 14;
+/** Drift past this, either way, raises the members-only warning (spec 5a, guard 2). */
+export const DRIFT_WARN_PCT = 5;
+
+const pow10 = (n: number): bigint => BigInt(`1${"0".repeat(Math.max(0, n))}`);
+
+/**
+ * A rate as a whole count of 1e-8 units, read exactly off its decimal text,
+ * so 509.86 is 50986000000 and never 509.8599999. Null for anything that is
+ * not a positive decimal. A JS number is fixed to 8 digits first.
+ */
+export function rateUnits(rate: string | number | null | undefined): bigint | null {
+  const text = typeof rate === "number" ? (Number.isFinite(rate) && rate > 0 ? rate.toFixed(RATE_DIGITS) : "") : String(rate ?? "").trim();
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!m) return null;
+  const units = BigInt(m[1] + (m[2] ?? "").slice(0, RATE_DIGITS).padEnd(RATE_DIGITS, "0"));
+  return units > BigInt(0) ? units : null;
+}
+
+/**
+ * An amount in `from`'s minor units, at `rate` units of `to` per unit of
+ * `from`, in `to`'s minor units, FLOORED (spec 5a: "Conversion floors in minor
+ * units"). Exact integer arithmetic, so no rate is a hair off. Null when the
+ * rate is not a positive decimal or the result is past what a number holds.
+ */
+export function convertAtRate(minor: number, from: string, to: string, rate: string | number | null | undefined): number | null {
+  const units = rateUnits(rate);
+  if (units === null || !Number.isFinite(minor) || minor < 0) return null;
+  const out = (BigInt(Math.trunc(minor)) * units * pow10(exponentOf(to))) / pow10(RATE_DIGITS + exponentOf(from));
+  const n = Number(out);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** What a line plans in the village's currency: itself, or converted at its locked rate, or null (R8). */
+export function inVillageCurrency(line: Pick<FigureLine, "plannedMinor" | "currency" | "fxRate">, villageCurrency: string): number | null {
+  if (line.currency.toUpperCase() === villageCurrency.toUpperCase()) return line.plannedMinor;
+  if (!line.fxRate) return null;
+  return convertAtRate(line.plannedMinor, line.currency, villageCurrency, line.fxRate);
+}
+
+export interface RateDrift {
+  id: string;
+  label: string;
+  currency: string;
+  plannedMinor: number;
+  lockedRate: string;
+  /** The figure at the locked rate, which is what counts. */
+  lockedMinor: number | null;
+  /** Today's stored rate, or null when there is none. */
+  todayRate: number | null;
+  /** The figure at today's rate. Shown, never applied. */
+  todayMinor: number | null;
+  /** Percent from the locked figure, one decimal. */
+  pct: number | null;
+  overThreshold: boolean;
+}
+
+/**
+ * DRIFT, DISPLAY ONLY (spec 5a, guard 2): "at today's rate this would be
+ * ₡612,000 (+3.1%)". Nothing reads this to move a figure; a person
+ * re-locks if they choose to.
+ */
+export function rateDrift(line: Pick<FigureLine, "id" | "label" | "currency" | "plannedMinor" | "fxRate">, villageCurrency: string, todayRate: number | null): RateDrift {
+  const lockedMinor = line.fxRate ? convertAtRate(line.plannedMinor, line.currency, villageCurrency, line.fxRate) : null;
+  const todayMinor = todayRate !== null && todayRate > 0 ? convertAtRate(line.plannedMinor, line.currency, villageCurrency, todayRate) : null;
+  const pct = lockedMinor && todayMinor !== null ? Math.round(((todayMinor - lockedMinor) / lockedMinor) * 1000) / 10 : null;
+  return {
+    id: line.id,
+    label: line.label,
+    currency: line.currency,
+    plannedMinor: line.plannedMinor,
+    lockedRate: String(line.fxRate ?? ""),
+    lockedMinor,
+    todayRate,
+    todayMinor,
+    pct,
+    overThreshold: pct !== null && Math.abs(pct) > DRIFT_WARN_PCT,
+  };
 }
 
 export interface MoonSpan {
@@ -334,7 +430,7 @@ export type NotCountedReason = "status" | "currency" | "no_currency" | "not_adop
 export function whyNotCounted(line: FigureLine, villageCurrency: string | null): NotCountedReason | null {
   if (line.status !== "approved" && line.status !== "closed") return "status";
   if (!villageCurrency) return "no_currency";
-  if (line.currency.toUpperCase() !== villageCurrency.toUpperCase()) return "currency";
+  if (inVillageCurrency(line, villageCurrency) === null) return "currency";
   if (line.source === "sera" && !line.adoptedAt) return "not_adopted";
   if (!line.matched) return "unmatched";
   return null;
@@ -391,7 +487,13 @@ export interface FigureWorkingLine {
   category: BudgetCategory;
   periodKind: PeriodKind;
   periodKey: string;
+  /** The line's own amount, in its own currency. */
   plannedMinor: number;
+  currency: string;
+  /** The amount in the village's currency: itself, or converted at the locked rate before pro-rating. */
+  convertedMinor: number;
+  /** The locked rate, its source, its date and who locked it, when the line is in another currency. */
+  fx: { rate: string; source: string | null; asOf: string | null; lockedBy: string | null; lockedAt: string | null } | null;
   lineDays: number;
   sharedDays: number;
   countedMinor: number;
@@ -443,8 +545,13 @@ export function budgetFigure(
   if (!villageCurrency || counting.length === 0) return null;
   const { kept, dropped } = precedence(counting);
   const workingLines: FigureWorkingLine[] = kept.map((l) => {
-    const s = lineShareOfMoon(l, moon);
-    return { id: l.id, label: l.label, source: l.source, category: l.category, periodKind: l.periodKind, periodKey: l.periodKey, plannedMinor: l.plannedMinor, ...s };
+    // Converted first, then pro-rated (spec 5a: "pro-rating applies after conversion").
+    const convertedMinor = inVillageCurrency(l, villageCurrency)!;
+    const s = lineShareOfMoon({ ...l, plannedMinor: convertedMinor }, moon);
+    const fx = l.currency.toUpperCase() === villageCurrency.toUpperCase() || !l.fxRate
+      ? null
+      : { rate: l.fxRate, source: l.fxSource ?? null, asOf: l.fxAsOf ?? null, lockedBy: l.fxLockedBy ?? null, lockedAt: l.fxLockedAt ?? null };
+    return { id: l.id, label: l.label, source: l.source, category: l.category, periodKind: l.periodKind, periodKey: l.periodKey, plannedMinor: l.plannedMinor, currency: l.currency, convertedMinor, fx, ...s };
   });
   const plannedMinor = workingLines.reduce((n, l) => n + l.countedMinor, 0);
   const committedMinor = committedTotal(committed);
