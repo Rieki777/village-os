@@ -300,6 +300,12 @@ this village read from a chain it does not control. Never write a hypha token as
 though minting it here creates anything. `postTransfer` refuses to move one at
 all, by name, and every boot refuses to start if a ledger row for one exists.
 
+Decision 5, as amended by Rye on 2026-11-09: **equity lives on the platform first.** Until Hypha goes
+live for a village, the equity it issues (Earned Equity, and investment equity from the voice-from-money
+work) is a `platform` token and this ledger is its record. When Hypha goes live a token can graduate:
+Hypha becomes the source and the row here turns `hypha`, a read-only mirror from then on. A token is
+never both at once. The seeded `equity` and `voice` rows above are mirrors and stay unpostable.
+
 **What a token is called, what it means, and what all of them are called
 together are the village's own words (0283).** Rye, 2026-10-23: "Village Tokens
 is the umbrella word, which should be able to be set in admin to name each type
