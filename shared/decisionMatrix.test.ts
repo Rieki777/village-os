@@ -625,6 +625,12 @@ describe("a vote is not always the only door", () => {
     expect(r.approval.text).toContain(MOON_CLOSE_DOOR);
   });
 
+  it("a moon vote is priced at the village's raised routine tier (AC2.5; the ballot freezes the same numbers)", () => {
+    // The opener's half of this claim is server/lib/moonProposal.test.ts ("settlementDials").
+    const r = row(generateDecisionMatrix(inputs(RAISED_ROUTINE)), `vote:${CYCLE_SETTLEMENT}`);
+    expect(r.method).toMatchObject({ unityPct: 70, quorumPct: 40, tierFloor: "routine" });
+  });
+
   it("a village that settles by hand, or has governance off for members, gets no moon vote, and the Cycles desk decides", () => {
     // The engine's own answer, which the rows below follow.
     expect(settlementProposalDecision({ mode: "proposal", governanceOn: true, due: DUE, asks: [] }).post).toBe(true);
