@@ -27,6 +27,7 @@
  * After sign-up, the character page offers what was drafted
  * (components/roleDraft/DraftCarry.tsx).
  */
+import { NextForRoles } from "@/components/openProposal/RoleCardBridge";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -73,7 +74,8 @@ type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: D
  * (`GET /api/open-proposals/form`, public). A visitor's board shows only roles
  * the form would take, and no Apply when it is closed (red team, 9 Nov).
  */
-type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null };
+type FormRoleSteps = { id: string; name: string; interviews?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
+type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null; roles: FormRoleSteps[] };
 
 function useProposalForm(): FormState | null {
   const [form, setForm] = useState<FormState | null>(null);
@@ -83,12 +85,18 @@ function useProposalForm(): FormState | null {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!live) return;
-        if (!d) return setForm({ open: false, offered: null, message: null, term: null });
+        if (!d) return setForm({ open: false, offered: null, message: null, term: null, roles: [] });
         const ids = Array.isArray(d.roles) ? d.roles.map((r: any) => String(r?.id ?? "")).filter(Boolean) : null;
-        setForm({ open: !!d.open, offered: ids ? new Set(ids) : null, message: typeof d.message === "string" ? d.message : null, term: termOf(d.term) ?? null });
+        setForm({
+          open: !!d.open,
+          offered: ids ? new Set(ids) : null,
+          message: typeof d.message === "string" ? d.message : null,
+          term: termOf(d.term) ?? null,
+          roles: Array.isArray(d.roles) ? d.roles.filter((r: any) => r && typeof r.id === "string") : [],
+        });
       })
       .catch(() => {
-        if (live) setForm({ open: false, offered: null, message: null, term: null });
+        if (live) setForm({ open: false, offered: null, message: null, term: null, roles: [] });
       });
     return () => {
       live = false;
@@ -500,11 +508,12 @@ export default function RoleDraft() {
                 </ol>
               ) : (
                 <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
                   <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
+                  <li>{t`You meet the people the role works with, in the order the role sets, when it sets one.`}</li>
                   <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your application, and never their own.`}</li>
                   <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
-                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
                   <li>
                     {form?.term
                       ? t`Your role runs from adoption to the next new moon, ${moonEnds}. Each moon you lay out what you will contribute.`
@@ -512,6 +521,8 @@ export default function RoleDraft() {
                   </li>
                 </ol>
               )}
+              {/* Each drafted role's interviews in order, when the role sets them (Rye's answer 7). */}
+              {!member && <NextForRoles roles={(form?.roles ?? []).filter((r) => picks.includes(r.id))} />}
             </div>
             <div>
               <h2 className="font-display text-2xl font-bold text-foreground">{t({ message: "Other ways in", context: "role draft heading" })}</h2>

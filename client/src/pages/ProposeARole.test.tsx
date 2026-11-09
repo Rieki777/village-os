@@ -78,6 +78,8 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
     // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.click(screen.getByLabelText(/align with the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
@@ -95,7 +97,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
+      card: expect.objectContaining({ roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true }, terms: { choice: "accept", note: "" } }),
     });
   });
 
@@ -246,15 +248,58 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.click(screen.getByLabelText(/align with the Love Letter/));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
-    expect(posted[0].body.card).toEqual({
+    expect(posted[0].body.card).toMatchObject({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: "g-investor", how: "One set of numbers" }],
       hours: "",
       agreed: { loveLetter: true, nda: true },
+      terms: { choice: "accept", note: "" },
     });
+  });
+});
+
+describe("form v2 (role journey brief v2, 5.4)", () => {
+  it("takes the time zone from the browser, and shows each picked role's interviews in order after sending", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
+    serve({
+      ...FORM,
+      roles: [
+        {
+          id: "r-lfs",
+          name: "Lead Financial Steward",
+          circle: "Anchor Circle",
+          aim: null,
+          interviews: [
+            { role: "Visionary Channel", minutes: 60 },
+            { role: "Technical Operations Steward", minutes: 20 },
+            { role: "Anchor Circle Steward", minutes: 20, finalApproval: true },
+          ],
+        },
+      ],
+    });
+    render(<ProposeARole />);
+    const tz = (await screen.findByLabelText("Your time zone")) as HTMLInputElement;
+    expect(tz.value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    fireEvent.click(screen.getByLabelText("I'd like to talk about the terms."));
+    fireEvent.change(screen.getByLabelText("What you would like to talk about in the terms"), { target: { value: "The hours" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Money kept true." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
+    fireEvent.click(screen.getByLabelText(/align with the Love Letter/));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(posted[0].body.card.terms).toEqual({ choice: "talk", note: "The hours" });
+    const steps = document.querySelector("[data-next-for-roles]") as HTMLElement;
+    const items = Array.from(steps.querySelectorAll("li")).map((li) => li.textContent);
+    expect(items).toEqual(["60 minutes with Visionary Channel", "20 minutes with Technical Operations Steward", "20 minutes with Anchor Circle Steward, the final approval"]);
+    expect(steps.textContent).toContain("We'll write to you to find a time.");
   });
 });

@@ -18,7 +18,7 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
-import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
+import { EMPTY_ROLE_CARD, NextForRoles, Practicalities, RoleAsks, SeasonServes, browserTimeZone, type Practical, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -42,6 +42,9 @@ interface FormRole {
   /** The open card's own sections, to answer with the applicant's card (shared/openProposalCard.ts). */
   accountabilities?: string[];
   timeCommitment?: string | null;
+  /** Filled by the role-interviews lane and PR-A; nothing shows until they are. */
+  interviews?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
+  bookingUrl?: string | null;
 }
 
 type FormState =
@@ -124,6 +127,7 @@ export default function ProposeARole() {
   const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
   const [agreed, setAgreed] = useState({ loveLetter: false, nda: false });
+  const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
   /** How many of the roles the link named the village no longer offers. */
   const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
@@ -199,6 +203,10 @@ export default function ProposeARole() {
             serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
             hours,
             agreed,
+            timeZone: practical.timeZone.trim(),
+            windows: practical.windows,
+            earliestStart: practical.earliestStart,
+            terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
           },
         }),
       });
@@ -244,6 +252,8 @@ export default function ProposeARole() {
       <Shell>
         <Notice title="Check your email">
           <p>{sent}</p>
+          {/* The steps after confirming, for the roles picked (Rye's answer 7): interviews in order, the booking link. */}
+          {form.kind === "open" && <NextForRoles roles={form.roles.filter((r) => r.id in picked)} />}
         </Notice>
       </Shell>
     );
@@ -344,8 +354,9 @@ export default function ProposeARole() {
             <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.aimLabel}
             </label>
-            <input id="propose-aim" maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+            <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
           </div>
+          <Practicalities value={practical} onChange={setPractical} />
           <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed} onAgreed={setAgreed} />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">

@@ -22,6 +22,7 @@ const GOOD = {
   serves: [{ goalId: "g-investor", how: "Investors read one set of numbers." }],
   hours: "About 25 a week",
   agreed: { loveLetter: true, nda: true },
+  terms: { choice: "accept", note: "" },
 };
 
 describe("parseCard", () => {
@@ -67,5 +68,38 @@ describe("cardOf and cardSummary", () => {
     expect(text).toContain("Investor ready: Investors read one set of numbers.");
     expect(text).toContain("About 25 a week");
     expect(text.length).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe("form v2: the person's practicalities and the terms (role journey brief v2, 5.4)", () => {
+  const V2 = { ...GOOD, timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "weekend-afternoons"], earliestStart: "2026-11-16", terms: { choice: "talk", note: "I'd like to discuss the hours." } };
+
+  it("keeps a valid time zone, the usual windows, an earliest start and the terms choice", () => {
+    const r = parseCard(V2, CTX);
+    expect(r.ok && r.card).toMatchObject({ timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "weekend-afternoons"], earliestStart: "2026-11-16", terms: { choice: "talk", note: "I'd like to discuss the hours." } });
+  });
+
+  it("refuses a made-up time zone, an unknown window and a date that is not one", () => {
+    expect(parseCard({ ...V2, timeZone: "Mars/Olympus" }, CTX)).toMatchObject({ ok: false, field: "timeZone" });
+    expect(parseCard({ ...V2, windows: ["midnight"] }, CTX)).toMatchObject({ ok: false, field: "windows" });
+    expect(parseCard({ ...V2, earliestStart: "soon" }, CTX)).toMatchObject({ ok: false, field: "earliestStart" });
+  });
+
+  it("needs a terms choice, and a note when they want to talk about the terms", () => {
+    expect(parseCard({ ...V2, terms: undefined }, CTX)).toMatchObject({ ok: false, field: "terms" });
+    expect(parseCard({ ...V2, terms: { choice: "talk", note: "" } }, CTX)).toMatchObject({ ok: false, field: "terms" });
+    expect(parseCard({ ...V2, terms: { choice: "accept", note: "" } }, CTX).ok).toBe(true);
+  });
+
+  it("needs at least one of the season's goals when the season has any", () => {
+    expect(parseCard({ ...V2, serves: [] }, CTX)).toMatchObject({ ok: false, field: "serves" });
+    expect(parseCard({ ...V2, serves: [] }, { ...CTX, goalIds: new Set() }).ok).toBe(true);
+  });
+
+  it("writes the practicalities and a terms flag into the application's words", () => {
+    const text = cardSummary(cardOf(V2)!, (id) => id, (g) => g);
+    expect(text).toContain("Time zone: America/Costa_Rica");
+    expect(text).toContain("Earliest start: 2026-11-16");
+    expect(text).toContain("Wants to talk about the terms: I'd like to discuss the hours.");
   });
 });

@@ -176,6 +176,8 @@ export function parseOpenProposal(
   if (aim.length > OPEN_AIM_MAX) return { ok: false, field: "aim", error: OPEN_WORDS.tooLong("Your aim", OPEN_AIM_MAX) };
   // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
   if (o.card !== undefined && o.card !== null) {
+    // Form v2 (brief v2, 5.4): the aim is required once the applicant writes their card.
+    if (!aim) return { ok: false, field: "aim", error: OPEN_WORDS.needAim };
     const card = parseCard(o.card, {
       roleIds: new Set(roles.map((r) => r.roleId)),
       accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
@@ -224,7 +226,7 @@ export const OPEN_WORDS = {
   pickRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles`,
   noteLabel: "What you bring to this role",
   whyLabel: "Why you, and why now",
-  aimLabel: "Your aim for the season (optional)",
+  aimLabel: "Your aim for the season",
   nameLabel: "Your name",
   emailLabel: "Your email",
   emailNote: "We'll only write to you about this proposal.",
@@ -242,6 +244,7 @@ export const OPEN_WORDS = {
   unknownRole: "One of those roles isn't open any more. Reload the page and pick again.",
   sameRoleTwice: "You picked the same role twice.",
   needWhy: "Say why you, and why now.",
+  needAim: "Say your aim for this role.",
   tooLong: (what: string, max: number) => `${what} is too long. Keep it under ${max} characters.`,
   notSent: "We couldn't send the confirmation email just now. Try again later.",
   tooMany: "Too many proposals from here. Wait a little and try again.",

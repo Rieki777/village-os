@@ -766,6 +766,10 @@ msgstr "Construye un módulo"
 msgid "{0} answers for the service."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Wants to talk about the terms: {termsNote}"
+msgstr ""
+
 #: client/src/components/admin/QuestSafetyEditor.tsx
 msgctxt "admin quest safety"
 msgid "Physical work on site"
@@ -1295,6 +1299,10 @@ msgctxt "signing key"
 msgid "Sending..."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "The terms on offer"
+msgstr ""
+
 #: client/src/pages/ExitPolicy.tsx
 msgctxt "the circle that decides an involuntary exit"
 msgid "Decided by:"
@@ -1456,6 +1464,10 @@ msgctxt "notebook document kind and date"
 msgid "{0}, added {1}."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "What you would like to talk about in the terms"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Show the suggestion"
@@ -1468,6 +1480,11 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "How this change serves the village's governing purpose"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekday mornings"
 msgstr ""
 
 #: client/src/components/valuation/QuestEnginePrice.tsx
@@ -1565,6 +1582,11 @@ msgstr ""
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run section toggle"
 msgid "Moon by moon"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekend afternoons"
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
@@ -2140,6 +2162,15 @@ msgctxt "label before a decision's note"
 msgid "The note:"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "When you can usually meet (optional)"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekday evenings"
+msgstr ""
+
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "What it should be"
 msgstr ""
@@ -2520,6 +2551,10 @@ msgstr ""
 msgid "Change the public line"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Book your first conversation"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
 msgstr ""
@@ -2879,6 +2914,14 @@ msgstr ""
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "a switch setting"
 msgid "Off"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "I'd like to talk about the terms."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "I accept the terms on offer."
 msgstr ""
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
@@ -3325,6 +3368,11 @@ msgctxt "canvas suggestion form heading"
 msgid "Suggest a change"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card"
+msgid "Your time zone"
+msgstr ""
+
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "economics view heading"
 msgid "Cycle settlement report"
@@ -3559,6 +3607,11 @@ msgstr ""
 msgid "Background work over this span"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal interviews"
+msgid "{minutes} minutes with {who}"
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Saved."
 #~ msgstr ""
@@ -3632,6 +3685,11 @@ msgstr "Tu navegador bloqueó la copia. Selecciona el texto de arriba y cópialo
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that removes a contact from the agreement"
 msgid "Remove this contact"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal interviews"
+msgid "{minutes} minutes with {who}, the final approval"
 msgstr ""
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
@@ -3794,6 +3852,10 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request checklist"
 msgid "Time to review"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "We'll write to you to find a time."
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
@@ -4154,6 +4216,10 @@ msgctxt "decline the model consent line"
 msgid "Not now"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They want to talk about the terms"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Downloading..."
@@ -4234,6 +4300,10 @@ msgctxt "funding rounds"
 msgid "Reading the rounds"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "For {roleName}, if the village takes your application forward:"
+msgstr ""
+
 #. placeholder {0}: new Date(a.decidedAt).toLocaleDateString()
 #: client/src/components/governance/VillageAgreements.tsx
 msgctxt "the day an agreement was adopted"
@@ -4273,6 +4343,11 @@ msgstr ""
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "Your claim now pays the quest's new price."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Earliest start: {start}"
 msgstr ""
 
 #: client/src/components/NextStepBox.tsx
@@ -4470,6 +4545,11 @@ msgctxt "canvas block card button"
 msgid "Close this block"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Time zone: {tz}"
+msgstr ""
+
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Write the words you would like in place of the current ones, and why. They are frozen into the document when the vote opens, so they cannot change while people are voting."
 msgstr ""
@@ -4585,6 +4665,10 @@ msgstr ""
 
 #: client/src/components/governance/VillageConflictSteps.tsx
 msgid "<0>Write them in Admin, under Departures</0>. They are the restorative steps of the exit policy, and this page prints them once they are in the village's own words."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Everyone who reads your application sees a wish to talk about the terms."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -4979,6 +5063,10 @@ msgstr ""
 msgid "Could be as little as"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Accepts the terms on offer."
+msgstr ""
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal side by side"
 msgid "Their card beside the open card"
@@ -5125,6 +5213,10 @@ msgstr ""
 #: client/src/components/openProposal/ApplicationAgreements.tsx
 msgctxt "open proposal card"
 msgid "Agreements"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "The earliest you could start (optional)"
 msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
@@ -5496,6 +5588,11 @@ msgstr ""
 msgid "One thing would not work as set"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekend evenings"
+msgstr ""
+
 #: client/src/components/openProposal/ApplicationAgreements.tsx
 msgid "Once approved into a role, I will align with the village's confidentiality agreement (NDA) before I see any confidential records."
 msgstr ""
@@ -5537,6 +5634,11 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Usar el idioma del navegador"
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekend mornings"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Saved"
@@ -5549,6 +5651,11 @@ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "{error}. There may be changes waiting; this is not an empty list."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card window"
+msgid "Weekday afternoons"
 msgstr ""
 
 #: client/src/components/roleDraft/DraftCarry.tsx
@@ -5802,6 +5909,10 @@ msgstr ""
 msgid "This village has not tagged its roles by character for visitors yet, so every role is shown for every character."
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgid "You meet the people the role works with, in the order the role sets, when it sets one."
+msgstr ""
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 msgstr ""
@@ -5885,6 +5996,11 @@ msgstr ""
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"
 msgid "Save as Markdown"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Usual times: {windowList}"
 msgstr ""
 
 #: client/src/components/Layout.tsx
