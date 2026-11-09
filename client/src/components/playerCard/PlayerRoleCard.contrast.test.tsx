@@ -16,9 +16,10 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { describeFailures } from "@/test/tokenContrast";
+import { describeFailures, parseColor, toHex } from "@/test/tokenContrast";
 import { cardOverlay, measureCard } from "@/test/cardContrast";
 import { fixturePayload, fixtureRole } from "@/test/playerCardFixture";
+import { deriveTheme } from "@shared/brandTokens";
 import { PlayerRoleCardView } from "./PlayerRoleCard";
 
 afterEach(() => cleanup());
@@ -80,7 +81,10 @@ describe("the instrument reads the card's own stylesheet", () => {
     render(<PlayerRoleCardView data={fixturePayload(1, "self")} />);
     const results = measureCard(root());
     // The palette, read from the card's own token block rather than typed here.
-    const t = cardOverlay();
+    // Each --pc-* is `var(--sheet-*, <design>)` since the night layer follows
+    // the village (shared/brandTokens.ts); unseeded, as here, it resolves to the design.
+    const raw = cardOverlay();
+    const t = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, v.startsWith("var(--sheet-") ? toHex(parseColor(v, raw)) : v]));
     const purpose = results.find((r) => r.text === "Purpose")!;
     expect(purpose.fg).toBe(t["--pc-gold"]);
     const eyebrow = results.find((r) => r.text === "What I look after")!;
@@ -93,4 +97,25 @@ describe("the instrument reads the card's own stylesheet", () => {
     const failures = describeFailures(measureCard(root(), "light", { "--pc-dim": "var(--pc-line)" }));
     expect(failures.some((f) => f.includes("What I look after"))).toBe(true);
   });
+});
+
+describe("the card takes the village's palette from Admin, and still clears every floor", () => {
+  // Rye, 2026-11-09: the role card must "pull from the same color palette being
+  // delivered by the admin section". theme.css writes the --sheet-* layer the
+  // card's --pc-* read; these are the values it writes for each seed.
+  const VILLAGES: Array<[string, string, string | undefined]> = [
+    ["Amora (forest seed, champagne accent)", "#16342a", "#e0c79a"], // theme-ok: a seed a founder would type, not a painted colour
+    ["a blue village", "#1d4ed8", undefined], // theme-ok: a seed a founder would type, not a painted colour
+    ["a gold village", "#ca8a04", undefined], // theme-ok: a seed a founder would type, not a painted colour
+    ["a pink village with a blue accent", "#f472b6", "#0000ff"], // theme-ok: a seed a founder would type, not a painted colour
+  ];
+  for (const [label, seed, accent] of VILLAGES) {
+    it(label, () => {
+      const night = Object.fromEntries(Object.entries(deriveTheme(seed, null, accent)!.vars).filter(([k]) => k.startsWith("--sheet-")));
+      render(<PlayerRoleCardView data={fixturePayload(1, "self", { roles: [{ ...fixtureRole(1), ...CCOS }], frameworkTerms: true })} />);
+      const results = measureCard(root(), "light", night);
+      expect(results.find((r) => r.text === "Purpose")!.fg).toBe(night["--sheet-earned"]);
+      expect(describeFailures(results)).toEqual([]);
+    });
+  }
 });
