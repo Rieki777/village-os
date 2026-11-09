@@ -7,6 +7,10 @@ msgstr ""
 "X-Generator: @lingui/cli\n"
 "Language: en\n"
 
+#: client/src/pages/StructureReview.tsx
+msgid "{source}'s wording replaces ours wherever {source} sent some, and the rest stays ours."
+msgstr "{source}'s wording replaces ours wherever {source} sent some, and the rest stays ours."
+
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "The model's answer could not be read, so nothing was drafted. The words-only draft still works."
 msgstr "The model's answer could not be read, so nothing was drafted. The words-only draft still works."
@@ -765,6 +769,10 @@ msgctxt "funding rounds"
 msgid "Open a round for ideas"
 msgstr "Open a round for ideas"
 
+#: client/src/pages/StructureReview.tsx
+msgid "Whoever holds it keeps it."
+msgstr "Whoever holds it keeps it."
+
 #: client/src/components/journey/TestRun.tsx
 msgid "Across the whole run"
 msgstr "Across the whole run"
@@ -1415,6 +1423,10 @@ msgstr "Sending..."
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The terms on offer"
 msgstr "The terms on offer"
+
+#: client/src/pages/StructureReview.tsx
+msgid "When this is published: {updateSays}"
+msgstr "When this is published: {updateSays}"
 
 #: client/src/pages/ExitPolicy.tsx
 msgctxt "the circle that decides an involuntary exit"
@@ -2077,6 +2089,10 @@ msgctxt "pricing desk"
 msgid "Reason for {0}"
 msgstr "Reason for {0}"
 
+#: client/src/pages/StructureReview.tsx
+msgid "It moves into {theirCircle}."
+msgstr "It moves into {theirCircle}."
+
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid " (leave it empty to use the file's name)"
 msgstr " (leave it empty to use the file's name)"
@@ -2154,6 +2170,10 @@ msgstr "{agent} suggests {nChanges} for the chart"
 msgctxt "label of the appeal box on the consequences ladder"
 msgid "How someone appeals"
 msgstr "How someone appeals"
+
+#: client/src/pages/StructureReview.tsx
+msgid "{liveName} stays as it is. {source}'s role is added beside it as a new role, under a name you type."
+msgstr "{liveName} stays as it is. {source}'s role is added beside it as a new role, under a name you type."
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "You have none yet. Gather several changes here and the village votes on them together."
@@ -2396,6 +2416,11 @@ msgstr "Turn it down"
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "The village has not written any rows of its own yet."
 msgstr "The village has not written any rows of its own yet."
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role takes the name an outside service sent"
+msgid "{liveName} is renamed {theirName}."
+msgstr "{liveName} is renamed {theirName}."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
@@ -3494,6 +3519,10 @@ msgstr "That did not go through. Try again in a moment."
 msgid "Currency code, such as CRC"
 msgstr "Currency code, such as CRC"
 
+#: client/src/pages/StructureReview.tsx
+msgid "Another role with this name already updates {liveName}"
+msgstr "Another role with this name already updates {liveName}"
+
 #: client/src/components/TreasurySync.tsx
 msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
 msgstr "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
@@ -3560,6 +3589,11 @@ msgstr "A role card shows the work the village needs done. Your application is t
 msgctxt "settlement report cycle line"
 msgid "· pool released {0} {1}"
 msgstr "· pool released {0} {1}"
+
+#: client/src/pages/StructureReview.tsx
+msgctxt "a live role moves into the circle an outside service sent"
+msgid "{liveName} moves into {theirCircle}."
+msgstr "{liveName} moves into {theirCircle}."
 
 #. placeholder {0}: label[band]
 #: client/src/components/admin/AgeBandCorrection.tsx
@@ -3766,6 +3800,10 @@ msgstr "Close"
 msgid "Time they can give: {0}"
 msgstr "Time they can give: {0}"
 
+#: client/src/pages/StructureReview.tsx
+msgid "Nothing changes. {liveName} stays as it is, and {source}'s version waits in the queue for later."
+msgstr "Nothing changes. {liveName} stays as it is, and {source}'s version waits in the queue for later."
+
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "a button that deletes a matrix row"
 msgid "Remove this row"
@@ -3867,6 +3905,10 @@ msgstr "1 open role fits"
 msgctxt "the conflict agreement's screens"
 msgid "Frames"
 msgstr "Frames"
+
+#: client/src/pages/StructureReview.tsx
+msgid "Update our role with this"
+msgstr "Update our role with this"
 
 #: client/src/components/review/SeraRows.tsx
 msgid "Its {n} roles come with it, and leaving the circle out leaves them out too."
@@ -4709,6 +4751,11 @@ msgctxt "sera changes"
 msgid "Everything waiting"
 msgstr "Everything waiting"
 
+#: client/src/pages/StructureReview.tsx
+msgctxt "leave an outside service's role waiting, change nothing"
+msgid "Skip for now"
+msgstr "Skip for now"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Both counts agree."
@@ -4883,6 +4930,10 @@ msgstr "Admin"
 msgctxt "settlement text copied for Hypha"
 msgid " → {0} {1} credited"
 msgstr " → {0} {1} credited"
+
+#: client/src/pages/StructureReview.tsx
+msgid "Add it as a second role"
+msgstr "Add it as a second role"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -5314,6 +5365,10 @@ msgctxt "admin header"
 msgid "{village} admin"
 msgstr "{village} admin"
 
+#: client/src/pages/StructureReview.tsx
+msgid "When this is published, a new role sits beside {liveName}, under the name you type."
+msgstr "When this is published, a new role sits beside {liveName}, under the name you type."
+
 #: client/src/components/review/SeraDifferences.tsx
 #~ msgctxt "sera changes"
 #~ msgid "Compare them"
@@ -5429,6 +5484,10 @@ msgstr "Open"
 #: client/src/components/journey/EconomicsView.tsx
 msgid " · no key set, so this module answers 503"
 msgstr " · no key set, so this module answers 503"
+
+#: client/src/pages/StructureReview.tsx
+msgid "Pick one. Nothing is decided for you."
+msgstr "Pick one. Nothing is decided for you."
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgctxt "a suggestion is being adopted"
@@ -5959,6 +6018,10 @@ msgstr "You align with the Love Letter, the village's membership agreement, when
 msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "the circle's lead role"
+
+#: client/src/pages/StructureReview.tsx
+msgid "Nobody holds it yet."
+msgstr "Nobody holds it yet."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal card"
