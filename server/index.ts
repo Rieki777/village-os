@@ -113,6 +113,7 @@ import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
+import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
@@ -260,7 +261,8 @@ import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
 import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
 import { register as registerCommsEventRoutes } from "./routes/commsEvents";
-import { resolveGoogleConfig } from "./lib/oauthGoogle";
+import { googleCredentialEnv, resolveGoogleConfig } from "./lib/oauthGoogle";
+import { satelliteKeyCards } from "./lib/satellite";
 import { makeIdentityGate } from "./lib/identityConfirm";
 import {
   decodeToken,
@@ -378,9 +380,10 @@ import {
   currentMintRuleValue,
   mintRuleLabel, moduleChangeLabel,
   rowToProposal,
-  priceChangeSet, validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
+  validateChangeSet, asChangeItem, CHANGE_SET_CAP_KEY,
   type MintRuleValues,
 } from "./lib/mechanics";
+import { changeSetPriceNow } from "./lib/changeSetPriceNow";
 import { buildMechanicsHandoff } from "./lib/hypha-bridge";
 // ── The Hypha Bridge module (R58) ────────────────────────────────────────────
 import * as hyphaRepo from "./repos/hypha";
@@ -489,7 +492,7 @@ import { register as registerProfilePrivacyRoutes } from "./routes/profilePrivac
 import { seedEconomy, suggestClassTags } from "./lib/economySeed";
 import { blankFlatRoleMint } from "./lib/flatRoleMint";
 import { enableEarnedEquityRules } from "./lib/earnedEquityRules";
-import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim } from "./lib/voiceClaim";
+import { assertVoiceSecret, checkVoiceSecret, claimHistory, claimReadiness, requestVoiceClaim, settleVoiceClaim, usableVoiceSecret, voiceSecretWriteRefusal } from "./lib/voiceClaim";
 import { normalizeSeasonConfig, seasonRunningProblem } from "./lib/seasonCalendar";
 import { completionsFor, completionsForMany, gatingModuleIds, trainingIsComplete, trainingProgress } from "./lib/trainingRecord";
 import { starterTrainingModules } from "./lib/trainingStarter";
@@ -731,7 +734,7 @@ import {
 } from "./lib/agentProfile";
 // ── END LANE L6 IMPORTS ─────────────────────────────────────────────────────
 import {
-  allSecretStatuses, BASE_RPC_CARD, ROOT_SLOT_CARDS,
+  allSecretStatuses, BASE_RPC_CARD, ERROR_WEBHOOK_CARD, GOOGLE_CARDS, HYPHA_VOICE_CARD, ROOT_SLOT_CARDS,
   loadSecrets,
   NO_VILLAGE_SECRETS_KEY_SENTENCE,
   putSecret,
@@ -3969,7 +3972,7 @@ function deploymentOrigin(): string {
  * FRONTEND_URL and never the observed origin: see the note in oauthGoogle.ts.
  */
 const googleSignInAvailability = () =>
-  resolveGoogleConfig(process.env, String(process.env.FRONTEND_URL ?? ""));
+  resolveGoogleConfig(googleCredentialEnv(), String(process.env.FRONTEND_URL ?? "")); // the client pair from Admin, Integrations first (R171)
 /** Exit and delete: a password, or a fresh Google sign-in for a member with none (server/lib/identityConfirm.ts). */
 const confirmIdentity = makeIdentityGate({ authSecret: AUTH_TOKEN_SECRET, verifyPassword, googleAvailable: () => googleSignInAvailability().available, members: { update: (id, mutate) => members.update(id, mutate) } });
 
@@ -6430,7 +6433,7 @@ async function startServer() {
       return res.status(429).json({ error: "too many webhook deliveries; retry shortly" });
     }
 
-    const secret = String(process.env.HYPHA_VOICE_WEBHOOK_SECRET ?? "").trim();
+    const secret = usableVoiceSecret(); // typed into Admin first, the host variable second (R171); "" when the check refuses it
     if (!secret) return res.status(503).json({ error: "this village has no claim receiver configured" });
 
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from("");
@@ -17202,7 +17205,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     { key: "assistant_api_key", title: "Anthropic, the AI guide", unlocks: "The AI guide: proposal intake, the launch journey, and call synthesis. Blank means every form still works, with no guide on them.", getAt: "console.anthropic.com", placeholder: "sk-ant-…" },
     { key: "riverside_webhook_secret", title: "Riverside recording deliveries", unlocks: "Call automation's inbound deliveries. It fails closed: with no secret set, every payload is discarded with an inert 200 and nobody is told why.", getAt: "Riverside → webhook settings → send this same value as the x-riverside-secret header", placeholder: "a long random string you choose" },
     { key: "governance_hub_secret", title: "Governance hub deliveries", unlocks: "How a Hypha vote's executed outcome comes home. Fails closed the same way. Until it is set, outcomes are reported by the proposer and applied by an admin.", getAt: "Issued when your fork is registered with the hub", placeholder: "the value the hub issued you" },
-    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
+    { key: "basescan_api_key", title: "Basescan token lookup", unlocks: "Game Mechanics, Hypha Bridge lists the token contracts your founder account holds on Base. Without it that lookup answers 409 and addresses can still be pasted by hand.", getAt: "etherscan.io → API keys (one free key serves Base)", placeholder: "your Etherscan API key" }, HYPHA_VOICE_CARD, ...GOOGLE_CARDS, ERROR_WEBHOOK_CARD, BASE_RPC_CARD, ...ROOT_SLOT_CARDS,
   ];
 
   interface IntegrationCard {
@@ -17236,7 +17239,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   }
 
   function integrationCards(): IntegrationCard[] {
-    const platform: IntegrationCard[] = PLATFORM_CARDS.map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true }));
+    const platform: IntegrationCard[] = [...PLATFORM_CARDS, ...satelliteKeyCards()].map((c) => ({ ...c, module: null, tier: "included", support: null, setupSteps: [], credential: true })); // R171: the chosen imagery provider's key card
     const listings: IntegrationCard[] = vendorModules().flatMap((m): IntegrationCard[] => {
       const support = supportRoute(m);
       const base = {
@@ -17331,6 +17334,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       return res.status(503).json({ error: NO_VILLAGE_SECRETS_KEY_SENTENCE, message: villageSecretsRefusal() });
     }
     // value: "" clears the admin-typed key (env fallback, if any, resumes).
+    const voiceRefusal = voiceSecretWriteRefusal(key, value); if (voiceRefusal) return res.status(409).json({ error: voiceRefusal }); // R171: the voice secret's boot check, held at the write
     const asked = await plantingDoor(key, value, actor); if (asked) return res.status(202).json(asked); // after launch a keystone waits for a co-sign (server/routes/plantingRequests.ts)
     await putSecret(getPool(), key, value, actor);
     void recordEvent(getPool(), {
@@ -22546,6 +22550,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   setSubjectCloserCheck((subjectType: string) => ballotBinds(subjectType));
   registerOrgDraftDecideRoutes(app, { authedUser, isAdmin, guardCapability, capabilityCtx, getPool, overLimit, notify, seasonState, circlesRepo, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
 
 
@@ -23001,10 +23006,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * `SUBJECT_FOR_ITEM_KIND`, an executor, and its kind in
      * `EXECUTABLE_ITEM_KINDS`. Nothing on this route changes for it.
      */
-    const priced = priceChangeSet(p.changeSet, method, {
-      unityPct: Math.max(0, numberVar("governance.unity_pct")),
-      quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
-    }, thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key)));
+    const priced = changeSetPriceNow(p.changeSet).set; // one price with the dry run (change requests, 3b)
     if (priced.conflict) return res.status(409).json({ error: priced.conflict });
     // A subject may fix the method its own numbers are conducted by, and a
     // proposal brought back after a veto is priced at the village's highest set
@@ -24871,7 +24873,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerGovernanceVetoRoutes(app, { authedUser, mayAct, isAdmin, getPool, members, firstName, notify, closerFor: (subjectType: string) => SUBJECT_CLOSERS[subjectType] });
   registerQuorumFallbackRoutes(app, { authedUser, isAdmin, getPool, notify });
   registerGovernanceLandingRoutes(app, { authedUser, mayAct, getPool, members, firstName, notify });
-  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges });
+  registerChangeRequestRoutes(app, { authedUser, capabilityCtx, getPool, members, overLimit, validate: validateProposalChanges, liveHoldersOf, notify, cycleStart: () => new Date(currentCycle().startsAt), proposalsOpenedSince: (id, since) => proposalsOpenedSince(getPool(), id, since) });
   // The two founder doors onto the moon's settlement: ask the village now,
   // and land what the village has already carried. server/routes/moonSettlement.ts.
   registerMoonSettlementRoutes(app, {

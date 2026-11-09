@@ -27,7 +27,7 @@ import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects"
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
 import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
-import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY } from "./changeRequestLimits";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY, REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -1305,6 +1305,22 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 50,
     unit: "change requests",
+  },
+  {
+    // Change requests (Rye, 2026-11-06, 3c; spec C3, R20). The review
+    // round before a vote. Meta, so a trial can never set it to nothing for
+    // a moon, and a lowered value never shortens a review already running.
+    key: REVIEW_DAYS_KEY,
+    category: "Governance",
+    label: "Days a change request is reviewed before its vote",
+    criticality: "structural",
+    description:
+      "How long the village has to ask questions, raise concerns and objections, and suggest edits before a change request may go to the vote. The clock starts again whenever a change or the why is edited. 0 lets a change request go to the vote as soon as its objections are answered.",
+    type: "integer",
+    default: String(REVIEW_DAYS_DEFAULT),
+    min: 0,
+    max: 30,
+    unit: "days",
   },
 
   // ── Governance windows, per proposal kind (19E, 19F, 20.11) ──────────────
@@ -2914,6 +2930,33 @@ export const VARIABLES: VariableDef[] = [
     min: 10,
     max: 200,
     unit: "entries",
+  },
+  /*
+   * WHERE THE LAND'S SATELLITE PICTURE COMES FROM (readiness R171). This was
+   * the host variable SATELLITE_PROVIDER alone, so a founder on a hosted
+   * village could not choose one. Blank defers to that variable, so a village
+   * that set it there keeps it. Each keyed provider's key has its own slot in
+   * Admin, Integrations (server/lib/satellite.ts, `keySlot`), and the licence
+   * reading for each lives beside it there. The choices are the providers that
+   * file knows, in its order; satellite.test.ts holds the two lists together.
+   */
+  {
+    key: "village.satellite_provider",
+    category: "Village",
+    label: "Where the land's satellite picture comes from",
+    description:
+      "Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.",
+    type: "choice",
+    default: "",
+    choices: [
+      { value: "", label: "Left to the host", hint: "Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground." },
+      { value: "village-upload", label: "The village's own aerial photograph", hint: "No provider and no key: an admin uploads the picture." },
+      { value: "esri-open", label: "Esri World Imagery, no key", hint: "Kept on the village's own volume." },
+      { value: "sentinel2", label: "Copernicus Sentinel-2", hint: "Needs the address of a Sentinel-2 WMS service." },
+      { value: "mapbox", label: "Mapbox Static Images", hint: "Needs a Mapbox token." },
+      { value: "google", label: "Google Maps Static", hint: "Needs a Google Maps Static API key." },
+      { value: "esri", label: "Esri World Imagery", hint: "Needs an ArcGIS API key." },
+    ],
   },
   {
     // WHERE THIS VILLAGE STARTS COUNTING ITS OWN MOONS.

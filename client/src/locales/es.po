@@ -12,8 +12,32 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr ""
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Kind of work"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Not now"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Reason"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Pick a reason"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -48,12 +72,17 @@ msgid "Open menu"
 msgstr "Abrir menú"
 
 #: client/src/pages/FundingRounds.tsx
-#~ msgid "Pot"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Share this idea"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote is open. <0>Read it and vote</0>."
+msgstr ""
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Wide range"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -86,13 +115,21 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Name"
-#~ msgstr ""
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Hide how this was worked out"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding round stage"
 msgid "The village has chosen"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Ask the village for one copy of its database"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "No steward is sitting now, so there is nobody to name."
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -108,14 +145,15 @@ msgctxt "funding rounds"
 msgid "Pot"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Download the copy"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Open the round"
-#~ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -128,6 +166,10 @@ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgid "That did not save. Try again."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The steward who receives it"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -147,12 +189,22 @@ msgstr ""
 msgid "Sera records that name no invoice here"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "A pot"
-#~ msgstr ""
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Show the suggestion"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Say why"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgid "When shaping starts (leave empty to keep the round in Seed)"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Why the village needs it"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -165,18 +217,6 @@ msgid "Talk about it"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
-#~ msgid "Opening the round"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Open the pot"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Rough cost:"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
 msgid "The pot is open."
 msgstr ""
 
@@ -184,17 +224,22 @@ msgstr ""
 msgid "A rough idea is enough. Each member may share {allowance} in this round."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Who it helps:"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "This round is closed"
-#~ msgstr ""
+#: client/src/components/governance/ExportByVote.tsx
+msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding round stage"
 msgid "This round is closed"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Estimated effort for the moon, in hours"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Opening..."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -208,12 +253,12 @@ msgctxt "funding rounds"
 msgid "Rough cost:"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Who might do it?"
-#~ msgstr ""
-
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -233,6 +278,10 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Iniciar sesión"
 
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Work out this role's pay with the valuation engine"
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "From {author}"
@@ -246,14 +295,6 @@ msgstr ""
 msgctxt "funding round stage"
 msgid "Harvest"
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Back to funding rounds"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Choosing which quests to fund"
-#~ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -280,17 +321,9 @@ msgid "Name"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
-#~ msgid "Ideas welcome until the pot's holder sets the next stage"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Open the pot"
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Who would it help?"
-#~ msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -317,17 +350,14 @@ msgid "Opening funding rounds"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
-#~ msgid "Talk about it"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
 msgctxt "funding round stage"
 msgid "Closed"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Share or read ideas"
-#~ msgstr ""
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Ask the village"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -335,13 +365,10 @@ msgctxt "site header"
 msgid "Sign out everywhere"
 msgstr "Cerrar sesión en todos los dispositivos"
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Reading the rounds"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "From {author}"
-#~ msgstr ""
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Paid as {paid}."
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding round stage"
@@ -352,24 +379,25 @@ msgstr ""
 msgid "Vote on it again here"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Ideas are being shaped into quests"
-#~ msgstr ""
-
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Funding rounds"
-#~ msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Traducción automática"
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
+msgstr ""
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Medium range"
+msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
@@ -434,14 +462,6 @@ msgid "Grow"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
-#~ msgid "Open a pot"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Share an idea"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
 msgid "You hold the village's funding pots, so you can open a pot and a round."
 msgstr ""
 
@@ -456,19 +476,11 @@ msgctxt "language picker"
 msgid "Close"
 msgstr "Cerrar"
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "{potName}. {line}."
-#~ msgstr ""
-
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Cuenta de {firstName}"
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Open a round for ideas"
-#~ msgstr ""
 
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
@@ -478,13 +490,17 @@ msgstr ""
 msgid "For the pot's holder"
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "The village has chosen"
-#~ msgstr ""
-
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Saved. The role's pay is set."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy did not download"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -492,13 +508,42 @@ msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests"
 msgstr ""
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This figure is outside the suggestion's band, so pick a reason."
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Share an idea"
 msgstr ""
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
+msgstr ""
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgid "Hide the valuation engine"
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgid "This round could not be found."
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "Choose a sitting steward"
+msgstr ""
+
+#: client/src/components/admin/RoleValueEditor.tsx
+msgctxt "role pay"
+msgid "Opening…"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The vote did not open"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -506,14 +551,23 @@ msgctxt "treasury sync"
 msgid "Try again"
 msgstr ""
 
+#. placeholder {0}: money(s.range.lowTotalMinor)
+#. placeholder {1}: money(s.range.highTotalMinor)
+#. placeholder {2}: widthWords[s.range.width]
+#. placeholder {3}: s.range.why.join(", ")
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "Likely {0} to {1}. {2}: {3}."
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgctxt "database export"
+msgid "Downloading..."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Yours"
-#~ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -524,17 +578,9 @@ msgstr ""
 msgid "The rough cost must be a number."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Sharing"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "A short name"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Opening funding rounds"
-#~ msgstr ""
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Reading the village's pay settings…"
+msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -546,9 +592,9 @@ msgstr "Ahora en {announced}"
 msgid "Your idea was not shared. Try again."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "What it is for"
-#~ msgstr ""
+#: client/src/components/governance/ExportByVote.tsx
+msgid "One copy of the village's database"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgid "No ideas yet. The first one can be yours."
@@ -557,6 +603,19 @@ msgstr ""
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is outside the suggestion's band, so give a reason. A second Treasurer or a steward then signs it, or the village decides."
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Your figure"
+msgstr ""
+
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -583,6 +642,10 @@ msgctxt "funding round stage"
 msgid "Ideas welcome until the pot's holder sets the next stage"
 msgstr ""
 
+#: client/src/components/governance/ExportByVote.tsx
+msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Opening the round"
@@ -591,6 +654,15 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Back to funding rounds"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "The figure you set"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "This is inside the suggestion's band, so your word sets it."
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -607,10 +679,24 @@ msgctxt "funding rounds"
 msgid "Who would it help?"
 msgstr ""
 
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Reward"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Could be as little as"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign out everywhere"
 #~ msgstr "Cerrar sesión en todos los dispositivos"
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "My own figure"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -618,13 +704,15 @@ msgctxt "site header"
 msgid "Main Site"
 msgstr "Sitio principal"
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Round stages"
-#~ msgstr ""
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Set this role's pay"
+msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Ideas welcome until {day}"
-#~ msgstr ""
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Or as much as"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -635,13 +723,10 @@ msgstr "Sitio principal"
 msgid "The rounds could not be read just now. Try again in a moment."
 msgstr ""
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Ideas are being shaped into quests until {day}"
-#~ msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Choosing which quests to fund until {day}"
-#~ msgstr ""
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgctxt "valuation receipt"
+msgid "Narrow range"
+msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -668,23 +753,31 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Usar el idioma del navegador"
 
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Who might do it:"
-#~ msgstr ""
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Saved"
+msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgid "{count, plural, one {# idea so far} other {# ideas so far}}"
 msgstr ""
-
-#: client/src/pages/FundingRounds.tsx
-#~ msgid "Share this idea"
-#~ msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
+
+#. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Use the suggestion, {0}"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "A note (optional)"
+msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -707,6 +800,14 @@ msgctxt "site header"
 msgid "Skip to content"
 msgstr "Ir al contenido"
 
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure first, before you see the suggestion (optional)"
+msgstr ""
+
+#: client/src/components/valuation/ValuationReceipt.tsx
+msgid "How this was worked out"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign in or join"
@@ -717,7 +818,17 @@ msgctxt "funding rounds"
 msgid "Round stages"
 msgstr ""
 
+#. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgid "Your own figure was {0}."
+msgstr ""
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Who it helps:"
+msgstr ""
+
+#: client/src/components/valuation/RolePayWithEngine.tsx
+msgctxt "role pay"
+msgid "Responsibility"
 msgstr ""

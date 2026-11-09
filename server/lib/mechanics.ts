@@ -327,6 +327,45 @@ export function priceChangeSet(
   village: MethodDials,
   settings?: ThresholdSettings,
 ): ChangeSetPrice {
+  return priceChangeSetItems(changes, method, village, settings).set;
+}
+
+/** One change's share of a set's price (change requests, 3b). */
+export interface PricedChangeItem {
+  /** The change's position in the set, matching the dry run's element index. */
+  index: number;
+  subject: string;
+  criticality: Criticality;
+  /** What this change alone asks, conducted the way the whole set is. */
+  dials: MethodDials;
+  /** True when this change asks the set's unity or the set's quorum. */
+  setsTheBar: boolean;
+}
+
+export interface ChangeSetItemsPrice {
+  /** The set's price: exactly what `priceChangeSet` returns. */
+  set: ChangeSetPrice;
+  items: PricedChangeItem[];
+  /** The indexes of the changes that set the bar, in order. */
+  setBy: number[];
+}
+
+/**
+ * WHAT EACH CHANGE COSTS, AND WHICH ONE SETS THE BAR.
+ *
+ * Rye, 2026-11-06: a change request says which item set the tier and offers
+ * "split this into its own proposal". The set's price is the hardest of its
+ * changes', half by half (unity and quorum separately), so it is computed
+ * here from the per-change prices and `priceChangeSet` returns this function's
+ * `set`. One computation, so the explanation a member reads and the price the
+ * ballot freezes cannot disagree (I.21).
+ */
+export function priceChangeSetItems(
+  changes: readonly ChangeInput[],
+  method: BallotMethod,
+  village: MethodDials,
+  settings?: ThresholdSettings,
+): ChangeSetItemsPrice {
   const items = changes.map(asChangeItem);
   const priced = items.map(pricingOf);
   const subjects = priced.map((p) => p.subject);
@@ -334,32 +373,35 @@ export function priceChangeSet(
   const { method: fixed, conflict } = methodForSubjects(subjects);
   const conducts = fixed ?? method;
   /*
-   * The criticality tier is asked for as a subject-less target, because a
-   * dial's tier belongs to the dial and not to the word "mechanics". Every
-   * other floor arrives through the subjects.
-   */
-  let dials = raiseToTier(
-    dialsForSubject(subjects, conducts, village, settings),
-    criticality,
-    settings,
-  );
-  /*
+   * EACH CHANGE ALONE, conducted the way the whole set will be. The
+   * criticality tier is asked for as a subject-less target, because a dial's
+   * tier belongs to the dial and not to the word "mechanics". Every other
+   * floor arrives through the subject.
+   *
    * THRESHOLDS FOR THRESHOLDS (19B). A dial that IS a bar is priced at the
    * bar it currently holds: a setting at 97 and 97 costs 97 and 97 to move,
-   * up or down. The tier above is the floor under this, so this call can only
-   * ever raise, and a set that moves two bars pays the harder of the two.
-   *
+   * up or down. The tier is the floor under this, so it can only ever raise.
    * It lives here and never in `pricingOf` because a tier is a word and a
    * bar is a pair of numbers: 97 and 97 has no name on the ladder once a
    * village has raised its constitutional tier above the platform's, and
    * rounding it to the nearest tier would price the change below the bar it
    * is moving.
    */
-  for (const item of items) {
-    if (item.kind !== "dial") continue;
-    const own = thresholdChangePrice(item.key, settings);
-    if (own) dials = raiseDials(dials, own);
-  }
+  const perItem = items.map((item, index) => {
+    let own = raiseToTier(dialsForSubject(subjects[index], conducts, village, settings), priced[index].criticality, settings);
+    if (item.kind === "dial") {
+      const bar = thresholdChangePrice(item.key, settings);
+      if (bar) own = raiseDials(own, bar);
+    }
+    return own;
+  });
+  /*
+   * THE SET: the method's own answer and the set's tier, raised by every
+   * change. Raising is a maximum half by half, so this is the hardest change's
+   * unity and the hardest change's quorum, which may be two different changes.
+   */
+  let dials = raiseToTier(dialsForSubject([], conducts, village, settings), criticality, settings);
+  for (const own of perItem) dials = raiseDials(dials, own);
   /*
    * WHICH SUBJECT GETS STAMPED. The one whose own floor is the set's floor,
    * preferring the first named, so a set of one behaves exactly as it did.
@@ -375,7 +417,15 @@ export function priceChangeSet(
       subjectType = subject;
     }
   }
-  return { subjectType, subjects, criticality, method: fixed, conflict, dials };
+  const set: ChangeSetPrice = { subjectType, subjects, criticality, method: fixed, conflict, dials };
+  const out: PricedChangeItem[] = perItem.map((own, index) => ({
+    index,
+    subject: subjects[index],
+    criticality: priced[index].criticality,
+    dials: own,
+    setsTheBar: own.unityPct === dials.unityPct || own.quorumPct === dials.quorumPct,
+  }));
+  return { set, items: out, setBy: out.filter((i) => i.setsTheBar).map((i) => i.index) };
 }
 
 function raiseToTier(base: MethodDials, criticality: Criticality, settings?: ThresholdSettings): MethodDials {

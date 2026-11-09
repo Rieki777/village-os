@@ -74,6 +74,8 @@
  * whoever actually holds the contract.
  */
 import { sanitiseForVolume, sniffKind, stampedName, writeToVolume } from "./uploads";
+import { secretStatus, secretValue } from "./secrets";
+import { stringVar } from "./variables";
 import { MAP_WORLD_ASPECT, boundsFor, boundsForAspect, zoomFor, type LatLon } from "../../shared/land";
 
 /** What a provider is asked for. */
@@ -105,6 +107,12 @@ export interface SatelliteProvider {
   licenceNote: string;
   /** The environment variable holding this provider's key. Null needs none. */
   keyEnv: string | null;
+  /**
+   * The store slot that holds this provider's key when it is typed into Admin,
+   * Integrations (readiness R171), with `keyEnv` as its host fallback. Null
+   * exactly when `keyEnv` is, and satellite.test.ts holds the pairing.
+   */
+  keySlot: string | null;
   /**
    * Roughly how fine the imagery is on the ground, in metres per pixel, for
    * the rural terrain these villages are in. Lower is better. This is what
@@ -189,6 +197,7 @@ const VILLAGE_UPLOAD: SatelliteProvider = {
   caching: "permitted",
   licenceNote: "The village took the photograph and holds the copyright, so there is no third party licence to satisfy.",
   keyEnv: null,
+  keySlot: null,
   groundResolutionM: 0.05,
   /* The village's own camera over the village's own land. There is no service to say no. */
   detailVariesByPlace: false,
@@ -203,6 +212,7 @@ const SENTINEL2: SatelliteProvider = {
   licenceNote:
     "Copernicus data is free and open for reproduction and distribution, including commercially, as long as the modification notice is shown.",
   keyEnv: "SENTINEL_WMS_URL",
+  keySlot: "satellite_sentinel_wms_url",
   groundResolutionM: 10,
   /* One sensor, ten metres, the whole earth. The figure holds wherever a village is. */
   detailVariesByPlace: false,
@@ -236,6 +246,7 @@ const MAPBOX: SatelliteProvider = {
   licenceNote:
     "The Mapbox Product Terms forbid distributing map content from a cache, by proxying, or as a static image instead of calling the API directly. Storing a copy on this server and serving it is the case those terms name.",
   keyEnv: "MAPBOX_TOKEN",
+  keySlot: "satellite_mapbox_token",
   groundResolutionM: 0.5,
   /* A tile API answers every zoom with a picture, upsampling past its detail instead of refusing. */
   detailVariesByPlace: false,
@@ -258,6 +269,7 @@ const GOOGLE: SatelliteProvider = {
   licenceNote:
     "The Google Maps Platform terms prohibit storing or caching map content, with one narrow exception for a temporary performance cache under 30 days that is explicitly not redistributed. Serving a stored copy to a village page is redistribution.",
   keyEnv: "GOOGLE_MAPS_STATIC_KEY",
+  keySlot: "satellite_google_maps_key",
   groundResolutionM: 0.5,
   /* Same shape as Mapbox: a tile API answers, so there is no no to catch. */
   detailVariesByPlace: false,
@@ -283,6 +295,7 @@ const ESRI: SatelliteProvider = {
   licenceNote:
     "Esri World Imagery is governed by the Esri Master Licence Agreement, and the standard layer is not intended for exporting tiles to hold offline. Esri publishes a separate export layer, which is a licensing conversation and not an API key.",
   keyEnv: "ESRI_API_KEY",
+  keySlot: "satellite_esri_api_key",
   groundResolutionM: 0.5,
   /* A mosaic of many surveys, so 0.5 is its best and not its promise. See the flag's note. */
   detailVariesByPlace: true,
@@ -332,6 +345,7 @@ const ESRI_OPEN: SatelliteProvider = {
   licenceNote:
     "Kept by a deployment owner's decision. This project is open source and treats its own use of the public World Imagery export endpoint as acceptable for itself. That is a policy choice made here on 2026-09-19, and it is not a licence grant. The keyed `esri` entry above records the stricter reading and is unchanged. A fork that has not made the same decision should leave this provider unnamed.",
   keyEnv: null,
+  keySlot: null,
   groundResolutionM: 0.5,
   /* The same World Imagery service as the keyed entry above, with the same varying detail. */
   detailVariesByPlace: true,
@@ -498,15 +512,84 @@ export interface ProviderStatus {
  * showed a different picture from the one the founder configured would be a
  * worse failure than a map that says nothing is configured yet.
  */
-export function configuredProvider(env: NodeJS.ProcessEnv = process.env): ProviderStatus {
-  const id = String(env.SATELLITE_PROVIDER ?? "").trim();
+export function configuredProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  chosen: { provider?: string } = { provider: villageChoice() },
+): ProviderStatus {
+  // The village's own dial first, the host's variable second (readiness R171).
+  const id = String(chosen.provider ?? "").trim() || String(env.SATELLITE_PROVIDER ?? "").trim();
   if (!id) return { provider: null, ready: false, missingEnv: "SATELLITE_PROVIDER", key: null };
   const provider = providerById(id);
   if (!provider) return { provider: null, ready: false, missingEnv: "SATELLITE_PROVIDER", key: null };
   if (!provider.keyEnv) return { provider, ready: true, missingEnv: null, key: null };
-  const key = String(env[provider.keyEnv] ?? "").trim();
+  const key = keyFor(provider, env);
   if (!key) return { provider, ready: false, missingEnv: provider.keyEnv, key: null };
   return { provider, ready: true, missingEnv: null, key };
+}
+
+/** The provider the village chose on its dial, or "" when it chose none here or the dials are not loaded yet. */
+function villageChoice(): string {
+  try {
+    return stringVar("village.satellite_provider").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A provider's key: typed into Admin, Integrations first, the host's own
+ * variable second. Before boot has loaded the store, `secretValue` throws, and
+ * the host's variable is all there is.
+ */
+function keyFor(provider: SatelliteProvider, env: NodeJS.ProcessEnv): string {
+  if (provider.keySlot) {
+    try {
+      return secretValue(provider.keySlot, env).trim();
+    } catch {
+      /* the store is not loaded yet */
+    }
+  }
+  return String(env[provider.keyEnv ?? ""] ?? "").trim();
+}
+
+/** Where each keyed provider's key is found, for its Integrations card. */
+const KEY_CARD_HELP: Readonly<Record<string, { getAt: string; placeholder: string }>> = {
+  sentinel2: { getAt: "The WMS service you use for Sentinel-2, its base address with any key it needs", placeholder: "https://…/wms" },
+  mapbox: { getAt: "account.mapbox.com → Access tokens", placeholder: "pk.…" },
+  google: { getAt: "console.cloud.google.com → APIs & Services → Credentials, a key for the Maps Static API", placeholder: "AIza…" },
+  esri: { getAt: "developers.arcgis.com → API keys", placeholder: "your ArcGIS API key" },
+};
+
+/**
+ * The Integrations cards for satellite keys (readiness R171): the chosen
+ * provider's, and any other provider's whose key is still stored, so a key
+ * left behind by a change of provider can still be seen and cleared. Nothing
+ * for a keyless provider, and nothing while no provider is chosen.
+ */
+export function satelliteKeyCards(
+  chosen: { provider?: string } = { provider: villageChoice() },
+  env: NodeJS.ProcessEnv = process.env,
+): Array<{ key: string; title: string; unlocks: string; getAt: string; placeholder: string }> {
+  const live = configuredProvider(env, chosen).provider?.id ?? null;
+  return PROVIDERS.filter((p) => p.keySlot && (p.id === live || storedHere(p.keySlot))).map((p) => ({
+    key: p.keySlot!,
+    title: `Satellite imagery, ${p.label}`,
+    unlocks:
+      p.id === live
+        ? `The key Where the Land Is fetches the village's picture with, from ${p.label}. Without it, there is nothing to fetch from. ${p.licenceNote}`
+        : `A key for ${p.label}, which this village no longer has chosen. Clear it if nothing else uses it.`,
+    getAt: KEY_CARD_HELP[p.id]?.getAt ?? "",
+    placeholder: KEY_CARD_HELP[p.id]?.placeholder ?? "",
+  }));
+}
+
+/** True when a value for this slot is typed into Admin, Integrations. False before the store is loaded. */
+function storedHere(slot: string): boolean {
+  try {
+    return secretStatus(slot).source === "admin";
+  } catch {
+    return false;
+  }
 }
 
 /** How big a satellite image this platform will accept, in bytes. */
