@@ -28,7 +28,7 @@ export interface EngineUse {
 }
 
 const field = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white";
-const label = "block text-xs text-gray-500 mb-1";
+const label = "block text-xs text-muted-foreground mb-1";
 
 export default function QuestEnginePrice({
   offered,
@@ -79,9 +79,9 @@ export default function QuestEnginePrice({
   }, [model, work, read]);
 
   if (failed) return null;
-  if (!read || !model) return <p className="text-xs text-gray-500"><Trans context="quest editor">Reading the village's pay settings…</Trans></p>;
+  if (!read || !model) return <p className="text-xs text-muted-foreground"><Trans context="quest editor">Reading the village's pay settings…</Trans></p>;
   if (model.bands.length === 0) {
-    return <p className="text-xs text-gray-500"><Trans context="quest editor">The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below.</Trans></p>;
+    return <p className="text-xs text-muted-foreground"><Trans context="quest editor">The village has not set its rates yet, so there is no suggested price. Set them on the economics page, or type a price below.</Trans></p>;
   }
 
   const s = suggestion?.ok ? suggestion.payee : null;
@@ -120,7 +120,7 @@ export default function QuestEnginePrice({
       {suggestion && !suggestion.ok && <p className="text-sm text-muted-foreground">{suggestion.problem}</p>}
       {s && filled && work && (
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-foreground">
             {t({ message: `Suggested ${wholeMoney(s.expected.totalMinor, model.currency)}, likely ${wholeMoney(s.range.lowTotalMinor, model.currency)} to ${wholeMoney(s.range.highTotalMinor, model.currency)}.`, context: "quest editor" })}
           </p>
           <button
@@ -130,8 +130,8 @@ export default function QuestEnginePrice({
           >
             <Trans context="quest editor">Use this price</Trans>
           </button>
-          {filled.voiceHeld && <p className="w-full text-xs text-gray-500"><Trans context="quest editor">Voice starts when the village adopts its own pay settings.</Trans></p>}
-          {s.expected.earnedEquityHeld > 0 && <p className="w-full text-xs text-gray-500"><Trans context="quest editor">Earned Equity is owed on this quest until the village writes what Earned Equity means.</Trans></p>}
+          {filled.voiceHeld && <p className="w-full text-xs text-muted-foreground"><Trans context="quest editor">Voice starts when the village adopts its own pay settings.</Trans></p>}
+          {s.expected.earnedEquityHeld > 0 && <p className="w-full text-xs text-muted-foreground"><Trans context="quest editor">Earned Equity is owed on this quest until the village writes what Earned Equity means.</Trans></p>}
           {filled.unoffered.length > 0 && (
             <p className="w-full text-xs text-amber-800">
               {t({ message: `The rule pays ${filled.unoffered.map(tokenName).join(", ")}, which quests do not pay here yet. Turn it on in the quest pay rules first.`, context: "quest editor" })}
