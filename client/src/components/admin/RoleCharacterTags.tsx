@@ -82,14 +82,14 @@ export default function RoleCharacterTags({
   };
 
   return (
-    <fieldset className="mt-3 rounded-lg border border-gray-200 p-3">
-      <legend className="px-1 text-xs font-medium text-gray-700">{t({ message: `Characters ${roleName} suits`, context: "admin role characters legend" })}</legend>
-      <p className="text-xs text-gray-500">
+    <fieldset className="mt-3 rounded-lg border border-border p-3">
+      <legend className="px-1 text-xs font-medium text-foreground">{t({ message: `Characters ${roleName} suits`, context: "admin role characters legend" })}</legend>
+      <p className="text-xs text-muted-foreground">
         {t`Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it.`}
       </p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {cast.map((c) => (
-          <label key={c.key} className="inline-flex min-h-11 items-center gap-2 text-sm text-gray-800">
+          <label key={c.key} className="inline-flex min-h-11 items-center gap-2 text-sm text-foreground">
             <input
               type="checkbox"
               className="size-4"
@@ -104,7 +104,7 @@ export default function RoleCharacterTags({
         type="button"
         disabled={!changed || busy}
         onClick={() => void save()}
-        className="mt-2 min-h-11 rounded-lg border border-gray-200 px-3 py-2 text-sm disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
+        className="mt-2 min-h-11 rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-teal-deep"
       >
         {t({ message: "Save characters", context: "admin role characters" })}
       </button>
