@@ -811,6 +811,40 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     ]);
   });
 
+  /*
+   * The cash budget (0347, budgets spec R26). A leaver's account id comes off
+   * the lines they changed, the rates they locked and the imports they ran;
+   * the role they acted as stays, and so does every row, and a bystander's
+   * attribution does not move.
+   */
+  it("de-attributes the budget lines, rate locks and imports a leaver made, keeps the role they acted as, and leaves a bystander's rows", async () => {
+    const leaver = await member("own-leaver-bd", "Wren Halloway");
+    await member("own-bd-ash", "Ash Moreno");
+    const line = (id: string, by: string, lockedBy: string | null) =>
+      q(
+        "INSERT INTO budget_lines (id, line_key, source, period_kind, period_key, starts_on, ends_on, category, planned_minor, currency, label, changed_by, changed_as, fx_locked_by) " +
+          "VALUES (?, ?, 'manual', 'month', '2026-11', '2026-11-01', '2026-11-30', 'role_pay', 1000, 'CRC', ?, ?, 'Treasury', ?)",
+        [id, `manual:${id}`, `Line ${id}`, by, lockedBy],
+      );
+    await line("bl-own-1", leaver.id, leaver.id);
+    await line("bl-own-2", "own-bd-ash", "own-bd-ash");
+    await line("bl-own-3", "own-bd-ash", leaver.id);
+    await q("INSERT INTO budget_syncs (id, source, `by`, by_as, ok) VALUES ('bs-own-1', 'upload', ?, 'Treasury', 1), ('bs-own-2', 'upload', 'own-bd-ash', 'Treasury', 1)", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id, changed_by, changed_as, fx_locked_by, planned_minor FROM budget_lines WHERE id LIKE 'bl-own-%' ORDER BY id"), "every line stays, without the leaver's id").toEqual([
+      { id: "bl-own-1", changed_by: null, changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+      { id: "bl-own-2", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: "own-bd-ash", planned_minor: 1000 },
+      { id: "bl-own-3", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+    ]);
+    expect(await q("SELECT id, `by`, by_as FROM budget_syncs WHERE id LIKE 'bs-own-%' ORDER BY id")).toEqual([
+      { id: "bs-own-1", by: null, by_as: "Treasury" },
+      { id: "bs-own-2", by: "own-bd-ash", by_as: "Treasury" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
+  });
+
   it("runs every new step after the tombstone, between the role tensions and the role proposals, and runs clean twice", async () => {
     const leaver = await member("own-leaver-st", "Wren Halloway");
     await anonymizeMember(pool, leaver, "admin-1", deps());

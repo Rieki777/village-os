@@ -192,6 +192,7 @@ import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
+import { forgetBudgetAttributionOf } from "../repos/budgets";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -1682,6 +1683,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * The cash budget (0347, budgets spec R26): their account id comes off
+       * every budget line they changed (`changed_by`), every rate they locked
+       * (`fx_locked_by`) and every import they ran (`budget_syncs.by`). The
+       * lines and imports stay, as the village's record of its plan, and
+       * `changed_as` stays too, because it names the role they acted through
+       * and never a person.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a budget
+       * write still lands for anybody signed in until the sessions die. Keyed
+       * on the member, so a resume or a second run finds nothing to change.
+       */
+      name: "budget-attribution-after-tombstone",
+      run: async () => {
+        await forgetBudgetAttributionOf(pool, target.id);
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again, as the last step that deletes the
       // member's own data. Two steps follow it on purpose and touch none:
@@ -2235,6 +2254,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "reward-moments-after-tombstone",
+  "budget-attribution-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
