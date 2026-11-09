@@ -666,16 +666,16 @@ msgid "Why"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "I will align with the Love Letter, the village's membership agreement, before I am seated."
-msgstr ""
+#~ msgid "I will align with the Love Letter, the village's membership agreement, before I am seated."
+#~ msgstr ""
 
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "The village is deciding a change to this right now."
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
-msgstr ""
+#~ msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
+#~ msgstr ""
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
@@ -1179,6 +1179,10 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "The confidentiality agreement is not promised"
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
@@ -1995,6 +1999,10 @@ msgctxt "sera answers"
 msgid "including 1 role inside {name}"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They aligned with the membership letter when they applied."
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "Keep the vote"
@@ -2040,6 +2048,10 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Adopted. The exit policy and the governance page read it from now on."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They have not promised the confidentiality agreement."
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -2858,8 +2870,8 @@ msgid "added:"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "The agreements are not given"
-msgstr ""
+#~ msgid "The agreements are not given"
+#~ msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "who answered a note"
@@ -3019,6 +3031,10 @@ msgstr ""
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft tray"
 msgid "Your draft"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Not aligned with the membership letter"
 msgstr ""
 
 #: client/src/components/fundingRounds/common.tsx
@@ -3716,8 +3732,8 @@ msgid "Paper"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They have not agreed to the Love Letter and the NDA."
-msgstr ""
+#~ msgid "They have not agreed to the Love Letter and the NDA."
+#~ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "No open role carries these characters yet. Every role is still open to you."
@@ -3779,6 +3795,10 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "start a change request"
 msgid "Start it"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They have not aligned with the membership letter yet."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -4045,6 +4065,10 @@ msgstr "Tu siguiente paso"
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft stat"
 msgid "Time"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They will align with the confidentiality agreement once approved."
 msgstr ""
 
 #: client/src/components/review/SeraInDraft.tsx

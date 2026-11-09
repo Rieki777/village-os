@@ -409,6 +409,9 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
         [addressParty(email)],
       );
       expect(atAddress).toEqual([expect.objectContaining({ subject_type: "membership" })]);
+      // Whoever decides reads a yes, and never the address or the words.
+      const page = await call("GET", `/api/governance/open-proposals/${id}`, undefined, FOUNDER.id);
+      expect(page.body.proposal.membership).toEqual({ aligned: true });
       // The address is never stored: only its fingerprint names the party.
       expect(JSON.stringify(await q("SELECT party_key FROM alignment_parties WHERE text_id = ?", [atAddress[0].id]))).not.toContain(email);
 
@@ -441,6 +444,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       const email = "unaligned-applicant@example.test";
       const id = await proposeAndConfirm(email, false);
       expect(await q("SELECT text_id FROM alignment_parties WHERE party_key = ?", [addressParty(email)])).toEqual([]);
+      expect((await call("GET", `/api/governance/open-proposals/${id}`, undefined, FOUNDER.id)).body.proposal.membership).toEqual({ aligned: false });
       state.dials["org.start_after_membership"] = true;
       const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       const token = new URL(String(r.body?.invitation?.link)).searchParams.get("invite") as string;

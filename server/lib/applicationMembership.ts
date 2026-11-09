@@ -30,7 +30,7 @@
  * suggested contribution stays a paragraph in the letter.
  */
 import crypto from "node:crypto";
-import type { PoolConnection } from "mysql2/promise";
+import type { Pool, PoolConnection } from "mysql2/promise";
 import { CAPACITY, userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import { civilDateKey } from "../../shared/lunar";
 import { letterIntent, MEMBERSHIP, membershipRef, readMembershipRef, type ServedLetter } from "../../shared/membershipLetter";
@@ -38,6 +38,18 @@ import { identityKey } from "../../shared/openProposals";
 import { insertEnding, textsForParty, textsForPartyKey, type StoredParty } from "../repos/alignments";
 import { contentHashOf, endingIdFor, recordAlignment, viewTexts, writePreparedText } from "./alignmentSubjects";
 import { prepareMembershipText } from "./membershipLetter";
+
+/**
+ * Whether the applicant behind a proposal is aligned with the membership letter,
+ * for whoever decides it: they aligned on the form and the address confirmed (the
+ * address's text, carried or not), or their account here already holds a letter.
+ * Never the address or the words: a yes or a no.
+ */
+export async function membershipAlignedFor(db: Pool | PoolConnection, email: string | null, accountId: string | null): Promise<boolean> {
+  if (email && (await textsForPartyKey(db, addressParty(email))).some((t) => t.subjectType === MEMBERSHIP)) return true;
+  if (accountId && (await textsForParty(db, accountId)).some((t) => t.subjectType === MEMBERSHIP)) return true;
+  return false;
+}
 
 /** The party key for an address that has no account yet. */
 export function addressParty(email: string): string {

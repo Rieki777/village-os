@@ -124,7 +124,7 @@ export default function ProposeARole() {
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
   const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
-  const [agreed, setAgreed] = useState({ loveLetter: false, nda: false });
+  const [agreed, setAgreed] = useState({ nda: false });
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
   const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
   const [letterRead, setLetterRead] = useState(0);
@@ -202,7 +202,8 @@ export default function ProposeARole() {
             }),
             serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
             hours,
-            agreed: { ...agreed, loveLetter: membership.kind !== "none" },
+            // The NDA promise only: the membership letter is aligned with below, never ticked.
+            agreed,
           },
           // The letter version the applicant aligned with here; recorded once the address confirms.
           ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),

@@ -153,14 +153,14 @@ export function SeasonServes({
   onServes: (next: Record<string, string>) => void;
   hours: string;
   onHours: (v: string) => void;
-  agreed: { loveLetter: boolean; nda: boolean };
-  onAgreed: (next: { loveLetter: boolean; nda: boolean }) => void;
+  agreed: { nda: boolean };
+  onAgreed: (next: { nda: boolean }) => void;
   /**
    * The membership alignment itself, made here when they apply
-   * (MembershipAtApplication.tsx, Rye's answer 8). Given, it takes the place of
-   * the Love Letter tick, and the form sets `agreed.loveLetter` from it.
+   * (MembershipAtApplication.tsx, Rye's answer 8). There is no Love Letter
+   * tick: this is the agreement.
    */
-  membership?: ReactNode;
+  membership: ReactNode;
 }) {
   const { t } = useLingui();
   const full = Object.keys(serves).length >= CARD_LIMITS.serves;
@@ -217,12 +217,7 @@ export function SeasonServes({
       </div>
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
-        {membership ?? (
-          <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-            <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
-            {t`I will align with the Love Letter, the village's membership agreement, before I am seated.`}
-          </label>
-        )}
+        {membership}
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
           <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
           {t`Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts.`}
@@ -242,13 +237,16 @@ export function SeasonServes({
 export function CardSideBySide({
   roles,
   card,
+  membershipAligned = false,
 }: {
+  /** The applicant aligned with the membership letter, on the form or from their account (Rye's answer 8). */
+  membershipAligned?: boolean;
   roles: ReadonlyArray<{ id: string; name: string | null; accountabilities?: string[]; timeCommitment?: string | null }>;
   card: {
     roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
     serves: Array<{ goalId: string; how: string; goal?: string }>;
     hours: string;
-    agreed: { loveLetter: boolean; nda: boolean };
+    agreed: { loveLetter?: boolean; nda: boolean };
   } | null;
 }) {
   const { t } = useLingui();
@@ -264,7 +262,8 @@ export function CardSideBySide({
     if (!(mine?.firstMoon ?? []).length) gaps.push(t`No first-moon quest for ${roleName}`);
   }
   if (!card.serves.length) gaps.push(t`No season goal served`);
-  if (!card.agreed.loveLetter || !card.agreed.nda) gaps.push(t`The agreements are not given`);
+  if (!membershipAligned) gaps.push(t`Not aligned with the membership letter`);
+  if (!card.agreed.nda) gaps.push(t`The confidentiality agreement is not promised`);
   return (
     <div className="grid gap-4">
       {roles.map((r) => {
@@ -338,9 +337,8 @@ export function CardSideBySide({
         )}
         {card.hours && <p className="mt-2 text-foreground">{t`Time they can give: ${card.hours}`}</p>}
         <p className="mt-2 text-foreground">
-          {card.agreed.loveLetter && card.agreed.nda
-            ? t`They agreed to sign the Love Letter before seating, and the NDA once approved.`
-            : t`They have not agreed to the Love Letter and the NDA.`}
+          {membershipAligned ? t`They aligned with the membership letter when they applied.` : t`They have not aligned with the membership letter yet.`}{" "}
+          {card.agreed.nda ? t`They will align with the confidentiality agreement once approved.` : t`They have not promised the confidentiality agreement.`}
         </p>
       </div>
       {gaps.length > 0 && (

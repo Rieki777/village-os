@@ -101,7 +101,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { nda: true } },
       membership: { letterVersion: LETTER.version },
     });
     // No payment anywhere on the path: nothing posted names money.
@@ -119,8 +119,11 @@ describe("the form", () => {
     expect(within(ask).getByText(/Read the Membership agreement/)).toBeTruthy();
     expect(within(ask).getByText(/Aligning is the village's way of signing\./)).toBeTruthy();
     expect(within(ask).getByText(/No payment is asked/)).toBeTruthy();
-    // Control: the old intent tick ("I will align with the Love Letter...") is gone; the alignment took its place.
-    expect(screen.queryByLabelText(/I will align with the Love Letter/)).toBeNull();
+    // Control: there is no Love Letter tick on the form at all; the alignment is the agreement.
+    expect(screen.queryByLabelText(/Love Letter/)).toBeNull();
+    // The one checkbox about the letter is the alignment itself, bound to the letter's own sentence.
+    const aboutLetter = screen.getAllByRole("checkbox").filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
+    expect(aboutLetter.map((c) => c.closest("label")?.textContent)).toEqual([LETTER.intent]);
     cleanup();
 
     auth.user = { name: "Gil Moss", email: "gil@example.test" };
@@ -294,7 +297,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: "g-investor", how: "One set of numbers" }],
       hours: "",
-      agreed: { loveLetter: true, nda: true },
+      agreed: { nda: true },
     });
   });
 });
