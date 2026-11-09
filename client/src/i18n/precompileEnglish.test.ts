@@ -17,6 +17,22 @@ describe("precompileMessages: English compiled at build, so no compiler ships (s
     expect(out).toContain(JSON.stringify(compileMessage(`{count, plural, one {# vote} other {# votes}} for "Ana"`)));
   });
 
+  it("compiles a <Trans> or <Plural> with values, which the macro emits as id, values, message", () => {
+    // The shape a built chunk actually carries (TreasurySync, 2026-11-08):
+    // `values` sits between `id` and `message`, and the message was left a
+    // raw string, so the page printed "Paid {paidOn}" with the braces in.
+    const code = `e.jsx(t,{id:"224D8v",values:{paidOn:o},message:"Paid {paidOn}",context:"treasury sync"}); e.jsx(t,{id:"Zz9_-a",values:{0:d.review.consents},message:"{0, plural, one {# person} other {# people}}"})`;
+    const out = precompileMessages(code);
+    expect(out).toContain(`message:${JSON.stringify(compileMessage("Paid {paidOn}"))}`);
+    expect(out).toContain(JSON.stringify(compileMessage("{0, plural, one {# person} other {# people}}")));
+    expect(out).not.toMatch(/message:"/);
+  });
+
+  it("compiles a descriptor whose values hold a nested object or a call", () => {
+    const out = precompileMessages(`x({id:"Ab12Cd",values:{a:f({b:1}),c:g(h)},message:"{a} and {c}"})`);
+    expect(out).toContain(JSON.stringify(compileMessage("{a} and {c}")));
+  });
+
   it("leaves code without macro descriptors untouched", () => {
     const code = `const message = "hello"; obj({ id: "toolong1", message: "nope" })`;
     expect(precompileMessages(code)).toBe(code);

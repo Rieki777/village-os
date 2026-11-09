@@ -69,6 +69,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/verify-email": "Confirm your address",
   "/forgot-password": "Set a new password",
   "/game-mechanics": "Game Mechanics",
+  // Change requests: the list and, by longest prefix, each one.
+  "/changes": "Change requests",
   "/exit-policy": "Leaving well",
   "/tools": "Tools",
   // One line covers the shelf and every detail page: keys match by longest

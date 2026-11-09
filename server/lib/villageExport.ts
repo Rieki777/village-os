@@ -48,6 +48,7 @@ import type { Pool } from "mysql2/promise";
 import { seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 import { keyFromEnv, openWith, sealWith, type Sealed } from "./sealedBox";
 import { VILLAGE_SECRETS_ENV, villageSecretsKeyProblem } from "./secrets";
+import { replaceSigningKeyDoc } from "../repos/signingKeyRow";
 import { DECIDES_BY, DOMAINS, SHAPES } from "../../shared/power";
 import { circlesOnCycles } from "../../shared/circleView";
 import { canonicalJson } from "../../shared/canonicalJson";
@@ -363,6 +364,48 @@ export async function ensureSigningKey(
   };
   cachedAtRest = atRest;
   return cachedKey;
+}
+
+/**
+ * Re-mint the village's signing key in place (readiness R069).
+ *
+ * Two ways reach a village that needs this: the private half leaked, or a
+ * restore under a different VILLAGE_SECRETS_KEY stranded it, sealed under a key
+ * nobody holds, so the signed documents answer 503 on every boot. The only
+ * recovery was a hand-written DELETE on app_config.
+ *
+ * The new keypair is sealed under the key this deployment holds, and with no
+ * usable key it refuses: rotation never stores a private half in the clear,
+ * the same rule the secrets store keeps. Peers holding the old public key see
+ * the change and pause on it (server/lib/network.ts), because a rotation and
+ * an impostor look the same from outside, so each peer accepts the new key by
+ * hand. That is the cost, and the caller says so before asking.
+ */
+export async function rotateSigningKey(
+  pool: Pool,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<{ ok: true; kid: string; previousKid: string | null } | { ok: false; error: string }> {
+  const key = keyFromEnv(VILLAGE_SECRETS_ENV, env);
+  if (!key) {
+    return {
+      ok: false,
+      error: `A new signing key is sealed under ${VILLAGE_SECRETS_ENV}, and this deployment has no usable one. ${villageSecretsKeyProblem(env)}`,
+    };
+  }
+  const previousKid = cachedKey?.kid ?? null;
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const fresh = storedDoc(
+    publicKey.export({ type: "spki", format: "pem" }).toString(),
+    privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    key,
+    new Date().toISOString(),
+  );
+  await replaceSigningKeyDoc(pool, JSON.stringify(fresh));
+  cachedKey = null;
+  cachedAtRest = null;
+  const loaded = await ensureSigningKey(pool, env);
+  if (loaded.privateKeyPem === null) return { ok: false, error: "the new signing key was written and could not be read back" };
+  return { ok: true, kid: loaded.kid, previousKid };
 }
 
 /** Synchronous read for hot paths; boot must have called `ensureSigningKey`. */
