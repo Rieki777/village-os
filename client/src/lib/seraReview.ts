@@ -39,16 +39,48 @@ export interface CountAnswer extends DifferenceCount {
   /** About this reader: may they read the list (null when the server could not say), and do they decide. */
   reader?: { mayRead: boolean | null; decides: boolean };
   /** The drafts the list's answers opened, by id and size only (R38's door to a vote). */
-  drafts?: Array<{ id: string; changes: number }>;
+  drafts?: CountDraft[];
+}
+
+/** One answer in a draft, as the list sends it (R13, review 3, 11). */
+export interface InDraftItem {
+  key: string;
+  answer: "taken" | "edited";
+  sentence: string;
+  /** The words the draft will write, for a name or a role's words. */
+  value: string | null;
+  field: "name" | "aim" | null;
+  /** The role the words are for. */
+  about: string | null;
+  /** An edit's author: "you", a role's name, or null. */
+  by: string | null;
+  /** Its difference has gone, or moved since it was taken. */
+  changed: boolean;
+  /** The difference as it stands now, to take again. */
+  now: { key: string; seraHash: string; oursHash: string } | null;
 }
 
 /** One draft the list's answers opened, as the list sends it (R13). */
 export interface InDraftGroup {
   draftId: string;
   title: string | null;
-  items: Array<{ key: string; sentence: string }>;
+  items: InDraftItem[];
   /** The new roles that came with a new circle in it. */
   with: number;
+  /** How many changes the draft really holds, nested roles included. */
+  changes: number;
+  /** Their ids, which a publish from the page sends back (review 12). */
+  changeIds: string[];
+  /** Something in it changed since it was taken: never published from the page. */
+  hasChanged: boolean;
+}
+
+/** One open draft on the count, by id and size: no subject (R38). */
+export interface CountDraft {
+  id: string;
+  changes: number;
+  changeIds: string[];
+  hasChanged: boolean;
 }
 
 /** `GET /api/saberra/differences`, behind the review queue's key. */
@@ -102,7 +134,14 @@ export function readCount(v: unknown): CountAnswer | null {
       ? { mayRead: typeof v.reader.mayRead === "boolean" ? v.reader.mayRead : null, decides: v.reader.decides === true }
       : undefined,
     drafts: Array.isArray(v.drafts)
-      ? v.drafts.filter((d): d is { id: string; changes: number } => isObj(d) && typeof d.id === "string" && typeof d.changes === "number")
+      ? v.drafts
+          .filter((d): d is Record<string, unknown> => isObj(d) && typeof d.id === "string" && typeof d.changes === "number")
+          .map((d) => ({
+            id: d.id as string,
+            changes: d.changes as number,
+            changeIds: Array.isArray(d.changeIds) ? d.changeIds.filter((x): x is string => typeof x === "string") : [],
+            hasChanged: d.hasChanged === true,
+          }))
       : [],
   };
 }
@@ -153,10 +192,36 @@ export function readList(v: unknown): ListAnswer | null {
   };
 }
 
+function inDraftItemOf(i: unknown): InDraftItem | null {
+  if (!isObj(i) || typeof i.key !== "string" || typeof i.sentence !== "string") return null;
+  const now = isObj(i.now) && typeof i.now.key === "string" && typeof i.now.seraHash === "string" && typeof i.now.oursHash === "string"
+    ? { key: i.now.key, seraHash: i.now.seraHash, oursHash: i.now.oursHash }
+    : null;
+  return {
+    key: i.key,
+    answer: i.answer === "edited" ? "edited" : "taken",
+    sentence: i.sentence,
+    value: typeof i.value === "string" ? i.value : null,
+    field: i.field === "name" || i.field === "aim" ? i.field : null,
+    about: typeof i.about === "string" ? i.about : null,
+    by: typeof i.by === "string" ? i.by : null,
+    changed: i.changed === true,
+    now,
+  };
+}
+
 function inDraftOf(v: unknown): InDraftGroup | null {
   if (!isObj(v) || typeof v.draftId !== "string" || !Array.isArray(v.items)) return null;
-  const items = v.items.filter((i): i is { key: string; sentence: string } => isObj(i) && typeof i.key === "string" && typeof i.sentence === "string");
-  return { draftId: v.draftId, title: typeof v.title === "string" ? v.title : null, items, with: num(v.with) };
+  const items = v.items.map(inDraftItemOf).filter((i): i is InDraftItem => i !== null);
+  return {
+    draftId: v.draftId,
+    title: typeof v.title === "string" ? v.title : null,
+    items,
+    with: num(v.with),
+    changes: typeof v.changes === "number" ? v.changes : items.length,
+    changeIds: Array.isArray(v.changeIds) ? v.changeIds.filter((x): x is string => typeof x === "string") : [],
+    hasChanged: v.hasChanged === true,
+  };
 }
 
 // ── What waits ──────────────────────────────────────────────────────────────

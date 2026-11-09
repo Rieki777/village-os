@@ -8,7 +8,7 @@
  * difference is the one on screen. The outcome stays in ONE `role="status"`
  * strip with its Undo until the next act: no toasts (R30).
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { bulkPlan } from "@shared/seraSettle";
 import type { ListedDifference } from "@/lib/seraReview";
@@ -39,6 +39,24 @@ type Refused = { key: string; why: string; words: string };
 /** A difference a person may write their own words for: a role's name or its words. */
 export const editable = (d: ListedDifference): boolean => (d.kind === "textField" && d.field === "aim") || (d.kind === "rename" && d.subject.kind === "role");
 
+/**
+ * Where an edit starts (R9, review 1). Words that name a member here are never
+ * offered back to type over, so such a difference always starts from ours; any
+ * other starts where the person asked, the service's words as stored.
+ */
+export function editStart(d: ListedDifference, from: "sera" | "ours"): { from: "sera" | "ours"; value: string } {
+  const start = d.namesAMember ? "ours" : from;
+  return { from: start, value: (start === "sera" ? (d.seraAsStored ?? d.sera) : (d.oursAsStored ?? d.ours)) ?? "" };
+}
+
+/** Focus the first element the selector finds once the page has drawn, or the status strip when none does (review 23). */
+export function focusSoon(selector: string | null): void {
+  setTimeout(() => {
+    const el = (selector ? document.querySelector<HTMLElement>(selector) : null) ?? document.querySelector<HTMLElement>("[data-sera-strip]");
+    el?.focus();
+  }, 0);
+}
+
 export function useSeraActs(differences: readonly ListedDifference[], reload: () => Promise<void>) {
   const { t } = useLingui();
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
@@ -46,6 +64,8 @@ export function useSeraActs(differences: readonly ListedDifference[], reload: ()
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  /** The button that opened the sheet: focus goes back to it when the sheet closes (review 20, 23). */
+  const sheetOpener = useRef<HTMLElement | null>(null);
   /** The key last acted on, so the list can move focus to the row after it (R32). */
   const [acted, setActed] = useState<string | null>(null);
   const byKey = useMemo(() => new Map(differences.map((d) => [d.key, d])), [differences]);
@@ -120,6 +140,8 @@ export function useSeraActs(differences: readonly ListedDifference[], reload: ()
         undo: null,
         leftOut: [],
       });
+      // The row that came back, or the strip when it did not come back here.
+      focusSoon(keys[0] ? `[data-sera-row="${keys[0]}"]` : null);
     },
     [reload, t],
   );
@@ -150,17 +172,41 @@ export function useSeraActs(differences: readonly ListedDifference[], reload: ()
     setActed,
     tick,
     tickAll: (keys: string[]) => setTicked(new Set(keys)),
-    /** Put an outcome from elsewhere on the list (the draft card) in the same strip. */
-    say: (words: string) => setStrip({ words, undo: null, leftOut: [] }),
+    /** Put an outcome from elsewhere on the list (the draft card) in the same strip, and focus it (review 23). */
+    say: (words: string) => {
+      setStrip({ words, undo: null, leftOut: [] });
+      focusSoon(null);
+    },
     untickAll: () => setTicked(new Set()),
     take: (d: ListedDifference) => run("take", [d]),
+    /** Take again, from the draft card, a take that changed since: with the difference as it stands now (R13). */
+    takeAgain: async (now: { key: string; seraHash: string; oursHash: string }) => {
+      setBusy(true);
+      const r = await answerDifferences("take", [itemOf(now)]);
+      await reload();
+      setBusy(false);
+      setStrip({
+        words: r.ok ? t({ message: "Taken again. The draft holds what it says now.", context: "sera answers" }) : (errorWords(r) ?? t({ message: "The answer was not written.", context: "sera answers" })),
+        undo: null,
+        leftOut: [],
+      });
+      focusSoon(null);
+    },
     keep: (d: ListedDifference) => run("keep", [d]),
     edit: (d: ListedDifference, value: string) => run("edit", [d], value),
-    startEdit: (d: ListedDifference, from: "sera" | "ours") =>
-      setEditing({ key: d.key, from, value: (from === "sera" ? d.sera : (d.oursAsStored ?? d.ours)) ?? "" }),
+    startEdit: (d: ListedDifference, from: "sera" | "ours") => setEditing({ key: d.key, ...editStart(d, from) }),
     setValue: (value: string) => setEditing((e) => (e ? { ...e, value } : e)),
-    stopEdit: () => setEditing(null),
-    openSheet: (kind: Sheet["kind"]) => setSheet({ kind, keys: tickedRows.map((d) => d.key) }),
+    /** Leave an edit, and hand focus back to the button that opened it (review 23). */
+    stopEdit: () => {
+      const key = editing?.key ?? null;
+      setEditing(null);
+      if (key) focusSoon(`[data-edit-for="${key}"]`);
+    },
+    openSheet: (kind: Sheet["kind"], opener?: HTMLElement | null) => {
+      sheetOpener.current = opener ?? null;
+      setSheet({ kind, keys: tickedRows.map((d) => d.key) });
+    },
+    sheetOpener,
     closeSheet: () => setSheet(null),
     /** The sheet's confirm: a bulk take of what may be taken together, or a bulk keep. */
     confirmSheet: async () => {

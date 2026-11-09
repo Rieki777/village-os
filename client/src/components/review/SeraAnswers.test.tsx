@@ -64,9 +64,23 @@ function Harness() {
   );
 }
 
-function wideScreen(on: boolean) {
-  vi.stubGlobal("matchMedia", vi.fn((q: string) => ({ matches: on && q.includes("1280"), media: q, addEventListener: () => {}, removeEventListener: () => {} })));
+/** The screen: 1280 px when `on`, else a tablet's 800 px, or a phone's 375 px when `phone`. */
+function wideScreen(on: boolean, phone = false) {
+  const width = on ? 1280 : phone ? 375 : 800;
+  vi.stubGlobal("matchMedia", vi.fn((q: string) => {
+    const min = Number(/min-width:\s*(\d+)px/.exec(q)?.[1] ?? NaN);
+    return { matches: Number.isFinite(min) && width >= min, media: q, addEventListener: () => {}, removeEventListener: () => {} };
+  }));
   window.matchMedia = globalThis.matchMedia as typeof window.matchMedia;
+}
+
+/** The status strip as drawn: the words a sighted reader sees, with its Undo. */
+async function theStrip(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const el = document.querySelector<HTMLElement>("[data-sera-strip]");
+    if (!el) throw new Error("no strip yet");
+    return el;
+  });
 }
 
 const move = () =>
@@ -119,14 +133,17 @@ describe("one answer, and its Undo (R13, R14, R30)", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Add to draft" }));
     await waitFor(() => expect(posts("/api/saberra/differences/answer")).toHaveLength(1));
     expect(posts("/api/saberra/differences/answer")[0].body).toEqual({ act: "take", items: [{ key: m.key, seraHash: "s-move", oursHash: "o-move" }] });
-    const strip = await screen.findByRole("status", { name: "" }).catch(() => null);
-    const said = await screen.findByText("Added to the draft. It goes live when the draft is published.");
-    expect(said.closest("[role=status]")).toBeTruthy();
-    void strip;
-    fireEvent.click(within(said.closest("[role=status]") as HTMLElement).getByRole("button", { name: "Undo" }));
+    const strip = await theStrip();
+    await waitFor(() => expect(strip.textContent).toContain("Added to the draft. It goes live when the draft is published."));
+    // Said once, in the one live region (review 28).
+    expect(screen.getAllByRole("status").map((s) => s.textContent).filter((t) => t?.includes("Added to the draft"))).toHaveLength(1);
+    list = [m, ...list];
+    fireEvent.click(within(strip).getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(posts("/api/saberra/differences/undo")).toHaveLength(1));
     expect(posts("/api/saberra/differences/undo")[0].body).toEqual({ keys: [m.key] });
-    expect(await screen.findByText("Undone. It waits in the list again.")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector("[data-sera-strip]")?.textContent).toContain("Undone. It waits in the list again."));
+    // Focus goes to the row that came back, never to the page (review 23).
+    await waitFor(() => expect((document.activeElement as HTMLElement | null)?.dataset.seraRow).toBe(m.key));
   });
 
   it("says the server's refusal in its own words, with no Undo, when the service changed it since it was opened", async () => {
@@ -138,8 +155,25 @@ describe("one answer, and its Undo (R13, R14, R30)", () => {
     render(<Harness />);
     const row = (await screen.findByText(/moving Water Steward/)).closest("article") as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "Keep ours" }));
-    const said = await screen.findByText("Sera changed this since you opened it.");
-    expect(within(said.closest("[role=status]") as HTMLElement).queryByRole("button", { name: "Undo" })).toBeNull();
+    const strip = await theStrip();
+    await waitFor(() => expect(strip.textContent).toContain("Sera changed this since you opened it."));
+    expect(within(strip).queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("never offers a row whose words name a member as a take, starts its edit from ours, and gives focus back when the edit is left (R9, review 1, 23)", async () => {
+    const named = { ...words(), takeable: false, namesAMember: true, flags: [{ key: "namesAMember" as const }] };
+    serve({ "GET /api/saberra/differences": [200, listAnswer([named])] });
+    render(<Harness />);
+    const row = (await screen.findByText(/Well Keeper/)).closest("article") as HTMLElement;
+    expect(within(row).queryByRole("button", { name: "Add to draft" })).toBeNull();
+    const edit = within(row).getByRole("button", { name: "Edit" });
+    expect(edit.className, "never the primary button").not.toContain("bg-teal-deep");
+    fireEvent.click(edit);
+    const box = screen.getByRole("textbox", { name: "Well Keeper's purpose" }) as HTMLTextAreaElement;
+    expect(box.value, "starts from ours, never the service's words").toBe("Keeps the wells.");
+    expect(screen.queryByRole("button", { name: /Start from Sera's instead/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(document.activeElement).toBe(within(row).getByRole("button", { name: "Edit" })));
   });
 });
 
@@ -206,8 +240,25 @@ describe("many at once (R2, R30, R31, the bulk board)", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: "Take 2" }));
     await waitFor(() => expect(posts("/api/saberra/differences/answer")).toHaveLength(1));
     expect(posts("/api/saberra/differences/answer")[0].body.items.map((i: { key: string }) => i.key)).toEqual([a.key, b.key]);
-    expect(await screen.findByText(/Added 2 to the draft/)).toBeTruthy();
-    expect(screen.getByText(/Left out: Well Monitor \(Check first\); Land Stewardship \(Check first\)\./)).toBeTruthy();
+    const strip = await theStrip();
+    await waitFor(() => expect(strip.textContent).toContain("Added 2 to the draft"));
+    expect(strip.textContent).toContain("Left out: Well Monitor (Check first); Land Stewardship (Check first).");
+  });
+
+  it("is a real modal: Escape closes it and focus goes back to the button that opened it (review 20)", async () => {
+    serve({ "GET /api/saberra/differences": [200, listAnswer([move(), words()])] });
+    render(<Harness />);
+    await screen.findByText(/moving Water Steward/);
+    fireEvent.click(screen.getByRole("button", { name: "Tick all shown" }));
+    const opener = screen.getByRole("button", { name: "Take Sera's for 2" });
+    opener.focus();
+    fireEvent.click(opener);
+    const sheet = await screen.findByRole("dialog");
+    // The page behind is shut out while it is open.
+    await waitFor(() => expect(sheet.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Take Sera's for 2" })));
   });
 
   it("confirms a bulk keep first, from the bar's overflow", async () => {
@@ -216,7 +267,11 @@ describe("many at once (R2, R30, R31, the bulk board)", () => {
     render(<Harness />);
     const row = (await screen.findByText(/moving Water Steward/)).closest("article") as HTMLElement;
     fireEvent.click(within(row).getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    // Named for what it holds, so it never reads as the tab bar's own "More" (review 31), and Escape closes it.
+    fireEvent.click(screen.getByRole("button", { name: "Keep or untick" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Keep ours for 1" }), { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Keep ours for 1" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Keep or untick" }));
     fireEvent.click(screen.getByRole("button", { name: "Keep ours for 1" }));
     expect(posts("/api/saberra/differences/answer")).toHaveLength(0);
     const sheet = screen.getByRole("dialog");
@@ -227,7 +282,17 @@ describe("many at once (R2, R30, R31, the bulk board)", () => {
 });
 
 describe("in a draft (R13, R38)", () => {
-  const group = { draftId: "d-1", title: "Sera's suggestions", items: [{ key: "k1", sentence: "Sera suggests a new circle, Land Stewardship, with 4 roles." }, { key: "k2", sentence: "Sera has new words for Treasurer's purpose." }], with: 4 };
+  const it_ = (over: Record<string, unknown>) => ({ answer: "taken", value: null, field: null, about: null, by: null, changed: false, now: null, ...over });
+  const group = {
+    draftId: "d-1", title: "Sera's suggestions", with: 4, changes: 6, changeIds: ["c1", "c2", "c3", "c4", "c5", "c6"], hasChanged: false,
+    items: [it_({ key: "k1", sentence: "Sera suggests a new circle, Land Stewardship, with 4 roles." }), it_({ key: "k2", sentence: "Sera has new words for Treasurer's purpose." })],
+  };
+  /** The card, found by its heading: its count is the draft's own, and says the nested roles are in it (review 3, 31). */
+  const findCard = async (): Promise<HTMLElement> => {
+    const h = await screen.findByText(/^In a draft, not live yet: 6 changes$/);
+    expect(h.textContent?.replace(/\s+/g, " ")).toBe("In a draft, not live yet: 6 changes (including 4 roles inside a new circle)");
+    return h.closest("section") as HTMLElement;
+  };
 
   it("is its own card with the draft's doors: Publish for whoever may, and Withdraw", async () => {
     serve({
@@ -236,12 +301,59 @@ describe("in a draft (R13, R38)", () => {
       "POST /api/org/drafts/d-1/publish-by-power": [200, { success: true }],
     });
     render(<Harness />);
-    const card = (await screen.findByRole("heading", { name: "In a draft, not live yet: 2 changes" })).closest("section") as HTMLElement;
-    expect(card.textContent).toContain("Sera suggests a new circle, Land Stewardship, with 4 roles. Sera has new words for Treasurer's purpose.");
+    // Its count is the draft's own, nested roles included (review 3, 31).
+    const card = await findCard();
+    expect(card.textContent).toContain("Sera suggests a new circle, Land Stewardship, with 4 roles.");
+    expect(card.textContent).toContain("Sera has new words for Treasurer's purpose.");
     fireEvent.click(await within(card).findByRole("button", { name: "Publish the draft" }));
     expect(within(card).getByRole("button", { name: "Withdraw it" })).toBeTruthy();
     await waitFor(() => expect(posts("/api/org/drafts/d-1/publish-by-power")).toHaveLength(1));
-    expect(await screen.findByText("Published. The changes are on the chart now.")).toBeTruthy();
+    // It sends what it showed, so a draft that moved since is refused (review 12).
+    expect(posts("/api/org/drafts/d-1/publish-by-power")[0].body).toEqual({ expectedChanges: group.changeIds });
+    await waitFor(() => expect(document.querySelector("[data-sera-strip]")?.textContent).toContain("Published. The changes are on the chart now."));
+    // Focus goes to the strip, never to the page (review 23).
+    await waitFor(() => expect((document.activeElement as HTMLElement | null)?.hasAttribute("data-sera-strip")).toBe(true));
+  });
+
+  it("shows an edit as whose words they are, and a take that changed since with Take it again and Undo, and never offers Publish then (review 3, 11)", async () => {
+    const changed = {
+      ...group,
+      hasChanged: true,
+      items: [
+        it_({ key: "k1", answer: "edited", sentence: "Sera has new words for Pump Keeper's purpose.", value: "Keeps the pumps and the filters.", field: "aim", about: "Pump Keeper", by: "you" }),
+        it_({ key: "k2", sentence: "Sera has new words for Treasurer's purpose.", changed: true, now: { key: "k2", seraHash: "s-new", oursHash: "o-1" } }),
+      ],
+    };
+    serve({
+      "GET /api/saberra/differences": [200, listAnswer([move()], { inDraft: [changed] })],
+      "GET /api/org/drafts/d-1/decide": [200, { youMayPublish: true, adminMayPublish: false, youMayPutToVillage: false, ballot: null, blocked: 0, blockedLines: [] }],
+      "POST /api/saberra/differences/answer": [200, { done: [{ key: "k2" }], refused: [] }],
+    });
+    render(<Harness />);
+    const card = await findCard();
+    expect(card.textContent).toContain("Your words for Pump Keeper's purpose: Keeps the pumps and the filters.");
+    expect(card.textContent).toContain("Changed since it was taken");
+    await within(card).findByRole("button", { name: "Withdraw it" });
+    expect(within(card).queryByRole("button", { name: "Publish the draft" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Take it again" }));
+    await waitFor(() => expect(posts("/api/saberra/differences/answer")[0]?.body).toEqual({ act: "take", items: [{ key: "k2", seraHash: "s-new", oursHash: "o-1" }] }));
+  });
+
+  it("while the village votes on it, Withdraw says it ends the vote and asks first (review 27)", async () => {
+    serve({
+      "GET /api/saberra/differences": [200, listAnswer([move()], { inDraft: [group] })],
+      "GET /api/org/drafts/d-1/decide": [200, { youMayPublish: true, adminMayPublish: false, youMayPutToVillage: false, ballot: { id: "b-1", closesAt: "2026-11-20T12:00:00.000Z" }, blocked: 0, blockedLines: [] }],
+      "POST /api/review/drafts/d-1/withdraw": [200, { success: true, reopened: 0, ballotWithdrawn: "b-1" }],
+    });
+    render(<Harness />);
+    const card = await findCard();
+    fireEvent.click(await within(card).findByRole("button", { name: "Withdraw it and end the vote" }));
+    expect(posts("/api/review/drafts/d-1/withdraw")).toHaveLength(0);
+    expect(card.textContent).toContain("Withdrawing it ends the village's vote on it");
+    expect(within(card).queryByRole("button", { name: "Publish the draft" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Withdraw it and end the vote" }));
+    await waitFor(() => expect(posts("/api/review/drafts/d-1/withdraw")).toHaveLength(1));
+    await waitFor(() => expect(document.querySelector("[data-sera-strip]")?.textContent).toContain("Withdrawn, and the village's vote on it ended."));
   });
 
   it("offers the village's vote, never a publish, when nobody may publish and the door is open to any member", async () => {
@@ -251,7 +363,7 @@ describe("in a draft (R13, R38)", () => {
       "POST /api/org/drafts/d-1/put-to-village": [200, { success: true, ballot: { id: "b-1" } }],
     });
     render(<Harness />);
-    const card = (await screen.findByRole("heading", { name: "In a draft, not live yet: 2 changes" })).closest("section") as HTMLElement;
+    const card = await findCard();
     fireEvent.click(await within(card).findByRole("button", { name: "Put it to the village" }));
     expect(within(card).queryByRole("button", { name: "Publish the draft" })).toBeNull();
     await waitFor(() => expect(posts("/api/org/drafts/d-1/put-to-village")).toHaveLength(1));
@@ -259,19 +371,41 @@ describe("in a draft (R13, R38)", () => {
 
   it("gives a member the village's door on the draft the list opened, through its own decide answer", async () => {
     serve({
-      "GET /api/saberra/differences/count": [200, { ...COUNT, total: 1, toDecide: 1, lanes: { facts: 0, lowRisk: 0, decision: 1 }, decides: { by: "vote" }, drafts: [{ id: "d-1", changes: 2 }], reader: { mayRead: false, decides: false } }],
+      "GET /api/saberra/differences/count": [200, { ...COUNT, total: 1, toDecide: 1, lanes: { facts: 0, lowRisk: 0, decision: 1 }, decides: { by: "admins" }, drafts: [{ id: "d-1", changes: 2, changeIds: ["c1", "c2"], hasChanged: false }, { id: "d-2", changes: 1, changeIds: ["c3"], hasChanged: false }], reader: { mayRead: false, decides: false } }],
       "GET /api/guide": [200, { options: [{ id: "saberra", name: "Sera" }] }],
       "GET /api/org/drafts/d-1/decide": [200, { youMayPublish: false, adminMayPublish: false, youMayPutToVillage: true, ballotNeeded: true, ballot: null, blocked: 0, blockedLines: [] }],
+      "GET /api/org/drafts/d-2/decide": [200, { youMayPublish: false, adminMayPublish: false, youMayPutToVillage: true, ballotNeeded: true, ballot: null, blocked: 0, blockedLines: [] }],
       "POST /api/org/drafts/d-1/put-to-village": [200, { success: true, ballot: { id: "b-1" } }],
+      "POST /api/org/drafts/d-2/put-to-village": [200, { success: true, ballot: { id: "b-2" } }],
     });
     render(<Harness />);
+    // When the reader may open the vote, the village decides: never also "the admins decide them" (review 30).
     expect(await screen.findByText("Nobody holds the power to decide these right now, so the village decides by vote.")).toBeTruthy();
-    expect(screen.getByText("2 of them are in a draft, waiting to be published.")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Put it to the village" }));
-    await waitFor(() => expect(posts("/api/org/drafts/d-1/put-to-village")).toHaveLength(1));
-    expect(await screen.findByText("The village is voting on it now.")).toBeTruthy();
+    expect(screen.queryByText(/The admins decide/)).toBeNull();
+    // Every draft from the list, by its size (review 16).
+    expect(screen.getByText("2 changes are in a draft, waiting to be published.")).toBeTruthy();
+    expect(screen.getByText("1 change is in a draft, waiting to be published.")).toBeTruthy();
+    const doors = await screen.findAllByRole("button", { name: "Put it to the village" });
+    expect(doors).toHaveLength(2);
+    fireEvent.click(doors[1]);
+    await waitFor(() => expect(posts("/api/org/drafts/d-2/put-to-village")).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByRole("status").map((s) => s.textContent).join(" ")).toContain("The village is voting on it now."));
     // A member never asked the list.
     expect(calls.some((c) => c.path === "/api/saberra/differences")).toBe(false);
+  });
+});
+
+describe("a decider on the member page (review 21)", () => {
+  it("publishes a draft the doors say they may, sending the changes it was shown", async () => {
+    serve({
+      "GET /api/saberra/differences/count": [200, { ...COUNT, total: 1, toDecide: 1, lanes: { facts: 0, lowRisk: 0, decision: 1 }, decides: { by: "holders", labels: ["Ops lead (Rye)"], more: 0, stewards: false, others: 0, admins: false }, drafts: [{ id: "d-1", changes: 2, changeIds: ["c1", "c2"], hasChanged: false }], reader: { mayRead: false, decides: true } }],
+      "GET /api/guide": [200, { options: [{ id: "saberra", name: "Sera" }] }],
+      "GET /api/org/drafts/d-1/decide": [200, { youMayPublish: true, adminMayPublish: false, youMayPutToVillage: false, ballot: null, blocked: 0, blockedLines: [] }],
+      "POST /api/org/drafts/d-1/publish-by-power": [200, { success: true }],
+    });
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole("button", { name: "Publish the draft" }));
+    await waitFor(() => expect(posts("/api/org/drafts/d-1/publish-by-power")[0]?.body).toEqual({ expectedChanges: ["c1", "c2"] }));
   });
 });
 
@@ -322,6 +456,34 @@ describe("the keyboard (R32)", () => {
     press(rows[1], "t");
     await waitFor(() => expect(posts("/api/saberra/differences/answer")).toHaveLength(1));
     expect(posts("/api/saberra/differences/answer")[0].body.items[0].key).toBe(rows[1].dataset.seraRow);
+  });
+
+  it("does nothing below 768 px, even remembered on (review 29)", async () => {
+    window.localStorage.setItem("village.seraReview.keys", "on");
+    wideScreen(false, true);
+    serve({ "GET /api/saberra/differences": [200, listAnswer([move(), words()])] });
+    render(<Harness />);
+    await screen.findByText(/moving Water Steward/);
+    const rows = screen.getAllByRole("article");
+    rows[0].focus();
+    fireEvent.keyDown(rows[0], { key: "j" });
+    expect(document.activeElement).toBe(rows[0]);
+  });
+
+  it("at 1280 px, a row that takes focus is the one shown, and a key presses the pane's button for that row only (review 8)", async () => {
+    window.localStorage.setItem("village.seraReview.keys", "on");
+    wideScreen(true);
+    const a = move();
+    const b = words();
+    serve({ "GET /api/saberra/differences": [200, listAnswer([a, b])], "POST /api/saberra/differences/answer": [200, { done: [{ key: b.key }], refused: [] }] });
+    render(<Harness />);
+    await screen.findAllByText(/moving Water Steward/);
+    const row = document.querySelector<HTMLElement>(`[data-sera-row="${b.key}"]`)!;
+    // Focus on something inside the row (its tick) selects it.
+    within(row).getByRole("checkbox").focus();
+    await waitFor(() => expect(document.getElementById("sera-pane")?.dataset.paneKey).toBe(b.key));
+    fireEvent.keyDown(row, { key: "t" });
+    await waitFor(() => expect(posts("/api/saberra/differences/answer")[0]?.body.items[0].key).toBe(b.key));
   });
 
   it("never acts while typing, and Escape leaves an edit", async () => {

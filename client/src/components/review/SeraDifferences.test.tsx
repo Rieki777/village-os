@@ -233,7 +233,8 @@ describe("the Waiting for you board", () => {
       listed({ kind: "roleAdd", field: null, subject: { ourId: null, name, circleId: "sera:landpage", circleName: "Land Stewardship" } });
     serve({ list: [200, listAnswer([role("Soil Keeper"), circle, role("Seed Saver")])] });
     show();
-    const h = await screen.findByRole("heading", { level: 3, name: "Land Stewardship: 3 changes" });
+    // The two new roles have no tick of their own, so the count says they are in it (review 31).
+    const h = await screen.findByRole("heading", { level: 3, name: "Land Stewardship: 3 changes, including 2 roles inside Land Stewardship" });
     const rows = within(h.closest("section") as HTMLElement).getAllByRole("article");
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain("Sera suggests a new circle, Land Stewardship, with 2 roles.");
@@ -245,12 +246,14 @@ describe("the Waiting for you board", () => {
     serve({ list: [200, listAnswer(mainBoard())] });
     show();
     await screen.findByRole("heading", { level: 2 });
-    // What is shown is said under the chips, in the status line (Q4).
-    const shown = () => screen.getAllByRole("status").map((s) => s.textContent).join(" ");
+    // What is shown is said under the chips (Q4), and a change of filter is announced in the list's one live region (review 28).
+    const shown = () => screen.getAllByText(/^Showing /).map((s) => s.textContent).join(" ");
+    const announced = () => screen.getAllByRole("status").map((s) => s.textContent).join(" ");
     expect(shown()).toContain("Showing 5 changes: To decide");
     fireEvent.click(screen.getByRole("button", { name: "Conflicts 1" }));
     expect(screen.getAllByRole("article")).toHaveLength(1);
     expect(shown()).toContain("Showing 1 change: Conflicts");
+    expect(announced()).toContain("Showing 1 change: Conflicts");
     expect(screen.getByRole("button", { name: "Conflicts 1" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "Check first 1" }));
     expect(screen.getAllByRole("article")[0].textContent).toContain("Well Monitor");
@@ -345,7 +348,7 @@ describe("the Waiting for you board", () => {
     const role = listed({ kind: "roleAdd", field: null, subject: { ourId: null, name: "Seed Keeper", circleId: `sera:${C.replace(/-/g, "")}`, circleName: "Land Stewardship" } });
     serve({ list: [200, listAnswer([circle, role])] });
     show();
-    expect(await screen.findByRole("heading", { level: 3, name: "Land Stewardship: 2 changes" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 3, name: "Land Stewardship: 2 changes, including 1 role inside Land Stewardship" })).toBeTruthy();
     expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
   });
 

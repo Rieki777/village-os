@@ -106,7 +106,8 @@ export function CompactRow({ ctx, d, selected, onSelect, inset }: { ctx: Ctx; d:
     <article
       data-sera-row={d.key}
       tabIndex={-1}
-      onFocus={(e) => e.target === e.currentTarget && onSelect()}
+      // Any focus inside the row selects it, so the pane always shows the row the keys act on (review 8).
+      onFocus={() => !selected && onSelect()}
       className={`bg-card rounded-[10px] flex ${selected ? "border-2 border-teal-deep" : "border border-border"}${inset ? " ml-6" : ""} focus-visible:outline-2 focus-visible:outline-teal-deep`}
     >
       {inset || d.kind === "pay" ? <span className="w-8 shrink-0" /> : <RowTick d={d} acts={ctx.acts} compact />}
@@ -131,6 +132,7 @@ export function Pane({ ctx, d }: { ctx: Ctx; d: ListedDifference | null }) {
   return (
     <section
       id="sera-pane"
+      data-pane-key={d.key}
       aria-labelledby="sera-pane-h"
       className={`${card} flex-1 min-w-0 p-5 flex flex-col gap-3.5 sticky top-24 self-start max-h-[calc(100vh-7rem)] overflow-y-auto`}
     >

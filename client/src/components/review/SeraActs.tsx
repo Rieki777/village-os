@@ -29,7 +29,7 @@ export function RowTick({ d, acts, compact }: { d: ListedDifference; acts: SeraA
   const { t } = useLingui();
   const sentence = d.words.sentence;
   return (
-    <label className={`flex ${compact ? "items-start pt-3 pl-3" : "items-start justify-center min-w-[44px] min-h-[44px] pt-0.5"} shrink-0 cursor-pointer`}>
+    <label className={`flex ${compact ? "items-start justify-center min-w-[44px] min-h-[44px] pt-3 pl-1.5" : "items-start justify-center min-w-[44px] min-h-[44px] pt-0.5"} shrink-0 cursor-pointer`}>
       <input
         type="checkbox"
         data-tick={d.key}
@@ -117,14 +117,25 @@ export function RowActions({ d, acts, agent, pay, layout, onCompare }: ActionsPr
     : conflict || layout !== "card"
       ? t({ message: `Take ${owner}: add to draft`, context: "sera answers" })
       : t({ message: "Add to draft", context: "sera answers" });
-  const editLabel = layout === "compare" ? t({ message: `Edit: start from ${owner}`, context: "sera answers" }) : t({ message: "Edit", context: "sera answers" });
+  // Words that name a member start from ours (R9, review 1), and the button says so.
+  const editLabel =
+    layout !== "compare"
+      ? t({ message: "Edit", context: "sera answers" })
+      : d.namesAMember
+        ? t({ message: "Edit: start from ours", context: "sera answers" })
+        : t({ message: `Edit: start from ${owner}`, context: "sera answers" });
+  // aria-disabled while an act is under way, so focus stays on the button pressed (review 23).
+  const guard = (fn: () => void) => () => {
+    if (!busy) fn();
+  };
   const take = d.takeable && (
-    <button type="button" data-act="take" disabled={busy} onClick={() => void acts.take(d)} className={`${primary}${size}`}>
+    <button type="button" data-act="take" aria-disabled={busy || undefined} onClick={guard(() => void acts.take(d))} className={`${primary}${size}`}>
       {takeLabel}
     </button>
   );
+  // Never the primary button on a row whose words name a member: there is nothing of the service's to take there.
   const edit = canEdit && (layout !== "card" || !d.takeable) && (
-    <button type="button" data-act="edit" disabled={busy} onClick={() => acts.startEdit(d, "sera")} className={`${d.takeable ? secondary : primary}${size}`}>
+    <button type="button" data-act="edit" data-edit-for={d.key} aria-disabled={busy || undefined} onClick={guard(() => acts.startEdit(d, "sera"))} className={`${secondary}${size}`}>
       {editLabel}
     </button>
   );
@@ -137,7 +148,7 @@ export function RowActions({ d, acts, agent, pay, layout, onCompare }: ActionsPr
       )}
       <div className={block ? "flex flex-col gap-2" : "flex flex-wrap items-center gap-2"}>
         {take}
-        <button type="button" data-act="keep" disabled={busy} onClick={() => void acts.keep(d)} className={`${secondary}${size}`}>
+        <button type="button" data-act="keep" aria-disabled={busy || undefined} onClick={guard(() => void acts.keep(d))} className={`${secondary}${size}`}>
           <Trans context="sera answers">Keep ours</Trans>
         </button>
         {edit}
@@ -197,50 +208,66 @@ export function EditPanel({ d, acts, agent }: { d: ListedDifference; acts: SeraA
         <textarea id={`${id}-v`} ref={field} rows={5} value={e.value} onChange={(ev) => acts.setValue(ev.target.value)} className={inputClass} />
       )}
       <div className="flex gap-2">
-        <button type="button" data-act="edit-save" disabled={acts.busy} onClick={() => void acts.edit(d, e.value)} className={`${primary} flex-1`}>
+        <button type="button" data-act="edit-save" aria-disabled={acts.busy || undefined} onClick={() => !acts.busy && void acts.edit(d, e.value)} className={`${primary} flex-1`}>
           <Trans context="sera answers">Add my words to draft</Trans>
         </button>
         <button type="button" onClick={() => acts.stopEdit()} className={secondary}>
           <Trans context="sera answers">Cancel</Trans>
         </button>
       </div>
-      <button type="button" onClick={() => acts.startEdit(d, e.from === "sera" ? "ours" : "sera")} className={`self-start min-h-[44px] text-sm font-semibold ${inlineLink}`}>
-        {e.from === "sera" ? <Trans context="sera answers">Start from ours instead</Trans> : <Trans context="sera answers">Start from {owner} instead</Trans>}
-      </button>
+      {/* Words that name a member are never offered back to type over (R9). */}
+      {!d.namesAMember && (
+        <button type="button" onClick={() => acts.startEdit(d, e.from === "sera" ? "ours" : "sera")} className={`self-start min-h-[44px] text-sm font-semibold ${inlineLink}`}>
+          {e.from === "sera" ? <Trans context="sera answers">Start from ours instead</Trans> : <Trans context="sera answers">Start from {owner} instead</Trans>}
+        </button>
+      )}
     </section>
   );
 }
 
 /**
- * What the last act did, with its Undo, until the next one (R30). One polite
- * live region (R32). It sticks under the header while it has something to
- * say (the page's `top-24` convention), so an act far down the list still
- * shows its outcome and its Undo, where the bulk board floats it.
+ * ONE polite live region for the list (R32, review 28), drawn above both the
+ * list and the phone's compare view so it stays put when the view changes. It
+ * says the latest of two things, once each: what an act did, and what a
+ * filter now shows (QA Q4).
+ */
+export function LiveRegion({ words }: { words: string }) {
+  return (
+    <p role="status" className="sr-only">
+      {words}
+    </p>
+  );
+}
+
+/**
+ * What the last act did, with its Undo, until the next one (R30). It sticks
+ * under the header while it has something to say (the page's `top-24`
+ * convention), so an act far down the list still shows its outcome and its
+ * Undo, where the bulk board floats it. It is not itself a live region:
+ * LiveRegion announces the words once. Focus comes here after an act that
+ * leaves nothing else to focus (review 23).
  */
 export function StatusStrip({ acts }: { acts: SeraActs }) {
   const s = acts.strip;
+  if (!s) return null;
   return (
-    <div className={s ? "sticky top-24 z-30 rounded-[10px] bg-card shadow-sm" : undefined}>
-    <div role="status" className={s ? "bg-teal-deep/10 border border-teal-deep rounded-[10px] px-3 py-2.5 text-sm leading-snug text-foreground" : "sr-only"}>
-      {s && (
-        <>
-          {s.words}
-          {s.undo && (
-            <>
-              {" "}
-              <button type="button" disabled={acts.busy} onClick={() => void acts.undo(s.undo!)} className={`font-semibold ${inlineLink}`}>
-                <Trans context="sera answers">Undo</Trans>
-              </button>
-            </>
-          )}
-          {s.leftOut.length > 0 && (
-            <span className="block mt-1 text-[13px] text-muted-foreground">
-              <Trans context="sera answers">Left out: {s.leftOut.join("; ")}.</Trans>
-            </span>
-          )}
-        </>
-      )}
-    </div>
+    <div data-sera-strip-on="" className="sticky top-24 z-30 rounded-[10px] bg-card shadow-sm">
+      <div data-sera-strip="" tabIndex={-1} className="bg-teal-deep/10 border border-teal-deep rounded-[10px] px-3 py-1.5 text-sm leading-snug text-foreground [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-teal-deep">
+        <span className="inline-block py-1.5">{s.words}</span>
+        {s.undo && (
+          <>
+            {" "}
+            <button type="button" aria-disabled={acts.busy || undefined} onClick={() => !acts.busy && void acts.undo(s.undo!)} className={`inline-flex items-center min-h-[44px] px-1 font-semibold ${inlineLink}`}>
+              <Trans context="sera answers">Undo</Trans>
+            </button>
+          </>
+        )}
+        {s.leftOut.length > 0 && (
+          <span className="block pb-1.5 text-[13px] text-muted-foreground">
+            <Trans context="sera answers">Left out: {s.leftOut.join("; ")}.</Trans>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

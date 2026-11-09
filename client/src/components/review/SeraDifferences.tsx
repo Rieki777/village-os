@@ -38,7 +38,7 @@ import type { Door } from "@shared/seraDecides";
 import SeraCompare from "@/components/review/SeraCompare";
 import { SeraMember } from "@/components/review/SeraMember";
 import { CompactRow, Pane, RowCard, Source, Chips, type Ctx } from "@/components/review/SeraRows";
-import { ConflictSubtitle, EditPanel, RowActions, StatusStrip } from "@/components/review/SeraActs";
+import { ConflictSubtitle, EditPanel, LiveRegion, RowActions, StatusStrip } from "@/components/review/SeraActs";
 import { BulkBar, BulkSheet } from "@/components/review/SeraBulk";
 import { InDraftCard } from "@/components/review/SeraInDraft";
 import { handleListKey, KeysLegend, KeysToggle, useKeysToggle } from "@/components/review/SeraKeys";
@@ -62,6 +62,7 @@ import {
   readTrouble,
   smallWords,
   splitWaiting,
+  type CircleGroup,
   type CountAnswer,
   type ListAnswer,
   type ListedDifference,
@@ -338,9 +339,26 @@ function SeraList({
   const shownWords = [shownLabel, circleName].filter(Boolean).join(", ");
   const shownCount = changes(shownList.length);
   const nShown = shownList.length;
+  const showingWords = shownWords
+    ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
+    : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" });
+  // The one live region says the latest of what a filter now shows and what an act did (review 28, QA Q4).
+  const [announce, setAnnounce] = useState("");
+  const filtered = useRef(false);
+  useEffect(() => {
+    if (!filtered.current) {
+      filtered.current = true;
+      return;
+    }
+    setAnnounce(showingWords);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, only, circle]);
+  useEffect(() => {
+    if (acts.strip) setAnnounce(acts.strip.words);
+  }, [acts.strip]);
   const status_ = waiting.length > 0 && (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <p role="status" className="text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {shownWords
           ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
           : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" })}
@@ -355,8 +373,26 @@ function SeraList({
   // What waits in a draft (R13). The strip that says what the last act did is a direct child of the
   // section, so it can stick under the header the whole length of the list (a sticky element never
   // leaves its parent).
-  const answers = drafts.map((g) => <InDraftCard key={g.draftId} group={g} onChanged={reload} say={acts.say} />);
+  const answers = drafts.map((g) => <InDraftCard key={g.draftId} group={g} onChanged={reload} say={acts.say} acts={acts} />);
   const strip = <StatusStrip acts={acts} />;
+  // ONE live region, first in every view the list draws, so it stays mounted when the view changes (review 28).
+  const live = <LiveRegion words={announce} />;
+  /** The new roles a group carries under a new circle, which have no tick of their own: said beside its count (review 31). */
+  const headingOf = (g: CircleGroup) => {
+    const n = g.rows.reduce((sum, r) => sum + r.nested.length, 0);
+    const name = g.name ?? "";
+    return (
+      <>
+        {groupHeading(g)}
+        {n > 0 && (
+          <span className="font-normal text-muted-foreground">
+            {", "}
+            {n === 1 ? <Trans context="sera answers">including 1 role inside {name}</Trans> : <Trans context="sera answers">including {n} roles inside {name}</Trans>}
+          </span>
+        )}
+      </>
+    );
+  };
   const bulk = (
     <>
       <BulkBar acts={acts} agent={agent} />
@@ -367,6 +403,8 @@ function SeraList({
   const compareRow = !wide && comparing ? waiting.find((d) => d.key === comparing) ?? null : null;
   if (compareRow) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-cmp`} className="scroll-mt-24">
         <span id={`${ids}-cmp`} className="sr-only">{headline}</span>
         <SeraCompare
@@ -389,6 +427,7 @@ function SeraList({
           }
         />
       </section>
+      </>
     );
   }
 
@@ -477,11 +516,11 @@ function SeraList({
             <h3 id={hid} className={`${compact ? "text-[15px] my-1" : "text-base"} font-bold text-foreground`}>
               {collapsible ? (
                 <button type="button" aria-expanded={open} onClick={toggle} className="inline-flex items-center gap-2 min-h-[44px] text-left">
-                  {groupHeading(g)}
+                  {headingOf(g)}
                   <ChevronDown aria-hidden="true" className={`w-4 h-4 motion-safe:transition-transform ${open ? "rotate-180" : ""}`} />
                 </button>
               ) : (
-                groupHeading(g)
+                headingOf(g)
               )}
             </h3>
             {open &&
@@ -604,6 +643,8 @@ function SeraList({
 
   if (step || waiting.length === 0) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
         {troubleCards}
@@ -623,11 +664,14 @@ function SeraList({
         )}
         {bottom}
       </section>
+      </>
     );
   }
 
   if (wide) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-6">
           <h2 id={`${ids}-h`} className="text-[26px] leading-tight font-bold text-foreground">{headline}</h2>
@@ -643,20 +687,25 @@ function SeraList({
         {troubleCards}
         {askedLine}
         {chipRow}
-        {strip}
         {answers}
         {status_}
         <div className="flex gap-6 items-start" onKeyDown={onKeys}>
-          <div className="w-[480px] shrink-0 flex flex-col gap-2">{groups(true)}</div>
+          <div className="w-[480px] shrink-0 flex flex-col gap-2">
+            {strip}
+            {groups(true)}
+          </div>
           <Pane ctx={ctx} d={pick} />
         </div>
         {bottom}
         {bulk}
       </section>
+      </>
     );
   }
 
   return (
+    <>
+    {live}
     <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
       <div className="flex flex-col gap-3">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
@@ -681,6 +730,7 @@ function SeraList({
       {bottom}
       {bulk}
     </section>
+    </>
   );
 }
 

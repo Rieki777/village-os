@@ -79,13 +79,18 @@ export async function draftDoors(draftId: string): Promise<DraftDoors | null> {
   };
 }
 
-/** Publish through the holder's door, or the admin panel's before launch: whichever the decide read offered. */
-export async function publishDraftThrough(draftId: string, door: "power" | "admin"): Promise<Called> {
+/**
+ * Publish through the holder's door, or the admin panel's before launch:
+ * whichever the decide read offered. It sends the ids of the changes the page
+ * showed, so the publish refuses a draft that holds anything else (review 12).
+ */
+export async function publishDraftThrough(draftId: string, door: "power" | "admin", expectedChanges: readonly string[]): Promise<Called> {
   const id = encodeURIComponent(draftId);
+  const body = JSON.stringify({ expectedChanges });
   const r =
     door === "power"
-      ? await fetch(`/api/org/drafts/${id}/publish-by-power`, { method: "POST", headers: headers() }).catch(() => null)
-      : await fetch(`/api/admin/org/drafts/${id}/publish`, { method: "POST", headers: headers() }).catch(() => null);
+      ? await fetch(`/api/org/drafts/${id}/publish-by-power`, { method: "POST", headers: headers(), body }).catch(() => null)
+      : await fetch(`/api/admin/org/drafts/${id}/publish`, { method: "POST", headers: headers(), body }).catch(() => null);
   return called(r);
 }
 

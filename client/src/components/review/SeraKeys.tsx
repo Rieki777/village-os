@@ -77,8 +77,13 @@ function typing(el: EventTarget | null): boolean {
  * order they are drawn; a key acts on the row focus is in. Answers whether it
  * used the key.
  */
+/** The keys are offered from 768 px, and they work only there too (review 29): a phone with them remembered on types freely. */
+function wideEnough(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 768px)").matches;
+}
+
 export function handleListKey(e: KeyboardEvent<HTMLElement>, on: boolean, root: HTMLElement | null, onRow?: (key: string) => void): boolean {
-  if (!on || !root || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return false;
+  if (!on || !root || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || !wideEnough()) return false;
   const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-sera-row]"));
   if (rows.length === 0) return false;
   const here = (e.target as HTMLElement).closest<HTMLElement>("[data-sera-row]");
@@ -91,9 +96,12 @@ export function handleListKey(e: KeyboardEvent<HTMLElement>, on: boolean, root: 
   const press = (selector: string) => {
     if (!here) return false;
     const own = here.querySelector<HTMLElement>(selector);
-    const pane = root.querySelector<HTMLElement>(`#sera-pane ${selector}`);
-    const button = own ?? pane;
-    if (!button || (button as HTMLButtonElement).disabled) return false;
+    // The pane's button only when the pane shows this very row (review 8): never another row's.
+    const key = here.dataset.seraRow ?? "";
+    const pane = root.querySelector<HTMLElement>("#sera-pane");
+    const paneButton = pane && pane.dataset.paneKey === key ? pane.querySelector<HTMLElement>(selector) : null;
+    const button = own ?? paneButton;
+    if (!button || (button as HTMLButtonElement).disabled || button.getAttribute("aria-disabled") === "true") return false;
     button.click();
     return true;
   };
