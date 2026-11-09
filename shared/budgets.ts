@@ -1,5 +1,5 @@
 /**
- * THE CASH BUDGET, THE PURE HALF (budgets spec v0.2; tables in 9999).
+ * THE CASH BUDGET, THE PURE HALF (budgets spec v0.2; tables in 0355).
  *
  * Rye, 9 Nov: "build an Admin Budgets upload section, so the Treasurer can
  * upload or update the cash budget." A moon's cash share is the budget left for

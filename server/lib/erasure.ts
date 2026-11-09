@@ -1700,7 +1700,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
-       * The cash budget (9999, budgets spec R26): their account id comes off
+       * The cash budget (0355, budgets spec R26): their account id comes off
        * every budget line they changed (`changed_by`), every rate they locked
        * (`fx_locked_by`), every import they ran (`budget_syncs.by`), every
        * period note they wrote (`budget_period_notes.changed_by`), every
