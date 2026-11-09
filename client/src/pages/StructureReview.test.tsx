@@ -106,12 +106,12 @@ describe("the structure review page", () => {
     expect(screen.getByTestId("bar-status").textContent).toContain("2 roles need your call");
 
     const [first, second] = [screen.getByTestId("conflict-xp-structure#0"), screen.getByTestId("conflict-xp-structure#1")];
-    fireEvent.click(within(first).getByRole("button", { name: "Use our existing role here" }));
+    fireEvent.click(within(first).getByRole("button", { name: "Update our role with this" }));
     expect(accept()).toBeDisabled();
     // The live seat can move once: the second match may not take it too.
-    expect(within(second).getByRole("button", { name: "Use our existing role here" })).toBeDisabled();
+    expect(within(second).getByRole("button", { name: "Update our role with this" })).toBeDisabled();
 
-    fireEvent.click(within(second).getByRole("button", { name: "Keep both roles" }));
+    fireEvent.click(within(second).getByRole("button", { name: "Add it as a second role" }));
     // A second seat needs a name of its own before anything goes ahead.
     expect(accept()).toBeDisabled();
     fireEvent.change(within(second).getByRole("textbox"), { target: { value: "Ventures Operations Steward" } });
@@ -153,8 +153,8 @@ describe("the structure review page", () => {
 
   it("previews, then accepts, sending exactly the decisions on screen", async () => {
     await ready();
-    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Use our existing role here" }));
-    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#1")).getByRole("button", { name: "Skip this one" }));
+    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#0")).getByRole("button", { name: "Update our role with this" }));
+    fireEvent.click(within(screen.getByTestId("conflict-xp-structure#1")).getByRole("button", { name: "Skip for now" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Retire the old chart/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "Preview as a draft" }));
@@ -171,6 +171,32 @@ describe("the structure review page", () => {
       dryRun: false,
     });
     await waitFor(() => expect(accept()).toBeDisabled());
+  });
+
+  it("says each choice in full, including the rename an update brings when the live role was renamed here", async () => {
+    // Matched by its own id, after the village renamed it: an update writes the source's name back.
+    const circles = [{ id: "general", name: "General Circle", parentCircleId: null, status: "active" as const, isExample: false }];
+    const one: PlanProposal[] = [{ ...PROPOSALS[0], payload: { ...PROPOSALS[0].payload, seats: [(PROPOSALS[0].payload.seats as unknown[])[2]] } }, PROPOSALS[2]];
+    const id = planStructure(one, circles, []).seats[0].id;
+    const renamedPlan = planStructure(one, circles, [{ id, name: "Events and Guest Host", circleId: "general", active: true, isExample: false, holders: 1 }]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ batchId: "sync-1", moduleId: "saberra", receivedAt: "2026-10-09T17:24:00Z", title: "Structure suggested by the connected service", plan: renamedPlan }),
+      })),
+    );
+    await ready();
+    const card = screen.getByTestId("conflict-xp-structure#0");
+    const update = within(card).getByRole("button", { name: "Update our role with this" });
+    expect(update.textContent).toContain("Events and Guest Host is renamed Events Manager.");
+    expect(update.textContent).toContain("It moves into Regenerative Business.");
+    expect(update.textContent).toContain("Whoever holds it keeps it.");
+    expect(within(card).getByRole("button", { name: "Add it as a second role" }).textContent).toContain("Events and Guest Host stays as it is.");
+    expect(within(card).getByRole("button", { name: "Skip for now" }).textContent).toContain("Nothing changes.");
+    fireEvent.click(update);
+    expect(card.textContent).toContain("When this is published: Events and Guest Host is renamed Events Manager.");
   });
 
   it("offers the map as a list, where a seat jumps to its row", async () => {

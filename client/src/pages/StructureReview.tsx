@@ -45,6 +45,7 @@
  * word about it anywhere.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { Link, useParams } from "wouter";
 import Layout from "@/components/Layout";
 import { authToken } from "@/lib/gameApi";
@@ -151,6 +152,7 @@ const card = "rounded-2xl border border-border bg-card text-card-foreground";
 const pillBase = "text-[11px] font-bold tracking-wide uppercase rounded-full px-2.5 py-0.5 border whitespace-nowrap";
 
 export default function StructureReview() {
+  const { t } = useLingui();
   const params = useParams<{ batchId: string }>();
   const batchId = String(params?.batchId ?? "");
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -170,8 +172,8 @@ export default function StructureReview() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const headers = useCallback((): Record<string, string> => {
-    const t = authToken();
-    return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+    const token = authToken();
+    return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
 
   const read = useCallback(async (quiet = false) => {
@@ -568,6 +570,22 @@ export default function StructureReview() {
                     const otherTakes = plan.seats.some(
                       (o) => o.key !== s.key && o.match?.seatId === live.seatId && !exclude.has(o.key) && conflicts[o.key]?.choice === "update",
                     );
+                    // Said in full, so nobody learns what a choice does by publishing it.
+                    // "Update" writes every field the source sent onto the live role,
+                    // its name included (UPDATE_FIELDS, shared/structurePlan.ts).
+                    const liveName = live.name;
+                    const theirName = s.name;
+                    const theirCircle = circleName(s.circleId);
+                    const renamed = theirName.trim() !== "" && theirName !== liveName;
+                    const moves = !!s.circleId && s.circleId !== live.circleId;
+                    const updateSays = [
+                      renamed ? t`${liveName} is renamed ${theirName}.` : null,
+                      moves ? (renamed ? t`It moves into ${theirCircle}.` : t`${liveName} moves into ${theirCircle}.`) : null,
+                      t`${source}'s wording replaces ours wherever ${source} sent some, and the rest stays ours.`,
+                      live.holders ? t`Whoever holds it keeps it.` : t`Nobody holds it yet.`,
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
                     return (
                       <div key={s.key} className={`${card} px-4 py-3.5 grid gap-2.5 border-notice/50`} data-testid={`conflict-${s.key}`}>
                         <div className="grid grid-cols-[1fr_auto_1fr] gap-2.5 items-center text-sm">
@@ -586,24 +604,24 @@ export default function StructureReview() {
                         <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label={`What happens to ${s.name} in ${circleName(s.circleId)}`}>
                           {[
                             {
-                              label: "Use our existing role here",
-                              says: `${live.name} moves into ${circleName(s.circleId)}. ${live.holders ? "Whoever holds it keeps it." : "Nobody holds it yet."}`,
+                              label: t`Update our role with this`,
+                              says: updateSays,
                               on: choice?.choice === "update",
                               disabled: otherTakes && choice?.choice !== "update",
-                              title: otherTakes ? "The other role with this name already uses the existing role" : undefined,
+                              title: otherTakes ? t`Another role with this name already updates ${liveName}` : undefined,
                               pick: () => choose(s, { choice: "update" }),
                             },
                             {
-                              label: "Keep both roles",
-                              says: `A second role beside ${live.name}, under a name you type.`,
+                              label: t`Add it as a second role`,
+                              says: t`${liveName} stays as it is. ${source}'s role is added beside it as a new role, under a name you type.`,
                               on: choice?.choice === "rename",
                               disabled: false,
                               title: undefined,
                               pick: () => choose(s, { choice: "rename", name: choice?.choice === "rename" ? choice.name : "" }),
                             },
                             {
-                              label: "Skip this one",
-                              says: `${live.name} stays as it is. This role waits in the queue.`,
+                              label: t`Skip for now`,
+                              says: t`Nothing changes. ${liveName} stays as it is, and ${source}'s version waits in the queue for later.`,
                               on: false,
                               disabled: false,
                               title: undefined,
@@ -641,10 +659,10 @@ export default function StructureReview() {
                         )}
                         <p className="text-[13px] text-muted-foreground">
                           {choice?.choice === "update"
-                            ? `The live role moves into ${circleName(s.circleId)} with ${source}'s wording. Whoever holds it keeps it.`
+                            ? t`When this is published: ${updateSays}`
                             : choice?.choice === "rename"
-                              ? "A new role beside the live one, under the name you type."
-                              : "Pick one. Nothing is decided for you."}
+                              ? t`When this is published, a new role sits beside ${liveName}, under the name you type.`
+                              : t`Pick one. Nothing is decided for you.`}
                         </p>
                       </div>
                     );
