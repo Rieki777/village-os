@@ -379,7 +379,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect(opened).toHaveLength(1);
     expect(opened[0].docMarkdown, "the ballot says what changes in words").toContain('Adds "Garden crew pay"');
     const ballot = { id: "bal-1", subjectRef: made.body.suggestion.id, title: opened[0].title } as any;
-    const out = await closers[ADMIN_EDIT].execute(ballot, "system");
+    const out = await closers[ADMIN_EDIT].execute!(ballot, "system");
     expect(out.applied).toEqual([`admin_edit:${made.body.suggestion.id}`]);
     expect(await stored()).toEqual([{ label: "Garden crew pay", status: "approved", planned_minor: 10_000_000, spent_minor: null, changed_by: null, changed_as: BY_VILLAGE_VOTE }]);
   });
