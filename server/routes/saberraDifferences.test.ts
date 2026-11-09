@@ -159,6 +159,8 @@ describe("the count", () => {
       oursAhead: 0,
       lastReadAt: "2025-11-06T09:00:00.000Z",
       lastReadWhole: true,
+      // The drafts the list's answers opened, by id and size only: none yet (R38).
+      drafts: [],
     });
     // It gated on no key: it only LOOKED, to tell this reader whether the list is theirs to read (Q5).
     expect(asked).toEqual(["look:intake.moderate"]);

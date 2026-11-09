@@ -29,7 +29,7 @@ import PayDoorNote, { type PayDoor } from "./PayDoorNote";
 type Call = (path: string, body?: unknown, method?: string) => Promise<any>;
 type ModelRead = { model: ValuationModel; eeMeaningWritten: boolean; tokenNames: Record<string, string>; payDoor?: PayDoor };
 
-const field = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm min-h-[44px] bg-white";
+const field = "w-full border border-border rounded-lg px-3 py-2 text-sm min-h-[44px] bg-card";
 const label = "block text-xs font-semibold text-muted-foreground mb-1";
 
 const toMinor = (text: string, currency: string): number | null => {
@@ -146,12 +146,12 @@ export default function RolePayWithEngine({ role, call, onSaved }: { role: { id:
       </div>
 
       {!revealed && (
-        <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+        <div className="rounded-lg border border-border bg-muted px-3 py-2">
           <label className="block">
             <span className={label}><Trans>Your own figure first, before you see the suggestion (optional)</Trans></span>
             <input className={field} inputMode="decimal" value={ownFirst} onChange={(e) => setOwnFirst(e.target.value)} />
           </label>
-          <button type="button" disabled={!s} onClick={() => setRevealed(true)} className="mt-2 min-h-[44px] rounded-lg border border-gray-300 px-3 text-sm font-medium disabled:opacity-40">
+          <button type="button" disabled={!s} onClick={() => setRevealed(true)} className="mt-2 min-h-[44px] rounded-lg border border-border px-3 text-sm font-medium disabled:opacity-40">
             <Trans context="role pay">Show the suggestion</Trans>
           </button>
         </div>
@@ -202,7 +202,7 @@ export default function RolePayWithEngine({ role, call, onSaved }: { role: { id:
             <span className={label}>{reason === "Other" ? t({ message: "Say why", context: "role pay" }) : t({ message: "A note (optional)", context: "role pay" })}</span>
             <input className={field} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
-          <button type="button" disabled={figure === null} onClick={() => void save()} className="min-h-[44px] rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-black disabled:opacity-40">
+          <button type="button" disabled={figure === null} onClick={() => void save()} className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark disabled:opacity-40">
             <Trans context="role pay">Set this role's pay</Trans>
           </button>
           {outcome && <p className="text-sm text-foreground" role="status">{outcome}</p>}

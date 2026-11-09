@@ -528,6 +528,25 @@ describe.skipIf(!configured)("the post office against the fake provider: lane B1
     expect(onTheWire(queued.messageId).requests).toHaveLength(0);
   });
 
+  it("essential mail is refused to an address that bounced, complained or was erased, and still reaches one that only unsubscribed (coordinator, 9 Nov)", async () => {
+    await clearQueue();
+    const d = viaFake();
+    // A stranger can type any address into a public form; the village must not keep mailing one that cannot or will not receive.
+    for (const reason of ["bounced", "complained", "erased"] as const) {
+      const to = `hard-${reason}@example.test`;
+      await addSuppression(pool, { email: to, reason });
+      const r = await post(d, essential(to, `acc:hard:${reason}`));
+      expect(r, reason).toMatchObject({ status: "skipped", reason: "suppressed" });
+      expect(onTheWire(r.messageId).requests, reason).toHaveLength(0);
+    }
+    // "Stop everything" and a manual suppress keep the mail the person asks for, such as a password reset.
+    for (const reason of ["unsubscribed_all", "manual"] as const) {
+      const to = `soft-${reason}@example.test`;
+      await addSuppression(pool, { email: to, reason });
+      expect((await post(d, essential(to, `acc:soft:${reason}`))).status, reason).toBe("sent");
+    }
+  });
+
   it("rehearsal reroutes events, paths and letters to rehearsalTo and records rehearsal_to, while essential reaches the person", async () => {
     await clearQueue();
     const d = viaFake({

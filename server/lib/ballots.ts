@@ -265,7 +265,7 @@ export async function ballotById(pool: Pool, id: string): Promise<BallotRow | nu
 }
 
 /** The open ballot on a subject, if one is running. */
-export async function openBallotFor(pool: Pool, subjectType: string, subjectRef: string): Promise<BallotRow | null> {
+export async function openBallotFor(pool: Pool | PoolConnection, subjectType: string, subjectRef: string): Promise<BallotRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM ballots WHERE open_key = ? AND status = 'open'",
     [`${subjectType}:${subjectRef}`],

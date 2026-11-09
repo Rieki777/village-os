@@ -49,6 +49,8 @@ export interface ServedOpenProposal {
   statusWords: string;
   proposer: string | null;
   season: { id: string; name: string | null; startsOn: string } | null;
+  /** Set when the proposal is for a moon (shared/openProposalTerm.ts). */
+  term?: { kind: "moon"; startsOn: string; endsOn: string } | null;
   roles: Array<{ id: string; name: string | null; circle: string | null; note: string }>;
   why: string;
   aim: string;
@@ -195,11 +197,17 @@ export default function OpenProposal() {
             <header>
               <p className="text-sm font-semibold text-teal-deep">{p.statusWords}</p>
               <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
-                {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone))}
+                {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
               </h1>
               <p className="mt-2 leading-relaxed text-stone-600">
-                {DECIDE_WORDS.fromOutside}
-                {p.season ? ` ${p.season.name ?? "The season"} starts on ${civilDayWords(p.season.startsOn)}.` : ""}
+                {p.term ? (
+                  DECIDE_WORDS.fromOutsideMoon(civilDayWords(p.term.startsOn), civilDayWords(p.term.endsOn))
+                ) : (
+                  <>
+                    {DECIDE_WORDS.fromOutside}
+                    {p.season ? ` ${p.season.name ?? "The season"} starts on ${civilDayWords(p.season.startsOn)}.` : ""}
+                  </>
+                )}
               </p>
             </header>
 

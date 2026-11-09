@@ -81,6 +81,7 @@ import { liveChart } from "./structureReview";
 import { rosterRows } from "../repos/peopleRoster";
 import { insertSnapshot, pruneCarriedOlderThan, pruneSnapshots, pruneSnapshotsOlderThan, recentSnapshots } from "../repos/saberraSnapshots";
 import { acceptedProposalsFor, circlesForDifferences, publishedFromModule, rolesWithPaySet } from "../repos/seraDifferences";
+import { linksFor } from "../repos/seraSettled";
 
 /** How many reads are kept. R4 needs two whole ones; the rest are history. */
 export const SNAPSHOT_KEEP = 30;
@@ -306,8 +307,9 @@ const MATCH_FROM = 5;
  */
 async function withMatches(pool: Pool, read: Snapshot, older: readonly Snapshot[], check: NameCheck): Promise<Snapshot> {
   try {
-    const [live, accepted] = await Promise.all([liveForDifferences(pool), acceptedForDifferences(pool)]);
-    return stampMatches({ snapshots: [read, ...older], live, accepted, swap: check.swap }) ?? read;
+    // The page ids a person tied to ours (R1) feed the match the read is kept with, as they feed the list.
+    const [live, accepted, links] = await Promise.all([liveForDifferences(pool), acceptedForDifferences(pool), linksFor(pool)]);
+    return stampMatches({ snapshots: [read, ...older], live, accepted, links, swap: check.swap }) ?? read;
   } catch (e) {
     const code = typeof (e as { code?: unknown })?.code === "string" ? String((e as { code: string }).code) : "unknown";
     console.warn(`[saberra] this read is kept without its matches (${code}); the list matches it against today's chart`);

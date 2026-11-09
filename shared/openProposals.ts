@@ -12,13 +12,15 @@
  * to each and why, and gives their name and address. Nothing reaches anybody
  * until the address answers a confirmation email: an unconfirmed proposal is
  * deleted after 48 hours. Once confirmed it waits for the village, and only an
- * adoption makes an account, at the Member stage, with its roles starting at
- * the season's start (the adoption half is a later change).
+ * adoption makes an account, with its roles waiting. Member comes with the
+ * signed Love Letter, never with an adoption (shared/openProposalDecide.ts).
  *
  * In the 2026-10-02 voice: the next step, never the machinery.
  */
 
 /** The village's public link. */
+import { termOf, type OpenProposalTerm } from "./openProposalTerm";
+
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
 /** The public link with one role already picked: the door a visitor or a guest is offered on a role. */
@@ -35,6 +37,63 @@ export const OPEN_WHY_MAX = 1200;
 export const OPEN_AIM_MAX = 300;
 /** How long a confirmation link works, and how long an unconfirmed proposal is kept. */
 export const OPEN_CONFIRM_HOURS = 48;
+
+/**
+ * THE GATES A PUBLIC FORM NEEDS WHEN A ROLE IS SHARED WIDELY (red team, 9 Nov
+ * 2026: "the village can be made to email any address you name, at scale").
+ * Every confirmation is an email the village sends to an address a stranger
+ * typed, so the caps are on what reaches inboxes:
+ *   - an overall hourly cap, whatever the connections and addresses;
+ *   - the per-address cap counts an address without its "+tag", so
+ *     victim+1@, victim+2@ ... share one allowance;
+ *   - the per-connection cap counts an IPv6 address by its /64, the block
+ *     one household or one server is handed.
+ */
+export const OPEN_GLOBAL_HOURLY = 60;
+
+/**
+ * One person's address, however they dressed it: folded to lower case,
+ * without a "+tag", and for Gmail without the dots it ignores and with
+ * googlemail.com read as gmail.com. Used where "the same person" matters: the
+ * per-address flood cap, and the rule that an approver is never the applicant.
+ */
+export function identityKey(email: string): string {
+  const e = String(email ?? "").trim().toLowerCase();
+  const at = e.lastIndexOf("@");
+  if (at <= 0) return e;
+  let local = e.slice(0, at).split("+")[0] || e.slice(0, at);
+  let domain = e.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") local = local.replace(/\./g, "");
+  return `${local}@${domain}`;
+}
+
+/** The address as the per-address cap counts it (see identityKey). */
+export function limiterAddressKey(emailKey: string): string {
+  return identityKey(emailKey);
+}
+
+/** The connection as the per-connection cap counts it: IPv4 as is, IPv6 by its /64. */
+export function ipBucket(ip: string): string {
+  const raw = String(ip ?? "").trim().toLowerCase().replace(/^\[|\]$/g, "").split("%")[0];
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(raw);
+  if (mapped) return mapped[1];
+  if (!raw.includes(":")) return raw;
+  const [head, tail = ""] = raw.split("::");
+  const h = head ? head.split(":") : [];
+  const t = raw.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = raw.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => (parseInt(g || "0", 16) || 0).toString(16)).join(":")}::/64`;
+}
+
+/** Letters in any script (Unicode classes, so the pattern is built at runtime), apostrophes and hyphens. */
+const GREETING = new RegExp("^[\\p{L}\\p{M}'\\u2019-]{1,40}$", "u");
+
+/** A first name safe to greet with: letters (any script), apostrophes and hyphens, never a link or an address. */
+export function safeGreeting(name: string): string | null {
+  const first = String(name ?? "").trim().split(/\s+/)[0] ?? "";
+  return GREETING.test(first) ? first : null;
+}
 /**
  * How long a declined or withdrawn proposal keeps its name and address, and an
  * adopted one whose invitation nobody used (open proposals part B), counted
@@ -49,6 +108,8 @@ export interface OpenProposalBody {
   roles: Array<{ roleId: string; note: string }>;
   why: string;
   aim: string;
+  /** Set by the server when the village's proposals are for the moon (shared/openProposalTerm.ts). Absent: next season. */
+  term?: OpenProposalTerm;
 }
 
 export interface OpenProposalInput {
@@ -73,6 +134,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
       .slice(0, OPEN_PROPOSAL_MAX_ROLES),
     why: text(o.why, OPEN_WHY_MAX).slice(0, OPEN_WHY_MAX),
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
+    ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
   };
 }
 
@@ -116,13 +178,13 @@ export function andList(items: readonly string[]): string {
 }
 
 /** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
-export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string }): { subject: string; text: string } {
+export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
   return {
     subject: `Confirm your proposal to ${i.village}`,
     text: [
       i.firstName ? `Hi ${i.firstName},` : "Hi,",
       "",
-      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} next season.`,
+      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} ${i.when ? `for ${i.when}` : "next season"}.`,
       "",
       "Confirm it's you, and your proposal goes to the village:",
       i.link,
@@ -138,6 +200,9 @@ export const OPEN_WORDS = {
   heading: (village: string) => `Propose a role in ${village}`,
   lede: (season: string) => `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles for ${season}, say what you bring, and send it. You don't need an account.`,
   noSeason: "The village hasn't set its next season yet, so there's nothing to propose for right now. Check back soon.",
+  /** The lede when the village's proposals are for the moon. */
+  ledeMoon: (from: string, to: string) => `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles for this moon, from ${from} to the next new moon on ${to}, say what you bring, and send it. You don't need an account.`,
+  noCurrentSeason: "The village has no season running right now, so there's nothing to propose for this moon. Check back soon.",
   closed: "This page isn't taking proposals right now.",
   pickRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles`,
   noteLabel: "What you bring to this role",
