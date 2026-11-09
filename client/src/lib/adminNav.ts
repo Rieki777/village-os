@@ -109,3 +109,15 @@ export function filterNavByModules<I extends FilterableItem, G extends Filterabl
     }))
     .filter((g) => g.items.length > 0);
 }
+
+/**
+ * The left rail's classes. Open below the laptop width it is a drawer, fixed
+ * above the page at z-40. Docked (lg and up) it is a flex item, and a flex item
+ * honours z-index even when static, so the drawer's z-40 used to lift the docked
+ * rail over the sticky header (z-30) and cut the header's title off as the page
+ * scrolled. `lg:z-auto` keeps the docked rail on the page's own layer.
+ */
+export function adminNavRailClass(open: boolean): string {
+  return `${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:z-auto lg:shadow-none lg:w-56" : "w-14"} ` +
+    "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150";
+}
