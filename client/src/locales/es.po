@@ -244,6 +244,11 @@ msgctxt "label of an answer box"
 msgid "Your answer"
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "{a} and older"
+msgstr ""
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Village signing key"
@@ -743,9 +748,9 @@ msgid "{0} answers for the service."
 msgstr ""
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "Physical work on site"
-msgstr ""
+#~ msgctxt "admin quest safety"
+#~ msgid "Physical work on site"
+#~ msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -2386,6 +2391,11 @@ msgstr ""
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr ""
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Every quest is open to every age, and families are welcome. A village that wants minimum ages turns on Let quests ask a minimum age in Settings, under Quests."
+msgstr ""
+
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "who last wrote a matrix row, when the name is missing"
 msgid "a founder"
@@ -2747,9 +2757,9 @@ msgid "No invoice has been sent yet."
 msgstr ""
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
-msgstr ""
+#~ msgctxt "admin quest safety"
+#~ msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
+#~ msgstr ""
 
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "It goes on the village calendar for every member, recurring each new moon."
@@ -3468,6 +3478,11 @@ msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
 msgid "No cycle has closed yet."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Open to every age"
 msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
@@ -4922,6 +4937,11 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Someone who reaches a contact outside the village hears back within {replyHours, plural, one {# hour} other {# hours}}."
+msgstr ""
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Hands-on quest on site"
 msgstr ""
 
 #. placeholder {0}: counts.hours
