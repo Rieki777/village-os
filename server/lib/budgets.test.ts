@@ -37,6 +37,10 @@ import {
   budgetShareHistory,
   budgetSourceState,
   budgetVillageCircle,
+  budgetLines,
+  envelopeVersion,
+  periodNoteVersion,
+  stateRevision,
   setEnvelope,
   recheckSource,
   switchBudgetSource,
@@ -237,17 +241,14 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     ]);
   });
 
-  it("withdraws and restores one line by id, never deletes it, and never touches a closed moon's line", async () => {
+  it("withdraws and restores one line by id, and never deletes it", async () => {
     await confirm({ lines: [row()] });
     const [{ id }] = await lines();
     expect((await confirm({ source: "manual", lines: [{ id, action: "withdraw" }] })).changed.map((c) => c.op)).toEqual(["withdraw"]);
     expect((await lines())[0].status).toBe("withdrawn");
     expect((await confirm({ source: "manual", lines: [{ id, action: "restore" }] })).changed.map((c) => c.op)).toEqual(["restore"]);
     expect((await lines())[0].status).toBe("approved");
-    await q("UPDATE budget_lines SET status = 'closed' WHERE id = ?", [id]);
-    const closed = await upload([{ id, action: "withdraw" }], { source: "manual" });
-    expect(closed.refused.map((r) => r.reason)).toEqual(["closed"]);
-    expect((await upload([{ id, planned: "1" }], { source: "manual" })).refused.map((r) => r.reason)).toEqual(["closed"]);
+    // An ended moon's lines are refused in the M8 and V3 tests; a line its source closed in this moon, in the nits.
   });
 
   it("turns a hand-edited upload line into a hand line, says so, and the next upload of the sheet leaves it alone", async () => {
@@ -955,6 +956,156 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     }
   });
 
+  // ── Round 3 (V2, V3, V4, V5, V6, V7 and the nits) ─────────────────────────
+
+  it("V2: keys a row that names the village's own circle on the village-wide scope, so a blank circle and the circle by name are one line", async () => {
+    await confirm({ lines: [row({ label: "Village crew" })] });
+    expect(await upload([row({ label: "Village crew", circle: "The Village" })]), "the circle by name").toMatchObject({ added: [], changed: [], unchanged: 1 });
+    expect(await upload([row({ label: "Village crew", circleId: "c-village" })]), "the circle by id").toMatchObject({ added: [], changed: [], unchanged: 1 });
+    expect((await cashBudgetLeft(pool, MOON))!.plannedMinor, "counted once").toBe(10_000_000);
+  });
+
+  it("V3: refuses every write that shares a day with an ended moon: an add, an edit reaching back, an amount change, a withdrawal and a lock", async () => {
+    const pm = moonPeriod(PREV, TZ)!;
+    const span = `${pm.startsOn}..${moon.endsOn}`;
+    expect((await upload([row({ label: "Two moons", period: span })])).refused.map((r) => r.reason), "an add").toEqual(["closed"]);
+    await confirm({ lines: [row({ label: "Current only" })] });
+    const [{ id }] = await lines();
+    expect((await upload([{ id, period: span }], { source: "manual" })).refused.map((r) => r.reason), "an edit reaching back").toEqual(["closed"]);
+    await q(
+      "INSERT INTO budget_lines (id, line_key, source, period_kind, period_key, starts_on, ends_on, circle_id, category, planned_minor, currency, label) VALUES ('bl-span', 'upload:span', 'upload', 'span', ?, ?, ?, ?, 'role_pay', 1000, 'USD', 'Span line')",
+      [span, pm.startsOn, moon.endsOn, VILLAGE_WIDE],
+    );
+    for (const r of [{ id: "bl-span", planned: "5,800" }, { id: "bl-span", action: "withdraw" as const }, { id: "bl-span", action: "lock" as const, rate: "500", sourceNote: "A typed quote" }]) {
+      expect((await upload([r], { source: "manual" })).refused.map((x) => x.reason), JSON.stringify(r)).toEqual(["closed"]);
+    }
+    // A source moving a line that reached into an ended moon is listed and left alone: the before counts too.
+    await q("DELETE FROM budget_sources");
+    await sourceOn("review");
+    await q(
+      "INSERT INTO budget_lines (id, line_key, source, source_ref, period_kind, period_key, starts_on, ends_on, circle_id, category, planned_minor, currency, label) VALUES ('bl-sera-span', 'sera:rec-span', 'sera', 'rec-span', 'span', ?, ?, ?, ?, 'role_pay', 1000, 'CRC', 'Library span')",
+      [span, pm.startsOn, moon.endsOn, VILLAGE_WIDE],
+    );
+    await sync([seraRow({ sourceRef: "rec-span", label: "Library span", plannedMinor: 1000 })]);
+    expect((await q("SELECT period_key FROM budget_lines WHERE id = 'bl-sera-span'"))[0].period_key, "the source's move left the line as it was").toBe(span);
+  });
+
+  it("V4: holds no ordinary word for a surname and never a role's or a circle's name, so a source's \"Cook pay\" counts, and refuses a full name run together", async () => {
+    await usersRepo(pool).add({ id: "u-samc", name: "Sam Cook", email: "samc@example.test", passwordHash: "x", paths: [] } as any);
+    await usersRepo(pool).add({ id: "u-samg", name: "Sam Garden", email: "samg@example.test", passwordHash: "x", paths: [] } as any);
+    // A first name that is a circle's name on the chart.
+    await usersRepo(pool).add({ id: "u-gardenr", name: "Garden Rivers", email: "gardenr@example.test", passwordHash: "x", paths: [] } as any);
+    try {
+      await q("DELETE FROM budget_sources");
+      await sourceOn("auto");
+      await sync([seraRow({ sourceRef: "rec-cook", label: "Cook pay", roleId: "r-cook" })]);
+      expect((await q("SELECT name_held, adopted_at IS NOT NULL AS adopted FROM budget_lines WHERE source_ref = 'rec-cook'"))[0]).toEqual({ name_held: 0, adopted: 1 });
+      const p = await upload([row({ label: "Garden crew" }), row({ label: "Kitchen tools", category: "materials", note: "For the Cook" })]);
+      expect(p.held, "a role's and a circle's names are never held").toEqual([]);
+      expect((await upload([row({ label: "SamCook crew" })])).refused.map((r) => r.reason), "a full name run together").toEqual(["name_full_name"]);
+    } finally {
+      await q("DELETE FROM users WHERE id IN ('u-samc', 'u-samg', 'u-gardenr')");
+    }
+  });
+
+  it("V5: holds a source's line on the cell whose words name somebody, and clears the hold only when that cell is renamed", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("auto");
+    const rec = seraRow({ sourceRef: "rec-sl", label: "Field crew", sourceLabel: "Anabel's team" });
+    await sync([rec]);
+    const id = (await q("SELECT id FROM budget_lines WHERE source_ref = 'rec-sl'"))[0].id;
+    const state = async () =>
+      (await q("SELECT label_override, source_label_override, name_held, name_held_cell, adopted_at IS NOT NULL AS adopted FROM budget_lines WHERE id = ?", [id]))[0];
+    expect(await state()).toEqual({ label_override: null, source_label_override: null, name_held: 1, name_held_cell: "source_label", adopted: 0 });
+    await confirm({ source: "manual", lines: [{ id, label: "Field crew" }] });
+    expect(await state(), "a rename to the same words clears nothing").toMatchObject({ name_held: 1 });
+    await confirm({ source: "manual", lines: [{ id, label: "Field crew pay" }] });
+    expect(await state(), "renaming the label leaves the source label's hold").toMatchObject({ label_override: "Field crew pay", name_held: 1 });
+    await confirm({ source: "manual", lines: [{ id, sourceLabel: "Field team" }] });
+    expect(await state()).toMatchObject({ source_label_override: "Field team", name_held: 0 });
+    await sync([rec]);
+    expect(await state(), "the next sync keeps both renames and counts the line").toMatchObject({ label_override: "Field crew pay", source_label_override: "Field team", name_held: 0, adopted: 1 });
+    await sync([{ ...rec, sourceLabel: "Anabel's new team" }]);
+    expect(await state(), "new words from the source hold again").toMatchObject({ source_label_override: null, name_held: 1, name_held_cell: "source_label", adopted: 0 });
+  });
+
+  it("V6: names a locked line in the drift by the label members read, and leaves out a rate locked into another currency", async () => {
+    const insert = (id: string, label: string, override: string | null, currency: string, into: string) =>
+      q(
+        "INSERT INTO budget_lines (id, line_key, source, period_kind, period_key, starts_on, ends_on, circle_id, category, planned_minor, currency, label, label_override, fx_rate, fx_source, fx_as_of, fx_into) VALUES (?, ?, 'upload', 'moon', ?, ?, ?, ?, 'role_pay', 1000, ?, ?, ?, 500, 'typed: A quote', ?, ?)",
+        [id, `upload:${id}`, MOON, moon.startsOn, moon.endsOn, VILLAGE_WIDE, currency, label, override, moon.startsOn, into],
+      );
+    await insert("bl-renamed", "Anabel's crew", "Field crew", "USD", "CRC");
+    await insert("bl-other", "Euro line", null, "EUR", "USD");
+    expect((await budgetRateDrift(pool)).map((d) => [d.id, d.label])).toEqual([["bl-renamed", "Field crew"]]);
+  });
+
+  it("V7: keys every revision under the server's secret, so nobody can work one out from what they read", async () => {
+    await confirm({ lines: [row({ spent: "1,234" })] });
+    const all = await budgetLines(pool);
+    const read = async () => ({ state: stateRevision(all), preview: (await upload([row({ planned: "90,000" })])).revision, touched: (await upload([row({ planned: "90,000" })])).touchedRevision });
+    configureBudgets({ revisionSecret: () => "one" });
+    const one = await read();
+    configureBudgets({ revisionSecret: () => "two" });
+    const two = await read();
+    expect(one.state).not.toBe(two.state);
+    expect(one.preview).not.toBe(two.preview);
+    expect(one.touched).not.toBe(two.touched);
+    configureBudgets({ revisionSecret: () => "one" });
+    expect(await read(), "the same secret reads the same revisions").toEqual(one);
+  });
+
+  it("nits: lets a holder rename, lock or withdraw a line its source closed in the current moon, and never adopt it", async () => {
+    await q("DELETE FROM budget_sources");
+    await sourceOn("review");
+    const id = (await sync([seraRow({ sourceRef: "rec-closed", status: "closed", currency: "USD", plannedMinor: 1000 })])).lineIds[0];
+    expect((await upload([{ id, action: "adopt" }], { source: "manual" })).refused.map((r) => r.reason)).toEqual(["closed"]);
+    expect((await confirm({ source: "manual", lines: [{ id, label: "Closed crew" }] })).written, "a rename").toBe(true);
+    expect((await confirm({ source: "manual", lines: [{ id, action: "lock", rate: "500", sourceNote: "A typed quote" }] })).written, "a lock").toBe(true);
+    expect((await confirm({ source: "manual", lines: [{ id, action: "withdraw" }] })).written, "a withdrawal").toBe(true);
+  });
+
+  it("nits: writes no import row for a source's switch, and keeps a person's withdrawal of a line its source had withdrawn", async () => {
+    await q("DELETE FROM budget_sources");
+    await q("DELETE FROM budget_syncs");
+    const sw = { source: "sera", on: true, mode: "review" as const, schedule: "daily" as const, by: "u-treasurer", byAs: "Treasury" };
+    const p = await switchBudgetSource(pool, { ...sw, dryRun: true });
+    expect(await switchBudgetSource(pool, { ...sw, dryRun: false, revision: (p as any).revision })).toMatchObject({ ok: true, written: true });
+    expect(await q("SELECT COUNT(*) AS n FROM budget_syncs"), "a switch is not an import").toEqual([{ n: 0 }]);
+
+    await sync([seraRow({ sourceRef: "rec-w1" }), seraRow({ sourceRef: "rec-w2", label: "Second" })], true);
+    await sync([seraRow({ sourceRef: "rec-w1" })], true);
+    const w2 = (await q("SELECT id, status, withdrawn_by_source FROM budget_lines WHERE source_ref = 'rec-w2'"))[0];
+    expect(w2).toMatchObject({ status: "withdrawn", withdrawn_by_source: 1 });
+    expect((await confirm({ source: "manual", lines: [{ id: w2.id, action: "withdraw" }] })).written).toBe(true);
+    expect((await q("SELECT withdrawn_by_source FROM budget_lines WHERE id = ?", [w2.id]))[0].withdrawn_by_source).toBe(0);
+    await sync([seraRow({ sourceRef: "rec-w1" }), seraRow({ sourceRef: "rec-w2", label: "Second" })], true);
+    expect((await q("SELECT status FROM budget_lines WHERE id = ?", [w2.id]))[0].status, "the person's withdrawal sticks").toBe("withdrawn");
+  });
+
+  it("nits: reads an upload's default withdrawal scope off its own rows, never off a line it names by id", async () => {
+    const next = boundsForNumber(NOW.cycleNumber + 1).id;
+    await confirm({ lines: [row({ label: "Next A", period: next }), row({ label: "Next B", period: next })] });
+    const a = (await lines()).find((l) => l.label === "Next A")!.id;
+    const r = await confirm({ lines: [row({ label: "This moon" }), { id: a, action: "withdraw" }], scope: { whole: true } });
+    expect(r.withdrawn, "only the line named by id; next moon is not this import's scope").toEqual(["Next A"]);
+  });
+
+  it("nits: leaves example events out of the share's history", async () => {
+    await q("INSERT INTO health_events (id, kind, text, entity_type, entity_ref, audience, is_example) VALUES ('evt-example', 'budget', ?, 'budget', ?, 'admin', 1)", [SHARE_MOVED_EVENT, MOON]);
+    expect((await budgetShareHistory(pool)).length).toBe(0);
+  });
+
+  it("nits: checks the version a suggestion was made on inside the budget lock, for an envelope and a note", async () => {
+    const env = { circleId: "c-kitchen", period: MOON, planned: "600", goalNote: null, format: EN, by: "u-treasurer", byAs: "Treasury" };
+    const pe = await setEnvelope(pool, { ...env, dryRun: true });
+    expect(await setEnvelope(pool, { ...env, dryRun: false, revision: (pe as any).revision, expectVersion: "old" })).toMatchObject({ ok: false, status: 409, code: "stale" });
+    expect(await setEnvelope(pool, { ...env, dryRun: false, revision: (pe as any).revision, expectVersion: await envelopeVersion(pool, "c-kitchen", MOON) })).toMatchObject({ ok: true, written: true });
+    const note = { period: MOON, note: "The harvest pays late.", by: "u-treasurer", byAs: "Treasury" };
+    expect(await setPeriodNote(pool, { ...note, expectVersion: "old" })).toMatchObject({ ok: false, status: 409, code: "stale" });
+    expect(await setPeriodNote(pool, { ...note, expectVersion: await periodNoteVersion(pool, MOON) })).toMatchObject({ ok: true });
+  });
+
   it("refuses more than 2000 rows in one import", async () => {
     const r = await upload(Array.from({ length: 2001 }, (_, i) => row({ label: `Line ${i}` })));
     expect(r).toMatchObject({ ok: false, status: 400, code: "too_many_rows" });
@@ -1010,9 +1161,47 @@ describe("S6: the name check reads a line the way a member sees it", () => {
     expect(check("\u0410nabel's crew"), "a Cyrillic capital a, held as a first name").toEqual({ kind: "held", what: "first_name" });
   });
 
-  it("holds an initial with a surname, and a lone surname, the way it holds a lone first name", () => {
+  it("holds an initial with a surname, and a surname in the possessive, the way it holds a lone first name", () => {
     expect(check("A. Gomez crew")).toEqual({ kind: "held", what: "surname" });
     expect(check("Halloway's tools")).toEqual({ kind: "held", what: "surname" });
     expect(check("Garden crew pay"), "ordinary words pass").toBeNull();
   });
 });
+
+describe("V4: the name check holds a surname only where it reads as a person", () => {
+  const check = budgetNameCheck(
+    [
+      { id: "u-ana", name: "Ana Gomez", handle: null, email: null },
+      { id: "u-sam", name: "Sam Cook", handle: null, email: null },
+      { id: "u-jo", name: "Jo Smith", handle: null, email: null },
+      { id: "u-kit", name: "Kitchen Adams", handle: null, email: null },
+    ],
+    { chartWords: ["Cook", "Kitchen", "Garden"] },
+  );
+
+  it("holds a surname after the member's initial or as a possessive, and never a lone surname", () => {
+    expect(check("A. Gomez crew")).toEqual({ kind: "held", what: "surname" });
+    expect(check("A Gomez crew")).toEqual({ kind: "held", what: "surname" });
+    expect(check("Gomez's crew")).toEqual({ kind: "held", what: "surname" });
+    expect(check("Gomez crew"), "a lone surname").toBeNull();
+    expect(check("Smith fund"), "a lone surname").toBeNull();
+  });
+
+  it("never holds a word that names a role or a circle on the chart, and still refuses a full name", () => {
+    expect(check("Cook pay")).toBeNull();
+    expect(check("Kitchen tools"), "a first name that is a circle's name").toBeNull();
+    expect(check("S. Cook's shift"), "a chart word is never held").toBeNull();
+    expect(check("Pay Sam Cook")).toEqual({ kind: "refused", what: "full_name" });
+  });
+
+  it("refuses a full name run together", () => {
+    expect(check("AnaGomez")).toEqual({ kind: "refused", what: "full_name" });
+    expect(check("Pay anagomez for May")).toEqual({ kind: "refused", what: "full_name" });
+  });
+
+  it("reads Latin small capitals and an Armenian o as the letters they draw", () => {
+    expect(check("Pay \u1d00na Gomez")).toEqual({ kind: "refused", what: "full_name" });
+    expect(check("Pay Ana G\u0585mez")).toEqual({ kind: "refused", what: "full_name" });
+  });
+});
+

@@ -36,7 +36,10 @@
 -- whole upload no longer listing the line), which a later import may undo; a
 -- person's withdrawal is never undone by an import. `name_held` keeps a
 -- source's line whose words may name a member out of the figure and the
--- member view until a holder renames it with `label_override`.
+-- member view until a holder renames the words that hold it. `name_held_cell`
+-- names those words, one or more of `label`, `source_label` and `note`,
+-- comma-separated; `label_override` and `source_label_override` are a holder's
+-- renames, and a hold clears only once every cell it names is renamed.
 --
 -- Money is an integer count of minor units, never negative. `spent_minor` is
 -- NULL unless a person typed it or the library sent it.
@@ -124,7 +127,9 @@ CREATE TABLE IF NOT EXISTS `budget_lines` (
   `fx_locked_as` varchar(120) NULL,
   `withdrawn_by_source` tinyint(1) NOT NULL DEFAULT 0,
   `name_held` tinyint(1) NOT NULL DEFAULT 0,
+  `name_held_cell` varchar(40) NULL,
   `label_override` varchar(120) NULL,
+  `source_label_override` varchar(120) NULL,
   `prev_planned_minor` bigint NULL,
   `prev_seen_at` timestamp NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

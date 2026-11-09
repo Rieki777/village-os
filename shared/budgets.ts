@@ -336,7 +336,8 @@ export function readAmount(cell: unknown, currency: string, format: NumberFormat
   if (!spaced && /[ \u00a0\u202f\u2009]/.test(body)) return refuse("unreadable", "Group thousands with a space, a comma or a point, three digits at a time.");
 
   const marks = Array.from(grouped.matchAll(SEPARATOR));
-  if (!format.chosen && !spaced && marks.length === 1 && THREE_DIGITS.test(grouped.slice((marks[0].index ?? 0) + 1))) {
+  // One mark with three digits after it reads either way, space groups or not, until a format is chosen (V8).
+  if (!format.chosen && marks.length === 1 && THREE_DIGITS.test(grouped.slice((marks[0].index ?? 0) + 1))) {
     return refuse("ambiguous", `"${raw.trim().slice(0, 30)}" could be a whole number or a decimal, depending on the number format. Pick the format in the preview.`);
   }
   if (parseLocaleNumber(grouped, format.locale) === null) {
@@ -460,13 +461,18 @@ export interface RateDrift {
  * ₡612,000 (+3.1%)". Nothing reads this to move a figure; a person
  * re-locks if they choose to.
  */
-export function rateDrift(line: Pick<FigureLine, "id" | "label" | "currency" | "plannedMinor" | "fxRate" | "fxInto">, villageCurrency: string, todayRate: number | null): RateDrift {
+export function rateDrift(
+  line: Pick<FigureLine, "id" | "label" | "currency" | "plannedMinor" | "fxRate" | "fxInto"> & { labelOverride?: string | null },
+  villageCurrency: string,
+  todayRate: number | null,
+): RateDrift {
   const lockedMinor = line.fxRate ? convertAtRate(line.plannedMinor, line.currency, villageCurrency, line.fxRate) : null;
   const todayMinor = todayRate !== null && todayRate > 0 ? convertAtRate(line.plannedMinor, line.currency, villageCurrency, todayRate) : null;
   const pct = lockedMinor && todayMinor !== null ? Math.round(((todayMinor - lockedMinor) / lockedMinor) * 1000) / 10 : null;
   return {
     id: line.id,
-    label: line.label,
+    // The label members read: a holder's rename before a source's own words (V6).
+    label: line.labelOverride ?? line.label,
     currency: line.currency,
     plannedMinor: line.plannedMinor,
     lockedRate: String(line.fxRate ?? ""),

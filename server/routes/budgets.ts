@@ -59,8 +59,9 @@
  *              names roles, never an account.
  *
  * And the payee conflict: a write that touches a line naming a role the
- * writer is seated in is refused, with the suggestion path named, so the
- * village decides it; a suggestion with one goes straight to a vote (S9).
+ * writer is seated in is refused, with the suggestion path named. A suggestion
+ * goes to the live holders who hold no role it pays, and to a vote when every
+ * holder holds one or nobody holds the power (V10).
  *
  * Every write has a vote path (B3): the cash budget's lines, a circle's
  * envelope, a period's note and a source's switch each have a suggestion
@@ -83,6 +84,7 @@ import {
   budgetCircleNames,
   budgetCircles,
   budgetLines,
+  budgetRoleNames,
   budgetRateDrift,
   budgetShareHistory,
   budgetSourceStates,
@@ -90,6 +92,7 @@ import {
   cashBudgetLeft,
   configureBudgets,
   displayLabel,
+  displaySourceLabel,
   envelopeVersion,
   importBudgetLines,
   latestSyncs,
@@ -99,6 +102,7 @@ import {
   setPeriodNote,
   sourceVersion,
   stateRevision,
+  stillHeld,
   switchBudgetSource,
   type ImportInput,
   type ImportResult,
@@ -132,6 +136,8 @@ type Deps = Pick<AppDeps, "authedUser" | "capabilityCtx" | "getPool" | "overLimi
   isFormerMember?(user: any): Promise<boolean>;
   /** The org roles this person is seated in, for the payee conflict. Defaults to their live seatings. */
   seatedRoleIds?(userId: string): Promise<string[]>;
+  /** The server's secret every budget revision is keyed under (V7); a per-boot key without it. */
+  revisionSecret?: string;
 };
 
 /** Where a refused write is sent instead (R21, R22). */
@@ -234,17 +240,35 @@ export const HELD_WORDS = "A line from a source, held for its words until a hold
  * source's words held for naming somebody (`heldWords`, id to words) stay
  * with the people who keep the budget (M9).
  */
-export function cashView<T extends Pick<ImportResult, "added" | "changed">>(r: T, mayReadCash: boolean, heldWords?: ReadonlyMap<string, string>): T {
+export function cashView<T extends Pick<ImportResult, "added" | "changed"> & Partial<Pick<ImportResult, "withdrawn" | "withdrawnLines" | "stillListed" | "keptWithdrawn" | "lineChanges" | "flags">>>(
+  r: T,
+  mayReadCash: boolean,
+  heldWords?: ReadonlyMap<string, string>,
+): T {
   if (mayReadCash && !heldWords?.size) return r;
-  const hide = <L extends PreviewLine>(l: L): L => {
-    const held = !!l.id && heldWords?.get(l.id) === l.label;
-    return { ...l, spentMinor: mayReadCash ? l.spentMinor : null, ...(held ? { label: HELD_WORDS } : {}) };
-  };
-  return { ...r, added: r.added.map(hide), changed: r.changed.map((c) => ({ ...hide(c), before: hide(c.before) })) };
+  const held = (id: string | null | undefined) => !!id && !!heldWords?.has(id);
+  const hide = <L extends PreviewLine>(l: L): L => ({ ...l, spentMinor: mayReadCash ? l.spentMinor : null, ...(held(l.id) && heldWords?.get(l.id!) === l.label ? { label: HELD_WORDS } : {}) });
+  const named = <L extends { id: string | null; label: string }>(l: L): L => (held(l.id) ? { ...l, label: HELD_WORDS } : l);
+  const out: T = { ...r, added: r.added.map(hide), changed: r.changed.map((c) => ({ ...hide(c), before: hide(c.before) })) };
+  if (!heldWords?.size) return out;
+  // A withdrawal, a line still listed or kept withdrawn, a line's change, an overlap: each may name a held line (V6).
+  if (r.withdrawnLines) {
+    const lines = r.withdrawnLines.map(named);
+    Object.assign(out, { withdrawnLines: lines, withdrawn: lines.map((l) => l.label) });
+  }
+  if (r.stillListed) Object.assign(out, { stillListed: r.stillListed.map(named) });
+  if (r.keptWithdrawn) Object.assign(out, { keptWithdrawn: r.keptWithdrawn.map(named) });
+  if (r.lineChanges) Object.assign(out, { lineChanges: r.lineChanges.map(named) });
+  if (r.flags) {
+    Object.assign(out, {
+      flags: r.flags.map((f) => ((f.ids ?? []).some(held) ? { ...f, message: "This touches a line held for its words, which the people who keep the budget rename." } : f)),
+    });
+  }
+  return out;
 }
 
 const PAYEE_CONFLICT =
-  "This changes a budget line for a role you hold, so the village decides it. Suggest the change, and it goes to the other holders or to a vote.";
+  "This changes a budget line for a role you hold, so you cannot make it yourself. Suggest it: it goes to the holders who hold no role it pays, or to a village vote when every holder holds one.";
 
 export function register(app: Express, deps: Deps): void {
   const { authedUser, capabilityCtx, getPool, overLimit, liveHoldersOf, projectCurrency, rolesCarrying, roleHolders } = deps;
@@ -262,7 +286,21 @@ export function register(app: Express, deps: Deps): void {
     holdsRolePay: async (userId: string) => (await liveHoldersOf("role.pay")).includes(userId),
     seatedRoleIds,
     launched: () => launched(),
+    ...(deps.revisionSecret ? { revisionSecret: () => String(deps.revisionSecret) } : {}),
   });
+
+  /** Each holder's seated roles, for the payee conflict, read once (V10). */
+  const seatsOf = async (userIds: readonly string[]): Promise<Map<string, Set<string>>> => {
+    if (deps.seatedRoleIds) return new Map(await Promise.all(userIds.map(async (u) => [u, new Set(await seatedRoleIds(u))] as const)));
+    const all = await listOrgAssignments(getPool());
+    return new Map(userIds.map((u) => [u, new Set(all.filter((a) => String(a.userId ?? "") === u).map((a) => a.orgRoleId))]));
+  };
+  /** The holders who hold none of the roles a suggestion pays: the people who may decide it (V10). */
+  const unconflicted = async (rolesPaid: readonly string[], holders: readonly string[]): Promise<string[]> => {
+    if (!rolesPaid.length) return [...holders];
+    const seats = await seatsOf(holders);
+    return holders.filter((h) => !rolesPaid.some((r) => seats.get(h)?.has(r)));
+  };
 
   /** Signed in, still in the village, at the member rung. Answers the refusal and returns null otherwise. */
   async function member(req: any, res: any): Promise<{ user: any; ctx: CapabilityCtx } | null> {
@@ -417,7 +455,9 @@ export function register(app: Express, deps: Deps): void {
     // Committed and spent below the village total come from `cash_owed`, which is holder-only (R23).
     const mayReadCash = hasCapability("cash.pay", who.ctx);
     // A source's line held for its words stays out of the members' view until a holder renames it (M9).
-    const all = (await budgetLines(pool)).filter((l) => door.ok || !l.nameHeld);
+    const every = await budgetLines(pool);
+    const heldIds = new Set(every.filter((l) => stillHeld(l)).map((l) => l.id));
+    const all = every.filter((l) => door.ok || !heldIds.has(l.id));
     const figure = await cashBudgetLeft(pool, moonId);
     const span = { id: moonId, startsOn: moon.startsOn, endsOn: moon.endsOn, days: moon.days };
     const touching = all.filter((l) => sharedDays(l, span) > 0);
@@ -471,6 +511,8 @@ export function register(app: Express, deps: Deps): void {
               ...figure.working,
               // The role a rate was locked as, kept as written, never an account (S10).
               lines: figure.working.lines.map(({ fx, ...l }) => ({ ...l, fx: fx ? { rate: fx.rate, source: fx.source, asOf: fx.asOf, lockedAt: fx.lockedAt, lockedAs: lockedAs.get(l.id) ?? null } : null })),
+              // A line held for its words stays with the door, by id as well as by words (V6).
+              notCounted: door.ok ? figure.working.notCounted : figure.working.notCounted.filter((n) => !heldIds.has(n.id)),
               committed: mayReadCash ? figure.working.committed : null,
             },
           }
@@ -610,21 +652,30 @@ export function register(app: Express, deps: Deps): void {
     const village = !by || by.decidedBy.startsWith("village:");
     return { village, by: village ? null : by!.decidedBy, byAs: village ? BY_VILLAGE_VOTE : actingAs(by!.decidedBy) };
   };
-  const PAYEE_SUGGESTED = (p: object) => ({ ...p, payeeConflict: true });
+  /** The roles a stored suggestion pays, written at creation (V10). */
+  const rolesPaidOf = (payload: unknown): string[] => {
+    const r = (payload as { rolesPaid?: unknown } | null)?.rolesPaid;
+    return Array.isArray(r) ? r.filter((x): x is string => typeof x === "string") : [];
+  };
 
   /*
    * THE CASH BUDGET'S LINES. A member's suggested change is the same import the
-   * direct routes take, cleaned of what a suggestion may not carry (an action,
-   * an adoption's words), checked by a dry run at creation (refused or held
-   * rows are refused), bound to the lines it touches and what it does to them
-   * (S7), sent to a vote when its suggester is seated in a role it touches (S9),
-   * and applied whole or not at all.
+   * direct routes take, every act included (add, change, withdraw, restore,
+   * lock, adopt: V1), with only an adoption's words taken off, since the
+   * adoption is made as whoever decides it. It is checked by a dry run at
+   * creation (refused or held rows, or no change at all, are refused), bound to
+   * the lines it touches and what it does to them (S7), sent to the holders who
+   * hold no role it pays and to a vote when there are none (V10), and applied
+   * whole or not at all.
    */
   const cleanRows = (rows: ImportRow[]): ImportRow[] =>
     rows.map((r) => {
-      const { action: _a, adoptedAs: _b, use: _c, rate: _d, sourceNote: _e, ...rest } = r as ImportRow;
+      const { adoptedAs: _adoptedAs, ...rest } = r as ImportRow;
       return rest;
     });
+  /** The queue's freshness reads, cached a short while by payload and the budget as it stands (nit). */
+  const versions = new Map<string, { at: number; version: string }>();
+  const VERSION_TTL_MS = 30_000;
   const linesInput = (p: SuggestedImport, by: string | null, byAs: string | null): ImportInput => ({
     source: p.source, lines: cleanRows(p.lines), scope: p.scope ?? null, by, byAs, dryRun: true, format: formatOf(p.format),
   });
@@ -643,12 +694,19 @@ export function register(app: Express, deps: Deps): void {
       const r = await importBudgetLines(getPool(), linesInput(cleaned, suggestedBy, null));
       if (!r.ok) return { problem: r.message ?? "This change cannot be read.", payload };
       if (r.refused.length || r.held.length) return { problem: "Some rows of this change cannot be applied as written. Preview it, fix the rows, then suggest it.", payload };
-      const seated = new Set(await seatedRoleIds(suggestedBy));
-      const conflict = rolesTouched(r).some((id) => seated.has(id));
-      return { problem: null, payload: conflict ? PAYEE_SUGGESTED(cleaned) : cleaned, version: r.touchedRevision };
+      if (!r.added.length && !r.changed.length) return { problem: "This change would leave the budget as it is, so there is nothing to suggest.", payload };
+      return { problem: null, payload: { ...cleaned, rolesPaid: rolesTouched(r).sort() }, version: r.touchedRevision };
     },
-    versionFor: async (payload) => (await importBudgetLines(getPool(), linesInput(payload as SuggestedImport, null, null))).touchedRevision,
-    forcesBallot: (payload) => (payload as { payeeConflict?: boolean })?.payeeConflict === true,
+    versionFor: async (payload) => {
+      const key = JSON.stringify([payload, stateRevision(await budgetLines(getPool())), projectCurrency()]);
+      const hit = versions.get(key);
+      if (hit && Date.now() - hit.at < VERSION_TTL_MS) return hit.version;
+      const version = (await importBudgetLines(getPool(), linesInput(payload as SuggestedImport, null, null))).touchedRevision;
+      if (versions.size > 200) versions.clear();
+      versions.set(key, { at: Date.now(), version });
+      return version;
+    },
+    deciders: (payload, holders) => unconflicted(rolesPaidOf(payload), holders),
     apply: async (payload, was, by): Promise<{ ok: true } | Refusal> => {
       const d = decider(by);
       const base = linesInput(payload as SuggestedImport, d.by, d.byAs);
@@ -671,7 +729,7 @@ export function register(app: Express, deps: Deps): void {
     describe: async (payload) => {
       if (suggestionProblem(payload)) return ["The suggested lines cannot be read."];
       const r = await importBudgetLines(getPool(), linesInput(payload as SuggestedImport, null, null));
-      return ballotLines(r, String(projectCurrency() ?? "").toUpperCase());
+      return ballotLines(r, String(projectCurrency() ?? "").toUpperCase(), { circles: await budgetCircleNames(getPool()), roles: await budgetRoleNames(getPool()) });
     },
   });
 
@@ -697,7 +755,8 @@ export function register(app: Express, deps: Deps): void {
       const d = decider(by);
       const dry = await setEnvelope(getPool(), { ...envelopeInput(p), by: d.by, byAs: d.byAs, dryRun: true });
       if (!dry.ok) return { ok: false, status: dry.status, body: { error: dry.message, code: dry.code } };
-      const done = await setEnvelope(getPool(), { ...envelopeInput(p), by: d.by, byAs: d.byAs, dryRun: false, revision: dry.revision });
+      // The version the suggestion was made on is checked again inside the budget lock.
+      const done = await setEnvelope(getPool(), { ...envelopeInput(p), by: d.by, byAs: d.byAs, dryRun: false, revision: dry.revision, expectVersion: was });
       return done.ok ? { ok: true } : { ok: false, status: done.status, body: { error: done.message, code: done.code } };
     },
     describe: async (payload) => {
@@ -705,7 +764,8 @@ export function register(app: Express, deps: Deps): void {
       const r = await setEnvelope(getPool(), { ...envelopeInput(p), by: null, byAs: null, dryRun: true });
       if (!r.ok) return [`This envelope cannot be set as written: ${r.message}`];
       const was = r.before ? formatMoney(r.before.plannedMinor, r.before.currency) : "no envelope";
-      return [`Sets the envelope of circle ${r.after.circleId} for ${r.after.periodKey}: from ${was} to ${formatMoney(r.after.plannedMinor, r.after.currency)}.`, `Its lines plan ${formatMoney(r.circlePlannedMinor, r.after.currency)} for that period.`];
+      const circle = (await budgetCircleNames(getPool())).get(r.after.circleId) ?? "a circle";
+      return [`Sets the envelope of ${circle} for ${r.after.periodKey}: from ${was} to ${formatMoney(r.after.plannedMinor, r.after.currency)}.`, `Its lines plan ${formatMoney(r.circlePlannedMinor, r.after.currency)} for that period.`];
     },
   });
 
@@ -727,7 +787,8 @@ export function register(app: Express, deps: Deps): void {
       const p = payload as SuggestedNote;
       if ((await periodNoteVersion(getPool(), p.period)) !== was) return { ok: false, status: 409, body: { error: "This note changed since the suggestion was made. Suggest it again.", code: "stale" } };
       const d = decider(by);
-      const done = await setPeriodNote(getPool(), { period: p.period, note: p.note, by: d.by, byAs: d.byAs });
+      // The version the suggestion was made on is checked again inside the budget lock.
+      const done = await setPeriodNote(getPool(), { period: p.period, note: p.note, by: d.by, byAs: d.byAs, expectVersion: was });
       return done.ok ? { ok: true } : { ok: false, status: done.status, body: { error: done.message, code: done.code } };
     },
     describe: async (payload) => {
@@ -745,13 +806,12 @@ export function register(app: Express, deps: Deps): void {
     },
     prepare: async (payload, suggestedBy) => {
       const p = payload as SuggestedSwitch;
-      const r = await switchBudgetSource(getPool(), { ...switchInput(p), by: suggestedBy, byAs: null, dryRun: true, seatedRoleIds: await seatedRoleIds(suggestedBy) });
-      if (!r.ok && r.code !== "payee_conflict") return { problem: r.message, payload };
-      const cleaned = switchInput(p);
-      return { problem: null, payload: !r.ok ? PAYEE_SUGGESTED(cleaned) : cleaned, version: await sourceVersion(getPool(), p.source) };
+      const r = await switchBudgetSource(getPool(), { ...switchInput(p), by: suggestedBy, byAs: null, dryRun: true });
+      if (!r.ok) return { problem: r.message, payload };
+      return { problem: null, payload: { ...switchInput(p), rolesPaid: r.rolesPaid }, version: await sourceVersion(getPool(), p.source) };
     },
     versionFor: async (payload) => sourceVersion(getPool(), (payload as SuggestedSwitch).source),
-    forcesBallot: (payload) => (payload as { payeeConflict?: boolean })?.payeeConflict === true,
+    deciders: (payload, holders) => unconflicted(rolesPaidOf(payload), holders),
     apply: async (payload, was, by) => {
       const p = payload as SuggestedSwitch;
       if ((await sourceVersion(getPool(), p.source)) !== was) return { ok: false, status: 409, body: { error: "This source changed since the suggestion was made. Suggest it again.", code: "stale" } };
@@ -776,7 +836,8 @@ interface SuggestedImport {
   lines: ImportRow[];
   scope?: ImportScope | null;
   format?: NumberFormatChoice;
-  payeeConflict?: boolean;
+  /** The roles the change pays, written at creation (V10). */
+  rolesPaid?: string[];
 }
 interface SuggestedEnvelope {
   circleId: string;
@@ -794,7 +855,7 @@ interface SuggestedSwitch {
   on: boolean;
   mode?: "auto" | "review";
   schedule?: "daily" | "hourly" | "off";
-  payeeConflict?: boolean;
+  rolesPaid?: string[];
 }
 
 const envelopeInput = (p: SuggestedEnvelope) => ({
@@ -823,8 +884,10 @@ function shareWords(before: ImportResult["shareBefore"], after: ImportResult["sh
  * line's act (adds, changes, withdraws, restores, locks a rate on, adopts),
  * every field that differs, and the cash share before and after.
  */
-export function ballotLines(r: ImportResult, currency: string): string[] {
+export function ballotLines(r: ImportResult, currency: string, names: { circles?: ReadonlyMap<string, string>; roles?: ReadonlyMap<string, string> } = {}): string[] {
   const money = (minor: number | null, cur: string) => (minor === null ? "none" : formatMoney(minor, cur));
+  const circleName = (id: string | null) => (id === VILLAGE_WIDE ? "the whole village" : id === null ? null : names.circles?.get(id) ?? "a circle not on the chart");
+  const roleName = (id: string | null) => (id === null ? null : names.roles?.get(id) ?? "a role not on the chart");
   const fields = (a: PreviewLine, b: PreviewLine): string[] => {
     const out: string[] = [];
     const diff = (name: string, x: unknown, y: unknown, show: (v: any) => string = String) => {
@@ -832,20 +895,26 @@ export function ballotLines(r: ImportResult, currency: string): string[] {
     };
     diff("label", a.label, b.label);
     diff("period", a.periodKey, b.periodKey);
-    diff("circle", a.circleId === VILLAGE_WIDE ? "the whole village" : a.circleId, b.circleId === VILLAGE_WIDE ? "the whole village" : b.circleId);
-    diff("role", a.roleId, b.roleId);
+    diff("circle", circleName(a.circleId), circleName(b.circleId));
+    diff("role", roleName(a.roleId), roleName(b.roleId));
     diff("category", a.category, b.category);
     diff("currency", a.currency, b.currency);
     diff("planned", a.plannedMinor, b.plannedMinor, (v) => money(v, b.currency));
     diff("status", a.status, b.status);
+    diff("rate", a.fx ? `${a.fx.rate} (${a.fx.source ?? "no source"})` : null, b.fx ? `${b.fx.rate} (${b.fx.source ?? "no source"})` : null);
+    diff(`in ${currency || "the village's currency"}`, a.convertedMinor, b.convertedMinor, (v) => money(v, currency || "XXX"));
     return out;
   };
   const verbs: Record<string, string> = { change: "Changes", restore: "Restores", withdraw: "Withdraws", lock: "Locks a rate on", adopt: "Adopts" };
   const lines = [
-    ...r.added.map((a) => `Adds "${a.label}": ${money(a.plannedMinor, a.currency)}, ${a.category.replace("_", " ")}, for ${a.periodKey}, ${a.circleId === VILLAGE_WIDE ? "for the whole village" : `on circle ${a.circleId}`}.`),
+    ...r.added.map((a) => {
+      const where = a.circleId === VILLAGE_WIDE ? "for the whole village" : `in ${circleName(a.circleId)}`;
+      return `Adds "${a.label}": ${money(a.plannedMinor, a.currency)}, ${a.category.replace("_", " ")}, for ${a.periodKey}, ${where}${a.roleId ? `, for the role ${roleName(a.roleId)}` : ""}.`;
+    }),
     ...r.changed.map((c) => {
       const what = fields(c.before, c);
-      return `${verbs[c.op] ?? "Changes"} "${c.before.label}"${what.length ? `: ${what.join("; ")}` : ""}.`;
+      const counts = c.op === "adopt" ? " It counts from now." : c.op === "withdraw" ? " It stops counting, and stays on the record." : "";
+      return `${verbs[c.op] ?? "Changes"} "${c.before.label}"${what.length ? `: ${what.join("; ")}` : ""}.${counts}`;
     }),
     ...r.refused.map((x) => `Row ${x.row} cannot be read: ${x.message}`),
   ];
@@ -887,10 +956,11 @@ function lineView(l: StoredLine, mayReadCash: boolean, village: string, isDoor: 
     fx: l.fxRate ? { rate: l.fxRate, source: l.fxSource ?? null, asOf: l.fxAsOf ?? null, into: l.fxInto ?? null, lockedAt: l.fxLockedAt ?? null, lockedAs: l.fxLockedAs ?? null } : null,
     id: l.id,
     label: displayLabel(l),
-    ...(isDoor ? { sourceWords: l.labelOverride ? l.label : null, nameHeld: !!l.nameHeld } : {}),
+    ...(isDoor ? { sourceWords: l.labelOverride ? l.label : null, nameHeld: stillHeld(l) } : {}),
     note: l.note,
     source: l.source,
-    sourceLabel: l.sourceLabel,
+    sourceLabel: isDoor ? l.sourceLabel : stillHeld(l) && (l.nameHeldCell ?? "").split(",").includes("source_label") ? null : displaySourceLabel(l),
+    ...(isDoor ? { sourceLabelRenamed: l.sourceLabelOverride ?? null, heldOn: l.nameHeldCell ?? null } : {}),
     periodKind: l.periodKind,
     periodKey: l.periodKey,
     startsOn: l.startsOn,

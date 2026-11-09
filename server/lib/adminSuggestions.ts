@@ -72,8 +72,12 @@ export interface AdminEditControl {
    * (the rows it touches, never the whole document). Stale is judged on it.
    */
   versionFor?(payload: unknown): Promise<string>;
-  /** This suggestion goes to a village vote whoever holds the power: a payee conflict (R21). */
-  forcesBallot?(payload: unknown): boolean;
+  /**
+   * Of the live holders, the ones who may decide this suggestion: for the cash
+   * budget, those who hold no role the change pays (a payee conflict, V10).
+   * When holders exist and none may decide it, it goes to a village vote.
+   */
+  deciders?(payload: unknown, holders: readonly string[]): Promise<string[]>;
 }
 
 /** The control's value now, with the version this suggestion's payload binds to. */
@@ -213,6 +217,11 @@ export async function putSuggestionToVillage(
   const now = await currentFor(control, s);
   const stale = staleDifference(s, now);
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
+  // The checks it passed when it was made are run again before the village is asked: a name added to the roster since, say.
+  if (control.prepare) {
+    const again = await control.prepare(s.edit.payload, s.suggestedBy);
+    if (again.problem) return { ok: false, status: 400, body: { error: again.problem, code: "payload_refused" } };
+  }
   const { setup } = input;
   if (setup.tokenProblem) return { ok: false, status: 409, body: { error: setup.tokenProblem } };
   if (!(await deps.store.move(s.id, "proposed", "superseded", {}))) {

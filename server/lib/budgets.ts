@@ -29,7 +29,7 @@
  * and keeps the key, so the next upload of the same sheet finds it, sees it
  * was edited by hand, and leaves it alone (R2). The preview says so.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
   ADMIN_BEFORE_LAUNCH,
@@ -128,6 +128,8 @@ export interface BudgetEnv {
   launched(pool: Pool): Promise<boolean>;
   /** The `budgets.village_circle_id` setting (a game variable), "" when it is not set (R34). */
   villageCircleSetting(): string;
+  /** The server's secret every revision is keyed under (V7); "" keys them under one random key per boot. */
+  revisionSecret(): string;
   /**
    * The base still to set this moon, for the share in percent (R10). The
    * valuation lane owns it too; null until handed in, and then the preview
@@ -155,6 +157,7 @@ const DEFAULT_ENV: BudgetEnv = {
     }
   },
   baseToSet: async () => null,
+  revisionSecret: () => "",
 };
 
 let env: BudgetEnv = { ...DEFAULT_ENV };
@@ -193,10 +196,28 @@ export interface StoredLine extends FigureLine {
   withdrawnBySource?: boolean;
   /** A holder's rename of a source's line, which the name check passed (M9). */
   labelOverride?: string | null;
+  /** Which of a source's words hold it, comma-separated: `label`, `source_label`, `note` (V5). */
+  nameHeldCell?: string | null;
+  /** A holder's rename of the source's own label for a line (V5). */
+  sourceLabelOverride?: string | null;
 }
 
 /** What a line is called where people read it: a holder's rename, or its own label. */
 export const displayLabel = (l: Pick<StoredLine, "label" | "labelOverride">): string => l.labelOverride ?? l.label;
+
+/** The source label people read: a holder's rename, or the source's own words. */
+export const displaySourceLabel = (l: Pick<StoredLine, "sourceLabel" | "sourceLabelOverride">): string | null => (l.sourceLabelOverride ?? l.sourceLabel) || null;
+
+/** The cells a hold sits on (V5). A hold with no cell named is the label's. */
+const heldCellsOf = (l: Pick<StoredLine, "nameHeld" | "nameHeldCell">): string[] =>
+  l.nameHeldCell ? l.nameHeldCell.split(",").filter(Boolean) : l.nameHeld ? ["label"] : [];
+
+/** A cell a holder renamed no longer holds the line (V5). */
+const cellRenamed = (l: Pick<StoredLine, "labelOverride" | "sourceLabelOverride">, cell: string): boolean =>
+  cell === "label" ? !!l.labelOverride : cell === "source_label" ? l.sourceLabelOverride !== null && l.sourceLabelOverride !== undefined : false;
+
+/** Is the line held: some cell its source's words hold it on is not renamed yet (V5). */
+export const stillHeld = (l: Pick<StoredLine, "nameHeld" | "nameHeldCell" | "labelOverride" | "sourceLabelOverride">): boolean => heldCellsOf(l).some((c) => !cellRenamed(l, c));
 
 const iso = (v: unknown): string | null => (v ? new Date(v as string).toISOString() : null);
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
@@ -241,21 +262,41 @@ export function rowToLine(r: RowDataPacket): StoredLine {
     withdrawnBySource: Number(r.withdrawn_by_source) === 1,
     nameHeld: Number(r.name_held) === 1,
     labelOverride: str(r.label_override),
+    nameHeldCell: str(r.name_held_cell),
+    sourceLabelOverride: r.source_label_override === null || r.source_label_override === undefined ? null : String(r.source_label_override),
   };
 }
 
 const digest = (v: unknown): string => createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 32);
+
+/** The key revisions fall back to when the server hands in no secret: one per boot (V7). */
+const BOOT_REVISION_KEY = randomBytes(32);
+
+/**
+ * A REVISION, KEYED (V7). Every revision a reader is handed (`revision`,
+ * `touchedRevision`, `stateRevision` and the versions a suggestion binds to)
+ * is an HMAC under the server's secret, never a bare digest: the values it
+ * covers include figures some readers may not see (spent, held words), and a
+ * bare digest of a one-line preview could be matched against guesses. A line's
+ * key is a plain digest, because it is stored and must read the same forever.
+ */
+const revisionOf = (v: unknown): string => {
+  const secret = env.revisionSecret();
+  const key = secret ? createHash("sha256").update(`budget-revisions:${secret}`).digest() : BOOT_REVISION_KEY;
+  return createHmac("sha256", key).update(JSON.stringify(v)).digest("hex").slice(0, 32);
+};
 
 /** The fields whose change is a change to the budget. Who changed it, and when, are not. */
 const valueOf = (l: StoredLine) => [
   l.id, l.lineKey, l.source, l.sourceRef, l.sourceChangedAt, l.periodKind, l.periodKey, l.startsOn, l.endsOn, l.circleId, l.roleId,
   l.matched, l.category, l.plannedMinor, l.spentMinor, l.currency, l.label, l.sourceLabel, l.note, l.status, l.adoptedAt,
   l.fxRate ?? null, l.fxSource ?? null, l.fxAsOf ?? null, !!l.sourceVillageWide, l.fxInto ?? null, !!l.withdrawnBySource, !!l.nameHeld, l.labelOverride ?? null,
+  l.nameHeldCell ?? null, l.sourceLabelOverride ?? null,
 ];
 
 /** The budget as it stands, as one digest: what the figure names as its `revision` (R7). */
 export function stateRevision(lines: readonly StoredLine[]): string {
-  return digest([...lines].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map(valueOf));
+  return revisionOf([...lines].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).map(valueOf));
 }
 
 // ── The key (R2) ────────────────────────────────────────────────────────────
@@ -616,6 +657,8 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
       roleId = s.roleId;
     } else refuse(s.cell, "scope", s.message);
   }
+  // The village's own circle, named by name or id, is the village-wide scope: one key with a blank circle (V2).
+  if (circleId !== null && circleId !== VILLAGE_WIDE && roleId === null && input.villageCircleId && circleId === input.villageCircleId) circleId = VILLAGE_WIDE;
   // Every line that counts names a circle or the village-wide scope (R34, M2): the fixed marker, never the dial's circle.
   if (!sera && circleId === null && !refused.some((r) => r.cell === "circle" || r.cell === "role")) {
     if (input.villageCircleId) circleId = VILLAGE_WIDE;
@@ -664,6 +707,8 @@ function readCells(n: number, row: ImportRow, base: StoredLine | null, input: Pl
       withdrawnBySource: base?.withdrawnBySource ?? false,
       nameHeld: base?.nameHeld ?? false,
       labelOverride: base?.labelOverride ?? null,
+      nameHeldCell: base?.nameHeldCell ?? null,
+      sourceLabelOverride: base?.sourceLabelOverride ?? null,
     },
   };
 }
@@ -741,12 +786,14 @@ export function planImport(input: PlanInput): ImportPlan {
   const byId = new Map(input.existing.map((l) => [l.id, l]));
   const byKey = new Map(input.existing.map((l) => [l.lineKey, l]));
   /** A period that lies wholly in a moon that has ended: closed to every write (M8). */
-  const ended = (l: Pick<StoredLine, "endsOn">) => !!input.currentMoonStartsOn && l.endsOn < input.currentMoonStartsOn;
+  // A line whose days reach into a moon that has ended (V3): any day before the current moon starts. A write to
+  // one, before or after, is refused; a correction goes on a new line in the current moon.
+  const ended = (l: Pick<StoredLine, "startsOn">) => !!input.currentMoonStartsOn && l.startsOn < input.currentMoonStartsOn;
   const sera = input.source === "sera";
   const auto = sera && input.standing?.mode === "auto";
   const setterRoles = new Set(input.standing?.setterRoleIds ?? []);
   /** Under the standing switch a line counts at once, unless its words are held or it names a role the setter holds (P1). */
-  const mayAutoAdopt = (l: StoredLine) => auto && !l.nameHeld && !(l.roleId && setterRoles.has(l.roleId));
+  const mayAutoAdopt = (l: StoredLine) => auto && !stillHeld(l) && !(l.roleId && setterRoles.has(l.roleId));
 
   // First pass: read every row and give it its key.
   type Read = { n: number; row: ImportRow; key: string | null; cells: Cells | null; target: StoredLine | null };
@@ -785,8 +832,9 @@ export function planImport(input: PlanInput): ImportPlan {
         plan.refused.push({ row: r.n, cell: "id", reason: "no_line", message: "There is no budget line with that id." });
         continue;
       }
-      // A line in a moon that has ended, or one its source closed, is history (M8).
-      if (ended(t) || t.status === "closed") {
+      // A line in a moon that has ended is history (M8, V3). One its source closed this moon may still be renamed,
+      // locked or withdrawn, and never adopted.
+      if (ended(t)) {
         refuseClosed(r.n);
         continue;
       }
@@ -799,7 +847,11 @@ export function planImport(input: PlanInput): ImportPlan {
           plan.refused.push({ row: r.n, cell: "status", reason: "withdrawn", message: "Restore this line before adopting it." });
           continue;
         }
-        if (t.nameHeld) {
+        if (t.status === "closed") {
+          refuseClosed(r.n, "status");
+          continue;
+        }
+        if (stillHeld(t)) {
           plan.refused.push({ row: r.n, cell: "label", reason: "name_held", message: "This line's words may name a member. Rename it, then adopt it." });
           continue;
         }
@@ -838,7 +890,9 @@ export function planImport(input: PlanInput): ImportPlan {
       }
       if (r.row.action === "withdraw" || r.row.action === "restore") {
         const restoring = r.row.action === "restore";
-        if ((t.status === "withdrawn") !== restoring) {
+        const already = (t.status === "withdrawn") !== restoring;
+        // Withdrawing a line its source withdrew makes the withdrawal the person's, so no import undoes it (M7).
+        if (already && (restoring || !t.withdrawnBySource)) {
           plan.unchanged.push({ row: r.n, id: t.id });
           continue;
         }
@@ -849,31 +903,46 @@ export function planImport(input: PlanInput): ImportPlan {
         continue;
       }
       if (t.source === "sera") {
-        // A source's line stays read-only here, except its words: a holder may rename it (M9).
+        // A source's line stays read-only here, except its words: a holder may rename its label or its source label (M9, V5).
         const asked = Object.keys(r.row).filter((k) => k !== "id" && r.row[k as keyof ImportRow] !== undefined);
-        if (asked.length !== 1 || asked[0] !== "label") {
+        if (!asked.length || asked.some((k) => k !== "label" && k !== "sourceLabel")) {
           plan.refused.push({ row: r.n, cell: "row", reason: "library_line", message: NOT_IN_LIBRARY });
           continue;
         }
-        const override = clean(r.row.label);
-        if (!override || Array.from(override).length > LABEL_MAX) {
-          plan.refused.push({ row: r.n, cell: "label", reason: "label", message: `Give the line a label of at most ${LABEL_MAX} characters.` });
-          continue;
+        const renames: Partial<Pick<StoredLine, "labelOverride" | "sourceLabelOverride">> = {};
+        let problem = false;
+        for (const [key, cell] of [["label", "label"], ["sourceLabel", "source_label"]] as const) {
+          if (r.row[key] === undefined) continue;
+          const override = clean(r.row[key]);
+          if ((key === "label" && !override) || Array.from(override).length > LABEL_MAX) {
+            plan.refused.push({ row: r.n, cell, reason: cell, message: `Give the line ${key === "label" ? "a label" : "a source label"} of at most ${LABEL_MAX} characters.` });
+            problem = true;
+            continue;
+          }
+          if (FORMAT_CHARS.test(String(r.row[key] ?? ""))) {
+            plan.refused.push({ row: r.n, cell, reason: "hidden_characters", message: "These words carry invisible characters. Type them again as plain text." });
+            problem = true;
+            continue;
+          }
+          const find = override ? input.names(override) : null;
+          if (find?.kind === "refused") {
+            plan.refused.push({ row: r.n, cell, reason: `name_${find.what}`, message: nameFindWords(find) });
+            problem = true;
+            continue;
+          }
+          if (find?.kind === "held") {
+            plan.held.push({ row: r.n, cell, message: nameFindWords(find) });
+            problem = true;
+            continue;
+          }
+          // The source's own words again are no rename at all; an empty source label hides the source's.
+          if (key === "label") renames.labelOverride = override === t.label ? null : override;
+          else renames.sourceLabelOverride = override === (t.sourceLabel ?? "") ? null : override;
         }
-        if (FORMAT_CHARS.test(String(r.row.label ?? ""))) {
-          plan.refused.push({ row: r.n, cell: "label", reason: "hidden_characters", message: "This label carries invisible characters. Type it again as plain text." });
-          continue;
-        }
-        const find = input.names(override);
-        if (find?.kind === "refused") {
-          plan.refused.push({ row: r.n, cell: "label", reason: `name_${find.what}`, message: nameFindWords(find) });
-          continue;
-        }
-        if (find?.kind === "held") {
-          plan.held.push({ row: r.n, cell: "label", message: nameFindWords(find) });
-          continue;
-        }
-        const line: StoredLine = { ...t, labelOverride: override === t.label ? null : override, nameHeld: false };
+        if (problem) continue;
+        const renamed: StoredLine = { ...t, ...renames };
+        // A hold clears only once every cell it sits on is renamed (V5).
+        const line: StoredLine = { ...renamed, nameHeld: stillHeld(renamed) };
         if (sameValues(line, t)) {
           plan.unchanged.push({ row: r.n, id: t.id });
           continue;
@@ -925,23 +994,26 @@ export function planImport(input: PlanInput): ImportPlan {
       continue;
     }
     plan.flags.push(...cells.flags);
-    // A held word blocks a person's confirm; a source's line is stored waiting and hidden instead (M9).
-    const nameHeld = cells.held.length > 0;
-    if (nameHeld && !sera) {
+    // A held word blocks a person's confirm; a source's line is stored waiting and hidden instead, with the cells that hold it (M9, V5).
+    const heldCells = Array.from(new Set(cells.held.map((h) => h.cell)));
+    if (heldCells.length && !sera) {
       plan.held.push(...cells.held);
       continue;
     }
-    if (nameHeld) plan.flags.push({ row: r.n, cell: "label", kind: "name_held", message: "This line's words may name a member, so it is kept out of the budget and the members' view until a holder renames it." });
     const t = r.target;
-    const line: StoredLine = { ...cells.line, lineKey: r.key!, nameHeld };
-    if (ended(line)) {
-      // A source re-sending history is listed and left alone; a person's row is refused (M8).
-      if (t && sameValues({ ...line, id: t.id, lineKey: t.lineKey, source: t.source, adoptedAt: t.adoptedAt, adoptedAs: t.adoptedAs, ...keptLock(t), withdrawnBySource: t.withdrawnBySource, labelOverride: t.labelOverride, nameHeld: t.nameHeld }, t)) {
+    const line: StoredLine = { ...cells.line, lineKey: r.key!, nameHeld: heldCells.length > 0, nameHeldCell: heldCells.join(",") || null, labelOverride: null, sourceLabelOverride: null };
+    if (ended(line) || (t && ended(t))) {
+      // A source re-sending history is listed and left alone; a person's row is refused (M8, V3).
+      const kept = t && { ...line, id: t.id, lineKey: t.lineKey, source: t.source, adoptedAt: t.adoptedAt, adoptedAs: t.adoptedAs, ...keptLock(t), withdrawnBySource: t.withdrawnBySource, labelOverride: t.labelOverride, sourceLabelOverride: t.sourceLabelOverride, nameHeld: t.nameHeld, nameHeldCell: t.nameHeldCell };
+      if (t && kept && sameValues(kept, t)) {
         plan.unchanged.push({ row: r.n, id: t.id });
       } else if (sera) {
         plan.ended.push({ row: r.n, label: line.label });
       } else refuseClosed(r.n, "period");
       continue;
+    }
+    if (!t && line.nameHeld) {
+      plan.flags.push({ row: r.n, cell: heldCells[0] ?? "label", kind: "name_held", message: "This line's words may name a member, so it is kept out of the budget and the members' view until a holder renames them." });
     }
     if (!t) {
       // Under a source's standing switch in auto mode, a synced line counts as soon as it lands (R18).
@@ -968,10 +1040,15 @@ export function planImport(input: PlanInput): ImportPlan {
       adoptedAs: t.adoptedAs,
       status: sera ? line.status : "approved",
       withdrawnBySource: false,
-      // A source's new words void a holder's rename; the same words keep it, and a rename that passed clears the hold.
+      // A source's new words void a holder's rename of them; the same words keep it (M9, V5).
       labelOverride: sera && line.label === t.label ? t.labelOverride ?? null : null,
+      sourceLabelOverride: sera && line.sourceLabel === t.sourceLabel ? t.sourceLabelOverride ?? null : null,
     };
-    if (sera && next.labelOverride) next.nameHeld = false;
+    // Held while any cell the source's words hold it on is not renamed (V5).
+    next.nameHeld = sera ? stillHeld(next) : false;
+    if (sera && next.nameHeld) {
+      plan.flags.push({ row: r.n, cell: heldCellsOf(next)[0] ?? "label", kind: "name_held", message: "This line's words may name a member, so it is kept out of the budget and the members' view until a holder renames them." });
+    }
     // The lock (spec 5a, guard 2): a new amount converts at the SAME locked rate, from a source or a writer here alike; a new currency drops it.
     const lockStays = !!t.fxRate && next.currency === t.currency;
     Object.assign(next, lockStays ? keptLock(t) : UNLOCKED, previousOf(t, next));
@@ -997,7 +1074,9 @@ export function planImport(input: PlanInput): ImportPlan {
     plan.writes.push({ op: t.status === "withdrawn" ? "restore" : "change", row: r.n, line: next, before: t, plannedCell: cells.plannedCell, becomesManual: false, adoptionCleared: cleared });
   }
 
-  withdrawByScope(input, reads.map((r) => r.key).filter((k): k is string => !!k), plan, ended);
+  // An upload's own rows, read: its default withdrawal scope, never a line it names by id, keeps, or finds withdrawn.
+  const ownRows = reads.filter((r) => !r.row?.id && r.cells?.ok).map((r) => (r.cells as Extract<Cells, { ok: true }>).line);
+  withdrawByScope(input, reads.map((r) => r.key).filter((k): k is string => !!k), plan, ended, ownRows);
   return plan;
 }
 
@@ -1010,7 +1089,7 @@ export function planImport(input: PlanInput): ImportPlan {
  * never withdrawn, and the withdrawal is marked an import's, which a later
  * import may undo (M7).
  */
-function withdrawByScope(input: PlanInput, listedKeys: string[], plan: ImportPlan, ended: (l: StoredLine) => boolean): void {
+function withdrawByScope(input: PlanInput, listedKeys: string[], plan: ImportPlan, ended: (l: StoredLine) => boolean, ownRows: readonly StoredLine[]): void {
   if (!input.scope?.whole || input.source === "manual") return;
   if (input.source === "sera" && input.rows.length === 0) {
     plan.withdrawSkipped = "empty_read";
@@ -1046,11 +1125,9 @@ function withdrawByScope(input: PlanInput, listedKeys: string[], plan: ImportPla
     return;
   }
 
-  // An upload: its scope, named or read off its rows.
-  const rowPeriods = plan.writes.map((w) => `${w.line.periodKind}|${w.line.periodKey}`).concat(
-    input.existing.filter((l) => touched.has(l.lineKey)).map((l) => `${l.periodKind}|${l.periodKey}`),
-  );
-  const rowCircles = plan.writes.map((w) => w.line.circleId).concat(input.existing.filter((l) => touched.has(l.lineKey)).map((l) => l.circleId));
+  // An upload: its scope, named, or read off its own rows (never off a line it names by id, keeps, or finds withdrawn).
+  const rowPeriods = ownRows.map((l) => `${l.periodKind}|${l.periodKey}`);
+  const rowCircles = ownRows.map((l) => l.circleId);
   let periods = new Set(rowPeriods);
   let circles = new Set<string | null>(rowCircles);
   if (input.scope.periods?.length) {
@@ -1255,6 +1332,12 @@ export async function budgetCircleNames(pool: Pool): Promise<Map<string, string>
   return new Map(circles.map((c) => [String(c.id), String(c.name ?? "")]));
 }
 
+/** The chart's role names by id, for words a ballot reads (names, never ids). */
+export async function budgetRoleNames(pool: Pool): Promise<Map<string, string>> {
+  const { roles } = await repo.budgetChartRows(pool);
+  return new Map(roles.map((r) => [String(r.id), String(r.name ?? "")]));
+}
+
 /** Every line, as stored, for the read route. */
 export async function budgetLines(pool: Pool): Promise<StoredLine[]> {
   return (await repo.budgetLineRows(pool)).map(rowToLine);
@@ -1305,6 +1388,8 @@ export interface ImportInput {
    * at all. A message refuses the confirm as stale and writes nothing.
    */
   withinLock?: (conn: PoolConnection) => Promise<string | null>;
+  /** False for a write that is not an import (a source's switch adopting what it sent): no `budget_syncs` row (R5). */
+  recordSync?: boolean;
 }
 
 /** An import's scope, held to a shape and a size before it is used or stored (nit). */
@@ -1539,6 +1624,16 @@ interface Prepared {
   shareAfter: ShareState;
 }
 
+/** The names on the chart, roles and circles: words the name check never holds (V4). */
+function chartWordsOf(chart: BudgetChart): string[] {
+  return [...chart.circles.filter((c) => !c.isExample).map((c) => c.name), ...chart.roles.filter((r) => !r.isExample).map((r) => r.name)];
+}
+
+async function chartWordsFor(db: Pool | PoolConnection): Promise<string[]> {
+  const rows = await repo.budgetChartRows(db);
+  return [...rows.circles.filter((c) => Number(c.is_example) !== 1).map((c) => String(c.name ?? "")), ...rows.roles.filter((r) => Number(r.is_example) !== 1).map((r) => String(r.name ?? ""))];
+}
+
 async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetEnv, pool: Pool = db as Pool): Promise<Prepared> {
   const existing = (await repo.budgetLineRows(db)).map(rowToLine);
   const chartRows = await repo.budgetChartRows(db);
@@ -1546,7 +1641,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     circles: chartRows.circles.map(chartCircleOf),
     roles: chartRows.roles.map((r) => ({ id: String(r.id), name: String(r.name ?? ""), circleId: str(r.circle_id), active: Number(r.active) === 1, isExample: Number(r.is_example) === 1 })),
   };
-  const names = budgetNameCheck(await rosterRows(db as Pool));
+  const names = budgetNameCheck(await rosterRows(db as Pool), { chartWords: chartWordsOf(chart) });
   const villageCircleId = villageCircleOf(chart.circles, e.villageCircleSetting())?.id ?? null;
   const villageCurrency = e.currency();
   const readAt = new Date().toISOString();
@@ -1599,7 +1694,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
   const touched = existing.filter((l) => touchedIds.has(l.id)).sort((a, b) => (a.id < b.id ? -1 : 1)).map(valueOf);
   return {
     turnOff,
-    touchedRevision: digest([touched, planDigest(plan, readAt)]),
+    touchedRevision: revisionOf([touched, planDigest(plan, readAt)]),
     timezone: e.timezone(),
     villageCircleId,
     village: villageCurrency,
@@ -1609,7 +1704,7 @@ async function prepare(db: Pool | PoolConnection, input: ImportInput, e: BudgetE
     plan,
     after,
     stateRevision: state,
-    revision: digest([state, planDigest(plan, readAt)]),
+    revision: revisionOf([state, planDigest(plan, readAt)]),
     shareBefore: shareState(moonId, figureFor(existing, moonId, committed, e), base),
     shareAfter: shareState(moonId, figureFor(after, moonId, committed, e), base),
   };
@@ -1705,9 +1800,11 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     sourceLink: ok && p ? p.sourceLink : null,
   });
 
+  const insertSync = (db: Pool | PoolConnection, row: repo.BudgetSyncRow) => (input.recordSync === false ? Promise.resolve() : repo.insertBudgetSync(db, row).then(() => undefined));
+
   if (!input.revision && !input.stateRevision) {
     const p = await prepare(pool, input, e);
-    await repo.insertBudgetSync(pool, syncRow(p, false, "revision_required"));
+    await insertSync(pool, syncRow(p, false, "revision_required"));
     return refusal(400, "revision_required", "Preview the import first, then confirm the preview you read.", p);
   }
 
@@ -1716,7 +1813,7 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
   try {
     locked = await repo.takeBudgetLock(conn, 10);
     if (!locked) {
-      await repo.insertBudgetSync(pool, syncRow(null, false, "busy"));
+      await insertSync(pool, syncRow(null, false, "busy"));
       return refusal(409, "busy", "Somebody else is changing the budget right now. Preview again in a moment.");
     }
     await conn.beginTransaction();
@@ -1724,23 +1821,23 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
     const stale = input.revision ? input.revision !== p.revision : input.stateRevision !== p.stateRevision;
     const sync = (ok: boolean, error: string | null) => syncRow(p, ok, error);
     if (stale) {
-      await repo.insertBudgetSync(conn, sync(false, "stale"));
+      await insertSync(conn, sync(false, "stale"));
       await conn.commit();
       return refusal(409, "stale", "The budget changed since this preview. Read the fresh preview, then confirm again.", p);
     }
     if (p.plan.refused.some((r) => r.row === 0)) {
-      await repo.insertBudgetSync(conn, sync(false, "source_refused"));
+      await insertSync(conn, sync(false, "source_refused"));
       await conn.commit();
       return refusal(400, "source_refused", "The import's own name, link or scope cannot be used as written. Fix it, then preview again.", p);
     }
     if (p.plan.held.length) {
-      await repo.insertBudgetSync(conn, sync(false, "names_held"));
+      await insertSync(conn, sync(false, "names_held"));
       await conn.commit();
       return refusal(400, "names_held", "Some words may name a member. Reword them, then preview again.", p);
     }
     const refusedRows = new Set(p.plan.refused.map((r) => r.row).filter((n) => n > 0));
     if (input.lines.length > 0 && refusedRows.size === input.lines.length) {
-      await repo.insertBudgetSync(conn, sync(false, "all_refused"));
+      await insertSync(conn, sync(false, "all_refused"));
       await conn.commit();
       return refusal(400, "all_refused", "Every row of this import was refused, so nothing was written. Read the reasons, fix the rows, then preview again.", p);
     }
@@ -1748,7 +1845,7 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
       const stop = await input.withinLock(conn);
       if (stop) {
         await conn.rollback();
-        await repo.insertBudgetSync(pool, sync(false, "stale"));
+        await insertSync(pool, sync(false, "stale"));
         return refusal(409, "stale", stop, p);
       }
     }
@@ -1774,6 +1871,8 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
         withdrawnBySource: !!line.withdrawnBySource,
         nameHeld: !!line.nameHeld,
         labelOverride: line.labelOverride ?? null,
+        nameHeldCell: line.nameHeldCell ?? null,
+        sourceLabelOverride: line.sourceLabelOverride ?? null,
       };
       if (w.op === "add") await repo.insertBudgetLine(conn, row);
       else await repo.updateBudgetLine(conn, row);
@@ -1781,7 +1880,7 @@ export async function importBudgetLines(pool: Pool, input: ImportInput): Promise
       written.push({ op: w.op, id: row.id });
     }
     const s = sync(true, null);
-    await repo.insertBudgetSync(conn, s);
+    await insertSync(conn, s);
     await conn.commit();
     for (const w of written) {
       void recordEvent(pool, { kind: "audit", text: `budget:${VERB[w.op]}:${w.id}`, actorUserId: input.by, entityType: "budget_line", entityRef: w.id, audience: "admin" });
@@ -1829,25 +1928,49 @@ export async function periodNote(pool: Pool, periodKey: string): Promise<PeriodN
  * every budget word (R15), at most 1000 characters, recorded. An empty note
  * clears it. The caller has already passed the R21 door.
  */
+const noteVersionOf = (periodKey: string, note: string | null): string => revisionOf(["note", periodKey, note]);
+
 export async function setPeriodNote(
   pool: Pool,
-  input: { period: string; note: string; by: string | null; byAs: string | null; dryRun?: boolean },
-): Promise<{ ok: true; periodKey: string; cleared: boolean } | { ok: false; status: 400; code: string; message: string }> {
+  input: { period: string; note: string; by: string | null; byAs: string | null; dryRun?: boolean; expectVersion?: string | null },
+): Promise<{ ok: true; periodKey: string; cleared: boolean } | { ok: false; status: 400 | 409; code: string; message: string }> {
   const p = resolvePeriod(input.period, periodEnvOf(env));
   if (!p.ok) return { ok: false, status: 400, code: "period", message: p.message };
   const note = String(input.note ?? "").normalize("NFC").trim();
   if (Array.from(note).length > PERIOD_NOTE_MAX) return { ok: false, status: 400, code: "too_long", message: `Keep the note to ${PERIOD_NOTE_MAX} characters.` };
   if (FORMAT_CHARS.test(note)) return { ok: false, status: 400, code: "hidden_characters", message: "This note carries invisible characters. Type it again as plain text." };
   if (note) {
-    const find = budgetNameCheck(await rosterRows(pool))(note);
+    const find = budgetNameCheck(await rosterRows(pool), { chartWords: await chartWordsFor(pool) })(note);
     if (find?.kind === "refused") return { ok: false, status: 400, code: `name_${find.what}`, message: nameFindWords(find) };
     if (find?.kind === "held") return { ok: false, status: 400, code: "names_held", message: nameFindWords(find) };
   }
   if (input.dryRun) return { ok: true, periodKey: p.period.key, cleared: !note };
-  if (note) {
-    await repo.upsertPeriodNote(pool, { periodKey: p.period.key, note, changedBy: input.by, changedAs: input.byAs ?? BUDGET_KEEPER });
-  } else {
-    await repo.deletePeriodNote(pool, p.period.key);
+  // Under the budget lock, in one transaction, with the version a suggestion was made on checked there.
+  const conn = await pool.getConnection();
+  let locked = false;
+  try {
+    locked = await repo.takeBudgetLock(conn, 10);
+    if (!locked) return { ok: false, status: 409, code: "busy", message: "Somebody else is changing the budget right now. Try again in a moment." };
+    await conn.beginTransaction();
+    if (input.expectVersion) {
+      const [row] = await repo.periodNoteRows(conn, [p.period.key]);
+      if (noteVersionOf(p.period.key, row ? String(row.note) : null) !== input.expectVersion) {
+        await conn.rollback();
+        return { ok: false, status: 409, code: "stale", message: "This note changed since the suggestion was made. Suggest it again." };
+      }
+    }
+    if (note) {
+      await repo.upsertPeriodNote(conn, { periodKey: p.period.key, note, changedBy: input.by, changedAs: input.byAs ?? BUDGET_KEEPER });
+    } else {
+      await repo.deletePeriodNote(conn, p.period.key);
+    }
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback().catch(() => undefined);
+    throw err;
+  } finally {
+    if (locked) await repo.releaseBudgetLock(conn).catch(() => undefined);
+    conn.release();
   }
   void recordEvent(pool, { kind: "audit", text: `budget:note:${p.period.key}`, actorUserId: input.by, entityType: "budget_period_note", entityRef: p.period.key, audience: "admin" });
   return { ok: true, periodKey: p.period.key, cleared: !note };
@@ -1954,6 +2077,8 @@ export type EnvelopeResult =
       circlePlannedMinor: number;
       /** The lines pass the envelope: a warning, never a block (R35). */
       over: boolean;
+      /** The envelope's version as it stands, the one a suggestion binds to. */
+      version: string;
     }
   | { ok: false; status: 400 | 404 | 409; code: string; message: string };
 
@@ -1972,7 +2097,22 @@ function circlePlanned(plan: MoonPlan, circleId: string, villageCircleId: string
   return { total: own.reduce((n, c) => n + c.totalMinor, 0), byCategory };
 }
 
-type EnvelopeInput = { circleId: string; period: string; planned: string | number; goalNote: string | null; format?: NumberFormatChoice; by: string | null; byAs: string | null; dryRun: boolean; revision?: string | null };
+type EnvelopeInput = {
+  circleId: string;
+  period: string;
+  planned: string | number;
+  goalNote: string | null;
+  format?: NumberFormatChoice;
+  by: string | null;
+  byAs: string | null;
+  dryRun: boolean;
+  revision?: string | null;
+  /** The envelope's version a suggestion was made on, checked inside the budget lock. */
+  expectVersion?: string | null;
+};
+
+const envelopeVersionOf = (circleId: string, periodKey: string, row: Pick<BudgetEnvelope, "plannedMinor" | "currency" | "goalNote" | "startsOn" | "endsOn"> | null): string =>
+  revisionOf(["envelope", circleId, periodKey, row ? [row.plannedMinor, row.currency, row.goalNote, row.startsOn, row.endsOn] : null]);
 
 async function envelopeView(db: Pool | PoolConnection, input: EnvelopeInput, e: BudgetEnv): Promise<EnvelopeResult> {
   const chart = await repo.budgetChartRows(db);
@@ -1989,7 +2129,7 @@ async function envelopeView(db: Pool | PoolConnection, input: EnvelopeInput, e: 
   if (goalNote && Array.from(goalNote).length > GOAL_NOTE_MAX) return { ok: false, status: 400, code: "too_long", message: `Keep what this budget is for to ${GOAL_NOTE_MAX} characters.` };
   if (goalNote && FORMAT_CHARS.test(goalNote)) return { ok: false, status: 400, code: "hidden_characters", message: "This note carries invisible characters. Type it again as plain text." };
   if (goalNote) {
-    const find = budgetNameCheck(await rosterRows(db as Pool))(goalNote);
+    const find = budgetNameCheck(await rosterRows(db as Pool), { chartWords: chartWordsOf({ circles: chart.circles.map(chartCircleOf), roles: chart.roles.map((r) => ({ id: String(r.id), name: String(r.name ?? ""), circleId: str(r.circle_id), active: Number(r.active) === 1, isExample: Number(r.is_example) === 1 })) }) })(goalNote);
     if (find?.kind === "refused") return { ok: false, status: 400, code: `name_${find.what}`, message: nameFindWords(find) };
     if (find?.kind === "held") return { ok: false, status: 400, code: "names_held", message: nameFindWords(find) };
   }
@@ -2000,8 +2140,8 @@ async function envelopeView(db: Pool | PoolConnection, input: EnvelopeInput, e: 
   const villageCircleId = villageCircleOf(circles, e.villageCircleSetting())?.id ?? null;
   const circlePlannedMinor = circlePlanned(moonPlan(lines, span, village), circle.id, villageCircleId).total;
   const before = existing ? (({ changedBy: _changedBy, ...rest }) => rest)(existing) : null;
-  const revision = digest([before, after, stateRevision(lines)]);
-  return { ok: true, written: false, revision, before, after, circlePlannedMinor, over: circlePlannedMinor > amount.minor };
+  const revision = revisionOf([before, after, stateRevision(lines)]);
+  return { ok: true, written: false, revision, before, after, circlePlannedMinor, over: circlePlannedMinor > amount.minor, version: envelopeVersionOf(circle.id, p.period.key, existing) };
 }
 
 /**
@@ -2025,7 +2165,7 @@ export async function setEnvelope(pool: Pool, input: EnvelopeInput): Promise<Env
     if (!locked) return { ok: false, status: 409, code: "busy", message: "Somebody else is changing the budget right now. Preview again in a moment." };
     await conn.beginTransaction();
     const now = await envelopeView(conn, input, e);
-    if (!now.ok || now.revision !== input.revision) {
+    if (!now.ok || now.revision !== input.revision || (input.expectVersion && now.version !== input.expectVersion)) {
       await conn.rollback();
       return now.ok ? STALE : now;
     }
@@ -2178,18 +2318,18 @@ const sourceOf = (source: string, r: RowDataPacket | null): BudgetSourceState =>
 export async function envelopeVersion(pool: Pool, circleId: string, period: string): Promise<string> {
   const p = resolvePeriod(period, periodEnvOf(env));
   const row = p.ok ? (await budgetEnvelopes(pool)).find((x) => x.circleId === circleId && x.periodKey === p.period.key) ?? null : null;
-  return digest(["envelope", circleId, p.ok ? p.period.key : String(period), row ? [row.plannedMinor, row.currency, row.goalNote, row.startsOn, row.endsOn] : null]);
+  return envelopeVersionOf(circleId, p.ok ? p.period.key : String(period), row);
 }
 
 export async function periodNoteVersion(pool: Pool, period: string): Promise<string> {
   const p = resolvePeriod(period, periodEnvOf(env));
   const row = p.ok ? await periodNote(pool, p.period.key) : null;
-  return digest(["note", p.ok ? p.period.key : String(period), row ? row.note : null]);
+  return noteVersionOf(p.ok ? p.period.key : String(period), row ? row.note : null);
 }
 
 export async function sourceVersion(pool: Pool, source: string): Promise<string> {
   const s = await budgetSourceState(pool, source);
-  return digest(["source", source, s.on, s.mode, s.schedule, s.setAs, s.offReason]);
+  return revisionOf(["source", source, s.on, s.mode, s.schedule, s.setAs, s.offReason]);
 }
 
 /** One source's switch, or the default for one never switched: off, auto, daily. */
@@ -2224,13 +2364,15 @@ export type SwitchResult =
       after: Omit<BudgetSourceState, "setBy" | "setAt" | "offReason">;
       /** How many lines the source already sent that count from now (auto, turned on). */
       adopts: number;
+      /** The roles those lines pay: who holds one of them may not decide the switch (V10). */
+      rolesPaid: string[];
       shareBefore: ShareState;
       shareAfter: ShareState;
     }
   | { ok: false; status: 400 | 404 | 409; code: string; message: string };
 
 const SWITCH_PAYEE_CONFLICT =
-  "Turning this source on would make a budget line count for a role you hold, so the village decides it. Suggest the change, and it goes to the other holders or to a vote.";
+  "Turning this source on would make a budget line count for a role you hold, so you cannot do it yourself. Suggest it: it goes to the holders who hold no role it pays, or to a village vote when every holder holds one.";
 
 /**
  * TURNING A SOURCE ON, OFF, OR BETWEEN MODES (R18): an act of the R21 door,
@@ -2254,17 +2396,18 @@ export async function switchBudgetSource(pool: Pool, input: SwitchInput): Promis
   const adoptedAs = `standing: ${byAs}`.slice(0, 120);
   const current = moonPeriod(e.currentMoonId(), e.timezone());
   const pending = input.on && input.mode === "auto"
-    ? (await budgetLines(pool)).filter((l) => l.source === input.source && !l.adoptedAt && l.status === "approved" && !l.nameHeld && !(current && l.endsOn < current.startsOn))
+    ? (await budgetLines(pool)).filter((l) => l.source === input.source && !l.adoptedAt && l.status === "approved" && !stillHeld(l) && !(current && l.startsOn < current.startsOn))
     : [];
   const seated = new Set(input.seatedRoleIds ?? []);
   if (pending.some((l) => l.roleId && seated.has(l.roleId))) return { ok: false, status: 409, code: "payee_conflict", message: SWITCH_PAYEE_CONFLICT };
   const rows: ImportRow[] = pending.map((l) => ({ id: l.id, action: "adopt", adoptedAs }));
-  const base: ImportInput = { source: "manual", lines: rows, by: input.by, byAs, dryRun: true };
+  const base: ImportInput = { source: "manual", lines: rows, by: input.by, byAs, dryRun: true, recordSync: false };
   const p = await importBudgetLines(pool, base);
   const after = { source: input.source, on: input.on, mode: input.mode, schedule: input.schedule, setAs: byAs };
   const stateOf = (x: BudgetSourceState) => [x.on, x.mode, x.schedule, x.setBy, x.setAs, x.offReason];
-  const revision = digest([p.revision, stateOf(before), after]);
-  const out = { ok: true as const, written: false, revision, before, after, adopts: p.changed.length, shareBefore: p.shareBefore, shareAfter: p.shareAfter };
+  const revision = revisionOf([p.revision, stateOf(before), after]);
+  const rolesPaid = Array.from(new Set(pending.map((l) => l.roleId).filter((x): x is string => !!x))).sort();
+  const out = { ok: true as const, written: false, revision, before, after, adopts: p.changed.length, rolesPaid, shareBefore: p.shareBefore, shareAfter: p.shareAfter };
   if (input.dryRun) return out;
   const STALE = "The budget or the source changed since this preview. Read the fresh preview, then confirm again.";
   if (input.revision !== revision) return { ok: false, status: 409, code: "stale", message: STALE };
@@ -2358,10 +2501,12 @@ export async function budgetRateDrift(pool: Pool, over: Partial<BudgetEnv> = {})
   const e = { ...env, ...over };
   const village = e.currency().toUpperCase();
   if (!village) return [];
-  const locked = (await budgetLines(pool)).filter((l) => l.fxRate && l.status !== "withdrawn" && l.currency.toUpperCase() !== village);
+  // Only a rate locked into the village's currency drifts against it (M4, V6).
+  const locked = (await budgetLines(pool)).filter((l) => l.fxRate && l.status !== "withdrawn" && l.currency.toUpperCase() !== village && String(l.fxInto ?? "").toUpperCase() === village);
   if (!locked.length) return [];
   const table = await latestRates(pool);
-  return locked.map((l) => rateDrift(l, village, crossRate(table.rates, l.currency.toUpperCase(), village)));
+  // The label members read: a holder's rename, never a source's words held for a name (V6).
+  return locked.map((l) => rateDrift({ ...l, label: displayLabel(l) }, village, crossRate(table.rates, l.currency.toUpperCase(), village)));
 }
 
 // ── The sources a puller plugs into ─────────────────────────────────────────

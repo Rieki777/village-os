@@ -420,6 +420,14 @@ describe("the review round: amounts (M5)", () => {
     expect(readAmount("CRC 1,000.00", "CRC", EN)).toMatchObject({ ok: true, minor: 100_000 });
   });
 
+  it("V8: still asks for the format after space groups when one mark is followed by three digits", () => {
+    for (const c of ["1 234,567", "1 234.567", "12 345,678"]) {
+      expect(readAmount(c, "CRC", { locale: "en", chosen: false }), c).toMatchObject({ ok: false, reason: "ambiguous" });
+    }
+    expect(readAmount("1 234,567", "CRC", { locale: "en", chosen: true }), "a chosen format reads it").toMatchObject({ ok: true, minor: 123_456_700 });
+    expect(readAmount("1 234 567", "CRC", { locale: "en", chosen: false }), "spaces alone are never ambiguous").toMatchObject({ ok: true, minor: 123_456_700 });
+  });
+
   it("maps an unambiguous currency symbol and refuses one that is not the line's currency", () => {
     expect(readAmount("$1,200.00", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });
     expect(readAmount("\u20ac1,200.00", "CRC", EN)).toMatchObject({ ok: false, reason: "currency_mismatch" });

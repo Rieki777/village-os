@@ -29,7 +29,7 @@ vi.mock("../lib/ballots", async (orig) => ({
 }));
 
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
-import { register as registerBudgets } from "./budgets";
+import { HELD_WORDS, register as registerBudgets } from "./budgets";
 import { register as registerSuggestions } from "./adminSuggestions";
 import { register as registerPulse } from "./pulse";
 import { adminGateWasConsulted } from "../lib/adminGate";
@@ -546,8 +546,9 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   // ── The suggestion control (R22) ──────────────────────────────────────────
 
   const suggest = async (user: string, lines: unknown[] = [ROW]) => {
-    const read = await call("GET", "/api/budgets", user, {}, {}, { moon: MOON });
-    return call("POST", "/api/admin/suggestions", user, { control: "budget_lines", payload: { source: "upload", lines, format: FORMAT }, why: "The garden needs it", was: read.body.stateRevision });
+    // The suggester's own preview names the revision the suggestion binds to (V9).
+    const preview = await call("POST", "/api/admin/budgets/import", user, { lines, format: FORMAT });
+    return call("POST", "/api/admin/suggestions", user, { control: "budget_lines", payload: { source: "upload", lines, format: FORMAT }, why: "The garden needs it", was: preview.body.touchedRevision });
   };
 
   it("sends a member's suggestion to the holders, and a holder's Accept writes it through importBudgetLines", async () => {
@@ -696,7 +697,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect(read.body.shareHistory).toEqual(expect.arrayContaining([expect.objectContaining({ moonId: MOON, text: expect.stringContaining("cash budget changed") })]));
   });
 
-  it("S7: words a ballot by each act and every field that differs with the cash share before and after, strips what a suggestion may not carry, and refuses rows that cannot apply", async () => {
+  it("S7: words a ballot by each act and every field that differs with the cash share before and after, strips an adoption's words, and refuses rows that cannot apply", async () => {
     await importAs("u-hana", [ROW, { ...ROW, label: "Tools", category: "materials", planned: "1,000" }]);
     const ids = Object.fromEntries((await q("SELECT id, label FROM budget_lines")).map((r: any) => [r.label, r.id]));
     holders = { "role.pay": [] };
@@ -704,10 +705,10 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect((await make([{ ...ROW, label: "Pay Wren Halloway" }])).status, "a refused row").toBe(400);
     expect((await make([{ ...ROW, label: "Anabel's crew" }])).status, "a held row").toBe(400);
     expect(store.rows, "nothing stored").toHaveLength(0);
-    const made = await make([{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew", action: "adopt", adoptedAs: "Treasury" }]);
+    const made = await make([{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew", adoptedAs: "Treasury" }]);
     expect(made.status).toBe(201);
     expect(made.body.route).toBe("ballot");
-    expect(store.rows[0].edit.payload, "an action and an adoption's words are taken off").toEqual({ source: "manual", lines: [{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew" }], scope: null, format: FORMAT });
+    expect(store.rows[0].edit.payload, "an adoption's words are taken off, and the roles it pays are written").toEqual({ source: "manual", lines: [{ id: ids["Garden crew pay"], planned: "90,000", label: "Garden crew" }], scope: null, format: FORMAT, rolesPaid: [] });
     const text = opened[0].docMarkdown as string;
     expect(text).toContain('Changes "Garden crew pay": label from Garden crew pay to Garden crew; planned from');
     expect(text).toContain("This moon's cash budget:");
@@ -725,7 +726,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect(made.status).toBe(201);
     expect(made.body.route, "never to the holders, who are the payee").toBe("ballot");
     expect(opened).toHaveLength(1);
-    expect(store.rows[0].edit.payload).toMatchObject({ payeeConflict: true });
+    expect(store.rows[0].edit.payload, "the roles the change pays, stored when it was made").toMatchObject({ rolesPaid: ["r-gardener"] });
     expect(await stored()).toEqual([]);
   });
 
@@ -749,6 +750,136 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     limited = ["budget-read:"];
     for (const path of ["/api/budgets", "/api/budgets/ahead", "/api/budgets/circles"]) {
       expect((await call("GET", path, "u-sam", {}, {}, { moon: MOON, from: MOON, count: "1" })).status, path).toBe(429);
+    }
+  });
+
+  // ── Round 3 (V1, V6, V9, V10 and the nits) ────────────────────────────────
+
+  /** A suggestion on the budget's lines, bound to the preview its suggester read (V9). */
+  const suggestRows = async (user: string, lines: unknown[], source: "upload" | "manual" = "manual") => {
+    const preview = await importBudgetLines(pool, { source, lines: lines as any, by: user, byAs: null, dryRun: true, format: FORMAT });
+    return call("POST", "/api/admin/suggestions", user, { control: "budget_lines", payload: { source, lines, format: FORMAT }, why: "For the moon", was: preview.touchedRevision });
+  };
+
+  it("V1: carries a withdrawal and a lock in a suggestion, words each act on its ballot, applies them through importBudgetLines, and refuses one that changes nothing", async () => {
+    await storeDaily();
+    await importAs("u-hana", [ROW, { ...ROW, label: "Dollars", currency: "USD", planned: "10.00" }]);
+    const ids = Object.fromEntries((await q("SELECT id, label FROM budget_lines")).map((r: any) => [r.label, r.id]));
+
+    const w = await suggestRows("u-sam", [{ id: ids["Garden crew pay"], action: "withdraw" }]);
+    expect(w.status).toBe(201);
+    expect(w.body.route).toBe("holders");
+    expect((store.rows[0].edit.payload as any).lines, "the act is carried").toEqual([{ id: ids["Garden crew pay"], action: "withdraw" }]);
+    expect((await call("POST", "/api/admin/suggestions/:id/accept", "u-hana", {}, { id: w.body.suggestion.id })).status).toBe(200);
+    expect((await stored()).find((l) => l.label === "Garden crew pay")).toMatchObject({ status: "withdrawn", changed_as: "Treasury" });
+    expect((await suggestRows("u-sam", [{ id: ids["Garden crew pay"], action: "withdraw" }])).status, "a suggestion that changes nothing").toBe(400);
+
+    holders = { "role.pay": [] };
+    const lock = await suggestRows("u-sam", [{ id: ids["Dollars"], action: "lock", rate: "512.25", sourceNote: "Bank quote, 9 Nov" }]);
+    expect(lock.status).toBe(201);
+    expect(lock.body.route).toBe("ballot");
+    expect((store.rows[1].edit.payload as any).lines).toEqual([{ id: ids["Dollars"], action: "lock", rate: "512.25", sourceNote: "Bank quote, 9 Nov" }]);
+    const text = opened[0].docMarkdown as string;
+    expect(text).toContain('Locks a rate on "Dollars"');
+    expect(text).toContain("512.25");
+    const out = await closers[ADMIN_EDIT].execute!({ id: "bal-1", subjectRef: lock.body.suggestion.id, title: opened[0].title } as any, "system");
+    expect(out.applied).toEqual([`admin_edit:${lock.body.suggestion.id}`]);
+    expect((await q("SELECT fx_rate, fx_locked_as FROM budget_lines WHERE id = ?", [ids["Dollars"]]))[0]).toEqual({ fx_rate: "512.25000000", fx_locked_as: BY_VILLAGE_VOTE });
+    // A typed rate's note is checked for names like every other word.
+    expect((await suggestRows("u-sam", [{ id: ids["Dollars"], action: "lock", rate: "500", sourceNote: "Quote from Wren Halloway" }])).status).toBe(400);
+  });
+
+  it("V1: takes off an adoption's words from a suggestion and adopts as whoever decides it", async () => {
+    await syncSera();
+    const id = (await q("SELECT id FROM budget_lines WHERE source = 'sera'"))[0].id;
+    holders = { "role.pay": [] };
+    const made = await suggestRows("u-sam", [{ id, action: "adopt", adoptedAs: "Mallory, by her own say" }]);
+    expect(made.status).toBe(201);
+    expect((store.rows[0].edit.payload as any).lines).toEqual([{ id, action: "adopt" }]);
+    expect(opened[0].docMarkdown).toContain('Adopts "Library pay"');
+    await closers[ADMIN_EDIT].execute!({ id: "bal-1", subjectRef: made.body.suggestion.id, title: opened[0].title } as any, "system");
+    expect((await q("SELECT adopted_as FROM budget_lines WHERE id = ?", [id]))[0].adopted_as).toBe(BY_VILLAGE_VOTE);
+  });
+
+  it("V6: keeps a held line's words and id from members in the figure's not-counted list and in a withdrawal's preview", async () => {
+    await importAs("u-hana");
+    const held = await seraHeld();
+    const member = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(member.body.figure.working.notCounted.map((n: any) => n.id), "a held line's id stays with the door").not.toContain(held);
+    const door = await call("GET", "/api/budgets", "u-hana", {}, {}, { moon: MOON });
+    expect(door.body.figure.working.notCounted.map((n: any) => n.id)).toContain(held);
+    const w = await call("POST", "/api/admin/budgets/lines/:id/withdraw", "u-sam", { dryRun: true }, { id: held });
+    expect(w.status).toBe(200);
+    expect(w.body.withdrawn).toEqual([HELD_WORDS]);
+    expect(JSON.stringify(w.body), "the held words never reach a member's preview").not.toContain("Anabel");
+  });
+
+  it("V5: keeps a source label that names somebody from members after the line's own label is renamed", async () => {
+    const input = { source: "sera" as const, by: null, byAs: null, dryRun: true, lines: [{ sourceRef: "rec-sl", period: MOON, category: "role_pay", label: "Field crew", sourceLabel: "Anabel's team", plannedMinor: 40_000 }] };
+    const p = await importBudgetLines(pool, input);
+    await importBudgetLines(pool, { ...input, dryRun: false, revision: p.revision });
+    const id = (await q("SELECT id FROM budget_lines WHERE source_ref = 'rec-sl'"))[0].id;
+    const path = "/api/admin/budgets/lines/:id";
+    const r = await call("PATCH", path, "u-hana", { changes: { label: "Field crew pay" }, format: FORMAT }, { id });
+    expect((await call("PATCH", path, "u-hana", { changes: { label: "Field crew pay" }, format: FORMAT, dryRun: false, revision: r.body.revision }, { id })).status).toBe(200);
+    const member = await call("GET", "/api/budgets", "u-sam", {}, {}, { moon: MOON });
+    expect(JSON.stringify(member.body), "the source label's hold outlives the label's rename").not.toContain("Anabel");
+    const door = await call("GET", "/api/budgets", "u-hana", {}, {}, { moon: MOON });
+    expect(door.body.lines.find((l: any) => l.id === id)).toMatchObject({ label: "Field crew pay", nameHeld: true, heldOn: "source_label", sourceLabel: "Anabel's team" });
+  });
+
+  it("V9: binds a suggestion to the preview its suggester read, and refuses one whose preview has since moved", async () => {
+    const p = await call("POST", "/api/admin/budgets/import", "u-sam", { lines: [ROW], format: FORMAT });
+    expect(p.body.touchedRevision).toEqual(expect.any(String));
+    await importAs("u-hugo", [{ ...ROW, planned: "90,000" }]);
+    const make = (was: string) => call("POST", "/api/admin/suggestions", "u-sam", { control: "budget_lines", payload: { source: "upload", lines: [ROW], format: FORMAT }, why: "x", was });
+    const stale = await make(p.body.touchedRevision);
+    expect(stale.status).toBe(409);
+    expect(store.rows, "nothing stored").toHaveLength(0);
+    const fresh = await call("POST", "/api/admin/budgets/import", "u-sam", { lines: [ROW], format: FORMAT });
+    expect((await make(fresh.body.touchedRevision)).status).toBe(201);
+  });
+
+  it("V10: routes a suggestion that pays a role to the holders who hold none of it, to a vote when every holder does, and a member's own role line to the holders", async () => {
+    const gardener = { ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener" };
+    seats = { "u-hana": ["r-gardener"] };
+    const two = await suggest("u-sam", [gardener]);
+    expect(two.status).toBe(201);
+    expect(two.body.route, "one of two holders holds the role").toBe("holders");
+    expect((await call("GET", "/api/admin/suggestions/queue", "u-hana")).body.suggestions, "not in the payee's queue").toEqual([]);
+    expect((await call("GET", "/api/admin/suggestions/queue", "u-hugo")).body.suggestions.map((s: any) => s.id)).toEqual([two.body.suggestion.id]);
+    const payee = await call("POST", "/api/admin/suggestions/:id/accept", "u-hana", {}, { id: two.body.suggestion.id });
+    expect(payee.status).toBe(409);
+    expect(payee.body.error).toBe("payee_conflict");
+    expect((await call("POST", "/api/admin/suggestions/:id/accept", "u-hugo", {}, { id: two.body.suggestion.id })).status).toBe(200);
+
+    holders = { "role.pay": ["u-hana"] };
+    expect((await suggest("u-sam", [{ ...gardener, label: "Gardener tools", category: "materials" }])).body.route, "the lone holder holds the role").toBe("ballot");
+
+    holders = { "role.pay": ["u-hana", "u-hugo"] };
+    seats = { "u-sam": ["r-gardener"] };
+    expect((await suggest("u-sam", [{ ...gardener, label: "Gardener boots", category: "other" }])).body.route, "a member's own role goes to the holders").toBe("holders");
+  });
+
+  it("nits: names circles and roles on a ballot by name, and checks a suggestion again when it goes to a vote", async () => {
+    holders = { "role.pay": [] };
+    const made = await suggest("u-sam", [{ ...ROW, label: "Gardener pay", circle: "Garden", role: "Gardener" }]);
+    const text = opened[0].docMarkdown as string;
+    expect(text).toContain("Garden");
+    expect(text).toContain("Gardener");
+    expect(text).not.toMatch(/c-garden|r-gardener/);
+    expect(made.status).toBe(201);
+
+    holders = { "role.pay": ["u-hana", "u-hugo"] };
+    const later = await call("POST", "/api/admin/suggestions", "u-sam", { control: "budget_notes", payload: { period: MOON, note: "Ask Tess Nolan about the harvest" }, why: "x" });
+    expect(later.body.route).toBe("holders");
+    await usersRepo(pool).add({ id: "u-tess", name: "Tess Nolan", email: "tess@example.test", passwordHash: "x", paths: [] } as any);
+    try {
+      const vote = await call("POST", "/api/admin/suggestions/:id/send-to-vote", "u-hana", {}, { id: later.body.suggestion.id });
+      expect(vote.status, "the rows no longer pass the name check").toBe(400);
+      expect((await store.byId(later.body.suggestion.id))!.status).toBe("proposed");
+    } finally {
+      await q("DELETE FROM users WHERE id = 'u-tess'");
     }
   });
 });

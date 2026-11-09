@@ -151,17 +151,23 @@ export function register(app: Express, deps: Deps): void {
     return who;
   }
 
-  const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[] }> => {
-    const holders = await liveHoldersOf(s.edit.capability);
-    // A control may send a suggestion to a vote whoever holds the power: a payee conflict (R21).
-    if (adminEditControl(s.edit.control)?.forcesBallot?.(s.edit.payload)) return { route: "ballot", holders };
+  /** The holders who may decide this suggestion, and every live holder (V10). */
+  const decidersOf = async (s: SuggestionRow, all: string[]): Promise<string[]> => {
+    const control = adminEditControl(s.edit.control);
+    return control?.deciders ? control.deciders(s.edit.payload, all) : all;
+  };
+
+  const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[]; all: string[] }> => {
+    const all = await liveHoldersOf(s.edit.capability);
+    // Only the holders who may decide it count: when every holder is conflicted (V10), nobody does, so the village decides it.
+    const holders = await decidersOf(s, all);
     const route = routeSuggestion({
       capability: s.edit.capability,
       villageHolds: isVillageHeld(s.edit.capability, ctx.villageHeld),
       liveHolders: holders,
       passesPowers: ADMIN_EDIT_CONTROLS[s.edit.control]?.passesPowers ?? false,
     });
-    return { route, holders };
+    return { route, holders, all };
   };
 
   /** The suggestion by id, or null after a 404. */
@@ -192,7 +198,15 @@ export function register(app: Express, deps: Deps): void {
       res.status(409).json({ error: "not_waiting", message: `This suggestion is already ${s.status}.`, status: s.status });
       return null;
     }
-    const { route, holders } = await routeNow(s, who.ctx);
+    const { route, holders, all } = await routeNow(s, who.ctx);
+    if (all.includes(userId) && !holders.includes(userId)) {
+      res.status(409).json({
+        error: "payee_conflict",
+        code: "payee_conflict",
+        message: "This suggestion changes what a role you hold is paid, so the other holders decide it, or the village when every holder holds one.",
+      });
+      return null;
+    }
     if (!holders.includes(userId)) {
       res.status(403).json({
         error: "holders_only",
@@ -283,6 +297,10 @@ export function register(app: Express, deps: Deps): void {
       edit.payload = prepared.payload;
       if (prepared.version) edit.version = prepared.version;
     }
+    // A control that binds a suggestion to the rows it touches checks the version its preview read (V9).
+    if (control.versionFor && typeof body.was === "string" && body.was && body.was !== edit.version) {
+      return res.status(409).json({ error: "stale", message: "What this suggestion changes moved since you previewed it. Preview it again, then suggest it." });
+    }
 
     const made = await store.create({ edit, why, suggestedBy: userId });
     const { route, holders } = await routeNow(made, who.ctx);
@@ -326,10 +344,11 @@ export function register(app: Express, deps: Deps): void {
     for (const s of await store.withStatus("proposed")) {
       if (s.suggestedBy === userId || !isAdminEditControl(s.edit.control)) continue;
       if (!holdersByCap.has(s.edit.capability)) holdersByCap.set(s.edit.capability, await liveHoldersOf(s.edit.capability));
-      const holders = holdersByCap.get(s.edit.capability)!;
+      const all = holdersByCap.get(s.edit.capability)!;
+      if (!all.includes(userId)) continue;
+      // Only the holders who may decide it see it: never one a payee conflict rules out (V10).
+      const holders = await decidersOf(s, all);
       if (!holders.includes(userId)) continue;
-      // A suggestion its control sends to a vote is in nobody's queue.
-      if (adminEditControl(s.edit.control)?.forcesBallot?.(s.edit.payload)) continue;
       const route = routeSuggestion({
         capability: s.edit.capability,
         villageHolds: isVillageHeld(s.edit.capability, who.ctx.villageHeld),
