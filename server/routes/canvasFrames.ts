@@ -750,7 +750,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     const rule = ruleFor(p, facts);
     const block = CANVAS_BLOCKS[p.blockId];
 
-    // "Share with the village" (9999_c): the prose pen puts a member's document
+    // "Share with the village" (0359): the prose pen puts a member's document
     // in the village's notebook. The one statement that shares moves only a
     // private document still owned by the member who asked.
     if (p.target === "document") {
