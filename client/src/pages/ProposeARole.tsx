@@ -18,6 +18,7 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
+import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -40,12 +41,15 @@ interface FormRole {
   name: string;
   circle: string;
   aim: string | null;
+  /** The open card's own sections, to answer with the applicant's card (shared/openProposalCard.ts). */
+  accountabilities?: string[];
+  timeCommitment?: string | null;
 }
 
 type FormState =
   | { kind: "loading" }
   | { kind: "closed"; message: string }
-  | { kind: "open"; village: string; season: { id: string; name: string | null; startsOn: string } | null; term: OpenProposalTerm | null; roles: FormRole[] }
+  | { kind: "open"; village: string; season: { id: string; name: string | null; startsOn: string } | null; term: OpenProposalTerm | null; goals: Array<{ id: string; text: string }>; roles: FormRole[] }
   | { kind: "failed" };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -117,6 +121,11 @@ export default function ProposeARole() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
+  const [cards, setCards] = useState<Record<string, RoleCardState>>({});
+  const [serves, setServes] = useState<Record<string, string>>({});
+  const [hours, setHours] = useState("");
+  const [agreed, setAgreed] = useState({ loveLetter: false, nda: false });
   /** How many of the roles the link named the village no longer offers. */
   const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
@@ -129,7 +138,7 @@ export default function ProposeARole() {
       .then((r) => r.json())
       .then((d) => {
         const roles: FormRole[] = Array.isArray(d?.roles) ? d.roles : [];
-        setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, term: termOf(d.term) ?? null, roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
+        setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, term: termOf(d.term) ?? null, goals: Array.isArray(d.goals) ? d.goals : [], roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
         // The roles the Apply link or the draft was for, ticked while the village still offers them.
         if (d?.open && wanted.length) {
           const offered = wanted.filter((id) => roles.some((r) => r.id === id)).slice(0, OPEN_PROPOSAL_MAX_ROLES);
@@ -178,7 +187,29 @@ export default function ProposeARole() {
       const res = await fetch("/api/open-proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, why, aim, hp, link: link || undefined, roles: Object.entries(picked).map(([roleId, note]) => ({ roleId, note })) }),
+        body: JSON.stringify({
+          name,
+          email,
+          why,
+          aim,
+          hp,
+          link: link || undefined,
+          roles: Object.entries(picked).map(([roleId, note]) => ({ roleId, note })),
+          // The applicant's own card, one section per section of the open card.
+          card: {
+            roles: Object.keys(picked).map((roleId) => {
+              const c = cards[roleId] ?? EMPTY_ROLE_CARD;
+              return {
+                roleId,
+                moves: Object.entries(c.moves).map(([text, target]) => ({ text, target })),
+                firstMoon: c.quests.filter((q) => q.quest.trim()),
+              };
+            }),
+            serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
+            hours,
+            agreed,
+          },
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return setError({ field: typeof data?.field === "string" ? data.field : null, message: typeof data?.error === "string" ? data.error : OPEN_WORDS.notSent });
@@ -294,6 +325,17 @@ export default function ProposeARole() {
                           />
                         </label>
                       )}
+                      {on && (
+                        <RoleAsks
+                          roleId={r.id}
+                          roleName={r.name}
+                          aim={r.aim}
+                          timeCommitment={r.timeCommitment ?? null}
+                          accountabilities={r.accountabilities ?? []}
+                          value={cards[r.id] ?? EMPTY_ROLE_CARD}
+                          onChange={(next) => setCards((c) => ({ ...c, [r.id]: next }))}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -313,6 +355,7 @@ export default function ProposeARole() {
             </label>
             <input id="propose-aim" maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
           </div>
+          <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed} onAgreed={setAgreed} />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.nameLabel}
