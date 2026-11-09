@@ -160,6 +160,8 @@ import { register as registerGovernanceAgreementRoutes } from "./routes/governan
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
+import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
+import { orgStructureForHelper } from "./lib/adminHelperReaders";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -12849,6 +12851,18 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // (Wave 4) and registered HERE, the spot it left: after /api/admin's audit row and
   // default-deny, so both still apply. It now reads the brief (defect 10).
   registerOrganizeRoutes(app, { isAdmin, authedUser, capabilityCtx, getPool, clientIp, villageName: () => mergedConfig().project.name, assistantName: () => guidePromptName(getWorkWithUs().assistantName), noteAssistantUsage });
+  // The Admin helper: the village guide in a panel beside Admin (server/routes/adminHelper.ts).
+  registerAdminHelperRoutes(app, {
+    isAdmin, authedUser, clientIp, overLimit, noteAssistantUsage,
+    villageName: () => mergedConfig().project.name,
+    guideSource: () => getWorkWithUs().assistantName,
+    dials: () => allVariables(),
+    switchOn: () => boolVar("platform.admin_helper"),
+    readOrgStructure: async () => {
+      const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool())]);
+      return orgStructureForHelper({ roles, assignments, circles: circleViews(circlesRepo.all()) });
+    },
+  });
 
   registerCapabilityExplainerRoutes(app, { isAdmin, members, capabilityCtx, stageOf });
 
@@ -17710,7 +17724,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
-  registerBudgetRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, seasonState, liveHoldersOf, projectCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""), rolesCarrying, roleHolders: loadRoleHolders, revisionSecret: AUTH_TOKEN_SECRET }); // the cash budget (0360): every write through one door, role.pay (server/routes/budgets.ts)
+  registerBudgetRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, seasonState, guardCapability, liveHoldersOf, projectCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""), rolesCarrying, roleHolders: loadRoleHolders, revisionSecret: AUTH_TOKEN_SECRET }); // the cash budget (0360): every write through one door, role.pay (server/routes/budgets.ts)
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
   const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
   registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)

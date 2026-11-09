@@ -38,6 +38,7 @@ import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
+import AdminHelperHost from "@/components/admin/AdminHelperHost";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
@@ -7865,6 +7866,8 @@ export default function Admin() {
   // collapsed — 224px of menu on a 390px screen left the settings themselves
   // in a column too narrow to read — and anything laptop-sized starts open,
   // where there is room for both. A stored choice beats both defaults.
+  // The Admin helper panel (AdminHelperHost): the header menu and Ctrl+/ open it.
+  const [helperOpen, setHelperOpen] = useState(false);
   const [navOpen, setNavOpen] = useState<boolean>(() => {
     const saved = storedText("local", "admin.navOpen");
     if (saved !== null) return saved === "1";
@@ -7911,6 +7914,15 @@ export default function Admin() {
         onSignOut={() => setPassword(null)}
         extra={<AdminSeraChip password={password} />}
         defaultLocale={cfg?.defaultLocale ?? null}
+        onHelper={() => setHelperOpen(true)}
+      />
+      <AdminHelperHost
+        open={helperOpen}
+        setOpen={setHelperOpen}
+        password={password}
+        groups={shownGroups}
+        tab={activeTab}
+        onOpenTab={setActiveTab}
       />
 
       <div className="flex w-full">

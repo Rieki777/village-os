@@ -58,7 +58,7 @@ import { budgetNameCheck } from "./budgetNames";
 import { usersRepo } from "../repos/users";
 import { createOrgRole } from "./orgChart";
 import { LUNAR_CLOCK, boundsForNumber, parseId } from "../../shared/cycleClock";
-import { ADMIN_BEFORE_LAUNCH, VILLAGE_WIDE, convertAtRate, moonPeriod } from "../../shared/budgets";
+import { ADMIN_BEFORE_LAUNCH, BREAK_GLASS, VILLAGE_WIDE, convertAtRate, moonPeriod } from "../../shared/budgets";
 
 const configured = testDbConfigured();
 const TZ = "America/Costa_Rica";
@@ -895,9 +895,20 @@ describe.skipIf(!configured)("the one write path and the moon's figure", () => {
     expect((await budgetSourceState(pool, "sera")).on, "the apply re-checked the setter and turned the source off").toBe(false);
     expect((await q("SELECT adopted_at FROM budget_lines WHERE source_ref = 'rec-w'"))[0].adopted_at).toBeNull();
     expect(off.written).toBe(true);
-    configureBudgets({ rolePayHolders: async () => ["u-hana"], launched: async () => false });
+    // The shared door (`holderDoor`): an admin's door stands before launch whoever holds the power,
+    // and after launch while nobody sits in the steward's seat. The switch follows the door.
+    configureBudgets({ rolePayHolders: async () => ["u-hana"], launched: async () => false, stewardHolders: async () => ["u-stew"] });
     await sourceOn("auto", "u-ada", ADMIN_BEFORE_LAUNCH);
-    expect(await recheckSource(pool, "sera"), "an admin's switch ends once somebody holds the power").toMatchObject({ on: false, turnedOff: true });
+    expect(await recheckSource(pool, "sera"), "before launch, an admin's switch stands though somebody holds the power").toMatchObject({ on: true });
+    configureBudgets({ launched: async () => true, stewardHolders: async () => [] });
+    expect(await recheckSource(pool, "sera"), "after launch with nobody in the steward's seat, it still stands").toMatchObject({ on: true });
+    configureBudgets({ stewardHolders: async () => ["u-stew"] });
+    expect(await recheckSource(pool, "sera"), "once a steward sits after launch, it ends").toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("steward seated") });
+    configureBudgets({ stewardHolders: async () => ["u-stew"] });
+    await sourceOn("auto", "u-stew", BREAK_GLASS);
+    expect(await recheckSource(pool, "sera"), "a broken glass's switch stands while its steward sits").toMatchObject({ on: true });
+    configureBudgets({ stewardHolders: async () => [] });
+    expect(await recheckSource(pool, "sera"), "and ends when they leave the seat").toMatchObject({ on: false, turnedOff: true, offReason: expect.stringContaining("broke the glass") });
   });
 
   it("nits: folds a label fully for its key, and never records the machine key as a role", async () => {
