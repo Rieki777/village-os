@@ -1,0 +1,12 @@
+{
+  "ruling": "Rye, 2026-11-09: six parcels, one sold, five available.",
+  "way": "parcel",
+  "parcels": [
+    { "title": "Parcel 1", "status": "sold", "buyerKnown": false },
+    { "title": "Parcel 2", "status": "open" },
+    { "title": "Parcel 3", "status": "open" },
+    { "title": "Parcel 4", "status": "open" },
+    { "title": "Parcel 5", "status": "open" },
+    { "title": "Parcel 6", "status": "open" }
+  ]
+}
