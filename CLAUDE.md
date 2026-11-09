@@ -282,7 +282,10 @@ display faces are a different path and still accept `.woff` (`server/index.ts` s
 The woff2 bytes themselves are unhinted copies committed in `client/src/fonts`: every glyph,
 code point and layout feature of the @fontsource file, without the TrueType hinting, which took
 another 84 KB off the ceiling. `useUnhintedFonts` in `vite.config.ts` points the @fontsource CSS
-at them. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
+at them. Eight of the families are served from ONE variable file each (`<family>-latin-wght-<style>.woff2`):
+every weight's @font-face keeps its own single weight and only its url points at the shared file,
+so font matching is unchanged and the 39 static files became 9, about 370 KB off the ceiling.
+`--check` proves per cut that the variable instance lays text out exactly as the static cut did. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
 `--check`), or `client/src/lib/unhintedFonts.test.ts` fails.
 
 The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
