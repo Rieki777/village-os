@@ -21,7 +21,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY } from "../lib/examples";
 import { currentModel, payeesSetBy, settingsForWork, writeSetting } from "../lib/valuationStore";
-import { payLineProblem, questPayRules } from "../lib/workPay";
+import { payLineProblem, questPay, questPayRules } from "../lib/workPay";
 import type { ClaimsRepo, QuestsRepo } from "../repos/quests";
 import type { WorkInputs } from "../../shared/valuation";
 import { suggestValuation, type PayeeSuggestion } from "../../shared/valuationEngine";
@@ -34,7 +34,16 @@ export interface QuestPayDeps extends Pick<AppDeps, "authedUser" | "getPool" | "
   quests: QuestsRepo;
   claims: ClaimsRepo;
   payLineCheck?: (rules: Awaited<ReturnType<typeof questPayRules>>, token: string) => string | null;
+  /**
+   * The cash budget left this moon, in minor units, or null when the village
+   * has none. Null means the desk prices with no cash (Rye, 2026-11-09: "the
+   * cash share is 0% until a budget exists"). Absent: no budget reader yet.
+   */
+  cashBudgetLeft?: () => Promise<{ minor: number; currency: string } | null>;
 }
+
+/** Statuses a quest is still offered in. A retired quest has nothing to price. */
+const PRICEABLE = new Set(["Open", "Seasonal", "Ongoing", "Paused"]);
 
 const SEASON_MS = 91 * 24 * 60 * 60 * 1000;
 
@@ -144,6 +153,52 @@ export function registerQuestPay(app: Express, deps: QuestPayDeps): void {
       ...(voiceHeld ? { voiceHeld: true, voiceNote: "Voice starts when the village adopts its own pay settings." } : {}),
       ...(decision.needs === "second" ? { voteAfterDays: decision.voteAfterDays } : {}),
     });
+  });
+
+  /*
+   * THE PRICING DESK (quest re-price Q3; approved mockup 2026-11-09). Every
+   * quest still offered, what it pays today, its last figure with the inputs
+   * and suggestion it was set beside, and its open claims; plus the model and
+   * the Treasurer's path (EE meaning, model adopted). The browser prices each
+   * row with the same pure engine (`shared/valuationEngine.ts`); the write
+   * door above prices again on the server, so the desk can never set a figure
+   * the server did not suggest.
+   */
+  app.get("/api/quests/pricing-desk", async (req, res) => {
+    if (!(await guardCapability(req, res, "role.pay"))) return;
+    if (!(await authedUser(req))) return res.status(401).json({ error: "auth_required" });
+    const pool = getPool();
+    const model = await currentModel(pool, currency());
+    const rules = await questPayRules(pool);
+    const all = (await quests.all()).filter((q: any) => !q.isExample && PRICEABLE.has(String(q.status ?? "Open")));
+    const rows = [];
+    for (const q of all as any[]) {
+      const settings = await settingsForWork(pool, "quest", q.id);
+      const latest = settings[0] ?? null;
+      rows.push({
+        id: q.id,
+        title: q.title,
+        circle: q.circle ?? null,
+        duration: q.duration ?? null,
+        difficulty: q.difficulty ?? null,
+        status: q.status ?? "Open",
+        valueMinor: q.valueMinor ?? null,
+        valueCurrency: q.valueCurrency ?? null,
+        pay: questPay(q, rules),
+        latest: latest
+          ? { id: latest.id, state: latest.state, setMinor: latest.setMinor, inputs: latest.inputs, suggestedMinor: latest.suggestedMinor, at: latest.createdAt }
+          : null,
+        pastPrices: settings.filter((x) => x.state === "set").map((x) => ({ setMinor: x.setMinor, at: x.createdAt })).slice(0, 5),
+        openClaims: (await claims.openClaimantsOf(q.id)).length,
+      });
+    }
+    let cash: { minor: number; currency: string } | null = null;
+    try {
+      cash = deps.cashBudgetLeft ? await deps.cashBudgetLeft() : null;
+    } catch {
+      cash = null;
+    }
+    res.json({ model, eeMeaningWritten: eeMeaningWritten(), modelAdopted: model.version > 0, cashBudgetLeft: cash, quests: rows });
   });
 
   app.get("/api/quests/:id/pay/settings", async (req, res) => {

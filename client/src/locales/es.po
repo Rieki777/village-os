@@ -12,6 +12,15 @@ msgctxt "treasury sync"
 msgid "Differs"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pick a reason"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Give the hours"
+#~ msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Kind of work"
@@ -20,6 +29,22 @@ msgstr ""
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Not now"
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As little as, for {0}"
+msgstr ""
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} inside the band"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "None yet"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -31,6 +56,15 @@ msgstr ""
 msgctxt "role pay"
 msgid "Pick a reason"
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Past prices"
+#~ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
@@ -50,10 +84,22 @@ msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Check the hours"
+#~ msgstr ""
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Take the new price"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Paid {paidOn}"
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Send for signing"
+#~ msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -61,14 +107,54 @@ msgctxt "site header"
 msgid "Open menu"
 msgstr "Abrir menú"
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "As much as, for {0}"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pricing desk"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr ""
+
+#. placeholder {0}: counts.waiting
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} waiting for a signer"
+#~ msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Wide range"
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{hoursLeft} quests still need yours"
+#~ msgstr ""
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "This quest has a new price."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Pay settings adopted"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+#~ msgstr ""
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Use the suggestion on all {0} inside the band"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Confirm the hours first"
+#~ msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
@@ -85,6 +171,15 @@ msgstr "Buscar idiomas"
 msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Its worker takes the new price here"
+#~ msgstr ""
+
+#. placeholder {0}: counts.hours
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} need your hours"
+#~ msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
@@ -107,9 +202,53 @@ msgctxt "database export"
 msgid "Download the copy"
 msgstr ""
 
+#. placeholder {0}: q.openClaims
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} open claims keep the price they were taken at."
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set the prices"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "None yet"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Write what it means first"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Estimated hours"
+#~ msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Set"
+msgstr ""
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "You took it on at its earlier price, and your claim keeps that one unless you choose the new price shown above."
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}: waiting for a second Treasurer or a steward to sign."
+msgstr ""
+
+#. placeholder {0}: money(p.s.range.lowTotalMinor)
+#. placeholder {1}: money(p.s.range.highTotalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Likely {0} to {1}"
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
@@ -118,6 +257,12 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
+msgstr ""
+
+#. placeholder {0}: q.openClaims
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} open claims keep the price they were taken at."
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -134,13 +279,62 @@ msgctxt "role pay"
 msgid "Say why"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Confirm the hours first"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Why the village needs it"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Send for signing"
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours for {0}"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Own figure"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+#~ msgstr ""
+
+#. placeholder {0}: read.model.currency
+#. placeholder {1}: read.model.version
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0}, version {1}"
+#~ msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "It was downloaded on {when} UTC, once, as the vote allowed. Another copy needs another vote."
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{done} prices set."
+#~ msgstr ""
+
+#: client/src/components/admin/PricingDeskTab.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Opening the pricing desk…"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Cancel"
+#~ msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
@@ -157,8 +351,27 @@ msgctxt "site header"
 msgid "Close menu"
 msgstr "Cerrar menú"
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "to"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "1 quest still needs yours"
+#~ msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Reason for {0}"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Nothing yet"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -181,6 +394,22 @@ msgstr "Iniciar sesión"
 msgid "Work out this role's pay with the valuation engine"
 msgstr ""
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Your figure for {0}"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Waiting for a signer"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 quest still needs yours"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
@@ -189,6 +418,33 @@ msgstr ""
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "This village's records: {here}."
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0}: waiting for a second Treasurer or a steward to sign."
+#~ msgstr ""
+
+#. placeholder {0}: money(q.valueMinor)
+#. placeholder {1}: new Date(q.latest.at).toLocaleDateString()
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} · set {1}"
+#~ msgstr ""
+
+#. placeholder {0}: counts.set
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} set"
+#~ msgstr ""
+
+#. placeholder {0}: money(p.s.expected.totalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use {0}"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Cancel"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -200,10 +456,23 @@ msgstr ""
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "from"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Written"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgctxt "database export"
 msgid "Ask the village"
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Your figure"
+#~ msgstr ""
 
 #: client/src/components/Layout.tsx
 #, fuzzy
@@ -216,13 +485,50 @@ msgctxt "valuation receipt"
 msgid "Paid as {paid}."
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "The desk could not be read."
+#~ msgstr ""
+
+#. placeholder {0}: money(q.valueMinor)
+#. placeholder {1}: new Date(q.latest.at).toLocaleDateString()
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} · set {1}"
+msgstr ""
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "Vote on it again here"
 msgstr ""
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Kind of work for {0}"
+#~ msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
+msgstr ""
+
+#. placeholder {0}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} outside the band"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Written"
+#~ msgstr ""
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "All checked"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -230,6 +536,11 @@ msgstr ""
 msgctxt "language picker"
 msgid "Translated automatically"
 msgstr "Traducción automática"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{hoursLeft} quests still need yours"
+msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "You do not hold the steward role now, so this copy cannot be delivered. It stays unused."
@@ -244,6 +555,16 @@ msgstr ""
 msgid "Not synced yet. Press Sync to read every source."
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "The village adopts them by vote"
+#~ msgstr ""
+
+#. placeholder {0}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} outside the band"
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
@@ -253,6 +574,10 @@ msgstr "Idioma: {current} ({code})"
 #: client/src/components/TreasurySync.tsx
 msgid "{differs} of your numbers differ between sources. The Treasurer has been shown each one."
 msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Nothing yet"
+#~ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -274,6 +599,13 @@ msgctxt "language picker"
 msgid "Close"
 msgstr "Cerrar"
 
+#. placeholder {0}: read.model.currency
+#. placeholder {1}: read.model.version
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0}, version {1}"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
@@ -284,9 +616,61 @@ msgstr "Cuenta de {firstName}"
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr ""
 
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Give the hours"
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Kind of work for {0}"
+msgstr ""
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+#~ msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Reason for {0}"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Set"
+#~ msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Tokens, by source"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Check the hours"
+msgstr ""
+
+#. placeholder {0}: counts.waiting
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} waiting for a signer"
+msgstr ""
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Use the suggestion on all {0} inside the band"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -297,8 +681,30 @@ msgstr ""
 msgid "The copy did not download"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Set the prices"
+#~ msgstr ""
+
+#. placeholder {0}: money(ownMinor)
+#. placeholder {1}: money(p.s.band.lowMinor)
+#. placeholder {2}: money(p.s.band.highMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} is above the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "This figure is outside the suggestion's band, so pick a reason."
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Conditions for {0}"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{done} prices set."
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -313,8 +719,18 @@ msgstr ""
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "1 open claim keeps the price it was taken at."
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "Choose a sitting steward"
+msgstr ""
+
+#: client/src/components/admin/QuestsTab.tsx
+msgctxt "admin quests"
+msgid "Price the quests on the pricing desk"
 msgstr ""
 
 #: client/src/components/admin/RoleValueEditor.tsx
@@ -331,12 +747,25 @@ msgctxt "treasury sync"
 msgid "Try again"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Pricing desk"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "That price was not set."
+#~ msgstr ""
+
 #. placeholder {0}: money(s.range.lowTotalMinor)
 #. placeholder {1}: money(s.range.highTotalMinor)
 #. placeholder {2}: widthWords[s.range.width]
 #. placeholder {3}: s.range.why.join(", ")
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Likely {0} to {1}. {2}: {3}."
+msgstr ""
+
+#: client/src/components/admin/PricingDeskTab.tsx
+msgctxt "pricing desk"
+msgid "Open the desk as its own page, for a Treasurer who is not an admin"
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
@@ -349,8 +778,31 @@ msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Earned Equity meaning"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "to"
+msgstr ""
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "Your claim now pays the quest's new price."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Hours"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Reading the village's pay settings…"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Its worker takes the new price here"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -359,13 +811,49 @@ msgctxt "language picker"
 msgid "Now in {announced}"
 msgstr "Ahora en {announced}"
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "The hours are an estimate that sets the price. Members see the price, never the hours. Every figure is kept beside its suggestion, so past prices fill in as quests are done."
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Waiting for a signer"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "from"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "All checked"
+#~ msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "One copy of the village's database"
 msgstr ""
 
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Estimated hours for {0}"
+#~ msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The village adopts them by vote"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "1 open claim keeps the price it was taken at."
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Earned Equity meaning"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -379,6 +867,12 @@ msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The copy holds every member's data. If the village carries this at its highest bar, the steward you name may download it once, and every member is told when they do."
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "As much as, for {0}"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -396,9 +890,25 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr ""
 
+#: client/src/components/admin/PricingDeskTab.tsx
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Opening the pricing desk…"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pays today"
+msgstr ""
+
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The village authorised this copy for you. You can download it once; every member is told when you do. Keep the file where only you can reach it."
 msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "As little as, for {0}"
+#~ msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
@@ -423,6 +933,11 @@ msgstr ""
 msgid "Could be as little as"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "No cash budget this moon, so every price is paid in Credits and Earned Equity, with no cash."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign out everywhere"
@@ -439,9 +954,31 @@ msgctxt "site header"
 msgid "Main Site"
 msgstr "Sitio principal"
 
+#. placeholder {0}: counts.hours
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} need your hours"
+msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Your figure for {0}"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Quest"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Set this role's pay"
+msgstr ""
+
+#. placeholder {0}: counts.ready
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} inside the band"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -449,20 +986,43 @@ msgctxt "role pay"
 msgid "Or as much as"
 msgstr ""
 
+#. placeholder {0}: money(p.s.expected.totalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Use {0}"
+#~ msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Close menu"
 #~ msgstr "Cerrar menú"
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Quest"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Pick a reason"
+#~ msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Narrow range"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Suggestion"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Main Site"
 #~ msgstr "Sitio principal"
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Write what it means first"
+msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -485,11 +1045,22 @@ msgctxt "role pay"
 msgid "Saved"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Past prices"
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
+
+#. placeholder {0}: money(p.s.range.lowTotalMinor)
+#. placeholder {1}: money(p.s.range.highTotalMinor)
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Likely {0} to {1}"
+#~ msgstr ""
 
 #. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -497,14 +1068,45 @@ msgctxt "role pay"
 msgid "Use the suggestion, {0}"
 msgstr ""
 
+#. placeholder {0}: counts.set
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} set"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Own figure"
+#~ msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "A note (optional)"
 msgstr ""
 
+#. placeholder {0}: counts.ready
+#. placeholder {1}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "{0} ready, {1} flagged"
+#~ msgstr ""
+
+#. placeholder {0}: q.title
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Conditions for {0}"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}, {amount}, {doneCount} of 4 steps done"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Pays today"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Pay settings adopted"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -517,6 +1119,15 @@ msgstr "Ir al contenido"
 msgid "Your own figure first, before you see the suggestion (optional)"
 msgstr ""
 
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "The desk could not be read."
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Suggestion"
+#~ msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "How this was worked out"
 msgstr ""
@@ -526,6 +1137,24 @@ msgstr ""
 #~ msgid "Sign in or join"
 #~ msgstr "Iniciar sesión o unirse"
 
+#: client/src/components/valuation/PricingDesk.tsx
+#~ msgid "Hours"
+#~ msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Estimated hours"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer."
+msgstr ""
+
+#: client/src/components/TakeCurrentPrice.tsx
+msgid "The new price was not taken."
+msgstr ""
+
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Your own figure was {0}."
@@ -534,4 +1163,16 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Responsibility"
+msgstr ""
+
+#. placeholder {0}: counts.ready
+#. placeholder {1}: counts.flagged
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "{0} ready, {1} flagged"
+msgstr ""
+
+#: client/src/components/valuation/PricingDesk.tsx
+msgctxt "pricing desk"
+msgid "That price was not set."
 msgstr ""

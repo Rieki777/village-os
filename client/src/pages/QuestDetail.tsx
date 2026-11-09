@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import QuestActions from "@/components/QuestActions";
+import TakeCurrentPrice from "@/components/TakeCurrentPrice";
 import QuestCrews from "@/components/QuestCrews";
 import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
@@ -428,6 +429,7 @@ export default function QuestDetail() {
                 pay={quest.pay}
                 onChanged={refreshClaims}
               />
+              <TakeCurrentPrice claim={claim} quest={quest} onTaken={refreshClaims} />
               {/* The chat everyone on this quest shares, once two people are on it. */}
               {!quest.isExample && (
                 <div className="px-6 pb-5 empty:hidden">
