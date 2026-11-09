@@ -19,6 +19,7 @@
  * (client/src/components/companion/Companion.tsx).
  */
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { seasonFocus, seasonMoment, type CanvasSeason as Season, type CanvasSeasonPayload } from "@shared/canvasSeason";
 import type { CanvasMoonPayload } from "@shared/canvasRevisit";
@@ -54,6 +55,7 @@ export function CanvasView({
   /** Told when somebody presses Ask, so the page can close whatever else is in the corner. */
   onAsk?: () => void;
 } = {}) {
+  const { t } = useLingui();
   const [payload, setPayload] = useState<CanvasSeasonPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
 
@@ -162,7 +164,7 @@ export function CanvasView({
     <CompanionProvider cornerTaken={cornerTaken} onOpen={onAsk}>
       <div className="space-y-6 wrap-anywhere" data-testid="canvas-view">
         <div className="flex justify-end">
-          <AskButton block={null} label="Ask about the canvas" />
+          <AskButton block={null} label={t`Ask about the canvas`} />
         </div>
         <CanvasSeason
           payload={payload}
@@ -173,7 +175,11 @@ export function CanvasView({
           onRemove={remove}
         />
         <CanvasMoon payload={moon} onOffer={offerMoon} onPublish={publishMoon} />
-        <CanvasBaseline focus={focus} focusLabel={phase === "before" ? "First up" : "This week"} season={season} />
+        <CanvasBaseline focus={focus} focusLabel={
+            phase === "before"
+              ? t({ message: "First up", context: "tag on the canvas block a season starts with" })
+              : t({ message: "This week", context: "tag on the canvas block of this season week" })
+          } season={season} />
         <Suspense fallback={null}>
           <NotebookPanel />
         </Suspense>

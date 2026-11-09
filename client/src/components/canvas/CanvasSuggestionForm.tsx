@@ -37,6 +37,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import {
   bodyLabel,
@@ -70,6 +71,7 @@ const labelText = "font-medium text-stone-900";
 const hint = "block text-xs text-stone-600";
 
 export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFramesPayload; onSent: () => void }) {
+  const { t } = useLingui();
   const options = useMemo(() => suggestionOptions(payload), [payload]);
   const titles = useMemo(() => sectionTitlesOf(payload.answer.sections), [payload]);
   const [key, setKey] = useState(options[0]?.key ?? "");
@@ -100,8 +102,10 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
   if (!option) return null;
 
+  const blockName = payload.block.name;
   const scoped = servesPurposeScoped(payload.block.id, option.target);
   const pen = payload.pens[penKeyFor(option)];
+  const penSentence = pen?.sentence;
   const fate = suggestionFate(option, pen, payload.careDoorInAgreement, payload.careDoorByAgreement ?? true);
   const dial = door?.kind === "dial" && option.door ? dialFor(option.door, payload.doors) : null;
   const set = (patch: Partial<SuggestionFields>) => {
@@ -136,21 +140,25 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
   return (
     <form
-      aria-label={`Suggest a change to ${payload.block.name}`}
+      aria-label={t`Suggest a change to ${blockName}`}
       className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-4"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
-      <h4 className="font-semibold text-stone-900">Suggest a change</h4>
+      <h4 className="font-semibold text-stone-900">
+        <Trans context="canvas suggestion form heading">Suggest a change</Trans>
+      </h4>
       <p className="text-xs text-stone-700" data-testid="canvas-notes-public">
         {suggestionReaders(option, payload.answer.sections, payload.notesArePublic)}
       </p>
 
       {options.length > 1 ? (
         <fieldset>
-          <legend className={labelText}>What would it change?</legend>
+          <legend className={labelText}>
+            <Trans>What would it change?</Trans>
+          </legend>
           <div className="mt-2 space-y-1">
             {options.map((o) => (
               <label key={o.key} className="flex items-start gap-2 min-h-[32px] text-stone-800 cursor-pointer">
@@ -177,10 +185,16 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
         </fieldset>
       ) : (
         <p className="text-stone-800">
-          <span className={labelText}>It would change:</span> {option.label}
+          <span className={labelText}>
+            <Trans context="the one thing a canvas suggestion aims at">It would change:</Trans>
+          </span> {option.label}
         </p>
       )}
-      {pen && <p className="text-xs text-stone-600">Who decides: {pen.sentence}</p>}
+      {pen && (
+        <p className="text-xs text-stone-600">
+          <Trans context="who adopts a canvas suggestion">Who decides: {penSentence}</Trans>
+        </p>
+      )}
       {fate && (
         <p className="text-xs text-stone-800" data-testid="canvas-suggestion-fate">
           {fate.text}
@@ -197,11 +211,13 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {door?.kind === "dial" && (
         <label className="block">
-          <span className={labelText}>What it should be</span>
+          <span className={labelText}>
+            <Trans>What it should be</Trans>
+          </span>
           {dial && <span className={hint}>{dialToday(dial)}</span>}
           {dial?.choices ? (
             <select value={f.value} onChange={(e) => set({ value: e.target.value })} className={field}>
-              <option value="">Choose one</option>
+              <option value="">{t({ message: "Choose one", context: "an empty choice in a list" })}</option>
               {dial.choices.map((c) => (
                 <option key={c.value} value={c.value}>
                   {c.label}
@@ -224,9 +240,11 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {door?.kind === "module" && (
         <label className="block">
-          <span className={labelText}>How widely it should be switched on</span>
+          <span className={labelText}>
+            <Trans>How widely it should be switched on</Trans>
+          </span>
           <select value={f.value} onChange={(e) => set({ value: e.target.value })} className={field}>
-            <option value="">Choose one</option>
+            <option value="">{t({ message: "Choose one", context: "an empty choice in a list" })}</option>
             {MODULE_LIFECYCLES.map((l) => (
               <option key={l} value={l}>
                 {LIFECYCLE_WORDS[l].charAt(0).toUpperCase() + LIFECYCLE_WORDS[l].slice(1)}
@@ -238,21 +256,31 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {door?.id === "exit:terms" && (
         <div className="space-y-3">
-          <p className={hint}>Fill in only what you would change. Anything left empty stays as it is.</p>
+          <p className={hint}>
+            <Trans>Fill in only what you would change. Anything left empty stays as it is.</Trans>
+          </p>
           <label className="block">
-            <span className={labelText}>Notice before leaving, in days</span>
+            <span className={labelText}>
+              <Trans>Notice before leaving, in days</Trans>
+            </span>
             <input type="number" inputMode="numeric" min={0} value={f.noticePeriodDays} onChange={(e) => set({ noticePeriodDays: e.target.value })} className={field} />
           </label>
           <label className="block">
-            <span className={labelText}>How a departing member's contribution is valued</span>
+            <span className={labelText}>
+              <Trans>How a departing member's contribution is valued</Trans>
+            </span>
             <textarea value={f.valuationMethod} onChange={(e) => set({ valuationMethod: e.target.value })} className={area} />
           </label>
           <label className="block">
-            <span className={labelText}>The steps of leaving, one per line</span>
+            <span className={labelText}>
+              <Trans>The steps of leaving, one per line</Trans>
+            </span>
             <textarea value={f.unwindSteps} onChange={(e) => set({ unwindSteps: e.target.value })} className={area} />
           </label>
           <label className="block">
-            <span className={labelText}>What happens when somebody is asked to leave</span>
+            <span className={labelText}>
+              <Trans>What happens when somebody is asked to leave</Trans>
+            </span>
             <textarea value={f.involuntaryProcess} onChange={(e) => set({ involuntaryProcess: e.target.value })} className={area} />
           </label>
         </div>
@@ -260,18 +288,24 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {door?.id === "exit:restorative" && (
         <div className="space-y-3">
-          <p className={hint}>Fill in only what you would change. Anything left empty stays as it is.</p>
+          <p className={hint}>
+            <Trans>Fill in only what you would change. Anything left empty stays as it is.</Trans>
+          </p>
           <label className="block">
-            <span className={labelText}>The restorative steps, one per line</span>
+            <span className={labelText}>
+              <Trans>The restorative steps, one per line</Trans>
+            </span>
             <textarea value={f.steps} onChange={(e) => set({ steps: e.target.value })} className={area} />
           </label>
-          <RolePicker label="The care role, which hears a conflict first" value={f.intakeContactRole} roles={roles} onChange={(v) => set({ intakeContactRole: v })} />
+          <RolePicker label={t`The care role, which hears a conflict first`} value={f.intakeContactRole} roles={roles} onChange={(v) => set({ intakeContactRole: v })} />
           {/* The agreement's own meaning of the cover role. A conflict that involves
               the care holder is the agreement's "When power is involved", which the
               cover role does not take (audit of Wave 3b, 2026-09-28). */}
-          <RolePicker label="The cover role, which hears a request when the care role cannot" value={f.coverRole} roles={roles} onChange={(v) => set({ coverRole: v })} />
+          <RolePicker label={t`The cover role, which hears a request when the care role cannot`} value={f.coverRole} roles={roles} onChange={(v) => set({ coverRole: v })} />
           <label className="block">
-            <span className={labelText}>The promised reply time, in hours</span>
+            <span className={labelText}>
+              <Trans>The promised reply time, in hours</Trans>
+            </span>
             <input type="number" inputMode="numeric" min={1} value={f.replyHours} onChange={(e) => set({ replyHours: e.target.value })} className={field} />
           </label>
         </div>
@@ -279,13 +313,15 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {option.target === "matrix" && (
         <div className="space-y-3">
-          <p className={hint}>Each column needs an answer. "Nobody yet" is an answer.</p>
-          <MatrixField label="The kind of decision" value={f.subject} onChange={(v) => set({ subject: v })} />
-          <MatrixField label="Who approves it" value={f.approval} onChange={(v) => set({ approval: v })} />
-          <MatrixField label="Who is asked first" value={f.consultation} onChange={(v) => set({ consultation: v })} />
-          <MatrixField label="Who is told" value={f.information} onChange={(v) => set({ information: v })} />
-          <MatrixField label="How it is decided (optional)" value={f.method} onChange={(v) => set({ method: v })} />
-          <MatrixField label="Risk tags, separated by commas (optional)" value={f.riskTags} onChange={(v) => set({ riskTags: v })} />
+          <p className={hint}>
+            <Trans>Each column needs an answer. "Nobody yet" is an answer.</Trans>
+          </p>
+          <MatrixField label={t`The kind of decision`} value={f.subject} onChange={(v) => set({ subject: v })} />
+          <MatrixField label={t({ message: "Who approves it", context: "Decision Matrix column" })} value={f.approval} onChange={(v) => set({ approval: v })} />
+          <MatrixField label={t`Who is asked first`} value={f.consultation} onChange={(v) => set({ consultation: v })} />
+          <MatrixField label={t({ message: "Who is told", context: "Decision Matrix column" })} value={f.information} onChange={(v) => set({ information: v })} />
+          <MatrixField label={t`How it is decided (optional)`} value={f.method} onChange={(v) => set({ method: v })} />
+          <MatrixField label={t`Risk tags, separated by commas (optional)`} value={f.riskTags} onChange={(v) => set({ riskTags: v })} />
         </div>
       )}
 
@@ -296,7 +332,9 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       {scoped && (
         <label className="block">
-          <span className={labelText}>How it serves the governing purpose</span>
+          <span className={labelText}>
+            <Trans>How it serves the governing purpose</Trans>
+          </span>
           <span className={hint}>
             {payload.servesPurpose.requiredToday
               ? `Needed here: this changes how the village works. One line of at least ${ALIGNMENT_MIN_WORDS} words, which everyone reads beside the suggestion.`
@@ -330,12 +368,13 @@ function RolePicker({
   roles: Array<{ id: string; name: string }> | null;
   onChange: (v: string) => void;
 }) {
+  const { t } = useLingui();
   return (
     <label className="block">
       <span className={labelText}>{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)} className={field} disabled={!roles}>
-        <option value={KEEP}>Leave it as it is</option>
-        <option value="">No role</option>
+        <option value={KEEP}>{t({ message: "Leave it as it is", context: "a role choice that keeps the current role" })}</option>
+        <option value="">{t({ message: "No role", context: "a role choice" })}</option>
         {(roles ?? []).map((r) => (
           <option key={r.id} value={r.id}>
             {r.name}

@@ -13,6 +13,7 @@ import { Link } from "wouter";
 import { Loader2, Send } from "lucide-react";
 import MicButton from "@/components/MicButton";
 import { authToken } from "@/lib/gameApi";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -30,6 +31,7 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
   // Two hats, one panel. "launch" reads the live readiness checklist;
   // "organize" (S70) reads the village's own second brain first, then the
   // shipped practitioner corpus — and shows which shelves she consulted.
+  const { t } = useLingui();
   const [mode, setMode] = useState<"launch" | "organize">(launched ? "organize" : "launch");
   // The status arrives after the first render, so a village found to be live
   // moves the guide onto organizing then, and the launch tab is gone.
@@ -37,8 +39,8 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
     if (launched) setMode("organize");
   }, [launched]);
   const GREETINGS: Record<string, string> = {
-    launch: "I can see exactly where your launch stands. Want to start with what's blocking, or shall I walk the whole journey with you?",
-    organize: "Ask me about organizing: governance, conflict, membership, legal shells, internal economics. I read your village's brief first, then its own calls, and they outrank the books when they speak to it.",
+    launch: t`I can see exactly where your launch stands. Want to start with what's blocking, or shall I walk the whole journey with you?`,
+    organize: t`Ask me about organizing: governance, conflict, membership, legal shells, internal economics. I read your village's brief first, then its own calls, and they outrank the books when they speak to it.`,
   };
   const [threads, setThreads] = useState<Record<string, Array<{ role: "user" | "assistant"; content: string; consulted?: any }>>>({
     launch: [{ role: "assistant", content: GREETINGS.launch }],
@@ -46,7 +48,7 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
   });
   const msgs = threads[mode];
   const setMsgs = (fn: (m: typeof msgs) => typeof msgs) =>
-    setThreads((t) => ({ ...t, [mode]: fn(t[mode]) }));
+    setThreads((all) => ({ ...all, [mode]: fn(all[mode]) }));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [gone, setGone] = useState(false);
@@ -67,7 +69,7 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
         if (!r.ok) throw new Error(d.message ?? d.error ?? "failed");
         setMsgs((m) => [...m, { role: "assistant", content: d.reply, consulted: d.consulted }]);
       })
-      .catch(() => setMsgs((m) => [...m, { role: "assistant", content: "Something hiccuped. Ask me that again?" }]))
+      .catch(() => setMsgs((m) => [...m, { role: "assistant", content: t`Something hiccuped. Ask me that again?` }]))
       .finally(() => setBusy(false));
   };
 
@@ -92,22 +94,24 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
           {!launched && (
             <button onClick={() => setMode("launch")}
               className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "launch" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-              Launch
+              <Trans context="launch guide tab">Launch</Trans>
             </button>
           )}
           <button onClick={() => setMode("organize")}
             className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 ${mode === "organize" ? "bg-teal-deep text-white" : "text-stone-500 hover:bg-stone-100"}`}>
-            Organizing
+            <Trans context="launch guide tab">Organizing</Trans>
           </button>
         </div>
-        <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-sm">Close</button>
+        <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-sm"><Trans context="close the launch guide">Close</Trans></button>
       </header>
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {gone ? (
           <p className="text-xs text-stone-500">
-            The guide needs an Anthropic key. Set one in{" "}
-            <Link href="/admin?tab=integrations" className="text-teal-deep underline">Integrations</Link>.
-            The checklist above works fine without the guide.
+            <Trans>
+              The guide needs an Anthropic key. Set one in{" "}
+              <Link href="/admin?tab=integrations" className="text-teal-deep underline">Integrations</Link>.
+              The checklist above works fine without the guide.
+            </Trans>
           </p>
         ) : (
           msgs.map((m, i) => (
@@ -121,12 +125,12 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
                   || m.consulted.references?.length > 0
                   || m.consulted.readers?.length > 0) && (
                 <p className="text-[10px] text-stone-400 mt-1.5 border-t border-stone-200 pt-1">
-                  {m.consulted.brief?.length > 0 && <>Your brief: {m.consulted.brief.join("; ")}. </>}
-                  {m.consulted.ownRecord?.length > 0 && <>Your calls: {m.consulted.ownRecord.join("; ")}. </>}
+                  {m.consulted.brief?.length > 0 && <><Trans context="what the launch guide read">Your brief: {m.consulted.brief.join("; ")}.</Trans>{" "}</>}
+                  {m.consulted.ownRecord?.length > 0 && <><Trans context="what the launch guide read">Your calls: {m.consulted.ownRecord.join("; ")}.</Trans>{" "}</>}
                   {/* Optional-chained on purpose: a reply cached before the
                       readers shipped carries no `readers` key at all. */}
-                  {m.consulted.readers?.length > 0 && <>Read from the village record: {m.consulted.readers.join("; ")}. </>}
-                  {m.consulted.references?.length > 0 && <>References: {m.consulted.references.join("; ")}.</>}
+                  {m.consulted.readers?.length > 0 && <><Trans>Read from the village record: {m.consulted.readers.join("; ")}.</Trans>{" "}</>}
+                  {m.consulted.references?.length > 0 && <Trans context="what the launch guide read">References: {m.consulted.references.join("; ")}.</Trans>}
                 </p>
               )}
             </div>
@@ -136,12 +140,12 @@ export function LaunchGuide({ open, onClose, launched = false }: { open: boolean
       </div>
       {!gone && (
         <div className="p-3 border-t border-stone-100 flex gap-2">
-          <MicButton onText={(t) => setDraft((v) => (v ? v.replace(/\s*$/, " ") : "") + t)} disabled={busy} className="!rounded-lg" />
+          <MicButton onText={(heard) => setDraft((v) => (v ? v.replace(/\s*$/, " ") : "") + heard)} disabled={busy} className="!rounded-lg" />
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-            placeholder="Ask about any step…"
+            placeholder={t`Ask about any step…`}
             className="flex-1 text-sm border border-stone-200 rounded-lg px-3 py-2"
           />
           <button onClick={send} disabled={busy || !draft.trim()}

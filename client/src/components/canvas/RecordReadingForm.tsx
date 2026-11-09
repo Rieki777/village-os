@@ -16,6 +16,7 @@
  * set in this platform's words, one page away from the first.
  */
 import { useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import {
   CANVAS_LEVELS,
   CANVAS_MOMENTS,
@@ -49,6 +50,7 @@ export function RecordReadingForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const blockName = block.name;
   const submit = async () => {
     const parsed = parseCanvasReading({ blockId: block.id, level, sentence, moment });
     if (!parsed.ok) {
@@ -71,7 +73,9 @@ export function RecordReadingForm({
       }}
     >
       <fieldset>
-        <legend className="text-sm font-medium text-stone-900">Where does {block.name} stand today?</legend>
+        <legend className="text-sm font-medium text-stone-900">
+          <Trans>Where does {blockName} stand today?</Trans>
+        </legend>
         <div className="mt-2 space-y-1.5">
           {CANVAS_LEVELS.map((l) => (
             <label key={l} className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
@@ -93,7 +97,9 @@ export function RecordReadingForm({
       </fieldset>
 
       <label className="block text-sm">
-        <span className="font-medium text-stone-900">Why, in one sentence</span>
+        <span className="font-medium text-stone-900">
+          <Trans>Why, in one sentence</Trans>
+        </span>
         <textarea
           value={sentence}
           onChange={(e) => setSentence(e.target.value)}
@@ -104,7 +110,9 @@ export function RecordReadingForm({
       </label>
 
       <label className="block text-sm">
-        <span className="font-medium text-stone-900">The occasion</span>
+        <span className="font-medium text-stone-900">
+          <Trans context="the occasion of a canvas reading">The occasion</Trans>
+        </span>
         <select
           value={moment}
           onChange={(e) => setMoment(e.target.value as CanvasMoment)}
@@ -137,7 +145,7 @@ export function RecordReadingForm({
           onClick={onCancel}
           className="text-sm font-medium rounded-lg px-3 py-1.5 text-stone-700 border border-stone-200 hover:bg-stone-50"
         >
-          Cancel
+          <Trans context="close a form without saving">Cancel</Trans>
         </button>
       </div>
     </form>

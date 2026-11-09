@@ -20,6 +20,7 @@
  * the first ring on purpose: "nobody has read this yet" must not look like
  * "Absent", which is a reading somebody gave.
  */
+import { useLingui } from "@lingui/react/macro";
 import { CANVAS_ORDER, CANVAS_LEVELS, type CanvasBlockId, type CanvasLevel } from "@shared/governanceCanvas";
 
 const WIDTH = 460;
@@ -66,6 +67,7 @@ export function CanvasRadar({
   /** The chart in words, block by block. It becomes the image's accessible description. */
   description: string;
 }) {
+  const { t } = useLingui();
   return (
     <svg
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -74,7 +76,7 @@ export function CanvasRadar({
       aria-labelledby="canvas-radar-title canvas-radar-desc"
       data-testid="canvas-radar"
     >
-      <title id="canvas-radar-title">The canvas radar, one axis per block</title>
+      <title id="canvas-radar-title">{t`The canvas radar, one axis per block`}</title>
       <desc id="canvas-radar-desc">{description}</desc>
 
       <g className="text-stone-300" fill="none" stroke="currentColor" strokeWidth={1}>

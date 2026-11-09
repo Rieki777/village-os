@@ -37,6 +37,7 @@
  */
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { useSettingFocus } from "./settingFocus";
 import {
@@ -71,6 +72,7 @@ export default function ClosingPolicyEditor({
   /** Handed the section as the server now holds it, so the tab can refresh that alone. */
   onSaved: (closing: ClosingSectionForReaders | undefined) => void;
 }) {
+  const { t } = useLingui();
   const stored = closing ?? null;
   const [policyId, setPolicyId] = useState<string>(stored?.policyId ?? "");
   const [statement, setStatement] = useState<string>(stored?.statement ?? "");
@@ -118,15 +120,15 @@ export default function ClosingPolicyEditor({
         body: JSON.stringify({ policyId, statement, adopt: adopt && canAdopt }),
       });
       const d = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(refusal(d, "What closing means was not saved"));
+      if (!res.ok) throw new Error(refusal(d, t`What closing means was not saved`));
       toast.success(
         d?.named
-          ? "Adopted. Members read it on the exit policy page, and the launch checklist counts it."
-          : "Saved as a draft. It counts once the village adopts it.",
+          ? t`Adopted. Members read it on the exit policy page, and the launch checklist counts it.`
+          : t`Saved as a draft. It counts once the village adopts it.`,
       );
       onSaved(d?.closing);
     } catch (e: any) {
-      toast.error(e?.message || "What closing means was not saved");
+      toast.error(e?.message || t`What closing means was not saved`);
     } finally {
       setSaving(false);
     }
@@ -135,16 +137,22 @@ export default function ClosingPolicyEditor({
   const inputCls = "border border-gray-200 rounded-lg px-2 py-1.5 text-sm";
   return (
     <div className="bg-white border border-gray-100 rounded-xl p-5">
-      <h3 className="font-semibold text-gray-900 mb-1">What closing this village means</h3>
+      <h3 className="font-semibold text-gray-900 mb-1">
+        <Trans>What closing this village means</Trans>
+      </h3>
       <p className="text-xs text-gray-500 mb-4">
-        If the village ever closes, its treasury and assets go somewhere. Name where before the
-        village starts: the launch checklist waits for it, and every member reads it at
-        /exit-policy. The platform works nothing out and moves nothing on closing. This is the
-        village's written promise.
+        <Trans>
+          If the village ever closes, its treasury and assets go somewhere. Name where before the
+          village starts: the launch checklist waits for it, and every member reads it at
+          /exit-policy. The platform works nothing out and moves nothing on closing. This is the
+          village's written promise.
+        </Trans>
       </p>
 
       <fieldset className="mb-4 border-0 p-0 m-0">
-        <legend className="text-xs font-medium text-gray-700 mb-2">How what is left is shared</legend>
+        <legend className="text-xs font-medium text-gray-700 mb-2">
+          <Trans>How what is left is shared</Trans>
+        </legend>
         <div className="space-y-2">
           {CLOSING_POLICY_IDS.map((id) => (
             <label key={id} className="flex items-start gap-2 text-sm text-gray-800 min-h-[44px]">
@@ -166,7 +174,9 @@ export default function ClosingPolicyEditor({
       </fieldset>
 
       <label className="text-xs text-gray-500 block mb-2" htmlFor={STATEMENT_ID}>
-        <span className="font-medium text-gray-700">The village's words</span>
+        <span className="font-medium text-gray-700">
+          <Trans context="label of the closing statement box">The village's words</Trans>
+        </span>
       </label>
       <textarea
         id={STATEMENT_ID}
@@ -181,8 +191,10 @@ export default function ClosingPolicyEditor({
         className={`${inputCls} w-full`}
       />
       <p id="closing-policy-hint" className="text-[11px] text-gray-500 mt-1 mb-3">
-        Always the village's to edit. Choosing the default fills this with its words: keep its
-        first sentence, which is the default itself, and change or add anything else.
+        <Trans>
+          Always the village's to edit. Choosing the default fills this with its words: keep its
+          first sentence, which is the default itself, and change or add anything else.
+        </Trans>
       </p>
       {problem && <p className="text-[11px] text-amber-900 mb-3">{problem}</p>}
       {putBack && (
@@ -194,7 +206,7 @@ export default function ClosingPolicyEditor({
           }}
           className="text-xs text-teal-deep underline mb-3 min-h-[44px] focus:outline-none focus:ring-2 focus:ring-teal-deep rounded"
         >
-          Start again from this choice's words
+          <Trans>Start again from this choice's words</Trans>
         </button>
       )}
 
@@ -207,14 +219,16 @@ export default function ClosingPolicyEditor({
             onChange={(e) => setAdopt(e.target.checked)}
             className="mt-0.5 w-5 h-5 shrink-0 focus:outline-none focus:ring-2 focus:ring-teal-deep"
           />
-          <span>The village adopts these words as what closing means here.</span>
+          <span>
+            <Trans>The village adopts these words as what closing means here.</Trans>
+          </span>
         </label>
         <p className="text-[11px] text-gray-500 mt-2 pl-7">
           {storedNamed && stored?.adoptedAt
-            ? `Adopted on ${day(stored.adoptedAt)}. Members read these words until new ones are adopted, so a change is saved by adopting it.`
+            ? t`Adopted on ${day(stored.adoptedAt)}. Members read these words until new ones are adopted, so a change is saved by adopting it.`
             : stored
-              ? "Saved as a draft and not adopted yet, so the launch checklist and /exit-policy both read it as not named."
-              : "Nothing saved yet. Until words are adopted, the launch checklist and /exit-policy both read it as not named."}
+              ? t`Saved as a draft and not adopted yet, so the launch checklist and /exit-policy both read it as not named.`
+              : t`Nothing saved yet. Until words are adopted, the launch checklist and /exit-policy both read it as not named.`}
         </p>
       </div>
 
@@ -224,7 +238,7 @@ export default function ClosingPolicyEditor({
         disabled={saving || !policyId || (storedNamed && !(adopt && canAdopt))}
         className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 min-h-[44px] font-medium disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-teal-deep"
       >
-        {saving ? "Saving..." : "Save what closing means"}
+        {saving ? t({ message: "Saving...", context: "the closing policy is being saved" }) : t`Save what closing means`}
       </button>
     </div>
   );

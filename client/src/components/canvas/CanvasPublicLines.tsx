@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { useAuth } from "@/contexts/AuthContext";
 import type { CanvasPayload } from "@/lib/canvasCopy";
@@ -71,9 +72,11 @@ function LineForm({
   onSaved: (saved: CanvasPublicBlock) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLingui();
   const [text, setText] = useState(current);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const name = block.name;
   const inputId = `public-line-input-${block.id}`;
   const hintId = `public-line-hint-${block.id}`;
 
@@ -90,12 +93,12 @@ function LineForm({
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) {
-          setError(typeof d?.error === "string" && d.error ? d.error : "The line could not be saved just now.");
+          setError(typeof d?.error === "string" && d.error ? d.error : t`The line could not be saved just now.`);
           return;
         }
         onSaved(d.block as CanvasPublicBlock);
       })
-      .catch(() => setError("The line could not be saved just now."))
+      .catch(() => setError(t`The line could not be saved just now.`))
       .finally(() => setSaving(false));
   };
 
@@ -109,11 +112,13 @@ function LineForm({
       data-testid={`public-line-form-${block.id}`}
     >
       <label htmlFor={inputId} className="block text-sm font-medium text-stone-900">
-        The public line for {block.name}
+        <Trans>The public line for {name}</Trans>
       </label>
       <p id={hintId} className="text-xs text-stone-600">
-        Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it
-        empty and save to take the line down.
+        <Trans>
+          Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it
+          empty and save to take the line down.
+        </Trans>
       </p>
       <input
         id={inputId}
@@ -131,10 +136,10 @@ function LineForm({
       )}
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={saving} className={BUTTON}>
-          {saving ? "Saving" : "Save the line"}
+          {saving ? t({ message: "Saving", context: "a public line is being saved" }) : t({ message: "Save the line", context: "button that saves a canvas block's public line" })}
         </button>
         <button type="button" onClick={onCancel} disabled={saving} className={BUTTON}>
-          Cancel
+          <Trans context="close the public line form without saving">Cancel</Trans>
         </button>
       </div>
     </form>
@@ -154,18 +159,23 @@ function BlockLine({
   mayWrite: boolean;
   onSaved: (saved: CanvasPublicBlock) => void;
 }) {
+  const { t } = useLingui();
   const [writing, setWriting] = useState(false);
   const line = shown?.line ?? null;
+  const number = block.number;
   const withheld = !!shown?.withheld;
   // Served only to the pen, on a held-back line (W3a-withheld-line-hidden-from-pen).
   const forPen = withheld ? shown?.forPen ?? null : null;
+  const matched = forPen ? forPen.matched : null;
 
   return (
     <li
       className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5"
       data-testid={`public-line-${block.id}`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Block {block.number}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
+        <Trans context="a canvas block's number">Block {number}</Trans>
+      </p>
       <h3 className="font-display text-lg font-semibold text-teal-deep">{block.name}</h3>
       <blockquote cite={CANVAS_SOURCE_URL} className="mt-1 text-sm italic text-stone-700">
         {CANVAS_BLOCK_TEXT[block.id].question}
@@ -176,22 +186,36 @@ function BlockLine({
           {line}
         </p>
       ) : withheld ? (
-        <p className="mt-3 text-sm text-stone-600">This block&apos;s public line is hidden for now.</p>
+        <p className="mt-3 text-sm text-stone-600">
+          <Trans>This block&apos;s public line is hidden for now.</Trans>
+        </p>
       ) : (
-        <p className="mt-3 text-sm text-stone-600">Not written yet.</p>
+        <p className="mt-3 text-sm text-stone-600">
+          <Trans context="a public line not written yet">Not written yet.</Trans>
+        </p>
       )}
 
       {withheld && mayWrite && (
         <p className="mt-2 text-xs text-stone-700" data-testid={`public-line-withheld-${block.id}`}>
-          The line holds the name of someone in this village, so the public page hides it.
-          {forPen ? ` The word that matched is "${forPen.matched}". ` : " "}
-          Write it again with the role in place of the name.
+          {matched !== null ? (
+            <Trans>
+              The line holds the name of someone in this village, so the public page hides it. The word that matched is
+              "{matched}". Write it again with the role in place of the name.
+            </Trans>
+          ) : (
+            <Trans>
+              The line holds the name of someone in this village, so the public page hides it. Write it again with the role
+              in place of the name.
+            </Trans>
+          )}
         </p>
       )}
 
       {answers && answers[0] && (
         <details className="mt-3 text-sm" data-testid={`member-answers-${block.id}`}>
-          <summary className="cursor-pointer font-medium text-teal-deep">What the village says to its members</summary>
+          <summary className="cursor-pointer font-medium text-teal-deep">
+            <Trans>What the village says to its members</Trans>
+          </summary>
           {answers.map((a) => (
             <div key={a.section} className="mt-2">
               <p className="text-xs font-medium text-stone-600">{a.title}</p>
@@ -203,7 +227,7 @@ function BlockLine({
 
       {mayWrite && !writing && (
         <button type="button" onClick={() => setWriting(true)} className={`mt-3 ${BUTTON}`}>
-          {line || withheld ? "Change the public line" : "Write the public line"}
+          {line || withheld ? t`Change the public line` : t`Write the public line`}
         </button>
       )}
       {mayWrite && writing && (
@@ -222,6 +246,7 @@ function BlockLine({
 }
 
 export default function CanvasPublicLines() {
+  const { t } = useLingui();
   const { user } = useAuth();
   const [lines, setLines] = useState<LinesById | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -277,28 +302,36 @@ export default function CanvasPublicLines() {
 
   return (
     <div data-testid="canvas-public-lines">
-      <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">Our Canvas, Block by Block</h2>
+      <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">
+        <Trans context="heading of the public canvas page">Our Canvas, Block by Block</Trans>
+      </h2>
       <p className="text-stone-700 leading-relaxed">
-        The Governance Canvas asks a group twelve questions about how it works together. Under each question is this
-        village&apos;s answer in one public line. The lines name roles, never people.
+        <Trans>
+          The Governance Canvas asks a group twelve questions about how it works together. Under each question is this
+          village&apos;s answer in one public line. The lines name roles, never people.
+        </Trans>
       </p>
       <p className="mt-2 text-sm text-stone-600" data-testid="canvas-public-credit">
-        The questions are quoted from the{" "}
-        <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
-          {CANVAS_CREDIT.text}
-          <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
-        </a>
-        .
+        <Trans>
+          The questions are quoted from the{" "}
+          <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
+            {CANVAS_CREDIT.text}
+            <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
+          </a>
+          .
+        </Trans>
       </p>
       {member && (
         <p className="mt-2 text-sm text-stone-700" data-testid="canvas-member-note">
-          You are signed in, so a block can also open the words the village keeps for its members. Visitors read the
-          public lines only.
+          <Trans>
+            You are signed in, so a block can also open the words the village keeps for its members. Visitors read the
+            public lines only.
+          </Trans>
         </p>
       )}
       {member?.mayWrite && (
         <p className="mt-2 text-sm text-stone-700" data-testid="canvas-pen-note">
-          You hold the village&apos;s story, so you can write these lines. Anyone can read them, signed in or not.
+          <Trans>You hold the village&apos;s story, so you can write these lines. Anyone can read them, signed in or not.</Trans>
         </p>
       )}
 
@@ -306,13 +339,13 @@ export default function CanvasPublicLines() {
         <div role="alert" className="mt-6 text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3 space-y-2">
           <p>{failed}</p>
           <button type="button" onClick={load} className={BUTTON}>
-            Try again
+            <Trans context="retry a failed read">Try again</Trans>
           </button>
         </div>
       ) : !lines ? (
         <p className="mt-6 text-sm text-stone-600 py-4 text-center">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-          Reading the canvas
+          <Trans context="the canvas is loading">Reading the canvas</Trans>
         </p>
       ) : (
         <ol className="mt-6 grid md:grid-cols-2 gap-4">

@@ -14,12 +14,14 @@ import {
   parseTextDocument,
 } from "@shared/villageDocuments";
 import { call } from "@/lib/notebookCopy";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const button =
   "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
 const input = "mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm";
 
 export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }) {
+  const { t } = useLingui();
   const [mode, setMode] = useState<"paste" | "file">("paste");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -47,9 +49,9 @@ export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }
       const got = await call("POST", "/api/documents", { kind: "paste", title, body });
       setBusy(false);
       if (!got.ok) return setSaid({ ok: false, text: got.error });
-      return done("Added. It is private: only you can read it.");
+      return done(t`Added. It is private: only you can read it.`);
     }
-    if (!file) return setSaid({ ok: false, text: "Pick a file to add." });
+    if (!file) return setSaid({ ok: false, text: t`Pick a file to add.` });
     if (!kindFromFileName(file.name)) return setSaid({ ok: false, text: DOCUMENT_WORDS.kindUnknown });
     if (file.size > DOCUMENT_FILE_MAX_BYTES) return setSaid({ ok: false, text: DOCUMENT_WORDS.fileTooBig });
     const form = new FormData();
@@ -59,32 +61,32 @@ export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }
     const got = await call("POST", "/api/documents/file", form);
     setBusy(false);
     if (!got.ok) return setSaid({ ok: false, text: got.error });
-    return done("Added. It is private: only you can read it.");
+    return done(t`Added. It is private: only you can read it.`);
   };
 
   return (
     <form onSubmit={submit} className="rounded-lg border border-stone-200 p-4 space-y-3" data-testid="notebook-add">
       <fieldset className="flex flex-wrap gap-4 text-sm text-stone-900">
-        <legend className="sr-only">How to add it</legend>
+        <legend className="sr-only"><Trans>How to add it</Trans></legend>
         <label className="flex items-center gap-2">
-          <input type="radio" name="notebook-add-mode" checked={mode === "paste"} onChange={() => setMode("paste")} /> Paste text
+          <input type="radio" name="notebook-add-mode" checked={mode === "paste"} onChange={() => setMode("paste")} />{" "}<Trans context="notebook add mode">Paste text</Trans>
         </label>
         <label className="flex items-center gap-2">
-          <input type="radio" name="notebook-add-mode" checked={mode === "file"} onChange={() => setMode("file")} /> Add a file
+          <input type="radio" name="notebook-add-mode" checked={mode === "file"} onChange={() => setMode("file")} />{" "}<Trans context="notebook add mode">Add a file</Trans>
         </label>
       </fieldset>
       <label className="block text-sm font-medium text-stone-900">
-        Title{mode === "file" ? " (leave it empty to use the file's name)" : ""}
+        <Trans context="document title field">Title</Trans>{mode === "file" ? t` (leave it empty to use the file's name)` : ""}
         <input className={input} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
       </label>
       {mode === "paste" ? (
         <label className="block text-sm font-medium text-stone-900">
-          The text
+          <Trans context="pasted document body field">The text</Trans>
           <textarea className={`${input} min-h-32`} value={body} onChange={(e) => setBody(e.target.value)} />
         </label>
       ) : (
         <label className="block text-sm font-medium text-stone-900">
-          A Markdown, text, PDF or Word (.docx) file, up to {DOCUMENT_FILE_MAX_BYTES / (1024 * 1024)} MB
+          <Trans>A Markdown, text, PDF or Word (.docx) file, up to {DOCUMENT_FILE_MAX_BYTES / (1024 * 1024)} MB</Trans>
           <input
             ref={fileInput}
             type="file"
@@ -96,7 +98,7 @@ export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }
       )}
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className={button} disabled={busy}>
-          {busy ? "Adding" : "Add to my notebook"}
+          {busy ? t({ message: "Adding", context: "notebook add button, busy" }) : t`Add to my notebook`}
         </button>
         {said && (
           <p role={said.ok ? "status" : "alert"} className={`text-sm ${said.ok ? "text-stone-700" : "text-red-700"}`}>

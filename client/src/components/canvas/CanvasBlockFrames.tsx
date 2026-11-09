@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ExternalLink, Loader2, Printer } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { recordedLine, type CanvasBlockView } from "@/lib/canvasCopy";
@@ -88,6 +89,8 @@ export default function CanvasBlockFrames({
   startRecording = false,
   recordAsks = 0,
 }: CanvasBlockFramesProps) {
+  const { t } = useLingui();
+  const name = block.name;
   const [frame, setFrame] = useState<FrameId>(initialFrame);
   /**
    * The frames opened so far. Each stays mounted once opened, hidden while
@@ -162,7 +165,7 @@ export default function CanvasBlockFrames({
     <div className="mt-4 border-t border-stone-100 pt-4 space-y-3" data-testid={`canvas-frames-${block.id}`}>
       {/* Five buttons on one line at 390px: the card leaves about 318px, and
           px-3 with gap-2 came to 320 and pushed Adopt onto a line of its own. */}
-      <div role="group" aria-label={`The five frames of ${block.name}`} className="flex flex-wrap gap-1.5">
+      <div role="group" aria-label={t`The five frames of ${name}`} className="flex flex-wrap gap-1.5">
         {FRAME_IDS.map((id) => (
           <button
             key={id}
@@ -196,14 +199,14 @@ export default function CanvasBlockFrames({
           <p>{failed.message}</p>
           {failed.retry && (
             <button type="button" onClick={load} className={quiet}>
-              Try again
+              <Trans context="retry a failed read">Try again</Trans>
             </button>
           )}
         </div>
       ) : needsBlock && !payload ? (
         <p className="text-sm text-stone-600 py-4 text-center">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-          Reading {block.name}
+          <Trans context="a canvas block is loading">Reading {name}</Trans>
         </p>
       ) : null}
 
@@ -259,13 +262,17 @@ function SenseFrame({
   useEffect(() => {
     if (recordAsks && mayRecord) setWriting(true);
   }, [recordAsks, mayRecord]);
+  const { t } = useLingui();
+  const name = block.name;
   const earlier = view.history.slice(1);
 
   return (
-    <section aria-label={`Sense: readings of ${block.name}`} className="space-y-3 text-sm">
+    <section aria-label={t({ message: `Sense: readings of ${name}`, context: "the Sense frame of a canvas block" })} className="space-y-3 text-sm">
       {earlier.length > 0 ? (
         <>
-          <h4 className="font-semibold text-stone-900">Earlier readings</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans context="heading over a canvas block's older readings">Earlier readings</Trans>
+          </h4>
           <ul className="space-y-2">
             {earlier.map((r) => (
               <li key={r.id} className="text-stone-700">
@@ -277,13 +284,13 @@ function SenseFrame({
         </>
       ) : (
         <p className="text-stone-700">
-          {view.latest ? `The reading above is the first one of ${block.name}.` : `Nobody has read ${block.name} yet.`}
+          {view.latest ? t`The reading above is the first one of ${name}.` : t`Nobody has read ${name} yet.`}
         </p>
       )}
 
       {mayRecord && !writing && (
         <button type="button" onClick={() => setWriting(true)} className={quiet}>
-          Record a reading
+          <Trans context="canvas block button">Record a reading</Trans>
         </button>
       )}
       {mayRecord && writing && (
@@ -304,8 +311,10 @@ function SenseFrame({
 
 /** See: the server's facts, where the words and the settings part, and the settings behind the block. */
 function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
+  const { t } = useLingui();
   const gaps = gapFacts(payload);
   const name = payload.block.name;
+  const whereSet = t({ message: "Where it is set", context: "link to the page where a setting is set" });
   // Only a link this viewer can follow is printed: an administrators' page is
   // no door for a member (`followableHref`). The fact stays readable to all.
   const admin = useIsAdmin();
@@ -321,9 +330,11 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
     return href ? <span className="text-stone-600">{ADMIN_PAGES_LINE}</span> : null;
   };
   return (
-    <section aria-label={`See: what the village shows about ${name}`} className="space-y-4 text-sm">
+    <section aria-label={t`See: what the village shows about ${name}`} className="space-y-4 text-sm">
       <div>
-        <h4 className="font-semibold text-stone-900">What the village's settings and records show</h4>
+        <h4 className="font-semibold text-stone-900">
+          <Trans>What the village's settings and records show</Trans>
+        </h4>
         {payload.observed.length > 0 ? (
           <ul className="mt-2 space-y-2" data-testid="canvas-see-facts">
             {payload.observed.map((f) => (
@@ -333,18 +344,22 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-stone-700">Nothing the village runs speaks to {name} yet.</p>
+          <p className="mt-2 text-stone-700">
+            <Trans>Nothing the village runs speaks to {name} yet.</Trans>
+          </p>
         )}
       </div>
 
       {gaps.length > 0 && (
         <div>
-          <h4 className="font-semibold text-stone-900">Where the words and the settings part</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans>Where the words and the settings part</Trans>
+          </h4>
           <ul className="mt-2 space-y-2 list-disc pl-5" data-testid="canvas-see-gaps">
             {gaps.map((g) => (
               <li key={g.id} className="text-stone-800">
                 {g.text}
-                {g.href && <> {door(g.href, g.label ?? "Where it is set")}</>}
+                {g.href && <> {door(g.href, g.label ?? whereSet)}</>}
               </li>
             ))}
           </ul>
@@ -353,12 +368,14 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
 
       {payload.doors.length > 0 && (
         <div>
-          <h4 className="font-semibold text-stone-900">The settings behind this block</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans>The settings behind this block</Trans>
+          </h4>
           <ul className="mt-2 space-y-2" data-testid="canvas-see-doors">
             {payload.doors.map((d) => (
               <li key={d.label} className="text-stone-800">
                 <span className="font-medium text-stone-900">{d.label}.</span>{" "}
-                {d.wired ? "Anybody in the village can suggest a change to it under Say." : d.why} {door(d.href, "Where it is set")}
+                {d.wired ? t`Anybody in the village can suggest a change to it under Say.` : d.why} {door(d.href, whereSet)}
               </li>
             ))}
           </ul>
@@ -376,24 +393,32 @@ function SeeFrame({ payload }: { payload: BlockFramesPayload }) {
  * a member can open today, so there is no link to it. What exists is linked.
  */
 function LearnFrame({ block }: { block: CanvasBlock }) {
+  const { t } = useLingui();
+  const name = block.name;
   return (
-    <section aria-label={`Learn about ${block.name}`} className="space-y-3 text-sm text-stone-800">
-      <p data-testid="canvas-learn-not-built">Readings and tools picked for {block.name} are not built yet.</p>
-      <AskButton block={block.id} label={`Ask a question about ${block.name}`} />
+    <section aria-label={t({ message: `Learn about ${name}`, context: "the Learn frame of a canvas block" })} className="space-y-3 text-sm text-stone-800">
+      <p data-testid="canvas-learn-not-built">
+        <Trans>Readings and tools picked for {name} are not built yet.</Trans>
+      </p>
+      <AskButton block={block.id} label={t`Ask a question about ${name}`} />
       <ul className="space-y-2">
         <li>
-          <a href={CANVAS_SOURCE_URL} target="_blank" rel="noreferrer" className="font-medium text-teal-deep hover:underline">
-            The canvas's own article
-            <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
-          </a>
-          , where its authors describe the canvas.
+          <Trans>
+            <a href={CANVAS_SOURCE_URL} target="_blank" rel="noreferrer" className="font-medium text-teal-deep hover:underline">
+              The canvas's own article
+              <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
+            </a>
+            , where its authors describe the canvas.
+          </Trans>
         </li>
         <li>
-          <Link href="/canvas/workbook" className="font-medium text-teal-deep hover:underline">
-            <Printer className="inline w-3 h-3 mr-1 align-[-1px]" aria-hidden="true" />
-            Print the canvas workbook
-          </Link>{" "}
-          to talk {block.name} through on paper. The questions under "Our questions to talk through" on this card are there too.
+          <Trans>
+            <Link href="/canvas/workbook" className="font-medium text-teal-deep hover:underline">
+              <Printer className="inline w-3 h-3 mr-1 align-[-1px]" aria-hidden="true" />
+              Print the canvas workbook
+            </Link>{" "}
+            to talk {name} through on paper. The questions under "Our questions to talk through" on this card are there too.
+          </Trans>
         </li>
       </ul>
     </section>

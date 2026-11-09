@@ -33,6 +33,7 @@
  */
 import { useState } from "react";
 import { Download, Printer } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import ModuleGate from "@/components/modules/ModuleGate";
 import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
@@ -98,7 +99,9 @@ export default function CanvasWorkbook() {
   if (!modules.loaded) {
     return (
       <Layout>
-        <p role="status" className="py-24 text-center text-sm text-stone-600">Opening the workbook</p>
+        <p role="status" className="py-24 text-center text-sm text-stone-600">
+          <Trans context="loading the canvas workbook page">Opening the workbook</Trans>
+        </p>
       </Layout>
     );
   }
@@ -119,8 +122,10 @@ function Workbook() {
         <div className="container max-w-3xl mx-auto px-4 space-y-6">
           <div className="print-hide bg-white border border-stone-200 rounded-xl p-4 sm:p-5 space-y-3" data-testid="workbook-toolbar">
             <p className="text-sm text-stone-700">
-              Print this workbook to fill in by hand, or save it as a Markdown file to fill in on a screen. Both happen
-              in your browser, and nothing is sent anywhere.
+              <Trans>
+                Print this workbook to fill in by hand, or save it as a Markdown file to fill in on a screen. Both happen
+                in your browser, and nothing is sent anywhere.
+              </Trans>
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -128,19 +133,21 @@ function Workbook() {
                 onClick={() => window.print()}
                 className="inline-flex items-center gap-2 rounded-lg bg-teal-deep px-4 py-2 text-sm font-semibold text-white hover:bg-teal-deep-dark"
               >
-                <Printer className="w-4 h-4" /> Print
+                <Printer className="w-4 h-4" /> <Trans context="a button that prints the workbook">Print</Trans>
               </button>
               <button
                 type="button"
                 onClick={() => saveFile(workbookFilename(villageName), workbookMarkdown(villageName))}
                 className="inline-flex items-center gap-2 rounded-lg border border-teal-deep px-4 py-2 text-sm font-semibold text-teal-deep hover:bg-stone-50"
               >
-                <Download className="w-4 h-4" /> Save as Markdown
+                <Download className="w-4 h-4" /> <Trans context="a button that downloads the workbook as a file">Save as Markdown</Trans>
               </button>
               <fieldset className="flex items-center gap-3 text-sm text-stone-800">
-                <legend className="sr-only">Paper size</legend>
+                <legend className="sr-only">
+                  <Trans context="the workbook's paper size choices">Paper size</Trans>
+                </legend>
                 <span aria-hidden="true" className="font-medium">
-                  Paper
+                  <Trans context="the label beside the paper size choices">Paper</Trans>
                 </span>
                 {PAPERS.map((p) => (
                   <label key={p} className="inline-flex items-center gap-1.5">

@@ -39,6 +39,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Landmark } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { fetchBallots, fetchWizardFacts } from "@/components/governance/governanceApi";
@@ -59,19 +60,25 @@ export default function ClosingPolicyCard({ closing }: { closing: ClosingSection
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center gap-2 mb-2">
         <Landmark className="w-4 h-4 text-teal-deep" aria-hidden="true" />
-        <p className="font-semibold text-foreground text-sm">If the village closes</p>
+        <p className="font-semibold text-foreground text-sm">
+          <Trans context="heading of the closing policy card">If the village closes</Trans>
+        </p>
       </div>
       {named && closing && def ? (
         <>
           <p className="text-sm text-foreground whitespace-pre-line">{closing.statement}</p>
           <p className="text-xs text-muted-foreground mt-3">
-            {def.name}. Adopted on {adoptedOn(String(closing.adoptedAt))}.
+            <Trans>
+              {def.name}. Adopted on {adoptedOn(String(closing.adoptedAt))}.
+            </Trans>
           </p>
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          This village has not yet named what happens to its treasury and assets if it ever
-          closes. The launch checklist asks for it before a village starts.
+          <Trans>
+            This village has not yet named what happens to its treasury and assets if it ever
+            closes. The launch checklist asks for it before a village starts.
+          </Trans>
         </p>
       )}
       <ClosingProposeDoor />
@@ -89,6 +96,7 @@ export default function ClosingPolicyCard({ closing }: { closing: ClosingSection
  */
 export function ClosingProposeDoor() {
   const { user, loading } = useAuth();
+  const { t } = useLingui();
   const modules = useModules();
   const governance = useModule("governance");
   const forum = useModule("forum");
@@ -126,17 +134,19 @@ export function ClosingProposeDoor() {
   if (modules.loaded && !governance) {
     return (
       <p className={line}>
-        Proposing a change puts it to a village vote, and this village has not turned governance on yet.
-        Whoever keeps the exit policy can change these words, so say what you would change to them.
+        <Trans>
+          Proposing a change puts it to a village vote, and this village has not turned governance on yet.
+          Whoever keeps the exit policy can change these words, so say what you would change to them.
+        </Trans>
       </p>
     );
   }
   if (running) {
     return (
       <p className={line}>
-        The village is deciding a change to this right now.{" "}
+        <Trans>The village is deciding a change to this right now.</Trans>{" "}
         <Link href={`/decisions/${running}`} className="font-medium text-teal-deep underline">
-          Go to the vote
+          <Trans>Go to the vote</Trans>
         </Link>
       </p>
     );
@@ -145,9 +155,19 @@ export function ClosingProposeDoor() {
   if (!mayOpen) {
     return (
       <p className={line}>
-        Putting a change to the whole village opens a vote every member is rung about, and this
-        account does not open those yet. Say what you would change to whoever keeps the exit
-        policy{forum ? ", or in the forum" : ""}.
+        {forum ? (
+          <Trans>
+            Putting a change to the whole village opens a vote every member is rung about, and this
+            account does not open those yet. Say what you would change to whoever keeps the exit
+            policy, or in the forum.
+          </Trans>
+        ) : (
+          <Trans>
+            Putting a change to the whole village opens a vote every member is rung about, and this
+            account does not open those yet. Say what you would change to whoever keeps the exit
+            policy.
+          </Trans>
+        )}
       </p>
     );
   }
@@ -159,29 +179,24 @@ export function ClosingProposeDoor() {
           onClick={() => setAsking(true)}
           className="min-h-[44px] rounded-lg border border-teal-deep px-4 text-sm font-medium text-teal-deep hover:bg-teal-deep/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
         >
-          Propose a change
+          <Trans context="button that proposes a change to what closing means">Propose a change</Trans>
         </button>
       </div>
     );
   }
   return (
     <div className="mt-4">
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
+      <Suspense fallback={<p className="text-sm text-muted-foreground"><Trans context="the closing-policy vote form is loading">Loading...</Trans></p>}>
         <PracticeVote
           about={null}
           asking={{
             question: CLOSING_CHANGE_QUESTION,
-            heading: "Propose a change to what closing means",
-            lead:
-              "The whole village is asked this one line, on the real roll with the weights your village uses. " +
-              "Closing the vote records the answer. The words themselves are rewritten by whoever keeps the exit " +
-              "policy, and this is how they hear what the village wants.",
-            detailLabel: "The change you propose",
-            detailHelp:
-              "Write the words you would like in place of the current ones, and why. They are frozen into the " +
-              "document when the vote opens, so they cannot change while people are voting.",
-            submitLabel: "Ask the village",
-            cancelLabel: "Not now",
+            heading: t`Propose a change to what closing means`,
+            lead: t`The whole village is asked this one line, on the real roll with the weights your village uses. Closing the vote records the answer. The words themselves are rewritten by whoever keeps the exit policy, and this is how they hear what the village wants.`,
+            detailLabel: t`The change you propose`,
+            detailHelp: t`Write the words you would like in place of the current ones, and why. They are frozen into the document when the vote opens, so they cannot change while people are voting.`,
+            submitLabel: t({ message: "Ask the village", context: "button that opens the closing-policy vote" }),
+            cancelLabel: t({ message: "Not now", context: "button that closes the closing-policy ask" }),
           }}
           onOpened={(ballotId) => navigate(`/decisions/${ballotId}`)}
           onCancel={() => setAsking(false)}

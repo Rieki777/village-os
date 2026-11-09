@@ -26,6 +26,8 @@
  * Phone first: one column, full-width fields, 44px targets.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { msg, plural } from "@lingui/core/macro";
 import { authToken } from "@/lib/gameApi";
 import { contactsWithFreshIds, freshContactId, ideasNotYetAdded, namedContacts, removeAt, rolesOtherThan, withRungWords } from "@/lib/agreementDraft";
 import {
@@ -115,14 +117,18 @@ const primary = "min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold
  * the state they want, and every save is refused with an id the page never
  * showed (Wave 3a audit, 2026-09-28).
  */
-const GONE = "No longer in the list. Choose another, or none";
+const GONE = msg({ message: "No longer in the list. Choose another, or none", context: "a saved choice the picker no longer offers" });
 
-function roleLabel(r: RoleOption): string {
-  if (r.liveHolders === 0) return `${r.name}, nobody holds it today`;
-  return `${r.name}, held by ${r.liveHolders === 1 ? "one person" : `${r.liveHolders} people`} today`;
+type I18n = ReturnType<typeof useLingui>["i18n"];
+
+function roleLabel(i18n: I18n, r: RoleOption): string {
+  const name = r.name;
+  if (r.liveHolders === 0) return i18n._(msg`${name}, nobody holds it today`);
+  return i18n._(msg`${name}, held by ${plural(r.liveHolders, { one: "one person", other: "# people" })} today`);
 }
 
 export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
+  const { t, i18n } = useLingui();
   const [payload, setPayload] = useState<AgreementPayload | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [frame, setFrame] = useState<AgreementFrameId>("steps");
@@ -140,14 +146,14 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) {
-          setLoadFailed(r.status === 401 ? "Sign in to read the conflict agreement." : String(d?.error ?? "The agreement could not be read just now."));
+          setLoadFailed(r.status === 401 ? t`Sign in to read the conflict agreement.` : String(d?.error ?? t`The agreement could not be read just now.`));
           return;
         }
         setPayload(d as AgreementPayload);
         setDraft(draftOf((d as AgreementPayload).agreement));
       })
-      .catch(() => setLoadFailed("The agreement could not be read just now."));
-  }, []);
+      .catch(() => setLoadFailed(t`The agreement could not be read just now.`));
+  }, [t]);
   useEffect(() => {
     load();
   }, [load]);
@@ -156,7 +162,11 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
   const canEdit = !!payload && (payload.pen.mayWrite || payload.pen.mayPropose);
 
   if (loadFailed) return <p role="status" className="text-sm text-stone-700">{loadFailed}</p>;
-  if (!payload || !draft) return <p role="status" className="text-sm text-stone-600">Loading the conflict agreement…</p>;
+  if (!payload || !draft) return (
+      <p role="status" className="text-sm text-stone-600">
+        <Trans>Loading the conflict agreement…</Trans>
+      </p>
+    );
 
   const set = (patch: Partial<Draft>) => {
     setDraft({ ...draft, ...patch });
@@ -194,36 +204,42 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
           : await fetch("/api/admin/conflict-agreement", { method: "PUT", headers: headers(), body: JSON.stringify({ agreement: bodyOf(outgoing), adopt: kind === "adopt" }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setError(String(d?.error ?? "That was not saved."));
+        setError(String(d?.error ?? t`That was not saved.`));
         if (d?.frame) setFrame(d.frame as AgreementFrameId);
         return;
       }
       if (kind === "propose") {
-        setNotice(`The vote is open until ${new Date(d.ballot.closesAt).toLocaleDateString()}. Every member on the roll has been told.`);
+        const closes = new Date(d.ballot.closesAt).toLocaleDateString();
+        setNotice(t`The vote is open until ${closes}. Every member on the roll has been told.`);
       } else if (!d.changed) {
-        setNotice("Nothing changed: this is what the village already has on record.");
+        setNotice(t`Nothing changed: this is what the village already has on record.`);
       } else {
-        setNotice(kind === "adopt" ? "Adopted. The exit policy and the governance page read it from now on." : "Saved as a draft. The exit policy reads it from now on.");
+        setNotice(kind === "adopt" ? t`Adopted. The exit policy and the governance page read it from now on.` : t`Saved as a draft. The exit policy reads it from now on.`);
       }
       load();
       onDone?.();
     } catch {
-      setError("That did not reach the server, so nothing was saved.");
+      setError(t`That did not reach the server, so nothing was saved.`);
     } finally {
       setBusy(false);
     }
   };
 
   const a = payload.agreement;
+  const openUntil = payload.openBallot ? new Date(payload.openBallot.closesAt).toLocaleDateString() : "";
+  const openBallotId = payload.openBallot?.id ?? "";
+  const adoptedOn = a.adoptedAt ? new Date(a.adoptedAt).toLocaleDateString() : "";
   const adoptedLine = a.adoptedAt
-    ? `Adopted on ${new Date(a.adoptedAt).toLocaleDateString()} ${a.adoptedHow === "ballot" ? "by the village's vote" : "by the founders, before the Game started"}.`
+    ? a.adoptedHow === "ballot"
+      ? t`Adopted on ${adoptedOn} by the village's vote.`
+      : t`Adopted on ${adoptedOn} by the founders, before the Game started.`
     : payload.stored
-      ? "Saved as a draft. Nobody has adopted it yet."
-      : "Not written yet. What you see is drawn from the exit policy's restorative path.";
+      ? t`Saved as a draft. Nobody has adopted it yet.`
+      : t`Not written yet. What you see is drawn from the exit policy's restorative path.`;
 
   return (
-    <section aria-label="The conflict agreement" className="space-y-4 text-stone-700">
-      <nav aria-label="Frames">
+    <section aria-label={t({ message: "The conflict agreement", context: "screen reader name of the conflict agreement editor" })} className="space-y-4 text-stone-700">
+      <nav aria-label={t({ message: "Frames", context: "the conflict agreement's screens" })}>
         <ol className="flex flex-wrap gap-2">
           {AGREEMENT_FRAMES.map((f) => (
             <li key={f.id}>
@@ -250,13 +266,13 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
             <>
               {payload.platformSteps && (
                 <p className="text-xs rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-                  These are still the platform's starting steps. Write them in the village's own words before adopting them.
+                  <Trans>These are still the platform's starting steps. Write them in the village's own words before adopting them.</Trans>
                 </p>
               )}
               {draft.steps.map((s, i) => (
                 <div key={i} className="rounded-lg border border-stone-200 p-3 space-y-2">
                   <label className={label}>
-                    Step {i + 1}: what happens
+                    <Trans>Step {i + 1}: what happens</Trans>
                     <textarea
                       className={area}
                       value={s.what}
@@ -264,11 +280,11 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     />
                   </label>
                   <label className={label}>
-                    Who is in the room
+                    <Trans>Who is in the room</Trans>
                     <input
                       className={input}
                       value={s.whoInRoom}
-                      placeholder="For example: the two of us and the care holder"
+                      placeholder={t`For example: the two of us and the care holder`}
                       onChange={(e) => set({ steps: draft.steps.map((x, j) => (j === i ? { ...x, whoInRoom: e.target.value } : x)) })}
                     />
                   </label>
@@ -283,12 +299,12 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                           set({ steps: next });
                         }}
                       >
-                        Move up
+                        <Trans context="move a step earlier">Move up</Trans>
                       </button>
                     )}
                     {draft.steps.length > 1 && (
                       <button type="button" className={smallButton} onClick={() => set({ steps: removeAt(draft.steps, i) })}>
-                        Remove this step
+                        <Trans context="button that removes a conflict step">Remove this step</Trans>
                       </button>
                     )}
                   </div>
@@ -296,15 +312,23 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
               ))}
               {draft.steps.length < STEPS_MAX && (
                 <button type="button" className={smallButton} onClick={() => set({ steps: [...draft.steps, { what: "", whoInRoom: "" }] })}>
-                  Add a step
+                  <Trans context="button that adds a conflict step">Add a step</Trans>
                 </button>
               )}
               <details className="text-xs text-stone-600">
-                <summary className="cursor-pointer font-medium text-teal-deep">An example, to read and not to copy</summary>
+                <summary className="cursor-pointer font-medium text-teal-deep">
+                  <Trans>An example, to read and not to copy</Trans>
+                </summary>
                 <ol className="mt-2 list-decimal pl-5 space-y-1">
-                  <li>The two of us talk it through, in person. In the room: the two of us.</li>
-                  <li>If that does not settle it, we ask the care holder to sit with us. In the room: the two of us and the care holder.</li>
-                  <li>If it is still stuck, a circle hears it. In the room: the two of us, the care holder and the circle.</li>
+                  <li>
+                    <Trans>The two of us talk it through, in person. In the room: the two of us.</Trans>
+                  </li>
+                  <li>
+                    <Trans>If that does not settle it, we ask the care holder to sit with us. In the room: the two of us and the care holder.</Trans>
+                  </li>
+                  <li>
+                    <Trans>If it is still stuck, a circle hears it. In the room: the two of us, the care holder and the circle.</Trans>
+                  </li>
                 </ol>
               </details>
             </>
@@ -313,40 +337,49 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
           {frame === "care" && (
             <>
               <label className={label}>
-                The care role: who hears a request first
+                <Trans>The care role: who hears a request first</Trans>
                 <select className={input} value={draft.careRole} onChange={(e) => set({ careRole: e.target.value, coverRole: e.target.value && e.target.value !== draft.coverRole ? draft.coverRole : "" })}>
-                  <option value="">No role chosen</option>
-                  {draft.careRole && !payload.roles.some((r) => r.id === draft.careRole) && <option value={draft.careRole}>{GONE}</option>}
+                  <option value="">{t({ message: "No role chosen", context: "no care role chosen" })}</option>
+                  {draft.careRole && !payload.roles.some((r) => r.id === draft.careRole) && <option value={draft.careRole}>{i18n._(GONE)}</option>}
                   {payload.roles.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {roleLabel(r)}
+                      {roleLabel(i18n, r)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className={label}>
-                The cover role: who hears it when the care role cannot
+                <Trans>The cover role: who hears it when the care role cannot</Trans>
                 <select className={input} value={draft.coverRole} disabled={!draft.careRole} onChange={(e) => set({ coverRole: e.target.value })}>
-                  <option value="">No cover</option>
+                  <option value="">{t({ message: "No cover", context: "no cover role chosen" })}</option>
                   {draft.coverRole && !rolesOtherThan(payload.roles, draft.careRole).some((r) => r.id === draft.coverRole) && (
-                    <option value={draft.coverRole}>{GONE}</option>
+                    <option value={draft.coverRole}>{i18n._(GONE)}</option>
                   )}
                   {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={r.id}>
-                      {roleLabel(r)}
+                      {roleLabel(i18n, r)}
                     </option>
                   ))}
                 </select>
               </label>
-              <p className="text-sm font-medium text-stone-900">Contacts outside the village</p>
+              <p className="text-sm font-medium text-stone-900">
+                <Trans>Contacts outside the village</Trans>
+              </p>
               <p className="text-xs text-stone-600">
-                The public page names them by organisation or role. Members see the name and how to reach them, and can ask them to talk.
+                <Trans>The public page names them by organisation or role. Members see the name and how to reach them, and can ask them to talk.</Trans>
               </p>
               {draft.outsideContacts.map((c, i) => (
                 <div key={c.id} className="rounded-lg border border-stone-200 p-3 space-y-2">
                   {(["name", "organisation", "role", "howToReach"] as const).map((field) => (
                     <label key={field} className={label}>
-                      {{ name: "Their name", organisation: "Organisation", role: "Their role here, such as cohort ombuds", howToReach: "How to reach them" }[field]}
+                      {
+                        {
+                          name: t({ message: "Their name", context: "an outside contact's name" }),
+                          organisation: t({ message: "Organisation", context: "an outside contact's organisation" }),
+                          role: t`Their role here, such as cohort ombuds`,
+                          howToReach: t`How to reach them`,
+                        }[field]
+                      }
                       <input
                         className={input}
                         value={c[field]}
@@ -365,7 +398,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                       })
                     }
                   >
-                    Remove this contact
+                    <Trans context="button that removes a contact from the agreement">Remove this contact</Trans>
                   </button>
                 </div>
               ))}
@@ -382,7 +415,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     })
                   }
                 >
-                  Add a contact outside the village
+                  <Trans>Add a contact outside the village</Trans>
                 </button>
               )}
             </>
@@ -390,15 +423,15 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
 
           {frame === "reply" && (
             <label className={label}>
-              Hours until someone who reaches out hears back
-              <input className={input} inputMode="numeric" value={draft.replyHours} placeholder="The village chooses" onChange={(e) => set({ replyHours: e.target.value })} />
+              <Trans>Hours until someone who reaches out hears back</Trans>
+              <input className={input} inputMode="numeric" value={draft.replyHours} placeholder={t({ message: "The village chooses", context: "empty reply time" })} onChange={(e) => set({ replyHours: e.target.value })} />
             </label>
           )}
 
           {frame === "power" && (
             <>
               <label className={label}>
-                Who holds it instead
+                <Trans>Who holds it instead</Trans>
                 <select
                   className={input}
                   value={draft.whenPowerInvolved.roleId ? `role:${draft.whenPowerInvolved.roleId}` : draft.whenPowerInvolved.outsideContactId ? `contact:${draft.whenPowerInvolved.outsideContactId}` : ""}
@@ -413,27 +446,27 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     });
                   }}
                 >
-                  <option value="">Not named yet</option>
+                  <option value="">{t({ message: "Not named yet", context: "nobody chosen to hold a conflict involving power" })}</option>
                   {(draft.whenPowerInvolved.roleId
                     ? !rolesOtherThan(payload.roles, draft.careRole).some((r) => r.id === draft.whenPowerInvolved.roleId)
                     : !!draft.whenPowerInvolved.outsideContactId &&
                       !namedContacts(draft.outsideContacts).some((c) => c.id === draft.whenPowerInvolved.outsideContactId)) && (
-                    <option value={draft.whenPowerInvolved.roleId ? `role:${draft.whenPowerInvolved.roleId}` : `contact:${draft.whenPowerInvolved.outsideContactId}`}>{GONE}</option>
+                    <option value={draft.whenPowerInvolved.roleId ? `role:${draft.whenPowerInvolved.roleId}` : `contact:${draft.whenPowerInvolved.outsideContactId}`}>{i18n._(GONE)}</option>
                   )}
                   {rolesOtherThan(payload.roles, draft.careRole).map((r) => (
                     <option key={r.id} value={`role:${r.id}`}>
-                      {roleLabel(r)}
+                      {roleLabel(i18n, r)}
                     </option>
                   ))}
                   {namedContacts(draft.outsideContacts).map((c) => (
                     <option key={c.id} value={`contact:${c.id}`}>
-                      {c.name}, outside the village
+                      {t`${c.name}, outside the village`}
                     </option>
                   ))}
                 </select>
               </label>
               <label className={label}>
-                In the village's own words
+                <Trans>In the village's own words</Trans>
                 <textarea className={area} value={draft.whenPowerInvolved.words} onChange={(e) => set({ whenPowerInvolved: { ...draft.whenPowerInvolved, words: e.target.value } })} />
               </label>
             </>
@@ -442,13 +475,19 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
           {frame === "safety" && (
             <>
               <p className="text-xs rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-stone-700">
-                If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own.
+                <Trans>If anyone is in danger now, the first call is to local emergency services. These contacts come after that, and nothing here contacts anyone on its own.</Trans>
               </p>
               {draft.safetyContacts.map((c, i) => (
                 <div key={i} className="rounded-lg border border-stone-200 p-3 space-y-2">
                   {(["name", "howToReach", "when"] as const).map((field) => (
                     <label key={field} className={label}>
-                      {{ name: "Who", howToReach: "How to reach them", when: "When to call them" }[field]}
+                      {
+                        {
+                          name: t({ message: "Who", context: "a safety contact's name" }),
+                          howToReach: t`How to reach them`,
+                          when: t`When to call them`,
+                        }[field]
+                      }
                       <input
                         className={input}
                         value={c[field]}
@@ -457,13 +496,13 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                     </label>
                   ))}
                   <button type="button" className={smallButton} onClick={() => set({ safetyContacts: removeAt(draft.safetyContacts, i) })}>
-                    Remove this contact
+                    <Trans context="button that removes a contact from the agreement">Remove this contact</Trans>
                   </button>
                 </div>
               ))}
               {draft.safetyContacts.length < SAFETY_CONTACTS_MAX && (
                 <button type="button" className={smallButton} onClick={() => set({ safetyContacts: [...draft.safetyContacts, { name: "", howToReach: "", when: "" }] })}>
-                  Add a safety contact
+                  <Trans>Add a safety contact</Trans>
                 </button>
               )}
             </>
@@ -480,12 +519,12 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
                   <label key={rung} className={label}>
                     <span className="text-sm font-medium text-stone-900">{LADDER_RUNGS[rung].name}</span>
                     <span className="block text-xs text-stone-600">{LADDER_RUNGS[rung].rule}</span>
-                    <textarea className={area} value={mine?.words ?? ""} placeholder="Leave empty if this village does not use this rung" onChange={(e) => setWords(e.target.value)} />
+                    <textarea className={area} value={mine?.words ?? ""} placeholder={t`Leave empty if this village does not use this rung`} onChange={(e) => setWords(e.target.value)} />
                   </label>
                 );
               })}
               <label className={label}>
-                How someone appeals
+                <Trans context="label of the appeal box on the consequences ladder">How someone appeals</Trans>
                 <textarea
                   className={area}
                   value={draft.consequencesLadder.appeal}
@@ -501,24 +540,26 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
               {draft.practices.map((p, i) => (
                 <div key={i} className="rounded-lg border border-stone-200 p-3 space-y-2">
                   <label className={label}>
-                    The practice
+                    <Trans context="label of a practice's name">The practice</Trans>
                     <input className={input} value={p.name} onChange={(e) => set({ practices: draft.practices.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
                   </label>
                   <label className={label}>
-                    When
+                    <Trans context="when a practice happens">When</Trans>
                     <input className={input} value={p.when} onChange={(e) => set({ practices: draft.practices.map((x, j) => (j === i ? { ...x, when: e.target.value } : x)) })} />
                   </label>
                   <button type="button" className={smallButton} onClick={() => set({ practices: removeAt(draft.practices, i) })}>
-                    Remove this practice
+                    <Trans context="button that removes a practice">Remove this practice</Trans>
                   </button>
                 </div>
               ))}
               {draft.practices.length < PRACTICES_MAX && (
                 <>
                   <button type="button" className={smallButton} onClick={() => set({ practices: [...draft.practices, { name: "", when: "" }] })}>
-                    Add a practice
+                    <Trans context="button that adds a practice that keeps tensions small">Add a practice</Trans>
                   </button>
-                  <p className="text-xs text-stone-600">Ideas other villages keep, added only if you tap one:</p>
+                  <p className="text-xs text-stone-600">
+                    <Trans>Ideas other villages keep, added only if you tap one:</Trans>
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {ideasNotYetAdded(PRACTICE_IDEAS, draft.practices).map((idea) => (
                       <button key={idea.name} type="button" className={smallButton} onClick={() => set({ practices: [...draft.practices, { ...idea }] })}>
@@ -535,7 +576,7 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
             <>
               <p className="text-sm text-stone-900">{adoptedLine}</p>
               <label className={label}>
-                The date it comes back for review
+                <Trans>The date it comes back for review</Trans>
                 <input className={input} type="date" value={draft.reviewDate} onChange={(e) => set({ reviewDate: e.target.value })} />
               </label>
             </>
@@ -556,10 +597,10 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={smallButton} disabled={at === 0} onClick={() => setFrame(AGREEMENT_FRAMES[at - 1].id)}>
-          Back
+          <Trans context="previous frame">Back</Trans>
         </button>
         <button type="button" className={smallButton} disabled={at === AGREEMENT_FRAMES.length - 1} onClick={() => setFrame(AGREEMENT_FRAMES[at + 1].id)}>
-          Next
+          <Trans context="next frame">Next</Trans>
         </button>
       </div>
 
@@ -567,40 +608,44 @@ export function ConflictAgreementEditor({ onDone }: { onDone?: () => void }) {
         <div className="flex flex-wrap gap-2">
           {!a.adoptedAt && (
             <button type="button" className={smallButton} disabled={busy} onClick={() => void send("draft")}>
-              Save as a draft
+              <Trans>Save as a draft</Trans>
             </button>
           )}
           <button type="button" className={primary} disabled={busy} onClick={() => void send("adopt")}>
-            {a.adoptedAt ? "Adopt this new version" : "Adopt it"}
+            {a.adoptedAt ? t`Adopt this new version` : t({ message: "Adopt it", context: "button that adopts the conflict agreement" })}
           </button>
         </div>
       )}
       {payload.pen.mayPropose && !payload.openBallot && (
         <div className="space-y-2">
           <label className={label}>
-            How this change serves the village's governing purpose
+            <Trans>How this change serves the village's governing purpose</Trans>
             <textarea className={area} value={purposeLine} disabled={busy} onChange={(e) => setPurposeLine(e.target.value)} />
           </label>
-          <p className="text-xs text-stone-600">Every member reads this line beside the vote, and it stays on the record.</p>
+          <p className="text-xs text-stone-600">
+            <Trans>Every member reads this line beside the vote, and it stays on the record.</Trans>
+          </p>
           <button type="button" className={primary} disabled={busy} onClick={() => void send("propose")}>
-            Put this change to the village
+            <Trans>Put this change to the village</Trans>
           </button>
         </div>
       )}
       {payload.openBallot && (
         <p className="text-sm text-stone-700">
-          A vote on changing the agreement is open until {new Date(payload.openBallot.closesAt).toLocaleDateString()}.{" "}
-          <a className="font-medium text-teal-deep underline" href={`/decisions/${payload.openBallot.id}`}>
-            Read it and vote
-          </a>
-          .
+          <Trans>
+            A vote on changing the agreement is open until {openUntil}.{" "}
+            <a className="font-medium text-teal-deep underline" href={`/decisions/${openBallotId}`}>
+              Read it and vote
+            </a>
+            .
+          </Trans>
         </p>
       )}
       {!canEdit && (
         <p className="text-sm text-stone-600">
           {payload.pen.how === "founders"
-            ? "Until the Game starts, the founders write this agreement. You can read every frame here."
-            : "Changing this agreement opens a vote of the whole village, which takes somebody holding proposal.open as a member."}
+            ? t`Until the Game starts, the founders write this agreement. You can read every frame here.`
+            : t`Changing this agreement opens a vote of the whole village, which takes somebody holding proposal.open as a member.`}
         </p>
       )}
     </section>

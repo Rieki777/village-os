@@ -24,6 +24,9 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { msg } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { readingDate } from "@/lib/canvasCopy";
 import { readFailure, refusalText, type MatrixRowView, type MatrixRowsPayload } from "@/lib/canvasFramesCopy";
@@ -47,13 +50,14 @@ const draftOf = (r: MatrixRowView): RowDraft => ({
   method: r.method,
   riskTags: r.riskTags.join(", "),
 });
-const COLUMNS: Array<[keyof RowDraft, string]> = [
-  ["subject", "The kind of decision"],
-  ["approval", "Who approves it"],
-  ["consultation", "Who is asked first"],
-  ["information", "Who is told"],
-  ["method", "How it is decided (optional)"],
-  ["riskTags", "Risk tags, separated by commas (optional)"],
+// Module-scope words are `msg` descriptors, rendered with i18n._ in the form (spec i18n US6.1).
+const COLUMNS: Array<[keyof RowDraft, MessageDescriptor]> = [
+  ["subject", msg`The kind of decision`],
+  ["approval", msg({ message: "Who approves it", context: "Decision Matrix column" })],
+  ["consultation", msg`Who is asked first`],
+  ["information", msg({ message: "Who is told", context: "Decision Matrix column" })],
+  ["method", msg`How it is decided (optional)`],
+  ["riskTags", msg`Risk tags, separated by commas (optional)`],
 ];
 
 export function DecisionMatrixRows({
@@ -64,6 +68,8 @@ export function DecisionMatrixRows({
   /** The rows are read again whenever this changes (the Say frame passes the block it read). */
   reloadOn?: unknown;
 }) {
+  const { t } = useLingui();
+  const aFounder = t({ message: "a founder", context: "who last wrote a matrix row, when the name is missing" });
   const [data, setData] = useState<MatrixRowsPayload | null>(null);
   const [failed, setFailed] = useState<{ message: string; retry: boolean } | null>(null);
   /** The row being written: "new", a row id, or null. */
@@ -87,7 +93,8 @@ export function DecisionMatrixRows({
   const writes = !!data && data.pen.how === "act" && data.pen.youMayAdopt;
 
   const remove = async (row: MatrixRowView) => {
-    if (!window.confirm(`Remove the row "${row.subject}" from the Decision Matrix? Everyone in the village stops seeing it.`)) return;
+    const subject = row.subject;
+    if (!window.confirm(t`Remove the row "${subject}" from the Decision Matrix? Everyone in the village stops seeing it.`)) return;
     setNotice(null);
     try {
       const r = await fetch(`/api/canvas/decision-matrix/rows/${row.id}`, { method: "DELETE", headers: headers() });
@@ -102,10 +109,14 @@ export function DecisionMatrixRows({
 
   return (
     <div className="rounded-lg border border-stone-200 p-3 space-y-3" data-testid="matrix-human-rows">
-      <h4 className="font-semibold text-stone-900">The village's own rows</h4>
+      <h4 className="font-semibold text-stone-900">
+        <Trans>The village's own rows</Trans>
+      </h4>
       <p className="text-stone-700">
-        For the decisions the platform does not run, the village writes who approves, who is asked first, who is told
-        and how it is decided.
+        <Trans>
+          For the decisions the platform does not run, the village writes who approves, who is asked first, who is told
+          and how it is decided.
+        </Trans>
       </p>
 
       {failed ? (
@@ -113,14 +124,14 @@ export function DecisionMatrixRows({
           <p>{failed.message}</p>
           {failed.retry && (
             <button type="button" onClick={load} className={quiet}>
-              Try again
+              <Trans context="retry a failed read">Try again</Trans>
             </button>
           )}
         </div>
       ) : !data ? (
         <p className="text-stone-600">
           <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-          Reading the village's rows
+          <Trans>Reading the village's rows</Trans>
         </p>
       ) : (
         <>
@@ -146,20 +157,28 @@ export function DecisionMatrixRows({
                       <p className="font-medium text-stone-900">{row.subject}</p>
                       <dl className="mt-1 grid gap-1 text-stone-800">
                         <div>
-                          <dt className="inline text-stone-600">Who approves it: </dt>
+                          <dt className="inline text-stone-600">
+                            <Trans context="Decision Matrix column, before its answer">Who approves it:</Trans>{" "}
+                          </dt>
                           <dd className="inline">{row.approval}</dd>
                         </div>
                         <div>
-                          <dt className="inline text-stone-600">Who is asked first: </dt>
+                          <dt className="inline text-stone-600">
+                            <Trans>Who is asked first:</Trans>{" "}
+                          </dt>
                           <dd className="inline">{row.consultation}</dd>
                         </div>
                         <div>
-                          <dt className="inline text-stone-600">Who is told: </dt>
+                          <dt className="inline text-stone-600">
+                            <Trans context="Decision Matrix column, before its answer">Who is told:</Trans>{" "}
+                          </dt>
                           <dd className="inline">{row.information}</dd>
                         </div>
                         {row.method && (
                           <div>
-                            <dt className="inline text-stone-600">How it is decided: </dt>
+                            <dt className="inline text-stone-600">
+                              <Trans>How it is decided:</Trans>{" "}
+                            </dt>
                             <dd className="inline">{row.method}</dd>
                           </div>
                         )}
@@ -168,21 +187,23 @@ export function DecisionMatrixRows({
                         <p className="mt-1 flex flex-wrap gap-1">
                           {row.riskTags.map((tag) => (
                             <span key={tag} className="rounded-full border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
-                              Risk: {tag}
+                              <Trans context="a risk tag on a decision">Risk: {tag}</Trans>
                             </span>
                           ))}
                         </p>
                       )}
                       <p className="mt-1 text-xs text-stone-600">
-                        Last written by {row.updatedBy.name || "a founder"} on {readingDate(row.updatedAt)}
+                        <Trans>
+                          Last written by {row.updatedBy.name || aFounder} on {readingDate(row.updatedAt)}
+                        </Trans>
                       </p>
                       {writes && editing === null && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button type="button" onClick={() => setEditing(row.id)} className={quiet}>
-                            Change this row
+                            <Trans context="a button that edits a matrix row">Change this row</Trans>
                           </button>
                           <button type="button" onClick={() => void remove(row)} className={quiet}>
-                            Remove this row
+                            <Trans context="a button that deletes a matrix row">Remove this row</Trans>
                           </button>
                         </div>
                       )}
@@ -192,7 +213,9 @@ export function DecisionMatrixRows({
               ))}
             </ul>
           ) : (
-            <p className="text-stone-700">The village has not written any rows of its own yet.</p>
+            <p className="text-stone-700">
+              <Trans>The village has not written any rows of its own yet.</Trans>
+            </p>
           )}
 
           <p className="text-xs text-stone-600">{data.riskTagsAreInformation}</p>
@@ -219,7 +242,7 @@ export function DecisionMatrixRows({
             ) : (
               editing === null && (
                 <button type="button" onClick={() => setEditing("new")} className={quiet}>
-                  Add a row
+                  <Trans context="a button that opens a new matrix row">Add a row</Trans>
                 </button>
               )
             )
@@ -251,6 +274,7 @@ function RowForm({
   /** Called with the sentence to show once saved, or with nothing when cancelled. */
   onDone: (message?: string) => void;
 }) {
+  const { t, i18n } = useLingui();
   const [d, setD] = useState<RowDraft>(start);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -279,17 +303,19 @@ function RowForm({
 
   return (
     <form
-      aria-label={rowId ? "Change this row" : "Add a row"}
+      aria-label={rowId ? t({ message: "Change this row", context: "a button that edits a matrix row" }) : t({ message: "Add a row", context: "a button that opens a new matrix row" })}
       className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <p className="text-xs text-stone-700">{notesArePublic} "Nobody yet" is an answer.</p>
+      <p className="text-xs text-stone-700">
+        <Trans>{notesArePublic} "Nobody yet" is an answer.</Trans>
+      </p>
       {COLUMNS.map(([key, label]) => (
         <label key={key} className="block text-sm">
-          <span className="font-medium text-stone-900">{label}</span>
+          <span className="font-medium text-stone-900">{i18n._(label)}</span>
           <input type="text" value={d[key]} onChange={(e) => setD({ ...d, [key]: e.target.value })} className={field} />
         </label>
       ))}
@@ -303,7 +329,7 @@ function RowForm({
           {busy ? "Saving" : rowId ? "Save this row" : "Add this row"}
         </button>
         <button type="button" disabled={busy} onClick={() => onDone()} className={quiet}>
-          Cancel
+          <Trans context="close a form without saving">Cancel</Trans>
         </button>
       </div>
     </form>

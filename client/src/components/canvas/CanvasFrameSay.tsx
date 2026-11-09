@@ -35,6 +35,7 @@
  */
 import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { readingDate } from "@/lib/canvasCopy";
 import { SECTION_STATUS_WORDS, sectionClosedLine, type BlockFramesPayload, type FrameId } from "@/lib/canvasFramesCopy";
 import { CanvasSuggestionForm } from "./CanvasSuggestionForm";
@@ -45,7 +46,11 @@ import { useModuleOn } from "@/modules/ModuleProvider";
 const DecisionMatrix = lazy(() => import("./DecisionMatrix"));
 const ConflictAgreementEditor = lazy(() => import("./ConflictAgreementEditor"));
 
-const waiting = <p className="text-sm text-stone-600">Opening</p>;
+const waiting = (
+  <p className="text-sm text-stone-600">
+    <Trans context="a part of the Say frame is loading">Opening</Trans>
+  </p>
+);
 
 export function CanvasFrameSay({
   payload,
@@ -57,22 +62,30 @@ export function CanvasFrameSay({
   onChanged: (message?: string) => void;
   onGoTo: (frame: FrameId) => void;
 }) {
+  const { t } = useLingui();
   const [sent, setSent] = useState(false);
   const { block, answer } = payload;
+  const name = block.name;
   const conflictOn = useModuleOn("conflict-evolution");
 
   return (
-    <section aria-label={`Say: the village's answer on ${block.name}`} className="space-y-5 text-sm">
+    <section aria-label={t`Say: the village's answer on ${name}`} className="space-y-5 text-sm">
       {answer.purposeStatement !== undefined && (
         <div className="rounded-lg border border-stone-200 p-3" data-testid="canvas-say-purpose">
-          <h4 className="font-semibold text-stone-900">The governing purpose statement</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans>The governing purpose statement</Trans>
+          </h4>
           {answer.purposeStatement ? (
             <>
               <p className="mt-1 whitespace-pre-wrap text-stone-900">{answer.purposeStatement.statement}</p>
-              <p className="mt-1 text-xs text-stone-600">Written on {readingDate(answer.purposeStatement.writtenAt)}</p>
+              <p className="mt-1 text-xs text-stone-600">
+                <Trans context="when the purpose statement was written">Written on {readingDate(answer.purposeStatement.writtenAt)}</Trans>
+              </p>
             </>
           ) : (
-            <p className="mt-1 text-stone-700">Not written yet.</p>
+            <p className="mt-1 text-stone-700">
+              <Trans context="the purpose statement is not written">Not written yet.</Trans>
+            </p>
           )}
         </div>
       )}
@@ -91,7 +104,11 @@ export function CanvasFrameSay({
                 </p>
               )}
               {s.body && <p className="mt-1 whitespace-pre-wrap text-stone-800">{s.body}</p>}
-              {s.body && s.updatedAt && <p className="mt-1 text-xs text-stone-600">Last changed on {readingDate(s.updatedAt)}</p>}
+              {s.body && s.updatedAt && (
+                <p className="mt-1 text-xs text-stone-600">
+                  <Trans context="when a section of the village's answer was last edited">Last changed on {readingDate(s.updatedAt)}</Trans>
+                </p>
+              )}
             </li>
           ))}
         </ul>
@@ -108,14 +125,18 @@ export function CanvasFrameSay({
 
       {block.id === "conflict" && !conflictOn && (
         <div className="space-y-2" data-testid="canvas-say-restorative">
-          <h4 className="font-semibold text-stone-900">The restorative steps</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans context="heading in the Say frame of the conflict block">The restorative steps</Trans>
+          </h4>
           <VillageConflictSteps />
         </div>
       )}
 
       {block.id === "conflict" && conflictOn && (
         <div className="space-y-2" data-testid="canvas-say-agreement">
-          <h4 className="font-semibold text-stone-900">The conflict agreement</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans context="heading in the Say frame of the conflict block">The conflict agreement</Trans>
+          </h4>
           <Suspense fallback={waiting}>
             <ConflictAgreementEditor onDone={() => onChanged()} />
           </Suspense>
@@ -137,7 +158,7 @@ export function CanvasFrameSay({
         payload={payload}
         onSent={() => {
           setSent(true);
-          onChanged("Your suggestion is open. It is listed under Adopt, with your name and today's date, until it is decided.");
+          onChanged(t`Your suggestion is open. It is listed under Adopt, with your name and today's date, until it is decided.`);
         }}
       />
       {sent && (
@@ -146,7 +167,7 @@ export function CanvasFrameSay({
           onClick={() => onGoTo("adopt")}
           className="text-sm font-medium rounded-lg px-3 min-h-[44px] text-teal-deep border border-teal-deep bg-white hover:bg-stone-50"
         >
-          Go to Adopt
+          <Trans context="button that switches to the Adopt frame">Go to Adopt</Trans>
         </button>
       )}
     </section>

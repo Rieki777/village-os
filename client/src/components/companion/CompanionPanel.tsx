@@ -24,6 +24,7 @@ import { Link } from "wouter";
 import { Loader2, Send, X } from "lucide-react";
 import { CANVAS_BLOCKS, type CanvasBlockId } from "@shared/governanceCanvas";
 import { authToken } from "@/lib/gameApi";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -78,6 +79,7 @@ export function askFailure(status: number | null, body: { error?: unknown; messa
 }
 
 export default function CompanionPanel({ block, onClose }: { block: CanvasBlockId | null; onClose: () => void }) {
+  const { t } = useLingui();
   const name = block ? CANVAS_BLOCKS[block].name : null;
   const [turns, setTurns] = useState<Turn[]>([
     {
@@ -200,14 +202,14 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
   return (
     <div
       role="dialog"
-      aria-label={name ? `Ask about ${name}` : "Ask about the canvas"}
+      aria-label={name ? t({ message: `Ask about ${name}`, context: "guide panel title" }) : t`Ask about the canvas`}
       data-testid="companion-panel"
       data-hides-fab
       className="fixed bottom-[calc(var(--tabbar-h)+0.5rem)] md:bottom-4 right-4 z-[70] w-[min(24rem,calc(100vw-2rem))] bg-white border border-stone-200 rounded-2xl shadow-2xl flex flex-col max-h-[70vh] wrap-anywhere"
     >
       <header className="px-4 py-3 border-b border-stone-100 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-stone-900">{name ? `Ask about ${name}` : "Ask about the canvas"}</p>
-        <button type="button" onClick={onClose} aria-label="Close" className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-600 hover:text-stone-900">
+        <p className="text-sm font-semibold text-stone-900">{name ? t({ message: `Ask about ${name}`, context: "guide panel title" }) : t`Ask about the canvas`}</p>
+        <button type="button" onClick={onClose} aria-label={t({ message: "Close", context: "close the guide panel" })} className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-stone-600 hover:text-stone-900">
           <X className="w-4 h-4" aria-hidden="true" />
         </button>
       </header>
@@ -225,17 +227,17 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
             )}
           </div>
         ))}
-        {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-500" aria-label="The guide is reading" />}
+        {busy && <Loader2 className="w-4 h-4 animate-spin text-stone-500" aria-label={t`The guide is reading`} />}
         {line && !notNow && (
           <div data-testid="companion-line" className="text-sm rounded-xl border border-teal-deep bg-white px-3 py-2 space-y-2">
             <p className="text-stone-900">{line.sentence}</p>
             {lineError && <p className="text-xs text-red-700">{lineError}</p>}
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void agree()} className="min-h-[44px] text-sm font-medium rounded-lg px-3 text-white bg-teal-deep">
-                Agree and ask again
+                <Trans>Agree and ask again</Trans>
               </button>
               <button type="button" onClick={() => setNotNow(true)} className="min-h-[44px] text-sm font-medium rounded-lg px-3 text-stone-800 border border-stone-300">
-                Not now
+                <Trans context="decline the model consent line">Not now</Trans>
               </button>
             </div>
           </div>
@@ -243,9 +245,9 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
       </div>
       {agreed && (
         <p className="px-4 pb-2 text-xs text-stone-600">
-          You agreed on {agreed.at.slice(0, 10)} that the guide may send your questions to {agreed.provider}.{" "}
+          <Trans>You agreed on {agreed.at.slice(0, 10)} that the guide may send your questions to {agreed.provider}.</Trans>{" "}
           <button type="button" onClick={() => void takeBack()} className="font-medium text-teal-deep underline">
-            Take back my yes
+            <Trans>Take back my yes</Trans>
           </button>
         </p>
       )}
@@ -257,23 +259,25 @@ export default function CompanionPanel({ block, onClose }: { block: CanvasBlockI
           onKeyDown={(e) => {
             if (e.key === "Enter") send();
           }}
-          aria-label="Your question"
-          placeholder={name ? `A question about ${name}` : "A question about the canvas"}
+          aria-label={t({ message: "Your question", context: "guide question field" })}
+          placeholder={name ? t({ message: `A question about ${name}`, context: "guide question placeholder" }) : t`A question about the canvas`}
           className="flex-1 min-w-0 text-sm border border-stone-300 rounded-lg px-3 py-2"
         />
         <button
           type="button"
           onClick={send}
           disabled={busy || !draft.trim()}
-          aria-label="Ask"
+          aria-label={t({ message: "Ask", context: "send the question to the guide" })}
           className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center bg-teal-deep text-white rounded-lg disabled:opacity-40"
         >
           <Send className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
       <p className="px-4 pb-3 text-xs text-stone-600">
-        The guide never changes the canvas. To change an answer, suggest it under Say on the block.{" "}
-        <Link href="/profile" className="text-teal-deep underline">Your profile</Link> holds anything it drafted for you.
+        <Trans>
+          The guide never changes the canvas. To change an answer, suggest it under Say on the block.{" "}
+          <Link href="/profile" className="text-teal-deep underline">Your profile</Link> holds anything it drafted for you.
+        </Trans>
       </p>
     </div>
   );

@@ -29,6 +29,7 @@
  * per printed page, so the writing space is real on A4 and on US Letter.
  */
 import type { ReactNode } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { CANVAS_FOUNDATIONS, CANVAS_LEVELS, CANVAS_ORDER, type CanvasBlock } from "@shared/governanceCanvas";
 import {
   CANVAS_BLOCK_TEXT,
@@ -56,13 +57,19 @@ import {
  * with our prompts, under a heading that carries the village's name.
  */
 function Credit({ testId }: { testId: string }) {
+  const quoted = WORKBOOK_WHAT_IS_QUOTED;
+  const ours = WORKBOOK_WHAT_IS_OURS;
+  const url = CANVAS_CREDIT.url;
+  const creditText = CANVAS_CREDIT.text;
   return (
     <p className="text-sm text-stone-700" data-testid={testId}>
-      {WORKBOOK_WHAT_IS_QUOTED}{" "}
-      <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-900 underline">
-        {CANVAS_CREDIT.text}
-      </a>
-      . The canvas lives at <span className="break-all">{CANVAS_CREDIT.url}</span>. {WORKBOOK_WHAT_IS_OURS}
+      <Trans>
+        {quoted}{" "}
+        <a href={url} target="_blank" rel="noreferrer" className="font-medium text-stone-900 underline">
+          {creditText}
+        </a>
+        . The canvas lives at <span className="break-all">{url}</span>. {ours}
+      </Trans>
     </p>
   );
 }
@@ -90,8 +97,9 @@ function Blank({ label }: { label: string }) {
 
 /** The five levels in a row, to circle one. The numeral sits beside its word and never on its own. */
 function CircleOne({ blockName }: { blockName: string }) {
+  const { t } = useLingui();
   return (
-    <ol className="mt-2 flex flex-wrap gap-2" aria-label={`Levels for ${blockName}, circle one`}>
+    <ol className="mt-2 flex flex-wrap gap-2" aria-label={t`Levels for ${blockName}, circle one`}>
       {CANVAS_LEVELS.map((level) => (
         <li key={level} className="rounded-full border border-stone-400 px-3 py-1 text-sm text-stone-900">
           <span className="font-semibold">{level}</span> {CANVAS_SCALE_TEXT[level].word}
@@ -126,7 +134,9 @@ function BlockPage({ block }: { block: CanvasBlock }) {
       </header>
 
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-stone-600">The canvas asks</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-stone-600">
+          <Trans context="workbook block page, the quoted canvas question">The canvas asks</Trans>
+        </p>
         <blockquote cite={CANVAS_CREDIT.url} className="mt-1 space-y-1.5">
           <p className="font-medium text-stone-900">{canvas.question}</p>
           <p className="text-sm text-stone-700">{canvas.description}</p>
@@ -134,7 +144,9 @@ function BlockPage({ block }: { block: CanvasBlock }) {
       </div>
 
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-stone-600">Our questions to talk through</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-stone-600">
+          <Trans>Our questions to talk through</Trans>
+        </p>
         <p className="mt-1 text-sm text-stone-900">{block.question}</p>
         <ul className="mt-1.5 list-disc pl-5 space-y-1 text-sm text-stone-700">
           {block.prompts.map((p) => (
@@ -144,7 +156,9 @@ function BlockPage({ block }: { block: CanvasBlock }) {
       </div>
 
       <div>
-        <p className="text-sm font-medium text-stone-800">What we say</p>
+        <p className="text-sm font-medium text-stone-800">
+          <Trans context="workbook block page, lines for the group's answer">What we say</Trans>
+        </p>
         <Lines count={7} />
         {/* Paper has room the screen does not need: measured on A4 and US
             Letter, a block used about two thirds of its page with seven lines. */}
@@ -154,12 +168,16 @@ function BlockPage({ block }: { block: CanvasBlock }) {
       </div>
 
       <div>
-        <p className="text-sm font-medium text-stone-800">Where it stands today (circle one)</p>
+        <p className="text-sm font-medium text-stone-800">
+          <Trans>Where it stands today (circle one)</Trans>
+        </p>
         <CircleOne blockName={block.name} />
       </div>
 
       <div>
-        <p className="text-sm font-medium text-stone-800">Why, in one sentence</p>
+        <p className="text-sm font-medium text-stone-800">
+          <Trans>Why, in one sentence</Trans>
+        </p>
         <Lines count={2} />
       </div>
     </section>
@@ -167,25 +185,28 @@ function BlockPage({ block }: { block: CanvasBlock }) {
 }
 
 export function CanvasWorkbookSheet({ villageName }: { villageName: string }) {
+  const { t } = useLingui();
   return (
     <article className="canvas-workbook-sheet space-y-6 text-stone-900" data-testid="canvas-workbook">
       <header className="wb-card wb-keep bg-white border border-stone-200 rounded-xl p-5 sm:p-6 space-y-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-600">Governance Canvas workbook</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-600">
+            <Trans context="workbook cover title">Governance Canvas workbook</Trans>
+          </p>
           <h1 className="font-display text-3xl font-bold text-stone-900" data-testid="workbook-village">
             {villageName}
           </h1>
         </div>
         <Credit testId="workbook-credit-top" />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Blank label="Filled in by" />
-          <Blank label="On" />
+          <Blank label={t({ message: "Filled in by", context: "workbook cover, a line for names" })} />
+          <Blank label={t({ message: "On", context: "workbook cover, a line for the date" })} />
         </div>
         <p className="text-sm text-stone-700">{workbookHowTo("circle")}</p>
         <p className="text-sm text-stone-700">{WORKBOOK_AFTER}</p>
       </header>
 
-      <Section title="The five levels" className="wb-keep">
+      <Section title={t({ message: "The five levels", context: "workbook section heading" })} className="wb-keep">
         <p className="text-sm text-stone-700">{WORKBOOK_LEVELS_NOTE}</p>
         <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[auto_1fr]" data-testid="workbook-levels">
           {CANVAS_LEVELS.map((level) => (
@@ -199,7 +220,7 @@ export function CanvasWorkbookSheet({ villageName }: { villageName: string }) {
         </dl>
       </Section>
 
-      <Section title="The four foundations" className="wb-keep">
+      <Section title={t({ message: "The four foundations", context: "workbook section heading" })} className="wb-keep">
         <dl className="space-y-2.5 text-sm" data-testid="workbook-foundations">
           {CANVAS_FOUNDATIONS.map((f) => (
             <div key={f}>
@@ -211,13 +232,15 @@ export function CanvasWorkbookSheet({ villageName }: { villageName: string }) {
       </Section>
 
       <div className="space-y-6" data-testid="workbook-blocks">
-        <h2 className="sr-only">The twelve blocks</h2>
+        <h2 className="sr-only">
+          <Trans context="workbook section heading">The twelve blocks</Trans>
+        </h2>
         {CANVAS_ORDER.map((block) => (
           <BlockPage key={block.id} block={block} />
         ))}
       </div>
 
-      <Section title="Decision Matrix" className="wb-keep wb-break">
+      <Section title={t({ message: "Decision Matrix", context: "workbook section heading" })} className="wb-keep wb-break">
         <p className="text-sm text-stone-700">{WORKBOOK_MATRIX_NOTE}</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[36rem] border-collapse text-sm" data-testid="workbook-matrix">
@@ -243,7 +266,7 @@ export function CanvasWorkbookSheet({ villageName }: { villageName: string }) {
         </div>
       </Section>
 
-      <Section title="Key moments" className="wb-keep">
+      <Section title={t({ message: "Key moments", context: "workbook section heading" })} className="wb-keep">
         <p className="text-sm text-stone-700">{WORKBOOK_MOMENTS_NOTE}</p>
         <ul className="list-disc pl-5 space-y-1 text-sm text-stone-800" data-testid="workbook-moments">
           {CANVAS_KEY_MOMENTS.map((m) => (

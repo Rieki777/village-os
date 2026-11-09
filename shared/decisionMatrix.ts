@@ -77,6 +77,8 @@
  * does not grade the village.
  */
 import {
+  ADMIN_EDIT,
+  DATABASE_EXPORT,
   GOVERNANCE_MODE,
   MINT_REQUEST,
   MINT_RULE,
@@ -280,6 +282,8 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [VILLAGE_LAUNCH]: "Starting the Game: the Birthing",
   [MINT_RULE]: "Changing what the village mints",
   [MINT_REQUEST]: "Minting new tokens to one member",
+  [ADMIN_EDIT]: "A suggested change to one admin control",
+  [DATABASE_EXPORT]: "Handing one steward a copy of every member's data",
   [GOVERNANCE_MODE]: "Changing how votes are weighed",
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",

@@ -15,6 +15,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModuleOn } from "@/modules/ModuleProvider";
 import { authToken } from "@/lib/gameApi";
@@ -43,6 +44,7 @@ function dayWords(ymd: string): string {
 
 export default function VillageAgreements() {
   const { user } = useAuth();
+  const { t } = useLingui();
   const governanceOn = useModuleOn("governance");
   const [agreements, setAgreements] = useState<ServedAgreement[] | null>(null);
 
@@ -71,23 +73,25 @@ export default function VillageAgreements() {
   return (
     <section className="bg-white py-12" data-testid="village-agreements">
       <div className="container max-w-5xl mx-auto px-4">
-        <h2 className="font-display text-2xl md:text-3xl font-bold text-teal-deep mb-2">The village&apos;s agreements</h2>
+        <h2 className="font-display text-2xl md:text-3xl font-bold text-teal-deep mb-2">
+          <Trans context="heading of the adopted agreements list">The village&apos;s agreements</Trans>
+        </h2>
         <p className="text-stone-700 leading-relaxed">
-          Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now.
+          <Trans>Agreements the village adopted by its own vote, exactly as written, and the ones at a vote now.</Trans>
         </p>
-        {active.length === 0 && <p className="mt-4 text-sm text-stone-600">The village has not adopted an agreement yet.</p>}
+        {active.length === 0 && <p className="mt-4 text-sm text-stone-600"><Trans>The village has not adopted an agreement yet.</Trans></p>}
         <ul className="mt-4 space-y-4">
           {active.map((a) => (
             <li key={a.id} className="rounded-xl border border-stone-200 p-4">
               <h3 className="font-semibold text-stone-900">{a.title}</h3>
               <p className="mt-2 text-stone-800 whitespace-pre-line">{a.body}</p>
               <p className="mt-2 text-xs text-stone-600">
-                {a.circleName ? `Circle: ${a.circleName}. ` : ""}
-                {a.decidedAt ? `Adopted on ${new Date(a.decidedAt).toLocaleDateString()}.` : ""}
+                {a.circleName ? t({ message: `Circle: ${a.circleName}. `, context: "the circle an agreement belongs to" }) : ""}
+                {a.decidedAt ? t({ message: `Adopted on ${new Date(a.decidedAt).toLocaleDateString()}.`, context: "the day an agreement was adopted" }) : ""}
               </p>
               {a.reviewAt && (
                 <p className="mt-1 text-xs text-stone-600" data-testid={`agreement-review-${a.id}`}>
-                  Review date: {dayWords(a.reviewAt)}.
+                  <Trans context="the day an agreement comes back for review">Review date: {dayWords(a.reviewAt)}.</Trans>
                 </p>
               )}
             </li>
@@ -95,7 +99,7 @@ export default function VillageAgreements() {
         </ul>
         {voting.length > 0 && (
           <div className="mt-6">
-            <h3 className="text-sm font-semibold text-stone-900">At a vote now</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans context="agreements whose vote is open">At a vote now</Trans></h3>
             <ul className="mt-2 space-y-1">
               {voting.map((a) => (
                 <li key={a.id}>

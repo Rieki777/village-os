@@ -20,6 +20,7 @@ import { CANVAS_BLOCKS, CANVAS_ORDER, isCanvasBlockId, type CanvasBlockId } from
 import { servesPurposeScoped } from "@shared/canvasFrames";
 import { KIND_LABELS, STANDING_WORDS } from "@shared/villageDocuments";
 import { NOTEBOOK_WORDS, call, dayWords, downloadStored, type DraftAnswer, type OpenDocument } from "@/lib/notebookCopy";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const quiet = "text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50 disabled:opacity-40";
 const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
@@ -37,12 +38,13 @@ function Note({ said }: { said: Said }) {
 }
 
 function ShareForm({ id, onShared }: { id: number; onShared: () => void }) {
+  const { t } = useLingui();
   const [blockId, setBlockId] = useState<CanvasBlockId | "">("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<Said>(null);
   const send = async () => {
-    if (!blockId) return setSaid({ ok: false, text: "Say which block of the canvas this document speaks to." });
+    if (!blockId) return setSaid({ ok: false, text: t`Say which block of the canvas this document speaks to.` });
     setBusy(true);
     const got = await call<{ message: string }>("POST", `/api/documents/${id}/share`, { blockId, note });
     setBusy(false);
@@ -52,13 +54,13 @@ function ShareForm({ id, onShared }: { id: number; onShared: () => void }) {
   };
   return (
     <details className="rounded-lg border border-stone-200 p-3">
-      <summary className="cursor-pointer text-sm font-medium text-teal-deep">Share with the village</summary>
+      <summary className="cursor-pointer text-sm font-medium text-teal-deep"><Trans>Share with the village</Trans></summary>
       <div className="mt-3 space-y-3">
         <p className="text-xs text-stone-600">{NOTEBOOK_WORDS.shareIntro}</p>
         <label className="block text-sm font-medium text-stone-900">
-          The block it speaks to
+          <Trans>The block it speaks to</Trans>
           <select className={field} value={blockId} onChange={(e) => setBlockId(isCanvasBlockId(e.target.value) ? e.target.value : "")}>
-            <option value="">Choose a block</option>
+            <option value="">{t({ message: "Choose a block", context: "canvas block picker, empty choice" })}</option>
             {CANVAS_ORDER.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.number}. {b.name}
@@ -67,12 +69,12 @@ function ShareForm({ id, onShared }: { id: number; onShared: () => void }) {
           </select>
         </label>
         <label className="block text-sm font-medium text-stone-900">
-          A note for whoever decides (optional)
+          <Trans>A note for whoever decides (optional)</Trans>
           <textarea className={`${field} min-h-20`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} />
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className={solid} disabled={busy} onClick={send}>
-            Ask to share it
+            <Trans>Ask to share it</Trans>
           </button>
           <Note said={said} />
         </div>
@@ -82,6 +84,7 @@ function ShareForm({ id, onShared }: { id: number; onShared: () => void }) {
 }
 
 function DraftView({ id, open }: { id: number; open: OpenDocument }) {
+  const { t } = useLingui();
   const [answer, setAnswer] = useState<DraftAnswer | null>(null);
   const [chosen, setChosen] = useState<Record<string, boolean>>({});
   const [lines, setLines] = useState<Record<string, string>>({});
@@ -102,13 +105,13 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
     }
     setAnswer(got.data);
     setChosen(Object.fromEntries(got.data.draft.items.map((i) => [i.blockId, true])));
-    if (mode === "model" && !got.data.read) setSaid({ ok: false, text: "The model's answer could not be read, so nothing was drafted. The words-only draft still works." });
+    if (mode === "model" && !got.data.read) setSaid({ ok: false, text: t`The model's answer could not be read, so nothing was drafted. The words-only draft still works.` });
   };
 
   const file = async () => {
     if (!answer) return;
     const blocks = answer.draft.items.filter((i) => chosen[i.blockId]).map((i) => i.blockId);
-    if (!blocks.length) return setSaid({ ok: false, text: "Tick at least one block to file." });
+    if (!blocks.length) return setSaid({ ok: false, text: t`Tick at least one block to file.` });
     setBusy(true);
     const got = await call<{ filed: Array<{ blockId: string }>; refused: Array<{ blockId: string; error: string }> }>(
       "POST",
@@ -123,7 +126,7 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
     if (!got.ok && !refused.length) return setSaid({ ok: false, text: got.error });
     setSaid({
       ok: filed.length > 0,
-      text: [filed.length ? `Filed as suggestions on ${filed.join(", ")}. Each waits on its block's Adopt frame.` : "", ...refused].filter(Boolean).join(" "),
+      text: [filed.length ? t`Filed as suggestions on ${filed.join(", ")}. Each waits on its block's Adopt frame.` : "", ...refused].filter(Boolean).join(" "),
     });
   };
 
@@ -131,28 +134,28 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
 
   return (
     <details className="rounded-lg border border-stone-200 p-3">
-      <summary className="cursor-pointer text-sm font-medium text-teal-deep">Draft canvas words from this document</summary>
+      <summary className="cursor-pointer text-sm font-medium text-teal-deep"><Trans>Draft canvas words from this document</Trans></summary>
       <div className="mt-3 space-y-3">
         <p className="text-xs text-stone-600">{NOTEBOOK_WORDS.draftIntro}</p>
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className={quiet} disabled={busy} onClick={() => void draft("words")}>
-            Draft with words only
+            <Trans>Draft with words only</Trans>
           </button>
           {model?.available && (
             <button type="button" className={quiet} disabled={busy || (!model.consented && !consent)} onClick={() => void draft("model")}>
-              Draft with a model
+              <Trans>Draft with a model</Trans>
             </button>
           )}
         </div>
         {showDisclosure && (
           <label className="flex items-start gap-2 text-sm text-stone-900" data-testid="notebook-model-disclosure">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />
-            <span>{showDisclosure} Yes, send this document's text.</span>
+            <span>{showDisclosure}{" "}<Trans>Yes, send this document's text.</Trans></span>
           </label>
         )}
         {answer && (
           <div className="space-y-3" data-testid="notebook-draft">
-            {answer.draft.items.length === 0 && <p className="text-sm text-stone-700">Nothing in this document matched a block of the canvas.</p>}
+            {answer.draft.items.length === 0 && <p className="text-sm text-stone-700"><Trans>Nothing in this document matched a block of the canvas.</Trans></p>}
             {answer.draft.items.map((item) => {
               const scoped = servesPurposeScoped(item.blockId, "words");
               return (
@@ -167,12 +170,12 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
                   </label>
                   <p className="text-xs text-stone-600">{item.why}</p>
                   <details>
-                    <summary className="cursor-pointer text-xs text-teal-deep">Read the drafted words</summary>
+                    <summary className="cursor-pointer text-xs text-teal-deep"><Trans>Read the drafted words</Trans></summary>
                     <p className="mt-1 whitespace-pre-wrap text-xs text-stone-800 max-h-60 overflow-y-auto">{item.body}</p>
                   </details>
                   {scoped && answer.purposeWritten && (
                     <label className="block text-xs font-medium text-stone-900">
-                      How this serves the village's purpose, in one line
+                      <Trans>How this serves the village's purpose, in one line</Trans>
                       <input className={field} value={lines[item.blockId] ?? ""} onChange={(e) => setLines((l) => ({ ...l, [item.blockId]: e.target.value }))} />
                     </label>
                   )}
@@ -181,7 +184,7 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
             })}
             {answer.draft.gaps.length > 0 && (
               <div className="text-xs text-stone-700 space-y-1">
-                <p className="font-medium text-stone-900">What the document does not answer yet</p>
+                <p className="font-medium text-stone-900"><Trans>What the document does not answer yet</Trans></p>
                 <ul className="list-disc pl-5 space-y-0.5">
                   {answer.draft.gaps.map((g) => (
                     <li key={g.blockId}>
@@ -193,12 +196,12 @@ function DraftView({ id, open }: { id: number; open: OpenDocument }) {
             )}
             {answer.draft.noSection.length > 0 && (
               <p className="text-xs text-stone-600">
-                {answer.draft.noSection.map((b) => CANVAS_BLOCKS[b].name).join(", ")} has no section of words to suggest into yet.
+                <Trans>{answer.draft.noSection.map((b) => CANVAS_BLOCKS[b].name).join(", ")} has no section of words to suggest into yet.</Trans>
               </p>
             )}
             {answer.draft.items.length > 0 && (
               <button type="button" className={solid} disabled={busy} onClick={() => void file()}>
-                File the ticked ones as suggestions
+                <Trans>File the ticked ones as suggestions</Trans>
               </button>
             )}
           </div>
@@ -220,6 +223,7 @@ export function NotebookDocument({
   onChanged: () => void | Promise<void>;
   onDeleted: () => void;
 }) {
+  const { t } = useLingui();
   const [open, setOpen] = useState<OpenDocument | null>(null);
   const [said, setSaid] = useState<Said>(null);
   const [confirming, setConfirming] = useState(false);
@@ -254,16 +258,17 @@ export function NotebookDocument({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 ref={titleRef} tabIndex={-1} className="text-base font-semibold text-stone-900 wrap-anywhere">
-            {doc?.title ?? "Opening the document"}
+            {doc?.title ?? t({ message: "Opening the document", context: "notebook document loading title" })}
           </h3>
           {doc && (
             <p className="text-xs text-stone-600">
-              {KIND_LABELS[doc.kind]}, added {dayWords(doc.createdAt)}. {doc.yours ? STANDING_WORDS[doc.standing] : doc.standing === "shared" ? STANDING_WORDS.shared : "Its owner asked to share it."}
+              <Trans context="notebook document kind and date">{KIND_LABELS[doc.kind]}, added {dayWords(doc.createdAt)}.</Trans>{" "}
+              {doc.yours ? STANDING_WORDS[doc.standing] : doc.standing === "shared" ? STANDING_WORDS.shared : t`Its owner asked to share it.`}
             </p>
           )}
         </div>
         <button type="button" onClick={onClose} className={quiet}>
-          Close
+          <Trans context="close the open document">Close</Trans>
         </button>
       </div>
       {open && open.body !== null && (
@@ -280,7 +285,7 @@ export function NotebookDocument({
             if (problem) setSaid({ ok: false, text: problem });
           }}
         >
-          Save the file to this device
+          <Trans>Save the file to this device</Trans>
         </button>
       )}
       {open && doc && doc.yours && doc.standing === "private" && (
@@ -297,18 +302,18 @@ export function NotebookDocument({
         <div className="flex flex-wrap items-center gap-3">
           {!confirming ? (
             <button type="button" className={quiet} onClick={() => setConfirming(true)}>
-              Delete this document
+              <Trans context="notebook document action">Delete this document</Trans>
             </button>
           ) : (
             <>
               <button type="button" className="text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-red-700 hover:bg-red-800" onClick={() => void remove()}>
-                Delete it for good
+                <Trans>Delete it for good</Trans>
               </button>
               <button type="button" className={quiet} onClick={() => setConfirming(false)}>
-                Keep it
+                <Trans context="keep the document, do not delete">Keep it</Trans>
               </button>
               <p className="text-xs text-stone-600">
-                {doc.standing === "shared" ? "It leaves the village's notebook too." : "Nobody can bring it back."}
+                {doc.standing === "shared" ? t`It leaves the village's notebook too.` : t`Nobody can bring it back.`}
               </p>
             </>
           )}

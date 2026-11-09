@@ -20,11 +20,13 @@ import {
   type ExportStatus,
   type PackFile,
 } from "@/lib/notebookCopy";
+import { Trans, useLingui } from "@lingui/react/macro";
 
 const quiet = "text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50 disabled:opacity-40";
 const solid = "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
 
 export function NotebookExport() {
+  const { t } = useLingui();
   const [status, setStatus] = useState<ExportStatus | null>(null);
   const [pack, setPack] = useState<{ files: PackFile[]; exportedAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,24 +60,24 @@ export function NotebookExport() {
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className={solid} disabled={busy} onClick={() => void build()}>
-          {busy ? "Building the pack" : pack ? "Build it again" : "Build the pack"}
+          {busy ? t({ message: "Building the pack", context: "canvas export button, busy" }) : pack ? t({ message: "Build it again", context: "canvas export button" }) : t({ message: "Build the pack", context: "canvas export button" })}
         </button>
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       </div>
       {pack && (
         <div className="space-y-2" data-testid="notebook-export-files">
-          <p className="text-sm text-stone-700">Built. Save the files to this device:</p>
+          <p className="text-sm text-stone-700"><Trans>Built. Save the files to this device:</Trans></p>
           <ul className="flex flex-wrap gap-2">
             {pack.files.map((f) => (
               <li key={f.name}>
                 <button type="button" className={quiet} onClick={() => saveText(f.name, f.content)}>
-                  Save {f.name}
+                  <Trans context="save one exported file">Save {f.name}</Trans>
                 </button>
               </li>
             ))}
           </ul>
           <button type="button" className={quiet} onClick={() => saveText(combinedName(pack.exportedAt), combinedPack(pack.files))}>
-            Save all four as one file
+            <Trans>Save all four as one file</Trans>
           </button>
         </div>
       )}

@@ -42,6 +42,7 @@
  */
 import { useCallback, useState, type ReactNode } from "react";
 import { ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { CANVAS_CREDIT, CANVAS_DECISION_MATRIX_COLUMNS } from "@shared/governanceCanvasText";
 import type { DecisionMatrix as Matrix, DecisionMatrixRow } from "@shared/decisionMatrix";
@@ -75,7 +76,12 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Lines({ lines }: { lines: readonly string[] }) {
-  if (lines.length === 0) return <p className="text-stone-600">Nobody, on purpose.</p>;
+  if (lines.length === 0)
+    return (
+      <p className="text-stone-600">
+        <Trans context="nobody is asked or told, by design">Nobody, on purpose.</Trans>
+      </p>
+    );
   return (
     <ul className="space-y-1">
       {lines.map((line) => (
@@ -95,7 +101,7 @@ function MatrixRow({ row }: { row: DecisionMatrixRow }) {
           <p className="mt-1 flex flex-wrap gap-1">
             {row.riskTags.map((tag) => (
               <span key={tag} className="rounded-full border border-stone-300 px-2 py-0.5 text-xs text-stone-700">
-                Risk: {tag}
+                <Trans context="a risk tag on a decision">Risk: {tag}</Trans>
               </span>
             ))}
           </p>
@@ -127,6 +133,7 @@ export default function DecisionMatrix({
   onOpenChange,
   src = MEMBERS_MATRIX_SRC,
 }: { onOpenChange?: (open: boolean) => void; src?: string } = {}) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(false);
   /** Which groups are showing their rows. Each is a heading that opens and closes its own rows. */
   const [shown, setShown] = useState<Readonly<Record<string, boolean>>>(FIRST_OPEN);
@@ -144,6 +151,9 @@ export default function DecisionMatrix({
       .catch(() => setFailed(readFailure(null, null)));
   }, [src]);
 
+  const creditUrl = CANVAS_CREDIT.url;
+  const creditText = CANVAS_CREDIT.text;
+
   const toggle = () => {
     const next = !open;
     setOpen(next);
@@ -153,7 +163,9 @@ export default function DecisionMatrix({
 
   return (
     <div className="mt-4 border-t border-stone-100 pt-3 text-sm" data-testid="decision-matrix">
-      <p className="text-xs font-medium text-stone-600">The Decision Matrix</p>
+      <p className="text-xs font-medium text-stone-600">
+        <Trans context="the platform's half of the Decision Matrix">The Decision Matrix</Trans>
+      </p>
       <button
         type="button"
         onClick={toggle}
@@ -165,11 +177,13 @@ export default function DecisionMatrix({
       </button>
 
       {open && (
-        <section id="decision-matrix-body" aria-label="The Decision Matrix" className="@container mt-3 space-y-5">
+        <section id="decision-matrix-body" aria-label={t({ message: "The Decision Matrix", context: "the platform's half of the Decision Matrix" })} className="@container mt-3 space-y-5">
           <p className="text-stone-700">
-            For each kind of decision the canvas asks who approves it, who is asked first, who is told, and how it is
-            made. For the decisions this platform runs, the answers are rules it already enforces, so it fills this
-            half in itself.
+            <Trans>
+              For each kind of decision the canvas asks who approves it, who is asked first, who is told, and how it is
+              made. For the decisions this platform runs, the answers are rules it already enforces, so it fills this
+              half in itself.
+            </Trans>
           </p>
 
           {failed ? (
@@ -181,14 +195,14 @@ export default function DecisionMatrix({
                   onClick={load}
                   className="text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep bg-white hover:bg-stone-50"
                 >
-                  Try again
+                  <Trans context="retry a failed read">Try again</Trans>
                 </button>
               )}
             </div>
           ) : !matrix ? (
             <p className="text-sm text-stone-600 py-4 text-center">
               <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-              Reading the matrix
+              <Trans context="loading the Decision Matrix">Reading the matrix</Trans>
             </p>
           ) : (
             <>
@@ -242,12 +256,14 @@ export default function DecisionMatrix({
 
           <p className="text-xs text-stone-600" data-testid="decision-matrix-credit">
             {/* Inline, like the baseline's credit, so the full stop stays on its line on a phone. */}
-            The five columns are the Decision Matrix of the{" "}
-            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
-              {CANVAS_CREDIT.text}
-              <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
-            </a>
-            . The answers in this half are the platform's.
+            <Trans>
+              The five columns are the Decision Matrix of the{" "}
+              <a href={creditUrl} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
+                {creditText}
+                <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
+              </a>
+              . The answers in this half are the platform's.
+            </Trans>
           </p>
         </section>
       )}

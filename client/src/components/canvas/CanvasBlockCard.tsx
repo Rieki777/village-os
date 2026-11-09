@@ -28,6 +28,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { type CanvasBlock, type CanvasReadingInput } from "@shared/governanceCanvas";
 import { CANVAS_BLOCK_TEXT, CANVAS_FOUNDATION_TEXT, CANVAS_SOURCE_URL } from "@shared/governanceCanvasText";
 import { recordedLine, weeksPhrase, type CanvasBlockView } from "@/lib/canvasCopy";
@@ -73,8 +74,14 @@ export function CanvasBlockCard({
     if (!mounted) setMounted({ recording });
     else if (recording) setRecordAsks((n) => n + 1);
   };
+  const { t } = useLingui();
   const latest = view.latest;
   const canvas = CANVAS_BLOCK_TEXT[block.id];
+  const number = block.number;
+  const name = block.name;
+  const openWords = open
+    ? t({ message: "Close this block", context: "canvas block card button" })
+    : t({ message: "Open this block", context: "canvas block card button" });
 
   return (
     <article
@@ -85,7 +92,7 @@ export function CanvasBlockCard({
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
-            Block {block.number}
+            <Trans context="a canvas block's number">Block {number}</Trans>
             {focusLabel && <span className="ml-2 normal-case tracking-normal font-semibold text-teal-deep">{focusLabel}</span>}
           </p>
           <h3 className="font-semibold text-stone-900">{block.name}</h3>
@@ -96,17 +103,21 @@ export function CanvasBlockCard({
           </span>
         ) : (
           <span className="shrink-0 text-xs font-medium rounded-full px-2.5 py-1 border border-stone-300 text-stone-600">
-            No reading yet
+            <Trans context="a canvas block with no reading">No reading yet</Trans>
           </span>
         )}
       </header>
 
-      <p className="mt-2 text-xs font-medium text-stone-600">The canvas asks</p>
+      <p className="mt-2 text-xs font-medium text-stone-600">
+        <Trans context="label above the canvas's own question">The canvas asks</Trans>
+      </p>
       <blockquote cite={CANVAS_SOURCE_URL} className="text-sm font-medium text-stone-900" data-testid={`canvas-question-${block.id}`}>
         {canvas.question}
       </blockquote>
       <details className="mt-1.5 text-sm">
-        <summary className="cursor-pointer font-medium text-teal-deep">What the canvas says about it</summary>
+        <summary className="cursor-pointer font-medium text-teal-deep">
+          <Trans>What the canvas says about it</Trans>
+        </summary>
         {/* Italic, so the canvas's words never read as a reading, which sits
             just below with the same rule on its left. */}
         <blockquote cite={CANVAS_SOURCE_URL} className="mt-2 italic text-stone-700 border-l-2 border-stone-200 pl-3">
@@ -122,7 +133,9 @@ export function CanvasBlockCard({
       )}
 
       <details className="mt-3 text-sm">
-        <summary className="cursor-pointer font-medium text-teal-deep">Our questions to talk through</summary>
+        <summary className="cursor-pointer font-medium text-teal-deep">
+          <Trans>Our questions to talk through</Trans>
+        </summary>
         <p className="mt-2 text-stone-900">{block.question}</p>
         <ul className="mt-2 space-y-1.5 list-disc pl-5 text-stone-700">
           {block.prompts.map((p) => (
@@ -151,27 +164,37 @@ export function CanvasBlockCard({
             onClick={() => openBlock(true)}
             className="min-h-[44px] text-sm font-medium rounded-lg px-3 text-teal-deep border border-teal-deep hover:bg-stone-50"
           >
-            Record a reading
+            <Trans context="canvas block button">Record a reading</Trans>
           </button>
         )}
         <button
           type="button"
           aria-expanded={!!open}
           aria-controls={`canvas-frames-region-${block.id}`}
-          aria-label={`${open ? "Close this block" : "Open this block"}: ${block.name}`}
+          aria-label={`${openWords}: ${block.name}`}
           onClick={() => (open ? setOpen(null) : openBlock(false))}
           className={`min-h-[44px] text-sm font-medium rounded-lg px-3 border ${
             open ? "text-stone-800 border-stone-300 hover:bg-stone-50" : "text-white bg-teal-deep border-teal-deep"
           }`}
         >
-          {open ? "Close this block" : "Open this block"}
+          {openWords}
         </button>
-        <AskButton block={block.id} label="Ask" name={`Ask about ${block.name}`} />
+        <AskButton
+          block={block.id}
+          label={t({ message: "Ask", context: "button asking the companion about a canvas block" })}
+          name={t({ message: `Ask about ${name}`, context: "accessible name of the companion button on a canvas block" })}
+        />
       </div>
 
       <div id={`canvas-frames-region-${block.id}`} hidden={!open}>
         {mounted && (
-          <Suspense fallback={<p className="mt-4 text-sm text-stone-600">Opening {block.name}</p>}>
+          <Suspense
+            fallback={
+              <p className="mt-4 text-sm text-stone-600">
+                <Trans context="a canvas block is loading">Opening {name}</Trans>
+              </p>
+            }
+          >
             <CanvasBlockFrames
               block={block}
               view={view}

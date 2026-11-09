@@ -31,6 +31,7 @@
  */
 import { useState } from "react";
 import { Link } from "wouter";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import {
   adoptEffect,
@@ -71,16 +72,20 @@ export function CanvasFrameAdopt({
   onChanged: (message?: string) => void;
   onGoTo: (frame: FrameId) => void;
 }) {
+  const { t } = useLingui();
+  const name = payload.block.name;
   const titles = sectionTitlesOf(payload.answer.sections);
   const pens = penSentences(payload.pens);
   return (
-    <section aria-label={`Adopt: suggestions on ${payload.block.name}`} className="space-y-4 text-sm">
+    <section aria-label={t({ message: `Adopt: suggestions on ${name}`, context: "the Adopt frame of a canvas block" })} className="space-y-4 text-sm">
       <p className="text-stone-800" data-testid="canvas-adopt-moment">
         {adoptIntro(payload.birthed)}
       </p>
       {pens.length > 0 && (
         <div>
-          <h4 className="font-semibold text-stone-900">Who adopts on this block</h4>
+          <h4 className="font-semibold text-stone-900">
+            <Trans>Who adopts on this block</Trans>
+          </h4>
           <ul className="mt-1 space-y-1 list-disc pl-5 text-stone-700">
             {pens.map((s) => (
               <li key={s}>{s}</li>
@@ -99,21 +104,27 @@ export function CanvasFrameAdopt({
         </ul>
       ) : (
         <div className="space-y-2">
-          <p className="text-stone-700">No suggestions are open on {payload.block.name}.</p>
+          <p className="text-stone-700">
+            <Trans>No suggestions are open on {name}.</Trans>
+          </p>
           <button
             type="button"
             onClick={() => onGoTo("say")}
             className="text-sm font-medium rounded-lg px-3 min-h-[44px] text-teal-deep border border-teal-deep bg-white hover:bg-stone-50"
           >
-            Suggest one under Say
+            <Trans>Suggest one under Say</Trans>
           </button>
         </div>
       )}
 
       {payload.decided.length > 0 && (
         <div className="space-y-2 border-t border-stone-200 pt-3">
-          <h4 className="font-semibold text-stone-900">Decided lately</h4>
-          <p className="text-xs text-stone-600">The newest decisions on {payload.block.name}, with the note each was decided with, where one was written.</p>
+          <h4 className="font-semibold text-stone-900">
+            <Trans context="heading over the latest decisions on a canvas block">Decided lately</Trans>
+          </h4>
+          <p className="text-xs text-stone-600">
+            <Trans>The newest decisions on {name}, with the note each was decided with, where one was written.</Trans>
+          </p>
           <ul className="space-y-3" data-testid="canvas-adopt-decided">
             {payload.decided.map((d) => (
               <li key={d.id}>
@@ -136,11 +147,15 @@ function DecidedCard({ d, payload, titles }: { d: DecidedView; payload: BlockFra
       <p className="text-stone-800">{decidedLine(d)}</p>
       {d.decisionNote && (
         <p className="text-stone-800">
-          <span className="font-medium">The note:</span> {d.decisionNote}
+          <span className="font-medium">
+            <Trans context="label before a decision's note">The note:</Trans>
+          </span> {d.decisionNote}
         </p>
       )}
       <details className="text-stone-800">
-        <summary className="cursor-pointer min-h-[32px] text-sm text-teal-deep">What it said</summary>
+        <summary className="cursor-pointer min-h-[32px] text-sm text-teal-deep">
+          <Trans context="a decided suggestion's own words">What it said</Trans>
+        </summary>
         {lines.length > 0 && (
           <ul className="mt-1 space-y-0.5">
             {lines.map((l) => (
@@ -165,6 +180,7 @@ function ProposalCard({
   titles: Record<string, string>;
   onChanged: (message?: string) => void;
 }) {
+  const { t } = useLingui();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"" | "adopt" | "decline" | "withdraw">("");
   const [error, setError] = useState<{ text: string; toProposals: boolean } | null>(null);
@@ -175,11 +191,12 @@ function ProposalCard({
   const acts = mayAdopt || declines || withdraws;
   const dial = dialOf(p, payload.doors);
   const lines = changeLines(p, dial);
+  const pen = p.pen.sentence;
 
   const decide = async (what: "adopt" | "decline" | "withdraw") => {
     setError(null);
     if (what === "decline" && note.trim().length < 2) {
-      setError({ text: "Say in a sentence why this is declined. The note is public, like the suggestion.", toProposals: false });
+      setError({ text: t`Say in a sentence why this is declined. The note is public, like the suggestion.`, toProposals: false });
       return;
     }
     setBusy(what);
@@ -192,18 +209,18 @@ function ProposalCard({
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        setError({ text: refusalText(d, "Nothing was decided."), toProposals: d?.door === PURPOSE_CHANGE_DOOR });
+        setError({ text: refusalText(d, t({ message: "Nothing was decided.", context: "fallback when adopting or declining a canvas suggestion is refused" })), toProposals: d?.door === PURPOSE_CHANGE_DOOR });
         return;
       }
       onChanged(
         what === "adopt"
-          ? String(d?.message ?? "Adopted.")
+          ? String(d?.message ?? t({ message: "Adopted.", context: "a canvas suggestion was adopted" }))
           : what === "withdraw"
-            ? "Your suggestion is withdrawn. It is listed under Decided lately on this block."
-            : "Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.",
+            ? t`Your suggestion is withdrawn. It is listed under Decided lately on this block.`
+            : t`Declined. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.`,
       );
     } catch {
-      setError({ text: "That did not reach the server, so nothing was decided.", toProposals: false });
+      setError({ text: t`That did not reach the server, so nothing was decided.`, toProposals: false });
     } finally {
       setBusy("");
     }
@@ -223,16 +240,20 @@ function ProposalCard({
       <p className="whitespace-pre-wrap text-stone-900 border-l-2 border-stone-300 pl-3">{p.body}</p>
       {p.servesPurpose && (
         <p className="text-stone-800">
-          <span className="font-medium">How it serves the purpose:</span> {p.servesPurpose}
+          <span className="font-medium">
+            <Trans>How it serves the purpose:</Trans>
+          </span> {p.servesPurpose}
         </p>
       )}
       <p className="text-stone-800" data-testid={`canvas-proposal-effect-${p.id}`}>
         {adoptEffect(p, payload.birthed, titles, dial, payload.careDoorByAgreement ?? true)}
       </p>
-      <p className="text-xs text-stone-600">Who decides: {p.pen.sentence}</p>
+      <p className="text-xs text-stone-600">
+        <Trans context="who may adopt a canvas suggestion">Who decides: {pen}</Trans>
+      </p>
       {opensPurposeVote(p) && (
         <Link href="/propose" className="inline-block text-sm font-medium text-teal-deep hover:underline">
-          Start a proposal to change the statement
+          <Trans>Start a proposal to change the statement</Trans>
         </Link>
       )}
 
@@ -240,7 +261,7 @@ function ProposalCard({
         <div className="space-y-2 border-t border-stone-100 pt-2">
           <label className="block text-sm">
             <span className="font-medium text-stone-900">
-              {declines ? (mayAdopt ? "Your note (optional to adopt, needed to decline)" : "Your note (needed to decline)") : "Your note (optional)"}
+              {declines ? (mayAdopt ? t`Your note (optional to adopt, needed to decline)` : t`Your note (needed to decline)`) : t({ message: "Your note (optional)", context: "label of the note box on a canvas suggestion" })}
             </span>
             <span className="block text-xs text-stone-600">{noteReaders(p, payload.notesArePublic)}</span>
             <textarea
@@ -259,7 +280,7 @@ function ProposalCard({
                 onClick={() => void decide("adopt")}
                 className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {busy === "adopt" ? "Adopting" : adoptLabel(p)}
+                {busy === "adopt" ? t({ message: "Adopting", context: "a suggestion is being adopted" }) : adoptLabel(p)}
               </button>
             )}
             {declines && (
@@ -269,7 +290,9 @@ function ProposalCard({
                 onClick={() => void decide("decline")}
                 className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
               >
-                {busy === "decline" ? "Declining" : "Decline"}
+                {busy === "decline"
+                  ? t({ message: "Declining", context: "a suggestion is being declined" })
+                  : t({ message: "Decline", context: "decline a suggestion" })}
               </button>
             )}
             {withdraws && (
@@ -279,7 +302,7 @@ function ProposalCard({
                 onClick={() => void decide("withdraw")}
                 className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
               >
-                {busy === "withdraw" ? "Withdrawing" : "Withdraw my suggestion"}
+                {busy === "withdraw" ? t({ message: "Withdrawing", context: "a suggestion is being withdrawn" }) : t({ message: "Withdraw my suggestion", context: "button on a canvas suggestion its author made" })}
               </button>
             )}
           </div>
@@ -291,7 +314,7 @@ function ProposalCard({
           <p>{error.text}</p>
           {error.toProposals && (
             <Link href="/propose" className="font-medium text-teal-deep hover:underline">
-              Start a proposal to change the statement
+              <Trans>Start a proposal to change the statement</Trans>
             </Link>
           )}
         </div>

@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ExternalLink, Loader2, Printer } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import {
   CANVAS_CREDIT,
@@ -131,11 +132,15 @@ export function CanvasBaseline({
     <div className="space-y-6" data-testid="canvas-baseline">
       <section className="bg-white border border-stone-200 rounded-xl p-5 space-y-4">
         <header>
-          <h2 className="font-display text-xl font-semibold text-stone-900">The canvas baseline</h2>
+          <h2 className="font-display text-xl font-semibold text-stone-900">
+            <Trans context="heading of the canvas baseline view">The canvas baseline</Trans>
+          </h2>
           <p className="text-sm text-stone-700 mt-1 max-w-2xl">
-            Each block of the governance canvas asks how one part of this village is governed. A reading gives the
-            block a level, from Absent to Thriving, and one sentence saying why. Every reading is kept, so the
-            village can see where each block has moved.
+            <Trans>
+              Each block of the governance canvas asks how one part of this village is governed. A reading gives the
+              block a level, from Absent to Thriving, and one sentence saying why. Every reading is kept, so the
+              village can see where each block has moved.
+            </Trans>
           </p>
         </header>
 
@@ -148,14 +153,14 @@ export function CanvasBaseline({
                 onClick={load}
                 className="text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep bg-white hover:bg-stone-50"
               >
-                Try again
+                <Trans context="retry a failed read">Try again</Trans>
               </button>
             )}
           </div>
         ) : !data ? (
           <p className="text-sm text-stone-600 py-8 text-center">
             <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-            Reading the canvas
+            <Trans context="the canvas is loading">Reading the canvas</Trans>
           </p>
         ) : (
           <>
@@ -171,8 +176,10 @@ export function CanvasBaseline({
               ))}
             </ul>
             <p className="text-xs text-stone-600 text-center">
-              The rings run from {CANVAS_SCALE_TEXT[1].word} at the centre to {CANVAS_SCALE_TEXT[5].word} at the edge. A
-              block with no reading yet runs to the centre and its name is in italics.
+              <Trans>
+                The rings run from {CANVAS_SCALE_TEXT[1].word} at the centre to {CANVAS_SCALE_TEXT[5].word} at the edge. A
+                block with no reading yet runs to the centre and its name is in italics.
+              </Trans>
             </p>
           </>
         )}
@@ -182,18 +189,22 @@ export function CanvasBaseline({
             {/* An INLINE link, never inline-flex: the credit wraps over three
                 lines on a phone, and a flex box would push the full stop after
                 it onto a line of its own. */}
-            Each block's question and description, and the words for the five levels, are quoted from the{" "}
-            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
-              {CANVAS_CREDIT.text}
-              <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
-            </a>
-            . The questions under "Our questions to talk through" are this platform's own.
+            <Trans>
+              Each block's question and description, and the words for the five levels, are quoted from the{" "}
+              <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="font-medium text-stone-800 hover:underline">
+                {CANVAS_CREDIT.text}
+                <ExternalLink className="inline w-3 h-3 ml-0.5 align-[-1px]" aria-hidden="true" />
+              </a>
+              . The questions under "Our questions to talk through" are this platform's own.
+            </Trans>
           </p>
           <p>
-            <Link href="/canvas/workbook" className="inline-flex items-center gap-1 font-medium text-teal-deep hover:underline">
-              <Printer className="w-3 h-3" /> Print the canvas workbook
-            </Link>{" "}
-            to talk it through on paper first.
+            <Trans>
+              <Link href="/canvas/workbook" className="inline-flex items-center gap-1 font-medium text-teal-deep hover:underline">
+                <Printer className="w-3 h-3" /> Print the canvas workbook
+              </Link>{" "}
+              to talk it through on paper first.
+            </Trans>
           </p>
         </div>
       </section>

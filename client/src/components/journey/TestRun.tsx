@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { ChevronRight, FlaskConical } from "lucide-react";
 import { authToken } from "@/lib/gameApi";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { villageMoonLabel, type VillageMoon } from "@shared/villageMoon";
 
 const headers = (): Record<string, string> => {
@@ -69,6 +70,7 @@ function OutcomeDot({ outcome }: { outcome: string }) {
 }
 
 export function TestRun() {
+  const { t } = useLingui();
   const [moons, setMoons] = useState(12);
   const [report, setReport] = useState<DryRunReport | null>(null);
   const [running, setRunning] = useState(false);
@@ -81,7 +83,7 @@ export function TestRun() {
     fetch("/api/dry-run", { method: "POST", headers: headers(), body: JSON.stringify({ moons }) })
       .then(async (r) => {
         const d = await r.json();
-        if (!r.ok) throw new Error(d.message ?? d.error ?? "The run was refused");
+        if (!r.ok) throw new Error(d.message ?? d.error ?? t`The run was refused`);
         setReport(d);
       })
       .catch((e) => { setReport(null); setProblem(String(e.message ?? e)); })
@@ -93,20 +95,24 @@ export function TestRun() {
       <div className="flex items-start gap-3 flex-wrap justify-between">
         <div className="max-w-md">
           <p className="font-semibold text-stone-900 flex items-center gap-2">
-            <FlaskConical className="w-4 h-4 text-teal-deep" /> Test run
+            <FlaskConical className="w-4 h-4 text-teal-deep" />{" "}<Trans context="test run card heading">Test run</Trans>
           </p>
           <p className="text-xs text-stone-500 mt-1">
-            Turn your village's moons over quickly and read what your settings would do: who the
-            settlement thanks, what each rule pays, when Claims Week opens, and what a member can
-            give. A good thing to do before the vote below.
+            <Trans>
+              Turn your village's moons over quickly and read what your settings would do: who the
+              settlement thanks, what each rule pays, when Claims Week opens, and what a member can
+              give. A good thing to do before the vote below.
+            </Trans>
           </p>
           <p className="text-xs text-stone-500 mt-1.5">
-            This writes nothing. No balance moves, no recognition is recorded, and nothing is
-            issued. It reads your settings and works out what each moon would do.
+            <Trans>
+              This writes nothing. No balance moves, no recognition is recorded, and nothing is
+              issued. It reads your settings and works out what each moon would do.
+            </Trans>
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-stone-500" htmlFor="dry-run-moons">Moons</label>
+          <label className="text-xs text-stone-500" htmlFor="dry-run-moons"><Trans context="how many moons the test run covers">Moons</Trans></label>
           <select
             id="dry-run-moons"
             value={moons}
@@ -120,7 +126,7 @@ export function TestRun() {
             disabled={running}
             className="text-sm bg-teal-deep text-white rounded-lg px-5 py-2.5 font-semibold disabled:opacity-40"
           >
-            {running ? "Running" : "Run the test"}
+            {running ? t({ message: "Running", context: "test run button, busy" }) : t({ message: "Run the test", context: "test run button" })}
           </button>
         </div>
       </div>
@@ -132,17 +138,17 @@ export function TestRun() {
       {report && (
         <div className="mt-5 border-t border-stone-900/10 pt-4 space-y-5">
           <p className="text-xs text-stone-500">
-            {report.moons} moons, about {report.spanDays} days. {report.isolation}
+            <Trans context="test run span">{report.moons} moons, about {report.spanDays} days.</Trans>{" "}{report.isolation}
           </p>
 
           {/* The refusals. This is the part a founder came for. */}
           <div>
             <h3 className="text-sm font-semibold text-stone-900">
               {report.refusals.length === 1
-                ? "One thing would not work as set"
+                ? t`One thing would not work as set`
                 : report.refusals.length > 1
-                  ? `${report.refusals.length} things would not work as set`
-                  : "Nothing refused across the whole run"}
+                  ? t`${report.refusals.length} things would not work as set`
+                  : t`Nothing refused across the whole run`}
             </h3>
             {report.refusals.length > 0 ? (
               <ul className="mt-2 space-y-1.5">
@@ -155,14 +161,14 @@ export function TestRun() {
               </ul>
             ) : (
               <p className="text-xs text-stone-500 mt-1">
-                Every rule this run reached would pay what it says it pays.
+                <Trans>Every rule this run reached would pay what it says it pays.</Trans>
               </p>
             )}
           </div>
 
           {/* What holds across the whole run. */}
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">Across the whole run</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans>Across the whole run</Trans></h3>
             <ul className="mt-2 space-y-1.5">
               {report.runFindings.map((f, i) => (
                 <li key={i} className="flex gap-2 text-xs text-stone-700">
@@ -175,7 +181,7 @@ export function TestRun() {
 
           {/* What a member can give, at each stage of the path. */}
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">What a member can give each moon</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans>What a member can give each moon</Trans></h3>
             <ul className="mt-2 space-y-1.5">
               {report.allowances.map((a) => (
                 <li key={a.stageId} className="flex gap-2 text-xs text-stone-700">
@@ -192,18 +198,18 @@ export function TestRun() {
               onClick={() => setOpenMoons((v) => !v)}
               className="text-sm font-semibold text-stone-900 inline-flex items-center gap-1.5"
             >
-              Moon by moon
+              <Trans context="test run section toggle">Moon by moon</Trans>
               <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openMoons ? "rotate-90" : ""}`} />
             </button>
             {openMoons && (
               <ul className="mt-2 space-y-3">
-                {report.turns.map((t) => (
-                  <li key={t.cycleKey}>
+                {report.turns.map((turn) => (
+                  <li key={turn.cycleKey}>
                     <p className="text-xs font-medium text-stone-900">
-                      {villageMoonLabel(t.moon)}
+                      {villageMoonLabel(turn.moon)}
                     </p>
                     <ul className="mt-1 space-y-1">
-                      {t.findings.map((f, i) => (
+                      {turn.findings.map((f, i) => (
                         <li key={i} className="flex gap-2 text-xs text-stone-600">
                           <OutcomeDot outcome={f.outcome} />
                           <span>{f.sentence}</span>
@@ -218,12 +224,11 @@ export function TestRun() {
 
           {/* The background jobs, counted and never run. */}
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">Background work over this span</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans>Background work over this span</Trans></h3>
             <ul className="mt-2 grid gap-1 sm:grid-cols-2">
               {report.jobs.map((j) => (
                 <li key={j.name} className="text-xs text-stone-600">
-                  <span className="font-medium text-stone-800">{j.name}</span>: {j.cadence},
-                  about {j.runsInSpan} times
+                  <Trans><span className="font-medium text-stone-800">{j.name}</span>: {j.cadence}, about {j.runsInSpan} times</Trans>
                 </li>
               ))}
             </ul>
@@ -231,7 +236,7 @@ export function TestRun() {
 
           {/* What it looked at, then what it did not. Both, every time. */}
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">What this run looked at</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans>What this run looked at</Trans></h3>
             <ul className="mt-2 space-y-1.5">
               {report.covered.map((s, i) => (
                 <li key={i} className="flex gap-2 text-xs text-stone-600">
@@ -243,7 +248,7 @@ export function TestRun() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-stone-900">What this run did not test</h3>
+            <h3 className="text-sm font-semibold text-stone-900"><Trans>What this run did not test</Trans></h3>
             <ul className="mt-2 space-y-1.5">
               {report.notCovered.map((s, i) => (
                 <li key={i} className="flex gap-2 text-xs text-stone-600">

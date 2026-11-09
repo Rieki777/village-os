@@ -33,6 +33,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { useIsAdmin } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 
@@ -97,14 +98,14 @@ export default function VillageConflictSteps() {
       href="/exit-policy"
       className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
     >
-      Read the village's exit policy <ArrowRight className="w-4 h-4" />
+      <Trans>Read the village's exit policy</Trans> <ArrowRight className="w-4 h-4" />
     </Link>
   );
 
   if (reading.state === "loading") {
     return (
       <p role="status" className="text-stone-600 leading-relaxed">
-        Loading this village's conflict steps…
+        <Trans>Loading this village's conflict steps…</Trans>
       </p>
     );
   }
@@ -112,7 +113,7 @@ export default function VillageConflictSteps() {
   if (reading.state === "failed") {
     return (
       <div className="space-y-3 text-stone-700 leading-relaxed">
-        <p role="status">This village's conflict steps could not be loaded just now.</p>
+        <p role="status"><Trans>This village's conflict steps could not be loaded just now.</Trans></p>
         {policyLink}
       </div>
     );
@@ -121,13 +122,15 @@ export default function VillageConflictSteps() {
   if (reading.state === "unwritten") {
     return (
       <div className="space-y-3 text-stone-700 leading-relaxed">
-        <p>This village has not written its conflict steps yet.</p>
+        <p><Trans>This village has not written its conflict steps yet.</Trans></p>
         {isAdmin && (
           <p>
-            <Link href={WRITE_STEPS_HREF} className="text-teal-deep font-semibold underline">
-              Write them in Admin, under Departures
-            </Link>
-            . They are the restorative steps of the exit policy, and this page prints them once they are in the village's own words.
+            <Trans>
+              <Link href={WRITE_STEPS_HREF} className="text-teal-deep font-semibold underline">
+                Write them in Admin, under Departures
+              </Link>
+              . They are the restorative steps of the exit policy, and this page prints them once they are in the village's own words.
+            </Trans>
           </p>
         )}
       </div>
@@ -136,7 +139,7 @@ export default function VillageConflictSteps() {
 
   return (
     <div className="space-y-4 text-stone-700 leading-relaxed">
-      <p>When tension between people needs repair, these are the steps this village wrote for it:</p>
+      <p><Trans>When tension between people needs repair, these are the steps this village wrote for it:</Trans></p>
       <ol className="space-y-2 list-decimal pl-6">
         {reading.steps.map((step, i) => (
           <li key={i}>{step}</li>
@@ -144,7 +147,7 @@ export default function VillageConflictSteps() {
       </ol>
       {reading.draft && (
         <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-          These steps are still a draft. The community has not yet adopted its exit policy.
+          <Trans>These steps are still a draft. The community has not yet adopted its exit policy.</Trans>
         </p>
       )}
       {policyLink}

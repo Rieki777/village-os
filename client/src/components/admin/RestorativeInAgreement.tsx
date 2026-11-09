@@ -15,19 +15,24 @@
  * Out of client/src/pages/Admin.tsx because that file sits at its line
  * ratchet. Light-only like the rest of the admin panel.
  */
+import { Trans, useLingui } from "@lingui/react/macro";
+
 export const AGREEMENT_HREF = "/governance#conflict-agreement";
 
 export function RestorativeInAgreement({ steps, byVote = false }: { steps: unknown; byVote?: boolean }) {
+  const { t } = useLingui();
   const lines = Array.isArray(steps) ? steps.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
   return (
     <div className="mb-4 rounded-lg border border-stone-200 p-3">
-      <p className="text-xs font-medium text-stone-700">The restorative path</p>
+      <p className="text-xs font-medium text-stone-700">
+        <Trans context="admin heading for the conflict steps">The restorative path</Trans>
+      </p>
       <p className="text-[11px] text-stone-600 mt-1">
         {byVote
-          ? "The Game has started, so this path, the care and cover roles, the reply time and the outside contact change only by a village vote on its conflict agreement."
-          : "This comes from the village's conflict agreement now, with the care and cover roles, the reply time and the outside contact."}{" "}
+          ? t`The Game has started, so this path, the care and cover roles, the reply time and the outside contact change only by a village vote on its conflict agreement.`
+          : t`This comes from the village's conflict agreement now, with the care and cover roles, the reply time and the outside contact.`}{" "}
         <a href={AGREEMENT_HREF} className="text-teal-deep underline">
-          {byVote ? "Open the agreement, where a member who can open votes proposes a change" : "Change it in the agreement"}
+          {byVote ? t`Open the agreement, where a member who can open votes proposes a change` : t`Change it in the agreement`}
         </a>
         .
       </p>

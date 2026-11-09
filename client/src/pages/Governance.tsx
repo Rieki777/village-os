@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import LiveDecisionsBand from "@/components/governance/LiveDecisionsBand";
 import VillageAgreements from "@/components/governance/VillageAgreements";
 import { lazy, Suspense } from "react";
@@ -159,11 +160,13 @@ export default function Governance() {
       <section className="bg-white py-16">
         <div className="container max-w-5xl mx-auto px-4">
           <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep mb-3">
-            Who Decides What
+            <Trans context="governance page section heading">Who Decides What</Trans>
           </h2>
           <p className="text-stone-700 leading-relaxed">
-            Who approves each kind of decision, who is asked first, who is told, and how it is made. These answers come
-            from the rules this village runs on today, so they change when the village changes them.
+            <Trans>
+              Who approves each kind of decision, who is asked first, who is told, and how it is made. These answers come
+              from the rules this village runs on today, so they change when the village changes them.
+            </Trans>
           </p>
           <Suspense fallback={null}>
             <DecisionMatrix src={CANVAS_PUBLIC_MATRIX_PATH} />
@@ -377,26 +380,30 @@ export default function Governance() {
           <div className="flex items-center gap-3 mb-4">
             <Printer className="w-6 h-6 text-teal-deep" />
             <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
-              The Governance Canvas, on Paper
+              <Trans>The Governance Canvas, on Paper</Trans>
             </h2>
           </div>
           <p className="text-stone-700 leading-relaxed mb-3">
-            Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is
-            held, how resources move. The workbook prints each block on its own page with room to write, and it can be
-            saved as a Markdown file too.
+            <Trans>
+              Twelve blocks, from purpose to impact, that a group can talk through together: who decides, how conflict is
+              held, how resources move. The workbook prints each block on its own page with room to write, and it can be
+              saved as a Markdown file too.
+            </Trans>
           </p>
           <p className="text-sm text-stone-600 mb-4">
-            The canvas is the{" "}
-            <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="underline hover:text-teal-deep">
-              {CANVAS_CREDIT.text}
-            </a>
-            .
+            <Trans>
+              The canvas is the{" "}
+              <a href={CANVAS_CREDIT.url} target="_blank" rel="noreferrer" className="underline hover:text-teal-deep">
+                {CANVAS_CREDIT.text}
+              </a>
+              .
+            </Trans>
           </p>
           <Link
             href="/canvas/workbook"
             className="inline-flex items-center gap-2 text-teal-deep font-semibold hover:text-teal transition-colors"
           >
-            Open the canvas workbook <ArrowRight className="w-4 h-4" />
+            <Trans>Open the canvas workbook</Trans> <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </section>

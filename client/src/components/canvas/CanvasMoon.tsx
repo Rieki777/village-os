@@ -17,6 +17,7 @@
  */
 import { useState } from "react";
 import { Moon } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { canvasMoonLine, type CanvasMoonPayload } from "@shared/canvasRevisit";
 
 export type MoonOfferAnswer = { ok: true; message: string } | { ok: false; error: string };
@@ -38,6 +39,7 @@ export function CanvasMoon({
   /** Publishes the offered draft. The card is the door for whoever manages events (W4-moon-publish-there). */
   onPublish?: (gatheringId: string) => Promise<MoonOfferAnswer>;
 }) {
+  const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const [answer, setAnswer] = useState<MoonOfferAnswer | null>(null);
   const next = payload?.next ?? null;
@@ -62,9 +64,13 @@ export function CanvasMoon({
     <section className="rounded-xl border border-stone-200 bg-white p-4 sm:p-5" data-testid="canvas-moon" aria-labelledby="canvas-moon-heading">
       <h3 id="canvas-moon-heading" className="flex items-center gap-2 font-display text-lg font-bold text-stone-900">
         <Moon className="h-5 w-5 text-teal-deep" aria-hidden="true" />
-        The canvas moon
+        <Trans context="heading of the canvas moon card">The canvas moon</Trans>
       </h3>
-      {day && <p className="mt-1 text-sm text-stone-700">Next new moon: {day}.</p>}
+      {day && (
+        <p className="mt-1 text-sm text-stone-700">
+          <Trans>Next new moon: {day}.</Trans>
+        </p>
+      )}
       {line && <p className="mt-2 text-stone-900">{line}</p>}
       <p className="flex flex-wrap gap-1.5 mt-2">
         {next.blocks.map((b) => (
@@ -78,15 +84,17 @@ export function CanvasMoon({
         ))}
       </p>
       <p className="mt-2 text-xs text-stone-600 leading-relaxed">
-        Each new moon the village looks again at the block its season chose to grow and at any block a key moment
-        flagged. With neither, the blocks take turns in canvas order.
+        <Trans>
+          Each new moon the village looks again at the block its season chose to grow and at any block a key moment
+          flagged. With neither, the blocks take turns in canvas order.
+        </Trans>
       </p>
 
       {payload?.gathering && (
         <p className="mt-3 text-sm text-stone-700" data-testid="canvas-moon-gathering">
           {payload.gathering.status === "draft"
-            ? "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it."
-            : "The canvas moon is on the village calendar."}
+            ? t`A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it.`
+            : t`The canvas moon is on the village calendar.`}
         </p>
       )}
 
@@ -98,10 +106,12 @@ export function CanvasMoon({
             disabled={busy}
             className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
           >
-            {busy ? "Offering" : "Offer a canvas moon gathering"}
+            {busy ? t({ message: "Offering", context: "a canvas moon gathering is being offered" }) : t`Offer a canvas moon gathering`}
           </button>
           <p className="mt-1.5 text-xs text-stone-600">
-            It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it.
+            <Trans>
+              It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it.
+            </Trans>
           </p>
         </div>
       )}
@@ -113,9 +123,11 @@ export function CanvasMoon({
             disabled={busy}
             className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
           >
-            {busy ? "Publishing" : "Publish the canvas moon"}
+            {busy ? t({ message: "Publishing", context: "the canvas moon is being published" }) : t`Publish the canvas moon`}
           </button>
-          <p className="mt-1.5 text-xs text-stone-600">It goes on the village calendar for every member, recurring each new moon.</p>
+          <p className="mt-1.5 text-xs text-stone-600">
+            <Trans>It goes on the village calendar for every member, recurring each new moon.</Trans>
+          </p>
         </div>
       )}
       {answer?.ok && (

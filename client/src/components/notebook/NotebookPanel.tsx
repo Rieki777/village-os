@@ -15,11 +15,13 @@ import { useCallback, useEffect, useState } from "react";
 import { BookOpen, FileText } from "lucide-react";
 import { KIND_LABELS, STANDING_WORDS, type DocumentSummary } from "@shared/villageDocuments";
 import { NOTEBOOK_WORDS, STANDING_SHORT, call, dayWords, sizeWords, type NotebookList } from "@/lib/notebookCopy";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { NotebookAdd } from "./NotebookAdd";
 import { NotebookDocument } from "./NotebookDocument";
 import { NotebookExport } from "./NotebookExport";
 
 function Row({ doc, onOpen, showOwner }: { doc: DocumentSummary; onOpen: (id: number) => void; showOwner: boolean }) {
+  const { t } = useLingui();
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 px-4 py-3">
       <div className="min-w-0">
@@ -28,8 +30,8 @@ function Row({ doc, onOpen, showOwner }: { doc: DocumentSummary; onOpen: (id: nu
           <span className="wrap-anywhere">{doc.title}</span>
         </p>
         <p className="text-xs text-stone-600 mt-0.5">
-          {KIND_LABELS[doc.kind]}, {sizeWords(doc.kind, doc.size)}, added {dayWords(doc.createdAt)}
-          {showOwner && doc.ownerName ? `, from ${doc.ownerName}` : ""}
+          <Trans context="notebook row kind, size and date">{KIND_LABELS[doc.kind]}, {sizeWords(doc.kind, doc.size)}, added {dayWords(doc.createdAt)}</Trans>
+          {showOwner && doc.ownerName ? t({ message: `, from ${doc.ownerName}`, context: "notebook row, who shared it" }) : ""}
           {doc.yours ? (
             <>
               {". "}
@@ -41,10 +43,10 @@ function Row({ doc, onOpen, showOwner }: { doc: DocumentSummary; onOpen: (id: nu
       <button
         type="button"
         onClick={() => onOpen(doc.id)}
-        aria-label={`Open ${doc.title}`}
+        aria-label={t({ message: `Open ${doc.title}`, context: "open a notebook document" })}
         className="text-sm font-medium rounded-lg px-3 py-1.5 text-teal-deep border border-teal-deep hover:bg-stone-50"
       >
-        Open
+        <Trans context="open a notebook document">Open</Trans>
       </button>
     </li>
   );
@@ -103,9 +105,9 @@ export default function NotebookPanel() {
         )}
 
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-stone-900">Yours</h3>
+          <h3 className="text-sm font-semibold text-stone-900"><Trans context="my notebook documents">Yours</Trans></h3>
           {!list ? (
-            <p className="text-sm text-stone-600">Reading your notebook.</p>
+            <p className="text-sm text-stone-600"><Trans context="notebook loading">Reading your notebook.</Trans></p>
           ) : list.mine.length ? (
             <ul className="space-y-2">{list.mine.map((d) => <Row key={d.id} doc={d} onOpen={setOpenId} showOwner={false} />)}</ul>
           ) : (
