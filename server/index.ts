@@ -156,7 +156,7 @@ import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatri
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
 import { register as registerCanvasRevisitRoutes } from "./routes/canvasRevisit";
-import { register as registerGovernanceAgreementRoutes } from "./routes/governanceAgreements";
+import { register as registerGovernanceAgreementRoutes, agreementReviewSweep } from "./routes/governanceAgreements";
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
@@ -5352,6 +5352,12 @@ async function startServer() {
   registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
     const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isPresent: notifyDeps.isPresent, isAdmin: (u) => adminReaches(u?.role), notify });
     return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
+  });
+
+  // An adopted agreement's review date: every present member reminded once (server/lib/agreements.ts, D10b).
+  registerJob("agreement-review", 24 * 60 * 60 * 1000, async () => {
+    if (effectiveLifecycle("governance") === "off") return;
+    return agreementReviewSweep({ pool: getPool(), timeZone: getSeasonConfig().timezone || "UTC", members: await members.all(), isPresent: notifyDeps.isPresent, notify });
   });
 
   /**

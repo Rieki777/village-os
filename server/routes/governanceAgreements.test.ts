@@ -19,10 +19,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { AGREEMENT } from "../../shared/agreements";
-import { ballotById } from "../lib/ballots";
+import { SUBJECT_THRESHOLDS } from "../../shared/ballotSubjects";
+import { TIER_FLOORS } from "../../shared/governanceEngine";
+import { ballotById, withdrawBallot } from "../lib/ballots";
 import { listAgreements, readAgreement } from "../lib/agreements";
 import { agreementCloser } from "../lib/agreementCloser";
-import { AGREEMENT_OPEN_REFUSAL, register } from "./governanceAgreements";
+import { loadVariables, setVariable } from "../lib/variables";
+import { AGREEMENT_ONE_OPEN_REFUSAL, AGREEMENT_OPEN_REFUSAL, register } from "./governanceAgreements";
 import { CANVAS_MEMBERS_ONLY } from "./canvas";
 
 const configured = testDbConfigured();
@@ -30,6 +33,9 @@ if (!configured) console.warn("[governanceAgreements] TEST_DATABASE_URL not set 
 
 const PEOPLE: Record<string, { id: string; name: string; role: string; caps: string[]; membershipGranted: boolean }> = {
   opener: { id: "agr-opener", name: "Wren Halloway", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
+  // Two more who may open votes, because a member holds one agreement vote at a time (D9).
+  opener2: { id: "agr-opener2", name: "Juniper Vale", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
+  opener3: { id: "agr-opener3", name: "Hollis Reed", role: "member", caps: ["proposal.open", "ballot.vote"], membershipGranted: true },
   member: { id: "agr-member", name: "Ash Brook", role: "member", caps: ["ballot.vote"], membershipGranted: true },
   stranger: { id: "agr-stranger", name: "Rook Talbot", role: "member", caps: [], membershipGranted: false },
 };
@@ -89,6 +95,7 @@ describe.skipIf(!configured)("the agreements route", () => {
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 }); // module-review-ok: the suite's own pool onto the scratch schema it provisioned
+    await loadVariables(pool);
     const app = express();
     app.use(express.json());
     register(app, {
@@ -124,9 +131,15 @@ describe.skipIf(!configured)("the agreements route", () => {
     await db?.drop();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     told.length = 0;
     pulse.length = 0;
+    /*
+     * Each case starts with no agreement vote open. A member holds one at a
+     * time (D9), and the closer is called directly below, so the ballots it
+     * settles stay open in the table until something frees them.
+     */
+    await pool.query("UPDATE ballots SET status = 'withdrawn', open_key = CONCAT(open_key, ':', id) WHERE status = 'open'"); // module-review-ok: fixture reset on the scratch schema this suite provisioned
   });
 
   it("refuses a visitor, and a member without proposal.open in the route's sentence", async () => {
@@ -177,21 +190,21 @@ describe.skipIf(!configured)("the agreements route", () => {
 
   it("lets two agreements be voted on at once, each its own subject", async () => {
     const a = await call("POST", "/api/governance/agreements", "opener", good({ title: "Tools go back to the shed" }));
-    const b = await call("POST", "/api/governance/agreements", "opener", good({ title: "Dogs on leads near the goats", reviewAt: null }));
+    const b = await call("POST", "/api/governance/agreements", "opener2", good({ title: "Dogs on leads near the goats", reviewAt: null }));
     expect([a.status, b.status]).toEqual([201, 201]);
     expect(a.body.ballot.id).not.toBe(b.body.ballot.id);
     expect((await readAgreement(pool, b.body.id))?.reviewAt).toBeNull();
   });
 
   it("adopts at the landing, and says no, or stands down, in the closer's own words", async () => {
-    const make = async (title: string) => {
-      const r = await call("POST", "/api/governance/agreements", "opener", good({ title }));
-      expect(r.status).toBe(201);
+    const make = async (title: string, as: keyof typeof PEOPLE) => {
+      const r = await call("POST", "/api/governance/agreements", as, good({ title }));
+      expect(r.status, JSON.stringify(r.body)).toBe(201);
       return { id: String(r.body.id), ballot: (await ballotById(pool, r.body.ballot.id))! };
     };
-    const carried = await make("Meals are shared on Sundays");
-    const failed = await make("Nobody parks by the gate");
-    const pulled = await make("Every circle meets once a moon");
+    const carried = await make("Meals are shared on Sundays", "opener");
+    const failed = await make("Nobody parks by the gate", "opener2");
+    const pulled = await make("Every circle meets once a moon", "opener3");
     const c = closer();
 
     // Carried: nothing at the close, the words at the landing.
@@ -203,11 +216,18 @@ describe.skipIf(!configured)("the agreements route", () => {
     expect(active?.status).toBe("active");
     expect(active?.decidedAt).toBeTruthy();
     expect(told.some((t) => t.userId === PEOPLE.opener.id && t.title === "The village adopted this agreement: Meals are shared on Sundays")).toBe(true);
+    // The roll is told too (D10b), each member once, and the proposer only in their own words.
+    const rollLines = told.filter((t) => String(t.dedupeKey).includes(":agreement-adopted:u"));
+    expect(rollLines.map((t) => [t.userId, t.type, t.title, t.dedupeKey])).toEqual([
+      [PEOPLE.member.id, "governance", "The village adopted an agreement: Meals are shared on Sundays", `bal:${carried.ballot.id}:agreement-adopted:u${PEOPLE.member.id}`],
+    ]);
+    expect(rollLines[0].body).toContain("reminds every present member");
+    expect(told.filter((t) => t.userId === PEOPLE.opener.id && String(t.dedupeKey).includes("agreement-adopted"))).toHaveLength(1);
     expect(pulse).toContain("The village adopted an agreement by its own vote: Meals are shared on Sundays");
 
     // Not carried.
     const no = await c.settle(failed.ballot, "failed", "Too many of us park there already.", "agr-member");
-    expect(no.proposerTold).toBe(PEOPLE.opener.id);
+    expect(no.proposerTold).toBe(PEOPLE.opener2.id);
     expect((await readAgreement(pool, failed.id))?.status).toBe("not-adopted");
 
     // Withdrawn.
@@ -217,6 +237,59 @@ describe.skipIf(!configured)("the agreements route", () => {
     // The list reads active first.
     const list = await listAgreements(pool);
     expect(list[0].id).toBe(carried.id);
+  });
+
+  it("prices the agreement at the structural tier on custom, whatever the village's own dials (D8)", async () => {
+    expect(SUBJECT_THRESHOLDS[AGREEMENT]).toMatchObject({
+      criticality: "structural",
+      method: "custom",
+      minUnityPct: TIER_FLOORS.structural.unityPct,
+      minQuorumPct: TIER_FLOORS.structural.quorumPct,
+    });
+    const r = await call("POST", "/api/governance/agreements", "opener", good({ title: "Water the seedlings at dawn" }));
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.ballot.method).toBe("custom");
+    expect(r.body.ballot.unityPct).toBeGreaterThanOrEqual(80);
+    expect(r.body.ballot.quorumPct).toBeGreaterThanOrEqual(50);
+  });
+
+  it("freezes the village's own structural bar when the village raised it above the platform's (D8)", async () => {
+    expect((await setVariable(pool, "governance.tier_structural_unity_pct", "90")).ok).toBe(true);
+    expect((await setVariable(pool, "governance.tier_structural_quorum_pct", "70")).ok).toBe(true);
+    try {
+      const r = await call("POST", "/api/governance/agreements", "opener", good({ title: "Guests sign the book at the gate" }));
+      expect(r.status, JSON.stringify(r.body)).toBe(201);
+      expect(r.body.ballot).toMatchObject({ method: "custom", unityPct: 90, quorumPct: 70 });
+    } finally {
+      await pool.query("DELETE FROM game_variables WHERE config_key LIKE 'governance.tier_structural%'"); // module-review-ok: fixture cleanup on the scratch schema this suite provisioned
+      await loadVariables(pool);
+    }
+  });
+
+  it("holds a member to one open agreement vote, names the way past, and never holds back another member (D9)", async () => {
+    const count = async () => {
+      const [[n]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM ballots WHERE subject_type = 'agreement'"); // module-review-ok: reading the scratch schema this suite provisioned
+      return Number(n.n);
+    };
+    const first = await call("POST", "/api/governance/agreements", "opener", good({ title: "Bikes stay out of the barn" }));
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const ballots = await count();
+    const agreements = (await listAgreements(pool)).length;
+
+    const second = await call("POST", "/api/governance/agreements", "opener", good({ title: "Compost is turned on Fridays" }));
+    expect(second.status).toBe(409);
+    expect(second.body).toEqual({ error: AGREEMENT_ONE_OPEN_REFUSAL });
+    expect(AGREEMENT_ONE_OPEN_REFUSAL).toMatch(/let that vote close, or withdraw it/i);
+    expect(await count()).toBe(ballots);
+    expect((await listAgreements(pool)).length).toBe(agreements);
+
+    const other = await call("POST", "/api/governance/agreements", "opener2", good({ title: "Compost is turned on Fridays" }));
+    expect(other.status, JSON.stringify(other.body)).toBe(201);
+
+    const off = await withdrawBallot(pool, { ballotId: first.body.ballot.id, withdrawnBy: PEOPLE.opener.id, reason: "Rewording it first.", withdrawerMayDiscardVotes: false });
+    expect(off.ok).toBe(true);
+    const again = await call("POST", "/api/governance/agreements", "opener", good({ title: "Compost is turned on Fridays" }));
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
   });
 
   it("holds a landing whose words were never stored, and adopts nothing", async () => {

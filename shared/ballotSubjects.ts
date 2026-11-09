@@ -69,6 +69,7 @@ import {
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
 
 export interface SubjectThresholds {
   /**
@@ -520,6 +521,23 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      */
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * A VILLAGE AGREEMENT (shared/agreements.ts; D8 of the canvas follow-up,
+   * accepted 2026-11-09). An agreement binds the whole village, exactly as
+   * written, until its review date, so it is decided at the STRUCTURAL tier,
+   * the CONFLICT_AGREEMENT shape: the tier's floor is the village's own
+   * structural setting, raised to at least TIER_FLOORS.structural, and it
+   * moves with that setting. Each agreement is its own subject ref
+   * (`agreement:<id>` as the open key), so two can be weighed at once.
+   */
+  [AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    // `custom` for CONFLICT_AGREEMENT's reason: only it reads the unity a ballot freezes.
+    method: "custom",
+    why: "An agreement binds the whole village exactly as written until its review date, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
   [ADMIN_EDIT]: {
     minUnityPct: 0,

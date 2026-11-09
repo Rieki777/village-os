@@ -161,3 +161,57 @@ export async function appendToConfigList(
     [key, field, json, json],
   );
 }
+
+/**
+ * In the list at `doc[listField]` under `key`, blank `itemField` on every item
+ * whose value is `value`, and keep everything else about each item. Returns
+ * how many items were blanked; 0 writes nothing.
+ *
+ * For an erasure (D10a, 2026-11-09): the ombuds door's pointers
+ * (`ombuds-asks`, server/lib/conflictAgreement.ts) keep that somebody asked,
+ * when, and which contact, and lose WHO. A read, an edit and a write would
+ * lose an ask `appendToConfigList` landed in between, so the row is read
+ * `FOR UPDATE` inside a transaction: the append's upsert waits on the same
+ * row lock and lands after the write. The same cache rule applies as for the
+ * writer above.
+ */
+export async function blankConfigListField(
+  pool: Pool,
+  key: string,
+  listField: string,
+  itemField: string,
+  value: string,
+): Promise<number> {
+  if (!value) return 0;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query<RowDataPacket[]>("SELECT value FROM app_config WHERE config_key = ? FOR UPDATE", [key]);
+    let doc: unknown = rows[0]?.value ?? null;
+    if (typeof doc === "string") {
+      try {
+        doc = JSON.parse(doc);
+      } catch {
+        doc = null;
+      }
+    }
+    const list = doc && typeof doc === "object" && !Array.isArray(doc) ? (doc as Record<string, unknown>)[listField] : null;
+    let blanked = 0;
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (item && typeof item === "object" && String((item as Record<string, unknown>)[itemField] ?? "") === value) {
+          (item as Record<string, unknown>)[itemField] = "";
+          blanked += 1;
+        }
+      }
+    }
+    if (blanked > 0) await writeConfigDocument(conn, key, doc as Record<string, unknown>);
+    await conn.commit();
+    return blanked;
+  } catch (e) {
+    await conn.rollback().catch(() => {});
+    throw e;
+  } finally {
+    conn.release();
+  }
+}
