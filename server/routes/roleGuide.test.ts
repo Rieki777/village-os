@@ -30,7 +30,8 @@ const DOOR = "POST /api/governance/role-proposals/:id/guide";
 
 function collect() {
   const handlers = new Map<string, Handler>();
-  return { app: { post: (p: string, h: Handler) => handlers.set(`POST ${p}`, h) } as any, handlers };
+  const add = (verb: string) => (p: string, h: Handler) => handlers.set(`${verb} ${p}`, h);
+  return { app: { post: add("POST"), get: add("GET"), put: add("PUT") } as any, handlers };
 }
 
 async function call(handlers: Map<string, Handler>, req: any) {

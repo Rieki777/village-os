@@ -31,7 +31,7 @@ import { guideStateFor } from "./guideChoice";
 import { guidePromptName } from "@shared/guideName";
 import { EMPTY_MAPPING, MAPPING_KEY, parseGuideAsk, parseMapping, type GuideSuggestionOut } from "@shared/roleDiscover";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | "guardCapability"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "clientIp" | "overLimit" | "mayAct"> & {
   villageGuideName: () => string;
   villageName: () => string;
 };
@@ -59,7 +59,7 @@ export function suggestionsFromReply(text: string, sent: ReadonlySet<string>): G
 }
 
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, clientIp, overLimit, guardCapability, villageGuideName, villageName } = deps;
+  const { authedUser, getPool, clientIp, overLimit, mayAct, villageGuideName, villageName } = deps;
 
   app.get("/api/governance/role-discover/mapping", async (_req, res) => {
     const raw = await readConfigDocument(getPool(), MAPPING_KEY);
@@ -67,7 +67,8 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.put("/api/governance/role-discover/mapping", async (req, res) => {
-    if (!(await guardCapability(req, res, "org.decide"))) return;
+    const verdict = await mayAct(req, "org.decide");
+    if (!verdict.ok) return res.status(403).json({ error: verdict.message });
     const mapping = parseMapping(req.body?.mapping ?? req.body);
     await writeConfigDocument(getPool(), MAPPING_KEY, mapping as unknown as Record<string, unknown>);
     res.json({ mapping });

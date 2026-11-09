@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { suggestionsFromReply } from "./roleDiscover";
 
 describe("the guide's reply on the discover step", () => {
@@ -19,60 +19,62 @@ describe("the guide's reply on the discover step", () => {
 });
 
 // ── The mapping route's gate ────────────────────────────────────────────────
-import express from "express";
-import type { AddressInfo } from "node:net";
-import { vi } from "vitest";
-
 vi.mock("../repos/appConfigDocs", () => ({ readConfigDocument: vi.fn(async () => null), writeConfigDocument: vi.fn(async () => undefined) }));
 import { writeConfigDocument } from "../repos/appConfigDocs";
 import { register } from "./roleDiscover";
 
-async function serve(holds: boolean) {
+type Handler = (req: any, res: any) => Promise<unknown> | unknown;
+
+function setup(holds: boolean) {
+  const handlers = new Map<string, Handler>();
   const asked: string[] = [];
-  const app = express();
-  app.use(express.json());
-  register(app, {
+  const add = (verb: string) => (p: string, h: Handler) => handlers.set(`${verb} ${p}`, h);
+  register({ get: add("GET"), put: add("PUT"), post: add("POST") } as any, {
     authedUser: async () => null,
     getPool: () => ({}) as never,
     clientIp: () => "127.0.0.1",
     overLimit: async () => false,
-    guardCapability: async (_req: unknown, res: express.Response, cap: string) => {
+    mayAct: async (_req: unknown, cap: string) => {
       asked.push(cap);
-      if (holds) return true;
-      res.status(403).json({ error: "You do not hold the power to do this." });
-      return false;
+      return { ok: holds, message: "You do not hold the power to do this." };
     },
     villageGuideName: () => "",
     villageName: () => "Test Village",
   } as never);
-  const server = app.listen(0);
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { base, asked, close: () => server.close() };
+  return { handlers, asked };
 }
+
+async function call(h: Handler | undefined, body?: unknown) {
+  const out: { status: number; body: any } = { status: 200, body: undefined };
+  const res: any = {
+    status(c: number) { out.status = c; return res; },
+    json(b: unknown) { out.body = b; return res; },
+  };
+  await h!({ body, headers: {}, ip: "127.0.0.1" }, res);
+  return out;
+}
+
+const PATH = "/api/governance/role-discover/mapping";
 
 describe("saving the mapping", () => {
   it("refuses a member without the power to decide, and writes nothing", async () => {
-    const s = await serve(false);
-    const res = await fetch(`${s.base}/api/governance/role-discover/mapping`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mapping: { humanDesign: { Projector: ["building"] } } }) });
-    s.close();
-    expect(res.status).toBe(403);
+    const s = setup(false);
+    const out = await call(s.handlers.get(`PUT ${PATH}`), { mapping: { humanDesign: { Projector: ["building"] } } });
+    expect(out.status).toBe(403);
     expect(s.asked).toEqual(["org.decide"]);
     expect(writeConfigDocument).not.toHaveBeenCalled();
   });
   it("saves, read strictly, for a holder of the power", async () => {
-    const s = await serve(true);
-    const res = await fetch(`${s.base}/api/governance/role-discover/mapping`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ mapping: { humanDesign: { Projector: ["building", 4] }, lines: { "9": ["x"] } } }) });
-    const body = await res.json();
-    s.close();
-    expect(res.status).toBe(200);
-    expect(body.mapping).toEqual({ humanDesign: { Projector: ["building"] }, lines: {} });
+    const s = setup(true);
+    const out = await call(s.handlers.get(`PUT ${PATH}`), { mapping: { humanDesign: { Projector: ["building", 4] }, lines: { "9": ["x"] } } });
+    expect(out.status).toBe(200);
+    expect(out.body.mapping).toEqual({ humanDesign: { Projector: ["building"] }, lines: {} });
     expect(writeConfigDocument).toHaveBeenCalledTimes(1);
   });
   it("reads publicly, with nothing shipped", async () => {
-    const s = await serve(false);
-    const res = await fetch(`${s.base}/api/governance/role-discover/mapping`);
-    const body = await res.json();
-    s.close();
-    expect(body.mapping).toEqual({ humanDesign: {}, lines: {} });
+    const s = setup(false);
+    const out = await call(s.handlers.get(`GET ${PATH}`));
+    expect(out.body.mapping).toEqual({ humanDesign: {}, lines: {} });
+    expect(s.asked).toEqual([]);
   });
 });
