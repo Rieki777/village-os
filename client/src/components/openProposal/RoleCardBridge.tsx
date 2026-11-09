@@ -14,6 +14,7 @@
  *
  * The admin palette's tokens only (theme audit, 9 Nov).
  */
+import type { ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { CARD_LIMITS } from "@shared/openProposalCard";
 
@@ -145,6 +146,7 @@ export function SeasonServes({
   onHours,
   agreed,
   onAgreed,
+  membership,
 }: {
   goals: ReadonlyArray<{ id: string; text: string }>;
   serves: Record<string, string>;
@@ -153,6 +155,12 @@ export function SeasonServes({
   onHours: (v: string) => void;
   agreed: { loveLetter: boolean; nda: boolean };
   onAgreed: (next: { loveLetter: boolean; nda: boolean }) => void;
+  /**
+   * The membership alignment itself, made here when they apply
+   * (MembershipAtApplication.tsx, Rye's answer 8). Given, it takes the place of
+   * the Love Letter tick, and the form sets `agreed.loveLetter` from it.
+   */
+  membership?: ReactNode;
 }) {
   const { t } = useLingui();
   const full = Object.keys(serves).length >= CARD_LIMITS.serves;
@@ -209,13 +217,15 @@ export function SeasonServes({
       </div>
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
-          {t`I will sign the Love Letter, the village's membership agreement, before I am seated.`}
-        </label>
+        {membership ?? (
+          <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+            <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
+            {t`I will align with the Love Letter, the village's membership agreement, before I am seated.`}
+          </label>
+        )}
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
           <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
-          {t`Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records.`}
+          {t`Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts.`}
         </label>
       </fieldset>
     </div>

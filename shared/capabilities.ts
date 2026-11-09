@@ -41,6 +41,7 @@ export type Capability =
   // rung check anywhere: a village that wants its book closed moves the rung.
   // `map.viewPeople` is never used for this, because it opens at guest.
   | "terms.read" // read what each seat offers whoever holds it, money included
+  | "records.confidential" // read the village's private records; held only while aligned with its confidentiality agreement as it reads now
   | "map.contact" // reach a role holder through the contact relay
   | "map.edit" // enter build mode and keep a draft of the land
   | "map.publish" // push a draft onto the live map everyone sees
@@ -237,6 +238,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "proposal.decide",
   "map.viewPeople",
   "terms.read",
+  "records.confidential",
   "map.contact",
   "map.edit",
   "map.publish",
@@ -311,6 +313,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "proposal.decide": "Record a decision's outcome",
   "map.viewPeople": "See who holds roles on the village map",
   "terms.read": "Read what each role offers, money included",
+  "records.confidential": "Read the village's private records, while aligned with its confidentiality agreement",
   "map.contact": "Reach a role holder through the contact relay",
   "map.edit": "Draft changes to the land in build mode",
   "map.publish": "Publish a draft onto the live map",
@@ -665,6 +668,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "map.viewPeople": false,
   // Reading is a member's own act, so there is nobody for it to move to.
   "terms.read": false,
+  // A role grants it (a finance role, say); the alignment is asked on top, in the gate (ALIGNMENT_BOUND).
+  // Not a power the village takes back to itself: nothing gates behind it yet that carries the escape hatch.
+  "records.confidential": false,
   "map.contact": false,
   "map.edit": false,
   // A member-rung act, the same as opening a room: whoever runs sessions
@@ -735,7 +741,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 30 keys
- * today. The other 23 are not withheld from anybody: they are personal acts
+ * today. The other 24 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
@@ -782,7 +788,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 30 and 21.
  * `place.tend` and `place.permit` (Living places, 0354) were born held back
  * until Rye gives his word on them (the places spec, C8), which moved only the
- * second: 30 and 23.
+ * second: 30 and 23. `records.confidential` (role journey L7) was born held
+ * back, a key no route gates behind yet and one the alignment binds on top,
+ * which moved only the second: 30 and 24.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -949,6 +957,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true, // a look, like map.viewPeople: a deny may pause it
+  "records.confidential": true, // a look at private records: a warning badge may pause it
   "map.edit": true,
   "map.publish": true,
   "map.curatePhotos": true,
@@ -1124,6 +1133,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true,
+  "records.confidential": true,
   "map.contact": true,
   "map.edit": true,
   "map.publish": true,
@@ -1205,7 +1215,18 @@ export type CapabilitySource =
   | "carried by a greater key"
   | "badge"
   | "stage"
-  | "not granted";
+  | "not granted"
+  | "needs an alignment";
+
+/**
+ * KEYS HELD ONLY WITH A CURRENT ALIGNMENT (role journey L7). Whatever grants
+ * `records.confidential` (a role, a badge, a stage, the admin short-circuit, the
+ * break-glass) grants nothing until the actor holds the village's
+ * confidentiality agreement as it reads NOW (`alignedConfidentiality`). Changed
+ * words make every holder align again before the key reaches them, which is the
+ * point: private records are read under the words in force today.
+ */
+export const ALIGNMENT_BOUND: readonly Capability[] = ["records.confidential"];
 
 export interface CapabilityCtx {
   stageIndex: number;
@@ -1263,6 +1284,12 @@ export interface CapabilityCtx {
    * request the gate refuses.
    */
   adminOverride?: boolean;
+  /**
+   * The actor holds the village's confidentiality agreement as it reads now
+   * (server/lib/confidentiality.ts). Read by step 0 alone, for ALIGNMENT_BOUND
+   * keys. Absent reads as not aligned, so a caller that never asks holds none.
+   */
+  alignedConfidentiality?: boolean;
 }
 
 export interface CapabilityDecision {
@@ -1283,6 +1310,8 @@ export interface CapabilityDecision {
  * and runs identically on client and server.
  *
  * Order of authority — this ordering IS the policy (Gate E, amended):
+ *   0. an ALIGNMENT_BOUND key without its alignment -> false, for everybody,
+ *      the admin and the break-glass included (role journey L7).
  *   1. isAdmin, on a key the village does NOT hold -> true. Unchanged: the
  *      operator can always act on the scaffolding they are responsible for.
  *   1b. isAdmin, on a key the village DOES hold:
@@ -1416,6 +1445,10 @@ export const BREAK_GLASS_WAY_THROUGH =
 
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
+  // Step 0 (L7): a key bound to an alignment is held by nobody without it, admins and the glass included.
+  if (ALIGNMENT_BOUND.includes(cap) && ctx.alignedConfidentiality !== true) {
+    return { allowed: false, source: "needs an alignment", villageHolds, reachedPastVillage: false };
+  }
   if (ctx.isAdmin && !villageHolds) {
     return { allowed: true, source: "admin", villageHolds: false, reachedPastVillage: false };
   }

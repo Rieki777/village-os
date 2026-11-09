@@ -1,0 +1,479 @@
+/**
+ * A ROLE STARTS ONLY AFTER ITS AGREEMENTS (role journey L7, PR-E), on a real schema.
+ *
+ * The open proposal doors (server/routes/openProposals.ts) and the confidentiality
+ * doors (server/routes/confidentiality.ts) are registered together, the way
+ * server/index.ts registers them, and the seating path is driven through its real
+ * doors: an adoption at the door (`placeOnRoles` -> `adoptApplication`), a sign-up
+ * through the invitation, and the hourly season turn (`seatFromApplication`).
+ *
+ *   1. moon mode: no start before both alignments; the holder hears "Two steps
+ *      before your role starts"; the role starts at the next turn after both.
+ *      CONTROL: the same adoption with the switches off seats at once.
+ *   2. season mode: nobody is seated on the season's first day without the
+ *      alignments, and they are once aligned. CONTROL: switches off, seated.
+ *   3. changed words ask again: an alignment with earlier words stops counting
+ *      the moment the words change, and aligning again counts.
+ *   4. membership at application: an alignment made on the form, against the
+ *      confirmed address, is carried to the account at sign-up and the gate does
+ *      not ask for it again. CONTROL: a proposal that did not align carries
+ *      nothing and the gate asks.
+ *   5. no payment is on the path: a holder with no money of any kind is seated
+ *      once aligned, and the gate's steps are the three agreements and nothing else.
+ *   6. the confidentiality door refuses changed words and a stale identity
+ *      confirmation, and writes nothing then.
+ */
+import http from "node:http";
+import express from "express";
+import type mysql from "mysql2/promise";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
+import { openInviteId } from "../../shared/openProposalDecide";
+import { letterSourceFrom } from "../../shared/membershipLetter";
+import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
+import { escapeHtml } from "../lib/comms/mailer";
+import { addressParty } from "../lib/applicationMembership";
+import { currentAgreement } from "../lib/confidentiality";
+import { stampConfirmed } from "../lib/identityConfirm";
+import { makeInviteDoor } from "../lib/inviteDoor";
+import { alignSigning, currentLetter } from "../lib/membershipLetter";
+import { createOrgRole, seatHolder } from "../lib/orgChart";
+import { START_STEPS, START_WORDS } from "../lib/roleStartAgreements";
+import { runSeasonTurn } from "../lib/seasonTurn";
+import { usersRepo } from "../repos/users";
+import { inApplicationTransaction } from "../repos/seatApplications";
+import { register as registerConfidentiality } from "./confidentiality";
+import { register as registerOpenProposals } from "./openProposals";
+
+const configured = testDbConfigured();
+if (!configured) console.warn("[roleStartAgreements] TEST_DATABASE_URL not set - DB cases SKIPPED. A skip is not a pass.");
+
+const ORIGIN = "https://village.example.test";
+const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2037-01-01", endsOn: "2037-03-20" };
+const NOW_SEASON = { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01", endsOn: "2037-01-01" };
+const FOUNDER = { id: "u-founder", name: "Fern Oak", email: "founder@example.test" };
+const ANA = { id: "u-ana", name: "Ana Reed", email: "ana@example.test" };
+const AGREEMENT = { title: "Confidentiality agreement", body: "What you read in the village's private records stays with you.\n\nYou keep it after you leave." };
+const LETTER_SOURCE = letterSourceFrom({ project: { name: "Test Village", commitmentName: "membership agreement" }, currency: { name: "Seeds" } }, null);
+
+describe.skipIf(!configured)("a role starts only after its agreements, on a real schema", () => {
+  let db: TestDb;
+  let pool: mysql.Pool;
+  let server: http.Server;
+  let base = "";
+  let gate = "";
+  let founderRole = "";
+  let n = 0;
+
+  const state = {
+    viewer: null as string | null,
+    dials: { "org.start_after_confidentiality": false, "org.start_after_membership": false, "org.start_after_paid_terms": false } as Record<string, boolean>,
+    content: { confidentiality: AGREEMENT } as Record<string, unknown>,
+    sent: [] as OutgoingEmail[],
+    notices: [] as Array<{ userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }>,
+    adminNotices: [] as Array<{ type: string; title: string; key: string }>,
+  };
+  const dialsOn = (on: boolean) => {
+    state.dials["org.start_after_confidentiality"] = on;
+    state.dials["org.start_after_membership"] = on;
+  };
+
+  const q = (sql: string, args: unknown[] = []) => pool.query<any[]>(sql, args).then(([rows]) => rows); // module-review-ok: fixture SQL on the scratch schema this suite provisioned
+  const calendar = () => ({ seasons: [NOW_SEASON, NEXT], currentSeasonId: "s-now", timezone: "UTC" });
+
+  beforeAll(async () => {
+    db = await provisionTestDb();
+    pool = testPool(db, { connectionLimit: 6 });
+    const users = usersRepo(pool);
+    for (const p of [FOUNDER, ANA]) await users.add({ id: p.id, name: p.name, email: p.email, passwordHash: "x", paths: [] } as any);
+    await q("INSERT INTO circles (id, name, aliases, is_example) VALUES ('c-land', 'Land Circle', '[]', 0), ('c-core', 'Core Circle', '[]', 0)");
+    gate = await createOrgRole(pool, { id: "rsa-role-gate", name: "Gate Keeper", seats: 20, circleId: "c-land", aim: "Open the gate at dawn." });
+    founderRole = await createOrgRole(pool, { id: "rsa-role-founder", name: "Founder", seats: 1, circleId: "c-core", aim: "Hold the village." });
+    await seatHolder(pool, founderRole, { userId: FOUNDER.id, seasonId: "s-now", termEndsAt: new Date("2036-12-01T00:00:00Z") });
+
+    const app = express();
+    app.use(express.json());
+    const authedUser = async () => (state.viewer ? await usersRepo(pool).byId(state.viewer) : null);
+    registerOpenProposals(app, {
+      getPool: () => pool,
+      overLimit: async () => false,
+      clientIp: () => "203.0.113.9",
+      guardCapability: async (_req: any, res: any) => {
+        if (state.viewer === FOUNDER.id) return true;
+        res.status(state.viewer ? 403 : 401).json({ error: "forbidden" });
+        return false;
+      },
+      authedUser,
+      commsPostOffice: { getPool: () => pool },
+      deploymentOrigin: () => ORIGIN,
+      projectName: () => "Test Village",
+      escapeHtml,
+      seasonState: () => ({ current: NOW_SEASON, seasons: [NOW_SEASON, NEXT], timezone: "UTC" }),
+      postEmail: async (email: OutgoingEmail) => {
+        state.sent.push(email);
+        return { status: "sent", messageId: `m-${state.sent.length}` } as PostResult;
+      },
+      governanceLifecycle: () => "public",
+      notify: async (x: any) => {
+        state.notices.push(x);
+        return { fresh: true };
+      },
+      notifyAdmins: async (type: string, title: string, key: string) => {
+        state.adminNotices.push({ type, title, key });
+      },
+      members: usersRepo(pool),
+      firstName: (name: string) => String(name ?? "").trim().split(/\s+/)[0] ?? "",
+      liveHoldersOf: async () => [FOUNDER.id],
+      rolesCarrying: () => [{ id: founderRole, name: "Founder" }],
+      loadRoleHolders: () => [{ roleId: founderRole, userId: FOUNDER.id }],
+      seatCalendar: calendar,
+      lapse: () => ({ currentSeasonId: "s-now", cadence: "season_turn" }),
+      stageOf: async () => "guest",
+      recordStageEvent: async () => undefined,
+      sessionsOn: () => false,
+      letterSource: () => LETTER_SOURCE,
+    } as any);
+    registerConfidentiality(app, {
+      authedUser,
+      getPool: () => pool,
+      overLimit: async () => false,
+      members: usersRepo(pool),
+      content: () => state.content,
+      boolVar: (k: string) => !!state.dials[k],
+      googleAvailable: () => false,
+      authSecret: "test-secret",
+    } as any);
+    server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("the test server did not report a port");
+    base = `http://127.0.0.1:${addr.port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    await pool?.end();
+    await db?.drop();
+  });
+
+  beforeEach(() => {
+    state.viewer = null;
+    dialsOn(false);
+    state.dials["org.start_after_paid_terms"] = false;
+    state.content = { confidentiality: AGREEMENT };
+    state.sent.length = 0;
+    state.notices.length = 0;
+    state.adminNotices.length = 0;
+  });
+
+  const call = async (method: string, path: string, body?: unknown, as: string | null = state.viewer) => {
+    const before = state.viewer;
+    state.viewer = as;
+    try {
+      const res = await fetch(`${base}${path}`, { // module-review-ok: a test calling its own local server, never an outside host
+        method,
+        headers: body === undefined ? {} : { "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: res.status, body: (await res.json()) as any };
+    } finally {
+      state.viewer = before;
+    }
+  };
+
+  const isLink = (line: string) => {
+    try {
+      return new URL(line.trim()).origin === new URL(ORIGIN).origin;
+    } catch {
+      return false;
+    }
+  };
+  const tokenOf = (mail: OutgoingEmail) => new URL((mail.text.split("\n").find(isLink) as string).trim()).searchParams.get("token") as string;
+
+  /** Send and confirm a proposal, aligning with the letter on the form when `align` says so. */
+  const proposeAndConfirm = async (email: string, align = false) => {
+    const before = state.sent.length;
+    const letter = currentLetter(LETTER_SOURCE);
+    const r = await call(
+      "POST",
+      "/api/open-proposals",
+      {
+        name: "Rowan Field",
+        email,
+        roles: [{ roleId: gate, note: "I open gates for a living." }],
+        why: "The gate is always shut.",
+        aim: "The gate opens at dawn.",
+        ...(align ? { membership: { letterVersion: letter.version } } : {}),
+      },
+      null,
+    );
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const mail = state.sent[before];
+    const id = mail.idempotencyKey.split(":")[1];
+    expect((await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null)).status).toBe(200);
+    return id;
+  };
+
+  const newAccount = async (label: string) => {
+    n += 1;
+    const id = `u-${label}-${n}`;
+    const email = `${label}-${n}@example.test`;
+    await usersRepo(pool).add({ id, name: "Rowan Field", email, passwordHash: "x", paths: [] } as any);
+    return { id, email };
+  };
+  const reconfirmed = async (userId: string) => usersRepo(pool).update(userId, (m: any) => stampConfirmed(m, Date.now()));
+  const alignAgreement = async (userId: string) => {
+    await reconfirmed(userId);
+    const read = await call("GET", "/api/confidentiality", undefined, userId);
+    const r = await call("POST", "/api/profile/confidentiality", { version: read.body.agreement.version }, userId);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+  };
+  const alignLetter = async (userId: string) =>
+    inApplicationTransaction(pool, (conn) => alignSigning(conn, { letter: currentLetter(LETTER_SOURCE), signingId: `sg-${userId}`, userId, now: new Date() }));
+  const seatedIn = (userId: string) => q("SELECT org_role_id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [userId]);
+  const appOf = async (userId: string) => (await q("SELECT id, status FROM seat_applications WHERE candidate_user_id = ? ORDER BY created_at DESC", [userId]))[0];
+  const turn = (at: Date, seasonId = "s-now") =>
+    runSeasonTurn({
+      getPool: () => pool,
+      notify: async (x: any) => {
+        state.notices.push(x);
+        return undefined;
+      },
+      notifyAdmins: async () => undefined,
+      closer: { settle: async () => ({ applied: [], held: null, proposerTold: null }) } as any,
+      lapse: () => ({ currentSeasonId: seasonId, cadence: "season_turn" }),
+      calendar: () => ({ ...calendar(), currentSeasonId: seasonId }),
+      now: () => at,
+    });
+  const moonMode = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" }, FOUNDER.id)).status).toBe(200);
+    try {
+      return await fn();
+    } finally {
+      await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
+    }
+  };
+
+  describe("moon mode: the role starts at adoption, once the agreements exist", () => {
+    it("holds the start until both alignments, says the two steps, and starts at the next turn after", async () => {
+      dialsOn(true);
+      await moonMode(async () => {
+        const who = await newAccount("moon");
+        const id = await proposeAndConfirm(who.email);
+        const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+
+        // Adopted, and nobody seated: the start waits on the agreements.
+        expect((await appOf(who.id)).status).toBe("adopted");
+        expect(await seatedIn(who.id)).toEqual([]);
+        const told = state.notices.filter((x) => x.userId === who.id && x.title === START_WORDS.title(2));
+        expect(told).toHaveLength(1);
+        expect(told[0].title).toBe("Two steps before your role starts");
+        expect(told[0].body).toContain(START_WORDS.step.confidentiality);
+        expect(told[0].body).toContain(START_WORDS.step.membership);
+        expect(told[0].link).toBe("/aligned");
+
+        // One of two: still nobody seated, and the shorter list is said once.
+        await alignAgreement(who.id);
+        await turn(new Date());
+        expect(await seatedIn(who.id)).toEqual([]);
+        expect(state.notices.filter((x) => x.userId === who.id && x.title === START_WORDS.title(1))).toHaveLength(1);
+        // An hourly retry says nothing new: the same key, which notify (unique dedupe_key) writes once.
+        await turn(new Date());
+        const keys = new Set(state.notices.filter((x) => x.userId === who.id && x.title === START_WORDS.title(1)).map((x) => x.dedupeKey));
+        expect(keys.size).toBe(1);
+
+        // Both: the next turn starts the role.
+        await alignLetter(who.id);
+        await turn(new Date());
+        expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
+      });
+    });
+
+    it("CONTROL: with the switches off the same adoption seats at once, as it does today", async () => {
+      await moonMode(async () => {
+        const who = await newAccount("moonoff");
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
+        expect(state.notices.some((x) => x.title.endsWith("before your role starts"))).toBe(false);
+      });
+    });
+  });
+
+  describe("season mode: the role starts on the season's first day, once the agreements exist", () => {
+    const firstDay = new Date("2037-01-01T12:00:00Z");
+
+    it("nobody is seated on the first day without both alignments, and they are at the turn after aligning", async () => {
+      dialsOn(true);
+      const id = await proposeAndConfirm("season-newcomer@example.test");
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      const token = new URL(String(r.body?.invitation?.link)).searchParams.get("invite") as string;
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      expect(await door.resolve(token)).toMatchObject({ ok: true, id: openInviteId(id) });
+      const newcomer = "u-season-newcomer";
+      const inviter = await door.claim(openInviteId(id), newcomer);
+      await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email: "season-newcomer@example.test", passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, newcomer);
+      expect(state.notices.some((x) => x.userId === newcomer && x.title === START_WORDS.title(2))).toBe(true);
+
+      await turn(firstDay, "s-next");
+      expect(await seatedIn(newcomer)).toEqual([]);
+      expect((await appOf(newcomer)).status).toBe("adopted");
+
+      await alignAgreement(newcomer);
+      await alignLetter(newcomer);
+      await turn(firstDay, "s-next");
+      expect(await seatedIn(newcomer)).toEqual([{ org_role_id: gate }]);
+    });
+
+    it("CONTROL: with the switches off the first day seats them, as it does today", async () => {
+      const who = await newAccount("seasonoff");
+      const id = await proposeAndConfirm(who.email);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      await turn(firstDay, "s-next");
+      expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
+    });
+  });
+
+  describe("changed words ask again", () => {
+    it("an alignment with earlier words stops counting when the words change, and aligning again counts", async () => {
+      const who = await newAccount("words");
+      await alignAgreement(who.id);
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: true });
+
+      state.content = { confidentiality: { ...AGREEMENT, body: `${AGREEMENT.body}\n\nAnd one more line.` } };
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: false });
+
+      // The gate asks again, in moon mode, before the role starts.
+      state.dials["org.start_after_confidentiality"] = true;
+      await moonMode(async () => {
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        expect(await seatedIn(who.id)).toEqual([]);
+        expect(state.notices.some((x) => x.userId === who.id && x.title === START_WORDS.title(1))).toBe(true);
+
+        await alignAgreement(who.id);
+        expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: true });
+        await turn(new Date());
+        expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
+      });
+      // The first text was superseded by the second: one in force, never two.
+      const texts = await q(
+        "SELECT t.id FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? AND t.subject_type = 'confidentiality'",
+        [who.id],
+      );
+      expect(texts).toHaveLength(2);
+      const ended = await q("SELECT text_id FROM alignment_endings WHERE kind = 'superseded' AND text_id IN (?)", [texts.map((t: any) => t.id)]);
+      expect(ended).toHaveLength(1);
+    });
+
+    it("the door refuses words that changed while they read, and a stale identity confirmation, and writes nothing", async () => {
+      const who = await newAccount("refused");
+      const was = currentAgreement(AGREEMENT)!;
+      // Never confirmed: asked to confirm first.
+      const stale = await call("POST", "/api/profile/confidentiality", { version: was.version }, who.id);
+      expect(stale.status).toBe(403);
+      expect(stale.body.error).toBe("reconfirm_required");
+      await reconfirmed(who.id);
+      state.content = { confidentiality: { ...AGREEMENT, title: "Privacy agreement" } };
+      const moved = await call("POST", "/api/profile/confidentiality", { version: was.version }, who.id);
+      expect(moved.status).toBe(409);
+      expect(moved.body.agreement.title).toBe("Privacy agreement");
+      expect(await q("SELECT t.id FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ?", [who.id])).toEqual([]);
+      // CONTROL: the version on screen now aligns.
+      const ok = await call("POST", "/api/profile/confidentiality", { version: currentAgreement(state.content.confidentiality)!.version }, who.id);
+      expect(ok.status).toBe(200);
+    });
+
+    it("a village that wrote no agreement offers nothing to align with, and a waiting role tells the admins", async () => {
+      state.content = {};
+      expect((await call("GET", "/api/confidentiality", undefined, ANA.id)).body).toMatchObject({ agreement: null });
+      state.dials["org.start_after_confidentiality"] = true;
+      await moonMode(async () => {
+        const who = await newAccount("noagreement");
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        expect(await seatedIn(who.id)).toEqual([]);
+        expect(state.adminNotices.some((x) => x.title === START_WORDS.noAgreement)).toBe(true);
+      });
+    });
+  });
+
+  describe("membership at application (Rye's answer 8)", () => {
+    it("is recorded against the confirmed address, carried to the account at sign-up, and not asked again", async () => {
+      const email = "aligned-applicant@example.test";
+      const id = await proposeAndConfirm(email, true);
+      const atAddress = await q(
+        "SELECT t.id, t.subject_type FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.party_key = ? AND p.user_id IS NULL",
+        [addressParty(email)],
+      );
+      expect(atAddress).toEqual([expect.objectContaining({ subject_type: "membership" })]);
+      // The address is never stored: only its fingerprint names the party.
+      expect(JSON.stringify(await q("SELECT party_key FROM alignment_parties WHERE text_id = ?", [atAddress[0].id]))).not.toContain(email);
+
+      state.dials["org.start_after_membership"] = true;
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      const token = new URL(String(r.body?.invitation?.link)).searchParams.get("invite") as string;
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      expect(await door.resolve(token)).toMatchObject({ ok: true });
+      const newcomer = "u-aligned-applicant";
+      const inviter = await door.claim(openInviteId(id), newcomer);
+      await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email, passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, newcomer);
+
+      // Carried: the account holds the letter in its own name, and the address's text is superseded by it.
+      const mine = await q(
+        "SELECT t.id, t.body FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? AND t.subject_type = 'membership'",
+        [newcomer],
+      );
+      expect(mine).toHaveLength(1);
+      expect(mine[0].body).toBe(currentLetter(LETTER_SOURCE).body);
+      expect(await q("SELECT refers_to FROM alignment_endings WHERE text_id = ? AND kind = 'superseded'", [atAddress[0].id])).toEqual([{ refers_to: mine[0].id }]);
+      // Not asked again: no step names the membership letter.
+      expect(state.notices.some((x) => x.userId === newcomer && x.title.endsWith("before your role starts"))).toBe(false);
+      await turn(new Date("2037-01-01T12:00:00Z"), "s-next");
+      // Seated with nothing paid: no step, no dues, no contribution stood between them and the start.
+      expect(await seatedIn(newcomer)).toEqual([{ org_role_id: gate }]);
+    });
+
+    it("CONTROL: a proposal that did not align carries nothing, and the gate asks for the letter", async () => {
+      const email = "unaligned-applicant@example.test";
+      const id = await proposeAndConfirm(email, false);
+      expect(await q("SELECT text_id FROM alignment_parties WHERE party_key = ?", [addressParty(email)])).toEqual([]);
+      state.dials["org.start_after_membership"] = true;
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      const token = new URL(String(r.body?.invitation?.link)).searchParams.get("invite") as string;
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      await door.resolve(token);
+      const newcomer = "u-unaligned-applicant";
+      const inviter = await door.claim(openInviteId(id), newcomer);
+      await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email, passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, newcomer);
+      const told = state.notices.find((x) => x.userId === newcomer && x.title === START_WORDS.title(1));
+      expect(told?.body).toContain(START_WORDS.step.membership);
+      expect(told?.link).toBe("/love-letter");
+      await turn(new Date("2037-01-01T12:00:00Z"), "s-next");
+      expect(await seatedIn(newcomer)).toEqual([]);
+    });
+
+    it("refuses a letter version that is not the letter on screen now, and sends nothing", async () => {
+      const before = state.sent.length;
+      const r = await call(
+        "POST",
+        "/api/open-proposals",
+        { name: "Rowan Field", email: "stale-letter@example.test", roles: [{ roleId: gate, note: "" }], why: "The gate.", aim: "", membership: { letterVersion: "lv-0000000000000000" } },
+        null,
+      );
+      expect(r.status).toBe(409);
+      expect(r.body.field).toBe("membership");
+      expect(r.body.letter.version).toBe(currentLetter(LETTER_SOURCE).version);
+      expect(state.sent.length).toBe(before);
+    });
+  });
+
+  it("no payment is ever a step: the gate knows the three agreements and nothing else", () => {
+    expect([...START_STEPS]).toEqual(["confidentiality", "membership", "terms"]);
+    for (const s of START_STEPS) expect(START_WORDS.step[s]).not.toMatch(/pay|contribut|dues|fee/i);
+  });
+});
