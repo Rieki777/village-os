@@ -51,7 +51,7 @@ import { TourCard } from "@/components/admin/AdminFeel";
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
-import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
+import { adminNavRailClass, filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
 import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
@@ -619,8 +619,7 @@ function AdminNav({
       <nav
         onTouchStart={swipeStart}
         onTouchEnd={swipeEnd}
-        className={`${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:shadow-none lg:w-56" : "w-14"} ` +
-          "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
+        className={adminNavRailClass(open)}
       >
         <button
           onClick={() => {
@@ -7904,6 +7903,8 @@ export default function Admin() {
       <AdminHeader
         villageName={villageName}
         siteUrl={siteUrl}
+        tab={activeTab}
+        userName={user?.name ?? ""}
         night={night}
         onNight={setNight}
         onSignOut={() => setPassword(null)}

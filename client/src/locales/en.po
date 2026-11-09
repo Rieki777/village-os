@@ -134,6 +134,11 @@ msgctxt "role draft stat"
 msgid "Open again"
 msgstr "Open again"
 
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters legend"
+msgid "Characters {roleName} suits"
+msgstr "Characters {roleName} suits"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "In review"
@@ -2111,6 +2116,10 @@ msgstr "Its role comes with it, and leaving the circle out leaves it out too."
 msgid "Apply with my {pickCount} picks"
 msgstr "Apply with my {pickCount} picks"
 
+#: client/src/components/admin/AdminHeader.tsx
+msgid "This device only. Admin stays light for everyone else."
+msgstr "This device only. Admin stays light for everyone else."
+
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "How to add it"
 msgstr "How to add it"
@@ -2520,6 +2529,11 @@ msgstr "Objections answered"
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "When to call them"
 msgstr "When to call them"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, jumps to the page's own filters"
+msgid "Change the filters"
+msgstr "Change the filters"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Sign in to see what your village is weighing."
@@ -3543,6 +3557,11 @@ msgctxt "a public line not written yet"
 msgid "Not written yet."
 msgstr "Not written yet."
 
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters"
+msgid "Save characters"
+msgstr "Save characters"
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box heading"
 msgid "Your next step"
@@ -3792,6 +3811,11 @@ msgstr "This round could not be found."
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, menu button"
+msgid "Your settings"
+msgstr "Your settings"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
@@ -4021,6 +4045,11 @@ msgctxt "pricing desk"
 msgid "to"
 msgstr "to"
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Signed in to admin"
+msgstr "Signed in to admin"
+
 #: client/src/components/valuation/QuestEnginePrice.tsx
 msgctxt "quest editor"
 msgid "As little as"
@@ -4039,6 +4068,10 @@ msgstr "Loading the conflict agreement…"
 #: client/src/pages/RoleDraft.tsx
 msgid "No role is open right now. New roles open each season."
 msgstr "No role is open right now. New roles open each season."
+
+#: client/src/components/admin/AdminHeader.tsx
+msgid "Handled today on this device: {handled}"
+msgstr "Handled today on this device: {handled}"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -4224,6 +4257,11 @@ msgstr "The review"
 msgctxt "a role choice"
 msgid "No role"
 msgstr "No role"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Admin"
+msgstr "Admin"
 
 #. placeholder {0}: row.credited
 #. placeholder {1}: cycle.poolToken ?? ""
@@ -4608,6 +4646,11 @@ msgctxt "signing key"
 msgid "Declined. The village keeps its key."
 msgstr "Declined. The village keeps its key."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "{village} admin"
+msgstr "{village} admin"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Compare them"
@@ -4663,6 +4706,11 @@ msgstr "Show everything waiting"
 msgctxt "funding rounds"
 msgid "Shape your idea into a quest"
 msgstr "Shape your idea into a quest"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, per-device dark colours"
+msgid "Night look"
+msgstr "Night look"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "No role is named yet."
@@ -4823,6 +4871,10 @@ msgstr "Main Site"
 msgctxt "a switch setting"
 msgid "On"
 msgstr "On"
+
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgid "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
+msgstr "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "The chart and {agent} are in step"
@@ -5053,6 +5105,11 @@ msgstr "Next"
 msgctxt "funding rounds"
 msgid "Pledge"
 msgstr "Pledge"
+
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters"
+msgid "Characters saved"
+msgstr "Characters saved"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"
@@ -5355,6 +5412,11 @@ msgstr "Who holds it instead"
 msgctxt "change request note outcome"
 msgid "Answered"
 msgstr "Answered"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, menu button"
+msgid "Your settings, {name}"
+msgstr "Your settings, {name}"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -5823,6 +5885,11 @@ msgstr "this moon (from its new moon to the next)"
 msgctxt "edit one change"
 msgid "Edit"
 msgstr "Edit"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Sign out"
+msgstr "Sign out"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
