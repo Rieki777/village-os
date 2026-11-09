@@ -10,8 +10,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { ROLE_DRAFT_KEY } from "@shared/roleDraft";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
-const auth = vi.hoisted(() => ({ user: null as null | { id: string; name: string } }));
-vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" }));
 // The full card is its own component with its own tests; here it only has to open.
 vi.mock("@/components/power/SeatTradingCard", () => ({ default: ({ input }: { input: { name: string } }) => <article data-testid="full-card">{input.name}</article> }));
@@ -38,7 +36,9 @@ const ORG = {
   ],
 };
 
-function serve(over: { org?: unknown; places?: unknown } = {}) {
+const OPEN_FORM = { open: true, roles: ORG.roles.map((r) => ({ id: r.id, name: r.name })) };
+
+function serve(over: { org?: unknown; places?: unknown; form?: unknown } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -46,6 +46,7 @@ function serve(over: { org?: unknown; places?: unknown } = {}) {
       const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
       if (u.includes("/api/archetypes")) return json(CAST);
       if (u.includes("/api/org")) return json(over.org ?? ORG);
+      if (u.includes("/api/open-proposals/form")) return json(over.form ?? OPEN_FORM);
       if (u.includes("/api/place-registry")) return over.places ? json(over.places) : json({ error: "not here" }, 404);
       if (u.includes("/api/season")) return json({ current: null, upcoming: null, seasons: [] });
       return json([]);
@@ -61,7 +62,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  auth.user = null;
 });
 
 describe("the board, read live", () => {
@@ -104,7 +104,7 @@ describe("the board, read live", () => {
     serve();
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Open the full card for Gardener" }));
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Full card for Gardener" }));
     expect(screen.getByTestId("full-card").textContent).toBe("Gardener");
   });
 
@@ -121,8 +121,11 @@ describe("the draft", () => {
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
     for (const n of ["Lead Financial Steward", "Gardener", "Welcome Host"]) fireEvent.click(within(card(n)).getByRole("button", { name: `Draft ${n}` }));
-    const cook = within(card("Cook")).getByRole("button", { name: "Draft Cook" }) as HTMLButtonElement;
-    expect(cook.disabled).toBe(true);
+    // A fourth is refused out loud, never by a silent disabled button.
+    const cook = within(card("Cook")).getByRole("button", { name: "Draft Cook" });
+    expect(cook.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(cook);
+    expect(screen.getByText("Your draft holds three. Take one off to draft another.")).toBeTruthy();
 
     const tray = screen.getByRole("complementary", { name: "Your draft" });
     expect(within(tray).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
@@ -136,7 +139,7 @@ describe("the draft", () => {
 
     // Taking one off frees a place.
     fireEvent.click(within(tray).getByRole("button", { name: "Remove Gardener from your draft" }));
-    expect(cook.disabled).toBe(false);
+    expect(cook.getAttribute("aria-disabled")).toBe("false");
   });
 
   it("comes back as it was left, dropping any role that is no longer open", async () => {
@@ -149,14 +152,38 @@ describe("the draft", () => {
     expect(screen.getByRole("button", { name: /The Catalyst/ }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("sends a signed-in member to Propose my roles instead", async () => {
-    auth.user = { id: "u1", name: "Ana" };
-    serve();
+  it("sends a member, told by the chart's terms tier, to one role application with every pick", async () => {
+    serve({ org: { ...ORG, roles: ORG.roles.map((r) => ({ ...r, termsOffer: null })) } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
+    fireEvent.click(within(card("Cook")).getByRole("button", { name: "Draft Cook" }));
+    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    expect(within(tray).getByRole("link", { name: /Apply for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook");
+  });
+
+  it("offers no Apply to a visitor while applications are closed, and keeps the draft", async () => {
+    serve({ form: { open: false, message: "This page isn't taking proposals right now." } });
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
     fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
     const tray = screen.getByRole("complementary", { name: "Your draft" });
-    expect(within(tray).getByRole("link", { name: /Propose my roles/ }).getAttribute("href")).toBe("/role-proposals/new?role=garden&path=quick");
+    expect(within(tray).queryByRole("link", { name: /Apply/ })).toBeNull();
+    expect(within(tray).getByText("This page isn't taking proposals right now.")).toBeTruthy();
+  });
+
+  it("shows a visitor only the roles the application form would take", async () => {
+    serve({ form: { open: true, roles: [{ id: "lfs" }, { id: "cook" }] } });
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Cook" });
+    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent).sort()).toEqual(["Cook", "Lead Financial Steward"]);
+  });
+
+  it("says so when the chart sends no character tags, instead of claiming nothing fits", async () => {
+    serve({ org: { ...ORG, roles: ORG.roles.map((r) => ({ ...r, archetypes: [] })) } });
+    render(<RoleDraft />);
+    expect(await screen.findByText(/has not tagged its roles by character for visitors yet/)).toBeTruthy();
+    expect(screen.queryByText(/open roles? fits?/)).toBeNull();
   });
 });
 

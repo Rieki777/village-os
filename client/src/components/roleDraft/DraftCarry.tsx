@@ -16,6 +16,7 @@ import { useLingui } from "@lingui/react/macro";
 import { gameFetch } from "@/lib/gameApi";
 import { readStoredJson, removeStored } from "@/lib/safeStorage";
 import { ROLE_DRAFT_KEY, applyHrefFor, draftFromStored } from "@shared/roleDraft";
+import { readsTerms } from "@/components/characters/RolesThatFit";
 
 export default function DraftCarry({
   cast,
@@ -33,26 +34,33 @@ export default function DraftCarry({
     return draftFromStored(read.status === "value" ? read.value : null);
   });
   const [read, setRead] = useState<Record<string, string>>({});
+  /** Whether the chart was read at the terms tier: a member applies through a role application. */
+  const [member, setMember] = useState(false);
   useEffect(() => {
-    if (roleNames || !draft.picks.length) return;
+    if (!draft.picks.length) return;
     let live = true;
     gameFetch("/api/org")
       .then((r) => (r.ok ? r.json() : null))
       .then((org) => {
         if (!live || !org || !Array.isArray(org.roles)) return;
+        setMember(readsTerms(org));
         setRead(Object.fromEntries(org.roles.filter((r: any) => r && typeof r.id === "string" && typeof r.name === "string").map((r: any) => [r.id, r.name])));
       })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [roleNames, draft.picks.length]);
+  }, [draft.picks.length]);
   const names = roleNames ?? read;
   if (!draft.chars.length && !draft.picks.length) return null;
 
-  const chars = draft.chars.map((k) => ({ key: k, name: cast.find((c) => c.key === k)?.name ?? k }));
+  // Only characters in the village's own cast; a stored key it does not know is dropped (red team, 9 Nov).
+  const chars = draft.chars.flatMap((k) => {
+    const c = cast.find((x) => x.key === k);
+    return c ? [{ key: k, name: c.name }] : [];
+  });
   const named = draft.picks.map((id) => names[id]).filter((n): n is string => !!n);
-  const propose = applyHrefFor(draft.picks, true);
+  const propose = applyHrefFor(draft.picks, member);
   const roleList = named.join(", ");
 
   return (
@@ -84,7 +92,7 @@ export default function DraftCarry({
             {named.length ? t`The roles you drafted: ${roleList}.` : t`You drafted roles before you joined.`}
           </p>
           <Link href={propose} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-notice px-4 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            {t`Propose my roles for next season`}
+            {member ? t`Apply for the roles you drafted` : t`Apply with your draft`}
           </Link>
         </div>
       )}

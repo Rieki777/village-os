@@ -14,6 +14,7 @@ const ORG = {
   circles: [
     { id: "anchor", name: "Anchor Circle", status: "active" },
     { id: "land", name: "Land Circle", status: "active" },
+    { id: "asleep", name: "Sleeping Circle", status: "dormant" },
   ],
   roles: [
     { id: "lfs", name: "Lead Financial Steward", circleId: "anchor", seats: 1, holderCount: 0, state: "open", archetypes: ["researching", "catalyzing"], timeCommitment: "25 to 30 hours a week", aim: "Money kept true.", accountabilities: ["a", "b", "c"] },
@@ -22,6 +23,7 @@ const ORG = {
     { id: "forming", name: "Seed Keeper", circleId: "land", seats: 1, holderCount: 0, state: "forming", archetypes: [] },
     { id: "example", name: "Example Role", circleId: "land", seats: 1, holderCount: 0, state: "open", isExample: true },
     { id: "orphan", name: "Nowhere", circleId: "gone", seats: 1, holderCount: 0, state: "open" },
+    { id: "dozing", name: "Dozing Role", circleId: "asleep", seats: 1, holderCount: 0, state: "open" },
     { id: "recruit", name: "Host", circleId: "land", seats: 1, holderCount: 1, state: "filled", recruiting: true, archetypes: ["facilitating"] },
   ],
 };
@@ -34,8 +36,8 @@ describe("openRolesFrom", () => {
     expect(ids).toEqual(expect.arrayContaining(["lfs", "half", "recruit"]));
   });
 
-  it("drops held, forming, example and circle-less roles", () => {
-    for (const id of ["held", "forming", "example", "orphan"]) expect(ids).not.toContain(id);
+  it("drops held, forming, example, circle-less roles and roles in a dormant circle", () => {
+    for (const id of ["held", "forming", "example", "orphan", "dozing"]) expect(ids).not.toContain(id);
   });
 
   it("carries the role's own words and its circle's name, with nothing invented", () => {
@@ -102,8 +104,8 @@ describe("applyHrefFor", () => {
     expect(applyHrefFor(["lfs", "half"], false)).toBe("/propose-a-role?role=lfs&role=half");
   });
 
-  it("sends a member to Propose my roles, starting from the first pick", () => {
-    expect(applyHrefFor(["lfs", "half"], true)).toBe("/role-proposals/new?role=lfs&path=quick");
+  it("sends a member to one role application carrying every pick", () => {
+    expect(applyHrefFor(["lfs", "half"], true)).toBe("/propose?type=role_application&seat=lfs&seat=half");
   });
 
   it("has no door with nothing drafted", () => {

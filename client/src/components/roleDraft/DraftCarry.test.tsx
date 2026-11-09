@@ -24,14 +24,27 @@ describe("DraftCarry", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("offers each drafted character on the stage, and the drafted roles to propose", () => {
-    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing", "facilitating"], picks: ["lfs", "garden"] }));
+  it("offers each drafted character on the stage, and applies with the drafted roles", () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing", "facilitating", "../made-up"], picks: ["lfs", "garden"] }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ roles: [] }), { status: 200 })));
     const pick = vi.fn();
     render(<DraftCarry cast={CAST} roleNames={{ lfs: "Lead Financial Steward" }} onPickCharacter={pick} />);
     fireEvent.click(screen.getByRole("button", { name: "Show The Spaceholder" }));
     expect(pick).toHaveBeenCalledWith("facilitating");
+    // A stored key the cast does not know is never offered.
+    expect(screen.queryByRole("button", { name: /made-up/ })).toBeNull();
     expect(screen.getByText(/Lead Financial Steward/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Propose my roles/ }).getAttribute("href")).toBe("/role-proposals/new?role=lfs&path=quick");
+    expect(screen.getByRole("link", { name: /Apply with your draft/ }).getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden");
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a member, told by the terms tier of the chart, to one role application", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs", "garden"] }));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ roles: [{ id: "lfs", name: "Lead Financial Steward", termsOffer: null }] }), { status: 200 })));
+    render(<DraftCarry cast={CAST} onPickCharacter={() => {}} />);
+    const link = await screen.findByRole("link", { name: /Apply for the roles you drafted/ });
+    expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=lfs&seat=garden");
+    vi.unstubAllGlobals();
   });
 
   it("clears the draft when they are done with it", () => {

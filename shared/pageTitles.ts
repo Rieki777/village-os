@@ -37,6 +37,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/propose-quest": "Propose a quest",
   "/pricing": "Pricing desk",
   "/roles": "Roles",
+  "/roles/draft": "Draft your roles",
   "/forum": "Forum",
   "/messages": "Messages",
   "/introductions": "Introductions",

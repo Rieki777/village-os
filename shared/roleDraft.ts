@@ -24,6 +24,7 @@
  * keeps strings only, drops duplicates and caps both lists.
  */
 import { OPEN_PROPOSAL_MAX_ROLES, openProposalHref } from "./openProposals";
+import { applySeatsHref } from "./seatApplyLinks";
 
 /** Where the draft is kept in the browser. Versioned, so a later shape can start clean. */
 export const ROLE_DRAFT_KEY = "village.roleDraft.v1";
@@ -85,7 +86,10 @@ export function openRolesFrom(org: unknown): DraftRole[] {
   if (!o || !Array.isArray(o.roles)) return [];
   const circles = new Map<string, string>();
   for (const c of Array.isArray(o.circles) ? o.circles : []) {
-    if (c && typeof c === "object" && typeof (c as any).id === "string") circles.set((c as any).id, text((c as any).name) ?? (c as any).id);
+    // A dormant or example circle offers nothing: the open proposal only takes roles in live circles (red team, 9 Nov).
+    if (!c || typeof c !== "object" || typeof (c as any).id !== "string") continue;
+    if ((c as any).status === "dormant" || (c as any).isExample) continue;
+    circles.set((c as any).id, text((c as any).name) ?? (c as any).id);
   }
   const out: DraftRole[] = [];
   for (const r of o.roles as any[]) {
@@ -137,14 +141,20 @@ export function addPick(picks: readonly string[], id: string): { picks: string[]
 }
 
 /**
- * Where "Apply" goes. A visitor (or a guest) applies through the open
- * proposal with every pick ticked. A member proposes through Propose my
- * roles, which starts from one role and adds the rest in its first step; the
- * address is the one `proposeRoleHref` makes (client/src/components/roleProposal/QuickPath.tsx).
+ * Where "Apply" goes. A visitor or a guest applies through the open proposal
+ * with every pick ticked. A reader who reads terms (a member) applies for all
+ * of them in one role application, the door "Roles that fit" on the character
+ * page already uses (`applySeatsHref`, shared/seatApplyLinks.ts), so no pick
+ * is dropped on the way.
  */
 export function applyHrefFor(picks: readonly string[], member: boolean): string | null {
   if (!picks.length) return null;
-  if (member) return `/role-proposals/new?${new URLSearchParams({ role: picks[0], path: "quick" }).toString()}`;
+  if (member) return applySeatsHref(picks);
   const [first, ...rest] = picks;
   return [openProposalHref(first), ...rest.map((id) => `role=${encodeURIComponent(id)}`)].join("&");
+}
+
+/** Whether this reader was sent any role's character tags. Strangers get them only when the village shows its structure publicly. */
+export function charactersKnown(roles: readonly DraftRole[]): boolean {
+  return roles.some((r) => r.archetypes.length > 0);
 }
