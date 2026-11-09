@@ -73,9 +73,9 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
-import { arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
+import { accountFor, arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInvitedArrives } from "../lib/inviteDoor";
-import { alignAtApplication } from "../lib/applicationMembership";
+import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/applicationMembership";
 import { currentLetter } from "../lib/membershipLetter";
 import { LETTER_WORDS, type LetterSource } from "../../shared/membershipLetter";
 import { inApplicationTransaction } from "../repos/seatApplications";
@@ -103,6 +103,8 @@ type Deps = Pick<
    * form's alignment is refused as unreadable and nothing is recorded.
    */
   letterSource?: () => LetterSource;
+  /** The submissions collection's insert: an address that already has an account gets its signing request at confirm. */
+  signings?: SigningDoor;
   now?: () => Date;
 };
 
@@ -330,6 +332,12 @@ export function register(app: Express, deps: Deps): void {
       const letter = currentLetter(deps.letterSource());
       if (letter.version !== asked.letterVersion) return;
       await inApplicationTransaction(getPool(), (conn) => alignAtApplication(conn, { letter, email: p.email as string, proposalId: p.id, now: at }));
+      // An account already here with this address: carried now, with the signing request a steward accepts.
+      const account = await accountFor(deps.members, p.email);
+      if (account && deps.signings) {
+        const m: any = await deps.members.byId(account);
+        await carryToAccount(getPool(), deps.signings, { userId: account, name: String(m?.name ?? ""), email: p.email, now: at });
+      }
     } catch (e) {
       console.error("[open-proposals] the membership alignment at application was not recorded", e);
     }
@@ -425,6 +433,20 @@ export function register(app: Express, deps: Deps): void {
   // ── The decision (part B) ─────────────────────────────────────────────────
 
   registerOpenProposalDecide(app, { ...deps, postEmail, now });
+  /*
+   * FIRST, THE MEMBERSHIP MADE AT APPLICATION (Rye's answer 8). An account made
+   * through the invitation carries it, and queues the signing a steward accepts.
+   * Registered before the placement below, because the hooks run in order and
+   * the role start gate then reads the letter on the account.
+   */
+  if (deps.signings) {
+    const signings = deps.signings;
+    whenInvitedArrives(OPEN_INVITE_PREFIX, async ({ userId }) => {
+      const m: any = await deps.members.byId(userId);
+      if (!m?.email) return;
+      await carryToAccount(getPool(), signings, { userId, name: String(m.name ?? ""), email: String(m.email), now: now() });
+    });
+  }
   // A sign-up through an adopted proposal's invitation finishes the adoption, whichever door it came by.
   whenInvitedArrives(OPEN_INVITE_PREFIX, arrivalFor(decide));
 }

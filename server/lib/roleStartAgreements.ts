@@ -6,9 +6,10 @@
  *
  *   confidentiality   the village's confidentiality agreement AS IT READS NOW
  *                     (server/lib/confidentiality.ts);
- *   membership        the membership letter, from the account or carried from
- *                     the application (server/lib/applicationMembership.ts),
- *                     or a membership the village already granted;
+ *   membership        the membership letter in force on the account (aligned
+ *                     there, or carried from the application at account
+ *                     creation, server/lib/applicationMembership.ts), or a
+ *                     membership the village already granted;
  *   terms             for a PAID role, the role's own terms with the agreed
  *                     rate (the application's `seat_terms` text).
  *
@@ -42,7 +43,6 @@ import { applicationHref } from "../../shared/seatApplications";
 import { alignmentsOf, textsForParty } from "../repos/alignments";
 import type { StoredApplication } from "../repos/seatApplications";
 import { viewTexts } from "./alignmentSubjects";
-import { carryToAccount } from "./applicationMembership";
 import { holdsCurrentAgreement } from "./confidentiality";
 
 /** The steps, in the order the holder meets them: the board's shipped order, confidentiality first. */
@@ -72,8 +72,6 @@ export interface RoleStartDeps {
   dials: () => RoleStartDials;
   /** The village's agreement now, or null when it has written none. */
   agreement: () => ServedAgreement | null;
-  /** The account's address, for carrying a membership made at application. */
-  emailOf: (userId: string) => Promise<string | null>;
   /** A membership the village already granted (a signing accepted before alignments existed). */
   membershipGranted: (userId: string) => Promise<boolean>;
 }
@@ -88,10 +86,8 @@ async function alignedWithTerms(conn: PoolConnection, app: StoredApplication): P
   return rows.some((a) => a.partyKey === userParty(app.candidateUserId) && a.contentHash === app.textHash);
 }
 
-/** Whether the account holds a membership letter in force, carrying one made at application first. */
+/** Whether the account holds a membership letter in force. The gate writes nothing: carrying happens at account creation. */
 async function holdsMembership(conn: PoolConnection, deps: RoleStartDeps, userId: string, now: Date): Promise<boolean> {
-  const email = await deps.emailOf(userId);
-  if (email) await carryToAccount(conn, { userId, email, now });
   const mine = (await textsForParty(conn, userId)).filter((t) => t.subjectType === MEMBERSHIP);
   if (mine.length) {
     const views = await viewTexts(conn, mine, civilDateKey(now, "UTC"), "UTC", now);

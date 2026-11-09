@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { ALL_CAPABILITIES, ALIGNMENT_BOUND, capabilityDecision, type CapabilityCtx } from "../../shared/capabilities";
-import { AGREEMENT_VERSION, DEFAULT_AGREEMENT_TITLE, readConfidentialityRef, renderAgreement } from "../../shared/confidentiality";
+import { AGREEMENT_VERSION, ALIGN_FIRST_HREF, alignmentRefusal, DEFAULT_AGREEMENT_TITLE, readConfidentialityRef, renderAgreement } from "../../shared/confidentiality";
 import { currentAgreement } from "./confidentiality";
 
 const WORDS = { title: "Confidentiality agreement", body: "What you read stays with you." };
@@ -65,5 +65,28 @@ describe("records.confidential is held only with a current alignment", () => {
       expect(capabilityDecision(cap, ctx), cap).toEqual(capabilityDecision(cap, { ...ctx, alignedConfidentiality: true }));
       expect(capabilityDecision(cap, ctx).source, cap).not.toBe("needs an alignment");
     }
+  });
+});
+
+describe("the refusal says where to align", () => {
+  it("names the one place, the card on /aligned, in a sentence anybody it reaches can act on", () => {
+    const r = alignmentRefusal();
+    expect(r.error).toBe("alignment_required");
+    expect(r.alignAt).toBe(ALIGN_FIRST_HREF);
+    expect(ALIGN_FIRST_HREF).toBe("/aligned#confidentiality");
+    expect(r.message).toMatch(/Align with the village's confidentiality agreement first/);
+    expect(r.message).toMatch(/one click/);
+  });
+
+  it("the guard answers it for exactly the step that needs an alignment, before any other refusal", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const index = fs.readFileSync(path.resolve(__dirname, "..", "index.ts"), "utf8");
+    const guard = index.slice(index.indexOf("async function guardCapability("), index.indexOf("function overrideRefusal("));
+    const at = guard.indexOf('verdict.source === "needs an alignment"');
+    expect(at).toBeGreaterThan(0);
+    expect(guard.slice(at, at + 200)).toContain("alignmentRefusal()");
+    // CONTROL: it comes before the 409 hatch and the route's own refusal, so nothing else answers first.
+    expect(at).toBeLessThan(guard.indexOf("overrideRefusal(cap, verdict)"));
   });
 });

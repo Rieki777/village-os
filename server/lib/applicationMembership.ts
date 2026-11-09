@@ -23,8 +23,9 @@
  * invitation, or an account already here), the alignment moves onto it: a new
  * text in the member's own name with the same words, their alignment carrying
  * the application's text as its authority, and the application's text
- * superseded by it. Run at sign-up through the invitation, and again by the
- * role start gate before it asks, so whichever comes first carries it.
+ * superseded by it, AND the signing request a steward accepts: a form alone
+ * never admits anyone. Run when the account is made through the adoption's
+ * invitation, and at confirm for an address that already has an account.
  *
  * NO PAYMENT. Nothing here asks for, reads or records money. The letter's
  * suggested contribution stays a paragraph in the letter.
@@ -34,6 +35,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { CAPACITY, userParty, VILLAGE_PARTY } from "../../shared/alignments";
 import { civilDateKey } from "../../shared/lunar";
 import { letterIntent, MEMBERSHIP, membershipRef, readMembershipRef, type ServedLetter } from "../../shared/membershipLetter";
+import { SIGNING_TYPE } from "../../shared/membershipSigning";
 import { identityKey } from "../../shared/openProposals";
 import { insertEnding, textsForParty, textsForPartyKey, type StoredParty } from "../repos/alignments";
 import { contentHashOf, endingIdFor, recordAlignment, viewTexts, writePreparedText } from "./alignmentSubjects";
@@ -108,66 +110,126 @@ export async function alignAtApplication(
   return { textId: id, already: false };
 }
 
-async function openAddressTexts(conn: PoolConnection, party: string, now: Date) {
+async function openAddressTexts(conn: Pool | PoolConnection, party: string, now: Date) {
   const texts = (await textsForPartyKey(conn, party)).filter((t) => t.subjectType === MEMBERSHIP);
   const views = await viewTexts(conn, texts, civilDateKey(now, "UTC"), "UTC", now);
   return views.filter((v) => v.derived.state === "in-force");
 }
 
+/** The one door a signing row goes in by: the submissions collection's own insert (server/index.ts). */
+export interface SigningDoor {
+  insert(entry: Record<string, unknown>, alsoInTransaction?: (conn: PoolConnection) => Promise<void>): Promise<unknown>;
+}
+
 /**
- * Move an address's alignment onto the account that now has that address.
- * Null when the address aligned with nothing. Inside the caller's transaction;
- * a second run finds the application's text superseded and writes nothing.
+ * MOVE AN ADDRESS'S ALIGNMENT ONTO THE ACCOUNT THAT NOW HAS THAT ADDRESS, AND
+ * QUEUE THE SIGNING A STEWARD ACCEPTS (coordinator, 9 Nov 2026).
+ *
+ * A form alone never admits anyone. So carrying writes what a member's own
+ * Love Letter signing writes, in one transaction through the collection's
+ * insert, the same door `landPublicSubmission` uses:
+ *
+ *   the signing   a `membership-508` row in the member's name, status `new`,
+ *                 which the steward's queue shows exactly like a normal
+ *                 signing, and accepting it is what admits them;
+ *   the text      the letter's words in the member's own name, its ref naming
+ *                 that signing, so the profile reads what the village did
+ *                 with it;
+ *   the ending    the application's text superseded by the account's.
+ *
+ * The ending goes first and its id is fixed by the text it ends, so a second
+ * run, or two at once, lands nothing and the signing rolls back with it: one
+ * request per alignment, ever. An account that already holds a letter gets no
+ * second request; the application's text is only superseded.
+ *
+ * Null when the address aligned with nothing, or it was carried already.
  */
-export async function carryToAccount(conn: PoolConnection, input: { userId: string; email: string; now: Date }): Promise<{ textId: string } | null> {
-  const held = await openAddressTexts(conn, addressParty(input.email), input.now);
-  const from = held[0];
-  if (!from) return null;
+export async function carryToAccount(
+  pool: Pool,
+  signings: SigningDoor,
+  input: { userId: string; name: string; email: string; now: Date },
+): Promise<{ textId: string; signingId: string | null } | null> {
+  const conn = await pool.getConnection();
+  let from: Awaited<ReturnType<typeof openAddressTexts>>[number] | undefined;
+  let open: { text: { id: string } } | null = null;
+  let mine: Awaited<ReturnType<typeof textsForParty>> = [];
+  try {
+    from = (await openAddressTexts(conn, addressParty(input.email), input.now))[0];
+    if (!from) return null;
+    mine = (await textsForParty(conn, input.userId)).filter((t) => t.subjectType === MEMBERSHIP);
+    const myViews = await viewTexts(conn, mine, civilDateKey(input.now, "UTC"), "UTC", input.now);
+    open = myViews.find((v) => v.derived.state === "in-force") ?? null;
+  } finally {
+    conn.release();
+  }
   const ref = readMembershipRef(from.text.subjectRef);
   if (!ref) return null;
-  const mine = (await textsForParty(conn, input.userId)).filter((t) => t.subjectType === MEMBERSHIP);
-  const myViews = await viewTexts(conn, mine, civilDateKey(input.now, "UTC"), "UTC", input.now);
-  const open = myViews.find((v) => v.derived.state === "in-force") ?? null;
-  let textId: string;
-  if (open) {
-    // Already aligned from the account: the application's text has nothing left to carry.
-    textId = open.text.id;
-  } else {
-    const letter = {
-      version: ref.letterVersion,
-      title: from.text.title,
-      body: from.text.body,
-      intent: from.alignments[0]?.intentText ?? letterIntent(from.text.title),
-    };
-    const prepared = prepareMembershipText({
-      letter,
-      signingId: from.text.id,
-      userId: input.userId,
-      version: mine.reduce((m, t) => Math.max(m, t.version), 0) + 1,
-      supersedesId: null,
-    });
-    await writePreparedText(conn, prepared);
-    const landed = await recordAlignment(conn, {
-      textId: prepared.text.id,
-      partyKey: userParty(input.userId),
-      userId: input.userId,
-      contentHash: prepared.text.contentHash,
-      intent: letter.intent,
-      method: "click",
-      // The click was the applicant's own, on the application.
-      authorityRef: from.text.id,
-    });
-    if (!landed) throw Object.assign(new Error("the carried alignment did not land"), { code: "AM_NOT_CARRIED" });
-    textId = prepared.text.id;
-  }
-  await insertEnding(conn, {
-    id: endingIdFor("superseded", from.text.id),
-    textId: from.text.id,
-    kind: "superseded",
-    refersTo: textId,
+  const ending = (refersTo: string) => ({
+    id: endingIdFor("superseded", from!.text.id),
+    textId: from!.text.id,
+    kind: "superseded" as const,
+    refersTo,
     partyKey: null,
     effectiveAt: input.now,
     recordedBy: null,
   });
-  return { textId };
+
+  if (open) {
+    // Already aligned from the account, so a signing exists already: nothing to queue twice.
+    await insertEnding(pool, ending(open.text.id));
+    return { textId: open.text.id, signingId: null };
+  }
+
+  const signingId = `${input.now.getTime()}-${crypto.randomBytes(4).toString("hex")}`;
+  const letter = {
+    version: ref.letterVersion,
+    title: from.text.title,
+    body: from.text.body,
+    intent: from.alignments[0]?.intentText ?? letterIntent(from.text.title),
+  };
+  const prepared = prepareMembershipText({
+    letter,
+    signingId,
+    userId: input.userId,
+    version: mine.reduce((m, t) => Math.max(m, t.version), 0) + 1,
+    supersedesId: null,
+  });
+  await signings.insert(
+    {
+      id: signingId,
+      type: SIGNING_TYPE,
+      status: "new",
+      rewarded: false,
+      userId: input.userId,
+      userName: input.name,
+      submittedAt: input.now.toISOString(),
+      // What the steward reads, as a member's own signing carries it. No contribution: none is asked.
+      data: {
+        name: input.name,
+        email: input.email,
+        letterVersion: ref.letterVersion,
+        signedAt: (from.alignments[0]?.at ?? input.now).toISOString(),
+        alignedAtApplication: true,
+        applicationText: from.text.id,
+      },
+    },
+    async (conn) => {
+      if (!(await insertEnding(conn, ending(prepared.text.id)))) {
+        throw Object.assign(new Error("this application's alignment was carried already"), { code: "AM_CARRIED" });
+      }
+      await writePreparedText(conn, prepared);
+      const landed = await recordAlignment(conn, {
+        textId: prepared.text.id,
+        partyKey: userParty(input.userId),
+        userId: input.userId,
+        contentHash: prepared.text.contentHash,
+        intent: letter.intent,
+        method: "click",
+        // The click was the applicant's own, on the application.
+        authorityRef: from!.text.id,
+      });
+      if (!landed) throw Object.assign(new Error("the carried alignment did not land"), { code: "AM_NOT_CARRIED" });
+    },
+  );
+  return { textId: prepared.text.id, signingId };
 }

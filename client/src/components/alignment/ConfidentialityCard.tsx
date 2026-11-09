@@ -37,7 +37,7 @@ export default function ConfidentialityCard() {
 
   if (!agreement) return null;
   return (
-    <section aria-labelledby="confidentiality-h" data-confidentiality="" className="mb-8 rounded-xl border border-border bg-card p-6 text-card-foreground">
+    <section id="confidentiality" aria-labelledby="confidentiality-h" data-confidentiality="" className="mb-8 rounded-xl border border-border bg-card p-6 text-card-foreground">
       <h2 id="confidentiality-h" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
         <ShieldCheck className="size-5 shrink-0 text-notice" aria-hidden="true" />
         {CONFIDENTIALITY_WORDS.heading(agreement.title)}

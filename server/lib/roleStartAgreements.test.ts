@@ -21,7 +21,6 @@ const UNPAID = { v: 1, pay: { kind: "none" } };
 const deps = (dials = NO_DIALS) => ({
   dials: () => dials,
   agreement: () => null,
-  emailOf: async () => null,
   membershipGranted: async () => false,
 });
 

@@ -15,9 +15,6 @@
  *
  * This module also installs, at boot:
  *   - the role start gate the seating path asks (server/lib/roleStartAgreements.ts);
- *   - the carry of a membership made at application onto the account, on a
- *     sign-up through an adopted open proposal's invitation
- *     (server/lib/applicationMembership.ts);
  * and serves `holdsConfidentiality`, which the capability context reads for
  * `records.confidential` (shared/capabilities.ts).
  *
@@ -27,12 +24,9 @@
 import type { Express } from "express";
 import { ALIGN_WORDS, RECONFIRM_FRESH_MS } from "../../shared/alignments";
 import { CONFIDENTIALITY_SECTION, CONFIDENTIALITY_WORDS } from "../../shared/confidentiality";
-import { OPEN_INVITE_PREFIX } from "../../shared/openProposalDecide";
 import type { AppDeps } from "../lib/appDeps";
-import { carryToAccount } from "../lib/applicationMembership";
 import { alignConfidentiality, currentAgreement, holdsCurrentAgreement } from "../lib/confidentiality";
 import { confirmedUntil, confirmWithFor } from "../lib/identityConfirm";
-import { whenInvitedArrives } from "../lib/inviteDoor";
 import { installRoleStartGate, makeRoleStartGate, roleStartDials } from "../lib/roleStartAgreements";
 import { seasonSaved } from "../lib/seasonTurn";
 import { inApplicationTransaction } from "../repos/seatApplications";
@@ -74,10 +68,6 @@ export function register(app: Express, deps: Deps): void {
     makeRoleStartGate({
       dials: () => roleStartDials(deps.boolVar),
       agreement,
-      emailOf: async (id) => {
-        const m: any = await members.byId(id);
-        return m?.email ? String(m.email) : null;
-      },
       membershipGranted: async (id) => !!((await members.byId(id)) as any)?.membershipGranted,
     }),
     () => agreement() !== null,
@@ -94,12 +84,6 @@ export function register(app: Express, deps: Deps): void {
     return yes;
   };
 
-  // A sign-up through an adopted open proposal's invitation carries the membership made at application.
-  whenInvitedArrives(OPEN_INVITE_PREFIX, async ({ userId }) => {
-    const m: any = await members.byId(userId);
-    if (!m?.email) return;
-    await inApplicationTransaction(getPool(), (conn) => carryToAccount(conn, { userId, email: String(m.email), now: now() }));
-  });
 
   app.get("/api/confidentiality", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");

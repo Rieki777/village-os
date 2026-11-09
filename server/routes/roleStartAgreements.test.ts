@@ -41,6 +41,7 @@ import { createOrgRole, seatHolder } from "../lib/orgChart";
 import { START_STEPS, START_WORDS } from "../lib/roleStartAgreements";
 import { runSeasonTurn } from "../lib/seasonTurn";
 import { usersRepo } from "../repos/users";
+import { dbCollection } from "../repos/store-db";
 import { inApplicationTransaction } from "../repos/seatApplications";
 import { register as registerConfidentiality } from "./confidentiality";
 import { register as registerOpenProposals } from "./openProposals";
@@ -64,6 +65,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
   let gate = "";
   let founderRole = "";
   let n = 0;
+  let signings: ReturnType<typeof dbCollection>;
 
   const state = {
     viewer: null as string | null,
@@ -90,6 +92,23 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
     gate = await createOrgRole(pool, { id: "rsa-role-gate", name: "Gate Keeper", seats: 20, circleId: "c-land", aim: "Open the gate at dawn." });
     founderRole = await createOrgRole(pool, { id: "rsa-role-founder", name: "Founder", seats: 1, circleId: "c-core", aim: "Hold the village." });
     await seatHolder(pool, founderRole, { userId: FOUNDER.id, seasonId: "s-now", termEndsAt: new Date("2036-12-01T00:00:00Z") });
+
+    // The submissions collection as server/index.ts keeps it: the one door a signing row goes in by.
+    signings = dbCollection(pool, {
+      table: "submissions",
+      orderBy: "`submitted_at`, `id`",
+      columns: [
+        { js: "id", db: "id" },
+        { js: "type", db: "type" },
+        { js: "status", db: "status" },
+        { js: "data", db: "data", kind: "json" },
+        { js: "rewarded", db: "rewarded", kind: "bool" },
+        { js: "userId", db: "user_id" },
+        { js: "userName", db: "user_name" },
+        { js: "submittedAt", db: "submitted_at", kind: "time" },
+      ],
+    });
+    await signings.load();
 
     const app = express();
     app.use(express.json());
@@ -132,6 +151,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       recordStageEvent: async () => undefined,
       sessionsOn: () => false,
       letterSource: () => LETTER_SOURCE,
+      signings: { insert: (entry: any, also?: any) => signings.insert(entry, also) },
     } as any);
     registerConfidentiality(app, {
       authedUser,
@@ -433,6 +453,22 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       expect(mine).toHaveLength(1);
       expect(mine[0].body).toBe(currentLetter(LETTER_SOURCE).body);
       expect(await q("SELECT refers_to FROM alignment_endings WHERE text_id = ? AND kind = 'superseded'", [atAddress[0].id])).toEqual([{ refers_to: mine[0].id }]);
+      // A form alone never admits anyone: the signing request a steward accepts is queued, in their name,
+      // exactly like a normal signing, and the account's letter names it.
+      const queued = await q("SELECT id, type, status, user_id, data FROM submissions WHERE user_id = ?", [newcomer]);
+      expect(queued).toHaveLength(1);
+      expect(queued[0]).toMatchObject({ type: "membership-508", status: "new", user_id: newcomer });
+      const data = typeof queued[0].data === "string" ? JSON.parse(queued[0].data) : queued[0].data;
+      expect(data).toMatchObject({ email, letterVersion: currentLetter(LETTER_SOURCE).version, alignedAtApplication: true });
+      expect(data).not.toHaveProperty("monthlyContribution");
+      expect(signings.all().some((r: any) => r.id === queued[0].id)).toBe(true);
+      expect((await q("SELECT subject_ref FROM alignment_texts WHERE id = ?", [mine[0].id]))[0].subject_ref).toBe(`${currentLetter(LETTER_SOURCE).version}:${queued[0].id}`);
+      const after = await usersRepo(pool).byId(newcomer);
+      expect(after?.membershipGranted ?? false).toBeFalsy();
+      expect(after?.stageGranted ?? null).not.toBe("member");
+      // A second arrival hook run (a retry) queues nothing twice.
+      await door.welcome(inviter as string, newcomer);
+      expect(await q("SELECT id FROM submissions WHERE user_id = ?", [newcomer])).toHaveLength(1);
       // Not asked again: no step names the membership letter.
       expect(state.notices.some((x) => x.userId === newcomer && x.title.endsWith("before your role starts"))).toBe(false);
       await turn(new Date("2037-01-01T12:00:00Z"), "s-next");
@@ -459,6 +495,19 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       expect(told?.link).toBe("/love-letter");
       await turn(new Date("2037-01-01T12:00:00Z"), "s-next");
       expect(await seatedIn(newcomer)).toEqual([]);
+      // CONTROL for the queue: nothing aligned at application, so no signing is queued on their behalf.
+      expect(await q("SELECT id FROM submissions WHERE user_id = ?", [newcomer])).toEqual([]);
+    });
+
+    it("an address that already has an account is carried at confirm, with its signing request queued once", async () => {
+      const who = await newAccount("already-here");
+      await proposeAndConfirm(who.email, true);
+      const queued = await q("SELECT type, status FROM submissions WHERE user_id = ?", [who.id]);
+      expect(queued).toEqual([{ type: "membership-508", status: "new" }]);
+      expect(await q("SELECT t.id FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? AND t.subject_type = 'membership'", [who.id])).toHaveLength(1);
+      // A second proposal aligned with the same words carries nothing more and queues nothing more.
+      await proposeAndConfirm(who.email, true);
+      expect(await q("SELECT id FROM submissions WHERE user_id = ?", [who.id])).toHaveLength(1);
     });
 
     it("refuses a letter version that is not the letter on screen now, and sends nothing", async () => {

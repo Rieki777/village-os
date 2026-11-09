@@ -98,4 +98,17 @@ export const CONFIDENTIALITY_WORDS = {
   none: "The village has not written its confidentiality agreement yet.",
   changed: "The agreement changed while you were reading it. Read it again, then align.",
   unreadable: "The agreement could not be read just now. Try again in a moment.",
+  alignFirst: "These records are private. Align with the village's confidentiality agreement first: it is one click on the Aligned page, then come back.",
 } as const;
+
+/** Where the agreement is aligned with: the card at the top of /aligned. */
+export const ALIGN_FIRST_HREF = "/aligned#confidentiality";
+
+/**
+ * THE REFUSAL A KEY BOUND TO THE AGREEMENT ANSWERS WITH (coordinator, 9 Nov
+ * 2026): everybody who reads private records aligns first, the admin included,
+ * so the refusal says exactly where, for anybody it reaches.
+ */
+export function alignmentRefusal(): { error: "alignment_required"; message: string; alignAt: string } {
+  return { error: "alignment_required", message: CONFIDENTIALITY_WORDS.alignFirst, alignAt: ALIGN_FIRST_HREF };
+}
