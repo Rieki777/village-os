@@ -50,11 +50,20 @@ import crypto from "crypto";
 import fs from "fs";
 import type { Express, RequestHandler, Response } from "express";
 import { splitArtifact, type SplitResult } from "../lib/groundsSplit";
+import { webpSplit } from "../lib/groundsWebp";
 import { effectiveLifecycle, requireModule } from "../lib/modules";
 
 interface Deps {
   /** The artifact on disk. Absent is a real state: the routes answer 404. */
   groundsFile: string;
+  /** S2: re-encode the lifted images as WebP in the background (default on). */
+  webp?: boolean;
+}
+
+/** What register hands back: a way for a test to wait for the WebP pass. */
+export interface GroundsRoutes {
+  /** Settles once the current version's WebP pass has finished (or failed). */
+  webpReady(): Promise<void>;
 }
 
 /** `requireModule`'s body for a module that is off. */
@@ -71,8 +80,9 @@ const mapNotOff: RequestHandler = (_req, res, next) => {
   next();
 };
 
-export function register(app: Express, deps: Deps): void {
+export function register(app: Express, deps: Deps): GroundsRoutes {
   const { groundsFile } = deps;
+  const useWebp = deps.webp !== false;
 
   /**
    * Identify the artifact by content, so it can be cached forever.
@@ -98,17 +108,45 @@ export function register(app: Express, deps: Deps): void {
    * memory: the file is read once per version, never per request, and never
    * written. server/lib/groundsSplit.ts says why this is no visible change.
    */
-  let groundsTag: { key: string; hash: string; split: SplitResult } | null = null;
-  const groundsInfo = (): { bytes: number; hash: string; split: SplitResult } | null => {
+  /*
+   * ── S2 STEP 1: THE SAME PAGE, NAMING WEBP IMAGES ─────────────────────────
+   *
+   * Once per version a background pass re-encodes the lifted images as WebP
+   * (server/lib/groundsWebp.ts, 3,678 KB to 1,866 KB on 9 Nov 2026). Until it
+   * finishes the S1 page is served; after, the page that names the WebP files.
+   * The two are DIFFERENT BYTES, so they get different immutable URLs: the
+   * WebP page's hash is derived from the source's, and the manifest names
+   * whichever is current. Both hashed URLs answer, so a shell that read the
+   * manifest a moment before the swap still gets a page, and every original
+   * image stays servable for pages cached before it.
+   */
+  type Version = { key: string; hash: string; split: SplitResult; webp: SplitResult | null; webpHash: string; pass: Promise<void> };
+  let groundsTag: Version | null = null;
+  const groundsInfo = (): { bytes: number; hash: string; split: SplitResult; version: Version } | null => {
     if (!fs.existsSync(groundsFile)) return null;
     const st = fs.statSync(groundsFile);
     const key = `${st.size}:${st.mtimeMs}`;
     if (groundsTag?.key !== key) {
       const raw = fs.readFileSync(groundsFile);
       const digest = crypto.createHash("sha256").update(raw).digest("hex");
-      groundsTag = { key, hash: digest.slice(0, 12), split: splitArtifact(raw.toString("utf8")) };
+      const split = splitArtifact(raw.toString("utf8"));
+      const v: Version = {
+        key, hash: digest.slice(0, 12), split, webp: null,
+        webpHash: crypto.createHash("sha256").update(digest + ":webp").digest("hex").slice(0, 12),
+        pass: Promise.resolve(),
+      };
+      if (useWebp && split.assets.size) {
+        v.pass = webpSplit(split).then(
+          (w) => { if (w.renamed.size) v.webp = w; },
+          (err) => console.warn("[grounds] WebP pass failed; serving the S1 images", err),
+        );
+      }
+      groundsTag = v;
     }
-    return { bytes: st.size, hash: groundsTag.hash, split: groundsTag.split };
+    const v = groundsTag;
+    return v.webp
+      ? { bytes: st.size, hash: v.webpHash, split: v.webp, version: v }
+      : { bytes: st.size, hash: v.hash, split: v.split, version: v };
   };
 
   /*
@@ -120,10 +158,12 @@ export function register(app: Express, deps: Deps): void {
     if (!info) return res.status(404).json({ error: "map_artifact_absent" });
     // A stale hash means a client is asking for a version we no longer have.
     // Redirect rather than 404: the shell re-reads the manifest and recovers.
-    if (req.params.hash !== info.hash) return res.redirect(302, `/grounds/grounds-${info.hash}.html`);
+    const v = info.version;
+    const page = req.params.hash === v.hash ? v.split : v.webp && req.params.hash === v.webpHash ? v.webp : null;
+    if (!page) return res.redirect(302, `/grounds/grounds-${info.hash}.html`);
     res.type("html");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.send(info.split.html);
+    res.send(page.html);
   });
 
   /*
@@ -148,6 +188,7 @@ export function register(app: Express, deps: Deps): void {
    * memory and never resolved against the disk, so no path reaches a file.
    */
   app.get("/grounds/a/:name", mapNotOff, (req, res) => {
+    // The WebP split holds every original too, so either page's images resolve.
     const asset = groundsInfo()?.split.assets.get(String(req.params.name));
     if (!asset) return res.status(404).json({ error: "map_asset_absent" });
     res.setHeader("Content-Type", asset.type);
@@ -173,4 +214,6 @@ export function register(app: Express, deps: Deps): void {
     res.setHeader("Cache-Control", "no-store");
     res.json({ present: true, bytes: info.bytes, url: `/grounds/grounds-${info.hash}.html` });
   });
+
+  return { webpReady: () => groundsInfo()?.version.pass ?? Promise.resolve() };
 }
