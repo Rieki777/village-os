@@ -307,7 +307,7 @@ export function publicDraftLines(draft: Pick<Draft, "changes">, context: Pick<Pr
 export function orgDraftBallotText(
   draft: Pick<Draft, "changes">,
   context: Pick<PreviewContext, "roles" | "circles">,
-  why: "nobody-holds-it" | "village-holds-it" | "a-role-holds-it",
+  why: "nobody-holds-it" | "village-holds-it" | "a-role-holds-it" | "the-scaffolding-holds-it",
   on: Date,
 ): { title: string; doc: string } {
   const lines = publicDraftLines(draft, context);

@@ -324,6 +324,10 @@ export const MODULE_DOCS: Readonly<Record<string, string>> = {
   "session-card": "session-card.md",
   // Shipped with its module (2026-11-03). The contract is shared/moonRecap.ts.
   "moon-review": "moon-review.md",
+  // Shipped with their modules (Rye's module ruling, 2026-10-01): the canvas
+  // build's two optional halves. The canvas doc carries the canvas authors' credit.
+  canvas: "governance-canvas.md",
+  "conflict-evolution": "conflict-evolution.md",
   // The four CORE modules. A village cannot switch these off, so their
   // contract docs are the ones a fork operator most needs and the last ones
   // written: the gap ratchet counted all four until 2026-09-06.

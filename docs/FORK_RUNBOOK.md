@@ -152,7 +152,10 @@ above the size of a gathering, not to the size of one person's usage.
 
 ## Seeds & per-deployment data
 
-- `server/seeds/content-seed.json` — page copy (self-heals via `seedIfMissingOrEmpty`).
+- `server/seeds/content-seed.json` — the content document, written once, on a boot that finds no
+  content document (the old `seedIfMissingOrEmpty` self-heal is retired). It ships EMPTY (`{}`,
+  fresh-boot seed audit 2026-09-26): it used to hand every fork one village's four journey
+  ladders, its stages and rites, as dead data no page renders.
 - Starter quests (2026-10-31): the `quests` section of `server/seeds/examples-seed.json`. A fresh
   village opens on them as standing examples a founder keeps (Admin, Quests, Keep, which asks for a
   value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
@@ -1991,6 +1994,68 @@ disabled, which is why it owns this.
 Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
+
+## Loading a season file onto the governance canvas (no migration, 2026-09-26)
+
+A season file is a week map a village lays over its governance canvas: each
+week's date and title, the canvas blocks it works on, and its foundations,
+tools, showcase ask and actions, plus any canvas moons. The Canvas view on
+Journey to Launch (`/journey-to-launch`, the Canvas tab) puts the current
+week's blocks first. It only orders: every block stays on the page and open
+every week, and the Birthing gate never reads the file. A village with no
+season sees the blocks in canvas order and loses nothing.
+
+- **Nothing here needs a ReGen service, or any outside service.** The file is
+  loaded by hand and stored in your own database, as the `canvas-season`
+  document in `app_config`. A self-hosted village with no network access to
+  anyone uses it exactly the same way.
+- **Who can load one:** whoever holds the canvas pen, `story.tell` (before
+  the handover, any admin or founder). Open the Canvas tab, open "Load a
+  season file", paste the JSON or choose the `.json` file, press "Check the
+  file", read the preview, then "Save this season". "Take the season off"
+  goes back to canvas order; "Download this season file" hands the pen a
+  copy first, since taking a season off deletes it.
+- **Who can read it, and the canvas:** a member the village has ADMITTED
+  (`membershipGranted`), and any admin. Being signed in is not enough: an
+  invited account the village has not admitted yet, and anybody who registers
+  on a fork with `membership.invite_only` off, get 403 and one sentence from
+  both `GET /api/canvas` and `GET /api/canvas/season`, and the Canvas tab is
+  not offered to them. The readings name who recorded them, so the canvas is
+  members-only, never public.
+- **A template ships with the platform:** `docs/seasons/season-two-2026.json`
+  (thirteen Saturdays from 26 September to 19 December 2026, 11:00
+  America/Los_Angeles). Copy it and change the dates, titles and blocks to
+  write your own season.
+- **The format** is `shared/canvasSeason.ts`, and its validator is the one the
+  page and the server both run: `id`, `name`, `timezone` (an IANA zone such
+  as `Europe/Amsterdam`), optional `sessionTime` (`HH:MM`) and `description`,
+  `weeks[]` of `{ number, date (YYYY-MM-DD, in the season's timezone), title,
+  blocks[], foundations[], tools[], showcaseAsk, actions[] }` and `moons[]` of
+  `{ date, blocks[], note }`. Block ids are the twelve in
+  `shared/governanceCanvas.ts`; foundation ids are `legal-framework`,
+  `internal-rules`, `culture` and `personal-leadership`. At most 60 weeks, and
+  the whole file under 128,000 characters. A field the format does not know
+  is left out and named in the preview, so a file written for a newer release
+  still loads on an older one.
+- **Over HTTP**, for a script: `PUT /api/canvas/season` with the file as the
+  JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
+  takes it off; `GET /api/canvas/season` reads it back for an admitted member
+  or an admin (403 to any other signed-in account).
+
+## Naming what closing your village means (no migration, 2026-09-27) <a id="closing-policy"></a>
+
+- **Before the launch vote can open, the village names what happens to its treasury and assets if it
+  ever closes** (the blocking row "Name what closing this village means"). In Admin, Departures, under
+  the published policy: choose "Shared by closing-day balances" (the platform's suggested default: in
+  proportion to the contribution tokens each person holds on closing day, and a member who already
+  redeemed receives nothing more) or "In the village's own words", edit the statement, tick "The
+  village adopts these words" and save. The pre-filled words saved without the tick are a draft and do
+  not count. It is stored as the `closing` section of the `exit-policy` app_config document, written by
+  `PUT /api/admin/exit-policy/closing` (`{ policyId, statement, adopt }`, admin session). Every reader
+  sees it at `/exit-policy`; the platform computes and moves nothing on closing. An exit policy saved
+  before this existed reads as "not named yet" until you do this, so a running village sees one new
+  blocking row and nothing else changes. With the default adopted and the redemption module on, the
+  redemption form tells a member what redeeming gives up before they ask.
 
 ## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
 

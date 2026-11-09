@@ -80,7 +80,7 @@ const NOT_SENT: Record<NotSentWhy, string> = {
 };
 
 /** Who may decide at the door now, in the words the page shows a reader who may not. */
-export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-it";
+export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-it" | "the-scaffolding-holds-it";
 
 /**
  * The same three readings by name, for client code: the dash guard
@@ -130,6 +130,8 @@ export const DECIDE_WORDS = {
     "village-holds-it": "The village holds the power that seats people now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
     "nobody-holds-it": "Right now nobody holds the power that seats people, so this proposal waits here until somebody does.",
     "a-role-holds-it": "It is adopted or declined by a holder of the power that seats people.",
+    // Answered only when a caller names who carries the power until the village holds it (shared/powerHands.ts).
+    "the-scaffolding-holds-it": "Until the village holds the power that seats people, the founders and stewards adopt or decline it.",
   } satisfies Record<DoorReason, string>,
 
   // What a decision answers. Every one that sends nothing says what to do instead.

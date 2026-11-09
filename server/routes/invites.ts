@@ -41,6 +41,7 @@ import {
   readInviteToken,
 } from "../lib/invites";
 import { whileSessionHolds } from "../lib/sessionHold";
+import { memberFirstName } from "../../shared/memberFirstName";
 import { createInviteOn, invitesBy, openInviteCount, revokeInvite } from "../repos/memberInvites";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapability" | "mayAct" | "overLimit" | "clientIp"> & {
@@ -48,7 +49,7 @@ type Deps = Pick<AppDeps, "authedUser" | "getPool" | "members" | "guardCapabilit
 };
 
 /** A first name, for a line a stranger holding a link reads. Never a full name, never an address. */
-const firstName = (name: unknown): string => String(name ?? "").trim().split(/\s+/)[0] || "A member";
+const firstName = (name: unknown): string => memberFirstName(name, "A member");
 
 /** What somebody who may not invite yet reads, from the refusal and from their own list alike. */
 const NOT_YET =
