@@ -122,8 +122,12 @@ function dropLegacyWoffFallback(): Plugin {
  * Serve the unhinted copies of the packaged faces (client/src/fonts) in place
  * of @fontsource's own files: the same glyphs, code points and layout
  * features, without the TrueType hinting. 888 KB of the dist budget became
- * 808 KB. client/src/lib/unhintedFonts.ts has the rule and
- * `scripts/unhint-fonts.py --check` the proof that nothing else differs.
+ * 808 KB. Eight families then went to one variable file each, every weight's
+ * @font-face pointing at it with its own single weight unchanged: 39 files
+ * became 9 and the fonts about 350 KB lighter in blocks. client/src/lib/unhintedFonts.ts
+ * has the rule and `scripts/unhint-fonts.py --check` the proof that nothing
+ * else differs, per cut, including that each variable instance lays text out
+ * exactly as the static cut it replaces.
  */
 function useUnhintedFonts(): Plugin {
   const dir = path.resolve(import.meta.dirname, "client", "src", "fonts");
