@@ -27,6 +27,9 @@ const ROUTES = [
   "POST /api/funding-rounds/pots",
   "POST /api/funding-rounds/pots/:id/rounds",
   "PATCH /api/funding-rounds/rounds/:id/dates",
+  "PATCH /api/funding-rounds/ideas/:id",
+  "POST /api/funding-rounds/ideas/:id/withdraw",
+  "PUT /api/funding-rounds/rounds/:id/marks",
 ];
 const STEWARD_ROUTES = ["POST /api/funding-rounds/pots", "POST /api/funding-rounds/pots/:id/rounds", "PATCH /api/funding-rounds/rounds/:id/dates"];
 
