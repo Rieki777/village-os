@@ -73,7 +73,7 @@ describe("what each module lists beyond its namespace", () => {
       ["payments.purchase_limit_annual_usd", ["stays", "exchange"]],
       ["feed.max_hearts_per_recipient_per_cycle", ["gratitude", "feed"]],
       ["feed.category_slug", ["forum", "feed"]],
-      ["map.public_structure", ["map", "resources"]],
+      ["map.public_structure", ["map", "places", "resources"]],
       ["events.rsvp_enabled", ["map", "events"]],
       ["gratitude.base_budget", ["gratitude", "health"]],
       ["health.alert_change_pct", ["gratitude", "health"]],
