@@ -213,10 +213,24 @@ describe("who adopts a canvas answer", () => {
   const after = { birthed: true, handoverComplete: false };
   const handedOver = { birthed: true, handoverComplete: true };
 
-  it("the purpose statement stays with the founders until the handover, the Birthing does not move it", () => {
+  it("the purpose statement's direct pen stays with the founders until the handover, the Birthing does not move it", () => {
     expect(whoAdoptsCanvasAnswer("purpose", before)).toMatchObject({ how: "act", who: "founders", because: "the-scaffolding-holds-it" });
     expect(whoAdoptsCanvasAnswer("purpose", after)).toMatchObject({ how: "act", who: "founders" });
     expect(whoAdoptsCanvasAnswer("purpose", handedOver)).toMatchObject({ how: "ballot", who: "any-member", because: "village-holds-it" });
+  });
+
+  it("the purpose vote is offered before the handover too, beside the founders' pen (Rye, 2026-11-06)", () => {
+    for (const facts of [before, after]) {
+      const rule = whoAdoptsCanvasAnswer("purpose", facts);
+      expect(rule.alsoByVote).toBe(true);
+      expect(canvasPenSentence(rule)).toContain("any member can put a new statement to a vote");
+    }
+    // After the handover the vote is the only door, so there is nothing "also" about it.
+    expect(whoAdoptsCanvasAnswer("purpose", handedOver).alsoByVote).toBeUndefined();
+    // No other pen carries it.
+    for (const pen of ["prose", "consequence", "dial", "module", "admin"] as const) {
+      expect(whoAdoptsCanvasAnswer(pen, before).alsoByVote, pen).toBeUndefined();
+    }
   });
 
   it("canvas prose is story.tell asked of the gate, before and after both moments", () => {

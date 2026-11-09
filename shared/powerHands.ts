@@ -280,11 +280,15 @@ export function whoMayPutHandToVillage(
  * second one. So every pen below is `whoMayPutHandToVillage` asked a question
  * shaped for it, and the only new thing is `scaffolding`:
  *
- *   purpose      the governing purpose statement. The founder keeps the pen
- *                until every transferable power is handed over (GPS ruling 3),
- *                so the village holds it exactly when the handover is
- *                complete, and until then the founders carry it. After, a
- *                change is a ballot (`POST /api/governance/purpose-changes`).
+ *   purpose      the governing purpose statement. The founder keeps the
+ *                direct pen until every transferable power is handed over
+ *                (GPS ruling 3), so the village holds it exactly when the
+ *                handover is complete, and until then the founders carry it.
+ *                After, a change is a ballot (`POST /api/governance/purpose-changes`).
+ *                Since Rye's ruling of 2026-11-06 (Article 0 wins over
+ *                "founder keeps the pen") that ballot is open BEFORE the
+ *                handover too, priced at the village's highest tier, so the
+ *                rule carries `alsoByVote` while the founders hold the pen.
  *   prose        the canvas's words in a brief section. `story.tell`, asked
  *                of the ONE gate, before the handover and after it: the gate
  *                already follows the village's holding of that key (an admin
@@ -344,6 +348,12 @@ export interface CanvasAdoptionRule {
   because: HandOpenerReason;
   /** The capability the gate is asked, when `who` is `the-gate`. */
   capability?: "story.tell" | "dial.set";
+  /**
+   * Beside a direct pen, any member may also put this to the village's vote.
+   * Only the purpose pen before the handover (Rye, 2026-11-06): the founders
+   * write directly, and a highest-tier vote may change the statement too.
+   */
+  alsoByVote?: true;
 }
 
 /** Which power a canvas answer's adoption needs, as one rule. Pure. */
@@ -358,12 +368,16 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
   };
   const rule = asked[pen]();
   const capability = rule.who !== "the-gate" ? undefined : pen === "dial" ? ("dial.set" as const) : ("story.tell" as const);
+  const how = rule.who === "any-member" ? "ballot" : "act";
+  // Article 0 (Rye, 2026-11-06): the purpose vote is open while the founders still hold the direct pen.
+  const alsoByVote = pen === "purpose" && how === "act";
   return {
     pen,
-    how: rule.who === "any-member" ? "ballot" : "act",
+    how,
     who: rule.who,
     because: rule.because,
     ...(capability ? { capability } : {}),
+    ...(alsoByVote ? { alsoByVote: true as const } : {}),
   };
 }
 
@@ -379,7 +393,9 @@ export function canvasPenSentence(rule: CanvasAdoptionRule): string {
     }
     return "The Game has started, so adopting this goes to a vote of the whole village.";
   }
-  if (rule.pen === "purpose") return "The founders keep the purpose statement until every power is handed to the village.";
+  if (rule.pen === "purpose") {
+    return "The founders write the purpose statement until every power is handed to the village, and any member can put a new statement to a vote of the whole village at its highest bar.";
+  }
   if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
   if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
   if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
