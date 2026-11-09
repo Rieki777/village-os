@@ -72,6 +72,11 @@ msgctxt "pricing desk"
 msgid "As little as, for {0}"
 msgstr "As little as, for {0}"
 
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters legend"
+msgid "Characters {roleName} suits"
+msgstr "Characters {roleName} suits"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "In review"
@@ -1709,6 +1714,11 @@ msgstr "Take this change out."
 msgid "Your choices are saved. You can change them until choosing closes."
 msgstr "Your choices are saved. You can change them until choosing closes."
 
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters"
+msgid "Save characters"
+msgstr "Save characters"
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box heading"
 msgid "Your next step"
@@ -2368,6 +2378,10 @@ msgctxt "a switch setting"
 msgid "On"
 msgstr "On"
 
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgid "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
+msgstr "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
+
 #: client/src/components/review/SeraDifferences.tsx
 msgid "The chart and {agent} are in step"
 msgstr "The chart and {agent} are in step"
@@ -2480,6 +2494,11 @@ msgstr "See the open roles"
 msgctxt "funding rounds"
 msgid "Pledge"
 msgstr "Pledge"
+
+#: client/src/components/admin/RoleCharacterTags.tsx
+msgctxt "admin role characters"
+msgid "Characters saved"
+msgstr "Characters saved"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A draft from this queue is still open."
