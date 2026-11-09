@@ -599,9 +599,13 @@ describe("which kinds this build will take to a vote", () => {
    * with Rye's 2026-11-06 rule, inside the limits of shared/brandVote.ts.
    */
   it("names the kinds it can carry out, and no more", () => {
+    // The consequence pen's three (exit_terms, exit_restorative, matrix_row) came in with canvas follow-up G.1, 2026-11-09.
     expect(Array.from(EXECUTABLE_ITEM_KINDS).sort()).toEqual([
       "brand_field",
       "dial",
+      "exit_restorative",
+      "exit_terms",
+      "matrix_row",
       "mint_rule",
       "mint_rule_create",
       "mode_switch",
