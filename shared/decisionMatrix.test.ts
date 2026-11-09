@@ -445,9 +445,23 @@ describe("where a vote is held", () => {
     expect(row(m, `vote:${GOVERNANCE_MODE}`).method.lines.join(" ")).not.toContain("no Hypha leg");
   });
 
-  it("the purpose statement's vote is the founder's pen until the handover completes", () => {
-    expect(row(generateDecisionMatrix(inputs()), `vote:${GPS_CHANGE}`).approval.who).toBe("founder");
-    expect(row(generateDecisionMatrix(inputs({ handoverComplete: true })), `vote:${GPS_CHANGE}`).approval.who).toBe("roll");
+  it("the purpose statement's vote is open before the handover too, at the highest tier, counted as custom (Rye, 2026-11-06)", () => {
+    const early = row(generateDecisionMatrix(inputs()), `vote:${GPS_CHANGE}`);
+    expect(early.approval.who).toBe("roll");
+    expect(early.approval.text).toContain("the founder can also write the statement directly");
+    expect(early.approval.text).not.toContain("cannot be opened");
+    expect(early.method).toMatchObject({ kind: "custom", tierFloor: "constitutional", ...TIER_FLOORS.constitutional });
+    // A village that set its highest tier lower is priced at that tier.
+    const structuralTop = row(
+      generateDecisionMatrix(inputs({ settings: thresholdSettingsFrom(() => 0, (k) => (k === "governance.highest_tier" ? "structural" : "")) })),
+      `vote:${GPS_CHANGE}`,
+    );
+    expect(structuralTop.method.tierFloor).toBe("structural");
+
+    const late = row(generateDecisionMatrix(inputs({ handoverComplete: true })), `vote:${GPS_CHANGE}`);
+    expect(late.approval.who).toBe("roll");
+    expect(late.approval.text).not.toContain("founder");
+    expect(late.method.tierFloor).not.toBe("constitutional");
   });
 
   it("a power vote says only a member may open it", () => {
