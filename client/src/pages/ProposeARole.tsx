@@ -18,6 +18,7 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
+import { useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { ArrowRight, MailCheck } from "lucide-react";
@@ -112,17 +113,25 @@ export default function ProposeARole() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ field: string | null; message: string } | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  /** How many of the roles the link named the village no longer offers. */
+  const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
+  const { t } = useLingui();
 
   useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get("role") ?? "";
+    // Every role a link or the draft board sent, in order (role draft board, 9 Nov).
+    const wanted = new URLSearchParams(window.location.search).getAll("role").map((r) => r.trim()).filter(Boolean);
     fetch(`/api/open-proposals/form${link ? `?link=${encodeURIComponent(link)}` : ""}`)
       .then((r) => r.json())
       .then((d) => {
         const roles: FormRole[] = Array.isArray(d?.roles) ? d.roles : [];
         setForm(d?.open ? { kind: "open", village: String(d.village ?? ""), season: d.season ?? null, roles } : { kind: "closed", message: String(d?.message ?? OPEN_WORDS.closed) });
-        // The role the Apply link was for, ticked, when the village still offers it.
-        if (d?.open && wanted && roles.some((r) => r.id === wanted)) setPicked((p) => (Object.keys(p).length ? p : { [wanted]: "" }));
+        // The roles the Apply link or the draft was for, ticked while the village still offers them.
+        if (d?.open && wanted.length) {
+          const offered = wanted.filter((id) => roles.some((r) => r.id === id)).slice(0, OPEN_PROPOSAL_MAX_ROLES);
+          setUnoffered(wanted.filter((id) => !roles.some((r) => r.id === id)).length);
+          if (offered.length) setPicked((p) => (Object.keys(p).length ? p : Object.fromEntries(offered.map((id) => [id, ""]))));
+        }
       })
       .catch(() => setForm({ kind: "failed" }));
   }, [link]);
@@ -229,6 +238,13 @@ export default function ProposeARole() {
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.pickRoles} <span className="font-normal text-muted-foreground">({count} of {OPEN_PROPOSAL_MAX_ROLES})</span>
             </legend>
+            {unoffered > 0 && (
+              <p role="status" className="rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
+                {unoffered === 1
+                  ? t`1 role you picked is not open for next season any more. Pick from the roles below.`
+                  : t`${unoffered} roles you picked are not open for next season any more. Pick from the roles below.`}
+              </p>
+            )}
             {circles.map(([circle, roles]) => (
               <div key={circle} className="space-y-2">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{circle}</h2>

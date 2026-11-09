@@ -26,6 +26,7 @@ import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLingui } from "@lingui/react/macro";
 import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
@@ -357,6 +358,7 @@ export default function Roles() {
   // Who may say what a seat is held for. The server refuses everybody else by
   // itself; this only decides whether the control is drawn.
   const { user } = useAuth();
+  const { t } = useLingui();
   const canTagNeeds = !!user && (user.role === "admin" || user.role === "founder");
   // The card's clock and the village's class names: one cached read each for
   // the whole page, however many rows are opened.
@@ -491,6 +493,14 @@ export default function Roles() {
               is a way to hold some of it with your own hands, by{" "}
               <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
             </p>
+            {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
+            <Link
+              href="/roles/draft"
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {t({ message: "Draft your roles", context: "roles page button" })}
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
           </m.div>
 
           <div className="max-w-4xl mx-auto">
