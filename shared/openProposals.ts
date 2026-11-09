@@ -196,6 +196,14 @@ export function andList(items: readonly string[]): string {
   return `${clean.slice(0, -1).join(", ")} and ${clean[clean.length - 1]}`;
 }
 
+/**
+ * THE DATA PROMISE ON AI DRAFTING (Rye, 9 Nov 2026: the Anchor approved the
+ * connector's `draft_letter`). On the form's privacy note, where the page
+ * renders it through Lingui with these same words, and in the confirmation
+ * email. Village-neutral, so it is platform copy.
+ */
+export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
+
 /** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
 export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
   return {
@@ -209,6 +217,8 @@ export function confirmLetter(i: { firstName: string | null; village: string; ro
       i.link,
       "",
       `The link works for ${OPEN_CONFIRM_HOURS} hours. If this wasn't you, leave it, and nothing happens.`,
+      "",
+      OPEN_AI_DRAFTS,
       "",
     ].join("\n"),
   };

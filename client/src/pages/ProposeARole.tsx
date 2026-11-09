@@ -374,6 +374,10 @@ export default function ProposeARole() {
             <p className="mt-1 text-sm text-muted-foreground" data-kept-for="">
               {OPEN_WORDS.keptFor}
             </p>
+            {/* The same words as OPEN_AI_DRAFTS, which the confirmation email carries (Rye, 9 Nov 2026). */}
+            <p className="mt-1 text-sm text-muted-foreground" data-ai-drafts="">
+              {t`An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.`}
+            </p>
           </div>
           <Practicalities value={practical} onChange={setPractical} />
           {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}

@@ -6524,6 +6524,10 @@ msgstr ""
 msgid "Add to my notebook"
 msgstr ""
 
+#: client/src/pages/ProposeARole.tsx
+msgid "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing."
+msgstr ""
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The agreement could not be read just now."
 msgstr ""

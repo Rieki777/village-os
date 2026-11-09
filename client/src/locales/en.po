@@ -6501,6 +6501,10 @@ msgstr "Your own figure first, before you see the suggestion (optional)"
 msgid "Add to my notebook"
 msgstr "Add to my notebook"
 
+#: client/src/pages/ProposeARole.tsx
+msgid "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing."
+msgstr "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing."
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The agreement could not be read just now."
 msgstr "The agreement could not be read just now."

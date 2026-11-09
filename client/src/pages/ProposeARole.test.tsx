@@ -11,7 +11,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { OPEN_WORDS } from "@shared/openProposals";
+import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -111,6 +111,13 @@ describe("the form", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
+  });
+
+  it("the privacy note says an AI may draft replies, in the same words as the confirmation email", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    expect(document.querySelector("[data-ai-drafts]")?.textContent).toBe(OPEN_AI_DRAFTS);
   });
 
   it("the honeypot is there, hidden from people and from screen readers", async () => {
