@@ -1011,6 +1011,16 @@ export const VARIABLES: VariableDef[] = [
     default: "true",
   },
   {
+    // Rye, 2026-11-09: quests are fun, and families are encouraged.
+    key: "quest.minimum_ages",
+    category: "Quests",
+    label: "Let quests ask a minimum age",
+    description:
+      "Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.",
+    type: "boolean",
+    default: "false",
+  },
+  {
     key: "quest.self_consent_until_members",
     category: "Quests",
     label: "Founder may self-consent below this many members",

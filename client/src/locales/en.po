@@ -119,6 +119,11 @@ msgctxt "label of an answer box"
 msgid "Your answer"
 msgstr "Your answer"
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "{a} and older"
+msgstr "{a} and older"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Village signing key"
@@ -339,9 +344,9 @@ msgid "Build a module"
 msgstr "Build a module"
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "Physical work on site"
-msgstr "Physical work on site"
+#~ msgctxt "admin quest safety"
+#~ msgid "Physical work on site"
+#~ msgstr "Physical work on site"
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -1116,6 +1121,11 @@ msgstr "Why"
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 msgstr "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
 
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Every quest is open to every age, and families are welcome. A village that wants minimum ages turns on Let quests ask a minimum age in Settings, under Quests."
+msgstr "Every quest is open to every age, and families are welcome. A village that wants minimum ages turns on Let quests ask a minimum age in Settings, under Quests."
+
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "What it is for"
@@ -1302,9 +1312,9 @@ msgid "No invoice has been sent yet."
 msgstr "No invoice has been sent yet."
 
 #: client/src/components/admin/QuestSafetyEditor.tsx
-msgctxt "admin quest safety"
-msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
-msgstr "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
+#~ msgctxt "admin quest safety"
+#~ msgid "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
+#~ msgstr "A physical quest asks 18 unless you set a minimum. It can ask 16 for light work beside a named adult, never lower, and never for machines or heights."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
@@ -1602,6 +1612,11 @@ msgstr "This asks again after <0>a vote too few of us answered</0>."
 msgctxt "pricing desk"
 msgid "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
 msgstr "{0} is below the band ({1} to {2}). Pick a reason, then a second Treasurer or a steward signs it."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Open to every age"
+msgstr "Open to every age"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2312,6 +2327,11 @@ msgstr "The chart and {agent} are in step"
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Anyone here can suggest a change. The village decides."
 msgstr "Anyone here can suggest a change. The village decides."
+
+#: client/src/components/admin/QuestSafetyEditor.tsx
+msgctxt "admin quest safety"
+msgid "Hands-on quest on site"
+msgstr "Hands-on quest on site"
 
 #. placeholder {0}: counts.hours
 #: client/src/components/valuation/PricingDesk.tsx
