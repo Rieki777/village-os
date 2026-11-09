@@ -515,6 +515,8 @@ export interface CompanionView {
   engineConnected: boolean;
   /** Who answers the chat right now, which is the village guide while the outside side is not connected. */
   chatEngine: string;
+  /** The outside agent's name as the saberra module gives it, for the engine picker. */
+  outsideEngine: string;
   name: string;
   /** "Personal companion", "Treasurer companion", "Pizza oven quest". */
   scopeLine: string;
