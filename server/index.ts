@@ -115,6 +115,7 @@ import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./route
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
 import { register as registerExportVoteRoutes } from "./routes/exportVotes"; // one database export, by the village's vote (Rye 2026-11-06)
 import { register as registerAdminSuggestionRoutes } from "./routes/adminSuggestions"; // a member suggests an edit to an admin control (ROLE_POWERS_DESIGN 4.5)
+import { register as registerSuggestionRouteDial, loadSuggestionRoutes } from "./routes/suggestionRoutes"; // where suggestions on each power go, turned by power.assign (4.5)
 import { approveMintRequest, declineMintRequest, type MintRequestDeps } from "./lib/mintRequests";
 import { recentMintRequests } from "./repos/adminMintRequests";
 import { newMintRuleProblem } from "./lib/mintRuleCreate"; // a new minting rule by vote, checked at raise
@@ -1561,7 +1562,7 @@ async function initStores(): Promise<void> {
     emailConfigRepo.load(),
     settingsRepo.load(),
     brandRepo.load(),
-    loadBrochurePages(getPool()), loadVillagePaths(getPool()),
+    loadBrochurePages(getPool()), loadVillagePaths(getPool()), loadSuggestionRoutes(getPool()),
     mapVocabRepo.load(),
     mapWalkRepo.load(),
     workWithUsRepo.load(),
@@ -18231,7 +18232,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
-  registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members });
+  registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members, questsRepo, electorate: buildElectorate });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
   registerMemberTaskBridgeRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, notify, timeZone: () => getSeasonConfig().timezone });
   registerSessionCardRoutes(app, { authedUser, isAdmin, getPool, overLimit, members, guideName: () => guidePromptName(getWorkWithUs().assistantName) });
@@ -18260,7 +18261,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
-  registerValuationRoutes(app, { authedUser, getPool, guardCapability, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
+  registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
   const invoiceRails = invoiceRailsDeps({ getPool, postOffice: commsPostOffice, projectName: () => mergedConfig().project.name, memberById: async (id) => (await members.byId(id)) as unknown as { walletAddress?: string | null; walletVerifiedAt?: string | null } | null, boolVar, stringVar }); // the invoice rails and the treasury sync (server/routes/invoiceRails.ts)
   registerMoonRecapRoutes(app, { authedUser, getPool, overLimit, seasonState, lapseContext, members, notify, mayAct, cashKeyHolders: () => liveHoldersOf("cash.pay"), keyHolders: liveHoldersOf, afterInvoiceSent: (uid, invoice) => emailInvoiceToSera(invoiceRails.mail, uid, invoice) }); // the end-of-moon review, member and approver doors (module moon-review, server/routes/moonRecaps.ts and moonReview.ts)
   registerMoonReviewSettingsRoutes(app, { authedUser, getPool, guardCapability, overLimit, members, notify, inboxSigners: async () => [...(await liveHoldersOf("cash.pay")), ...(await liveHoldersOf("steward.veto"))] }); // decision 22: the moon review's village settings (server/routes/moonReviewSettings.ts)
@@ -22555,6 +22556,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerMintRequestVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerExportVoteRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, notify, members, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
   registerAdminSuggestionRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, overLimit, notify, members, firstName, liveHoldersOf, ballotSetup: roleBallotSetup, notifyRoll, governanceOn: () => effectiveLifecycle("governance") !== "off", closers: SUBJECT_CLOSERS });
+  registerSuggestionRouteDial(app, { authedUser, capabilityCtx, liveHoldersOf, getPool });
 
 
   /**

@@ -6,12 +6,12 @@
  * count, not a currency, not a valuation. Nothing in this file can therefore
  * write one, however anybody later decides to call a function here.
  *
- * The rule it is keeping comes from server/lib/ledger.ts's own header: equity
- * and voice are HYPHA-GOVERNED tokens that live on Base and are mirrored here
- * READ-ONLY, because a platform that posted one "would quietly become the
- * source of truth for the cap table", which decision 5 forbids and the boot
- * invariants fail loud on. A column here holding how much somebody put in
- * would be that second source exactly: a member-facing capital figure written
+ * The rule it is keeping comes from server/lib/ledger.ts's own header: a token
+ * has exactly ONE source of truth. Decision 5, as amended 2026-11-09, puts
+ * equity on the platform first, so until Hypha goes live that source is the
+ * ledger, and after it graduates the source is Hypha; either way it is never
+ * this table. A column here holding how much somebody put in
+ * would be a second source exactly: a member-facing capital figure written
  * outside `postTransfer`, outside the per-token SUM(balance) = 0 invariant,
  * and outside `token_balances`' recompute-never-increment discipline, with
  * nothing anywhere reconciling the two.

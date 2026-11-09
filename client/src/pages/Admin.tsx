@@ -7909,6 +7909,7 @@ export default function Admin() {
         onNight={setNight}
         onSignOut={() => setPassword(null)}
         extra={<AdminSeraChip password={password} />}
+        defaultLocale={cfg?.defaultLocale ?? null}
       />
 
       <div className="flex w-full">
