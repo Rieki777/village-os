@@ -216,6 +216,7 @@ import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
+import { register as registerAgentProposalsRoutes } from "./routes/agentProposals";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
@@ -6853,6 +6854,7 @@ async function startServer() {
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentProposalsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf }); // role journey L13: what the connector proposes waits for a person (server/routes/agentProposals.ts)
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {
       authedUser, getPool, overLimit, clientIp,
