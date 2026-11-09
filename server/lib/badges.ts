@@ -44,6 +44,7 @@ import type { NotifyInput } from "./notify";
 import { shownGeneKeysUserIds } from "../repos/geneKeys";
 import { recordBadgeTier } from "../repos/badgeEvents";
 import { deleteBadgeAward } from "../repos/badgeAwards";
+import { homesHandedOverByMember, parcelsBoughtByMember } from "../repos/investorMilestones";
 // The sentence that names where the seat is actually filled, borrowed rather
 // than re-spelled: the roles routes and the badge panel are two doors onto
 // one rule, and a second wording of it is a twin that drifts.
@@ -57,7 +58,19 @@ export type BadgeKind = (typeof BADGE_KINDS)[number];
 export const MAX_BADGE_MULTIPLIER = 3;
 
 /** `gene_keys_shown`: 1 for a member whose Gene Keys lines are saved and shown (0287's "Lines found"). */
-export const EARNED_METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"] as const;
+/**
+ * `homes_handed_over` and `parcels_bought`: the investor path's two milestones
+ * (0349, server/lib/investorMilestones.ts), counted from their own tables and
+ * never from any amount.
+ */
+export const EARNED_METRICS = [
+  "quests_consented",
+  "ledger_earned_total",
+  "gratitude_breadth",
+  "gene_keys_shown",
+  "homes_handed_over",
+  "parcels_bought",
+] as const;
 /** Metrics that measure recognition: capability-bearing earned badges may not use them. */
 export const RECOGNITION_METRICS: ReadonlySet<string> = new Set(["gratitude_breadth"]);
 
@@ -621,6 +634,8 @@ async function metricValues(pool: Pool, metric: string): Promise<Map<string, num
     // Shown rows only: a public badge must never say a member did Gene Keys they keep hidden.
     return new Map((await shownGeneKeysUserIds(pool)).map((id) => [id, 1]));
   }
+  if (metric === "homes_handed_over") return homesHandedOverByMember(pool);
+  if (metric === "parcels_bought") return parcelsBoughtByMember(pool);
   return new Map();
 }
 
