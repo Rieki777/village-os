@@ -1480,6 +1480,44 @@ export const MODULES: ModuleDef[] = [
     // stage and not closed holds the module on (server/lib/fundingRounds.ts).
   },
   {
+    id: "places",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "registry-keeper",
+        kind: "hands",
+        ref: "place.tend",
+        title: "Seat someone in a role that keeps the place registry, then import the village's places",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/places.md Setup",
+      },
+    ],
+    tier: "included",
+    // A place is village content: its name, zone, stage and words. Who holds
+    // its roles is read from the org chart and sent only on the map's own
+    // viewPeople tier, and no child's location is ever stored (0346).
+    dataClass: "village-content",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Living places",
+    description:
+      "Every place on the land as a living invitation: what it is, which stage it has reached from idea to built, which permits it waits on, the roles that care for it, and how to step forward as its steward.",
+    // The anchors come from the map's published scene, and a place with no
+    // anchor is listed without being drawn, so the map is recommended, never
+    // required.
+    requires: [],
+    recommends: ["map", "governance"],
+    capabilities: ["place.tend", "place.permit"],
+    // A visitor reads the public tier only while the org chart is public.
+    variableKeys: ["map.public_structure"],
+    apiPrefixes: ["/api/place-registry"],
+  },
+  {
     id: "session-card",
     guild: [],
     tier: "included",

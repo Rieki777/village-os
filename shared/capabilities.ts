@@ -131,6 +131,8 @@ export type Capability =
   // org draft put to the vote (constitution 0.3).
   | "role.pay" // set what a role is worth and pays
   | "pot.steward" // hold a funding pot: open its rounds, set their dates, rule on whether an idea fits
+  | "place.tend" // keep the place registry: import the seed, confirm a match, set readiness, adopt a stage change
+  | "place.permit" // keep a place's permit checklist and its preserve and riparian answers
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -266,6 +268,8 @@ export const ALL_CAPABILITIES: Capability[] = [
   "cash.pay",
   "role.pay",
   "pot.steward",
+  "place.tend",
+  "place.permit",
   "module.switch",
   "steward.veto",
   "comms.manage",
@@ -340,6 +344,8 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
   "role.pay": "Set what a role is worth and pays, beside the valuation engine's suggestion",
   "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
+  "place.tend": "Keep the place registry: import it, confirm a place, set its readiness, and adopt a stage change",
+  "place.permit": "Keep a place's permit checklist and its preserve and riparian answers",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
@@ -557,6 +563,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // being paid is sent to the village instead (the conflict rule).
   "role.pay": true,
   "pot.steward": true,
+  // Living places (0346). FALSE until Rye says otherwise (spec C8, I.10): the
+  // two keys are new, and joining the handover set is his word to give. With
+  // no live holder the village still decides by its vote path (Article 0.3).
+  "place.tend": false,
+  "place.permit": false,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
@@ -724,7 +735,7 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
  * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 30 keys
- * today. The other 21 are not withheld from anybody: they are personal acts
+ * today. The other 23 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
@@ -769,6 +780,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 2026-11-06, relayed: a funding pot is a power the Treasurer holds by default
  * and can be handed to another role or the village. That moved only the first:
  * 30 and 21.
+ * `place.tend` and `place.permit` (Living places, 0346) were born held back
+ * until Rye gives his word on them (the places spec, C8), which moved only the
+ * second: 30 and 23.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -969,6 +983,10 @@ export const DENIABLE: Record<Capability, boolean> = {
   // The same: a warning takes away setting other people's pay.
   "role.pay": true,
   "pot.steward": true,
+  // Jobs, the same as the pot: a warning pauses keeping the registry or the
+  // permits, and takes no member's voice in a stage change.
+  "place.tend": true,
+  "place.permit": true,
   // A job as well. Pausing it stops somebody switching modules on alone; the
   // village can still propose one, and the vote decides.
   "module.switch": true,
@@ -1139,6 +1157,10 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // (coordinator, 2026-11-06), so a badge is not an honest way to hand it over.
   "role.pay": false,
   "pot.steward": true,
+  // Ordinary appointments: a badge is an honest way to hand somebody the
+  // registry or the permit checklist.
+  "place.tend": true,
+  "place.permit": true,
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,

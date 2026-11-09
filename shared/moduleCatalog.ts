@@ -440,6 +440,20 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 45,
     emblem: "Sprout",
   },
+  places: {
+    promise: "Every place on the land as a living invitation, from the first idea to a building that needs care.",
+    benefits: [
+      "One list of every place, by zone, with the stage it has reached and how ready it is",
+      "Each place shows the roles that care for it, its open quests and what it waits on",
+      "A place reaches building only with its permits complete and a steward in place, or by the village's highest vote",
+      "Anyone can step forward to steward a place, with what they would build, with whom and by when",
+    ],
+    forWhom: "Villages building on their land that want every place to say what it needs and who it is waiting for.",
+    setupSummary: "Seat someone who keeps the registry, then import the village's places from its seed.",
+    dataSummary: "Each place's name, zone, stage, permits and words. Who holds its roles is read from the org chart, never copied.",
+    hue: 120,
+    emblem: "Landmark",
+  },
   "session-card": {
     promise: "A card to pull as a session opens, so the room starts present with each other and the day.",
     benefits: [
