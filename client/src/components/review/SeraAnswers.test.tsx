@@ -304,7 +304,7 @@ describe("the keyboard (R32)", () => {
     const first = render(<Harness />);
     await screen.findByText(/moving Water Steward/);
     fireEvent.click(screen.getByRole("checkbox", { name: "Keyboard keys" }));
-    expect(screen.getByText(/^Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit\. Escape leaves an edit\.$/)).toBeTruthy();
+    expect(screen.getByText(/^Keys: j or Down for the next, k or Up for the one before, x tick, t take, a keep, e edit\. Escape leaves an edit\.$/)).toBeTruthy();
     first.unmount();
     render(<Harness />);
     await screen.findByText(/moving Water Steward/);

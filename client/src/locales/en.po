@@ -1330,9 +1330,9 @@ msgid "Start a crew and invite friends"
 msgstr "Start a crew and invite friends"
 
 #: client/src/components/review/SeraKeys.tsx
-msgctxt "sera answers"
-msgid "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
-msgstr "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
+#~ msgctxt "sera answers"
+#~ msgid "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
+#~ msgstr "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing here matches what is chosen above."
@@ -1448,6 +1448,11 @@ msgstr "All checked"
 #: client/src/components/review/SeraOnReview.tsx
 msgid "What each of these holds is in the list above, so none of it is offered here a second time."
 msgstr "What each of these holds is in the list above, so none of it is offered here a second time."
+
+#: client/src/components/review/SeraKeys.tsx
+msgctxt "sera answers"
+msgid "Keys: j or Down for the next, k or Up for the one before, x tick, t take, a keep, e edit. Escape leaves an edit."
+msgstr "Keys: j or Down for the next, k or Up for the one before, x tick, t take, a keep, e edit. Escape leaves an edit."
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"

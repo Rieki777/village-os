@@ -15,6 +15,7 @@
  * (the "go live now" line of the board belongs to the automatic lane, later).
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { possessive } from "@/lib/seraReview";
 import type { SeraActs } from "@/components/review/useSeraActs";
@@ -29,7 +30,8 @@ export function BulkBar({ acts, agent }: { acts: SeraActs; agent: string }) {
   if (n === 0) return null;
   const owner = possessive(agent);
   return (
-    <div className="sticky bottom-0 z-20 -mx-4 px-4 py-3 bg-card border-t border-border shadow-sm flex flex-wrap items-center gap-2">
+    // Above the phone's tab bar (`--tabbar-h`, 0 from 768 px), on the app's ladder just over it (MobileFab.tsx).
+    <div className="sticky bottom-[var(--tabbar-h)] z-[52] -mx-4 px-4 py-3 bg-card border-t border-border shadow-sm flex flex-wrap items-center gap-2">
       <p className="text-sm font-semibold text-foreground mr-auto">{n === 1 ? <Trans context="sera answers">1 ticked</Trans> : <Trans context="sera answers">{n} ticked</Trans>}</p>
       <button type="button" data-bulk="take" disabled={acts.busy} onClick={() => acts.openSheet("take")} className={primary}>
         {t({ message: `Take ${owner} for ${n}`, context: "sera answers" })}
@@ -79,8 +81,10 @@ export function BulkSheet({ acts, agent }: { acts: SeraActs; agent: string }) {
       : n === 1
         ? t({ message: `Take ${owner} for 1 change?`, context: "sera answers" })
         : t({ message: `Take ${owner} for ${n} changes?`, context: "sera answers" });
-  return (
-    <div className="fixed inset-0 z-50" onKeyDown={(e) => e.key === "Escape" && acts.closeSheet()}>
+  // On <body>, at the modal sheets' tier (z-[70], MobileFab.tsx's ladder), so neither the header nor the tab bar
+  // sits over it: inside the page it was under both, and the tab bar covered "Not yet".
+  return createPortal(
+    <div className="fixed inset-0 z-[70]" onKeyDown={(e) => e.key === "Escape" && acts.closeSheet()}>
       <div aria-hidden="true" className="absolute inset-0 bg-foreground/45" onClick={() => acts.closeSheet()} />
       <section
         role="dialog"
@@ -132,6 +136,7 @@ export function BulkSheet({ acts, agent }: { acts: SeraActs; agent: string }) {
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

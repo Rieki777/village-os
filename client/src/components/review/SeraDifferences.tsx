@@ -352,15 +352,11 @@ function SeraList({
       )}
     </div>
   );
-  // What waits in a draft, and what the last act did (R13, R30).
-  const answers = (
-    <>
-      <StatusStrip acts={acts} />
-      {drafts.map((g) => (
-        <InDraftCard key={g.draftId} group={g} onChanged={reload} say={acts.say} />
-      ))}
-    </>
-  );
+  // What waits in a draft (R13). The strip that says what the last act did is a direct child of the
+  // section, so it can stick under the header the whole length of the list (a sticky element never
+  // leaves its parent).
+  const answers = drafts.map((g) => <InDraftCard key={g.draftId} group={g} onChanged={reload} say={acts.say} />);
+  const strip = <StatusStrip acts={acts} />;
   const bulk = (
     <>
       <BulkBar acts={acts} agent={agent} />
@@ -617,6 +613,7 @@ function SeraList({
           {step ? ` ${t`Nothing waits for you, and no draft is open.`}` : draftOpen ? ` ${t`A draft from this queue is still open.`}` : ""}
         </p>
         {facts && <p className="text-sm leading-normal text-muted-foreground">{factsLine}</p>}
+        {strip}
         {answers}
         {list.lastReadAt !== null && (
           <section aria-labelledby={`${ids}-sw`} className={`${card} p-3.5 flex flex-col gap-2`}>
@@ -646,6 +643,7 @@ function SeraList({
         {troubleCards}
         {askedLine}
         {chipRow}
+        {strip}
         {answers}
         {status_}
         <div className="flex gap-6 items-start" onKeyDown={onKeys}>
@@ -676,6 +674,7 @@ function SeraList({
         {answers}
         {status_}
       </div>
+      {strip}
       <div className="flex flex-col gap-4" onKeyDown={onKeys}>
         {groups(false)}
       </div>

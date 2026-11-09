@@ -1337,9 +1337,9 @@ msgid "Start a crew and invite friends"
 msgstr "Forma una cuadrilla e invita a tus amistades"
 
 #: client/src/components/review/SeraKeys.tsx
-msgctxt "sera answers"
-msgid "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
-msgstr ""
+#~ msgctxt "sera answers"
+#~ msgid "Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit."
+#~ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing here matches what is chosen above."
@@ -1455,6 +1455,11 @@ msgstr ""
 
 #: client/src/components/review/SeraOnReview.tsx
 msgid "What each of these holds is in the list above, so none of it is offered here a second time."
+msgstr ""
+
+#: client/src/components/review/SeraKeys.tsx
+msgctxt "sera answers"
+msgid "Keys: j or Down for the next, k or Up for the one before, x tick, t take, a keep, e edit. Escape leaves an edit."
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx

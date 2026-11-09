@@ -211,10 +211,16 @@ export function EditPanel({ d, acts, agent }: { d: ListedDifference; acts: SeraA
   );
 }
 
-/** What the last act did, with its Undo, until the next one (R30). One polite live region (R32). */
+/**
+ * What the last act did, with its Undo, until the next one (R30). One polite
+ * live region (R32). It sticks under the header while it has something to
+ * say (the page's `top-24` convention), so an act far down the list still
+ * shows its outcome and its Undo, where the bulk board floats it.
+ */
 export function StatusStrip({ acts }: { acts: SeraActs }) {
   const s = acts.strip;
   return (
+    <div className={s ? "sticky top-24 z-30 rounded-[10px] bg-card shadow-sm" : undefined}>
     <div role="status" className={s ? "bg-teal-deep/10 border border-teal-deep rounded-[10px] px-3 py-2.5 text-sm leading-snug text-foreground" : "sr-only"}>
       {s && (
         <>
@@ -234,6 +240,7 @@ export function StatusStrip({ acts }: { acts: SeraActs }) {
           )}
         </>
       )}
+    </div>
     </div>
   );
 }

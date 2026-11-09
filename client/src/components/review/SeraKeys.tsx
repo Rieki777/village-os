@@ -58,7 +58,7 @@ export function KeysLegend({ on }: { on: boolean }) {
   if (!on) return null;
   return (
     <p className="hidden md:block text-[13px] text-muted-foreground">
-      <Trans context="sera answers">Keys: j or ↓ next, k or ↑ back, x tick, t take, a keep, e edit. Escape leaves an edit.</Trans>
+      <Trans context="sera answers">Keys: j or Down for the next, k or Up for the one before, x tick, t take, a keep, e edit. Escape leaves an edit.</Trans>
     </p>
   );
 }
