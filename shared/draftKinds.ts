@@ -226,6 +226,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "intake.moderate": "work the queues the village puts things into, and act on what gets reported",
   "library.keep": "keep the shared library: what comes in, what goes out on loan, what comes back",
   "story.tell": "say what this village is, in public, in its own words",
+  "brief.private": "read and write the brief's four private sections: the people, the legal setup, the land and the red lines",
   "dial.set": "turn the village's own dials, within the ring the village governs",
   "quest.approve": "put a proposed quest on the board, and set what finishing it pays",
   "redemption.confirm":

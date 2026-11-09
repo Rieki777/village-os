@@ -248,10 +248,24 @@ describe("who adopts a canvas answer", () => {
     expect(whoAdoptsCanvasAnswer("consequence", { ...after, votable: false })).toMatchObject({ how: "ballot" });
   });
 
-  it("the administrators' sections stay theirs whatever happens", () => {
+  // Canvas follow-up G.4 and D1 (AC1.5, AC2.1): the administrators keep the
+  // four private sections until a power_grant vote seats brief.private on a
+  // role; after the Birthing its live holders hold the pen.
+  it("the administrators' sections stay theirs while nobody holds brief.private, and its live holders take them after the Birthing", () => {
     for (const facts of [before, after, handedOver]) {
       expect(whoAdoptsCanvasAnswer("admin", facts)).toMatchObject({ how: "act", who: "admins" });
+      expect(whoAdoptsCanvasAnswer("admin", { ...facts, holders: { admin: [] } })).toMatchObject({ how: "act", who: "admins" });
     }
+    const seated = { holders: { admin: ["keeper-1"] } };
+    expect(whoAdoptsCanvasAnswer("admin", { ...after, ...seated })).toMatchObject({ how: "act", who: "live-holders", holders: ["keeper-1"] });
+    expect(whoAdoptsCanvasAnswer("admin", { ...handedOver, ...seated })).toMatchObject({ who: "live-holders", holders: ["keeper-1"] });
+    // Before the Birthing the administrators keep the pen even with a holder seated.
+    expect(whoAdoptsCanvasAnswer("admin", { ...before, ...seated })).toMatchObject({ who: "admins" });
+    // Only the admin pen reads it.
+    expect(whoAdoptsCanvasAnswer("prose", { ...after, ...seated })).toMatchObject({ who: "the-gate", capability: "story.tell" });
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("admin", { ...after, ...seated }))).toBe(
+      "This section is for whoever holds the brief's private sections, for reading and for writing.",
+    );
   });
 
   it("says each answer in one sentence, and a vote in a different one", () => {

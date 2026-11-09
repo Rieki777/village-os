@@ -111,6 +111,8 @@ let QUALIFIED = true;
 let AGREEMENT_STORED = false;
 /** Every notice the routes send, as `notify` receives it. */
 const NOTICES: NotifyInput[] = [];
+/** Who holds `brief.private` live, as `liveHoldersOf` answers (G.4). Empty unless a test seats somebody. */
+let PRIVATE_HOLDERS: string[] = [];
 
 const who = (req: express.Request) => {
   const token = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
@@ -250,6 +252,7 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       submissions: () => [],
       legalEntityLabel: () => "",
       seasonNow: () => null,
+      liveHoldersOf: async (capability: string) => (capability === "brief.private" ? [...PRIVATE_HOLDERS] : []),
     });
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -922,6 +925,32 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       } finally {
         QUALIFIED = true;
       }
+    });
+
+    it("the private sections (G.4, D1): a seated brief.private holder adopts and reads them, the unseated admin is refused naming the vote", async () => {
+      const p = (await propose("teller", { blockId: "legal", sectionId: "legal", body: "The trust holds the title, and the members hold the trust." })).body.proposal;
+      PRIVATE_HOLDERS = ["cf-member"];
+      try {
+        const seen = (await block("member", "legal")).body;
+        expect(seen.pens.adminWords).toMatchObject({ pen: "admin", how: "act", who: "live-holders", youMayAdopt: true });
+        expect(seen.proposals.map((x: any) => x.id)).toContain(p.id);
+        expect(seen.answer.sections.find((s: any) => s.id === "legal").readable).toBe(true);
+        // The unseated admin no longer reads or adopts them, and the refusal names the vote.
+        const asAdmin = (await block("admin", "legal")).body;
+        expect(asAdmin.answer.sections.find((s: any) => s.id === "legal").readable).toBe(false);
+        expect(asAdmin.proposals.map((x: any) => x.id)).not.toContain(p.id);
+        expect(await adopt("admin", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.admin } });
+        expect(PEN_REFUSALS.admin).toContain("a power_grant vote gives brief.private to a role");
+        // The story's holder is still refused there.
+        expect(await adopt("teller", p.id)).toEqual({ status: 403, body: { error: PEN_REFUSALS.admin } });
+        const r = await adopt("member", p.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        expect((await briefGet(pool, "legal", "admin"))?.body).toBe("The trust holds the title, and the members hold the trust.");
+      } finally {
+        PRIVATE_HOLDERS = [];
+      }
+      // With nobody holding it, the administrators keep it.
+      expect((await block("admin", "legal")).body.pens.adminWords).toMatchObject({ who: "admins", youMayAdopt: true });
     });
 
     it("the closing words (D3) are sent to the closing policy vote (D6), and nothing moves", async () => {
