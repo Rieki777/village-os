@@ -8,7 +8,9 @@
  * the page name or the corner menu.
  *
  * Three states, and the component test walks each one:
- *   off        no key of the village's own yet: plain steps to connect Claude.
+ *   off        the village has not switched the helper on (the dial
+ *              `platform.admin_helper`, off by default), or has no key of its
+ *              own yet: plain steps for whichever is missing.
  *   ready      a conversation. The guide answers, and may offer a page to open.
  *   proposing  the guide's answer carries ONE change, drawn as a card with the
  *              setting, what it is now and what it would become. Apply calls
@@ -107,7 +109,7 @@ export default function AdminHelperPanel({
       });
       setBusy(false);
       if (!out.ok) {
-        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false }));
+        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off }));
         else setError(out.error);
         return;
       }
@@ -163,7 +165,7 @@ export default function AdminHelperPanel({
       )}
       {statusError && <p role="alert" className="p-4 text-sm text-destructive">{statusError}</p>}
 
-      {status && !status.on && <ConnectSteps />}
+      {status && !status.on && (status.off === "switch" ? <SwitchedOff /> : <ConnectSteps />)}
 
       {status?.on && (
         <>
@@ -171,7 +173,7 @@ export default function AdminHelperPanel({
             {turns.length === 0 && (
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p><Trans context="admin helper panel">Ask me how to do something in Admin, where a setting lives, or what a control does. If you want something changed, I will show you the change first and you decide.</Trans></p>
-                <p><Trans context="admin helper panel">Money stays with you: pay, budgets, the exchange and redemption are changed by hand.</Trans></p>
+                <p><Trans context="admin helper panel">I read settings, help text and the shape of the org chart. I never read applications, proposals, interviews, terms or pay, and I can't help with choosing people for roles. Money stays with you too.</Trans></p>
               </div>
             )}
             {turns.map((turn, i) => (
@@ -250,6 +252,22 @@ export default function AdminHelperPanel({
         </>
       )}
     </aside>
+  );
+}
+
+/** Off by the village's own switch, which ships off. Turning it on is the village's decision. */
+function SwitchedOff() {
+  return (
+    <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 text-sm text-foreground">
+      <h3 className="font-semibold"><Trans context="admin helper panel">Your helper is switched off</Trans></h3>
+      <p className="text-muted-foreground">
+        <Trans context="admin helper panel">The helper stays off until your village decides to use AI in Admin. Whoever governs that here says yes first.</Trans>
+      </p>
+      <ol className="list-decimal space-y-2 pl-5">
+        <li><Trans context="admin helper, switch step">Open Game Mechanics and find "The guide's helper in Admin" under Platform.</Trans></li>
+        <li><Trans context="admin helper, switch step">Turn it on. It also needs the village's own Anthropic key on the server.</Trans></li>
+      </ol>
+    </div>
   );
 }
 

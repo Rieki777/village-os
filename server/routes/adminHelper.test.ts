@@ -8,10 +8,11 @@
  * tools, the fenced reader results) and what the panel is actually handed.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { register, HELPER_TOOLS, helperSystemPrompt } from "./adminHelper";
+import { register, DENIED_READS, HELPER_TOOLS, helperSystemPrompt, helperToolRunner } from "./adminHelper";
 import { wireAssistant, ADMIN_HELPER_MODEL } from "../lib/assistant";
 import { VARIABLES, type VariableDef } from "../../shared/gameVariables";
-import { mayPropose, type HelperDial } from "../../shared/adminHelper";
+import { HELPER_SWITCH, guideMaySee, mayPropose, searchAdmin, type HelperDial } from "../../shared/adminHelper";
+import { orgStructureForHelper } from "../lib/adminHelperReaders";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
 
@@ -72,7 +73,7 @@ function wire(replies: any[], opts: { limited?: (b: string) => boolean } = {}) {
 const text = (obj: unknown) => ({ content: [{ type: "text", text: JSON.stringify(obj) }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 5 } });
 const toolUse = (name: string) => ({ content: [{ type: "tool_use", id: `tu_${name}`, name, input: {} }], stop_reason: "tool_use", usage: { input_tokens: 10, output_tokens: 5 } });
 
-function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLimit?: boolean } = {}) {
+function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLimit?: boolean; switchOn?: boolean } = {}) {
   const { app, handlers } = collect();
   const usage: any[] = [];
   register(app, {
@@ -83,8 +84,8 @@ function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLi
     villageName: () => "North Wind",
     guideSource: () => "Sol",
     dials,
-    readOrg: async () => ({ roles: [{ role: "Treasurer", shown: ["Treasurer (Ana)"] }], circles: [] }),
-    readRequests: async () => ({ waiting: 1, newest: [{ kind: "proposal", from: "Kai", status: "new", arrived: "2026-11-08" }] }),
+    readOrgStructure: async () => ({ roles: [{ role: "Treasurer", circle: null, aim: null, seats: 1, filled: 1, active: true }], circles: [] }),
+    switchOn: () => o.switchOn ?? true,
     noteAssistantUsage: async (mode: string, model: string, call: { ok: boolean }) => void usage.push({ mode, model, ok: call.ok }),
     keyOwner: () => o.owner ?? "own",
   } as any);
@@ -110,8 +111,12 @@ describe("GET /api/admin/helper", () => {
     expect((await call("GET", "/api/admin/helper")).status).toBe(401);
   });
 
+  it("is off by the village's switch first, whatever the key", async () => {
+    expect((await setup({ switchOn: false, owner: "own" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "switch" });
+  });
+
   it("says off until the village's own key is set, and names the guide", async () => {
-    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol" });
+    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "key" });
     // A borrowed platform key does not turn the admin helper on.
     expect((await setup({ owner: "platform" }).call("GET", "/api/admin/helper")).body.on).toBe(false);
     expect((await setup({ owner: "own" }).call("GET", "/api/admin/helper")).body.on).toBe(true);
@@ -121,7 +126,7 @@ describe("GET /api/admin/helper", () => {
     wire([]);
     const out = await setup().call("GET", "/api/admin/helper");
     const raw = JSON.stringify(out.body);
-    expect(Object.keys(out.body).sort()).toEqual(["guide", "on"]);
+    expect(Object.keys(out.body).sort()).toEqual(["guide", "off", "on"]);
     expect(raw).not.toContain(SECRET);
     expect(raw).not.toContain(SECRET.slice(-4));
   });
@@ -137,7 +142,14 @@ describe("POST /api/admin/helper/ask", () => {
   it("answers helper-off with no key of the village's own, and sends nothing", async () => {
     const w = wire([]);
     const out = await setup({ owner: "none" }).call("POST", "/api/admin/helper/ask", ask("hi"));
-    expect(out).toEqual({ status: 503, body: { error: "helper-off" } });
+    expect(out).toEqual({ status: 503, body: { error: "helper-off", off: "key" } });
+    expect(w.sent).toEqual([]);
+  });
+
+  it("answers helper-off with the village's switch off, and sends nothing", async () => {
+    const w = wire([]);
+    const out = await setup({ switchOn: false }).call("POST", "/api/admin/helper/ask", ask("hi"));
+    expect(out).toEqual({ status: 503, body: { error: "helper-off", off: "switch" } });
     expect(w.sent).toEqual([]);
   });
 
@@ -148,7 +160,7 @@ describe("POST /api/admin/helper/ask", () => {
     expect(w.sent).toEqual([]);
   });
 
-  it("runs on the helper's model with the three readers and a per-admin burst bucket", async () => {
+  it("runs on the helper's model with the two readers and a per-admin burst bucket", async () => {
     const w = wire([text({ reply: "Open Game Mechanics.", open: "variables", propose: null })]);
     const { call, usage } = setup();
     const out = await call("POST", "/api/admin/helper/ask", ask("where are the game rules?"));
@@ -171,6 +183,8 @@ describe("POST /api/admin/helper/ask", () => {
     expect(system).toContain("Org Chart [org-chart]");
     expect(system).toContain('The admin has "Home" open right now.');
     expect(system).toContain("Money stays in the admin's hands");
+    expect(system).toContain("You cannot help with selection");
+    expect(system).toContain("never draft, rank, compare or recommend anything about a candidate");
   });
 
   it("reads through a tool, fenced, then proposes a change as a card it does not apply", async () => {
@@ -227,5 +241,74 @@ describe("POST /api/admin/helper/ask", () => {
 describe("the system prompt", () => {
   it("says plainly when the panel sent no map", () => {
     expect(helperSystemPrompt({ guide: "the village guide", village: "V", tabs: [], openTab: null })).toContain("sent no map");
+  });
+});
+
+describe("no AI in selection: the tool layer", () => {
+  const runner = (calls: string[]) => helperToolRunner({
+    query: "anything",
+    tabs: TABS,
+    dials: dials(),
+    readOrgStructure: async () => {
+      calls.push("org");
+      return {};
+    },
+  });
+
+  it("offers only the two reads: settings and help text, and the org chart's shape", () => {
+    expect(HELPER_TOOLS.map((t) => t.name)).toEqual(["admin_find", "org_chart"]);
+  });
+
+  it("refuses every selection and member-data read by name, and reads nothing doing it", async () => {
+    const names = Object.keys(DENIED_READS);
+    for (const want of ["role_applications", "open_proposals", "interview_scores", "role_terms", "role_pay", "requests_open", "members"]) {
+      expect(names, want).toContain(want);
+    }
+    const calls: string[] = [];
+    const run = runner(calls);
+    for (const name of names) {
+      const out = await run(name);
+      expect(out.ok, name).toBe(false);
+      expect((out as any).error, name).toContain("stays out of choosing people");
+    }
+    expect(calls).toEqual([]);
+    expect((await run("anything_else")).ok).toBe(false);
+  });
+
+  it("refuses a denied read the model asks for mid-conversation, and the answer carries no data", async () => {
+    const w = wire([toolUse("role_applications"), text({ reply: "I can't help with choosing people." })]);
+    const out = await setup().call("POST", "/api/admin/helper/ask", ask("rank the applicants for treasurer"));
+    const result = w.sent[1].body.messages.at(-1).content[0];
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("does not read role applications");
+    expect(out.body.reply).toBe("I can't help with choosing people.");
+  });
+
+  it("the org chart reader carries structure only: no names, holders, terms or pay", () => {
+    const out = orgStructureForHelper({
+      roles: [{ id: "r1", name: "Treasurer", circleId: "c1", aim: "Keep the books", seats: 2, isExample: false, active: true } as any],
+      assignments: [{ orgRoleId: "r1", userId: "u-9", displayName: "Ana Lopez", termEndsAt: new Date("2027-01-01"), note: "pay 400" } as any],
+      circles: [{ id: "c1", name: "Money", purpose: null, status: "active", isExample: false } as any],
+    });
+    expect(out.roles).toEqual([{ role: "Treasurer", circle: "Money", aim: "Keep the books", seats: 2, filled: 1, active: true }]);
+    const raw = JSON.stringify(out);
+    for (const leak of ["Ana", "u-9", "2027", "pay 400"]) expect(raw).not.toContain(leak);
+  });
+
+  it("never shows the guide a money, selection or sealed dial", () => {
+    const seen = searchAdmin("pay budget application interview term token ledger", [], dials()).settings;
+    for (const d of seen) expect(guideMaySee(VARIABLES.find((v) => v.key === d.key)), d.key).toBe(true);
+    for (const v of VARIABLES) {
+      if (/applica|interview|candidate/i.test(v.key)) expect(guideMaySee(v), v.key).toBe(false);
+    }
+  });
+});
+
+describe("the village's switch", () => {
+  it("exists, ships off, and the helper may never propose it", () => {
+    const def = VARIABLES.find((v) => v.key === HELPER_SWITCH);
+    expect(def?.type).toBe("boolean");
+    expect(def?.default).toBe("false");
+    expect(mayPropose(def)).toBe(false);
   });
 });

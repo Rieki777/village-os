@@ -11,6 +11,14 @@
  * showing (the tabs this admin can actually open), and the server ranks that
  * map and the game dials against the question. Pure: no I/O, no clock.
  *
+ * WHAT IT MAY READ (the coordinator's guardrail, 2026-11-09, from Rye's
+ * role-journey rule "no AI in selection"). Settings, help text and the SHAPE
+ * of the org chart. Never role applications or open proposals (their words,
+ * contact details, time zones), interview scores, role terms or pay, and no
+ * person's details. The server's tool layer refuses those reads by name
+ * (`DENIED_READS`, server/routes/adminHelper.ts), and the dial search below
+ * leaves out every money and selection dial, so the guide never sees them.
+ *
  * WHAT IT MAY PROPOSE. A game dial (shared/gameVariables.ts), and only one
  * that is not about money. Money actions stay manual (the brief, 2026-11-09:
  * role.pay, cash.pay, budgets, exchange, redemption), so a dial in a money
@@ -72,11 +80,19 @@ export interface HelperAnswer {
   consulted: string[];
 }
 
-/** The status route's answer. `on` is false until the village's own key is set. */
+/**
+ * The status route's answer. `on` needs BOTH the village's switch (the dial
+ * `platform.admin_helper`, off by default) and the village's own key; `off`
+ * says which is missing, switch first, so the panel names the right step.
+ */
 export interface HelperStatus {
   on: boolean;
   guide: string;
+  off: "switch" | "key" | null;
 }
+
+/** The village's own switch for the helper. Ships off. */
+export const HELPER_SWITCH = "platform.admin_helper";
 
 // ── The map the panel sends ─────────────────────────────────────────────────
 
@@ -120,6 +136,17 @@ export const HANDS_OFF_CATEGORIES: readonly string[] = [
 /** A dial key naming money, whatever category it sits in. */
 const MONEY_KEY = /(pay|price|cash|budget|mint|exchange|redeem|redemption|fee|wage|reward|treasur|fund|loan|dues|token|credit|ledger)/i;
 
+/** A dial about choosing people for roles: applications, interviews, terms. No AI in selection. */
+const SELECTION = /(applica|applicant|candidate|interview|selection|shortlist|role_term|seat_term|term_length|term_months|term_days)/i;
+
+/** Whether the guide may see this dial at all: never money, never selection, never a sealed secret. */
+export function guideMaySee(def: Pick<VariableDef, "key" | "label" | "category" | "movedToSecret"> | undefined): boolean {
+  if (!def || def.movedToSecret) return false;
+  if (HANDS_OFF_CATEGORIES.includes(def.category) || MONEY_KEY.test(def.key)) return false;
+  if (SELECTION.test(def.key) || SELECTION.test(def.label)) return false;
+  return true;
+}
+
 /**
  * Why the helper may not propose a change to this dial, or null when it may.
  * The sentence lands in the panel, so it is written for the admin.
@@ -127,8 +154,12 @@ const MONEY_KEY = /(pay|price|cash|budget|mint|exchange|redeem|redemption|fee|wa
 export function proposalRefusal(def: VariableDef | undefined): string | null {
   if (!def) return "That is not a setting Admin knows.";
   if (def.movedToSecret) return `${def.label} lives in the sealed connections now, so change it under Integrations yourself.`;
+  if (def.key === HELPER_SWITCH) return "The helper cannot switch itself on or off. That is the village's decision, made under Game Mechanics.";
   if (HANDS_OFF_CATEGORIES.includes(def.category) || MONEY_KEY.test(def.key)) {
     return `${def.label} is about money, and money settings stay in your own hands. Open ${def.category} under Game Mechanics to change it.`;
+  }
+  if (SELECTION.test(def.key) || SELECTION.test(def.label)) {
+    return `${def.label} is about choosing people for roles, and the helper stays out of selection. Change it by hand under Game Mechanics.`;
   }
   return null;
 }
@@ -203,7 +234,8 @@ function score(words: string[], strong: string, medium: string, weak: string): n
 }
 
 /**
- * Admin pages and dials ranked against the question. The value of a dial
+ * Admin pages and dials ranked against the question, with every money and
+ * selection dial left out before ranking. The value of a dial
  * that can carry a credential is withheld, the way the public mechanics feed
  * withholds it: this result goes to a model provider.
  */
@@ -212,7 +244,7 @@ export function searchAdmin(
   tabs: readonly HelperTab[],
   dials: readonly HelperDial[],
   limits = { tabs: 8, dials: 10 },
-): { pages: Array<HelperTab>; settings: Array<HelperDial & { proposable: boolean }> } {
+): { pages: Array<HelperTab>; settings: Array<HelperDial & { proposable: boolean }>; leftOut: string } {
   const words = queryWords(query);
   const pages = tabs
     .map((t) => ({ t, n: score(words, t.label, t.group, t.help) }))
@@ -221,6 +253,7 @@ export function searchAdmin(
     .slice(0, limits.tabs)
     .map((x) => x.t);
   const settings = dials
+    .filter((d) => guideMaySee(VARIABLES_BY_KEY[d.key]))
     .map((d) => ({ d, n: score(words, d.label, `${d.category} ${d.key}`, d.description) }))
     .filter((x) => x.n > 0)
     .sort((a, b) => b.n - a.n)
@@ -235,5 +268,5 @@ export function searchAdmin(
         proposable: mayPropose(def),
       };
     });
-  return { pages, settings };
+  return { pages, settings, leftOut: "Money, role selection and sealed settings are never shown to the guide." };
 }

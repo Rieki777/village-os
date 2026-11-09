@@ -12,9 +12,25 @@
  * read. Registered with the other admin assistant routes, AFTER `/api/admin`'s
  * audit row and default-deny; `isAdmin` is the gate and answers 401.
  *
- * ── THE KEY ────────────────────────────────────────────────────────────────
+ * ── WHAT IT READS, AND WHAT IT NEVER READS ─────────────────────────────────
  *
- * Only the village's OWN key turns it on (`assistantKeyOwner() === "own"`):
+ * Read-only, and narrow on purpose (the coordinator's guardrail, 2026-11-09,
+ * from Rye's role-journey rule "no AI in selection"; AI touching money, legal
+ * matters, member data or outside messages needs the village's approval):
+ * settings, help text, and the SHAPE of the org chart (roles, circles, seat
+ * counts), with no person in it. It NEVER reads role applications or open
+ * proposals, interview scores, role terms or pay, or anybody's details, and
+ * it never drafts or ranks anything about a candidate. `DENIED_READS` refuses
+ * those by name in the tool layer, whatever the model asks for, and the
+ * system prompt says it cannot help with selection.
+ *
+ * ── THE SWITCH AND THE KEY ─────────────────────────────────────────────────
+ *
+ * Two things must both be true: the village's dial `platform.admin_helper`,
+ * which ships OFF, and the village's own key. The switch is the village's
+ * decision and the helper can never propose it.
+ *
+ * Only the village's OWN key counts (`assistantKeyOwner() === "own"`):
  * the Railway variable ANTHROPIC_API_KEY, or the same slot typed under
  * Integrations. A borrowed platform key does not, because this panel exists
  * for one village's admins doing that village's work. The status route says
@@ -64,16 +80,16 @@ export interface AdminHelperDeps extends Pick<AppDeps, "isAdmin" | "authedUser" 
   guideSource(): unknown;
   /** Every dial with its current value (`allVariables()`). */
   dials(): HelperDial[];
-  /** The org chart: roles, who holds them, and circles. */
-  readOrg(): Promise<unknown>;
-  /** Requests still waiting on a steward. */
-  readRequests(): Promise<unknown>;
+  /** The org chart's SHAPE: roles, circles, seat counts. No people, no terms, no pay. */
+  readOrgStructure(): Promise<unknown>;
+  /** The village's switch, the dial `platform.admin_helper`. Off by default. */
+  switchOn(): boolean;
   noteAssistantUsage(mode: string, model: string, call: AssistantResult, userId: string | null, path?: AssistantPath): Promise<void>;
   /** Injected for tests. Defaults to the engine's own answer. */
   keyOwner?(): "own" | "platform" | "none";
 }
 
-/** The three readers, by wire name. No arguments: each ranks by the question. */
+/** The two readers, by wire name. No arguments: each ranks by the question. */
 export const HELPER_TOOLS: AssistantTool[] = [
   {
     name: "admin_find",
@@ -82,15 +98,53 @@ export const HELPER_TOOLS: AssistantTool[] = [
   },
   {
     name: "org_chart",
-    description: "The village's org chart: every role, its aim, how many people it takes, who holds it (first names), and the circles.",
-    input_schema: { type: "object", properties: {} },
-  },
-  {
-    name: "requests_open",
-    description: "Requests that are still waiting on a steward: what kind, from whom (first name), their status and when they arrived.",
+    description: "The shape of the village's org chart: every role, its aim, its circle, how many people it takes and how many of those places are filled, and the circles. No names.",
     input_schema: { type: "object", properties: {} },
   },
 ];
+
+/**
+ * Reads the helper refuses by name, whatever the model asks for (no AI in
+ * selection; member data needs the village's approval). A name not on this
+ * list and not one of HELPER_TOOLS is refused too; this list exists so the
+ * refusal says why, and so the test can try each one.
+ */
+export const DENIED_READS: Record<string, string> = {
+  role_applications: "role applications",
+  applications: "role applications",
+  open_proposals: "open role proposals",
+  role_proposals: "open role proposals",
+  proposals: "open role proposals",
+  interview_scores: "interview scores",
+  interviews: "interview scores",
+  role_terms: "role terms",
+  role_pay: "role pay",
+  pay: "role pay",
+  candidates: "candidates",
+  requests_open: "people's requests",
+  submissions: "people's requests",
+  members: "people's details",
+  people: "people's details",
+  org_holders: "who holds a role",
+};
+
+export type ToolAnswer = { ok: true; key: string; data: unknown } | { ok: false; error: string };
+
+/** The tool layer: the two reads it allows, and a plain refusal for everything else. */
+export function helperToolRunner(input: {
+  query: string;
+  tabs: readonly HelperTab[];
+  dials: readonly HelperDial[];
+  readOrgStructure(): Promise<unknown>;
+}): (name: string) => Promise<ToolAnswer> {
+  return async (name) => {
+    if (name === "admin_find") return { ok: true, key: "admin.find", data: searchAdmin(input.query, input.tabs, input.dials) };
+    if (name === "org_chart") return { ok: true, key: "org.chart", data: await input.readOrgStructure() };
+    const what = DENIED_READS[name];
+    if (what) return { ok: false, error: `The helper does not read ${what}. It stays out of choosing people and out of member data.` };
+    return { ok: false, error: `no reader named ${name}` };
+  };
+}
 
 const PER_MINUTE = 12;
 const PER_HOUR = 60;
@@ -116,9 +170,10 @@ What you do:
 - When the admin wants a setting changed, propose ONE change for them to approve. You never change anything yourself. The admin presses Apply, and Admin's own rules decide whether it goes through (some settings need a vote or a founder).
 
 Rules:
-- Use the village's own words: the page names and group names below, and the role names the org chart gives. Name a role first and the person holding it in parentheses, as in "Treasurer (Ana)".
+- Use the village's own words: the page names and group names below, and the role names the org chart gives. You do not see who holds a role; point to the Org Chart page for that.
 - Say "roughly" for any estimate.
-- Open a reader only when the question needs it: admin_find for pages and settings, org_chart for roles and people, requests_open for what is waiting.
+- Open a reader only when the question needs it: admin_find for pages and settings, org_chart for the shape of the roles and circles.
+- You cannot help with selection. You never read role applications, open proposals, interview scores, role terms or pay, or anybody's details, and you never draft, rank, compare or recommend anything about a candidate or applicant. If asked, say you can't help with choosing people, and name the page where the admins do it themselves.
 - Propose only a setting admin_find marked "proposable": true. Money stays in the admin's hands: pay, cash, budgets, the exchange, redemption, tokens and the ledger are never proposed. For those, say where the admin changes it.
 - You cannot send email or messages for anyone. Say where the admin does it.
 - If nothing here answers the question, say so plainly and point to the closest page.
@@ -138,9 +193,11 @@ export function register(app: Express, deps: AdminHelperDeps): void {
 
   app.get("/api/admin/helper", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const off = !deps.switchOn() ? "switch" : keyOwner() !== "own" ? "key" : null;
     const status: HelperStatus = {
-      on: keyOwner() === "own",
+      on: off === null,
       guide: guideName(deps.guideSource(), "admin").name,
+      off,
     };
     res.json(status);
   });
@@ -153,7 +210,8 @@ export function register(app: Express, deps: AdminHelperDeps): void {
     if (await overLimit(`admin-helper-minute:${actor}`, PER_MINUTE, 60_000)) {
       return res.status(429).json({ error: "Slow down a moment, then keep going." });
     }
-    if (keyOwner() !== "own") return res.status(503).json({ error: "helper-off" });
+    if (!deps.switchOn()) return res.status(503).json({ error: "helper-off", off: "switch" });
+    if (keyOwner() !== "own") return res.status(503).json({ error: "helper-off", off: "key" });
 
     const clean = sanitizeMessages(req.body?.messages);
     if (!clean.ok) return res.status(400).json({ error: clean.error });
@@ -165,12 +223,7 @@ export function register(app: Express, deps: AdminHelperDeps): void {
     const query = messages.slice(-3).map((m) => m.content).join("\n");
     const dials = deps.dials();
 
-    const runTool = async (name: string): Promise<{ ok: true; key: string; data: unknown } | { ok: false; error: string }> => {
-      if (name === "admin_find") return { ok: true, key: "admin.find", data: searchAdmin(query, tabs, dials) };
-      if (name === "org_chart") return { ok: true, key: "org.chart", data: await deps.readOrg() };
-      if (name === "requests_open") return { ok: true, key: "requests.open", data: await deps.readRequests() };
-      return { ok: false, error: `no reader named ${name}` };
-    };
+    const runTool = helperToolRunner({ query, tabs, dials, readOrgStructure: deps.readOrgStructure });
 
     const system = helperSystemPrompt({
       guide: guidePromptName(deps.guideSource()),

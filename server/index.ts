@@ -161,7 +161,7 @@ import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasP
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
 import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
-import { orgForHelper, requestsForHelper } from "./lib/adminHelperReaders";
+import { orgStructureForHelper } from "./lib/adminHelperReaders";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -12856,12 +12856,11 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     villageName: () => mergedConfig().project.name,
     guideSource: () => getWorkWithUs().assistantName,
     dials: () => allVariables(),
-    readOrg: async () => {
-      const [roles, assignments, people] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool(), lapseContext()), members.all()]);
-      const names = new Map((people as any[]).map((u: any) => [String(u.id), String(u.name ?? "")]));
-      return orgForHelper({ roles, assignments, nameOf: (id) => names.get(id) ?? null, circles: circleViews(circlesRepo.all()) });
+    switchOn: () => boolVar("platform.admin_helper"),
+    readOrgStructure: async () => {
+      const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool())]);
+      return orgStructureForHelper({ roles, assignments, circles: circleViews(circlesRepo.all()) });
     },
-    readRequests: async () => requestsForHelper(submissionsRepo.all()),
   });
 
   registerCapabilityExplainerRoutes(app, { isAdmin, members, capabilityCtx, stageOf });

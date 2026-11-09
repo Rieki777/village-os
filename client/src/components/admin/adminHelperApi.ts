@@ -21,7 +21,8 @@ export async function fetchHelperStatus(password: string, signal?: AbortSignal):
   const r = await fetch(`${API_BASE}/admin/helper`, { headers: authHeaders(password), signal });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(refusal(d, "The helper could not be reached."));
-  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "" };
+  const off = d?.off === "switch" || d?.off === "key" ? d.off : null;
+  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "", off: d?.on === true ? null : off ?? "key" };
 }
 
 /** The pages this admin can open, as the nav shows them, for the guide's map of Admin. */
@@ -29,7 +30,7 @@ export function tabsFromGroups(groups: readonly NavGroup[]): HelperTab[] {
   return groups.flatMap((g) => g.items.map((i) => ({ key: i.key, label: i.label, group: g.title, help: whatIsThis(i.key).help })));
 }
 
-export type AskOutcome = { ok: true; answer: HelperAnswer } | { ok: false; off: boolean; error: string };
+export type AskOutcome = { ok: true; answer: HelperAnswer } | { ok: false; off: "switch" | "key" | null; error: string };
 
 export async function askHelper(
   password: string,
@@ -42,11 +43,11 @@ export async function askHelper(
       body: JSON.stringify(input),
     });
     const d = await r.json().catch(() => ({}));
-    if (r.status === 503 && d?.error === "helper-off") return { ok: false, off: true, error: "" };
-    if (!r.ok) return { ok: false, off: false, error: refusal(d, "The helper could not answer just now. Try again in a moment.") };
+    if (r.status === 503 && d?.error === "helper-off") return { ok: false, off: d?.off === "switch" ? "switch" : "key", error: "" };
+    if (!r.ok) return { ok: false, off: null, error: refusal(d, "The helper could not answer just now. Try again in a moment.") };
     return { ok: true, answer: d as HelperAnswer };
   } catch {
-    return { ok: false, off: false, error: "The helper could not be reached. Check your connection and try again." };
+    return { ok: false, off: null, error: "The helper could not be reached. Check your connection and try again." };
   }
 }
 
