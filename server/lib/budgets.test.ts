@@ -5,7 +5,7 @@
  *                       its duplicates (R2), withdrawal by scope (R3), a hand
  *                       edit that the next upload leaves alone (R2), names
  *                       (R15), formula cells (R13), amounts (R12), one
- *                       `budget_syncs` row per import (R5), the events (R10,
+ *                       `budget_syncs` row for every import made (R5), the events (R10,
  *                       R25), and the library's own withdrawal and adoption
  *                       rules the puller will lean on (R3, R18)
  *   cashBudgetLeft      null and 0 apart, committed by cycle and by `owed_at`,
