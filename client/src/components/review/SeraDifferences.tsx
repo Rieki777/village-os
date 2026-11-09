@@ -13,13 +13,16 @@
  * sees the count and who decides, and never a subject. A module that is off
  * answers the count 404 and the section draws nothing.
  *
- * ── READ-ONLY IN THIS RELEASE ────────────────────────────────────────────
+ * ── ANSWERING THEM (spec R12 to R16, R30 to R32) ─────────────────────────
  *
- * No button here changes anything. Taking, keeping, editing and acting on
- * many at once arrive with the next release; until then each row's way on is
- * the structure review, which is where a steward decides today, and nothing is
- * drawn that would do nothing when pressed. The words of every difference
- * come from the server (shared/seraDifferenceWords.ts), never from here.
+ * Each row offers what it can do: Add to draft, Retire it here, Keep ours,
+ * Compare them, Edit (components/review/SeraActs.tsx). Ticked rows act
+ * together through the bar and its sheet (SeraBulk.tsx); what a person took
+ * shows in its own card with the draft's doors (SeraInDraft.tsx); the keyboard
+ * is off until a person turns it on (SeraKeys.tsx). No answer changes the
+ * chart: a take is a draft, published through the doors every draft has. The
+ * words of every difference come from the server (shared/seraDifferenceWords.ts),
+ * never from here.
  *
  * ── A FAILED READ IS NEVER AN EMPTY LIST ─────────────────────────────────
  *
@@ -28,14 +31,19 @@
  * waits and no draft is open (R29).
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link } from "wouter";
 import { ChevronDown } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
-import { headlineCount } from "@shared/seraWaiting";
-import { whoDecidesWords, whoSetsPayWords, type Door } from "@shared/seraDecides";
-import { STRUCTURE_KINDS } from "@shared/structurePlan";
-import SeraCompare, { CompareBlocks } from "@/components/review/SeraCompare";
+import type { Door } from "@shared/seraDecides";
+import SeraCompare from "@/components/review/SeraCompare";
+import { SeraMember } from "@/components/review/SeraMember";
+import { CompactRow, Pane, RowCard, Source, Chips, type Ctx } from "@/components/review/SeraRows";
+import { ConflictSubtitle, EditPanel, LiveRegion, RowActions, StatusStrip } from "@/components/review/SeraActs";
+import { BulkBar, BulkSheet } from "@/components/review/SeraBulk";
+import { InDraftCard } from "@/components/review/SeraInDraft";
+import { handleListKey, KeysLegend, KeysToggle, useKeysToggle } from "@/components/review/SeraKeys";
+import { useSeraActs } from "@/components/review/useSeraActs";
+import { card, inlineLink, primary, ring, secondary } from "@/components/review/seraStyles";
 import {
   aheadWords,
   changes,
@@ -52,9 +60,9 @@ import {
   readCount,
   readList,
   readTrouble,
-  SERA_MODULE,
   smallWords,
   splitWaiting,
+  type CircleGroup,
   type CountAnswer,
   type ListAnswer,
   type ListedDifference,
@@ -184,166 +192,6 @@ function useWide(): boolean {
   return wide;
 }
 
-const card = "bg-card border border-border rounded-xl";
-/** A ring offset from the fill, so focus shows on a teal control (QA Q2): the default outline is the fill's own colour. */
-const ring = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-deep";
-const primary =
-  `inline-flex items-center justify-center min-h-[44px] px-3.5 rounded-lg bg-teal-deep text-white text-sm font-semibold hover:bg-teal-deep-dark ${ring}`;
-const secondary =
-  "inline-flex items-center justify-center min-h-[44px] px-3.5 rounded-lg border border-border bg-card text-foreground text-sm font-medium hover:bg-muted";
-const inlineLink = "text-teal-deep underline hover:text-teal-deep-dark";
-const chip = "self-start rounded-md bg-amber-light text-amber-ink font-semibold";
-
-/** Flags in words, then the conflict, each its own chip and never a colour alone (R39). */
-function Chips({ d, small, inline }: { d: ListedDifference; small?: boolean; inline?: boolean }) {
-  const Tag = inline ? "span" : "p";
-  const size = small ? "px-2 py-0.5 text-xs" : "px-2 py-1 text-[13px]";
-  if (d.words.flags.length === 0 && d.state !== "conflict") return null;
-  return (
-    <>
-      {d.words.flags.map((f, i) => (
-        <Tag key={i} className={`${chip} ${size}`}>{f}</Tag>
-      ))}
-      {d.state === "conflict" && <Tag className={`${chip} ${size}`}><Trans context="sera changes">Conflict</Trans></Tag>}
-    </>
-  );
-}
-
-/** "Edited in Sera 29 Oct · Open in Sera", the link built by the server from the configured address (R10). */
-function Source({ d }: { d: ListedDifference }) {
-  return (
-    <>
-      {d.words.source}
-      {d.words.open && (
-        <>
-          {" · "}
-          <a href={d.words.open} target="_blank" rel="noopener noreferrer" className={inlineLink}>
-            {d.words.openWords}
-          </a>
-        </>
-      )}
-    </>
-  );
-}
-
-interface Ctx {
-  agent: string;
-  /** Who holds the power to set pay, from the count, or null when it could not be said. */
-  pay: Door | null;
-  onCompare: (d: ListedDifference) => void;
-}
-
-/** The way on from a row while the list is read-only: the structure review, or a plain sentence when nothing waits there. */
-function DecideThere({ ctx, d, block }: { ctx: Ctx; d: ListedDifference; block?: boolean }) {
-  if (d.kind === "pay") return ctx.pay ? <p className="text-[13px] text-muted-foreground">{whoSetsPayWords(ctx.pay)}</p> : null;
-  // The arrival that holds THIS difference (review C7), never one link for every row.
-  if (!d.batchId) {
-    const agent = ctx.agent;
-    return <p className="text-[13px] text-muted-foreground"><Trans>No arrival from {agent} waits in the structure review right now.</Trans></p>;
-  }
-  return (
-    <Link href={`/review/structure/${encodeURIComponent(d.batchId)}`} className={block ? `${primary} min-h-[48px] w-full text-[15px]` : primary}>
-      <Trans context="sera changes">Decide it in the structure review</Trans>
-    </Link>
-  );
-}
-
-function Actions({ ctx, d }: { ctx: Ctx; d: ListedDifference }) {
-  const compare = comparable(d) && (
-    <button type="button" data-compare={d.key} onClick={() => ctx.onCompare(d)} className={d.state === "conflict" ? primary : secondary}>
-      <Trans context="sera changes">Compare them</Trans>
-    </button>
-  );
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {!(d.state === "conflict" && compare) && <DecideThere ctx={ctx} d={d} />}
-      {compare}
-    </div>
-  );
-}
-
-/** What comes with a new circle: its roles, one sentence for each count. */
-function NestedWords({ n }: { n: number }) {
-  return n === 1 ? (
-    <Trans>Its role comes with it, and leaving the circle out leaves it out too.</Trans>
-  ) : (
-    <Trans>Its {n} roles come with it, and leaving the circle out leaves them out too.</Trans>
-  );
-}
-
-/** One row on the phone: the sentence, where it came from, its flags, and the way on (the "Waiting for you" board). */
-function RowCard({ ctx, d, nested }: { ctx: Ctx; d: ListedDifference; nested: ListedDifference[] }) {
-  return (
-    <article className={`${card} p-3 flex flex-col gap-1.5`}>
-      <p className="text-[15px] leading-snug font-medium text-foreground [overflow-wrap:anywhere]">{d.words.sentence}</p>
-      <p className="text-[13px] text-muted-foreground">
-        <Source d={d} />
-      </p>
-      <Chips d={d} />
-      <Actions ctx={ctx} d={d} />
-      {nested.length > 0 && (
-        <div className="mt-2 pl-3 border-l-2 border-border flex flex-col gap-3">
-          <p className="text-[13px] text-muted-foreground"><NestedWords n={nested.length} /></p>
-          {nested.map((n) => (
-            <div key={n.key} className="flex flex-col gap-1">
-              <p className="text-sm leading-snug font-medium text-foreground">{n.words.sentence}</p>
-              <p className="text-[13px] text-muted-foreground">
-                <Source d={n} />
-              </p>
-              <Chips d={n} small />
-            </div>
-          ))}
-        </div>
-      )}
-    </article>
-  );
-}
-
-/** One row at 1280 px: the sentence and its chips, and pressing it shows it in the pane. */
-function CompactRow({ d, selected, onSelect, inset }: { d: ListedDifference; selected: boolean; onSelect: () => void; inset?: boolean }) {
-  return (
-    <article className={`bg-card rounded-[10px] ${selected ? "border-2 border-teal-deep" : "border border-border"}${inset ? " ml-6" : ""}`}>
-      <button
-        type="button"
-        aria-current={selected ? "true" : undefined}
-        aria-controls="sera-pane"
-        onClick={onSelect}
-        className={`w-full text-left min-h-[44px] flex flex-col gap-1 rounded-[10px] ${selected ? "p-[11px]" : "p-3"}`}
-      >
-        <span className={`text-sm leading-normal text-foreground [overflow-wrap:anywhere]${selected ? " font-semibold" : ""}`}>{d.words.sentence}</span>
-        <Chips d={d} small inline />
-      </button>
-    </article>
-  );
-}
-
-/** The detail pane at 1280 px, sticky beside the list. */
-function Pane({ ctx, d }: { ctx: Ctx; d: ListedDifference | null }) {
-  if (!d) return null;
-  return (
-    <section
-      id="sera-pane"
-      aria-labelledby="sera-pane-h"
-      className={`${card} flex-1 min-w-0 p-5 flex flex-col gap-3.5 sticky top-24 self-start max-h-[calc(100vh-7rem)] overflow-y-auto`}
-    >
-      <h3 id="sera-pane-h" className="text-lg leading-snug font-bold text-foreground [overflow-wrap:anywhere]">
-        {d.words.sentence.replace(/\.$/, "")}
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        <Source d={d} />
-      </p>
-      {(d.words.flags.length > 0 || d.state === "conflict") && (
-        <div className="flex flex-col gap-1.5">
-          <Chips d={d} />
-        </div>
-      )}
-      {comparable(d) && <CompareBlocks key={d.key} d={d} agent={ctx.agent} layout="columns" />}
-      <div className="flex flex-wrap gap-2 mt-2">
-        <DecideThere ctx={ctx} d={d} />
-      </div>
-    </section>
-  );
-}
 
 type View = "decide" | "small" | "all";
 type Only = "checkFirst" | "conflicts" | null;
@@ -368,7 +216,8 @@ function SeraList({
   const now = new Date();
   const agent = list.agent;
   const w = useMemo(() => splitWaiting(list.differences), [list]);
-  const step = inStep(list, w, draftOpen);
+  // A draft the list's answers opened is a draft that is open (R29).
+  const step = inStep(list, w, draftOpen || (list.inDraft ?? []).length > 0);
   const trouble = readTrouble(list, now);
   const waiting = useMemo(() => [...w.toDecide, ...w.small], [w]);
   const [view, setView] = useState<View>(w.toDecide.length > 0 ? "decide" : "small");
@@ -384,6 +233,10 @@ function SeraList({
   const backTo = useRef<string | null>(null);
   const root = useRef<HTMLElement>(null);
   const ids = useId();
+  const reload = onReload ?? onRetry;
+  const acts = useSeraActs(list.differences, reload);
+  const [keysOn, setKeysOn] = useKeysToggle();
+  const drafts = list.inDraft ?? [];
 
   const order = useMemo(() => list.circleOrder ?? [], [list]);
   const allGroups = useMemo(() => groupByCircle(waiting, order), [waiting, order]);
@@ -397,11 +250,39 @@ function SeraList({
   const ctx: Ctx = {
     agent,
     pay,
+    acts,
     onCompare: (d) => {
       backTo.current = d.key;
       setComparing(d.key);
     },
   };
+
+  // After an act the row leaves the list: focus moves to the row that took its place (R32).
+  const rowOrder = shownList.map((d) => d.key);
+  const lastOrder = useRef<string[]>(rowOrder);
+  const orderKey = rowOrder.join("\n");
+  useEffect(() => {
+    const acted = acts.acted;
+    if (acted && lastOrder.current.includes(acted) && !rowOrder.includes(acted)) {
+      const next = rowOrder[Math.min(lastOrder.current.indexOf(acted), rowOrder.length - 1)];
+      const rows = root.current?.querySelectorAll<HTMLElement>("[data-sera-row]") ?? [];
+      rows.forEach((r) => {
+        if (r.dataset.seraRow === next) r.focus();
+      });
+      acts.setActed(null);
+    }
+    lastOrder.current = rowOrder;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKey]);
+  // A compared row that was answered has left the list: back to the list.
+  useEffect(() => {
+    if (comparing && !waiting.some((d) => d.key === comparing)) setComparing(null);
+  }, [comparing, waiting]);
+  const onKeys = (e: React.KeyboardEvent<HTMLElement>) => {
+    handleListKey(e, keysOn, e.currentTarget, (k) => wide && setSelected(k));
+  };
+  // What "Tick all shown" ticks: every row shown that has its own tick (a new circle's roles go with it).
+  const tickable = shownList.filter((d) => d.kind !== "pay" && !(d.kind === "roleAdd" && d.subject.ourId === null && (d.subject.circleId ?? "").startsWith("sera:")));
 
   // Back from a comparison, focus returns to the button that opened it, in a layout effect so it is
   // settled before the click that caused it returns (the test raced a passive effect under load).
@@ -458,17 +339,72 @@ function SeraList({
   const shownWords = [shownLabel, circleName].filter(Boolean).join(", ");
   const shownCount = changes(shownList.length);
   const nShown = shownList.length;
+  const showingWords = shownWords
+    ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
+    : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" });
+  // The one live region says the latest of what a filter now shows and what an act did (review 28, QA Q4).
+  const [announce, setAnnounce] = useState("");
+  const filtered = useRef(false);
+  useEffect(() => {
+    if (!filtered.current) {
+      filtered.current = true;
+      return;
+    }
+    setAnnounce(showingWords);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, only, circle]);
+  useEffect(() => {
+    if (acts.strip) setAnnounce(acts.strip.words);
+  }, [acts.strip]);
   const status_ = waiting.length > 0 && (
-    <p role="status" className="text-sm text-muted-foreground">
-      {shownWords
-        ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
-        : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" })}
-    </p>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <p className="text-sm text-muted-foreground">
+        {shownWords
+          ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
+          : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" })}
+      </p>
+      {tickable.length > 1 && (
+        <button type="button" onClick={() => acts.tickAll(tickable.map((d) => d.key))} className={`min-h-[44px] text-sm ${inlineLink}`}>
+          <Trans context="sera answers">Tick all shown</Trans>
+        </button>
+      )}
+    </div>
+  );
+  // What waits in a draft (R13). The strip that says what the last act did is a direct child of the
+  // section, so it can stick under the header the whole length of the list (a sticky element never
+  // leaves its parent).
+  const answers = drafts.map((g) => <InDraftCard key={g.draftId} group={g} onChanged={reload} say={acts.say} acts={acts} />);
+  const strip = <StatusStrip acts={acts} />;
+  // ONE live region, first in every view the list draws, so it stays mounted when the view changes (review 28).
+  const live = <LiveRegion words={announce} />;
+  /** The new roles a group carries under a new circle, which have no tick of their own: said beside its count (review 31). */
+  const headingOf = (g: CircleGroup) => {
+    const n = g.rows.reduce((sum, r) => sum + r.nested.length, 0);
+    const name = g.name ?? "";
+    return (
+      <>
+        {groupHeading(g)}
+        {n > 0 && (
+          <span className="font-normal text-muted-foreground">
+            {", "}
+            {n === 1 ? <Trans context="sera answers">including 1 role inside {name}</Trans> : <Trans context="sera answers">including {n} roles inside {name}</Trans>}
+          </span>
+        )}
+      </>
+    );
+  };
+  const bulk = (
+    <>
+      <BulkBar acts={acts} agent={agent} />
+      <BulkSheet acts={acts} agent={agent} />
+    </>
   );
 
   const compareRow = !wide && comparing ? waiting.find((d) => d.key === comparing) ?? null : null;
   if (compareRow) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-cmp`} className="scroll-mt-24">
         <span id={`${ids}-cmp`} className="sr-only">{headline}</span>
         <SeraCompare
@@ -482,9 +418,16 @@ function SeraList({
               <div className="flex flex-col gap-1.5"><Chips d={compareRow} /></div>
             ) : null
           }
-          action={<DecideThere ctx={ctx} d={compareRow} block />}
+          subtitle={<ConflictSubtitle d={compareRow} />}
+          action={
+            <>
+              <RowActions d={compareRow} acts={acts} agent={agent} pay={pay} layout="compare" />
+              <EditPanel d={compareRow} acts={acts} agent={agent} />
+            </>
+          }
         />
       </section>
+      </>
     );
   }
 
@@ -517,7 +460,9 @@ function SeraList({
         <button type="button" aria-expanded={filterOpen} aria-controls={`${ids}-filter`} onClick={() => setFilterOpen((o) => !o)} className={pressed(false)}>
           <Trans context="sera changes">Filter</Trans>
         </button>
+        <KeysToggle on={keysOn} set={setKeysOn} />
       </div>
+      <KeysLegend on={keysOn} />
       {filterOpen && (
         <div id={`${ids}-filter`} className={`${card} p-3.5 flex flex-wrap gap-4`}>
           <label className="flex flex-col gap-1 text-sm font-semibold text-foreground">
@@ -571,18 +516,18 @@ function SeraList({
             <h3 id={hid} className={`${compact ? "text-[15px] my-1" : "text-base"} font-bold text-foreground`}>
               {collapsible ? (
                 <button type="button" aria-expanded={open} onClick={toggle} className="inline-flex items-center gap-2 min-h-[44px] text-left">
-                  {groupHeading(g)}
+                  {headingOf(g)}
                   <ChevronDown aria-hidden="true" className={`w-4 h-4 motion-safe:transition-transform ${open ? "rotate-180" : ""}`} />
                 </button>
               ) : (
-                groupHeading(g)
+                headingOf(g)
               )}
             </h3>
             {open &&
               g.rows.map((r) =>
                 compact ? (
                   [r.d, ...r.nested].map((d, i) => (
-                    <CompactRow key={d.key} d={d} inset={i > 0} selected={pick?.key === d.key} onSelect={() => setSelected(d.key)} />
+                    <CompactRow key={d.key} ctx={ctx} d={d} inset={i > 0} selected={pick?.key === d.key} onSelect={() => setSelected(d.key)} />
                   ))
                 ) : (
                   <RowCard key={r.d.key} ctx={ctx} d={r.d} nested={r.nested} />
@@ -698,6 +643,8 @@ function SeraList({
 
   if (step || waiting.length === 0) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
         {troubleCards}
@@ -707,6 +654,8 @@ function SeraList({
           {step ? ` ${t`Nothing waits for you, and no draft is open.`}` : draftOpen ? ` ${t`A draft from this queue is still open.`}` : ""}
         </p>
         {facts && <p className="text-sm leading-normal text-muted-foreground">{factsLine}</p>}
+        {strip}
+        {answers}
         {list.lastReadAt !== null && (
           <section aria-labelledby={`${ids}-sw`} className={`${card} p-3.5 flex flex-col gap-2`}>
             <h3 id={`${ids}-sw`} className="text-base font-bold text-foreground"><Trans>Small changes apply by themselves: off</Trans></h3>
@@ -715,11 +664,14 @@ function SeraList({
         )}
         {bottom}
       </section>
+      </>
     );
   }
 
   if (wide) {
     return (
+      <>
+      {live}
       <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
         <div className="flex items-baseline justify-between gap-6">
           <h2 id={`${ids}-h`} className="text-[26px] leading-tight font-bold text-foreground">{headline}</h2>
@@ -735,17 +687,25 @@ function SeraList({
         {troubleCards}
         {askedLine}
         {chipRow}
+        {answers}
         {status_}
-        <div className="flex gap-6 items-start">
-          <div className="w-[480px] shrink-0 flex flex-col gap-2">{groups(true)}</div>
+        <div className="flex gap-6 items-start" onKeyDown={onKeys}>
+          <div className="w-[480px] shrink-0 flex flex-col gap-2">
+            {strip}
+            {groups(true)}
+          </div>
           <Pane ctx={ctx} d={pick} />
         </div>
         {bottom}
+        {bulk}
       </section>
+      </>
     );
   }
 
   return (
+    <>
+    {live}
     <section ref={root} id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
       <div className="flex flex-col gap-3">
         <h2 id={`${ids}-h`} className="text-[22px] leading-tight font-bold text-foreground">{headline}</h2>
@@ -760,46 +720,17 @@ function SeraList({
           </p>
         )}
         {chipRow}
+        {answers}
         {status_}
       </div>
-      {groups(false)}
-      {bottom}
-    </section>
-  );
-}
-
-/** R38: what a member without the queue's key sees. The count, who decides, and never a subject. */
-function SeraMember({ count, agent }: { count: CountAnswer; agent: string }) {
-  const { t } = useLingui();
-  const ids = useId();
-  // The headline's own rule (shared/seraWaiting.ts), so a member and a moderator read one number.
-  const n = headlineCount(count);
-  const small = count.toDecide === 0;
-  const nChanges = changes(n);
-  const heading =
-    n > 0
-      ? small
-        ? n === 1
-          ? t`${agent} suggests ${n} small change for the chart`
-          : t`${agent} suggests ${n} small changes for the chart`
-        : t`${agent} suggests ${nChanges} for the chart`
-      : count.lastReadWhole && count.lastReadAt
-        ? t`The chart and ${agent} are in step`
-        : t`Nothing from ${agent} waits for the chart`;
-  return (
-    <section id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
-      <div className={`${card} p-3.5 flex flex-col gap-2.5`}>
-        <h2 id={`${ids}-h`} className="text-[19px] leading-snug font-bold text-foreground">{heading}</h2>
-        {n > 0 && count.decides && <p className="text-[15px] leading-normal text-foreground">{whoDecidesWords(count.decides, n)}</p>}
-        {count.reader?.decides && (
-          <p className="text-[15px] leading-normal text-foreground"><Trans>These reach you as a draft to publish, once someone who reads the list puts them in one.</Trans></p>
-        )}
-        <p className="text-sm leading-normal text-muted-foreground"><Trans>Small changes applying by themselves: off.</Trans></p>
+      {strip}
+      <div className="flex flex-col gap-4" onKeyDown={onKeys}>
+        {groups(false)}
       </div>
-      <p className="text-[13px] leading-normal text-muted-foreground">
-        <Trans>Members see how many changes wait and who decides them. The changes themselves are read by the people who decide.</Trans>
-      </p>
+      {bottom}
+      {bulk}
     </section>
+    </>
   );
 }
 
@@ -832,113 +763,4 @@ export default function SeraDifferences({
     );
   }
   return <SeraList list={read.list} pay={read.count.paySetBy} draftOpen={draftOpen} onRetry={onRetry} onReload={onReload} />;
-}
-
-/** When an old arrival came and how much it held, one sentence for each count. */
-function ArrivedWords({ at, count }: { at: string; count: number }) {
-  return count === 1 ? <Trans>Arrived {at}, with 1 proposal.</Trans> : <Trans>Arrived {at}, with {count} proposals.</Trans>;
-}
-
-/**
- * The service's old batch cards, once the list above holds the same records:
- * folded, with no accept, so nothing is offered twice. Retiring them is a
- * later release (spec R28); until then each opens in the structure review.
- */
-export function SeraEarlierArrivals({
-  agent,
-  batches,
-  when,
-  chartKinds,
-}: {
-  agent: string;
-  batches: ReadonlyArray<{ batchId: string; receivedAt: string | null; items: ReadonlyArray<{ kind: string }> }>;
-  when: (iso: string | null) => string;
-  chartKinds: readonly string[];
-}) {
-  if (batches.length === 0) return null;
-  return (
-    <details className={`${card} p-5`}>
-      <summary className="min-h-[44px] flex items-center font-semibold text-foreground cursor-pointer">
-        <Trans context="sera changes">Earlier {agent} arrivals, now listed above</Trans>
-      </summary>
-      <p className="text-sm text-muted-foreground mt-2">
-        <Trans>What each of these holds is in the list above, so none of it is offered here a second time.</Trans>
-      </p>
-      <ul className="mt-3 flex flex-col gap-3">
-        {batches.map((b) => (
-          <li key={b.batchId} className="text-sm text-foreground flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span>
-              <ArrivedWords at={when(b.receivedAt)} count={b.items.length} />
-            </span>
-            {b.items.some((i) => chartKinds.includes(i.kind)) && (
-              <Link href={`/review/structure/${encodeURIComponent(b.batchId)}`} className={secondary}>
-                <Trans context="sera changes">Review it as one structure change</Trans>
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-// ── What /review carries of all this ────────────────────────────────────────
-
-/** The kinds that change the chart, as the structure review reads them. */
-const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
-
-/** The two reads, what waits on this reader, and which of the queue's batches fold away, for /review. */
-export function useSeraOnReview() {
-  const { read, load } = useSeraDifferences();
-  // An old arrival folds away unoffered only when EVERY item in it changes the chart and the newest read
-  // holds it whole (review S1): a note keeps its Accept, Reject and text box, and an arrival landed after
-  // a failed snapshot stays offered. Spec R28 retires them later.
-  const held = read.phase === "listed" && read.list.lastReadAt !== null ? new Set(read.list.heldBatches ?? []) : new Set<string>();
-  return {
-    read,
-    load,
-    waits: seraWaiting(read),
-    folds: (b: { batchId: string; moduleId: string | null; items: ReadonlyArray<{ kind: string }> }) =>
-      b.moduleId === SERA_MODULE && held.has(b.batchId) && b.items.length > 0 && b.items.every((i) => CHART_KINDS.includes(i.kind)),
-  };
-}
-export type SeraOnReview = ReturnType<typeof useSeraOnReview>;
-
-type QueueBatch = { batchId: string; moduleId: string | null; receivedAt: string | null; items: ReadonlyArray<{ kind: string }> };
-
-/** The top of /review: the summary line with its jump links, then the section (R37). */
-export function SeraTop({
-  sera,
-  queue,
-  witness,
-  onReload,
-}: {
-  sera: SeraOnReview;
-  /** The page's whole read, so a sync's moved batches show at once. */
-  onReload?: () => Promise<void>;
-  queue: { batches?: QueueBatch[]; openDrafts?: unknown[] } | null;
-  witness: number;
-}) {
-  return (
-    <>
-      <SeraSummaryLine read={sera.read} witness={witness} />
-      <SeraDifferences read={sera.read} draftOpen={(queue?.openDrafts ?? []).length > 0} onRetry={sera.load} onReload={onReload} />
-    </>
-  );
-}
-
-/** The page a member the queue refuses is shown: how many changes wait and who decides them (R38). */
-export function SeraMemberPage({ sera }: { sera: SeraOnReview }) {
-  return (
-    <>
-      <h1 className="text-2xl font-bold text-foreground"><Trans context="review page">Review</Trans></h1>
-      <SeraDifferences read={sera.read} draftOpen={false} onRetry={sera.load} />
-    </>
-  );
-}
-
-/** The service's old batches, folded once the list holds them. */
-export function SeraFold({ sera, batches, when }: { sera: SeraOnReview; batches: QueueBatch[]; when: (iso: string | null) => string }) {
-  if (sera.read.phase !== "listed") return null;
-  return <SeraEarlierArrivals agent={sera.read.list.agent} batches={batches.filter(sera.folds)} when={when} chartKinds={CHART_KINDS} />;
 }
