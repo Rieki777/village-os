@@ -281,21 +281,32 @@ describe("the Waiting for you board", () => {
     expect(screen.getByText("Gardener was renamed here. Sera still calls it Old Name.")).toBeTruthy();
   });
 
-  it("offers no button that would do nothing: each decision goes to the structure review", async () => {
+  it("offers each row what it can do, the board's own buttons, and nothing that would do nothing (R30)", async () => {
     serve({ list: [200, listAnswer(mainBoard())] });
     show();
     await screen.findByRole("heading", { level: 2 });
-    for (const dead of [/Add to draft/, /Keep ours/, /Apply now/, /Take Sera/, /^Edit/, /Undo/, /Retire it here/, /Ask the Treasurer/]) {
+    const row = (text: string) => screen.getAllByRole("article").find((a) => a.textContent?.includes(text)) as HTMLElement;
+    const names = (el: HTMLElement) => within(el).queryAllByRole("button").map((b) => b.textContent);
+    // A decision: into a draft, or keep ours, and a line saying it goes into a draft first.
+    expect(names(row("moving Water Steward"))).toEqual(["Add to draft", "Keep ours"]);
+    expect(within(row("moving Water Steward")).getByText("A decision. It goes into a draft before it is live.")).toBeTruthy();
+    // Archived there: retire it here. A conflict: compare first.
+    expect(names(row("Dish Rota"))).toEqual(["Retire it here", "Keep ours"]);
+    expect(names(row("both changed Pump Keeper"))).toEqual(["Compare them"]);
+    // Check first rows are taken on their own.
+    expect(names(row("Well Monitor"))).toEqual(["Add to draft", "Keep ours"]);
+    // Pay is set by a person: no button, only who sets it (S2), and no tick.
+    expect(names(row("Cook's pay"))).toEqual([]);
+    expect(within(row("Cook's pay")).queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText("Nobody holds the power to set pay right now.")).toBeTruthy();
+    // A tick on every other row, named by its sentence.
+    const ticks = screen.getAllByRole("checkbox").filter((c) => c.hasAttribute("data-tick"));
+    expect(ticks.map((c) => c.getAttribute("aria-label"))).toEqual(screen.getAllByRole("article").filter((a) => !a.textContent?.includes("Cook's pay")).map((a) => `Tick: ${a.querySelector("p")?.textContent}`));
+    // Nothing this release cannot do: no Apply now (the automatic lane), no Ask the Treasurer (pay, later), no structure review link.
+    for (const dead of [/Apply now/, /Ask the Treasurer/, /Decide it in the structure review/]) {
       expect(screen.queryByRole("button", { name: dead })).toBeNull();
       expect(screen.queryByRole("link", { name: dead })).toBeNull();
     }
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    const links = screen.getAllByRole("link", { name: "Decide it in the structure review" });
-    // The move, the new role and the rest. The conflict compares first, and pay is set by hand.
-    expect(links).toHaveLength(3);
-    for (const l of links) expect(l.getAttribute("href")).toBe("/review/structure/sync-1");
-    // Who sets pay comes from the count's door (S2): after launch with nobody holding it, the vote line.
-    expect(screen.getByText("Nobody holds the power to set pay right now.")).toBeTruthy();
   });
 
   it("says who sets pay, from who holds the power to set it here, in the house form", async () => {
@@ -318,14 +329,14 @@ describe("the Waiting for you board", () => {
     expect(screen.getAllByRole("article").map((a) => a.textContent?.includes("Well Monitor"))).toEqual([true]);
   });
 
-  it("links each row to the arrival that holds it, and says plainly when none does (C7)", async () => {
+  it("acts on the row itself, with or without an arrival holding it, so no row sends a person to an old batch (C7, R28)", async () => {
     const board = mainBoard();
     serve({ list: [200, listAnswer(board.map((d) => ({ ...d, batchId: d.kind === "roleMove" ? "sync-move" : null })))] });
     show();
     await screen.findByRole("heading", { level: 2 });
-    const links = screen.getAllByRole("link", { name: "Decide it in the structure review" });
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/review/structure/sync-move"]);
-    expect(screen.getAllByText("No arrival from Sera waits in the structure review right now.").length).toBe(2);
+    expect(screen.queryByRole("link", { name: "Decide it in the structure review" })).toBeNull();
+    expect(screen.queryByText(/No arrival from Sera waits/)).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Add to draft" })).toHaveLength(2);
   });
 
   it("puts a new circle and its roles in one group when the service sends dashed page ids (C4)", async () => {
@@ -631,8 +642,9 @@ describe("the 1280 px board", () => {
     expect((cols[0].parentElement?.parentElement as HTMLElement).className).toContain("grid-cols-2");
     // A button holds phrasing content only: its chips are spans (nit).
     expect(firstRow.querySelector("p")).toBeNull();
-    // Compact rows: no source line and no actions in the list column.
-    expect(screen.getAllByRole("link", { name: "Decide it in the structure review" })).toHaveLength(1);
+    // Compact rows: no source line and no actions in the list column; the pane's bar acts (the 1280 px board).
+    expect(within(pane).getAllByRole("button").filter((b) => b.dataset.act).map((b) => b.textContent)).toEqual(["Take Sera's: add to draft", "Keep ours", "Edit"]);
+    for (const a of screen.getAllByRole("article")) expect(within(a).queryByRole("button", { name: "Keep ours" })).toBeNull();
     expect(screen.getAllByRole("article").every((a) => !a.textContent?.includes("Edited in Sera"))).toBe(true);
   });
 });

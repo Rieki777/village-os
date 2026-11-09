@@ -308,7 +308,7 @@ export function takeRefusalWords(why: TakeRefusal, agent: string): string {
     case "severalCircles":
       return `${agent} puts this role in more than one circle, so there is no one circle to move it to.`;
     case "circleFirst":
-      return "This role sits in a circle that is not here yet. Add the circle, and its roles come with it.";
+      return "This role sits in a new circle. Add the circle, and its roles come with it.";
     case "circleNotHere":
       return `${agent} puts it in a circle this village doesn't have.`;
     case "circleRename":

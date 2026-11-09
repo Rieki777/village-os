@@ -57,7 +57,7 @@ import {
   type AnswerRefusal,
   type SettledRow,
 } from "../../shared/seraSettle";
-import { pageKey } from "../../shared/seraWaiting";
+import { pageKey, waitingKind } from "../../shared/seraWaiting";
 import { ORG_DRAFT } from "../../shared/ballotSubjects";
 import { openBallotFor } from "./ballots";
 import { recordEvent } from "./events";
@@ -238,7 +238,7 @@ export async function answerDifferences(
       else pass.push({ item, d });
     }
 
-    const done: Array<{ key: string; answer: Answer; draftId: string | null; with: string[] }> = [];
+    const done: Array<{ key: string; answer: Answer; draftId: string | null; with: string[]; setAside?: boolean }> = [];
     let draftId: string | null = null;
     if (pass.length > 0 && (act === "take" || act === "edit")) {
       draftId = await openAnswerDraft(conn, locked, read.answers ?? new Map());
@@ -292,7 +292,8 @@ export async function answerDifferences(
         if (d.subject.ourId && d.subject.pageId) {
           await writeLink(conn, { kind: d.subject.kind, pageKey: pageKey(d.subject.pageId), ourId: d.subject.ourId, setBy: "keep", actorUserId: actor.userId });
         }
-        done.push({ key: d.key, answer: "kept", draftId: null, with: [] });
+        // A moderator's keep of a decision only sets it aside (R16), and the page says so.
+        done.push({ key: d.key, answer: "kept", draftId: null, with: [], setAside: actor.door === "moderator" && waitingKind(d) === "toDecide" });
       }
     }
 

@@ -247,7 +247,8 @@ describe.skipIf(!configured)("answering the differences", () => {
 
     it("a moderator without the power only sets a decision aside: it stays in the list for the people who decide", async () => {
       const move = await one("roleMove");
-      expect((await answerDifferences(pool, deps, { act: "keep", items: [item(move)], actor: MODERATOR })).status).toBe(200);
+      const kept = await answerDifferences(pool, deps, { act: "keep", items: [item(move)], actor: MODERATOR });
+      expect([kept.status, (kept.body.done as Array<{ setAside?: boolean }>)[0].setAside]).toEqual([200, true]);
       const v = await view();
       expect(v.open.map((d) => d.key)).toContain(move.key);
       expect(Array.from(v.setAside)).toEqual([move.key]);
