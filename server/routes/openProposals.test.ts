@@ -39,7 +39,7 @@ if (!configured) console.warn("[openProposals] TEST_DATABASE_URL not set - DB ca
 const ORIGIN = "https://village.example.test";
 const ADMIN = { id: "u-admin", name: "Ada Stone" };
 const MEMBER = { id: "u-member", name: "Ivo Lantern" };
-const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01", endsOn: "2099-03-20" };
+const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01", endsOn: "2099-03-20", goals: [{ id: "g-roots", text: "Roots in the ground", done: false }, { id: "g-done", text: "Already done", done: true }] };
 const NOW_SEASON = { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01", endsOn: "2098-12-31" };
 
 describe.skipIf(!configured)("open role proposals, the intake, on a real schema", () => {
@@ -193,7 +193,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body).toMatchObject({ open: true, village: "Test Village", season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" } });
       expect(r.body.roles.map((x: any) => x.id).sort()).toEqual([gate, well].sort());
-      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn." });
+      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null });
       expect(JSON.stringify(r.body)).not.toContain(example);
       expect(JSON.stringify(r.body)).not.toContain(dormant);
     });
@@ -420,6 +420,27 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       // A second run finds nothing more to do.
       await tidyOpenProposals(pool, new Date());
       expect(await readOpenProposal(pool, declined.id)).toMatchObject({ name: null, email: null });
+    });
+  });
+
+  describe("the applicant's own card (Rye, 9 Nov 2026)", () => {
+    it("the form offers the season's open goals; a card is kept with each goal's words, and checked", async () => {
+      const form = await call("GET", "/api/open-proposals/form");
+      expect(form.body.goals).toEqual([{ id: "g-roots", text: "Roots in the ground" }]);
+      const card = {
+        roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens without a sound" }] }],
+        serves: [{ goalId: "g-roots", how: "A gate that opens lets people in." }],
+        hours: "About 10 a week",
+        agreed: { loveLetter: true, nda: true },
+      };
+      const { id } = await send({ card, email: "carded@example.test" });
+      const row = await readOpenProposal(pool, id);
+      expect(row?.body.card).toEqual({ ...card, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
+
+      const badGoal = await call("POST", "/api/open-proposals", proposal({ email: "badgoal@example.test", card: { ...card, serves: [{ goalId: "g-done", how: "x" }] } }));
+      expect(badGoal.status).toBe(400);
+      const noAgree = await call("POST", "/api/open-proposals", proposal({ email: "noagree@example.test", card: { ...card, agreed: { loveLetter: true, nda: false } } }));
+      expect(noAgree).toMatchObject({ status: 400, body: { field: "agreed" } });
     });
   });
 

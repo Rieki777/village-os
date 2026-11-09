@@ -51,6 +51,7 @@
  * account it makes finishes the adoption at the welcome step
  * (server/lib/inviteDoor.ts).
  */
+import { listOrgRoles } from "../lib/orgChart";
 import { identityKey } from "../../shared/openProposals";
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
@@ -173,7 +174,19 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   /** The roles by name and circle, as they read now. A role retired since keeps its place in the list. */
   async function rolesOf(pool: Pool, p: store.StoredOpenProposal) {
     const named = new Map((await seatsWithCircles(pool, p.body.roles.map((r) => r.roleId))).map((r) => [r.id, r]));
-    return p.body.roles.map((r) => ({ id: r.roleId, name: named.get(r.roleId)?.name ?? null, circle: named.get(r.roleId)?.circle ?? null, note: r.note }));
+    // The open card's outcomes and time, read live, so the decider sees what the role asks beside what was offered.
+    const live = new Map((await listOrgRoles(pool)).map((r) => [r.id, r]));
+    return p.body.roles.map((r) => {
+      const role: any = live.get(r.roleId);
+      return {
+        id: r.roleId,
+        name: named.get(r.roleId)?.name ?? null,
+        circle: named.get(r.roleId)?.circle ?? null,
+        note: r.note,
+        accountabilities: Array.isArray(role?.accountabilities) ? role.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
+        timeCommitment: role?.timeCommitment ?? null,
+      };
+    });
   }
   const namesOf = (roles: Array<{ id: string; name: string | null }>) => roles.map((r) => r.name ?? r.id);
 
@@ -271,6 +284,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         proposer: greetingName(p.name),
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
         term: p.body.term ?? null,
+        card: p.body.card ?? null,
         roles,
         why: p.body.why,
         aim: p.body.aim,
