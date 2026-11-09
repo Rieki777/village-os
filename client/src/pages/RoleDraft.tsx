@@ -443,7 +443,7 @@ export default function RoleDraft() {
                 </p>
               )}
               {applyHref && (
-                <Link href={applyHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-notice px-4 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <Link href={applyHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {member
                     ? pickCount === 1
                       ? t`Apply for this role`
