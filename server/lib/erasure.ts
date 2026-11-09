@@ -194,6 +194,7 @@ import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
+import { forgetBudgetAttributionOf } from "../repos/budgets";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -1711,6 +1712,26 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * The cash budget (0360, budgets spec R26): their account id comes off
+       * every budget line they changed (`changed_by`), every rate they locked
+       * (`fx_locked_by`), every import they ran (`budget_syncs.by`), every
+       * period note they wrote (`budget_period_notes.changed_by`), every
+       * source they switched (`budget_sources.set_by`) and every circle
+       * envelope they set (`budget_envelopes.changed_by`). The rows stay, as the
+       * village's record of its plan, and `changed_as` and `set_as` stay too,
+       * because they name the role the person acted through and never a person.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a budget
+       * write still lands for anybody signed in until the sessions die. Keyed
+       * on the member, so a resume or a second run finds nothing to change.
+       */
+      name: "budget-attribution-after-tombstone",
+      run: async () => {
+        await forgetBudgetAttributionOf(pool, target.id);
+      },
+    },
+    {
+      /*
        * THE MEMBER'S OWN NOTEBOOK (0359, plan 5.5): every document they kept
        * private, with its stored bytes, and their own list of picked
        * resources. A document the village's pen ADOPTED stays, because it is
@@ -2282,6 +2303,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "reward-moments-after-tombstone",
+  "budget-attribution-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
