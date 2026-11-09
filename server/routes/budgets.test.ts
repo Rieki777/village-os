@@ -302,6 +302,8 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect((await call("POST", "/api/admin/budgets/lines/:id/withdraw", "u-sam", {}, { id })).status, "the same door for a withdrawal").toBe(403);
     expect((await call("POST", "/api/admin/budgets/lines/:id/restore", "u-hana", {}, { id })).status).toBe(200);
     expect((await stored())[0].status).toBe("approved");
+    expect((await call("PATCH", "/api/admin/budgets/lines/:id", "u-hana", { changes: { planned: "1" }, format: FORMAT }, { id: "bl-nowhere" })).status).toBe(404);
+    expect((await call("POST", "/api/admin/budgets/lines/:id/withdraw", "u-hana", {}, { id: "bl-nowhere" })).status).toBe(404);
   });
 
   // ── Reading (R23) ─────────────────────────────────────────────────────────

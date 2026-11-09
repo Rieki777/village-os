@@ -215,6 +215,7 @@ export function register(app: Express, deps: Deps): void {
     };
     const preview = await importBudgetLines(getPool(), input);
     if (!preview.ok) return res.status(preview.status).json(preview);
+    if (preview.refused.some((r) => r.reason === "no_line")) return res.status(404).json({ error: "not_found", message: "There is no budget line with that id." });
     const seated = new Set(await seatedRoleIds(uid));
     const conflict = rolesTouched(preview).some((id) => seated.has(id));
     const doorView = door.ok
