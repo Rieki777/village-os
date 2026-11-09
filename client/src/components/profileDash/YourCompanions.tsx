@@ -733,10 +733,12 @@ function Customize({ data, onSaved, onClose }: { data: CompanionsPayload; onSave
                   className="min-h-11 rounded-lg border border-dash-edge bg-background px-2 text-foreground"
                 >
                   <option value="village">{c.chatEngine}</option>
-                  <option value="saberra">Sera, not connected yet</option>
+                  <option value="saberra">{`${c.outsideEngine}, not connected yet`}</option>
                 </select>
               </label>
-            ) : null}
+            ) : (
+              <span className="text-[13px] text-foreground/80">Speaks through the guide you chose: {c.engine}</span>
+            )}
             <label className="flex min-h-11 items-center gap-2 text-[13px] text-foreground/80">
               <input type="checkbox" checked={c.status === "resting"} onChange={(e) => patch(c, { status: e.target.checked ? "resting" : "active" })} />
               Resting

@@ -105,6 +105,14 @@ export interface CompanionsEnv {
   roleScope: string;
   /** The village guide's name, named above every chat it answers. */
   guideName: string;
+  /** The name the outside service's agent answers under: the saberra module's own, never a constant here. */
+  outsideGuideName: string;
+  /**
+   * The guide a member's personal companion speaks through: their own choice
+   * (shared/guideChoice.ts, `companionGuideOf`). Asked for any member, since
+   * a hand-over syncs the new holder's army too.
+   */
+  guideOf: (userId: string) => Promise<CompanionProvider>;
 }
 
 const PERSONAL_NAME = "Personal companion";
@@ -119,9 +127,9 @@ export function roleHasCompanion(roleScope: string, roleId: string): boolean {
   return s.split(",").map((x) => x.trim()).filter(Boolean).includes(roleId);
 }
 
-/** The engine's display name. The outside one is named by its own name. */
-export function engineName(provider: CompanionProvider, guideName: string): string {
-  return provider === "saberra" ? "Sera" : guideName.trim() || "The village guide";
+/** The engine's display name: the village's name for its own guide, the module's for the outside agent. */
+export function engineName(provider: CompanionProvider, env: Pick<CompanionsEnv, "guideName" | "outsideGuideName">): string {
+  return provider === "saberra" ? env.outsideGuideName : env.guideName.trim() || "The village guide";
 }
 
 // ── The army ─────────────────────────────────────────────────────────────
@@ -134,14 +142,19 @@ export function engineName(provider: CompanionProvider, guideName: string): stri
  */
 export async function syncArmy(env: CompanionsEnv, userId: string): Promise<CompanionRow[]> {
   const pool = env.pool;
+  // The personal companion follows the member's own chosen guide (Rye,
+  // 2026-11-06), so a switch on the guide chooser moves it on the next read.
+  const guide = await env.guideOf(userId);
   let mine = await companionsOf(pool, userId);
-  if (!mine.some((c) => c.scope === "personal")) {
+  const personal = mine.find((c) => c.scope === "personal");
+  if (personal && personal.provider !== guide) await updateCompanion(pool, personal.id, { provider: guide });
+  if (!personal) {
     await insertCompanionIfAbsent(pool, {
       id: `comp-${randomUUID().slice(0, 12)}`,
       ownerUserId: userId,
       scope: "personal",
       scopeId: "",
-      provider: "village",
+      provider: guide,
       name: DEFAULT_PERSONAL_NAME,
       look: JSON.stringify(defaultLook(0)),
       dailyQuestionCap: 3,
@@ -528,9 +541,10 @@ export async function armyView(
       scope: c.scope,
       scopeId: c.scopeId,
       provider: c.provider,
-      engine: engineName(c.provider, env.guideName),
+      engine: engineName(c.provider, env),
       engineConnected: c.provider === "village",
-      chatEngine: engineName("village", env.guideName),
+      chatEngine: engineName("village", env),
+      outsideEngine: engineName("saberra", env),
       name: c.name,
       scopeLine: scopeLine(c, roleNames),
       look: parseLook(c.look) ?? defaultLook(i),
