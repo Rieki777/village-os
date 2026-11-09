@@ -13,6 +13,7 @@
  * actions, so the only way on from here is the link the caller hands in.
  */
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { mergedDiff, possessive, type ListedDifference } from "@/lib/seraReview";
 
 /** Above this many characters a block is taken to run past four lines where nothing can be measured. */
@@ -27,12 +28,12 @@ export function DiffText({ here, sera }: { here: string; sera: string }) {
           {i > 0 && " "}
           {p.side === "here" ? (
             <>
-              <span className="sr-only">removed: </span>
+              <span className="sr-only"><Trans context="sera compare">removed:</Trans>{" "}</span>
               <del className="text-coral line-through">{p.text}</del>
             </>
           ) : p.side === "sera" ? (
             <>
-              <span className="sr-only">added: </span>
+              <span className="sr-only"><Trans context="sera compare">added:</Trans>{" "}</span>
               <ins className="text-sage underline decoration-2 underline-offset-2">{p.text}</ins>
             </>
           ) : (
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export function CompareBlocks({ d, agent, layout }: Props) {
+  const { t } = useLingui();
   // The diff compares the compared form (the engine's, a name swapped out the same on both sides), so a
   // swapped name is never struck (review K5); Here now shows our words as stored.
   const ours = d.ours ?? "";
@@ -71,11 +73,13 @@ export function CompareBlocks({ d, agent, layout }: Props) {
   }, [ours, theirs, full, layout]);
 
   const clamp = full ? "" : " line-clamp-4";
-  const theirsTitle = `${possessive(agent)} version`;
-  const hereText = stored ? stored : <span className="text-muted-foreground">Nothing here yet.</span>;
+  // `owner` is the service's name already in the possessive, "Sera's".
+  const owner = possessive(agent);
+  const theirsTitle = t({ message: `${owner} version`, context: "sera compare" });
+  const hereText = stored ? stored : <span className="text-muted-foreground"><Trans context="sera compare">Nothing here yet.</Trans></span>;
   const legend = (
     <p className="text-[13px] leading-snug text-muted-foreground">
-      Struck words are only here. Underlined words are only in {theirsTitle}.
+      <Trans>Struck words are only here. Underlined words are only in {theirsTitle}.</Trans>
     </p>
   );
   const toggle = overflows && (
@@ -85,7 +89,7 @@ export function CompareBlocks({ d, agent, layout }: Props) {
       onClick={() => setFull((f) => !f)}
       className="self-start min-h-[44px] text-sm font-semibold text-teal-deep underline hover:text-teal-deep-dark"
     >
-      {full ? "Show less" : "Read both in full"}
+      {full ? t({ message: "Show less", context: "sera compare" }) : t({ message: "Read both in full", context: "sera compare" })}
     </button>
   );
 
@@ -94,7 +98,7 @@ export function CompareBlocks({ d, agent, layout }: Props) {
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5 min-w-0">
-            <h4 className="text-sm font-bold text-foreground">Here now</h4>
+            <h4 className="text-sm font-bold text-foreground"><Trans context="sera compare">Here now</Trans></h4>
             <p ref={hereRef} className={`text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere]${clamp}`}>{hereText}</p>
           </div>
           <div className="flex flex-col gap-1.5 min-w-0">
@@ -112,7 +116,7 @@ export function CompareBlocks({ d, agent, layout }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <section aria-labelledby={`${id}-here`} className="bg-card border border-border rounded-xl p-3.5 flex flex-col gap-2">
-        <h3 id={`${id}-here`} className="text-[15px] font-bold text-foreground">Here now</h3>
+        <h3 id={`${id}-here`} className="text-[15px] font-bold text-foreground"><Trans context="sera compare">Here now</Trans></h3>
         <p ref={hereRef} className={`text-[15px] leading-normal text-foreground [overflow-wrap:anywhere]${clamp}`}>{hereText}</p>
       </section>
       <section aria-labelledby={`${id}-sera`} className="bg-card border border-border rounded-xl p-3.5 flex flex-col gap-2">

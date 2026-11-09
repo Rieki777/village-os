@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronDown } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { authToken } from "@/lib/gameApi";
 import { headlineCount } from "@shared/seraWaiting";
 import { whoDecidesWords, whoSetsPayWords, type Door } from "@shared/seraDecides";
@@ -138,12 +139,25 @@ export function SeraSummaryLine({ read, witness }: { read: SeraRead; witness: nu
   const agent = read.phase === "listed" ? read.list.agent : "";
   const parts: ReactNode[] = [];
   const link = "text-teal-deep underline hover:text-teal-deep-dark";
-  if (sera > 0) parts.push(<a key="sera" href="#sera-changes" className={link}>{sera} {agent} {sera === 1 ? "change" : "changes"}</a>);
+  if (sera > 0)
+    parts.push(
+      <a key="sera" href="#sera-changes" className={link}>
+        {sera === 1 ? <Trans context="sera changes">{sera} {agent} change</Trans> : <Trans context="sera changes">{sera} {agent} changes</Trans>}
+      </a>,
+    );
   if (witness > 0)
-    parts.push(<a key="witness" href="#witness" className={link}>{witness} finished {witness === 1 ? "Quest" : "Quests"} to witness</a>);
+    parts.push(
+      <a key="witness" href="#witness" className={link}>
+        {witness === 1 ? (
+          <Trans context="sera changes">{witness} finished Quest to witness</Trans>
+        ) : (
+          <Trans context="sera changes">{witness} finished Quests to witness</Trans>
+        )}
+      </a>,
+    );
   return (
     <p className="text-[13px] text-muted-foreground">
-      Waiting for you:{" "}
+      <Trans context="sera changes">Waiting for you:</Trans>{" "}
       {parts.map((p, i) => (
         <span key={i}>
           {i > 0 && " · "}
@@ -190,7 +204,7 @@ function Chips({ d, small, inline }: { d: ListedDifference; small?: boolean; inl
       {d.words.flags.map((f, i) => (
         <Tag key={i} className={`${chip} ${size}`}>{f}</Tag>
       ))}
-      {d.state === "conflict" && <Tag className={`${chip} ${size}`}>Conflict</Tag>}
+      {d.state === "conflict" && <Tag className={`${chip} ${size}`}><Trans context="sera changes">Conflict</Trans></Tag>}
     </>
   );
 }
@@ -224,11 +238,12 @@ function DecideThere({ ctx, d, block }: { ctx: Ctx; d: ListedDifference; block?:
   if (d.kind === "pay") return ctx.pay ? <p className="text-[13px] text-muted-foreground">{whoSetsPayWords(ctx.pay)}</p> : null;
   // The arrival that holds THIS difference (review C7), never one link for every row.
   if (!d.batchId) {
-    return <p className="text-[13px] text-muted-foreground">No arrival from {ctx.agent} waits in the structure review right now.</p>;
+    const agent = ctx.agent;
+    return <p className="text-[13px] text-muted-foreground"><Trans>No arrival from {agent} waits in the structure review right now.</Trans></p>;
   }
   return (
     <Link href={`/review/structure/${encodeURIComponent(d.batchId)}`} className={block ? `${primary} min-h-[48px] w-full text-[15px]` : primary}>
-      Decide it in the structure review
+      <Trans context="sera changes">Decide it in the structure review</Trans>
     </Link>
   );
 }
@@ -236,7 +251,7 @@ function DecideThere({ ctx, d, block }: { ctx: Ctx; d: ListedDifference; block?:
 function Actions({ ctx, d }: { ctx: Ctx; d: ListedDifference }) {
   const compare = comparable(d) && (
     <button type="button" data-compare={d.key} onClick={() => ctx.onCompare(d)} className={d.state === "conflict" ? primary : secondary}>
-      Compare them
+      <Trans context="sera changes">Compare them</Trans>
     </button>
   );
   return (
@@ -247,8 +262,14 @@ function Actions({ ctx, d }: { ctx: Ctx; d: ListedDifference }) {
   );
 }
 
-const nestedWords = (n: number) =>
-  `${n === 1 ? "Its role comes" : `Its ${n} roles come`} with it, and leaving the circle out leaves ${n === 1 ? "it" : "them"} out too.`;
+/** What comes with a new circle: its roles, one sentence for each count. */
+function NestedWords({ n }: { n: number }) {
+  return n === 1 ? (
+    <Trans>Its role comes with it, and leaving the circle out leaves it out too.</Trans>
+  ) : (
+    <Trans>Its {n} roles come with it, and leaving the circle out leaves them out too.</Trans>
+  );
+}
 
 /** One row on the phone: the sentence, where it came from, its flags, and the way on (the "Waiting for you" board). */
 function RowCard({ ctx, d, nested }: { ctx: Ctx; d: ListedDifference; nested: ListedDifference[] }) {
@@ -262,7 +283,7 @@ function RowCard({ ctx, d, nested }: { ctx: Ctx; d: ListedDifference; nested: Li
       <Actions ctx={ctx} d={d} />
       {nested.length > 0 && (
         <div className="mt-2 pl-3 border-l-2 border-border flex flex-col gap-3">
-          <p className="text-[13px] text-muted-foreground">{nestedWords(nested.length)}</p>
+          <p className="text-[13px] text-muted-foreground"><NestedWords n={nested.length} /></p>
           {nested.map((n) => (
             <div key={n.key} className="flex flex-col gap-1">
               <p className="text-sm leading-snug font-medium text-foreground">{n.words.sentence}</p>
@@ -342,6 +363,7 @@ function SeraList({
   draftOpen: boolean;
   onRetry: () => Promise<void>;
 }) {
+  const { t } = useLingui();
   const wide = useWide();
   const now = new Date();
   const agent = list.agent;
@@ -398,19 +420,20 @@ function SeraList({
    * sync already running is its own named refusal. The outcome stays in the card (QA Q3).
    */
   const checkAgain = async () => {
-    setAsked("Asking now.");
+    setAsked(t({ message: "Asking now.", context: "sera changes" }));
     const token = authToken();
     const r = await fetch("/api/saberra/sync", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }).catch(() => null);
-    const at = clockWords(new Date().toISOString()) ?? "now";
-    if (!r) return setAsked("Could not reach the server.");
+    const askedAt = clockWords(new Date().toISOString()) ?? "now";
+    if (!r) return setAsked(t`Could not reach the server.`);
     const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
-    if (r.status === 502) setAsked(`${agent} still didn't answer at ${at}.`);
+    const status = r.status;
+    if (status === 502) setAsked(t({ message: `${agent} still didn't answer at ${askedAt}.`, context: "sera changes" }));
     // The server's busy sentence points at the admin panel's Sync now; this page says what is true here (R3-2).
-    else if (r.status === 409 && (body as { state?: unknown } | null)?.state === "busy") setAsked("A sync is already running. Try again in a minute.");
-    else if (!r.ok) setAsked(typeof body?.error === "string" ? body.error : `The check did not run (${r.status}).`);
+    else if (status === 409 && (body as { state?: unknown } | null)?.state === "busy") setAsked(t`A sync is already running. Try again in a minute.`);
+    else if (!r.ok) setAsked(typeof body?.error === "string" ? body.error : t`The check did not run (${status}).`);
     // The whole page reads again: a sync moves waiting proposals, so the queue must follow (R3-2).
     await (onReload ?? onRetry)();
-    if (r.ok) setAsked(`answered:${at}`);
+    if (r.ok) setAsked(`answered:${askedAt}`);
   };
 
   const headline = headlineWords(agent, w, step);
@@ -421,14 +444,25 @@ function SeraList({
   const headCount = w.toDecide.length || w.small.length;
   const nChecks = waiting.filter(checkFirst).length;
   const nConflicts = waiting.filter((d) => d.state === "conflict").length;
+  const nDecide = w.toDecide.length;
+  const nSmall = w.small.length;
+  const checkFirstWords = t({ message: "Check first", context: "sera changes" });
+  const conflictsWords = t({ message: "Conflicts", context: "sera changes" });
+  const toDecideWords = t({ message: "To decide", context: "sera changes" });
+  const smallChangesWords = t({ message: "Small changes", context: "sera changes" });
+  const noCircleWords = t({ message: "Not in a circle", context: "sera changes" });
   // What the chips and the filter show, said out loud and under the chips (QA Q4).
   const shownLabel =
-    only === "checkFirst" ? "Check first" : only === "conflicts" ? "Conflicts" : view === "decide" ? "To decide" : view === "small" ? "Small changes" : null;
-  const circleName = circle ? allGroups.find((g) => g.key === circle)?.name ?? "Not in a circle" : null;
+    only === "checkFirst" ? checkFirstWords : only === "conflicts" ? conflictsWords : view === "decide" ? toDecideWords : view === "small" ? smallChangesWords : null;
+  const circleName = circle ? allGroups.find((g) => g.key === circle)?.name ?? noCircleWords : null;
   const shownWords = [shownLabel, circleName].filter(Boolean).join(", ");
+  const shownCount = changes(shownList.length);
+  const nShown = shownList.length;
   const status_ = waiting.length > 0 && (
     <p role="status" className="text-sm text-muted-foreground">
-      {shownWords ? `Showing ${changes(shownList.length)}: ${shownWords}` : `Showing all ${shownList.length} waiting changes`}
+      {shownWords
+        ? t({ message: `Showing ${shownCount}: ${shownWords}`, context: "sera changes" })
+        : t({ message: `Showing all ${nShown} waiting changes`, context: "sera changes" })}
     </p>
   );
 
@@ -440,7 +474,7 @@ function SeraList({
         <SeraCompare
           d={compareRow}
           agent={agent}
-          backWords={`Back to all ${headCount}`}
+          backWords={t({ message: `Back to all ${headCount}`, context: "sera changes" })}
           onBack={() => setComparing(null)}
           source={<Source d={compareRow} />}
           chips={
@@ -460,50 +494,50 @@ function SeraList({
     }`;
   const chipRow = waiting.length > 0 && (
     <div className="flex flex-col gap-3">
-      <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+      <div role="group" aria-label={t({ message: "Show", context: "sera changes" })} className="flex flex-wrap gap-2">
         {w.toDecide.length > 0 ? (
           <button type="button" aria-pressed={view === "decide" && only === null} onClick={() => { setView("decide"); setOnly(null); }} className={pressed(view === "decide" && only === null)}>
-            To decide {w.toDecide.length}
+            <Trans context="sera changes">To decide {nDecide}</Trans>
           </button>
         ) : (
           <button type="button" aria-pressed={view === "small" && only === null} onClick={() => { setView("small"); setOnly(null); }} className={pressed(view === "small" && only === null)}>
-            Small changes {w.small.length}
+            <Trans context="sera changes">Small changes {nSmall}</Trans>
           </button>
         )}
         {nChecks > 0 && (
           <button type="button" aria-pressed={only === "checkFirst"} onClick={() => { setOnly(only === "checkFirst" ? null : "checkFirst"); setView("all"); }} className={pressed(only === "checkFirst")}>
-            Check first {nChecks}
+            <Trans context="sera changes">Check first {nChecks}</Trans>
           </button>
         )}
         {nConflicts > 0 && (
           <button type="button" aria-pressed={only === "conflicts"} onClick={() => { setOnly(only === "conflicts" ? null : "conflicts"); setView("all"); }} className={pressed(only === "conflicts")}>
-            Conflicts {nConflicts}
+            <Trans context="sera changes">Conflicts {nConflicts}</Trans>
           </button>
         )}
         <button type="button" aria-expanded={filterOpen} aria-controls={`${ids}-filter`} onClick={() => setFilterOpen((o) => !o)} className={pressed(false)}>
-          Filter
+          <Trans context="sera changes">Filter</Trans>
         </button>
       </div>
       {filterOpen && (
         <div id={`${ids}-filter`} className={`${card} p-3.5 flex flex-wrap gap-4`}>
           <label className="flex flex-col gap-1 text-sm font-semibold text-foreground">
-            Which changes
+            <Trans context="sera changes">Which changes</Trans>
             <select
               value={view}
               onChange={(e) => { setView(e.target.value as View); setOnly(null); }}
               className="min-h-[44px] rounded-lg border border-border bg-card px-3 text-sm font-normal"
             >
-              <option value="all">Everything waiting</option>
-              {w.toDecide.length > 0 && <option value="decide">To decide</option>}
-              {w.small.length > 0 && <option value="small">Small changes</option>}
+              <option value="all">{t({ message: "Everything waiting", context: "sera changes" })}</option>
+              {w.toDecide.length > 0 && <option value="decide">{toDecideWords}</option>}
+              {w.small.length > 0 && <option value="small">{smallChangesWords}</option>}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm font-semibold text-foreground">
-            Circle
+            <Trans context="sera changes">Circle</Trans>
             <select value={circle} onChange={(e) => setCircle(e.target.value)} className="min-h-[44px] rounded-lg border border-border bg-card px-3 text-sm font-normal">
-              <option value="">Every circle</option>
+              <option value="">{t({ message: "Every circle", context: "sera changes" })}</option>
               {allGroups.map((g) => (
-                <option key={g.key} value={g.key}>{g.name ?? "Not in a circle"}</option>
+                <option key={g.key} value={g.key}>{g.name ?? noCircleWords}</option>
               ))}
             </select>
           </label>
@@ -515,9 +549,9 @@ function SeraList({
   const groups = (compact: boolean) =>
     shown.length === 0 && waiting.length > 0 ? (
       <p className="text-sm text-muted-foreground">
-        Nothing here matches what is chosen above.{" "}
+        <Trans>Nothing here matches what is chosen above.</Trans>{" "}
         <button type="button" onClick={() => { setView("all"); setOnly(null); setCircle(""); }} className={inlineLink}>
-          Show everything waiting
+          <Trans context="sera changes">Show everything waiting</Trans>
         </button>
       </p>
     ) : (
@@ -563,29 +597,35 @@ function SeraList({
     <>
       {facts}{" "}
       <a href="#sera-facts" onClick={() => setFactsOpen(true)} className={inlineLink}>
-        See them at the bottom of this page.
+        <Trans>See them at the bottom of this page.</Trans>
       </a>
     </>
   );
 
   // What Check again found, said in the card while the card stands, and under the headline once the read is whole.
-  const askedWords = asked.startsWith("answered:") ? `${agent} ${trouble?.noAnswer ? "still didn't answer" : "answered"} at ${asked.slice(9)}.` : asked;
+  const askedAt = asked.slice(9);
+  const askedWords = asked.startsWith("answered:")
+    ? trouble?.noAnswer
+      ? t({ message: `${agent} still didn't answer at ${askedAt}.`, context: "sera changes" })
+      : t({ message: `${agent} answered at ${askedAt}.`, context: "sera changes" })
+    : asked;
   const askedLine = !trouble?.noAnswer && asked && (
     <p role="status" className="text-sm text-foreground">{askedWords}</p>
   );
+  const lastAt = clockWords(list.lastReadAt, now) ?? "";
   const troubleCards = trouble && (
     <>
       {trouble.noAnswer ? (
         <section aria-labelledby={`${ids}-err`} className={`bg-card border border-coral rounded-xl p-3.5 flex flex-col gap-2.5`}>
           <h3 id={`${ids}-err`} className="text-base font-bold text-coral">
-            {agent} didn't answer at {clockWords(list.lastReadAt, now)}
+            <Trans context="sera changes">{agent} didn't answer at {lastAt}</Trans>
           </h3>
           {trouble.lines.map((l) => (
             <p key={l} className="text-[15px] leading-normal text-foreground">{l}</p>
           ))}
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={() => void checkAgain()} className={`${primary} self-start px-4`}>
-              Check again
+              <Trans context="sera changes">Check again</Trans>
             </button>
             <p role="status" className="text-sm text-foreground">{askedWords}</p>
           </div>
@@ -596,12 +636,16 @@ function SeraList({
         </div>
       )}
       <p className="text-sm leading-normal text-muted-foreground">
-        Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it
-        is missing from two full checks in a row.
+        <Trans>
+          Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it
+          is missing from two full checks in a row.
+        </Trans>
       </p>
     </>
   );
 
+  const nAhead = w.oursAhead.length;
+  const nFacts = w.facts.length;
   const bottom = (
     <>
       {ahead && (
@@ -609,7 +653,11 @@ function SeraList({
           <p className="text-sm leading-normal text-muted-foreground">
             {ahead}{" "}
             <button type="button" aria-expanded={aheadOpen} onClick={() => setAheadOpen((o) => !o)} className={inlineLink}>
-              {aheadOpen ? "Hide them" : `See which ${w.oursAhead.length === 1 ? "one" : w.oursAhead.length}`}
+              {aheadOpen
+                ? t({ message: "Hide them", context: "sera changes" })
+                : nAhead === 1
+                  ? t({ message: "See which one", context: "sera changes" })
+                  : t({ message: `See which ${nAhead}`, context: "sera changes" })}
             </button>
           </p>
           {aheadOpen && (
@@ -632,9 +680,9 @@ function SeraList({
           className={`${card} px-3.5 py-3 scroll-mt-24`}
         >
           <summary className="min-h-[44px] flex items-center text-[15px] font-semibold text-foreground cursor-pointer">
-            Facts updated since yesterday: {w.facts.length}
+            <Trans context="sera changes">Facts updated since yesterday: {nFacts}</Trans>
           </summary>
-          <p className="mt-2 text-sm text-muted-foreground">Review dates, sectors and role types {agent} keeps.</p>
+          <p className="mt-2 text-sm text-muted-foreground"><Trans>Review dates, sectors and role types {agent} keeps.</Trans></p>
           <ul className="mt-3 flex flex-col gap-3">
             {w.facts.map((d) => (
               <li key={d.key} className="text-sm text-foreground [overflow-wrap:anywhere]">
@@ -655,14 +703,14 @@ function SeraList({
         {troubleCards}
         {askedLine}
         <p className="text-[15px] leading-normal text-muted-foreground">
-          {checked ?? `Nothing has been read from ${agent} yet.`}
-          {step ? " Nothing waits for you, and no draft is open." : draftOpen ? " A draft from this queue is still open." : ""}
+          {checked ?? t`Nothing has been read from ${agent} yet.`}
+          {step ? ` ${t`Nothing waits for you, and no draft is open.`}` : draftOpen ? ` ${t`A draft from this queue is still open.`}` : ""}
         </p>
         {facts && <p className="text-sm leading-normal text-muted-foreground">{factsLine}</p>}
         {list.lastReadAt !== null && (
           <section aria-labelledby={`${ids}-sw`} className={`${card} p-3.5 flex flex-col gap-2`}>
-            <h3 id={`${ids}-sw`} className="text-base font-bold text-foreground">Small changes apply by themselves: off</h3>
-            <p className="text-sm leading-normal text-muted-foreground">Until it is on, each small change waits for you in this list.</p>
+            <h3 id={`${ids}-sw`} className="text-base font-bold text-foreground"><Trans>Small changes apply by themselves: off</Trans></h3>
+            <p className="text-sm leading-normal text-muted-foreground"><Trans>Until it is on, each small change waits for you in this list.</Trans></p>
           </section>
         )}
         {bottom}
@@ -722,28 +770,34 @@ function SeraList({
 
 /** R38: what a member without the queue's key sees. The count, who decides, and never a subject. */
 function SeraMember({ count, agent }: { count: CountAnswer; agent: string }) {
+  const { t } = useLingui();
   const ids = useId();
   // The headline's own rule (shared/seraWaiting.ts), so a member and a moderator read one number.
   const n = headlineCount(count);
   const small = count.toDecide === 0;
+  const nChanges = changes(n);
   const heading =
     n > 0
-      ? `${agent} suggests ${small ? `${n} small ${n === 1 ? "change" : "changes"}` : changes(n)} for the chart`
+      ? small
+        ? n === 1
+          ? t`${agent} suggests ${n} small change for the chart`
+          : t`${agent} suggests ${n} small changes for the chart`
+        : t`${agent} suggests ${nChanges} for the chart`
       : count.lastReadWhole && count.lastReadAt
-        ? `The chart and ${agent} are in step`
-        : `Nothing from ${agent} waits for the chart`;
+        ? t`The chart and ${agent} are in step`
+        : t`Nothing from ${agent} waits for the chart`;
   return (
     <section id="sera-changes" aria-labelledby={`${ids}-h`} className="scroll-mt-24 flex flex-col gap-4">
       <div className={`${card} p-3.5 flex flex-col gap-2.5`}>
         <h2 id={`${ids}-h`} className="text-[19px] leading-snug font-bold text-foreground">{heading}</h2>
         {n > 0 && count.decides && <p className="text-[15px] leading-normal text-foreground">{whoDecidesWords(count.decides, n)}</p>}
         {count.reader?.decides && (
-          <p className="text-[15px] leading-normal text-foreground">These reach you as a draft to publish, once someone who reads the list puts them in one.</p>
+          <p className="text-[15px] leading-normal text-foreground"><Trans>These reach you as a draft to publish, once someone who reads the list puts them in one.</Trans></p>
         )}
-        <p className="text-sm leading-normal text-muted-foreground">Small changes applying by themselves: off.</p>
+        <p className="text-sm leading-normal text-muted-foreground"><Trans>Small changes applying by themselves: off.</Trans></p>
       </div>
       <p className="text-[13px] leading-normal text-muted-foreground">
-        Members see how many changes wait and who decides them. The changes themselves are read by the people who decide.
+        <Trans>Members see how many changes wait and who decides them. The changes themselves are read by the people who decide.</Trans>
       </p>
     </section>
   );
@@ -764,19 +818,25 @@ export default function SeraDifferences({
   if (read.phase === "loading" || read.phase === "off") return null;
   if (read.phase === "member") return <SeraMember count={read.count} agent={read.agent} />;
   if (read.phase === "failed") {
+    const error = read.error;
     return (
       <section id="sera-changes" aria-labelledby="sera-failed-h" className={`${card} p-5 scroll-mt-24`}>
-        <h2 id="sera-failed-h" className="text-xl font-bold text-foreground">The list of changes did not load</h2>
+        <h2 id="sera-failed-h" className="text-xl font-bold text-foreground"><Trans>The list of changes did not load</Trans></h2>
         <p className="text-sm text-muted-foreground mt-2">
-          {read.error}. There may be changes waiting; this is not an empty list.
+          <Trans>{error}. There may be changes waiting; this is not an empty list.</Trans>
         </p>
         <button type="button" onClick={() => void onRetry()} className={`${secondary} mt-4`}>
-          Read the list again
+          <Trans context="sera changes">Read the list again</Trans>
         </button>
       </section>
     );
   }
   return <SeraList list={read.list} pay={read.count.paySetBy} draftOpen={draftOpen} onRetry={onRetry} onReload={onReload} />;
+}
+
+/** When an old arrival came and how much it held, one sentence for each count. */
+function ArrivedWords({ at, count }: { at: string; count: number }) {
+  return count === 1 ? <Trans>Arrived {at}, with 1 proposal.</Trans> : <Trans>Arrived {at}, with {count} proposals.</Trans>;
 }
 
 /**
@@ -799,20 +859,20 @@ export function SeraEarlierArrivals({
   return (
     <details className={`${card} p-5`}>
       <summary className="min-h-[44px] flex items-center font-semibold text-foreground cursor-pointer">
-        Earlier {agent} arrivals, now listed above
+        <Trans context="sera changes">Earlier {agent} arrivals, now listed above</Trans>
       </summary>
       <p className="text-sm text-muted-foreground mt-2">
-        What each of these holds is in the list above, so none of it is offered here a second time.
+        <Trans>What each of these holds is in the list above, so none of it is offered here a second time.</Trans>
       </p>
       <ul className="mt-3 flex flex-col gap-3">
         {batches.map((b) => (
           <li key={b.batchId} className="text-sm text-foreground flex flex-wrap items-center gap-x-3 gap-y-2">
             <span>
-              Arrived {when(b.receivedAt)}, with {b.items.length === 1 ? "1 proposal" : `${b.items.length} proposals`}.
+              <ArrivedWords at={when(b.receivedAt)} count={b.items.length} />
             </span>
             {b.items.some((i) => chartKinds.includes(i.kind)) && (
               <Link href={`/review/structure/${encodeURIComponent(b.batchId)}`} className={secondary}>
-                Review it as one structure change
+                <Trans context="sera changes">Review it as one structure change</Trans>
               </Link>
             )}
           </li>
@@ -871,7 +931,7 @@ export function SeraTop({
 export function SeraMemberPage({ sera }: { sera: SeraOnReview }) {
   return (
     <>
-      <h1 className="text-2xl font-bold text-foreground">Review</h1>
+      <h1 className="text-2xl font-bold text-foreground"><Trans context="review page">Review</Trans></h1>
       <SeraDifferences read={sera.read} draftOpen={false} onRetry={sera.load} />
     </>
   );
