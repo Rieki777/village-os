@@ -193,4 +193,20 @@ describe.skipIf(!configured)("setting a quest's price with the Treasurer and the
     expect(took.status, JSON.stringify(took.body)).toBe(200);
     expect((await claims.byId(claimId))?.payTerms?.valueMinor).toBe(expectedTotal);
   });
+  it("the pricing desk lists each quest still offered, its last figure beside its inputs, and its open claims", async () => {
+    const id = await makeQuest();
+    expect((await setPrice(id, expectedTotal)).body.state).toBe("set");
+    await claims.openClaim({ id: `claim-desk-${id}`, questId: id, questTitle: "q", userId: "member-9", userName: "M", status: "claimed", claimedAt: new Date().toISOString(), artifactUrl: "", note: "" });
+    const desk = await call("GET /api/quests/pricing-desk");
+    expect(desk.status, JSON.stringify(desk.body)).toBe(200);
+    expect(desk.body).toMatchObject({ modelAdopted: true, eeMeaningWritten: true, cashBudgetLeft: null });
+    const row = desk.body.quests.find((q: any) => q.id === id);
+    expect(row.latest).toMatchObject({ state: "set", setMinor: expectedTotal });
+    expect(row.latest.inputs.lines[0]).toMatchObject({ band: "general", estimatedHours: 4.5 });
+    expect(row.pastPrices[0].setMinor).toBe(expectedTotal);
+    expect(row.openClaims).toBe(1);
+    expect(row.pay.value).toMatchObject({ minor: expectedTotal, currency: "CRC" }); // the scratch schema seeds no rules, so the lines are the engine's to test elsewhere
+    holdsRolePay = false;
+    expect((await call("GET /api/quests/pricing-desk")).status).toBe(403);
+  });
 });
