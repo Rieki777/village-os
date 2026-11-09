@@ -53,6 +53,7 @@ import {
   acceptSuggestion,
   adminEditCloser,
   adminEditControl,
+  currentFor,
   putSuggestionToVillage,
   staleDifference,
   type SuggestionBallotDeps,
@@ -154,15 +155,24 @@ export function register(app: Express, deps: Deps): void {
     return who;
   }
 
-  const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[] }> => {
-    const holders = await liveHoldersOf(s.edit.capability);
+  /** The holders who may decide this suggestion, and every live holder (V10). */
+  const decidersOf = async (s: SuggestionRow, all: string[]): Promise<string[]> => {
+    const control = adminEditControl(s.edit.control);
+    return control?.deciders ? control.deciders(s.edit.payload, all) : all;
+  };
+
+  const routeNow = async (s: SuggestionRow, ctx: CapabilityCtx): Promise<{ route: SuggestionRoute; holders: string[]; all: string[] }> => {
+    const all = await liveHoldersOf(s.edit.capability);
+    // The dial picks holders or a ballot for the power; of the holders, only those who may decide it count, and when
+    // every holder is conflicted (V10) nobody does, so the village decides it.
+    const holders = await decidersOf(s, all);
     const route = routeSuggestion({
       capability: s.edit.capability,
       villageHolds: isVillageHeld(s.edit.capability, ctx.villageHeld),
       liveHolders: holders,
       passesPowers: ADMIN_EDIT_CONTROLS[s.edit.control]?.passesPowers ?? false,
     }, routes());
-    return { route, holders };
+    return { route, holders, all };
   };
 
   /** The suggestion by id, or null after a 404. */
@@ -193,7 +203,15 @@ export function register(app: Express, deps: Deps): void {
       res.status(409).json({ error: "not_waiting", message: `This suggestion is already ${s.status}.`, status: s.status });
       return null;
     }
-    const { route, holders } = await routeNow(s, who.ctx);
+    const { route, holders, all } = await routeNow(s, who.ctx);
+    if (all.includes(userId) && !holders.includes(userId)) {
+      res.status(409).json({
+        error: "payee_conflict",
+        code: "payee_conflict",
+        message: "This suggestion changes what a role you hold is paid, so the other holders decide it, or the village when every holder holds one.",
+      });
+      return null;
+    }
     if (!holders.includes(userId)) {
       res.status(403).json({
         error: "holders_only",
@@ -263,7 +281,7 @@ export function register(app: Express, deps: Deps): void {
     const control = adminEditControl(body.control);
     if (!control) return res.status(409).json({ error: "control_not_wired", message: "This control cannot take suggestions yet." });
     const why = typeof body.why === "string" ? body.why.trim().slice(0, 2000) : "";
-    const current = control.read();
+    const current = await control.read();
     const edit: AdminEditPayload = {
       control: body.control,
       capability: ADMIN_EDIT_CONTROLS[body.control].capability,
@@ -271,12 +289,23 @@ export function register(app: Express, deps: Deps): void {
       base: current.value,
       payload: body.payload,
     };
-    // The form names the version it was opened on, the way a direct save does.
-    if (typeof body.was === "string" && body.was && body.was !== current.version) {
+    // The form names the version it was opened on, the way a direct save does. A control that binds
+    // a suggestion to the rows it touches judges that itself, below.
+    if (!control.versionFor && typeof body.was === "string" && body.was && body.was !== current.version) {
       return res.status(409).json({ error: "stale", message: "These words changed since this page was opened. Reload it to see them, then suggest your change again." });
     }
     const shape = validateDraftPayload("admin_edit", edit) ?? control.problem(edit.payload);
     if (shape) return res.status(400).json({ error: "refused", message: shape });
+    if (control.prepare) {
+      const prepared = await control.prepare(edit.payload, userId);
+      if (prepared.problem) return res.status(400).json({ error: "refused", message: prepared.problem });
+      edit.payload = prepared.payload;
+      if (prepared.version) edit.version = prepared.version;
+    }
+    // A control that binds a suggestion to the rows it touches checks the version its preview read (V9).
+    if (control.versionFor && typeof body.was === "string" && body.was && body.was !== edit.version) {
+      return res.status(409).json({ error: "stale", message: "What this suggestion changes moved since you previewed it. Preview it again, then suggest it." });
+    }
 
     const made = await store.create({ edit, why, suggestedBy: userId });
     const { route, holders } = await routeNow(made, who.ctx);
@@ -320,7 +349,10 @@ export function register(app: Express, deps: Deps): void {
     for (const s of await store.withStatus("proposed")) {
       if (s.suggestedBy === userId || !isAdminEditControl(s.edit.control)) continue;
       if (!holdersByCap.has(s.edit.capability)) holdersByCap.set(s.edit.capability, await liveHoldersOf(s.edit.capability));
-      const holders = holdersByCap.get(s.edit.capability)!;
+      const all = holdersByCap.get(s.edit.capability)!;
+      if (!all.includes(userId)) continue;
+      // Only the holders who may decide it see it: never one a payee conflict rules out (V10).
+      const holders = await decidersOf(s, all);
       if (!holders.includes(userId)) continue;
       const route = routeSuggestion({
         capability: s.edit.capability,
@@ -330,7 +362,7 @@ export function register(app: Express, deps: Deps): void {
       }, routes());
       if (route !== "holders") continue;
       const control = adminEditControl(s.edit.control);
-      queue.push(view(s, { stale: control ? staleDifference(s, control.read()) : null, suggester: await nameOf(s.suggestedBy) }));
+      queue.push(view(s, { stale: control ? staleDifference(s, await currentFor(control, s)) : null, suggester: await nameOf(s.suggestedBy) }));
     }
     res.json({ suggestions: queue });
   });

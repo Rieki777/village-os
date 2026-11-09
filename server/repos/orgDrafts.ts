@@ -181,6 +181,27 @@ export async function lockCirclesCounter(conn: PoolConnection): Promise<void> {
   await conn.query("SELECT version FROM collection_versions WHERE collection = ? FOR UPDATE", ["circles"]);
 }
 
+/**
+ * One draft's row, locked for the publish's transaction, before its changes
+ * are read: a change added to the draft by another transaction waits until the
+ * publish has committed, and then finds the draft published (review 2).
+ */
+export async function lockDraftRow(conn: PoolConnection, draftId: string): Promise<void> {
+  await conn.query("SELECT id FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]);
+}
+
+/**
+ * The retirements a person chose (`chosenBy` on a `rest_seat` or `rest_circle`
+ * change): the structure review's and the differences list's. The erasure
+ * clears a leaver's id from them (review 15).
+ */
+export async function draftChangesChosenBy(pool: Pool): Promise<PeopleChangeRow[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, op, payload, before_json FROM org_draft_changes WHERE op IN ('rest_seat', 'rest_circle')",
+  );
+  return rows as unknown as PeopleChangeRow[];
+}
+
 /*
  * ── A DRAFT'S BODY: BOTH TABLES, UNDER ONE FILTER ────────────────────────
  *

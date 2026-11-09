@@ -950,6 +950,16 @@ describe("tracing a published change to the service's proposal", () => {
     // The control: the untouched proposal traces its own draft's change, and only that one.
     expect(traceAccepted(changes, [structure]).map((c) => c.from?.pageId ?? null)).toEqual([K, null]);
   });
+
+  it("never traces an update by name to another proposal's seat of the same name when an edited proposal also holds one (review 10)", () => {
+    const edited = { id: "p3", draftId: "d1", kind: "org.proposed", original: false, payload: { seats: [{ id: pid(87), name: "Cook", aim: "A steward's words." }] } };
+    const update = [{ draftId: "d1", op: "update_seat", orgRoleId: "cook-here", payload: { name: "Cook" } }];
+    // The edited one is counted, so the name names two seats and traces to neither.
+    expect(traceAccepted(update, [structure, edited]).map((c) => c.from)).toEqual([null]);
+    // An update traced by name to a seat only an edited proposal holds traces to nothing either.
+    const alone = { ...edited, payload: { seats: [{ id: pid(88), name: "Baker", aim: "Bakes." }] } };
+    expect(traceAccepted([{ draftId: "d1", op: "update_seat", orgRoleId: "baker-here", payload: { name: "Baker" } }], [structure, alone]).map((c) => c.from)).toEqual([null]);
+  });
 });
 
 describe("review 4: a move says when its circle is not here", () => {

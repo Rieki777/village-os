@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { announceThemeChange } from "@/lib/liveTheme";
 import { FONT_CATALOG, offeringsFor, type FontRole } from "@shared/fontCatalog";
 
 /**
@@ -84,7 +85,8 @@ export default function TypographyPanel({ password }: { password: string }) {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTheme(data.brand?.theme ?? next);
-      toast.success("Typography saved. The site re-typesets on next load");
+      announceThemeChange();
+      toast.success("Typography saved. Open pages re-typeset now");
     } catch {
       toast.error("Save failed");
     }

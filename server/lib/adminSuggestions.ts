@@ -38,16 +38,52 @@ export type Refusal = { ok: false; status: number; body: Record<string, unknown>
 
 /** One admin control a suggestion may name, as its own route module registers it. */
 export interface AdminEditControl {
-  /** The value in force now, and its version (the one the direct route's `x-content-was` names). */
-  read(): { value: unknown; version: string };
+  /**
+   * The value in force now, and its version (the one the direct route's
+   * `x-content-was` names). A control whose value lives in the database reads
+   * it there, so this may answer a promise; every caller awaits it.
+   */
+  read(): { value: unknown; version: string } | Promise<{ value: unknown; version: string }>;
   /** What is wrong with a payload, in words, or null. The direct route's own check. */
   problem(payload: unknown): string | null;
   /**
    * Apply it: the direct route's own write, given the version it was made on.
    * The route asks the gate before calling this; a carried vote is the
-   * village's decision and calls it directly.
+   * village's decision and calls it directly. `by.decidedBy` is the holder who
+   * accepted it, or `village:<ballot id>` for a carried vote, for a control
+   * whose own door asks who is writing (the cash budget's payee conflict).
    */
-  apply(payload: unknown, was: string): Promise<{ ok: true } | Refusal>;
+  apply(payload: unknown, was: string, by?: { decidedBy: string }): Promise<{ ok: true } | Refusal>;
+  /**
+   * What the change does, one line each, for the ballot's WHAT CHANGES. A
+   * control whose payload is a list of rows rather than the document itself
+   * says it in words; without this the ballot shows the leaf difference.
+   */
+  describe?(payload: unknown): string[] | Promise<string[]>;
+  /**
+   * At creation, before anything is stored: the control checks the payload
+   * the way its own door would (a dry run), refuses one that would not apply,
+   * returns it cleaned (fields a suggestion may not carry taken off, and a
+   * payee conflict flagged), and may name the version it binds to.
+   */
+  prepare?(payload: unknown, suggestedBy: string): Promise<{ problem: string | null; payload: unknown; version?: string }>;
+  /**
+   * The version THIS payload binds to now, when it is narrower than `read()`'s
+   * (the rows it touches, never the whole document). Stale is judged on it.
+   */
+  versionFor?(payload: unknown): Promise<string>;
+  /**
+   * Of the live holders, the ones who may decide this suggestion: for the cash
+   * budget, those who hold no role the change pays (a payee conflict, V10).
+   * When holders exist and none may decide it, it goes to a village vote.
+   */
+  deciders?(payload: unknown, holders: readonly string[]): Promise<string[]>;
+}
+
+/** The control's value now, with the version this suggestion's payload binds to. */
+export async function currentFor(control: AdminEditControl, s: Pick<SuggestionRow, "edit">): Promise<{ value: unknown; version: string }> {
+  const now = await control.read();
+  return control.versionFor ? { value: now.value, version: await control.versionFor(s.edit.payload) } : now;
 }
 
 const CONTROLS = new Map<AdminEditControlId, AdminEditControl>();
@@ -97,7 +133,7 @@ export async function acceptSuggestion(
 ): Promise<{ ok: true } | Refusal> {
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const stale = staleDifference(s, control.read());
+  const stale = staleDifference(s, await currentFor(control, s));
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
   const problem = control.problem(s.edit.payload);
   if (problem) return { ok: false, status: 400, body: { error: problem, code: "payload_refused" } };
@@ -106,7 +142,7 @@ export async function acceptSuggestion(
   }
   let applied: { ok: true } | Refusal;
   try {
-    applied = await control.apply(s.edit.payload, s.edit.version);
+    applied = await control.apply(s.edit.payload, s.edit.version, { decidedBy: input.decidedBy });
   } catch (e) {
     await store.move(s.id, "accepted", s.status, { ballotId: s.ballotId });
     throw e;
@@ -132,10 +168,12 @@ export interface SuggestionBallotDeps {
 export const villageDecider = (ballotId: string): string => `village:${ballotId}`.slice(0, 64);
 
 /** The decision page shows this text as written, so plain lines only (no Markdown marks). */
-function ballotText(s: SuggestionRow, suggester: string, current: { value: unknown }, at: Date): { title: string; doc: string } {
+function ballotText(s: SuggestionRow, suggester: string, current: { value: unknown }, at: Date, described: string[] | null = null): { title: string; doc: string } {
   const label = ADMIN_EDIT_CONTROLS[s.edit.control].label;
   const title = `A suggested change to ${label}: the village decides`;
-  const lines = suggestionDiff(current.value, s.edit.payload).map((d) => `  ${d.path}: ${JSON.stringify(d.from)} becomes ${JSON.stringify(d.to)}`);
+  const lines = described
+    ? described.map((l) => `  ${l}`)
+    : suggestionDiff(current.value, s.edit.payload).map((d) => `  ${d.path}: ${JSON.stringify(d.from)} becomes ${JSON.stringify(d.to)}`);
   const doc = [
     title,
     "",
@@ -176,9 +214,14 @@ export async function putSuggestionToVillage(
   if (s.status !== "proposed") return { ok: false, status: 409, body: { error: `This suggestion is already ${s.status}.`, code: "not_waiting" } };
   const control = adminEditControl(s.edit.control);
   if (!control) return { ok: false, status: 409, body: { error: "This control cannot take suggestions yet.", code: "control_not_wired" } };
-  const now = control.read();
+  const now = await currentFor(control, s);
   const stale = staleDifference(s, now);
   if (stale) return { ok: false, status: 409, body: { error: STALE_WORDS, code: "stale", difference: stale } };
+  // The checks it passed when it was made are run again before the village is asked: a name added to the roster since, say.
+  if (control.prepare) {
+    const again = await control.prepare(s.edit.payload, s.suggestedBy);
+    if (again.problem) return { ok: false, status: 400, body: { error: again.problem, code: "payload_refused" } };
+  }
   const { setup } = input;
   if (setup.tokenProblem) return { ok: false, status: 409, body: { error: setup.tokenProblem } };
   if (!(await deps.store.move(s.id, "proposed", "superseded", {}))) {
@@ -186,7 +229,8 @@ export async function putSuggestionToVillage(
   }
   const method = thresholdsForSubject(ADMIN_EDIT)?.method ?? setup.method;
   const dials = dialsForSubject(ADMIN_EDIT, method, setup.dials, thresholdSettingsFrom((key) => Number(numberVar(key)), (key) => stringVar(key)));
-  const { title, doc } = ballotText(s, await deps.nameOf(s.suggestedBy), now, input.at ?? new Date());
+  const described = control.describe ? await control.describe(s.edit.payload) : null;
+  const { title, doc } = ballotText(s, await deps.nameOf(s.suggestedBy), now, input.at ?? new Date(), described);
   let opened: Awaited<ReturnType<typeof openBallot>>;
   try {
     opened = await openBallot(deps.pool, {

@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists. Version 2 applies Rye's corrections of 9 Nov 2026 (plan v3.1).",
+  "version": 4,
+  "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists. Version 2 applies Rye's corrections of 9 Nov 2026 (plan v3.1). Version 4 follows the live map's version 7 (9 Nov 2026), which removed guest, healing and trailhead: 20 keys.",
   "registryDisputes": [],
   "zones": [
     {
@@ -637,7 +637,6 @@
     {
       "key": "trailhead",
       "name": "Pacific Trailhead",
-      "onMap": true,
       "zone": "food-forest",
       "kind": "route",
       "stage": "idea",
@@ -652,29 +651,29 @@
           "topic": "Is the map's Pacific Trailhead the trails of the forestry plan?",
           "sources": [
             "Live map: a trailhead",
-            "Forestry plan: about 3 km of trails"
+            "Forestry plan: about 3 km of trails",
+            "Live map version 7 (9 Nov 2026): removed"
           ],
           "toSettle": "Confirm the match"
         }
       ]
     },
     {
-      "key": "guest",
+      "key": "retreat-center",
       "name": "Retreat center",
-      "onMap": true,
       "zone": "ridge",
       "kind": "building",
       "stage": "idea",
       "phase": "P3",
       "confirmed": true,
-      "positionText": "On the ridge, ocean view",
+      "positionText": "On the ridge, ocean view; its place on the map is to come",
       "description": "Forty ocean-view villas for up to 100 guests, a yoga shala and a pool; runs as a hotel between retreats. Proposals are open: anyone may claim building it.",
       "roleTitles": [
         "Retreat Center Venture Steward"
       ],
       "showcase": true,
       "aliases": [
-        "retreat-center"
+        "guest"
       ]
     },
     {
@@ -1124,13 +1123,12 @@
     {
       "key": "healing",
       "name": "Healing Garden",
-      "onMap": true,
       "zone": "wild-sacred",
       "kind": "garden",
       "stage": "idea",
       "confirmed": false,
       "zoneProposed": true,
-      "positionText": "Where the live map draws it",
+      "positionText": "Not on the live map since version 7 (9 Nov 2026)",
       "description": "On the live map only.",
       "disputes": [
         {
@@ -1138,7 +1136,8 @@
           "topic": "The Healing Garden has no entry in Amora's records",
           "sources": [
             "Live map: a blueprint, phase 3",
-            "Working list: no healing garden"
+            "Working list: no healing garden",
+            "Live map version 7 (9 Nov 2026): removed"
           ],
           "toSettle": "Match it, or set it aside"
         }
@@ -1295,6 +1294,11 @@
       "topic": "Is the map's Guest Lodge the retreat center?",
       "answer": "Yes",
       "by": "Rye, 9 Nov 2026 (the suggested answer adopted)"
+    },
+    {
+      "topic": "The map's Guest Lodge, Healing Garden and Pacific Trailhead",
+      "answer": "Removed from the live map in version 7. The retreat center keeps its place under its own key, retreat-center (alias guest), with no anchor until the map places it; healing and trailhead stay listed with no anchor",
+      "by": "Rye, 9 Nov 2026 (map version 7, relayed by the coordinator)"
     }
   ],
   "homesTarget": {
