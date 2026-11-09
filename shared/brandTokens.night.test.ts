@@ -26,7 +26,7 @@ const NIGHT_KEYS = [
 ] as const;
 
 // The approved design (playerCard.css, index.css .sheet-night): the values an
-// unseeded village keeps, and the ones Amora's own palette must stay close to.
+// unseeded village keeps, and the ones a forest village's own palette must stay close to.
 const APPROVED: Record<string, string> = {
   "--sheet-ground": "#0d1411",
   "--sheet-panel": "#16221c",
@@ -65,7 +65,7 @@ describe("deriveTheme writes the night layer", () => {
     expect(Math.abs(pinned.h - 240)).toBeLessThan(6);
   });
 
-  it("keeps Amora's card within a few shades of the approved design", () => {
+  it("keeps a forest village's card within a few shades of the approved design", () => {
     const vars = deriveTheme("#16342a", null, "#e0c79a")!.vars;
     for (const k of NIGHT_KEYS) {
       // A ratio near 1 between derived and approved is the same colour to the eye.

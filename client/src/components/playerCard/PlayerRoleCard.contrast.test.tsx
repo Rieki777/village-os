@@ -104,7 +104,7 @@ describe("the card takes the village's palette from Admin, and still clears ever
   // delivered by the admin section". theme.css writes the --sheet-* layer the
   // card's --pc-* read; these are the values it writes for each seed.
   const VILLAGES: Array<[string, string, string | undefined]> = [
-    ["Amora (forest seed, champagne accent)", "#16342a", "#e0c79a"], // theme-ok: a seed a founder would type, not a painted colour
+    ["a forest village with a champagne accent", "#16342a", "#e0c79a"], // theme-ok: a seed a founder would type, not a painted colour
     ["a blue village", "#1d4ed8", undefined], // theme-ok: a seed a founder would type, not a painted colour
     ["a gold village", "#ca8a04", undefined], // theme-ok: a seed a founder would type, not a painted colour
     ["a pink village with a blue accent", "#f472b6", "#0000ff"], // theme-ok: a seed a founder would type, not a painted colour
