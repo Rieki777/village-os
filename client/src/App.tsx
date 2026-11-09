@@ -165,6 +165,7 @@ const Quests = lazyPage(() => import("./pages/Quests"));
 const QuestDetail = lazyPage(() => import("./pages/QuestDetail"));
 const ProposeQuest = lazyPage(() => import("./pages/ProposeQuest"));
 const Roles = lazyPage(() => import("./pages/Roles"));
+const RoleDraft = lazyPage(() => import("./pages/RoleDraft"));
 const HowWeCreate = brochurePage(() => import("./pages/HowWeCreate"));
 const CoCreatorsGuide = brochurePage(() => import("./pages/CoCreatorsGuide"));
 const Housing = brochurePage(() => import("./pages/Housing"));
@@ -347,6 +348,7 @@ function Router() {
       <Route path="/messages/:id" component={Messages} />
       <Route path="/introductions" component={Introductions} />
       <Route path="/propose-quest" component={ProposeQuest} />
+      <Route path="/roles/draft" component={RoleDraft} />
       <Route path="/roles" component={Roles} />
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />

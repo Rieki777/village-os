@@ -37,12 +37,14 @@ import Layout from "@/components/Layout";
 import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
 import { authToken } from "@/lib/gameApi";
+import { useLingui } from "@lingui/react/macro";
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function RequestMembership() {
   const villageName = useVillageName();
+  const { t } = useLingui();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [why, setWhy] = useState("");
@@ -222,6 +224,12 @@ export default function RequestMembership() {
                   Propose a role
                 </a>
                 .
+              </p>
+              {/* The draft board: every open role by character, a shortlist, then apply (pages/RoleDraft.tsx). */}
+              <p className="mt-3 text-center text-muted-foreground">
+                <a href="/roles/draft" className="font-medium text-foreground underline underline-offset-2">
+                  {t({ message: "Draft your roles", context: "join page link" })}
+                </a>
               </p>
             </>
           )}

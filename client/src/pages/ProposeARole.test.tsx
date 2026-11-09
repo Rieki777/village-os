@@ -175,3 +175,41 @@ describe("the confirmation link", () => {
     expect(screen.getByRole("link", { name: "Propose again" }).getAttribute("href")).toBe("/propose-a-role");
   });
 });
+
+/*
+ * A DRAFT OF SEVERAL ROLES (role draft board, 9 Nov). The board sends every
+ * drafted role as its own `role` parameter. Each one the village still offers
+ * arrives ticked, up to the three a proposal may name; one it no longer
+ * offers is said out loud rather than dropped in silence.
+ */
+describe("arriving with several roles", () => {
+  const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
+
+  it("ticks every drafted role the village offers", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-host");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-gate")).toBe(true));
+    expect(ticked("r-host")).toBe(true);
+    expect(ticked("r-well")).toBe(false);
+  });
+
+  it("says when a drafted role is no longer offered, and ticks the rest", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gone&role=r-cook");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-cook")).toBe(true));
+    expect(screen.getByText(/1 role you picked is not open for next season/)).toBeTruthy();
+  });
+
+  it("ticks no more than three", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-well&role=r-host&role=r-cook");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-gate")).toBe(true));
+    expect([ticked("r-well"), ticked("r-host"), ticked("r-cook")]).toEqual([true, true, false]);
+  });
+});
