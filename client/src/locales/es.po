@@ -17,6 +17,11 @@ msgctxt "role pay"
 msgid "Kind of work"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check again"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Reason"
@@ -31,6 +36,11 @@ msgstr ""
 msgid "Your numbers, from every source"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} answered at {askedAt}."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Your invoices"
@@ -39,6 +49,11 @@ msgstr ""
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Every invoice, sent to paid"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "See which one"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -51,6 +66,14 @@ msgstr ""
 msgctxt "site header"
 msgid "Open menu"
 msgstr "Abrir menú"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Could not reach the server."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Review dates, sectors and role types {agent} keeps."
+msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -73,6 +96,15 @@ msgctxt "invoice desk"
 msgid "Chain: {there}."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflicts"
+msgstr ""
+
+#: client/src/components/review/SeraCompare.tsx
+msgid "Struck words are only here. Underlined words are only in {theirsTitle}."
+msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "Hide how this was worked out"
 msgstr ""
@@ -81,13 +113,47 @@ msgstr ""
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "See which {nAhead}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Not in a circle"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Showing {shownCount}: {shownWords}"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "First seen {seen}."
 msgstr ""
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Nothing here yet."
+msgstr ""
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "{owner} version"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing from {agent} waits for the chart"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "Cash still owed to you, from this village's records: {owedWords}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Filter"
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -99,13 +165,31 @@ msgctxt "role pay"
 msgid "Show the suggestion"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{sera} {agent} changes"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Say why"
 msgstr ""
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Read both in full"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing has been read from {agent} yet."
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Estimated effort for the moon, in hours"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The check did not run ({status})."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -114,12 +198,25 @@ msgctxt "site header"
 msgid "Close menu"
 msgstr "Cerrar menú"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} still didn't answer at {askedAt}."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {n} small changes for the chart"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Nobody else can sign this figure, so it goes to the village. Put the change in an org draft and put it to a vote."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {nChanges} for the chart"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -138,14 +235,42 @@ msgstr "Iniciar sesión"
 msgid "Work out this role's pay with the valuation engine"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Decide it in the structure review"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The list of changes did not load"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Its role comes with it, and leaving the circle out leaves it out too."
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflicts {nConflicts}"
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "This village's records: {here}."
+msgstr ""
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "removed:"
+msgstr ""
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Show less"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -155,6 +280,24 @@ msgstr ""
 
 #: client/src/components/myMoon/InvoicePanel.tsx
 msgid "Sending also emails this invoice as a PDF to Sera, the village's record keeper, at <0>{seraInbox}</0>. It names you by your village name and code name. Your legal name and address stay private."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing counts as removed because of a check that failed. A role leaves the list only when {agent} archives it, or when it is missing from two full checks in a row."
+msgstr ""
+
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "added:"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Read the list again"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing here matches what is chosen above."
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -177,6 +320,10 @@ msgctxt "invoice desk"
 msgid "No invoice has been sent yet."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "What each of these holds is in the list above, so none of it is offered here a second time."
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
@@ -190,6 +337,16 @@ msgstr ""
 
 #: client/src/components/TreasurySync.tsx
 msgid "Not synced yet. Press Sync to read every source."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Facts updated since yesterday: {nFacts}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Review it as one structure change"
 msgstr ""
 
 #: client/src/i18n/LanguagePicker.tsx
@@ -216,17 +373,39 @@ msgstr ""
 #~ msgid "Skip to content"
 #~ msgstr "Ir al contenido"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "A sync is already running. Try again in a minute."
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "Close"
 msgstr "Cerrar"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Show"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
 msgid "Your account, {firstName}"
 msgstr "Cuenta de {firstName}"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Its {n} roles come with it, and leaving the circle out leaves them out too."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{witness} finished Quests to witness"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Until it is on, each small change waits for you in this list."
+msgstr ""
 
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
@@ -237,8 +416,22 @@ msgctxt "treasury sync"
 msgid "Tokens, by source"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{agent} didn't answer at {lastAt}"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Saved. The role's pay is set."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "No arrival from {agent} waits in the structure review right now."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check first"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -257,14 +450,29 @@ msgstr ""
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Hide them"
+msgstr ""
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgctxt "role pay"
 msgid "Opening…"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Back to all {headCount}"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Try again"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Asking now."
 msgstr ""
 
 #. placeholder {0}: money(s.range.lowTotalMinor)
@@ -275,9 +483,23 @@ msgstr ""
 msgid "Likely {0} to {1}. {2}: {3}."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Small changes apply by themselves: off"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Last synced {syncedAt}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Every circle"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Everything waiting"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -290,9 +512,32 @@ msgctxt "language picker"
 msgid "Now in {announced}"
 msgstr "Ahora en {announced}"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Check first {nChecks}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Circle"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Nothing waits for you, and no draft is open."
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sources that disagree ({flagCount})"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "review page"
+msgid "Review"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -302,6 +547,20 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Your figure"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Small changes {nSmall}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Small changes"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "These reach you as a draft to publish, once someone who reads the list puts them in one."
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -319,6 +578,21 @@ msgctxt "invoice desk"
 msgid "Reading the invoice tracks."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{witness} finished Quest to witness"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Which changes"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Compare them"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "The figure you set"
@@ -328,9 +602,23 @@ msgstr ""
 msgid "This is inside the suggestion's band, so your word sets it."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Show everything waiting"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Reading your saved numbers."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Arrived {at}, with {count} proposals."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Waiting for you:"
 msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
@@ -347,6 +635,11 @@ msgstr ""
 #~ msgid "Sign out everywhere"
 #~ msgstr "Cerrar sesión en todos los dispositivos"
 
+#: client/src/components/review/SeraCompare.tsx
+msgctxt "sera compare"
+msgid "Here now"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "My own figure"
@@ -358,9 +651,30 @@ msgctxt "site header"
 msgid "Main Site"
 msgstr "Sitio principal"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "The chart and {agent} are in step"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Arrived {at}, with 1 proposal."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "See them at the bottom of this page."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "Small changes applying by themselves: off."
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Set this role's pay"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "To decide"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -372,6 +686,10 @@ msgstr ""
 #, fuzzy
 #~ msgid "Close menu"
 #~ msgstr "Cerrar menú"
+
+#: client/src/components/review/SeraDifferences.tsx
+msgid "A draft from this queue is still open."
+msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
@@ -386,6 +704,11 @@ msgstr ""
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "Sera: {there}."
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Earlier {agent} arrivals, now listed above"
 msgstr ""
 
 #: client/src/components/Layout.tsx
@@ -404,16 +727,30 @@ msgctxt "role pay"
 msgid "Saved"
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{error}. There may be changes waiting; this is not an empty list."
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Conflict"
+msgstr ""
+
 #. placeholder {0}: wholeMoney(s.expected.totalMinor, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Use the suggestion, {0}"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "Showing all {nShown} waiting changes"
 msgstr ""
 
 #: client/src/components/valuation/RolePayWithEngine.tsx
@@ -445,12 +782,26 @@ msgstr ""
 #~ msgid "Sign in or join"
 #~ msgstr "Iniciar sesión o unirse"
 
+#: client/src/components/review/SeraDifferences.tsx
+msgid "{agent} suggests {n} small change for the chart"
+msgstr ""
+
 #. placeholder {0}: wholeMoney(toMinor(ownFirst, currency)!, currency)
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Your own figure was {0}."
 msgstr ""
 
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "To decide {nDecide}"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Responsibility"
+msgstr ""
+
+#: client/src/components/review/SeraDifferences.tsx
+msgctxt "sera changes"
+msgid "{sera} {agent} change"
 msgstr ""
