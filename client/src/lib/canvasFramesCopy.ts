@@ -113,6 +113,8 @@ export interface ProposalView {
   cannotAdopt?: string;
   pen: PenView;
   youProposedIt: boolean;
+  /** This viewer holds the village's story and may set this open suggestion aside (D7). Absent reads as no. */
+  youMaySetAside?: boolean;
 }
 
 /** A decided suggestion, as Adopt lists it under "Decided lately". */
@@ -133,6 +135,8 @@ export interface DecidedView {
   withdrawn: boolean;
   /** Adopted by filing it as a proposal the village votes on. */
   filed: boolean;
+  /** Set aside by whoever holds the village's story, with a note (D7). Absent reads as no. */
+  setAside?: boolean;
   decidedBy: { id: string; name: string };
   /** The pen's note. Null when none was written. */
   decisionNote: string | null;
@@ -313,11 +317,12 @@ export function suggestedLine(p: Pick<ProposalView, "proposedBy" | "createdAt" |
 }
 
 /** "Declined by Ivy on 5 October 2026." How a decided suggestion was decided, and by whom. */
-export function decidedLine(d: Pick<DecidedView, "status" | "withdrawn" | "filed" | "decidedBy" | "decidedAt" | "youProposedIt">, locale?: string): string {
+export function decidedLine(d: Pick<DecidedView, "status" | "withdrawn" | "filed" | "setAside" | "decidedBy" | "decidedAt" | "youProposedIt">, locale?: string): string {
   const on = d.decidedAt ? ` on ${readingDate(d.decidedAt, locale)}` : "";
   if (d.withdrawn) return `Withdrawn by ${d.youProposedIt ? "you" : "the member who made it"}${on}.`;
   const who = d.decidedBy.name || "the pen";
   if (d.filed) return `Filed${on} as a proposal to change the Game's rules, in its author's name. The village decides it.`;
+  if (d.setAside) return `Set aside by ${who}${on}, who holds the village's story.`;
   return d.status === "adopted" ? `Adopted by ${who}${on}.` : `Declined by ${who}${on}.`;
 }
 

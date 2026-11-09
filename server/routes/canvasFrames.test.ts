@@ -70,6 +70,9 @@ import {
   FILED_BY_PROPOSER,
   MECHANICS_PROPOSAL_DOOR,
   MODULE_HOLDERS_REFUSAL,
+  SET_ASIDE_NEEDS_A_NOTE,
+  SET_ASIDE_OWN,
+  SET_ASIDE_REFUSAL,
   PEN_REFUSALS,
   PURPOSE_CHANGE_DOOR,
   register,
@@ -1030,6 +1033,48 @@ describe.skipIf(!configured)("the canvas's five frames", () => {
       } finally {
         LIVE = {};
       }
+    });
+
+    /*
+     * D7 (AC2.7): the story's holder sets aside somebody else's open
+     * suggestion, whatever pen would adopt it (here a dial, whose pen is the
+     * village's vote now), with a public note, and the author is told.
+     */
+    it("the story's holder sets aside somebody else's open suggestion with a note, and the author is told (AC2.7)", async () => {
+      const p = (await propose("member", {
+        blockId: "team", target: "setting", door: "dial:membership.vouches_required", change: { value: "7" }, body: "Seven people should know a newcomer.",
+      })).body.proposal;
+      expect(p.pen).toMatchObject({ how: "ballot" });
+      const seen = async (as: Who) => (await block(as, "team")).body.proposals.find((x: any) => x.id === p.id);
+      expect((await seen("teller")).youMaySetAside).toBe(true);
+      expect((await seen("member")).youMaySetAside).toBe(false);
+      expect((await seen("switcher")).youMaySetAside).toBe(false);
+      const setAside = (as: Who, note?: string) => call("POST", `/api/canvas/proposals/${p.id}/set-aside`, as, note ? { note } : {});
+      expect(await setAside("switcher", "Not now.")).toEqual({ status: 403, body: { error: SET_ASIDE_REFUSAL } });
+      expect(await setAside("member", "Not now.")).toEqual({ status: 409, body: { error: SET_ASIDE_OWN } });
+      expect(await setAside("teller")).toEqual({ status: 400, body: { error: SET_ASIDE_NEEDS_A_NOTE } });
+      expect(await setAside("teller", "x")).toEqual({ status: 400, body: { error: SET_ASIDE_NEEDS_A_NOTE } });
+      expect((await seen("teller")).status).toBe("open");
+      expect(NOTICES.some((n) => n.dedupeKey === `canvas-proposal:${p.id}:set-aside`)).toBe(false);
+
+      const r = await setAside("teller", "Seven is more than this village has members.");
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body.proposal).toMatchObject({ status: "declined", outcome: { setAside: true }, decisionNote: "Seven is more than this village has members.", youMaySetAside: false });
+      const decided = (await block("member", "team")).body.decided.find((x: any) => x.id === p.id);
+      expect(decided).toMatchObject({ status: "declined", setAside: true, withdrawn: false, decisionNote: "Seven is more than this village has members.", decidedBy: { id: "cf-teller" } });
+      const told = NOTICES.filter((n) => n.dedupeKey === `canvas-proposal:${p.id}:set-aside`);
+      expect(told).toHaveLength(1);
+      expect(told[0]).toMatchObject({ userId: "cf-member", title: "Your suggestion on the canvas's Team block was set aside", body: "The note with it: Seven is more than this village has members." });
+      // Nothing was adopted or filed, and it cannot be set aside twice.
+      expect(await proposalsOpenedSince(pool, "cf-teller", new Date(0))).toBe(1);
+      expect((await setAside("teller", "Again.")).status).toBe(409);
+      let audited = 0;
+      for (let i = 0; i < 20 && audited === 0; i += 1) {
+        const [[row]] = await pool.query<any[]>("SELECT COUNT(*) AS n FROM health_events WHERE text = ?", [`canvas:set-aside:${p.id}`]); // module-review-ok: reading the scratch schema this suite provisioned
+        audited = Number(row.n);
+        if (!audited) await new Promise((r2) => setTimeout(r2, 50));
+      }
+      expect(audited).toBe(1);
     });
 
     it("words are still the story's holder's to adopt", async () => {

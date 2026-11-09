@@ -6,6 +6,7 @@
  *   POST   /api/canvas/proposals                    any member suggests an answer
  *   POST   /api/canvas/proposals/:id/adopt          the pen adopts it
  *   POST   /api/canvas/proposals/:id/decline        the pen declines it, or its proposer withdraws it
+ *   POST   /api/canvas/proposals/:id/set-aside      the story's holder sets it aside, with a note (D7)
  *   GET    /api/canvas/decision-matrix/rows         the matrix's human rows
  *   POST   /api/canvas/decision-matrix/rows         a new row, under the consequence pen
  *   PUT    /api/canvas/decision-matrix/rows/:id     a changed row, under the consequence pen
@@ -249,6 +250,16 @@ export const CARE_DOOR_HELD_BY_AGREEMENT =
 /** The note a withdrawal carries when its author wrote none. Not listed back: "Withdrawn" already says it. */
 const WITHDRAWN_NOTE = "Withdrawn by the member who suggested it.";
 
+/** Said to a member without the story's power who presses Set aside (D7). */
+export const SET_ASIDE_REFUSAL =
+  "Setting a suggestion aside is for whoever holds the village's story. You can say what you think of it in your own suggestion.";
+
+/** Said to the author of a suggestion who presses Set aside on it (D7). */
+export const SET_ASIDE_OWN = "This is your own suggestion, so withdraw it instead.";
+
+/** Said when Set aside comes with no note (D7). The note is public, like the pen's. */
+export const SET_ASIDE_NEEDS_A_NOTE = "Say in a sentence why this is set aside. The note is public, like the suggestion.";
+
 /** A suggestion somebody else is deciding at this moment. */
 export const BEING_DECIDED = "Somebody is deciding this suggestion right now. Look again in a moment.";
 
@@ -476,6 +487,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
       ...(careDoorHeld ? { cannotAdopt: CARE_DOOR_HELD_BY_AGREEMENT } : {}),
       pen: await penView(req, user, rule, p.proposedBy, careDoorByAgreementVote(p)),
       youProposedIt: String(user.id) === p.proposedBy,
+      // D7: whoever holds the village's story may set somebody else's open suggestion aside.
+      youMaySetAside:
+        p.status === "open" && String(user.id) !== p.proposedBy && capabilityDecision("story.tell", await capabilityCtx(user)).allowed,
     };
   };
 
@@ -498,6 +512,7 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     createdAt: p.createdAt,
     status: p.status,
     withdrawn: p.outcome?.withdrawn === true,
+    setAside: p.outcome?.setAside === true,
     filed: p.outcome?.filed === "mechanics-proposal",
     decidedBy: { id: p.decidedBy ?? "", name: firstName(p.deciderName ?? "") },
     decisionNote: p.outcome?.withdrawn === true && p.decisionNote === WITHDRAWN_NOTE ? null : p.decisionNote,
@@ -514,9 +529,9 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
    * is a trace and never the deed: a failure here changes nothing already
    * decided.
    */
-  const tellAuthor = async (p: CanvasProposalRow, outcome: "adopted" | "declined", deciderId: string, note: string) => {
+  const tellAuthor = async (p: CanvasProposalRow, outcome: "adopted" | "declined" | "set-aside", deciderId: string, note: string) => {
     if (p.proposedBy === deciderId) return;
-    const title = `Your suggestion on the canvas's ${CANVAS_BLOCKS[p.blockId].name} block was ${outcome}`;
+    const title = `Your suggestion on the canvas's ${CANVAS_BLOCKS[p.blockId].name} block was ${outcome === "set-aside" ? "set aside" : outcome}`;
     const kept = p.target === "words" && isAdminOnlySection(String(p.sectionId ?? ""));
     const body = !note
       ? "It is listed under Decided lately on the block's Adopt frame."
@@ -1062,6 +1077,44 @@ export function register(app: Express, deps: CanvasFrameDeps): void {
     if (run.value === "answered") return;
     // A withdrawal is the author's own act, and `tellAuthor` skips it.
     if (run.value.status === 200) await tellAuthor(first, "declined", String(user.id), note);
+    res.status(run.value.status).json(run.value.body);
+  });
+
+  /*
+   * ── POST /api/canvas/proposals/:id/set-aside (canvas follow-up D7) ────────
+   *
+   * Whoever holds the village's story (`story.tell`, asked of the ONE gate)
+   * may set aside somebody else's open suggestion, whatever pen would adopt
+   * it, the village's vote included: a suggestion nobody will carry should not
+   * sit open forever. It is recorded as declined with `setAside` on its
+   * outcome, the note is required and public like every pen's note, and the
+   * author is told. Its author withdraws it instead; nothing is adopted, so no
+   * setting moves.
+   */
+  app.post("/api/canvas/proposals/:id/set-aside", async (req, res) => {
+    const user = await refuseReader(req, res);
+    if (!user) return;
+    const first = await proposalFromPath(req, res);
+    if (!first) return;
+    if (first.proposedBy === String(user.id)) return res.status(409).json({ error: SET_ASIDE_OWN });
+    if (!(await guardCapability(req, res, "story.tell", { status: 403, body: { error: SET_ASIDE_REFUSAL } }))) return;
+    const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 2000) : "";
+    if (note.length < 2) return res.status(400).json({ error: SET_ASIDE_NEEDS_A_NOTE });
+    const pool = getPool();
+    const run = await withNamedLock(pool, `canvas-proposal:${first.id}`, async () => {
+      const p = await canvasProposalById(pool, first.id);
+      if (!p || p.status !== "open") return { status: 409, body: { error: `This suggestion was already ${p?.status ?? "removed"}.` } };
+      const moved = await decideCanvasProposal(pool, { id: p.id, status: "declined", decidedBy: String(user.id), note, outcome: { setAside: true } });
+      if (!moved) return { status: 409, body: { error: "This suggestion was decided by somebody else at the same moment." } };
+      void recordEvent(pool, {
+        kind: "audit", text: `canvas:set-aside:${p.id}`, actorUserId: String(user.id),
+        entityType: "canvas_proposal", entityRef: String(p.id), audience: "admin",
+      });
+      const saved = await canvasProposalById(pool, p.id);
+      return { status: 200, body: { proposal: saved ? await proposalView(req, user, saved, await penFacts()) : null } };
+    });
+    if (!run.ran) return res.status(409).json({ error: BEING_DECIDED });
+    if (run.value.status === 200) await tellAuthor(first, "set-aside", String(user.id), note);
     res.status(run.value.status).json(run.value.body);
   });
 

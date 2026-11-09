@@ -511,6 +511,37 @@ describe("Adopt", () => {
     );
   });
 
+  it("offers the story's holder Set it aside on a suggestion the village votes on, wants a note first, and says the author is told (D7)", async () => {
+    const voted = suggestion({ pen: penView({ how: "ballot", who: "any-member", youMayAdopt: false }), youMaySetAside: true });
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ birthed: true, proposals: [voted] }));
+    const frames = await openPower("Adopt");
+    const card = within(await frames.findByTestId("canvas-proposal-41"));
+    expect(card.queryByRole("button", { name: "Decline" })).toBeNull();
+    const note = card.getByLabelText(/Your note \(needed to set it aside\)/);
+    fireEvent.click(card.getByRole("button", { name: "Set it aside" }));
+    expect(card.getByRole("alert").textContent).toBe("Say in a sentence why this is set aside. The note is public, like the suggestion.");
+    expect(asked("POST /api/canvas/proposals/41/set-aside")).toHaveLength(0);
+    fireEvent.change(note, { target: { value: "The circle agreed this waits a season." } });
+    answer("POST", "/api/canvas/proposals/41/set-aside", 200, { proposal: { ...voted, status: "declined", outcome: { setAside: true } } });
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ birthed: true, proposals: [] }));
+    fireEvent.click(card.getByRole("button", { name: "Set it aside" }));
+    await waitFor(() =>
+      expect(frames.getByRole("status").textContent).toBe(
+        "Set aside. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told.",
+      ),
+    );
+    expect(JSON.parse(asked("POST /api/canvas/proposals/41/set-aside")[0].init.body)).toEqual({ note: "The circle agreed this waits a season." });
+  });
+
+  it("offers nobody Set it aside who does not hold the story (D7)", async () => {
+    answer("GET", "/api/canvas", 200, canvas(true));
+    answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ birthed: true, proposals: [suggestion({ pen: penView({ how: "ballot", who: "any-member", youMayAdopt: false }) })] }));
+    const frames = await openPower("Adopt");
+    const card = within(await frames.findByTestId("canvas-proposal-41"));
+    expect(card.queryByRole("button", { name: "Set it aside" })).toBeNull();
+  });
+
   it("gives the pen Adopt and Decline, says the note is public before the box, and refuses a decline with no note before sending", async () => {
     answer("GET", "/api/canvas", 200, canvas(true));
     answer("GET", "/api/canvas/blocks/power", 200, powerBlock({ pen: true, proposals: [suggestion({ pen: penView({ youMayAdopt: true }) })] }));

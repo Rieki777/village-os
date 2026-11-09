@@ -577,6 +577,8 @@ describe("a decided suggestion, read back", () => {
     expect(decidedLine(decided({ status: "adopted", filed: true }), "en-GB")).toBe(
       "Filed on 5 October 2026 as a proposal to change the Game's rules, in its author's name. The village decides it.",
     );
+    // D7: set aside by the story's holder.
+    expect(decidedLine(decided({ setAside: true }), "en-GB")).toBe("Set aside by Wren on 5 October 2026, who holds the village's story.");
   });
 });
 
