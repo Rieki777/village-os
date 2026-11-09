@@ -4,6 +4,7 @@
  *   GET /grounds/grounds-:hash.html   the immutable, content-hashed copy
  *   GET /grounds/index.html           the stable name, revalidated
  *   GET /grounds/manifest.json        the presence probe the shell reads first
+ *   GET /grounds/a/:name              an image lifted out of the page (S1, below)
  *
  * `docs/prototypes/grounds-v0.html` is a few megabytes of self-contained page.
  * It used to be copied into `client/public/grounds/` at build time, which put
@@ -48,6 +49,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import type { Express, RequestHandler, Response } from "express";
+import { splitArtifact, type SplitResult } from "../lib/groundsSplit";
 import { effectiveLifecycle, requireModule } from "../lib/modules";
 
 interface Deps {
@@ -85,16 +87,28 @@ export function register(app: Express, deps: Deps): void {
    * never serve, and a mid-flight artifact swap is picked up by the mtime
    * check rather than needing a restart.
    */
-  let groundsTag: { key: string; hash: string } | null = null;
-  const groundsInfo = (): { bytes: number; hash: string } | null => {
+  /*
+   * ── S1 OF THE MAP SPEED PLAN: THE PAGE IS SERVED SPLIT ─────────────────
+   *
+   * The file embeds about 5 MB of images as base64, and nothing on the map
+   * worked until all of it had arrived (about 23 s on a throttled phone,
+   * 8 Nov 2026). The page is now served with each embedded image swapped for
+   * `/grounds/a/<hash>.<ext>`, served below and cached for a year. The split
+   * is computed with the hash, on the same (size, mtime) key, and held in
+   * memory: the file is read once per version, never per request, and never
+   * written. server/lib/groundsSplit.ts says why this is no visible change.
+   */
+  let groundsTag: { key: string; hash: string; split: SplitResult } | null = null;
+  const groundsInfo = (): { bytes: number; hash: string; split: SplitResult } | null => {
     if (!fs.existsSync(groundsFile)) return null;
     const st = fs.statSync(groundsFile);
     const key = `${st.size}:${st.mtimeMs}`;
     if (groundsTag?.key !== key) {
-      const digest = crypto.createHash("sha256").update(fs.readFileSync(groundsFile)).digest("hex");
-      groundsTag = { key, hash: digest.slice(0, 12) };
+      const raw = fs.readFileSync(groundsFile);
+      const digest = crypto.createHash("sha256").update(raw).digest("hex");
+      groundsTag = { key, hash: digest.slice(0, 12), split: splitArtifact(raw.toString("utf8")) };
     }
-    return { bytes: st.size, hash: groundsTag.hash };
+    return { bytes: st.size, hash: groundsTag.hash, split: groundsTag.split };
   };
 
   /*
@@ -109,7 +123,7 @@ export function register(app: Express, deps: Deps): void {
     if (req.params.hash !== info.hash) return res.redirect(302, `/grounds/grounds-${info.hash}.html`);
     res.type("html");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.sendFile(groundsFile);
+    res.send(info.split.html);
   });
 
   /*
@@ -118,10 +132,28 @@ export function register(app: Express, deps: Deps): void {
    * name does not change when the bytes do. sendFile's ETag makes that a 304.
    */
   app.get("/grounds/index.html", mapNotOff, (_req, res) => {
-    if (!fs.existsSync(groundsFile)) return res.status(404).json({ error: "map_artifact_absent" });
+    const info = groundsInfo();
+    if (!info) return res.status(404).json({ error: "map_artifact_absent" });
     res.type("html");
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    res.sendFile(groundsFile);
+    // res.send sets an ETag from the body, so a revisit is still a 304.
+    res.send(info.split.html);
+  });
+
+  /*
+   * The lifted images. Each name is a hash of its own bytes, so it is cached
+   * for a year and can never go stale. Gated like the pages and for the same
+   * reason: the page's own <img> requests carry no token, so only an OFF map
+   * refuses them. A name this version does not hold is a 404, looked up in
+   * memory and never resolved against the disk, so no path reaches a file.
+   */
+  app.get("/grounds/a/:name", mapNotOff, (req, res) => {
+    const asset = groundsInfo()?.split.assets.get(String(req.params.name));
+    if (!asset) return res.status(404).json({ error: "map_asset_absent" });
+    res.setHeader("Content-Type", asset.type);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.end(asset.bytes);
   });
 
   /*
