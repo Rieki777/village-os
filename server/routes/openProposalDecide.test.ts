@@ -323,7 +323,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(r.status).toBe(200);
       const p = r.body.proposal;
       expect(p).toMatchObject({ id, status: "confirmed", proposer: "Rowan", why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
-      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living." }]);
+      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living.", accountabilities: [], timeCommitment: null }]);
       expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2037-01-01" });
       // Ana, Ben and u-has hold roles in the Land Circle; u-has is asked here, since this address is not its own.
       expect(p.consent).toMatchObject({ state: "open", asked: 3, consented: 0, objected: 0 });
@@ -648,6 +648,35 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       } finally {
         await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
       }
+    });
+  });
+
+  describe("the applicant's own card (Rye, 9 Nov 2026)", () => {
+    it("is on the page for the decider, and becomes the role application's own words on adoption", async () => {
+      const CARDED = { id: "u-carded", email: "carded@example.test" };
+      await usersRepo(pool).add({ id: CARDED.id, name: "Cara Ded", email: CARDED.email, passwordHash: "x", paths: [] } as any);
+      const before = state.sent.length;
+      const r = await call("POST", "/api/open-proposals", {
+        name: "Cara Ded",
+        email: CARDED.email,
+        roles: [{ roleId: well, note: "" }],
+        why: "I know wells.",
+        aim: "Clean water all season.",
+        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true } },
+      }, null);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const mail = state.sent[before];
+      const ok = await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null);
+      expect(ok.status).toBe(200);
+      const id = mail.idempotencyKey.split(":")[1];
+      const seen = await page(id, FOUNDER.id);
+      expect(seen.body.proposal.card.roles[0].firstMoon[0]).toEqual({ quest: "Test the water", doneWhen: "the lab says it is clean" });
+      expect(Array.isArray(seen.body.proposal.roles[0].accountabilities)).toBe(true);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
+      expect(String(apps[0].deliverables)).toContain("Clean water all season.");
+      expect(String(apps[0].deliverables)).toContain("First moon: Test the water: done when the lab says it is clean");
+      expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
     });
   });
 
