@@ -63,28 +63,35 @@ export function registerEnglish(messages: CompiledCatalog): void {
   mergeEnglishUnder(messages);
 }
 
-type PartFetcher = (part: string) => Promise<{ messages: CompiledCatalog }>;
+/** A part: moved Lingui messages by id, and the chunk's moved plain strings by index (copySplit.ts). */
+type PartBody = { messages: CompiledCatalog; texts?: readonly string[] };
+type PartFetcher = (part: string) => Promise<PartBody>;
 
 /** Same-origin and default credentials, which is what route-preload.js's `as=fetch` link asks for, so it is reused. */
 const fetchPart: PartFetcher = async (part) => {
   const res = await fetch(`/api/i18n/catalog/en/part/${encodeURIComponent(part)}`);
   if (!res.ok) throw new Error(`copy part ${part}: ${res.status}`);
-  return (await res.json()) as { messages: CompiledCatalog };
+  return (await res.json()) as PartBody;
 };
 
-const parts = new Map<string, Promise<void>>();
+const parts = new Map<string, Promise<readonly string[]>>();
 
 /**
- * Load one part of the moved English, once, however many chunks await it.
+ * Load one part of the moved English, once, however many chunks await it, and
+ * resolve to its plain texts, which the chunk reads its long literals from.
  * One retry, then the promise rejects, so the chunk's import fails the way a
- * missing chunk does and the error boundary takes it: an id is never shown.
+ * missing chunk does and the error boundary takes it: an id is never shown,
+ * and neither is an empty string where a sentence belonged.
  */
-export function loadCopy(part: string, fetcher: PartFetcher = fetchPart): Promise<void> {
+export function loadCopy(part: string, fetcher: PartFetcher = fetchPart): Promise<readonly string[]> {
   let pending = parts.get(part);
   if (!pending) {
     pending = fetcher(part)
       .catch(() => fetcher(part))
-      .then((body) => registerEnglish(body.messages));
+      .then((body) => {
+        registerEnglish(body.messages ?? {});
+        return body.texts ?? [];
+      });
     pending.catch(() => parts.delete(part));
     parts.set(part, pending);
   }
@@ -106,7 +113,7 @@ export function drainInlineCopy(): void {
   for (const messages of queued) registerEnglish(messages);
 }
 
-(globalThis as { __villageCopyLoad?: (part: string) => Promise<void> }).__villageCopyLoad = (part) => loadCopy(part);
+(globalThis as { __villageCopyLoad?: (part: string) => Promise<readonly string[]> }).__villageCopyLoad = (part) => loadCopy(part);
 drainInlineCopy();
 
 /** Switch the whole app to `locale`, with `catalog` already fetched (empty for English). */

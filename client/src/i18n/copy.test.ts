@@ -25,6 +25,12 @@ describe("loadCopy", () => {
     expect(fetchPart).toHaveBeenCalledWith("partAAAAAAAA");
   });
 
+  it("resolves to the part's plain texts, which the chunk reads its long literals from", async () => {
+    const body = { ...part({ cpyG01: "A message beside the plain texts of the same chunk." }), texts: ["First long literal of the chunk.", "Second one."] };
+    expect(await loadCopy("partGGGGGGGG", async () => body)).toEqual(body.texts);
+    expect(await loadCopy("partHHHHHHHH", async () => part({ cpyH01: "A part written before plain texts moved too." }))).toEqual([]);
+  });
+
   it("fetches each part once, however many chunks await it", async () => {
     const fetchPart = vi.fn(async () => part({ cpyB01: "Shared words for two chunks, loaded only once." }));
     await Promise.all([loadCopy("partBBBBBBBB", fetchPart), loadCopy("partBBBBBBBB", fetchPart)]);
