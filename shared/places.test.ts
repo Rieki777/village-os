@@ -275,11 +275,21 @@ describe("the first village's own seed record", () => {
   // brand-ok: the first village's own record, read to prove it holds together
   const file = path.resolve(process.cwd(), "server/seeds/amora/places-seed.json"); // brand-ok: the first village's own record
   const seed = JSON.parse(fs.readFileSync(file, "utf8")) as PlacesSeed;
-  // The keys on that village's published map, read from its live scene on 2026-11-08.
-  const LIVE = ["gate", "welcome", "market", "pondhomes", "ponds", "greenhouse", "community", "kitchen", "library", "council", "foodforest", "tank", "spring3", "spring2", "spring4", "possiblespring", "ridgeA", "ridgeB", "sanctuary", "guest", "healing", "trailhead", "new-food-forest"];
+  // The keys on that village's published map: scene version 7, read live on 2026-11-09
+  // (version 7 removed guest, healing and trailhead from the 23 of version 6).
+  const LIVE = ["gate", "welcome", "market", "pondhomes", "ponds", "greenhouse", "community", "kitchen", "library", "council", "foodforest", "tank", "spring3", "spring2", "spring4", "possiblespring", "ridgeA", "ridgeB", "sanctuary", "new-food-forest"];
 
   it("holds together against its live map", () => {
     expect(seedProblems(seed, LIVE)).toEqual([]);
+  });
+
+  it("follows map version 7: the retreat center keeps its place under its own key, with no anchor", () => {
+    const retreat = seed.places.find((p) => p.key === "retreat-center");
+    expect(retreat).toMatchObject({ showcase: true, aliases: ["guest"] });
+    expect(retreat?.onMap).toBeUndefined();
+    for (const k of ["healing", "trailhead"]) expect(seed.places.find((p) => p.key === k)?.onMap, k).toBeUndefined();
+    // A map that still drew the old key would be named, never silently accepted.
+    expect(seedProblems(seed, [...LIVE, "guest"]).join(" ")).toContain("guest");
   });
 
   it("draws nothing the record calls planned as standing", () => {
@@ -299,14 +309,14 @@ describe("the first village's own seed record", () => {
     expect(by("tents")).toBeUndefined();
     expect(by("greenhouse")).toMatchObject({ stage: "idea", confirmed: true });
     expect(by("greenhouse")?.stewardRoleTitle).toBeUndefined();
-    expect(by("guest")?.showcase).toBe(true);
-    expect(by("guest")?.disputes?.some((d) => d.kind === "size") ?? false).toBe(false);
+    expect(by("retreat-center")?.showcase).toBe(true);
+    expect(by("retreat-center")?.disputes?.some((d) => d.kind === "size") ?? false).toBe(false);
     expect(by("rancho")).toBeUndefined();
     expect(by("caretakers-house")?.aliases).toContain("rancho");
     expect(by("kitchen")).toMatchObject({ name: "Kitchen & Hearth", confirmed: true });
     expect(by("waterfall-coworking")?.positionText).toContain("kitchen's spot");
     expect(by("gate")?.confirmed).toBe(true);
-    expect(by("guest")).toMatchObject({ name: "Retreat center", confirmed: true });
+    expect(by("retreat-center")).toMatchObject({ name: "Retreat center", confirmed: true });
     expect(seed.registryDisputes ?? []).toEqual([]);
   });
 
