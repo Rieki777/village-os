@@ -131,7 +131,7 @@ export async function servePaths(env: OnboardingEnv, viewerId: string): Promise<
   for (const p of await repo.pathsOfBuddy(env.db, viewerId)) seen.set(p.id, p);
   if (ops) for (const p of await repo.allPaths(env.db)) seen.set(p.id, p);
   const out: ServedPath[] = [];
-  for (const p of seen.values()) {
+  for (const p of Array.from(seen.values())) {
     const s = await servePath(env, viewerId, p, doc);
     if (s) out.push(s);
   }

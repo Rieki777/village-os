@@ -210,3 +210,36 @@ export function readCheckin(raw: unknown): { ok: true; answers: CheckinAnswers }
     },
   };
 }
+
+/**
+ * The village's document as an editor may save it: every item read through
+ * `readItem` (so a bad row is named, never silently kept), owners cleaned,
+ * circle defaults keyed by circle id. Returns the sentence that says what is
+ * wrong, or the document to store.
+ */
+export function readVillageDoc(raw: unknown): { ok: true; doc: { items: PathItem[]; circles: Record<string, PathItem[]>; owners: Partial<Record<OwnerKey, string>> } } | { ok: false; error: string } {
+  const r = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  if (!r) return { ok: false, error: "Send an object with items, circles and owners." };
+  const list = (v: unknown, source: ItemSource, where: string): PathItem[] | string => {
+    if (v === undefined || v === null) return [];
+    if (!Array.isArray(v) || v.length > 60) return `${where} has to be a list of at most 60 items.`;
+    const out: PathItem[] = [];
+    for (let i = 0; i < v.length; i++) {
+      const it = readItem(v[i], source);
+      if (!it) return `${where}, item ${i + 1}, needs a title.`;
+      out.push(it);
+    }
+    return out;
+  };
+  const items = list(r.items, "village", "The village list");
+  if (typeof items === "string") return { ok: false, error: items };
+  const circles: Record<string, PathItem[]> = {};
+  if (r.circles && typeof r.circles === "object" && !Array.isArray(r.circles)) {
+    for (const [id, v] of Object.entries(r.circles as Record<string, unknown>).slice(0, 100)) {
+      const l = list(v, "circle", `The list for circle ${id}`);
+      if (typeof l === "string") return { ok: false, error: l };
+      circles[id] = l;
+    }
+  }
+  return { ok: true, doc: { items, circles, owners: ownerRoleNames(r as VillagePathDoc) } };
+}

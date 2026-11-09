@@ -99,3 +99,16 @@ describe("who ticks a step", () => {
     expect(openItems([{ doneAt: null }, { doneAt: "2026-11-02" }])).toBe(1);
   });
 });
+
+import { readVillageDoc } from "./onboardingPath";
+
+describe("saving the village's document", () => {
+  it("keeps good rows and cleans owners", () => {
+    const r = readVillageDoc({ items: [{ title: "Hello", owner: "buddy" }], circles: { c1: [{ title: "Gather" }] }, owners: { access: "Keys", bogus: "x" } });
+    expect(r).toMatchObject({ ok: true, doc: { owners: { access: "Keys" } } });
+  });
+  it("control: a row with no title is refused by name, not dropped", () => {
+    expect(readVillageDoc({ items: [{ title: "Fine" }, { owner: "buddy" }] })).toEqual({ ok: false, error: "The village list, item 2, needs a title." });
+    expect(readVillageDoc("nope").ok).toBe(false);
+  });
+});

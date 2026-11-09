@@ -47,6 +47,7 @@ import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
 import RoleCharacterTags from "@/components/admin/RoleCharacterTags";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
+import OnboardingPathEditor from "./OnboardingPathEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
@@ -552,6 +553,9 @@ export function OrgChartTab({ password }: { password: string }) {
 
         {/* The village's own starting points for a seat's terms (PR3). */}
         <VillagePresetsEditor password={password} />
+
+        {/* The village's own steps for "Your first moons in <role>". */}
+        <OnboardingPathEditor password={password} />
       </div>
     </div>
   );
