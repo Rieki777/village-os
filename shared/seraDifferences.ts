@@ -335,6 +335,12 @@ export interface Difference {
    * leave it out.
    */
   oursAsStored?: string | null;
+  /**
+   * The service's words exactly as the snapshot stored them, line breaks and
+   * all, for a name or a role's words: what a take writes (review 6). `sera`
+   * and `seraHash` stay the compared form. Absent on a hand-built one.
+   */
+  seraAsStored?: string | null;
   base: DifferenceBase;
   seraHash: string;
   oursHash: string;
@@ -470,6 +476,13 @@ export { pageKey };
 
 const PAGE_KEY_SHAPE = /^[0-9a-f]{32}$/;
 
+/** A field exactly as stored, for what a take writes: null when absent, blank, a relation, or clipped. */
+function storedOf(rec: SnapshotRecord, field: string): string | null {
+  if (rec.clipped?.includes(field)) return null;
+  const v = rec.fields[field];
+  return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
 /** A field as text, or null when absent, blank, a relation, or clipped (R3, R6). */
 function textOf(rec: SnapshotRecord, field: string, norm: Normaliser): string | null {
   if (rec.clipped?.includes(field)) return null;
@@ -538,24 +551,26 @@ function seatsOf(payload: Record<string, unknown>): Record<string, unknown>[] {
  * steward's choice to retire the old chart is not the service's word.
  */
 export function traceAccepted(changes: readonly PublishedChange[], proposals: readonly AcceptedProposal[]): AcceptedChange[] {
+  // Every proposal accepted into the draft, edited ones included: a seat is matched against all of them,
+  // and a match in an edited one traces to nothing (review 10), never to another proposal's same name.
   const byDraft = new Map<string, AcceptedProposal[]>();
-  for (const p of proposals) {
-    if (!p.original) continue;
-    byDraft.set(p.draftId, [...(byDraft.get(p.draftId) ?? []), p]);
-  }
+  for (const p of proposals) byDraft.set(p.draftId, [...(byDraft.get(p.draftId) ?? []), p]);
   return changes.map((c) => ({ op: c.op, orgRoleId: c.orgRoleId, payload: c.payload, from: traceOne(c, byDraft.get(c.draftId) ?? []), draftId: c.draftId }));
 }
 
 function traceOne(c: PublishedChange, props: readonly AcceptedProposal[]): SeraOriginal | null {
   const p = c.payload ?? {};
   if (c.op === "create_seat" || c.op === "update_seat") {
-    const seats = props.filter((k) => k.kind === "org.proposed" || k.kind === "role.proposed").flatMap((k) => seatsOf(k.payload));
-    let hits = seats.filter((s) => typeof s.id === "string" && seatIdFor(s.id, "") === c.orgRoleId);
+    const seats = props
+      .filter((k) => k.kind === "org.proposed" || k.kind === "role.proposed")
+      .flatMap((k) => seatsOf(k.payload).map((seat) => ({ seat, original: k.original })));
+    let hits = seats.filter((x) => typeof x.seat.id === "string" && seatIdFor(x.seat.id, "") === c.orgRoleId);
     if (hits.length === 0 && c.op === "update_seat" && typeof p.name === "string") {
-      hits = seats.filter((s) => seatNameKey(s.name) === seatNameKey(p.name));
+      hits = seats.filter((x) => seatNameKey(x.seat.name) === seatNameKey(p.name));
     }
-    if (hits.length !== 1) return null;
-    const s = hits[0];
+    // One seat, in a proposal nobody edited. A seat in an edited one is not the service's word.
+    if (hits.length !== 1 || !hits[0].original) return null;
+    const s = hits[0].seat;
     return { pageId: strOrNull(s.id), name: strOrNull(s.name), aim: strOrNull(s.aim), circleName: strOrNull(s.circleName) };
   }
   if (c.op === "create_circle") {
@@ -565,7 +580,7 @@ function traceOne(c: PublishedChange, props: readonly AcceptedProposal[]): SeraO
       const name = proposedCircleName(k.payload);
       return name !== "" && (circleIdFor(name, k.id) === id || (typeof p.name === "string" && fold(name) === fold(p.name)));
     });
-    if (hits.length !== 1) return null;
+    if (hits.length !== 1 || !hits[0].original) return null;
     return { pageId: strOrNull(hits[0].payload.vendorRecordId), name: proposedCircleName(hits[0].payload) };
   }
   return null;
@@ -1093,6 +1108,8 @@ interface Draft {
   ours: string | null;
   /** Our value as stored, for "Here now", where it is text; `ours` otherwise. */
   oursAsStored?: string | null;
+  /** The service's value as stored, where it is text: what a take writes. */
+  seraAsStored?: string | null;
   base: DifferenceBase;
   flags: DifferenceFlag[];
   rec: SnapshotRecord | null;
@@ -1138,6 +1155,7 @@ function finish(d: Draft, table: LaneTable): Difference {
     sera: d.sera,
     ours: d.ours,
     oursAsStored: d.oursAsStored !== undefined ? d.oursAsStored : d.ours,
+    seraAsStored: d.seraAsStored !== undefined ? d.seraAsStored : d.sera,
     base: d.base,
     seraHash: valueHash(d.sera),
     oursHash: valueHash(d.ours),
@@ -1404,7 +1422,7 @@ export function differences(input: DifferencesInput): Difference[] {
     if (!m) {
       if (presence !== "live" || !name) continue;
       drafts.push({
-        kind: "circleAdd", state: "suggestion", field: null, slot: "presence", sera: name, ours: null, base: "unknown",
+        kind: "circleAdd", state: "suggestion", field: null, slot: "presence", sera: name, seraAsStored: storedOf(rec, F.circleName), ours: null, base: "unknown",
         subject: { kind: "circle", pageId: rec.id, ourId: null, via: null, name, circleId: null, circleName: null },
         flags: [...additionFlags(rec, circleMatch, "circle", seenBefore.circles, (id) => circleById.get(id)?.name), ...recordFlags(rec, [F.circleName])],
         rec, params: { roles: 0 },
@@ -1434,7 +1452,7 @@ export function differences(input: DifferencesInput): Difference[] {
       const renamed = threeWay(name, ourName, nameBase, nameKey);
       if (renamed) {
         drafts.push({
-          kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, ours: ourName, oursAsStored: live.name, base: nameBase,
+          kind: "rename", state: renamed, subject, field: "name", slot: "name", sera: name, seraAsStored: storedOf(rec, F.circleName), ours: ourName, oursAsStored: live.name, base: nameBase,
           flags: [...(nameBase === "unknown" ? [flag("baseUnknown")] : []), ...how, ...recordFlags(rec, [F.circleName])], rec,
         });
       }
@@ -1456,11 +1474,11 @@ export function differences(input: DifferencesInput): Difference[] {
       if (at && !placed.refs.some((r) => r.here)) flags.push(flag("circleNotHere", { circle: at.name }));
       if (placed.present && placed.refs.length === 0) flags.push(flag("circleUnknown"));
       drafts.push({
-        kind: "roleAdd", state: "suggestion", field: null, slot: "presence", sera: name, ours: null, base: "unknown",
+        kind: "roleAdd", state: "suggestion", field: null, slot: "presence", sera: name, seraAsStored: storedOf(rec, F.roleName), ours: null, base: "unknown",
         subject: { kind: "role", pageId: rec.id, ourId: null, via: null, name, circleId: at?.key ?? null, circleName: at?.name ?? null },
         flags: [...flags, ...recordFlags(rec, [F.roleName, F.body])], rec,
         // What the new role is for, so whoever decides reads more than a job title.
-        params: { aim: textOf(rec, F.body, norm) },
+        params: { aim: textOf(rec, F.body, norm), aimAsStored: storedOf(rec, F.body) },
       });
       continue;
     }
@@ -1487,11 +1505,12 @@ export function differences(input: DifferencesInput): Difference[] {
     const field = (
       kind: DifferenceKind, slot: string, fieldName: string, sera: string | null, oursValue: string | null,
       fieldBase: DifferenceBase, fieldState: DifferenceState | null, uses: string[],
-      { extra = [], params, stored }: { extra?: DifferenceFlag[]; params?: Draft["params"]; stored?: string | null } = {},
+      { extra = [], params, stored, seraStored }: { extra?: DifferenceFlag[]; params?: Draft["params"]; stored?: string | null; seraStored?: string | null } = {},
     ) => {
       if (!fieldState) return;
       drafts.push({
-        kind, state: fieldState, subject, field: fieldName, slot, sera, ours: oursValue, ...(stored !== undefined ? { oursAsStored: stored } : {}), base: fieldBase,
+        kind, state: fieldState, subject, field: fieldName, slot, sera, ours: oursValue, ...(stored !== undefined ? { oursAsStored: stored } : {}),
+        ...(seraStored !== undefined ? { seraAsStored: seraStored } : {}), base: fieldBase,
         flags: [...(fieldBase === "unknown" ? [flag("baseUnknown")] : []), ...how, ...extra, ...recordFlags(rec, uses)],
         rec, ...(params ? { params } : {}),
       });
@@ -1499,7 +1518,7 @@ export function differences(input: DifferencesInput): Difference[] {
 
     const ourName = norm.plain(live.name);
     const nameBase = shownBase(baseFor("roles", rec, live.id, "name", base, base?.name), name, ourName, nameKey);
-    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, nameKey), [F.roleName], { stored: live.name });
+    field("rename", "name", "name", name, ourName, nameBase, threeWay(name, ourName, nameBase, nameKey), [F.roleName], { stored: live.name, seraStored: storedOf(rec, F.roleName) });
 
     const keys = placed.refs.map((r) => r.key).sort();
     const circleBase = baseFor("roles", rec, live.id, "circle", base, base?.circleId);
@@ -1516,7 +1535,7 @@ export function differences(input: DifferencesInput): Difference[] {
     const aim = textOf(rec, F.body, norm);
     const ourAim = norm.prose(live.aim);
     const aimBase = shownBase(baseFor("roles", rec, live.id, "aim", base, tracedUpToCase(base?.aim, aim), base?.aim), aim, ourAim, exactKey);
-    field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body], { stored: live.aim });
+    field("textField", "aim", "aim", aim, ourAim, aimBase, threeWay(aim, ourAim, aimBase), [F.body], { stored: live.aim, seraStored: storedOf(rec, F.body) });
 
     // Pay is information: its base is never known, so it is never taken in bulk (R23).
     const pay = payOf(rec, norm);
