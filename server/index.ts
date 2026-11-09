@@ -165,6 +165,8 @@ import { decideRoleCapabilities, liveHolderCount, rolesCarryingCapability, stewa
 import { leftEmptyByRemovalNow, liveHoldersNow, type HolderReads } from "./lib/holdersNow";
 import { OG_HEIGHT, OG_WIDTH, register as registerQuestRoutes } from "./routes/quests";
 import { bellQuestClaimed, makeQuestNextStep } from "./lib/questNextStep";
+import { claimRefusalFor } from "./lib/questClaimGate";
+import { MAP_REASON_FOR } from "../shared/questClaimGate";
 import { type ConsentActor, register as registerQuestClaimRoutes } from "./routes/questClaims";
 import { countInWindow, limitState, recordHit as recordRateHit } from "./repos/rateHits";
 import { register as registerHousingRoutes } from "./routes/housing";
@@ -18864,18 +18866,10 @@ Send an empty drafts array when you are still listening. A role payload is {name
       if (held) return reply({ ok: true, state: "on", next: await nextOrNull(quest, user.id) });
       // A closed quest is not taking claims, read exactly as the claim route
       // reads it: `closed` is this vocabulary's own "not taking answers".
-      if ((await isExampleRow(pool, "quests", quest.id)) || questClosed(quest.status)) {
-        return reply({ ok: false, state: "off", reason: "closed" });
-      }
-      if (quest.minStage) {
-        const needed = stageIndex(quest.minStage);
-        if (needed >= 0 && stageIndex(await stageOf(user)) < needed) {
-          return reply({ ok: false, state: "off", reason: "not-yet" });
-        }
-      }
-      if (quest.requiresRole && !roleIdsFor(user.id).includes(quest.requiresRole)) {
-        return reply({ ok: false, state: "off", reason: "not-yet" });
-      }
+      // The one claim gate both doors ask (shared/questClaimGate.ts), worded in
+      // the map's short vocabulary.
+      const refusal = await claimRefusalFor({ getPool, stageOf, roleIdsFor }, quest, user);
+      if (refusal) return reply({ ok: false, state: "off", reason: MAP_REASON_FOR[refusal.kind] });
       // The same locked insert the claim route takes: `held` above is a read
       // several awaits back, and two taps can pass it together.
       const taken = await claimsRepo.openClaim({
