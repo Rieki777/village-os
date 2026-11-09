@@ -413,3 +413,70 @@ describe("the inspector's circle picker, in build mode", () => {
     expect(m.uncaught).toEqual([]);
   });
 });
+
+/*
+ * R1 OF THE MAP LANE: SEATS GO WHERE THE VILLAGE'S DATABASE SAYS THEY LIVE.
+ *
+ * `/api/map/org` now carries `structureKey` on a seat and `homeStructureKey`
+ * on a circle (org_roles.structure_key and circles.home_structure_key, 0060).
+ * The map used those to place nothing: it matched a circle to a building only
+ * when the scene's one-word circle ("Land") folded to the village's circle
+ * name, so a village whose circles are called "Regenerative Agriculture
+ * Circle" had every seat listed as not placed. This plays a push into the
+ * map's OWN seed, where no scene circle names any village circle, so any seat
+ * that lands on a building got there by its key alone.
+ *
+ * And the count the founder asked for: every open seat the Circles map has is
+ * an open seat on the Living Map, placed or listed as not placed, never lost.
+ */
+describe("seats placed by the village's own keys (map lane R1)", () => {
+  const HOMED = { ...SOIL, homeStructureKey: "greenhouse" };
+  const UNHOMED = { ...OUTREACH, homeStructureKey: null };
+  const AT_GATE = role("marketing-steward", "Marketing Steward", OUTREACH.id, { structureKey: "gate" });
+  const OFF_LAND = role("compost-lead", "Compost Lead", SOIL.id, { structureKey: "no-such-place" });
+  const BY_CIRCLE = role("land-steward", "Land Steward", SOIL.id);
+  const NOWHERE = role("story-steward", "Story Steward", OUTREACH.id);
+  const FILLED = role("seed-keeper", "Seed Keeper", SOIL.id, { state: "filled", holderCount: 1, holders: ["Ana"] });
+  const ROWS = [AT_GATE, OFF_LAND, BY_CIRCLE, NOWHERE, FILLED];
+
+  let m: Booted;
+  let read: { greenhouse: string[]; gate: string[]; unplaced: string[]; orgOpen: number; orgAll: number };
+  beforeAll(async () => {
+    m = boot();
+    await settle(200);
+    m.post(lens(ROWS, [HOMED, UNHOMED]));
+    await settle(50);
+    read = {
+      greenhouse: m.run<string[]>("seatsAt('greenhouse').map(x=>x.s)"),
+      gate: m.run<string[]>("seatsAt('gate').map(x=>x.s)"),
+      unplaced: m.run<string[]>("orgUnplaced().seats.map(x=>x.s)"),
+      orgOpen: m.run<number>("seatList().filter(x=>x._org&&x._state==='open').length"),
+      orgAll: m.run<number>("seatList().filter(x=>x._org).length"),
+    };
+  });
+  afterAll(() => m?.close());
+
+  it("puts a seat in the building its own key names", () => {
+    expect(read.gate).toContain("Marketing Steward");
+  });
+
+  it("puts a seat with no key of its own in its circle's home", () => {
+    expect(read.greenhouse).toContain("Land Steward");
+    expect(read.greenhouse).toContain("Seed Keeper");
+  });
+
+  it("falls back to the circle's home when a seat's key names no place on the land", () => {
+    expect(read.greenhouse).toContain("Compost Lead");
+  });
+
+  it("lists a seat with no key and no circle home as not placed, and draws it nowhere", () => {
+    expect(read.unplaced).toEqual(["Story Steward"]);
+    expect(read.greenhouse).not.toContain("Story Steward");
+    expect(read.gate).not.toContain("Story Steward");
+  });
+
+  it("shows every seat the Circles map has, and every open one as open: none is lost", () => {
+    expect(read.orgAll).toBe(ROWS.length);
+    expect(read.orgOpen).toBe(ROWS.filter((r) => r.state === "open").length);
+  });
+});

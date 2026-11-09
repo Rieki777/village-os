@@ -1684,8 +1684,21 @@ code. Where a step needs a technical helper, that is called out.
    Peering, above). Rotating it is not a simple swap: every peer will pause
    with "signing key changed" until an admin on their side presses "accept
    and resume". Do this one deliberately, and tell peer villages it is
-   coming, rather than as a reflexive part of this checklist. Ask a technical
-   helper; it needs a database write, not an admin screen.
+   coming, rather than as a reflexive part of this checklist. An admin does
+   it under Admin, Integrations, in the "Village signing key" card, by typing
+   the confirmation it asks for (readiness R069): it re-mints the key sealed
+   under `VILLAGE_SECRETS_KEY`, records both key ids in the audit log, and
+   tells the admins and stewards the same hour. It refuses while that
+   variable is missing or malformed, since a new private half is never stored
+   in the clear. The same card offers it when the key reads unreadable, which
+   is what a restore under a different `VILLAGE_SECRETS_KEY` leaves.
+   After launch it takes two people whenever two can sign, as keystone keys
+   do: the first admin's press asks, every other admin with their own login
+   is told, and a different admin co-signs from the same card (or declines).
+   An unsigned request lapses after `platform.cosign_expiry_hours`. With only
+   one admin able to sign, they replace it at once and the audit line says
+   they were alone. In an incident, have the second admin ready before you
+   press.
 5. **Passwords.** Ask a technical helper to check how many accounts are
    still on the legacy hash (`passwordHash` not starting with `$2`, a plain
    64-character hex string). Any account in that state has a password that
@@ -2099,3 +2112,6 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The invoice rails and the treasury sync (0335, 2026-11-06)
 
 - To have a sent invoice emailed to Sera, an admin or the `cash.pay` holder sets **Sera's inbox** in Admin, End-of-moon review settings, Village settings (moon-review setting `seraInbox`, blank on the platform, so nothing is emailed until a village names one). The daily `treasury-sync` job needs no setup: it retries emails the provider refused, reads Sera's `list_invoices` once Saberra offers it (until then the Sera source reads "Sera does not report invoices yet"), and re-syncs every member with an invoice.
+## Funding rounds (module `funding-rounds`, migration 0338)
+
+- No env var. The Treasury role gains `pot.steward` two ways: `server/seeds/roles-seed.json` for a new village, and the `runOnce` step `pot-steward-to-treasury-2026-11-06` (`POT_STEWARD_GRANTS`, `server/lib/starterRoles.ts`) for a village that booted earlier and still has the seeded `treasury` role. The module ships off; a pot and its rounds are opened from `/funding-rounds` by a `pot.steward` holder.

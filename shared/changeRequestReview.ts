@@ -67,6 +67,8 @@ export interface ReadinessInput {
   endsAt: Date;
   changes: number;
   objections: { answered: boolean; postedAfterEnd: boolean }[];
+  /** The reader is the author. Absent means yes. */
+  forAuthor?: boolean;
 }
 
 export interface ReadinessLine {
@@ -91,7 +93,10 @@ export function readiness(input: ReadinessInput): { ready: boolean; lines: Readi
     {
       key: "objections",
       done: waiting === 0,
-      words: waiting === 0 ? "Done" : `${waiting} objection${waiting === 1 ? "" : "s"} waiting for your answer`,
+      words:
+        waiting === 0
+          ? "Done"
+          : `${waiting} objection${waiting === 1 ? "" : "s"} waiting for ${input.forAuthor === false ? "an answer from the author" : "your answer"}`,
     },
   ];
   return { ready: lines.every((l) => l.done), lines };

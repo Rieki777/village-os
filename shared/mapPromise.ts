@@ -24,6 +24,8 @@
  */
 
 /** Which promise. The map sends these as its message `type`. */
+import type { ResolvedNextStep } from "./questNextStep";
+
 export const PROMISE_KINDS = ["rsvp", "claim"] as const;
 export type PromiseKind = (typeof PROMISE_KINDS)[number];
 
@@ -81,6 +83,8 @@ export interface PromiseResult {
   count?: number;
   /** Where to send someone: the way in for `anonymous`, the gathering for `paid`. */
   href?: string;
+  /** For a claim that is on: the next-step box (shared/questNextStep.ts), structured parts only. */
+  next?: ResolvedNextStep | null;
 }
 
 export function isPromiseKind(v: unknown): v is PromiseKind {

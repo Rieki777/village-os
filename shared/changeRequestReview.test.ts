@@ -97,6 +97,11 @@ describe("readiness: the checklist before the vote (R39)", () => {
     expect(r.lines.find((l) => l.key === "objections")!.words).toMatch(/1 objection/);
   });
 
+  it("tells a reader who is not the author that the answer is the author's to give", () => {
+    const r = readiness({ ...base, objections: [{ answered: false, postedAfterEnd: false }], forAuthor: false });
+    expect(r.lines.find((l) => l.key === "objections")!.words).toBe("1 objection waiting for an answer from the author");
+  });
+
   it("does not wait for an objection posted after the review ended: it goes to the vote with the rest (R9)", () => {
     expect(readiness({ ...base, objections: [{ answered: false, postedAfterEnd: true }] }).ready).toBe(true);
   });

@@ -104,9 +104,11 @@ export function register(app: Express, deps: Deps): void {
    * 2026-11-08). The platform default model pays 1 Voice per currency unit, so a
    * role set at 200,000 colones on a village that never adopted a model would
    * store 200,000 Voice, and the role.cycle Voice rule (enabled, amount blank)
-   * pays whatever the role names. Rye set Amora's scale at 1 Voice per 1,000
-   * colones; until a village saves a model of its own (version 0 is the platform
-   * default), every write path here stores no Voice line, and says so.
+   * pays whatever the role names. Rye set the scale at 1 Voice per colon
+   * (2026-11-08), and Voice starts only when the village adopts its own model
+   * through the switch proposal: until a village saves a model of its own
+   * (version 0 is the platform default), every write path here stores no Voice
+   * line, and says so.
    */
   const rolePayFor = async (figure: number, cashPct: number | undefined, eeHeld: boolean) => {
     const model = await currentModel(getPool(), currency());
