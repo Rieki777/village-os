@@ -28,6 +28,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // before the pairing checks run.
 const RATCHETS = [
   { script: "check-tailwind-gray.mjs", gate: true, hit: (i) => `  <p className="text-gray-500">line ${i}</p>` },
+  { script: "check-tailwind-palette.mjs", gate: true, hit: (i) => `  <p className="${i % 2 ? "hover:text-blue-900" : "bg-emerald-50"}">line ${i}</p>` },
   { script: "check-theme-literals.mjs", gate: false, hit: (i) => `  <p style={{ color: "#a1b2c3" }}>line ${i}</p>` },
 ];
 

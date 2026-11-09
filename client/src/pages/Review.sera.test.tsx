@@ -135,10 +135,9 @@ describe("the service's old batches, once the list holds them", () => {
     // Accept appears once in the whole page: the other module's own batch.
     expect(screen.getAllByRole("button", { name: /^Accept all/ })).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Accept all 1, with my edits" })).toBeTruthy();
-    // And the list's rows lead to the service's batch in the structure review.
-    const decide = screen.getAllByRole("link", { name: "Decide it in the structure review" });
-    expect(decide.length).toBe(2);
-    expect(decide[0].getAttribute("href")).toBe("/review/structure/sync-abc");
+    // PR C: the list's rows act on the page, so no row leads to the structure
+    // review any more; the folded arrival keeps its own link (above).
+    expect(screen.queryByRole("link", { name: "Decide it in the structure review" })).toBeNull();
   });
 
   it("never fold a batch carrying a note, which keeps Accept, Reject and its text box (S1)", async () => {
