@@ -846,6 +846,12 @@ msgctxt "database export"
 msgid "Download the copy"
 msgstr "Download the copy"
 
+#. placeholder {0}: villageMoonLabel(cycle.moon)
+#: client/src/components/journey/EconomicsView.tsx
+msgctxt "settlement text copied for Hypha"
+msgid "{0} settlement (closed {closed})"
+msgstr "{0} settlement (closed {closed})"
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "You asked: {askedList}. Only you see this list."
 msgstr "You asked: {askedList}. Only you see this list."
@@ -2106,6 +2112,11 @@ msgstr "Now"
 msgid "See: what the village shows about {name}"
 msgstr "See: what the village shows about {name}"
 
+#: client/src/components/journey/EconomicsView.tsx
+msgctxt "settlement report cycle line"
+msgid "· closed {closed}"
+msgstr "· closed {closed}"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Signs what other villages read about this one: its discovery page, its public structure and its module report. Key <0>{kid}</0>, made {made}."
@@ -2266,9 +2277,9 @@ msgstr "Could not send"
 
 #. placeholder {0}: c.closedAt ? new Date(c.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })
 #: client/src/components/journey/EconomicsView.tsx
-msgctxt "settlement report cycle line"
-msgid "· closed {0}"
-msgstr "· closed {0}"
+#~ msgctxt "settlement report cycle line"
+#~ msgid "· closed {0}"
+#~ msgstr "· closed {0}"
 
 #: client/src/components/admin/ConflictDoorFields.tsx
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -4898,9 +4909,9 @@ msgstr "Skip to content"
 #. placeholder {0}: villageMoonLabel(cycle.moon)
 #. placeholder {1}: cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })
 #: client/src/components/journey/EconomicsView.tsx
-msgctxt "settlement text copied for Hypha"
-msgid "{0} settlement (closed {1})"
-msgstr "{0} settlement (closed {1})"
+#~ msgctxt "settlement text copied for Hypha"
+#~ msgid "{0} settlement (closed {1})"
+#~ msgstr "{0} settlement (closed {1})"
 
 #: client/src/components/notebook/NotebookAdd.tsx
 msgctxt "notebook add mode"

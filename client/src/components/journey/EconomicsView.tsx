@@ -36,9 +36,15 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Its own message, outside the sentences that print it: the build's English
+  // precompile cannot read a message nested inside another's values.
+  const closedOn = (at: string | null | undefined): string =>
+    at ? new Date(at).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" });
+
   const copyForHypha = (cycle: any) => {
+    const closed = closedOn(cycle.closedAt);
     const lines = [
-      t({ message: `${villageMoonLabel(cycle.moon)} settlement (closed ${cycle.closedAt ? new Date(cycle.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })})`, context: "settlement text copied for Hypha" }),
+      t({ message: `${villageMoonLabel(cycle.moon)} settlement (closed ${closed})`, context: "settlement text copied for Hypha" }),
       ...cycle.totals.map((row: any) =>
         t`${row.name}: ${row.received} received (${row.receivedHearts} ${tokenLower} + ${row.receivedAcks} acknowledgments) from ${row.distinctSenders} member(s)` +
         (row.credited ? t({ message: ` → ${row.credited} ${cycle.poolToken ?? ""} credited`, context: "settlement text copied for Hypha" }) : ""),
@@ -89,11 +95,11 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
         </p>
         {data.settlement.length === 0 && <p className="text-sm text-stone-400 italic"><Trans>No cycle has closed yet.</Trans></p>}
         <div className="space-y-5">
-          {data.settlement.map((c: any) => (
+          {data.settlement.map((c: any) => { const closed = closedOn(c.closedAt); return (
             <div key={c.cycleId}>
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2">
                 <p className="text-sm font-semibold text-stone-700">{villageMoonLabel(c.moon)}
-                  <span className="text-stone-400 font-normal">{" "}<Trans context="settlement report cycle line">· closed {c.closedAt ? new Date(c.closedAt).toLocaleDateString() : t({ message: "date not recorded", context: "settlement close date missing" })}</Trans></span>
+                  <span className="text-stone-400 font-normal">{" "}<Trans context="settlement report cycle line">· closed {closed}</Trans></span>
                   {c.poolCredited > 0 && <span className="text-teal-deep font-normal">{" "}<Trans context="settlement report cycle line">· pool released {c.poolCredited} {c.poolToken}</Trans></span>}
                 </p>
                 {hyphaSpace && (
@@ -128,7 +134,7 @@ export function EconomicsView({ headers }: { headers: (extra?: Record<string, st
                 </table>
               </div>
             </div>
-          ))}
+          ); })}
         </div>
       </div>
 
