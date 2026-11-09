@@ -1,5 +1,5 @@
 /**
- * Access tasks and moon renewals (migration 0363). Names the item and its
+ * Access tasks and moon renewals (migration 0366). Names the item and its
  * state, never a credential: see shared/accessBundle.ts.
  */
 import crypto from "node:crypto";

@@ -1,4 +1,4 @@
--- 0363 (provisional, the integrator renames): moon renewal and the access bundle.
+-- 0366 (provisional, the integrator renames): moon renewal and the access bundle.
 --
 -- role_moon_renewals: a holder of a role that runs by the moon files "carry on"
 -- with the next moon's contribution; one holder of the power to fill roles then
