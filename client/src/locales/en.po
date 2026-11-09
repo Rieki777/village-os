@@ -1049,6 +1049,10 @@ msgstr "Roles open now"
 msgid "Its role comes with it, and leaving the circle out leaves it out too."
 msgstr "Its role comes with it, and leaving the circle out leaves it out too."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgid "This device only. Admin stays light for everyone else."
+msgstr "This device only. Admin stays light for everyone else."
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "1 quest still needs yours"
@@ -1242,6 +1246,11 @@ msgstr "18 or older"
 msgctxt "change request checklist"
 msgid "Objections answered"
 msgstr "Objections answered"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, jumps to the page's own filters"
+msgid "Change the filters"
+msgstr "Change the filters"
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Sign in to see what your village is weighing."
@@ -1834,6 +1843,11 @@ msgstr "This round could not be found."
 msgid "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 msgstr "The village has not set its rates yet. Set them on the economics page, then work out this role's pay here."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, menu button"
+msgid "Your settings"
+msgstr "Your settings"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Every village that follows this one will pause on the new key until somebody there accepts it. Do this after a leak or a lost VILLAGE_SECRETS_KEY, and tell those villages first."
@@ -1934,10 +1948,19 @@ msgctxt "pricing desk"
 msgid "to"
 msgstr "to"
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Signed in to admin"
+msgstr "Signed in to admin"
+
 #: client/src/components/valuation/QuestEnginePrice.tsx
 msgctxt "quest editor"
 msgid "As little as"
 msgstr "As little as"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgid "Handled today on this device: {handled}"
+msgstr "Handled today on this device: {handled}"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -2047,6 +2070,11 @@ msgstr "Your idea was not shared. Try again."
 msgctxt "heading of the review feed"
 msgid "The review"
 msgstr "The review"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Admin"
+msgstr "Admin"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
@@ -2250,6 +2278,11 @@ msgctxt "signing key"
 msgid "Declined. The village keeps its key."
 msgstr "Declined. The village keeps its key."
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "{village} admin"
+msgstr "{village} admin"
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Compare them"
@@ -2288,6 +2321,11 @@ msgstr "Show everything waiting"
 msgctxt "funding rounds"
 msgid "Shape your idea into a quest"
 msgstr "Shape your idea into a quest"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, per-device dark colours"
+msgid "Night look"
+msgstr "Night look"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -2621,6 +2659,11 @@ msgctxt "change request note outcome"
 msgid "Answered"
 msgstr "Answered"
 
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header, menu button"
+msgid "Your settings, {name}"
+msgstr "Your settings, {name}"
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "No language matches"
@@ -2870,6 +2913,11 @@ msgstr "{0} ready, {1} flagged"
 msgctxt "edit one change"
 msgid "Edit"
 msgstr "Edit"
+
+#: client/src/components/admin/AdminHeader.tsx
+msgctxt "admin header"
+msgid "Sign out"
+msgstr "Sign out"
 
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
