@@ -127,3 +127,19 @@ describe("a founder's next step before launch", () => {
     expect(founderStepFor(undefined, true)).toBeNull();
   });
 });
+
+describe("the first moons rule", () => {
+  const trained: NextActionFacts = { trained: true, joining: null, claims: [], budget: { remaining: 0, total: 0 } };
+  const stepFor = (f: Partial<NextActionFacts>) => pickNextAction(GAME_CONFIG.nextActions, { ...trained, ...f }).id;
+  it("is the step while a path has open items", () => {
+    expect(stepFor({ onboardingOpen: true })).toBe("first-moons");
+  });
+  it("control: it is gone once the items are done, or when the fact is not asked", () => {
+    expect(stepFor({ onboardingOpen: false })).not.toBe("first-moons");
+    expect(stepFor({})).not.toBe("first-moons");
+  });
+  it("never hides the training or the letter behind it", () => {
+    expect(stepFor({ onboardingOpen: true, trained: false })).toBe("training");
+    expect(stepFor({ onboardingOpen: true, joining: "unsigned" })).toBe("membership");
+  });
+});

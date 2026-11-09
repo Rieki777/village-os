@@ -192,6 +192,7 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetOnboardingForMember } from "../repos/onboarding";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
 import { forgetProposer } from "../repos/questProposals";
@@ -820,6 +821,17 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S FIRST MOONS (0360): their paths with every step and
+       * check-in, the check-ins they wrote as a buddy's or holder's hand, and
+       * the buddy link on other people's paths. Their own, so it goes whole.
+       */
+      name: "onboarding",
+      run: async () => {
+        await forgetOnboardingForMember(pool, target.id);
       },
     },
     {

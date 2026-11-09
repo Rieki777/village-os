@@ -1,0 +1,188 @@
+/**
+ * "Your first moons in <role>": the onboarding path on the profile.
+ *
+ * Opens when a holder is seated; the profile loads it lazily and it renders
+ * nothing for anybody with no path to show. Items are ticked by whoever owns
+ * them (the holder, the buddy, or the holder of the owning role); a check-in at
+ * day 30, 60 and 90 is filed by the holder and read by the holder, the buddy and
+ * the onboarding role (server/lib/onboarding.ts decides, this only draws).
+ *
+ * Its own file because Profile.tsx sits under the file-lines ratchet.
+ */
+import { useCallback, useEffect, useState } from "react";
+import { gameFetch } from "@/lib/gameApi";
+import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
+
+export const ONBOARDING_WORDS = {
+  heading: (role: string) => `Your first moons in ${role}`,
+  line: (day: number, due: string) => `Day ${day}. The first steps are due by ${due}.`,
+  holderOf: (role: string, who: string) => `${who}'s first moons in ${role}`,
+  buddy: (name: string) => `Your buddy is ${name}.`,
+  noBuddy: "No buddy is named yet. Ask the one who adopted you.",
+  open: (n: number) => (n === 1 ? "1 step open" : `${n} steps open`),
+  allDone: "Every step is done.",
+  tick: "Mark done",
+  doneWhen: "Done when:",
+  due: (d: number) => `by day ${d}`,
+  checkins: "Check-ins",
+  checkinOpen: (d: number) => `File your day ${d} check-in`,
+  filed: (d: number) => `Day ${d} filed`,
+  clarity: "How clear is your role? (1 to 5)",
+  overall: "How is it going overall? (1 to 5)",
+  connection: "Who have you worked with? Who do you still want to meet?",
+  culture: "What has surprised you about how we work together?",
+  basics: "Do you have the access and tools you need? What is missing?",
+  load: "Hours given against hours expected. Any early signs of stretch?",
+  oneThing: "One thing that would help most next moon",
+  file: "File check-in",
+  failed: "Your first moons did not load.",
+  retry: "Retry",
+} as const;
+
+interface Served {
+  id: string;
+  roleName: string;
+  openedOn: string;
+  dueOn: string;
+  day: number;
+  buddyName: string;
+  mine: boolean;
+  items: Array<PathItemState & { mayTick: boolean }>;
+  openCount: number;
+  checkinsDue: number[];
+  checkins: Array<{ day: number; answers: CheckinAnswers | null; filedAt: string }> | null;
+  mayFile: boolean;
+}
+
+const FIELD = "mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground";
+const BTN =
+  "inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-semibold text-card-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring";
+
+function CheckinForm({ pathId, day, onFiled }: { pathId: string; day: number; onFiled: (paths: Served[]) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError(null);
+    const body = Object.fromEntries(["clarity", "overall", "connection", "culture", "basics", "load", "oneThing"].map((k) => [k, String(f.get(k) ?? "")]));
+    const res = await gameFetch(`/api/onboarding/paths/${encodeURIComponent(pathId)}/checkins/${day}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const out = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (res.ok && Array.isArray(out.paths)) onFiled(out.paths);
+    else setError(typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed);
+  }
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-3 rounded-lg border border-border/60 p-4">
+      <p className="font-semibold text-card-foreground">{ONBOARDING_WORDS.checkinOpen(day)}</p>
+      {(["clarity", "overall"] as const).map((k) => (
+        <label key={k} className="block text-sm text-foreground">
+          {ONBOARDING_WORDS[k]}
+          <select name={k} required defaultValue="" className={FIELD}>
+            <option value="" disabled />
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+      ))}
+      {(["connection", "culture", "basics", "load", "oneThing"] as const).map((k) => (
+        <label key={k} className="block text-sm text-foreground">
+          {ONBOARDING_WORDS[k]}
+          <textarea name={k} rows={2} maxLength={1000} className={FIELD} />
+        </label>
+      ))}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <button type="submit" disabled={busy} className={BTN}>{ONBOARDING_WORDS.file}</button>
+    </form>
+  );
+}
+
+function PathCard({ p, onPaths }: { p: Served; onPaths: (paths: Served[]) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  async function tick(key: string) {
+    setError(null);
+    const res = await gameFetch(`/api/onboarding/paths/${encodeURIComponent(p.id)}/items/${encodeURIComponent(key)}/done`, { method: "POST" });
+    const out = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray(out.paths)) onPaths(out.paths);
+    else setError(typeof out.error === "string" ? out.error : ONBOARDING_WORDS.failed);
+  }
+  return (
+    <section aria-labelledby={`onb-${p.id}`} className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
+      <h2 id={`onb-${p.id}`} className="font-display text-2xl font-bold text-card-foreground">
+        {p.mine ? ONBOARDING_WORDS.heading(p.roleName) : ONBOARDING_WORDS.holderOf(p.roleName, "A new holder")}
+      </h2>
+      <p className="mt-2 text-foreground">{ONBOARDING_WORDS.line(p.day, p.dueOn)}</p>
+      <p className="mt-1 text-foreground">{p.buddyName ? ONBOARDING_WORDS.buddy(p.buddyName) : ONBOARDING_WORDS.noBuddy}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{p.openCount > 0 ? ONBOARDING_WORDS.open(p.openCount) : ONBOARDING_WORDS.allDone}</p>
+      <ul className="mt-3 space-y-2">
+        {p.items.map((it) => (
+          <li key={it.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2">
+            <span className={it.doneAt ? "text-muted-foreground line-through" : "font-medium text-card-foreground"}>
+              {it.title}
+              <span className="block text-sm font-normal text-muted-foreground">
+                {ONBOARDING_WORDS.doneWhen} {it.doneWhen} ({ONBOARDING_WORDS.due(it.dueDay)})
+              </span>
+            </span>
+            {!it.doneAt && it.mayTick && (
+              <button type="button" onClick={() => void tick(it.key)} className={BTN}>{ONBOARDING_WORDS.tick}</button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+      {p.checkins && (
+        <div className="mt-4">
+          <h3 className="font-semibold text-card-foreground">{ONBOARDING_WORDS.checkins}</h3>
+          <ul className="mt-1 text-sm text-foreground">
+            {p.checkins.map((c) => (
+              <li key={c.day}>
+                {ONBOARDING_WORDS.filed(c.day)}
+                {c.answers ? ` (${c.answers.clarity} and ${c.answers.overall} of 5)` : ""}
+              </li>
+            ))}
+          </ul>
+          {p.mayFile && p.checkinsDue.map((d) => <CheckinForm key={d} pathId={p.id} day={d} onFiled={onPaths} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function OnboardingPath() {
+  const [paths, setPaths] = useState<Served[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(() => {
+    setFailed(false);
+    void gameFetch("/api/onboarding/me")
+      .then(async (res) => {
+        const out = await res.json().catch(() => ({}));
+        if (res.ok && Array.isArray(out.paths)) setPaths(out.paths);
+        else setFailed(true);
+      })
+      .catch(() => setFailed(true));
+  }, []);
+  useEffect(() => load(), [load]);
+
+  if (failed) {
+    return (
+      <p role="status" className="text-foreground">
+        {ONBOARDING_WORDS.failed}{" "}
+        <button type="button" onClick={load} className="min-h-11 font-medium text-notice underline underline-offset-2">{ONBOARDING_WORDS.retry}</button>
+      </p>
+    );
+  }
+  if (!paths || paths.length === 0) return null;
+  return (
+    <div id="onboarding" className="scroll-mt-28 flex flex-col gap-6">
+      {paths.map((p) => (
+        <PathCard key={p.id} p={p} onPaths={setPaths} />
+      ))}
+    </div>
+  );
+}

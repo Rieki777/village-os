@@ -492,6 +492,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "module-records",
       "member-agent",
       "companions",
+      "onboarding",
       "member-asks",
       "character-sheet",
       "portraits",
