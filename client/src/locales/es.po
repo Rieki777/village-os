@@ -89,6 +89,10 @@ msgstr ""
 msgid "What harm could this do to the village, or what would it stop us doing?"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgid "Your pledge is withdrawn."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
 msgid "Your answer"
@@ -166,6 +170,10 @@ msgid "Step {n}"
 msgstr "Paso {n}"
 
 #: client/src/pages/FundingRounds.tsx
+msgid "{who} pledged {much}, returned when the quest was not funded"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "A short name"
 msgstr ""
@@ -188,6 +196,10 @@ msgstr "Abrir menú"
 
 #: client/src/pages/FundingRounds.tsx
 msgid "It changes something everyone shares, such as a path, the water or a common building."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "The amount must be a number above zero."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
@@ -301,6 +313,11 @@ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
+msgid "{who} pledged {much}, firm"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
 msgid "Open a pot"
 msgstr ""
 
@@ -402,6 +419,10 @@ msgid "Download the copy"
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+msgid "Back this quest, in {unit}"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgid "This disagreement stays in the round's record for everyone to see."
 msgstr ""
 
@@ -441,6 +462,10 @@ msgstr "Empieza {at}"
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "delete a change request"
 msgid "Delete"
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+msgid "Nobody has backed this yet."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -604,6 +629,11 @@ msgstr ""
 msgid "Nothing has been read from {agent} yet."
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Withdraw my pledge"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a note about every change"
 msgid "The whole request"
@@ -697,6 +727,10 @@ msgstr ""
 #: client/src/components/TreasurySync.tsx
 msgid "One of your numbers differs between sources. The Treasurer has been shown it."
 msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "{who} pledged {much}, firm"
+#~ msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgid "Counts for this version. An edit asks again."
@@ -1248,6 +1282,10 @@ msgid "The suggestion was refused."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
+msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
+msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
 msgid "Saved."
 msgstr ""
@@ -1767,6 +1805,11 @@ msgctxt "funding rounds"
 msgid "Back to funding rounds"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "{who} pledged {much}"
+msgstr ""
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Declined. The village keeps its key."
@@ -1852,6 +1895,10 @@ msgstr ""
 msgid "Could be as little as"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgid "A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet."
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 #~ msgid "Sign out everywhere"
@@ -1913,6 +1960,10 @@ msgctxt "a setting with no value"
 msgid "not set"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgid "{who} pledged {much}, then withdrew it"
+msgstr ""
+
 #: client/src/components/modules/SuggestDial.tsx
 msgctxt "open the change request just added to"
 msgid "Open it"
@@ -1947,6 +1998,10 @@ msgctxt "character card, open the role proposal"
 msgid "Propose a new role"
 msgstr "Proponer un rol nuevo"
 
+#: client/src/pages/FundingRounds.tsx
+msgid "Thank you. Your pledge is shown on this quest."
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "To decide"
@@ -1966,6 +2021,11 @@ msgstr "Ver los roles abiertos"
 #, fuzzy
 #~ msgid "Close menu"
 #~ msgstr "Cerrar menú"
+
+#: client/src/pages/FundingRounds.tsx
+msgctxt "funding rounds"
+msgid "Pledge"
+msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "A draft from this queue is still open."
@@ -2011,6 +2071,10 @@ msgstr ""
 msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "el rol que guía el círculo"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "You are backing this quest (pending). The Backer badge comes when the quest is done."
+msgstr ""
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
@@ -2075,6 +2139,10 @@ msgstr ""
 msgctxt "language picker"
 msgid "No language matches"
 msgstr "Ningún idioma coincide"
+
+#: client/src/pages/FundingRounds.tsx
+msgid "You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet."
+msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "review response"
@@ -2147,6 +2215,10 @@ msgstr "Ir al contenido"
 msgid "Your own figure first, before you see the suggestion (optional)"
 msgstr ""
 
+#: client/src/pages/FundingRounds.tsx
+msgid "{n, plural, one {{pledged} pledged by # backer} other {{pledged} pledged by # backers}}"
+msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "How this was worked out"
 msgstr ""
@@ -2197,6 +2269,10 @@ msgstr ""
 msgctxt "default title of a suggestion"
 msgid "Change {label}"
 msgstr ""
+
+#: client/src/pages/FundingRounds.tsx
+#~ msgid "{who} pledged {much}"
+#~ msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"

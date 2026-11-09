@@ -49,6 +49,8 @@ import {
   interactionCountsFor, interactionsOf, listPots, listRounds, liveIdeasOf, openRoundCount, potById, receivedOf, roundById,
   setIdeaThread, updateRoundDates, type IdeaRow, type InteractionInput, type PotRow, type Queryable, type RoundRow,
   allMarksOf, claimIdeaQuest, claimOutcome, earmarkTotals, insertEarmark, lockPot, marksOf, marksOfMember, releaseIdeaQuest, replaceMarks, setEarmarkQuest, setIdeaStatus, updateIdeaGrow,
+  firmPledges, firmTotals, insertPledge, lowerEarmark, pledgeById, pledgesByBacker, pledgesOfRound, releasePledges, withdrawPledgeRow,
+  type PledgeRow, type PledgeStage,
 } from "../repos/fundingRounds";
 
 export const MODULE_ID = "funding-rounds";
@@ -279,6 +281,48 @@ export interface IdeaView {
   createdAt: string | null;
   /** First names of the members who ticked it. Only once choosing has closed (plan R6); absent before. */
   markedBy?: string[];
+  /** Pledges are shown openly with names (R19). Set by roundDetail. */
+  backing?: Backing;
+}
+
+export interface Backing {
+  /** Standing pledges: pledged, firm, collected or paid. */
+  pledgedMinor: number;
+  /** People with a standing pledge. */
+  backers: number;
+  firmMinor: number;
+  withdrawnMinor: number;
+  /** The viewer's own latest standing pledge, or null: the "backing (pending)" marker. */
+  mine: { id: string; amountMinor: number; status: PledgeRow["status"] } | null;
+  /** Every pledge, withdrawals and releases included, oldest first. */
+  pledges: Array<{ id: string; name: string; amountMinor: number; status: PledgeRow["status"] }>;
+}
+
+const STANDING: ReadonlySet<PledgeRow["status"]> = new Set<PledgeRow["status"]>(["pledged", "firm", "collected", "paid"]);
+const FIRM: ReadonlySet<PledgeRow["status"]> = new Set<PledgeRow["status"]>(["firm", "collected", "paid"]);
+
+/** The words shown for an anonymous idea's author backing their own idea: a name there would unmask them. */
+export const PROPOSER_BYLINE = "the proposer";
+
+export function backingOf(
+  pledges: readonly PledgeRow[],
+  viewerId: string | null,
+  nameOf: (id: string) => string | null,
+  idea?: Pick<IdeaRow, "shownAs" | "authorId">,
+): Backing {
+  const nameFor = (backer: string): string =>
+    idea?.shownAs === "anonymous" && backer === idea.authorId ? PROPOSER_BYLINE : firstNameOf(nameOf(backer) ?? "") || "a member";
+  const standing = pledges.filter((p) => STANDING.has(p.status));
+  const sum = (xs: readonly PledgeRow[]) => xs.reduce((s, p) => s + p.amountMinor, 0);
+  const mine = viewerId ? standing.filter((p) => p.backerUserId === viewerId).at(-1) : undefined;
+  return {
+    pledgedMinor: sum(standing),
+    backers: new Set(standing.map((p) => p.backerUserId)).size,
+    firmMinor: sum(pledges.filter((p) => FIRM.has(p.status))),
+    withdrawnMinor: sum(pledges.filter((p) => p.status === "withdrawn")),
+    mine: mine ? { id: mine.id, amountMinor: mine.amountMinor, status: mine.status } : null,
+    pledges: pledges.map((p) => ({ id: p.id, name: nameFor(p.backerUserId), amountMinor: p.amountMinor, status: p.status })),
+  };
 }
 
 /** How an idea's author is shown: "a member" when anonymous, else their first name. */
@@ -458,6 +502,11 @@ export async function roundDetail(
   }
   const ideas = await ideasOfRound(pool, roundId);
   const views = ideas.map((i) => ideaView(i, viewerId, nameOf));
+  const pledgesByIdea = new Map<string, PledgeRow[]>();
+  for (const p of await pledgesOfRound(pool, roundId)) pledgesByIdea.set(p.ideaId as string, [...(pledgesByIdea.get(p.ideaId as string) ?? []), p]);
+  ideas.forEach((idea, n) => {
+    views[n].backing = backingOf(pledgesByIdea.get(idea.id) ?? [], viewerId, nameOf, idea);
+  });
   if (stage === "harvest" || stage === "closed") {
     // Ticks are named once choosing has closed (plan R6). First names only.
     const byIdea = new Map<string, string[]>();
@@ -543,6 +592,95 @@ export async function withdrawIdea(pool: Pool, actorId: string, ideaId: string, 
   return { ok: true, idea: ideaView((await ideaById(pool, ideaId)) as IdeaRow, actorId, nameOf) };
 }
 
+// ── backing (S3b, plan §18) ─────────────────────────────────────────────────
+
+export interface PledgeView {
+  id: string;
+  ideaId: string | null;
+  amountMinor: number;
+  unit: string;
+  status: PledgeRow["status"];
+  stageAtPledge: PledgeStage;
+  createdAt: string | null;
+}
+
+const pledgeView = (p: PledgeRow): PledgeView => ({
+  id: p.id, ideaId: p.ideaId, amountMinor: p.amountMinor, unit: p.unitCode, status: p.status, stageAtPledge: p.stageAtPledge, createdAt: p.createdAt,
+});
+
+/**
+ * Back a quest with a pledge, at any stage (R18). Before choosing closes it is
+ * a standing pledge the backer can withdraw. In harvest it is accepted only on
+ * a funded quest, firm at once, and it lowers that quest's earmark. Nothing is
+ * collected here (Q-B1 waits on Rye).
+ */
+export async function pledgeToIdea(pool: Pool, actorId: string, ideaId: string, body: unknown, now: Date): Promise<{ ok: true; pledge: PledgeView } | Refusal> {
+  const raw = body && typeof body === "object" ? (body as Record<string, unknown>).amountMinor : undefined;
+  const amount = Number(raw);
+  if (raw == null || raw === "" || !Number.isInteger(amount) || amount <= 0) return { ok: false, status: 400, problem: "A pledge is a whole amount above zero." };
+  const idea = await ideaById(pool, ideaId);
+  if (!idea) return { ok: false, status: 404, problem: "No such idea." };
+  const round = (await roundById(pool, idea.roundId)) as RoundRow;
+  const pot = await potById(pool, round.potId);
+  if (!pot) return { ok: false, status: 404, problem: "No such pot." };
+  const stage = stageAt(datesOf(round), now);
+  if (stage === "closed") return { ok: false, status: 409, problem: "This round is closed." };
+  if (idea.status === "withdrawn" || idea.status === "held" || idea.status === "stopped") return { ok: false, status: 409, problem: "This idea is not in the round any more." };
+  const id = newId("pledge");
+  if (stage !== "harvest") {
+    await insertPledge(pool, { id, ideaId, backerUserId: actorId, amountMinor: amount, unitCode: pot.unitCode, stageAtPledge: stage, status: "pledged" });
+  } else {
+    if (round.outcome == null) return { ok: false, status: 409, problem: "The count is being made. Try again in a moment." };
+    if (idea.status !== "funded") return { ok: false, status: 409, problem: "Only a quest the round funded can be backed now." };
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await insertPledge(conn, { id, ideaId, backerUserId: actorId, amountMinor: amount, unitCode: pot.unitCode, stageAtPledge: "harvest", status: "firm" });
+      await lowerEarmark(conn, ideaId, amount);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+  await recordInteraction(pool, {
+    actorUserId: actorId,
+    kind: "idea.backed",
+    subjectType: "funding_idea",
+    subjectRef: ideaId,
+    roundId: idea.roundId,
+    visibility: "members",
+    dedupeKey: `idea.backed:${id}`,
+  });
+  return { ok: true, pledge: pledgeView((await pledgeById(pool, id)) as PledgeRow) };
+}
+
+/** The backer withdraws a standing pledge, until choosing closes. The withdrawal stays on the record. */
+export async function withdrawPledge(pool: Pool, actorId: string, pledgeId: string, now: Date): Promise<{ ok: true; pledge: PledgeView } | Refusal> {
+  const p = await pledgeById(pool, pledgeId);
+  if (!p || !p.ideaId) return { ok: false, status: 404, problem: "No such pledge." };
+  if (p.backerUserId !== actorId) return { ok: false, status: 403, problem: "Only the person who made this pledge can withdraw it." };
+  const idea = (await ideaById(pool, p.ideaId)) as IdeaRow;
+  const round = (await roundById(pool, idea.roundId)) as RoundRow;
+  const stage = stageAt(datesOf(round), now);
+  if (p.status !== "pledged" || (stage !== "seed" && stage !== "grow" && stage !== "choose")) {
+    return { ok: false, status: 409, problem: "A pledge is firm once choosing closes, and can no longer be withdrawn." };
+  }
+  if (!(await withdrawPledgeRow(pool, pledgeId))) return { ok: false, status: 409, problem: "This pledge has already changed." };
+  await recordInteraction(pool, {
+    actorUserId: actorId,
+    kind: "pledge.withdrawn",
+    subjectType: "funding_idea",
+    subjectRef: p.ideaId,
+    roundId: idea.roundId,
+    visibility: "members",
+    dedupeKey: `pledge.withdrawn:${pledgeId}`,
+  });
+  return { ok: true, pledge: pledgeView((await pledgeById(pool, pledgeId)) as PledgeRow) };
+}
+
 // ── choose ──────────────────────────────────────────────────────────────────
 
 /** Replace the member's ticks, while the round is in choose. Every tick must be on the ballot. */
@@ -603,6 +741,8 @@ export interface RoundOutcome {
   power: CountView;
   people: CountView;
   divergence: Array<{ ideaId: string; fundedBy: "power" | "people"; costMinor: number }>;
+  /** Quests their backers' firm pledges covered whole; funded without the count. */
+  backerFunded: string[];
   /** Ticks per quest, kept so the record survives a ticker's erasure. */
   marksByIdea: Record<string, number>;
   countedAt: string;
@@ -656,7 +796,15 @@ async function runHarvest(pool: Pool, deps: HarvestDeps, round: RoundRow, pot: P
     const quorumMet = electorate.length > 0 && markers * 100 >= round.quorumPct * electorate.length;
     const money = await potMoney(conn, pot.id);
     const availableMinor = Math.min(round.offeredMinor ?? money.free, money.free);
-    const options = ideas.map((i) => ({ id: i.id, cost: i.askMinor as number }));
+    // Choosing has closed: the standing pledges on the ballot are firm now
+    // (R19), and the pot is asked only for what they do not cover (§18.5).
+    await firmPledges(conn, ideas.map((i) => i.id));
+    const firm = await firmTotals(conn, round.id);
+    const potPart = new Map(ideas.map((i) => [i.id, Math.max(0, (i.askMinor as number) - (firm.get(i.id) ?? 0))]));
+    // A quest its backers cover whole goes ahead without the count (the plan's
+    // suggested answer to Q-B6; a stop vote arrives with S4). One place to change.
+    const backerFunded = ideas.filter((i) => potPart.get(i.id) === 0).map((i) => i.id);
+    const options = ideas.filter((i) => (potPart.get(i.id) as number) > 0).map((i) => ({ id: i.id, cost: potPart.get(i.id) as number }));
     const seed = `${round.id}:${(round.harvestAt as Date).toISOString()}`;
     const both = countBothWays({
       pot: quorumMet ? availableMinor : 0,
@@ -679,6 +827,7 @@ async function runHarvest(pool: Pool, deps: HarvestDeps, round: RoundRow, pot: P
       power: countView(both.power),
       people: countView(both.people),
       divergence: divergenceOf(both, options).map((d) => ({ ideaId: d.option, fundedBy: d.fundedBy, costMinor: d.cost })),
+      backerFunded,
       marksByIdea,
       countedAt: new Date().toISOString(),
     };
@@ -686,18 +835,23 @@ async function runHarvest(pool: Pool, deps: HarvestDeps, round: RoundRow, pot: P
       await conn.rollback();
       return;
     }
-    const funded = new Set(outcome[pot.decider].funded);
-    const promised = ideas.filter((i) => funded.has(i.id)).reduce((s, i) => s + (i.askMinor as number), 0);
+    const funded = new Set([...outcome[pot.decider].funded, ...backerFunded]);
+    const promised = ideas.filter((i) => funded.has(i.id)).reduce((s, i) => s + (potPart.get(i.id) as number), 0);
     // held + owed + paid never exceeds what the pot received.
     if (promised > money.free) throw new Error(`round ${round.id} would promise ${promised} from a pot with ${money.free} free`);
     for (const i of ideas) {
       if (funded.has(i.id)) {
-        await insertEarmark(conn, { id: newId("earmark"), potId: pot.id, roundId: round.id, ideaId: i.id, amountMinor: i.askMinor as number, changedBy: null });
+        const part = potPart.get(i.id) as number;
+        if (part > 0) await insertEarmark(conn, { id: newId("earmark"), potId: pot.id, roundId: round.id, ideaId: i.id, amountMinor: part, changedBy: null });
         await setIdeaStatus(conn, i.id, "funded");
       } else {
         await setIdeaStatus(conn, i.id, "not_funded");
       }
     }
+    // Pledges on an idea that will not happen go back to the backer: those not
+    // funded, and those that never reached the ballot. Nothing was collected.
+    const all = await ideasOfRound(conn, round.id);
+    await releasePledges(conn, all.filter((i) => !funded.has(i.id)).map((i) => i.id));
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -772,6 +926,7 @@ export async function exportMemberFundingRounds(pool: Pool, userId: string): Pro
       shownAs: i.shownAs, status: i.status, createdAt: i.createdAt,
     })),
     marks: await allMarksOf(pool, userId),
+    pledges: (await pledgesByBacker(pool, userId)).map(pledgeView),
     interactions: await interactionsOf(pool, userId),
   };
 }

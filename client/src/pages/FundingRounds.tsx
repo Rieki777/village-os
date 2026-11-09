@@ -68,6 +68,14 @@ interface Idea {
   questId: string | null;
   /** First names of those who ticked it; sent only once choosing has closed. */
   markedBy?: string[];
+  backing?: {
+    pledgedMinor: number;
+    backers: number;
+    firmMinor: number;
+    withdrawnMinor: number;
+    mine: { id: string; amountMinor: number; status: string } | null;
+    pledges: Array<{ id: string; name: string; amountMinor: number; status: string }>;
+  };
 }
 
 interface CountView {
@@ -87,6 +95,8 @@ interface Outcome {
   power: CountView;
   people: CountView;
   divergence: Array<{ ideaId: string; fundedBy: "power" | "people"; costMinor: number }>;
+  /** Absent on a round counted before backing existed. */
+  backerFunded?: string[];
 }
 
 interface Detail {
@@ -554,7 +564,134 @@ function Results({ detail }: { detail: Detail }) {
           <Trans context="funding rounds">Both counts agree.</Trans>
         </p>
       )}
+      {(outcome.backerFunded ?? []).length > 0 && (
+        <ul className="mt-3 grid gap-1 text-sm text-foreground">
+          {(outcome.backerFunded ?? []).map((id) => {
+            const title = titleOf(id);
+            return (
+              <li key={id}>
+                <Trans>{title} is fully backed by pledges, so it goes ahead without the pot.</Trans>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
+  );
+}
+
+/**
+ * Backing, shown openly (R19): who pledged what, and a way to back it. A
+ * pledge stands until choosing closes, then it is firm and lowers what the pot
+ * pays. Nothing is collected yet, and the page says so.
+ */
+function BackingPanel({ idea, pot, stage, onChanged }: { idea: Idea; pot: Pot; stage: RoundStage; onChanged: () => void }) {
+  const { t } = useLingui();
+  const [amountText, setAmountText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const b = idea.backing;
+  const open = stage === "seed" || stage === "grow" || stage === "choose" || (stage === "harvest" && idea.status === "funded");
+  if (!b || (!open && b.pledges.length === 0)) return null;
+  const pledged = amount(b.pledgedMinor, pot);
+  const n = b.backers;
+  const mine = b.mine;
+  const canWithdraw = mine?.status === "pledged" && (stage === "seed" || stage === "grow" || stage === "choose");
+  const unit = pot.unit;
+
+  const send = async (path: string, init: RequestInit, ok: string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await gameFetch(path, init);
+      const body = await readJson(res);
+      setMessage(res.ok ? ok : (sentenceOf(body) ?? t`That did not save. Try again.`));
+      if (res.ok) {
+        setAmountText("");
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pledge = async (e: FormEvent) => {
+    e.preventDefault();
+    const minor = toMinor(amountText, pot);
+    if (minor == null || Number.isNaN(minor) || minor <= 0) {
+      setMessage(t`The amount must be a number above zero.`);
+      return;
+    }
+    await send(`/api/funding-rounds/ideas/${idea.id}/pledges`, { method: "POST", body: JSON.stringify({ amountMinor: minor }) }, t`Thank you. Your pledge is shown on this quest.`);
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-border p-3 text-sm">
+      {b.pledgedMinor > 0 ? (
+        <p className="font-medium text-foreground">
+          <Plural value={n} one={`${pledged} pledged by # backer`} other={`${pledged} pledged by # backers`} />
+        </p>
+      ) : (
+        <p className="text-muted-foreground">
+          <Trans>Nobody has backed this yet.</Trans>
+        </p>
+      )}
+      {b.pledges.length > 0 && (
+        <ul className="mt-1 grid gap-0.5 text-muted-foreground">
+          {b.pledges.map((p) => {
+            const who = p.name;
+            const much = amount(p.amountMinor, pot);
+            return (
+              <li key={p.id}>
+                {p.status === "withdrawn" ? (
+                  <Trans>{who} pledged {much}, then withdrew it</Trans>
+                ) : p.status === "released_to_backer" ? (
+                  <Trans>{who} pledged {much}, returned when the quest was not funded</Trans>
+                ) : p.status === "pledged" ? (
+                  <Trans context="funding rounds">{who} pledged {much}</Trans>
+                ) : (
+                  <Trans context="funding rounds">{who} pledged {much}, firm</Trans>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {mine && (
+        <p className="mt-2 text-foreground">
+          <Trans>You are backing this quest (pending). The Backer badge comes when the quest is done.</Trans>
+        </p>
+      )}
+      {open && (
+        <form onSubmit={pledge} className="mt-2 flex flex-wrap items-end gap-2">
+          <label className={`${LABEL} min-w-[10rem] flex-1`}>
+            <Trans>Back this quest, in {unit}</Trans>
+            <input className={FIELD} inputMode="decimal" value={amountText} onChange={(e) => setAmountText(e.target.value)} />
+          </label>
+          <button type="submit" className={BTN_SECONDARY} disabled={busy}>
+            <Trans context="funding rounds">Pledge</Trans>
+          </button>
+          {canWithdraw && (
+            <button type="button" className={BTN_QUIET} disabled={busy} onClick={() => send(`/api/funding-rounds/pledges/${mine!.id}`, { method: "DELETE" }, t`Your pledge is withdrawn.`)}>
+              <Trans context="funding rounds">Withdraw my pledge</Trans>
+            </button>
+          )}
+        </form>
+      )}
+      {open && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {stage === "harvest" ? (
+            <Trans>A pledge now is firm at once and lowers what the pot pays for this quest. Nothing is collected yet.</Trans>
+          ) : (
+            <Trans>You can withdraw a pledge until choosing closes. Then it is firm and lowers what the pot pays. Nothing is collected yet.</Trans>
+          )}
+        </p>
+      )}
+      {message && (
+        <p role="status" className="mt-2 text-foreground">
+          {message}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -659,6 +796,7 @@ function IdeaCard({ idea, pot, stage, onChanged }: { idea: Idea; pot: Pot; stage
           <Trans context="funding rounds">Find it on the quest board</Trans>
         </Link>
       )}
+      {idea.status !== "withdrawn" && <BackingPanel idea={idea} pot={pot} stage={stage} onChanged={onChanged} />}
       {shaping && <GrowForm idea={idea} pot={pot} onChanged={onChanged} />}
     </li>
   );
