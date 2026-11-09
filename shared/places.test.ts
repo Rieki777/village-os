@@ -300,11 +300,13 @@ describe("the first village's own seed record", () => {
     expect(by("greenhouse")).toMatchObject({ stage: "idea", confirmed: true });
     expect(by("greenhouse")?.stewardRoleTitle).toBeUndefined();
     expect(by("guest")?.showcase).toBe(true);
-    expect(by("guest")?.disputes?.some((d) => d.kind === "size")).toBe(false);
+    expect(by("guest")?.disputes?.some((d) => d.kind === "size") ?? false).toBe(false);
     expect(by("rancho")).toBeUndefined();
     expect(by("caretakers-house")?.aliases).toContain("rancho");
-    expect(by("kitchen")?.name).toBe("Waterfall co-working");
-    expect(by("waterfall-coworking")).toBeUndefined();
+    expect(by("kitchen")).toMatchObject({ name: "Kitchen & Hearth", confirmed: true });
+    expect(by("waterfall-coworking")?.positionText).toContain("kitchen's spot");
+    expect(by("gate")?.confirmed).toBe(true);
+    expect(by("guest")).toMatchObject({ name: "Retreat center", confirmed: true });
     expect(seed.registryDisputes ?? []).toEqual([]);
   });
 

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "source": "Village OS x Jared plan v3 (8 Nov 2026) section 3, from Amora's working list of structures (April 2026) and Amora's memory, joined with the 23 keys on Amora's live map (scene v6, read 8 Nov 2026). Positions are described, not surveyed; master plan v8 replaces them when it exists. Version 2 applies Rye's corrections of 9 Nov 2026 (plan v3.1).",
   "registryDisputes": [],
   "zones": [
@@ -82,21 +82,9 @@
       "zone": "public-edge",
       "kind": "building",
       "stage": "idea",
-      "confirmed": false,
-      "proposedMatch": "Entrance gates",
+      "confirmed": true,
       "positionText": "At the main entrance, and another into the inner village",
-      "description": "A welcoming gate at the main entrance and another into the inner village.",
-      "disputes": [
-        {
-          "kind": "match",
-          "topic": "Is the map's Gate the planned entrance gates?",
-          "sources": [
-            "Live map: drawn as standing",
-            "Working list: planned, no phase"
-          ],
-          "toSettle": "Confirm the match and what stands"
-        }
-      ]
+      "description": "A welcoming gate at the main entrance and another into the inner village."
     },
     {
       "key": "guard-stations",
@@ -265,6 +253,16 @@
       "description": "A temazcal, a red tent, a fire pit and gardens."
     },
     {
+      "key": "waterfall-coworking",
+      "name": "Waterfall co-working",
+      "zone": "waterfall",
+      "kind": "building",
+      "stage": "idea",
+      "confirmed": true,
+      "positionText": "At the current kitchen's spot, by the waterfall",
+      "description": "Co-working by the waterfall. Named in recent tasks with a Rancho photo."
+    },
+    {
       "key": "event-space",
       "name": "Event space",
       "zone": "gathering",
@@ -285,14 +283,18 @@
     },
     {
       "key": "kitchen",
-      "name": "Waterfall co-working",
+      "name": "Kitchen & Hearth",
       "onMap": true,
-      "zone": "waterfall",
+      "zone": "gathering",
       "kind": "building",
       "stage": "idea",
       "confirmed": true,
-      "positionText": "Where the live map draws it, by the waterfall",
-      "description": "Co-working by the waterfall. Named in recent tasks with a Rancho photo."
+      "positionText": "Where the live map draws it",
+      "description": "Feeds people at gatherings, a step up from the potluck.",
+      "phase": "P1",
+      "roleTitles": [
+        "Gatherings Steward"
+      ]
     },
     {
       "key": "composting-toilets",
@@ -319,20 +321,6 @@
           "toSettle": "Count what stands"
         }
       ]
-    },
-    {
-      "key": "outdoor-kitchen",
-      "name": "Outdoor kitchen",
-      "zone": "gathering",
-      "kind": "building",
-      "stage": "idea",
-      "phase": "P1",
-      "confirmed": true,
-      "roleTitles": [
-        "Gatherings Steward"
-      ],
-      "positionText": "At the gathering place",
-      "description": "Feeds people at gatherings, a step up from the potluck."
     },
     {
       "key": "lotus-tent",
@@ -672,31 +660,22 @@
     },
     {
       "key": "guest",
-      "name": "Guest Lodge",
+      "name": "Retreat center",
       "onMap": true,
       "zone": "ridge",
       "kind": "building",
       "stage": "idea",
       "phase": "P3",
-      "confirmed": false,
-      "proposedMatch": "Retreat center",
+      "confirmed": true,
       "positionText": "On the ridge, ocean view",
       "description": "Forty ocean-view villas for up to 100 guests, a yoga shala and a pool; runs as a hotel between retreats. Proposals are open: anyone may claim building it.",
-      "disputes": [
-        {
-          "kind": "match",
-          "topic": "Is the map's Guest Lodge the retreat center?",
-          "sources": [
-            "Live map: Guest Lodge, phase 3",
-            "Working list: retreat center P3"
-          ],
-          "toSettle": "Confirm the match"
-        }
-      ],
       "roleTitles": [
         "Retreat Center Venture Steward"
       ],
-      "showcase": true
+      "showcase": true,
+      "aliases": [
+        "retreat-center"
+      ]
     },
     {
       "key": "ridgeA",
@@ -1299,8 +1278,23 @@
     },
     {
       "topic": "Waterfall co-working",
-      "answer": "Where the map's kitchen is; that place becomes the co-working",
+      "answer": "At the current kitchen's spot; the kitchen stays its own place",
       "by": "Rye, 9 Nov 2026 (plan v3.1, 7)"
+    },
+    {
+      "topic": "Is the map's Gate the planned entrance gates?",
+      "answer": "Yes, gate = gate",
+      "by": "Rye, 9 Nov 2026"
+    },
+    {
+      "topic": "Is the map's Kitchen & Hearth the planned kitchen?",
+      "answer": "Yes, kitchen = kitchen; it stays its own place, and the waterfall co-working sits at its spot",
+      "by": "Rye, 9 Nov 2026"
+    },
+    {
+      "topic": "Is the map's Guest Lodge the retreat center?",
+      "answer": "Yes",
+      "by": "Rye, 9 Nov 2026 (the suggested answer adopted)"
     }
   ],
   "homesTarget": {
