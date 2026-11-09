@@ -192,6 +192,11 @@ export const NAV: readonly NavEntry[] = [
       { href: "/aligned", label: "Aligned", module: "governance", roles: ["member", "admin", "founder"] },
       // Signed out, the page itself asks the visitor to sign in to write one.
       { href: "/propose", label: "Make a Proposal", module: "governance" },
+      // Change requests (Rye, 2026-11-06): several connected changes to the
+      // village's settings gathered, reviewed and sent to one vote. The routes
+      // mount outside requireModule(), and the page meets a stranger with a
+      // sign-in line, so it is listed for the signed-in roles and no module.
+      { href: "/changes", label: "Change Requests", roles: ["member", "admin", "founder"] },
       /**
        * 0140. What an outside service has proposed, waiting for somebody to
        * read it. Capability-gated in the page so that a steward who is not an

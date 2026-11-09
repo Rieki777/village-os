@@ -187,6 +187,7 @@ const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) =>
 const EmailAction = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailAction })));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
+const ChangeRequests = lazyPage(() => import("./pages/ChangeRequests"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
@@ -380,6 +381,8 @@ function Router() {
       <Route path="/email/a" component={EmailAction} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />
+      <Route path="/changes" component={ChangeRequests} />
+      <Route path="/changes/:id" component={ChangeRequests} />
       <Route path="/village-email" component={VillageEmail} />
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />

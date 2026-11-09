@@ -17,14 +17,36 @@ describe("precompileMessages: English compiled at build, so no compiler ships (s
     expect(out).toContain(JSON.stringify(compileMessage(`{count, plural, one {# vote} other {# votes}} for "Ana"`)));
   });
 
+  it("compiles a <Trans> or <Plural> with values, which the macro emits as id, values, message", () => {
+    // The shape a built chunk actually carries (TreasurySync, 2026-11-08):
+    // `values` sits between `id` and `message`, and the message was left a
+    // raw string, so the page printed "Paid {paidOn}" with the braces in.
+    const code = `e.jsx(t,{id:"224D8v",values:{paidOn:o},message:"Paid {paidOn}",context:"treasury sync"}); e.jsx(t,{id:"Zz9_-a",values:{0:d.review.consents},message:"{0, plural, one {# person} other {# people}}"})`;
+    const out = precompileMessages(code);
+    expect(out).toContain(`message:${JSON.stringify(compileMessage("Paid {paidOn}"))}`);
+    expect(out).toContain(JSON.stringify(compileMessage("{0, plural, one {# person} other {# people}}")));
+    expect(out).not.toMatch(/message:"/);
+  });
+
+  it("compiles a descriptor whose values hold a nested object or a call", () => {
+    const out = precompileMessages(`x({id:"Ab12Cd",values:{a:f({b:1}),c:g(h)},message:"{a} and {c}"})`);
+    expect(out).toContain(JSON.stringify(compileMessage("{a} and {c}")));
+  });
+
   /*
-   * The JSX macro writes `values` (and `components`) BETWEEN the id and the
-   * message, and single-quotes a message that holds a double quote. Both are
-   * the real output of @lingui/vite-plugin 6.12 for `<Trans>` and `<Plural>`
-   * (probed 2026-11-08). Missed, the message reached the browser as a string,
-   * and with no compiler there every placeholder rendered raw: "{potName}".
+   * The macro single-quotes a message that holds a double quote, and pretty-
+   * prints a JSX descriptor across lines (@lingui/vite-plugin 6.12, probed
+   * 2026-11-08 on the Funding rounds page). A single-quoted message left as a
+   * string renders its placeholders raw, the same defect as the values case.
    */
-  it("compiles a JSX descriptor whose values come before its message", () => {
+  it("compiles a single-quoted message, with values first", () => {
+    const code = `<T {...{ id: "Loql8J", values: { allowance: allowance }, message: 'Share {allowance} "now"' }}/>`;
+    const out = precompileMessages(code);
+    expect(out).toContain(JSON.stringify(compileMessage(`Share {allowance} "now"`)));
+    expect(out).not.toMatch(/message: ['"]/);
+  });
+
+  it("compiles a pretty-printed JSX descriptor across lines", () => {
     const code = `<Trans_ {.../*i18n*/ {
         id: "Loql8J",
         values: {
@@ -33,23 +55,12 @@ describe("precompileMessages: English compiled at build, so no compiler ships (s
         message: "Share {allowance} now",
         context: "funding rounds"
     }}/>`;
-    const out = precompileMessages(code);
-    expect(out).toContain(`message: ${JSON.stringify(compileMessage("Share {allowance} now"))}`);
-    expect(out).not.toMatch(/message: "/);
+    expect(precompileMessages(code)).toContain(`message: ${JSON.stringify(compileMessage("Share {allowance} now"))}`);
   });
 
-  it("compiles a single-quoted message and a plural with values first", () => {
-    const code = `<T {...{ id: "Loql8J", values: { allowance: allowance }, message: 'Share {allowance} "now"' }}/><T {...{ id: "9VfSjV", values: { n: n }, message: "{n, plural, one {# idea} other {# ideas}}" }}/>`;
-    const out = precompileMessages(code);
-    expect(out).toContain(JSON.stringify(compileMessage(`Share {allowance} "now"`)));
-    expect(out).toContain(JSON.stringify(compileMessage("{n, plural, one {# idea} other {# ideas}}")));
-    expect(out).not.toMatch(/message: ['"]/);
-  });
-
-  it("compiles a descriptor with components between its id and message", () => {
+  it("compiles a descriptor with JSX components between its id and message", () => {
     const code = `<T {...{ id: "AbCdE1", values: { a: a }, components: { 0: <Link href={x} className={y({ z: 1 })} /> }, message: "Read <0>{a}</0>" }}/>`;
-    const out = precompileMessages(code);
-    expect(out).toContain(JSON.stringify(compileMessage("Read <0>{a}</0>")));
+    expect(precompileMessages(code)).toContain(JSON.stringify(compileMessage("Read <0>{a}</0>")));
   });
 
   it("leaves code without macro descriptors untouched", () => {
