@@ -674,7 +674,7 @@ export async function addChange(
     }
   }
   // The draft row first, the same order `publishDraft` and the answer path lock in.
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]);
+  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]); // module-review-ok: the lock step of this function's own transaction, the order publishDraft locks in; server/repos/orgDrafts.ts explains why a transaction step stays here
   if (!d) return { ok: false, error: "No such draft" };
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
