@@ -22,6 +22,7 @@ import type { ValuationModel, WorkInputs } from "@shared/valuation";
 import { suggestValuation, wholeMoney, type PayeeSuggestion } from "@shared/valuationEngine";
 import { REASON_CODES } from "@shared/valuationSetting";
 import { effortGuess } from "@/lib/questEffortGuess";
+import PayDoorNote, { type PayDoor } from "./PayDoorNote";
 
 type Call = (path: string, body?: unknown, method?: string) => Promise<any>;
 
@@ -42,6 +43,7 @@ interface DeskRead {
   eeMeaningWritten: boolean;
   modelAdopted: boolean;
   cashBudgetLeft: { minor: number; currency: string } | null;
+  payDoor?: PayDoor;
   quests: DeskQuest[];
 }
 interface RowState {
@@ -213,6 +215,7 @@ export default function PricingDesk({ call }: { call: Call }) {
     <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-foreground"><Trans context="pricing desk">Pricing desk</Trans></h1>
       <p className="text-muted-foreground mb-4"><Trans context="pricing desk">Every open quest, the engine's suggestion beside it, and one tap to use it. For the Treasurer.</Trans></p>
+      <div className="mb-3"><PayDoorNote door={read.payDoor} /></div>
 
       <ol className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
         <li className={step(read.eeMeaningWritten, eeNow)}>

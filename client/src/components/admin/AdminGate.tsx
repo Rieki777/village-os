@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 /**
  * The sentence a refused sign-in shows, from what `login()` threw.
@@ -125,7 +126,10 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
   }
 
   return (
-    <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
+    <div className="min-h-screen bg-teal-deep flex flex-col px-4">
+      {/* The language selector (spec i18n US2): a row of its own, so it can never cover the card. */}
+      <PageLanguageBar tone="onDark" className="pt-3" />
+      <div className="flex flex-1 items-center justify-center py-6">
       {/* px-6 under sm so "Continue with Google" keeps to one line at 375px. */}
       <div className="bg-white rounded-2xl shadow-2xl px-6 py-10 sm:px-10 w-full max-w-sm">
         <div className="w-14 h-14 rounded-full bg-teal-deep/10 flex items-center justify-center mx-auto mb-6">
@@ -211,6 +215,7 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
           </p>
           <GoogleSignInButton next={here} />
         </div>
+      </div>
       </div>
     </div>
   );

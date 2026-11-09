@@ -429,6 +429,11 @@ msgctxt "signing key"
 msgid "The key was not replaced"
 msgstr ""
 
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin because the village has no steward yet. Once someone holds the steward's role, only whoever holds the pay power sets pay, or the village by vote."
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Share it without my name. It shows as \"a member\" everywhere, and its forum thread is posted for you. In a small village people may still guess who wrote it."
 msgstr ""
@@ -1189,6 +1194,11 @@ msgstr ""
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Keep this key"
+msgstr ""
+
+#: client/src/components/valuation/PayDoorNote.tsx
+msgctxt "pay door"
+msgid "You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote."
 msgstr ""
 
 #: client/src/components/governance/ExportByVote.tsx
