@@ -73,6 +73,7 @@ export const TIER_C_PATHS: ReadonlyArray<{ act: (typeof TIER_C)[number]; method:
   { act: "change powers", method: "POST", path: "/api/admin/power-assign" },
   { act: "send", method: "POST", path: "/api/governance/applications/a1/first-reply" },
   { act: "send", method: "POST", path: "/api/admin/letters/send" },
+  { act: "send", method: "POST", path: "/api/admin/letter-drafts/l1/send" },
   { act: "set pay or terms", method: "PUT", path: "/api/admin/org/roles/r1" },
   { act: "set pay or terms", method: "PUT", path: "/api/admin/role-pay/r1" },
   { act: "invite", method: "POST", path: "/api/admin/invites" },
@@ -200,7 +201,7 @@ export const LETTER_WORDS = {
 
 export const PROPOSAL_KINDS = ["seating", "letter"] as const;
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
-export const PROPOSAL_STATES = ["waiting", "taken", "dismissed"] as const;
+export const PROPOSAL_STATES = ["waiting", "taken", "dismissed", "sent"] as const;
 export type ProposalState = (typeof PROPOSAL_STATES)[number];
 
 // ── get_roles: the chart, public data only ───────────────────────────────────
@@ -270,4 +271,33 @@ export function projectChart(body: unknown): { roles: ChartRole[]; circles: Arra
         };
       }),
   };
+}
+
+// ── The letters screen: a person reads, edits and sends ─────────────────────
+
+export const LETTER_PREFIX: Record<LetterKind, string> = { first_reply: "First reply: ", decision: "Decision letter: " };
+
+/** The title a queued letter carries, so the screen can show its kind and give its subject back. */
+export const letterTitle = (kind: LetterKind, subject: string) => `${LETTER_PREFIX[kind]}${subject}`.slice(0, 200);
+
+export function splitLetterTitle(title: string): { kind: LetterKind; subject: string } {
+  for (const kind of LETTER_KINDS) if (title.startsWith(LETTER_PREFIX[kind])) return { kind, subject: title.slice(LETTER_PREFIX[kind].length) };
+  return { kind: "first_reply", subject: title };
+}
+
+export const SEND_WORDS = {
+  suppressed: "This address is on the suppression list, so nothing was sent. Reach the applicant another way, or discard the letter.",
+  noAddress: "There is no address on this application any more, so nothing was sent. Discard the letter.",
+  notSent: "The mail door did not take the letter, so it is still waiting. Try again in a little while.",
+  sent: "Sent.",
+  edited: "Saved. Nothing was sent.",
+} as const;
+
+/** What a person may change before sending. */
+export function parseLetterEdit(body: unknown): { ok: true; subject: string; text: string } | { ok: false; error: string } {
+  const r = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const subject = clip(r.subject, 160);
+  const text = clip(r.body, 6000);
+  if (!subject || text.length < 20) return { ok: false, error: "Give a subject and a letter of at least a few sentences." };
+  return { ok: true, subject, text };
 }

@@ -26,7 +26,7 @@ import { recordEvent } from "../lib/events";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
 import { addProposal, listWaiting, proposalById, resolveProposal, seatingAlreadyWaiting, waitingCount } from "../repos/agentProposals";
 import {
-  AI_APPROVAL_DOC, AI_APPROVAL_WORDS, LETTER_WORDS, approvalProblem, parseAiApproval, parseLetter, parseRoleChange, parseSeating, roleChangeReason,
+  AI_APPROVAL_DOC, AI_APPROVAL_WORDS, LETTER_WORDS, approvalProblem, parseAiApproval, letterTitle, parseLetter, parseRoleChange, parseSeating, roleChangeReason,
 } from "../../shared/agentProposals";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "isAdmin" | "overLimit" | "members"> & {
@@ -167,7 +167,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     if ((await waitingCount(pool, String(user.id), "letter")) >= WAITING_PER_HOLDER) return res.status(409).json({ error: "too_many_waiting", message: "Several letters from you are still waiting. Send or dismiss some first." });
     const l = parsed.value;
-    const id = await addProposal(pool, { kind: "letter", proposedBy: String(user.id), applicationRef: l.applicationRef, title: `${l.kind === "first_reply" ? "First reply" : "Decision letter"}: ${l.subject}`, body: l.body });
+    const id = await addProposal(pool, { kind: "letter", proposedBy: String(user.id), applicationRef: l.applicationRef, title: letterTitle(l.kind, l.subject), body: l.body });
     res.json({ success: true, id, sent: false, message: LETTER_WORDS.queued });
   });
 
