@@ -17,7 +17,7 @@ export default function Approvals() {
     <Layout>
       <div className="max-w-xl mx-auto px-4 py-8 space-y-4">
         <h1 className="text-2xl font-bold text-foreground">
-          <Trans>Approvals</Trans>
+          <Trans context="approval inbox">Approvals</Trans>
         </h1>
         <ApprovalInbox headers={headers} />
       </div>

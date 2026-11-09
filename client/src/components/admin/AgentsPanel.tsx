@@ -164,7 +164,7 @@ export default function AgentsPanel({ password, players }: { password: string; p
       <AiAgentsApprovalPanel password={password} />
       <LetterDraftsPanel password={password} />
       <div className="space-y-3 rounded-xl border border-border bg-white p-4">
-        <p className="text-sm font-semibold text-foreground"><Trans>Approval inbox</Trans></p>
+        <p className="text-sm font-semibold text-foreground"><Trans context="approval inbox">Approval inbox</Trans></p>
         <a href="/approvals" className="inline-flex min-h-9 items-center text-sm text-teal-deep underline"><Trans>Open it on its own page</Trans></a>
         <Suspense fallback={null}>
           <ApprovalInbox headers={() => authHeaders(password, { "Content-Type": "application/json" })} />

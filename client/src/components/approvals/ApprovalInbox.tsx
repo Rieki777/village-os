@@ -67,7 +67,7 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
       const r = await fetch(`/api/approval-inbox/${encodeURIComponent(id)}/${action}`, { method: "POST", headers: headers(), body: "{}" });
       const d = (await r.json().catch(() => ({}))) as { message?: string };
       if (!r.ok) toast.error(d.message ?? t`That could not be done`);
-      else toast.success(action === "approve" ? t`Approved` : action === "decline" ? t`Declined` : t`Put back`);
+      else toast.success(action === "approve" ? t({ message: `Approved`, context: "approval inbox" }) : action === "decline" ? t({ message: `Declined`, context: "approval inbox" }) : t({ message: `Put back`, context: "approval inbox" }));
     } finally {
       setBusy(null);
       void load();
@@ -84,7 +84,7 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
       const failed = (d.results ?? []).filter((x) => !x.ok);
       if (!r.ok) toast.error(t`That could not be done`);
       else if (failed.length) toast.error(failed[0].message || t`Some could not be approved`);
-      else toast.success(t`Approved`);
+      else toast.success(t({ message: `Approved`, context: "approval inbox" }));
     } finally {
       setBusy(null);
       void load();
@@ -115,12 +115,12 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
       </p>
       {waiting.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          <Trans>Nothing is waiting.</Trans>
+          <Trans context="approval inbox">Nothing is waiting.</Trans>
         </p>
       )}
       {waiting.length > 1 && (
         <button type="button" className={primary} disabled={count === 0 || busy !== null} onClick={() => void approvePicked()}>
-          <Trans>Approve {count} selected</Trans>
+          <Trans context="approval inbox">Approve {count} selected</Trans>
         </button>
       )}
       {waiting.map((c) => (
@@ -132,34 +132,34 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
             <span className="text-sm font-semibold text-foreground">{c.title}</span>
           </label>
           <p className="text-xs text-muted-foreground mt-1">
-            {c.at ? <Trans>Proposed by {c.by} on {day(c.at)}. Lapses {day(c.expiresAt)}.</Trans> : <Trans>Proposed by {c.by}.</Trans>}
+            {c.at ? <Trans>Proposed by {c.by} on {day(c.at)}. Lapses {day(c.expiresAt)}.</Trans> : <Trans context="approval inbox">Proposed by {c.by}.</Trans>}
           </p>
           <dl className="mt-3 space-y-2 text-sm">
             <div>
               <dt className="text-xs text-muted-foreground">
-                <Trans>Now</Trans>
+                <Trans context="approval inbox">Now</Trans>
               </dt>
               <dd className="text-foreground whitespace-pre-line break-words">{c.words.before}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">
-                <Trans>If you approve</Trans>
+                <Trans context="approval inbox">If you approve</Trans>
               </dt>
               <dd className="text-foreground whitespace-pre-line break-words">{c.words.after}</dd>
             </div>
           </dl>
           <div className="flex flex-wrap gap-2 mt-3">
             <button type="button" className={primary} disabled={busy !== null} onClick={() => void post(c.id, "approve")}>
-              <Trans>Approve</Trans>
+              <Trans context="approval inbox">Approve</Trans>
             </button>
             <button type="button" className={button} disabled={busy !== null} onClick={() => void post(c.id, "decline")}>
-              <Trans>Decline</Trans>
+              <Trans context="approval inbox">Decline</Trans>
             </button>
           </div>
         </div>
       ))}
       {decided.length > 0 && (
-        <section aria-label={t`Decided`} className="space-y-2">
+        <section aria-label={t({ message: `Decided`, context: "approval inbox" })} className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">
             <Trans>Decided in the last 30 days</Trans>
           </h3>
@@ -172,7 +172,7 @@ export default function ApprovalInbox({ headers }: { headers: () => Record<strin
               </p>
               {c.state === "approved" && c.canRevert && (
                 <button type="button" className={button} disabled={busy !== null} onClick={() => void post(c.id, "revert")}>
-                  <Trans>Put it back</Trans>
+                  <Trans context="approval inbox">Put it back</Trans>
                 </button>
               )}
             </div>
