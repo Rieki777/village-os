@@ -13,7 +13,7 @@ export type PayDoor = "holder" | "admin-before-launch" | "admin-no-steward" | nu
 export default function PayDoorNote({ door }: { door: PayDoor }) {
   if (door !== "admin-before-launch" && door !== "admin-no-steward") return null;
   return (
-    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-pay-door={door}>
+    <p className="rounded-lg border border-amber-ink/30 bg-amber-light px-3 py-2 text-sm text-amber-ink" data-pay-door={door}>
       {door === "admin-before-launch" ? (
         <Trans context="pay door">You are setting pay as an admin. This stays open until the launch vote carries. After that, only whoever holds the pay power sets pay, or the village by vote.</Trans>
       ) : (
