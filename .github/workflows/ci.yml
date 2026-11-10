@@ -1251,9 +1251,13 @@ jobs:
         # default, so both are named again. `json` writes the report that
         # tests-ran-once reads back.
         if: ${{ steps.build.outcome == 'success' }}
+        # Shards are balanced by recorded file time (scripts/plan-shards.mjs), not by
+        # vitest's path hash. The plan lists every file once; tests-ran-once proves it.
+        env:
+          CI_SHARD_FILES: test-results/shard-${{ matrix.shard }}-files.txt
         run: >-
+          node scripts/plan-shards.mjs ${{ matrix.shard }} ${{ strategy.job-total }} &&
           pnpm test
-          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           --reporter=default
           --reporter=github-actions
           --reporter=json
