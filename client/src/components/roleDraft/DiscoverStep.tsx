@@ -72,7 +72,7 @@ export default function DiscoverStep({
           type="button"
           aria-expanded={opened}
           onClick={() => setOpened((o) => !o)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-primary bg-card px-5 font-display text-lg font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-primary bg-card px-5 font-display text-lg font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {DISCOVER_WORDS.optionalDoor}
           <ChevronDown className={`size-4 transition-transform ${opened ? "rotate-180" : ""}`} aria-hidden="true" />

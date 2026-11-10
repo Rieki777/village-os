@@ -54,7 +54,7 @@ export default function SeasonGoals() {
               type="button"
               aria-expanded={all}
               onClick={() => setAll((v) => !v)}
-              className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="jw-btn mt-3 inline-flex min-h-11 items-center rounded-full border-2 border-border bg-card px-4 text-sm font-semibold text-foreground hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {all ? t({ message: "Show fewer goals", context: "roles page goals" }) : t({ message: `Show all ${goals.length} goals`, context: "roles page goals" })}
             </button>
@@ -66,7 +66,7 @@ export default function SeasonGoals() {
       <div className="mt-5">
         <Link
           href="/roles/select#sel-season"
-          className="inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {t({ message: "Explore the goals", context: "roles page goals" })}
           <ArrowRight className="size-4" aria-hidden="true" />

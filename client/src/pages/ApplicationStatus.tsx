@@ -8,7 +8,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
-import { BreathingLoader } from "@/components/natural";
+import { Check } from "lucide-react";
+import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
 import { PANEL_WORDS } from "@shared/applicationReview";
 import { DECLINED_PAGE_WORDS, replyPromise } from "@shared/openProposalDecide";
@@ -64,6 +65,7 @@ export default function ApplicationStatus() {
     })();
   }, [ref]);
 
+  const still = useReducedMotion();
   const byDay = s?.by ? civilDayWords(new Date(s.by).toISOString().slice(0, 10)) : null;
 
   return (
@@ -74,14 +76,14 @@ export default function ApplicationStatus() {
             <BreathingLoader label={PANEL_WORDS.statusHeading} />
           </div>
         )}
-        {state === "missing" && <p className="text-foreground">{PANEL_WORDS.statusMissing}</p>}
+        {state === "missing" && <p className="sel-rise rounded-2xl border-2 border-dashed border-border bg-card p-6 text-foreground">{PANEL_WORDS.statusMissing}</p>}
         {state === "ready" && s && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
               <h1 className="font-display text-3xl font-bold text-foreground">{PANEL_WORDS.statusHeading}</h1>
               {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
-            <section aria-label={PANEL_WORDS.statusNext} className="rounded-xl border-2 border-teal-deep/40 bg-card p-5">
+            <section aria-label={PANEL_WORDS.statusNext} className="sel-rise rounded-2xl border-2 border-notice bg-card p-5 shadow-sm">
               <p className="text-sm font-semibold text-teal-deep">{s.stepWords}</p>
               <p className="mt-1 text-lg text-foreground">
                 <span className="font-semibold">{PANEL_WORDS.statusNext}: </span>
@@ -101,23 +103,33 @@ export default function ApplicationStatus() {
                 </ul>
               </section>
             )}
-            <ol className="space-y-2">
+            {/* The path as stepping stones: the line fills down to where you stand, one stone after another, and the
+                stone you are on answers with a ring on the water. Reduce motion: the filled path, at once. */}
+            <ol className="jw-trail-v" data-motion={still ? "still" : "live"}>
               {s.path.map((p, i) => (
-                <li key={i} className="flex min-h-[44px] items-center gap-3 rounded-lg border border-border bg-card px-4" data-path-state={p.state}>
-                  <span aria-hidden="true">{p.state === "done" ? "✓" : p.state === "now" ? "•" : "○"}</span>
-                  <span className={p.state === "later" ? "text-muted-foreground" : "font-medium text-foreground"}>{p.label}</span>
+                <li
+                  key={i}
+                  className="sel-rise flex min-h-[52px] items-center gap-3 py-1"
+                  data-path-state={p.state}
+                  aria-current={p.state === "now" ? "step" : undefined}
+                  style={{ animationDelay: `${i * 80}ms`, ["--jw-delay" as string]: `${i * 80}ms` }}
+                >
+                  <span className="jw-stone flex w-11 shrink-0 justify-center" data-state={p.state === "done" ? "done" : p.state === "now" ? "here" : "ahead"} aria-hidden="true">
+                    <span className="jw-stone-face !m-0">{p.state === "done" ? <Check className="size-4" /> : p.state === "now" ? i + 1 : ""}</span>
+                  </span>
+                  <span className={p.state === "later" ? "text-muted-foreground" : p.state === "now" ? "font-bold text-foreground" : "font-medium text-foreground"}>{p.label}</span>
                   <span className="sr-only">{p.state === "done" ? "done" : p.state === "now" ? "now" : "later"}</span>
                 </li>
               ))}
             </ol>
             {s.booking && (
-              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-xl border border-border bg-card p-4">
+              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-2xl border border-border bg-card p-4">
                 <p className="text-foreground">{s.booking}</p>
                 {s.mode === "block" && (
                   <button
                     type="button"
                     onClick={() => void split()}
-                    className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="jw-btn mt-3 inline-flex min-h-[44px] items-center rounded-full border-2 border-primary bg-card px-5 text-sm font-semibold text-foreground hover:bg-muted"
                   >
                     {PANEL_WORDS.splitAsk}
                   </button>

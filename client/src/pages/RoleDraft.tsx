@@ -45,6 +45,8 @@ import DiscoverStep from "@/components/roleDraft/DiscoverStep";
 import SelectStepper from "@/components/roleDraft/SelectStepper";
 import ArtImage from "@/components/roleDraft/ArtImage";
 import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
+import { BreathingLoader } from "@/components/natural";
+import Leaf from "@/components/journey/Leaf";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { useModuleOn } from "@/modules/ModuleProvider";
@@ -345,7 +347,7 @@ export default function RoleDraft() {
               step={step}
               reached={4}
               onGo={go}
-              barLabel={t({ message: "Your progress through the four steps", context: "role draft steps" })}
+              barLabel={t({ message: "Your progress through the five steps", context: "role draft steps" })}
             />
           </div>
 
@@ -373,7 +375,7 @@ export default function RoleDraft() {
               <p className="mt-3 text-sm text-muted-foreground">{t`No goals are set for this season yet.`}</p>
             )}
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(1)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <button type="button" onClick={() => go(1)} className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
@@ -397,12 +399,15 @@ export default function RoleDraft() {
                     aria-pressed={on}
                     data-on={on}
                     onClick={() => toggleChar(c.key)}
-                    className={`sel-lift group relative flex min-h-11 flex-col overflow-hidden rounded-2xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+                    className={`sel-lift jw-pick group relative flex min-h-11 flex-col rounded-2xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
                   >
-                    <ArtImage portrait src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                    <span className="relative block overflow-hidden rounded-t-[14px]">
+                      <ArtImage portrait src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                      {on && <span className="jw-ring rounded-t-[14px]" aria-hidden="true" />}
+                    </span>
                     {on && (
-                      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
-                        <Check className="size-3.5" aria-hidden="true" />
+                      <span className="jw-unfurl absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background shadow-sm">
+                        <Leaf size={12} unfurl={false} />
                         {t({ message: "You play this", context: "role draft character" })}
                       </span>
                     )}
@@ -420,7 +425,7 @@ export default function RoleDraft() {
               })}
             </div>
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(2)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <button type="button" onClick={() => go(2)} className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {t({ message: "Next: scout the open roles", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
@@ -432,7 +437,7 @@ export default function RoleDraft() {
             <section aria-labelledby="draft-roles" className="min-w-0">
               <h2 id="draft-roles" className="font-display text-2xl font-bold text-foreground">{t({ message: "Open roles", context: "role draft heading" })}</h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" aria-pressed={!onlyFits} onClick={() => setOnlyFits(false)} className={`${CHIP} ${!onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}>
+                <button type="button" aria-pressed={!onlyFits} onClick={() => setOnlyFits(false)} className={`${CHIP} jw-btn ${!onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}>
                   {t({ message: "All open roles", context: "role draft filter" })}
                 </button>
                 <button
@@ -440,13 +445,17 @@ export default function RoleDraft() {
                   aria-pressed={onlyFits}
                   disabled={!chars.length || !tagsKnown}
                   onClick={() => setOnlyFits(true)}
-                  className={`${CHIP} disabled:opacity-50 ${onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+                  className={`${CHIP} jw-btn disabled:border-dashed disabled:opacity-50 ${onlyFits ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
                 >
                   {t({ message: "Only roles that fit", context: "role draft filter" })}
                 </button>
               </div>
 
-              {load.kind === "loading" && <p className="mt-6 text-muted-foreground">{t({ message: "Loading the open roles…", context: "role draft" })}</p>}
+              {load.kind === "loading" && (
+                <div className="mt-8 flex justify-center">
+                  <BreathingLoader label={t({ message: "Loading the open roles…", context: "role draft" })} showLabel />
+                </div>
+              )}
               {load.kind === "failed" && (
                 <p role="alert" className="mt-6 rounded-lg border border-border bg-muted p-4 text-sm text-foreground">
                   {t`We could not load the open roles just now. Refresh the page to try again, or see them on the Roles page.`}{" "}
@@ -470,8 +479,8 @@ export default function RoleDraft() {
                   const hours = role.timeCommitment ?? "";
                   const seats = role.seats;
                   return (
-                    <article key={role.id} data-on={drafted} className={`sel-lift flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
-                      <div className="relative h-36 bg-primary text-primary-foreground">
+                    <article key={role.id} data-on={drafted} className={`sel-lift jw-pick flex min-w-0 flex-col rounded-2xl border-2 bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
+                      <div className="relative h-36 overflow-hidden rounded-t-[14px] bg-primary text-primary-foreground">
                         <ArtImage src={roleArtFor(role)} className="absolute inset-0" imgClassName="object-top" />
                         <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/55 to-transparent" aria-hidden="true" />
                         {fits.length > 0 && (
@@ -481,7 +490,7 @@ export default function RoleDraft() {
                           </span>
                         )}
                         {drafted && (
-                          <span className="absolute left-2 top-2 grid size-8 place-items-center rounded-full bg-notice text-background" aria-hidden="true">
+                          <span className="jw-seal absolute left-2 top-2 grid size-9 place-items-center rounded-full border-2 border-background bg-notice text-background shadow-md" aria-hidden="true">
                             <Check className="size-4" />
                           </span>
                         )}
@@ -539,7 +548,7 @@ export default function RoleDraft() {
                           aria-expanded={isOpen}
                           aria-label={t({ message: `Full card for ${roleName}`, context: "role draft button label" })}
                           onClick={() => setOpen(isOpen ? null : role.id)}
-                          className="min-h-11 rounded-full border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+                          className="jw-btn min-h-11 rounded-full border-2 border-border bg-card px-4 text-sm font-semibold text-foreground hover:border-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
                         >
                           {t({ message: "Full card", context: "role draft button" })}
                         </button>
@@ -554,9 +563,9 @@ export default function RoleDraft() {
                           aria-label={t({ message: `Select ${roleName}`, context: "role draft button label" })}
                           aria-disabled={!drafted && pickCount >= OPEN_PROPOSAL_MAX_ROLES}
                           onClick={() => togglePick(role.id)}
-                          className={`min-h-11 flex-1 rounded-full px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:opacity-50 ${drafted ? "border-2 border-primary bg-card text-primary" : "bg-primary text-primary-foreground"}`}
+                          className={`jw-btn inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full border-2 px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:opacity-50 ${drafted ? "border-notice bg-notice/15 text-foreground" : "border-primary bg-primary text-primary-foreground hover:bg-teal-deep-dark"}`}
                         >
-                          {drafted && <Check className="mr-1 inline size-4" aria-hidden="true" />}
+                          {drafted && <Check className="jw-unfurl size-4 text-notice" aria-hidden="true" />}
                           {drafted ? t({ message: "Selected", context: "role draft button" }) : t({ message: "Select", context: "role draft button" })}
                         </button>
                         )}
@@ -566,7 +575,7 @@ export default function RoleDraft() {
                 })}
               </div>
               <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => go(3)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <button type="button" onClick={() => go(3)} className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {t({ message: "Next: review my selection", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
@@ -575,7 +584,21 @@ export default function RoleDraft() {
 
             <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-56">
               <Burst play={burst} />
-              <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
+                {/* Three seed slots: how much the selection holds, filled as you pick. Decoration; the list below is the record. */}
+                <span className="flex gap-1.5" aria-hidden="true" data-slots-filled={pickCount}>
+                  {Array.from({ length: OPEN_PROPOSAL_MAX_ROLES }, (_, i) =>
+                    i < pickCount ? (
+                      <span key={`f${i}`} className="grid size-7 place-items-center rounded-full bg-primary text-notice">
+                        <Leaf size={14} />
+                      </span>
+                    ) : (
+                      <span key={`e${i}`} className="size-7 rounded-full border-2 border-dashed border-border" />
+                    ),
+                  )}
+                </span>
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {chars.length ? t({ message: `Playing as ${playing}.`, context: "role draft tray" }) : t`No character picked yet.`}
               </p>
@@ -607,7 +630,7 @@ export default function RoleDraft() {
                 </p>
               )}
               {applyHref && (
-                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className="relative mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className="jw-btn relative mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {member
                     ? pickCount === 1
                       ? t`Propose for this role`
@@ -666,9 +689,10 @@ export default function RoleDraft() {
               <h2 className="font-display text-2xl font-bold text-foreground">{t({ message: "Other ways in", context: "role draft heading" })}</h2>
               <ul className="mt-3 grid gap-2 text-sm">
                 <li>
-                  <Link href="/quests" className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-2">
-                    <Compass className="size-4" aria-hidden="true" />
-                    {t`Not ready for a role? Take a quest, alone or with others.`}
+                  <Link href="/quests" className="jw-btn flex min-h-14 items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-2 font-semibold text-foreground hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    <Compass className="size-5 shrink-0 text-notice" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">{t`Not ready for a role? Take a quest, alone or with others.`}</span>
+                    <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
                   </Link>
                 </li>
                 {places.length > 0 ? (
@@ -680,16 +704,17 @@ export default function RoleDraft() {
                     <ul className="mt-1 flex flex-wrap gap-2 pl-6">
                       {places.map((p) => (
                         <li key={p.key}>
-                          <Link href="/map" className="inline-flex min-h-11 items-center rounded-full border border-border px-3 text-foreground hover:bg-muted">{p.name}</Link>
+                          <Link href="/map" className="jw-btn inline-flex min-h-11 items-center rounded-full border-2 border-border bg-card px-4 text-foreground hover:border-primary">{p.name}</Link>
                         </li>
                       ))}
                     </ul>
                   </li>
                 ) : (
                   <li>
-                    <Link href="/map" className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-2">
-                      <MapPin className="size-4" aria-hidden="true" />
-                      {t`See the places and their open roles on the Living Map`}
+                    <Link href="/map" className="jw-btn flex min-h-14 items-center gap-3 rounded-2xl border-2 border-border bg-card px-4 py-2 font-semibold text-foreground hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                      <MapPin className="size-5 shrink-0 text-notice" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">{t`See the places and their open roles on the Living Map`}</span>
+                      <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
                     </Link>
                   </li>
                 )}

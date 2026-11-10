@@ -96,7 +96,7 @@ export default function IkigaiDoor({
           checked={state.carry}
           disabled={!hasIkigai(state)}
           onChange={(e) => onChange({ ...state, carry: e.target.checked })}
-          className="mt-1 size-4"
+          className="mt-0.5 size-5 shrink-0 accent-teal-deep"
         />
         <span>{DISCOVER_WORDS.carry}</span>
       </label>
@@ -108,7 +108,7 @@ export default function IkigaiDoor({
               type="button"
               disabled={busy || !hasIkigai(state) || roles.length === 0}
               onClick={ask}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-ring"
+              className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-primary bg-card px-4 text-sm font-semibold hover:bg-muted disabled:border-dashed disabled:border-border disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-ring"
             >
               <Sparkles className="size-4" aria-hidden="true" />
               {DISCOVER_WORDS.askGuide}
@@ -130,7 +130,7 @@ export default function IkigaiDoor({
                 {out.suggestions.map((s) => (
                   <li key={s.roleId} className="text-sm">
                     <strong>{nameOf(s.roleId)}</strong>: {s.why}{" "}
-                    <button type="button" onClick={() => onDraft(s.roleId)} className="min-h-11 font-semibold underline underline-offset-2">
+                    <button type="button" onClick={() => onDraft(s.roleId)} className="jw-btn mt-1 inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark">
                       {t({ message: "Select this role", context: "role draft discover" })}
                     </button>
                   </li>

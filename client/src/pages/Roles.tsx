@@ -307,7 +307,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               {/* For a holder of the power to decide the structure, and nobody else: the editor is its own chunk. */}
               {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
-                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
+                <Link href={proposeRoleHref(role.id)} className="jw-btn inline-flex min-h-11 w-fit items-center rounded-full border-2 border-notice px-4 text-sm font-bold text-foreground hover:bg-notice/10">
                   {RP_WORDS.proposeThisRole}
                 </Link>
               )}
@@ -524,7 +524,7 @@ export default function Roles() {
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
             <Link
               href="/roles/select"
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="jw-btn mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -653,7 +653,7 @@ export default function Roles() {
             viewport={{ once: true }}
             className="mt-12 text-center"
           >
-            <Link href="/circles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
+            <Link href="/circles" className="jw-btn inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-full hover:bg-sage/90 font-medium">
               Explore Our Circles
               <ArrowRight className="w-4 h-4" />
             </Link>

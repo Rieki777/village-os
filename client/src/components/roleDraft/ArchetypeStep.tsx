@@ -74,7 +74,7 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
                   className="sel-lift group flex w-full flex-col overflow-hidden rounded-2xl border-2 border-border bg-card text-card-foreground hover:border-notice focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   <span className="flex items-center gap-4 p-4 pb-2">
-                    <ArtImage src={characterArt(c.key)} className="relative size-20 shrink-0 rounded-full border-2 border-notice" imgClassName="object-top" />
+                    <ArtImage src={characterArt(c.key)} className="relative size-20 shrink-0 rounded-full border-2 border-notice ring-0 ring-notice/30 ring-offset-2 ring-offset-card transition-shadow group-hover:ring-4" imgClassName="object-top" />
                     <span className="min-w-0">
                       <span className="block font-display text-xl font-bold leading-tight">{c.name}</span>
                       {c.subtitle && <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">{c.subtitle}</span>}
@@ -88,7 +88,7 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
                         {t({ message: `you are drawn to ${drawnTo}.`, context: "roles page archetypes" })}
                       </span>
                     )}
-                    <span className="mt-auto inline-flex min-h-11 items-center gap-2 pt-1 font-bold text-notice">
+                    <span className="mt-auto inline-flex min-h-11 w-fit items-center gap-2 rounded-full border-2 border-notice px-4 font-bold text-foreground transition-colors group-hover:bg-notice group-hover:text-background">
                       {t({ message: `Start as ${c.name}`, context: "roles page archetypes" })}
                       <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
                     </span>
@@ -104,7 +104,7 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
           <button
             type="button"
             onClick={onSeeAll}
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-notice px-5 text-sm font-bold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="jw-btn inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-notice bg-card px-5 text-sm font-bold text-foreground hover:bg-notice/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {t({ message: "See all roles", context: "roles page archetypes" })}
           </button>
