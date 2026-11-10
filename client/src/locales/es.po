@@ -2179,6 +2179,11 @@ msgstr ""
 msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 msgstr ""
 
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Village OS source"
+msgstr "Código fuente de Village OS"
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Funded from"
@@ -2322,6 +2327,11 @@ msgstr ""
 msgctxt "workbook cover, a line for names"
 msgid "Filled in by"
 msgstr ""
+
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Our source"
+msgstr "Nuestro código fuente"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "A season file comes from whoever runs your season, or you can write your own. The format, and a template to copy, are in the platform's source under docs/seasons."
@@ -5658,6 +5668,11 @@ msgstr ""
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
 msgstr ""
+
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "{villageName}'s source"
+msgstr "Código fuente de {villageName}"
 
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook cover title"
