@@ -60,6 +60,17 @@ export const termsChoiceProblem = (v: unknown, a: Record<string, unknown>): stri
   return settingsProblem(t.settings);
 };
 
+/** The member door's answers as the route stores them (shared/seatApplications.ts parseApplicationAnswers). */
+export function doorAnswers(a: Record<string, unknown>): Record<string, unknown> {
+  const goal = String(a.servesGoal ?? "").trim();
+  const t = termsChoiceOf(a.termsChoice);
+  return {
+    aim: String(a.aim ?? "").trim() || null,
+    servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
+    terms: t ? { choice: t.choice, note: t.note.trim() } : null,
+  };
+}
+
 /** No goals for the season yet: the goal field answers this for the member (SeasonGoalField). */
 export const NO_SEASON_GOALS = "none";
 
@@ -127,6 +138,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
       // deliverables, where every decider already reads them (doorDeliverables).
       deliverables: doorDeliverables(a),
       fitStatement: a.fitStatement,
+      // B1 (0369): the door's answers, structured, so the proposal's card shows them.
+      ...(isDoor(a) ? { answers: doorAnswers(a) } : {}),
       // The door sends the terms on offer it showed, unchanged; every other start sends the terms written.
       seatSettings: isDoor(a) ? (termsChoiceOf(a.termsChoice)?.settings ?? null) : (a.seatSettings ?? null),
       // Sent only when picked: no first day means "as soon as it is adopted".

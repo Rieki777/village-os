@@ -60,7 +60,7 @@ export type Prepared = { ok: true; app: PreparedApplication } | { ok: false; sta
 export async function prepareApplication(p: {
   candidateUserId: string;
   proposedBy: string;
-  input: Pick<ApplicationInput, "seatIds" | "note" | "deliverables" | "settings" | "supersedesId">;
+  input: Pick<ApplicationInput, "seatIds" | "note" | "deliverables" | "settings" | "supersedesId" | "answers">;
   startsAt: Date | null;
   startsNoEarlierThan: Date;
   seatNames: string[];
@@ -85,6 +85,7 @@ export async function prepareApplication(p: {
     seatIds: p.input.seatIds,
     note: p.input.note,
     deliverables: p.input.deliverables,
+    answers: p.input.answers ?? null,
     settings: p.input.settings,
     settingsHash: await settingsHash(p.input.settings),
     termEndsAt: term.endsAt,

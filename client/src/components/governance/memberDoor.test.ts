@@ -64,6 +64,9 @@ describe("a door start", () => {
     expect(doorDeliverables(a)).toBe("Aim: Food grows here.\nServes the village goal: Food grown on the land\nWants to talk about the terms: The hours\n\nThree beds planted.");
     const body = ROLE_APPLICATION_TYPE.publish.body(a) as Record<string, unknown>;
     expect(body.seatSettings).toEqual(VOLUNTEER);
+    // B1 (0369): the answers go structured, for the proposal's card.
+    expect(body.answers).toEqual({ aim: "Food grows here.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The hours" } });
+    expect((ROLE_APPLICATION_TYPE.publish.body({ ...RENEWAL.answers, deliverables: "x" }) as Record<string, unknown>).answers).toBeUndefined();
     expect(body.seatIds).toEqual(["garden", "host"]);
     // A season with no goals yet answers for the member, and says nothing about a goal.
     expect(doorDeliverables({ ...a, servesGoal: NO_SEASON_GOALS, termsChoice: { choice: "accept", note: "", settings: VOLUNTEER } })).toBe(

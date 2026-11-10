@@ -109,7 +109,53 @@ export const APPLICATION_ID = /^sa-[0-9a-f]{16}$/;
 
 // ── The input ────────────────────────────────────────────────────────────────
 
+/**
+ * THE MEMBER DOOR'S ANSWERS (guide v2, B1): the open form's field set, so the
+ * member door and the open form carry the same answers. Stored in
+ * `seat_applications.answers` (0369); read by the proposal's card.
+ */
+export interface ApplicationAnswers {
+  aim: string | null;
+  /** The season goal the work serves, in its words when sent; null when the season set none. */
+  servesGoal: string | null;
+  timeZone: string | null;
+  windows: string[];
+  earliestStart: string | null;
+  terms: { choice: "accept" | "talk"; note: string } | null;
+}
+
+const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
+
+/** The answers as stored, from anything. Null when there are none; never throws. */
+export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null {
+  let o: unknown = raw;
+  if (typeof o === "string") {
+    try {
+      o = JSON.parse(o);
+    } catch {
+      return null;
+    }
+  }
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const r = o as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+  const t = r.terms as Record<string, unknown> | null | undefined;
+  const choice = t && (t.choice === "accept" || t.choice === "talk") ? t.choice : null;
+  const answers: ApplicationAnswers = {
+    aim: text(r.aim, ANSWER_LIMITS.aim),
+    servesGoal: text(r.servesGoal, ANSWER_LIMITS.goal),
+    timeZone: text(r.timeZone, ANSWER_LIMITS.timeZone),
+    windows: Array.isArray(r.windows) ? r.windows.map((w) => text(w, ANSWER_LIMITS.window)).filter((w): w is string => !!w).slice(0, ANSWER_LIMITS.windows) : [],
+    earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
+    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
+  };
+  const empty = !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  return empty ? null : answers;
+}
+
 export interface ApplicationInput {
+  /** The member door's answers (0369), or null. */
+  answers?: ApplicationAnswers | null;
   seatIds: string[];
   /** Why this member. Stored, read by members on the page, never on a ballot. */
   note: string | null;
@@ -179,7 +225,7 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
   const supersedesId = words(b.supersedesId);
   if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId } };
+  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers: parseApplicationAnswers(b.answers) } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────

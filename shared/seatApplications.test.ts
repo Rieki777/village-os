@@ -24,7 +24,7 @@ import {
   whoAdoptsWords,
 } from "./seatApplications";
 import { whoApprovesWords } from "./roleProposalConsent";
-import { whoseMove } from "./seatApplications";
+import { parseApplicationAnswers, whoseMove } from "./seatApplications";
 
 const body = (over: Record<string, unknown> = {}) => ({
   seatIds: ["seat-a"],
@@ -197,6 +197,24 @@ describe("the subject", () => {
 
   it("has words for every status", () => {
     for (const s of APPLICATION_STATUSES) expect(STATUS_WORDS[s], s).toBeTruthy();
+  });
+});
+
+describe("the member door's answers (0369, guide v2 B1)", () => {
+  it("keeps the open form's field set, trimmed and capped, and reads a stored string", () => {
+    const raw = { aim: "  Money kept true. ", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "", 3], earliestStart: "2026-12-01", terms: { choice: "talk", note: " The rate " } };
+    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" } };
+    expect(parseApplicationAnswers(raw)).toEqual(want);
+    expect(parseApplicationAnswers(JSON.stringify(raw))).toEqual(want);
+  });
+  it("is null when nothing was answered, or the value is not answers", () => {
+    expect(parseApplicationAnswers({})).toBeNull();
+    expect(parseApplicationAnswers({ aim: " ", terms: { choice: "maybe" } })).toBeNull();
+    expect(parseApplicationAnswers("not json")).toBeNull();
+    expect(parseApplicationAnswers(null)).toBeNull();
+  });
+  it("drops a date that is not a date", () => {
+    expect(parseApplicationAnswers({ aim: "x", earliestStart: "next week" })?.earliestStart).toBeNull();
   });
 });
 
