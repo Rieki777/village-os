@@ -20,6 +20,7 @@
  *     something different for each type and guessing is not a member's job.
  */
 import { aboutYouReview } from "./AboutYouField";
+import { settleDraftAnswers } from "./seraDraftAnswers";
 import { goalsAsText } from "@shared/proposalGoals";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -319,7 +320,8 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
   }, [dirty]);
 
   const set = (key: string, value: unknown) => {
-    setAnswers((prev) => ({ ...prev, [key]: value }));
+    // A Sera draft that has been edited keeps no mark behind (shared/seraDrafts.ts).
+    setAnswers((prev) => settleDraftAnswers({ ...prev, [key]: value }));
     setDirty(true);
   };
 
@@ -560,6 +562,7 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
                   value={answers[field.key]}
                   problem={shownProblem(field.key)}
                   onChange={(v) => set(field.key, v)}
+                  setAnswer={set}
                   dials={dials}
                   answers={answers}
                 />

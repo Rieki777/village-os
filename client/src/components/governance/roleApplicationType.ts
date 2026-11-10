@@ -40,6 +40,8 @@ import { OPEN_AIM_MAX } from "@shared/openProposals";
 import { isDoor } from "./wizardDoor";
 import { TERM_KEYS, commitmentWords, isCommitment, judgeTermsStep, notesAsText, overallChoice, type TermAnswers, type TermKey } from "@shared/termsWords";
 import { goalsAsText, parseGoals, type ProposalGoal } from "@shared/proposalGoals";
+import { DRAFT_WORDS, isTextDraft, withoutDraftFlag, type DraftableGoal } from "@shared/seraDrafts";
+import { marksOf } from "./seraDraftAnswers";
 
 /** The goals the member listed, as the list holds them (GoalsField), or none. */
 export function goalsOfAnswers(a: Record<string, unknown>): ProposalGoal[] {
@@ -48,6 +50,8 @@ export function goalsOfAnswers(a: Record<string, unknown>): ProposalGoal[] {
 
 /** The goals step's verdict, in the shared rules' own words: at least one, each with a title and a done when. */
 export const goalsProblem = (v: unknown): string | null => {
+  // A goal Sera drafted is the member's only once they edit or keep it.
+  if (Array.isArray(v) && v.some((g) => (g as DraftableGoal)?.seraDraft === true)) return DRAFT_WORDS.blocked(["goals"]);
   const judged = parseGoals(v ?? [], {});
   return judged.ok ? null : judged.error;
 };
@@ -111,7 +115,7 @@ export function doorAnswers(a: Record<string, unknown>): Record<string, unknown>
 /** The goals as the route reads them: blank rows left out, each tied to a role (the only one, when there is one). */
 export function goalsForRoute(a: Record<string, unknown>): ProposalGoal[] {
   const seats = pickedSeats(a.seatIds ?? a.seatId);
-  return goalsOfAnswers(a)
+  return withoutDraftFlag(goalsOfAnswers(a))
     .filter((g) => g.title?.trim() || g.doneWhen?.trim() || g.moves || g.serves || g.date)
     .map((g) => ({ ...g, roleId: g.roleId || seats[0] || "", serves: g.serves === NO_SEASON_GOALS ? "" : g.serves }));
 }
@@ -236,7 +240,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           placeholder: "Food grows here every season, and two more people know how.",
           required: true,
           showWhen: isDoor,
-          problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : null),
+          problem: (v, a) =>
+            isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : isTextDraft(String(v ?? ""), marksOf(a).aim) ? DRAFT_WORDS.blocked(["aim"]) : null,
         },
         {
           // Joining lane PR 1: a list of goals, each with a "done when", where a textarea of tasks stood.
@@ -268,7 +273,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           help: "Only the people who decide your proposal see this. No AI reads it.",
           // The member door only: a renewal or a season plan carries on a seat, so it asks no references.
           showWhen: isDoor,
-          problem: aboutYouStepProblem,
+          problem: (v, a) => aboutYouStepProblem(v, a) ?? (isTextDraft(aboutYouOf(v).story, marksOf(a).story) ? DRAFT_WORDS.blocked(["story"]) : null),
         },
       ],
     },

@@ -91,6 +91,18 @@ export function isTextDraft(value: string, marked: string | undefined): boolean 
   return !!marked && value.trim() === marked.trim();
 }
 
+/**
+ * The marks that still mean something. A mark whose field has been edited is dropped, and with no marks left the
+ * object is gone, so a proposal being written keeps no sign that Sera drafted anything once it is edited or kept.
+ */
+export function settleMarks(marks: DraftMarks | undefined, now: { aim: string; story: string }): DraftMarks | undefined {
+  const kept: DraftMarks = {
+    ...(isTextDraft(now.aim, marks?.aim) ? { aim: marks!.aim } : {}),
+    ...(isTextDraft(now.story, marks?.story) ? { story: marks!.story } : {}),
+  };
+  return kept.aim || kept.story ? kept : undefined;
+}
+
 /** Which parts are still unconfirmed Sera drafts. Empty means the proposal may be sent. */
 export function unconfirmedDrafts(input: { aim: string; story: string; marks: DraftMarks; goals: readonly DraftableGoal[] }): DraftKind[] {
   const out: DraftKind[] = [];
@@ -98,6 +110,12 @@ export function unconfirmedDrafts(input: { aim: string; story: string; marks: Dr
   if (input.goals.some((g) => g.seraDraft === true)) out.push("goals");
   if (isTextDraft(input.story, input.marks.story)) out.push("story");
   return out;
+}
+
+/** Drafted goals placed in the list: wholly blank rows make room, the person's own goals stay, and the list never passes the cap. */
+export function placeDraftGoals(existing: readonly DraftableGoal[], drafted: readonly DraftableGoal[], cap: number): DraftableGoal[] {
+  const own = existing.filter((g) => g.title.trim() || g.doneWhen.trim() || g.moves || g.serves || g.date);
+  return [...own, ...drafted].slice(0, cap);
 }
 
 /** Goals as they are sent: the draft flag is left behind, so nothing says where a goal began. */

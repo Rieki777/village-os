@@ -50,6 +50,7 @@ export function RoleAsks({
   goals,
   value,
   onChange,
+  assist,
 }: {
   roleId: string;
   roleName: string;
@@ -61,6 +62,8 @@ export function RoleAsks({
   goals?: ReadonlyArray<{ id: string; text: string }>;
   value: RoleCardState;
   onChange: (next: RoleCardState) => void;
+  /** "Ask Sera for a first draft" for this role's goals, when the page can offer it (shared/seraDrafts.ts). */
+  assist?: ReactNode;
 }) {
   const { t } = useLingui();
   const serves = value.serves ?? {};
@@ -121,6 +124,7 @@ export function RoleAsks({
         <GoalsList
           idPrefix={`card-${roleId}-goals`}
           goals={value.goals}
+          assist={assist}
           onChange={(next) => onChange({ ...value, goals: next })}
           roles={[{ id: roleId, name: roleName, goals: accountabilities }]}
           seasonGoals={(goals ?? []).map((g) => ({ value: g.id, label: g.text }))}
