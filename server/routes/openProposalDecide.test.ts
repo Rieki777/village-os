@@ -29,7 +29,10 @@
  */
 import { moonTermFor } from "../../shared/openProposalTerm";
 import { activeClock } from "../lib/gratitude-cycles";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -74,6 +77,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   let gate = "";
   let well = "";
   let founderRole = "";
+  /** The private folder a proposal's files are kept in (Rye, 10 Nov 2026). */
+  let fileDir = "";
 
   const state = {
     viewer: null as string | null,
@@ -92,6 +97,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 6 });
+    fileDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "proposal-decide-files-"));
     const users = usersRepo(pool);
     for (const p of [FOUNDER, ANA, BEN, MO, HAS, HIGH]) await users.add({ id: p.id, name: p.name, email: p.email, passwordHash: "x", paths: [] } as any);
     await users.update(HIGH.id, (u: any) => {
@@ -153,6 +159,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
         state.stageEvents.push({ userId: String(u.id), from, to, reason });
       },
       sessionsOn: () => false,
+      proposalFileDir: fileDir,
     } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -165,6 +172,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await pool?.end();
     await db?.drop();
+    if (fileDir) await fs.promises.rm(fileDir, { recursive: true, force: true });
   });
 
   beforeEach(async () => {
@@ -349,6 +357,93 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(objected.status).toBe(200);
       const read = (await page(id, MO.id)).body.proposal.consent;
       expect(read).toMatchObject({ state: "objected", consented: 1, objected: 1, objections: ["We have a gate keeper already."] });
+    });
+  });
+
+  describe("links and files, for the deciders only (Rye, 10 Nov 2026)", () => {
+    const PDF = Buffer.from(["%PDF-1.7", "1 0 obj", "<<>>", "endobj", ""].join(String.fromCharCode(10)));
+
+    /** Send with a link and a PDF, as somebody with no account, and confirm. */
+    const withFiles = async (email: string) => {
+      const before = state.sent.length;
+      const fd = new FormData();
+      fd.append("proposal", JSON.stringify({
+        name: "Rowan Field",
+        email,
+        roles: [{ roleId: gate, note: "I open gates for a living." }],
+        why: "I live up the road and the gate is always shut.",
+        aim: "The gate opens at dawn every day.",
+        links: [{ label: "Gates I built", url: "https://gates.example.org/rowan" }],
+      }));
+      fd.append("files", new Blob([PDF], { type: "application/pdf" }), "Gates portfolio.pdf");
+      const res = await fetch(`${base}/api/open-proposals`, { method: "POST", body: fd }); // module-review-ok: a test calling its own local server
+      expect(res.status, await res.clone().text()).toBe(200);
+      const mail = state.sent[before];
+      const id = mail.idempotencyKey.split(":")[1];
+      expect((await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null)).status).toBe(200);
+      return id;
+    };
+
+    const download = async (href: string, as: string | null) => {
+      const before = state.viewer;
+      state.viewer = as;
+      try {
+        return await fetch(`${base}${href}`); // module-review-ok: a test calling its own local server
+      } finally {
+        state.viewer = before;
+      }
+    };
+
+    it("the holder of the power and the circle's asked holders read them; another member reads neither", async () => {
+      const id = await withFiles("files1@example.test");
+      const founder = (await page(id, FOUNDER.id)).body.proposal.attached;
+      expect(founder.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
+      expect(founder.files).toHaveLength(1);
+      expect(founder.files[0]).toMatchObject({ kind: "pdf", name: "Gates portfolio.pdf", size: PDF.length });
+      // Ana holds a role in the Land Circle and is asked to consent: she decides it too.
+      expect((await page(id, ANA.id)).body.proposal.attached.files).toHaveLength(1);
+      // Mo is a member who can read the page, and decides nothing.
+      const mo = await page(id, MO.id);
+      expect(mo.status).toBe(200);
+      expect(mo.body.proposal.attached).toBeNull();
+      expect(JSON.stringify(mo.body)).not.toContain("gates.example.org");
+      expect(JSON.stringify(mo.body)).not.toContain("Gates portfolio");
+    });
+
+    it("the file door serves the bytes kept, as a download nobody caches or indexes, to a decider and nobody else", async () => {
+      const id = await withFiles("files2@example.test");
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      const ok = await download(href, FOUNDER.id);
+      expect(ok.status).toBe(200);
+      expect(Buffer.from(await ok.arrayBuffer()).equals(PDF)).toBe(true);
+      expect(ok.headers.get("content-type")).toBe("application/pdf");
+      expect(ok.headers.get("content-disposition")).toMatch(/^attachment; /);
+      expect(ok.headers.get("cache-control")).toBe("private, no-store");
+      expect(ok.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(ok.headers.get("x-content-type-options")).toBe("nosniff");
+      expect((await download(href, ANA.id)).status).toBe(200);
+      // Not a decider, not signed in, a made-up file: nothing, and nothing said about it.
+      expect((await download(href, MO.id)).status).toBe(404);
+      expect((await download(href, null)).status).toBe(401);
+      expect((await download(href.replace(/pf-[0-9a-f]+$/, "pf-0000000000000000"), FOUNDER.id)).status).toBe(404);
+      expect((await download(href.replace(/pf-[0-9a-f]+$/, "..%2F..%2Fsecret"), FOUNDER.id)).status).toBe(404);
+    });
+
+    it("a holder of the power reads none of their own proposal's links or files", async () => {
+      state.powerHolders = [FOUNDER.id, HAS.id];
+      const id = await withFiles(HAS.email);
+      const own = await page(id, HAS.id);
+      expect(own.body.proposal.attached).toBeNull();
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      expect((await download(href, HAS.id)).status).toBe(404);
+    });
+
+    it("a file changed on disk since it was sent is not served", async () => {
+      const id = await withFiles("files3@example.test");
+      const f = (await readOpenProposal(pool, id))!.body.files![0];
+      await fs.promises.writeFile(path.join(fileDir, id, `${f.id}.${f.kind}`), Buffer.from("%PDF-1.7 something else"));
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      expect((await download(href, FOUNDER.id)).status).toBe(404);
     });
   });
 

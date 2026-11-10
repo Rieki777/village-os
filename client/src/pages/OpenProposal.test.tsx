@@ -117,6 +117,39 @@ describe("the open proposal page", () => {
     expect(screen.getByText(DECIDE_WORDS.door[DOOR.aRoleHolds])).toBeTruthy();
   });
 
+  it("a decider reads the links as text to open off-site and the files as downloads; anybody else reads neither (Rye, 10 Nov 2026)", async () => {
+    answer = () =>
+      json({
+        proposal: served({
+          attached: {
+            links: [{ label: "Gates I built", url: "https://gates.example.org/rowan" }],
+            files: [{ id: "pf-0123456789abcdef", kind: "pdf", name: "Gates portfolio.pdf", size: 2048, href: `/api/governance/open-proposals/${ID}/files/pf-0123456789abcdef` }],
+          },
+        }),
+      });
+    render(<OpenProposal />);
+    await heading();
+    expect(screen.getByRole("heading", { name: "Links and files" })).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Gates I built" });
+    expect(link.getAttribute("href")).toBe("https://gates.example.org/rowan");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer nofollow");
+    expect(link.getAttribute("target")).toBe("_blank");
+    const file = screen.getByRole("link", { name: "Gates portfolio.pdf" });
+    expect(file.getAttribute("href")).toBe(`/api/governance/open-proposals/${ID}/files/pf-0123456789abcdef`);
+    expect(file.hasAttribute("download")).toBe(true);
+    // The page never fetches a link or a file by itself: the decider opens them.
+    // Each entry is "METHOD url": the URL is parsed and its host and path compared, never searched as text.
+    const fetched = asked.map((a) => new URL(a.slice(a.indexOf(" ") + 1), "http://local"));
+    expect(fetched.some((u) => u.hostname === "gates.example.org")).toBe(false);
+    expect(fetched.some((u) => /\/files\/[^/]+$/.test(u.pathname))).toBe(false);
+    cleanup();
+    // Anybody else: the server sends no attachments, and the page shows no section.
+    answer = () => json({ proposal: served({ attached: null }) });
+    render(<OpenProposal />);
+    await heading();
+    expect(screen.queryByRole("heading", { name: "Links and files" })).toBeNull();
+  });
+
   it("an asked holder consents on the proposal's own route", async () => {
     answer = () => json({ proposal: served({}, "open", { asked: true, answer: null, mayAnswer: true }) });
     render(<OpenProposal />);

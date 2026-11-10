@@ -88,7 +88,9 @@ import { currentMoonTerm, moonEnded, REVIEW_WORDS } from "../../shared/applicati
 import { activeClock } from "../lib/gratitude-cycles";
 import { createInviteOn, inviteById, reissueInviteOn, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
-import { asksFor } from "../repos/roleProposals";
+import { asksFor, type StoredAsk } from "../repos/roleProposals";
+import { PROPOSAL_FILE_ID, PROPOSAL_FILE_TYPES, proposalFileHref } from "../../shared/proposalAttachments";
+import { readProposalFile } from "../lib/proposalFiles";
 import { seatsWithCircles } from "../repos/seatApplications";
 
 export type DecideRouteDeps = Pick<
@@ -106,6 +108,8 @@ export type DecideRouteDeps = Pick<
   /** Whether Live Sessions is on, so an objection has a circle backlog to go to. Defaults to the live lifecycle. */
   sessionsOn?: () => boolean;
   now?: () => Date;
+  /** Where a proposal's attached files live (server/lib/proposalFiles.ts). Absent: no file is served. */
+  proposalFileDir?: string;
 };
 
 const BASE = "/api/governance/open-proposals";
@@ -216,6 +220,18 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     return { ok: false as const, status: refusal.status, body, rule, own };
   }
 
+  /**
+   * WHO SEES THE LINKS AND FILES (Rye, 10 Nov 2026: "deciders only"): the live
+   * holders of the power that seats people, and the circle's holders asked to
+   * consent or object. Never the applicant, never another member who can read
+   * the page, never an admin for being one.
+   */
+  function decidesIt(may: Awaited<ReturnType<typeof deciding>>, asks: readonly StoredAsk[], viewerId: string): boolean {
+    if (may.own === viewerId || (!may.ok && may.body.error === "own_proposal")) return false;
+    const holds = may.rule.who === "live-holders" && may.rule.holders.includes(viewerId);
+    return holds || asks.some((a) => a.userId === viewerId);
+  }
+
   /** A letter as an essential email: the person asked for this answer. */
   function letter(key: string, origin: string, to: { email: string; name: string | null }, words: { subject: string; text: string }): OutgoingEmail {
     const body = words.text
@@ -276,6 +292,10 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // A former member's address, told only to those who decide it (coordinator, 2026-10-31).
     const former = open && may.ok && !!may.own && (await isFormerMemberAccount(work, may.own));
     const season = seasonOf(p);
+    // Links and files, for the deciders only (Rye, 10 Nov 2026). Gone once the proposal is anonymised.
+    const attached = decidesIt(may, asks, viewerId)
+      ? { links: p.body.links ?? [], files: (p.body.files ?? []).map((f) => ({ id: f.id, kind: f.kind, name: f.name, size: f.size, href: proposalFileHref(p.id, f.id) })) }
+      : null;
     res.set("Cache-Control", "no-store").json({
       proposal: {
         id: p.id,
@@ -298,6 +318,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         consent: open ? view : { ...view, record: null, you: { ...view.you, mayAnswer: false } },
         door: { because: may.rule.because, words: DECIDE_WORDS.door[may.rule.because] },
         invitation,
+        attached,
         you: {
           holdsThePower,
           own: !!may.own && may.own === viewerId,
@@ -308,6 +329,37 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         },
       },
     });
+  });
+
+  /*
+   * ONE ATTACHED FILE, to a decider and nobody else. Read from the private
+   * folder, checked against the fingerprint kept when it was sent, kept out of
+   * every cache and every index, and always downloaded rather than opened in
+   * the page, so a file can never run as this site. Anybody else is answered
+   * as if there were no such file.
+   */
+  app.get(`${BASE}/:id/files/:fileId`, async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const viewer = await reader(req, res);
+    if (!viewer) return;
+    const viewerId = String(viewer.id);
+    if (await overLimit(`open-proposal-file:${viewerId}`, 60, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: "too_many_asks", message: "That is a lot of files in an hour. Try again in a little while." });
+    }
+    const p = await found(req, res);
+    if (!p) return;
+    const fileId = String(req.params.fileId ?? "");
+    const file = PROPOSAL_FILE_ID.test(fileId) ? (p.body.files ?? []).find((f) => f.id === fileId) : undefined;
+    const asks = (await asksFor(getPool(), [p.id])).get(p.id) ?? [];
+    if (!file || !deps.proposalFileDir || !decidesIt(await deciding(p, viewerId), asks, viewerId)) return res.status(404).json(MISSING);
+    const bytes = await readProposalFile(deps.proposalFileDir, p.id, file);
+    if (!bytes) return res.status(404).json(MISSING);
+    res.setHeader("Content-Type", PROPOSAL_FILE_TYPES[file.kind]);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.setHeader("Content-Disposition", `attachment; filename="${file.name.replace(/[^ -~]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    res.send(bytes);
   });
 
   // ── The circle answers ────────────────────────────────────────────────────
