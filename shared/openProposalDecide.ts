@@ -150,6 +150,7 @@ export const DECIDE_WORDS = {
   reissue: "Make a new invitation",
   reissueLine: "They have not used their invitation yet. A new one replaces it, and goes to them by email.",
   invitationUsed: "They made their account with their invitation.",
+  invitationSent: (when: string, emailed: boolean) => (emailed ? `The invitation went to them by email on ${when}.` : `The invitation was made on ${when}, and the email did not go. Send it again, or hand them the link.`),
   copy: "Copy invitation",
   copied: "Copied",
 
@@ -198,24 +199,31 @@ const whenRolesStart = (i: AdoptLetterIn) =>
   i.moon ? `Your roles run from ${i.moon.from} to the next new moon, ${i.moon.to}.` : `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
 const forWhen = (i: AdoptLetterIn) => (i.moon ? "this moon" : "next season");
 
-/** The yes, with the invitation, for an address with no account here. */
-export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string } {
+/** The yes, with the invitation, for an address with no account here. The email shows `button` as a button and keeps the link in the text. */
+export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string; button: { label: string; url: string } } {
   return {
     subject: `${i.village} adopted your proposal`,
+    button: { label: INVITE_BUTTON, url: i.link },
     text: [
       hello(i.firstName),
       "",
       `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
       "",
-      "Here is your invitation. Open it to make your account:",
+      `Here is your invitation. Use the button to create your profile, or open this link:`,
       i.link,
       "",
       `It works once and lasts ${i.days} days. ${whenRolesStart(i)}`,
+      "",
+      NEXT_AFTER_PROFILE,
       ...signFirst(i),
       "",
     ].join("\n"),
   };
 }
+
+/** The button's label, and what we tell a person to do once their profile exists. */
+export const INVITE_BUTTON = "Create your profile";
+export const NEXT_AFTER_PROFILE = "Then check your profile. Your tasks for the moon appear there, and it is where we run our sessions and track our work together.";
 
 /** The yes, for an address that already has an account here. */
 export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { subject: string; text: string } {
@@ -234,8 +242,11 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
   };
 }
 
-/** The kind no. */
-export function declinedLetter(i: { firstName: string | null; village: string; roleNames: readonly string[] }): { subject: string; text: string } {
+/**
+ * The kind no. It thanks, gives no reasons of its own, and points to three
+ * ways to stay close: a quest, the other open roles, the next season.
+ */
+export function declinedLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; site: string }): { subject: string; text: string } {
   return {
     subject: `Your proposal to ${i.village}`,
     text: [
@@ -243,10 +254,69 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
       "",
       `Thank you for proposing to hold ${andList(i.roleNames) || "a role"} in ${i.village}. We can't say yes this time.`,
       "",
-      "We're glad you found us, and we wish you well.",
+      "We're glad you found us. If you'd like to stay close, here are three ways in:",
+      `Take a quest: ${i.site}/quests`,
+      `Look at other open roles: ${i.site}/roles`,
+      "Or propose again next season. We would be glad to read it.",
       "",
     ].join("\n"),
   };
+}
+
+/** The same no, as the status page says it. Links are paths, so the page makes them its own. */
+export const DECLINED_PAGE_WORDS = {
+  heading: "Thank you for proposing",
+  line: "We can't say yes this time, and we're glad you found us. If you'd like to stay close:",
+  quests: { label: "Take a quest", href: "/quests" },
+  roles: { label: "Look at other open roles", href: "/roles" },
+  again: "Or propose again next season.",
+} as const;
+
+/** The reply promise on the status page: one sentence, the number from the village's setting. */
+export const replyPromise = (days: number): string => `We reply within ${days} ${days === 1 ? "day" : "days"}.`;
+
+// ── Updates about a proposal, to the person who made it ─────────────────────
+
+export type ApplicantUpdateKind = "confirmed" | "first_reply" | "conversation" | "consent" | "terms" | "adopted" | "declined";
+
+/** Kinds that go as an email as well as to the profile. The rest already have a letter of their own, so they only reach the profile. */
+export const UPDATE_EMAILS: Record<ApplicantUpdateKind, boolean> = {
+  confirmed: false,
+  first_reply: true,
+  conversation: true,
+  consent: true,
+  terms: true,
+  adopted: false,
+  declined: false,
+};
+
+/** One update's title (the email's subject and the profile's headline) and its text. */
+export function applicantUpdate(
+  kind: ApplicantUpdateKind,
+  i: { firstName: string | null; village: string; roleNames: readonly string[]; replyDays: number; withRole?: string | null; minutes?: number | null },
+): { title: string; text: string } {
+  const roles = andList(i.roleNames) || "a role";
+  const keep = "Your status page link is in the first email we sent you, so you can follow it any time.";
+  const body = (lines: string[]) => [hello(i.firstName), "", ...lines, "", keep, ""].join("\n");
+  switch (kind) {
+    case "confirmed":
+      return { title: `Your proposal is with ${i.village}`, text: `Your proposal to hold ${roles} is with us. ${replyPromise(i.replyDays)}` };
+    case "first_reply":
+      return { title: `We have taken up your proposal`, text: body([`The role that welcomes people has taken up your proposal to hold ${roles} and is writing to you about a time to talk.`, replyPromise(i.replyDays)]) };
+    case "conversation":
+      return {
+        title: `A conversation is asked for`,
+        text: body([`The next step on your proposal to hold ${roles} is a conversation${i.withRole ? ` with ${i.withRole}` : ""}${i.minutes ? `, about ${i.minutes} minutes` : ""}. We will write to you about a time.`]),
+      };
+    case "consent":
+      return { title: `The circle is weighing your proposal`, text: body([`The conversations are written up, and the circle is now asked to consent to your proposal to hold ${roles}. We will tell you what it decides.`]) };
+    case "terms":
+      return { title: `The terms for your proposal changed`, text: body([`We changed the terms we suggest for your proposal to hold ${roles}. Open your status page to read them, and tell us what you think.`]) };
+    case "adopted":
+      return { title: `${i.village} adopted your proposal`, text: `${i.village} adopted your proposal to hold ${roles}. ${NEXT_AFTER_PROFILE}` };
+    case "declined":
+      return { title: `Your proposal to ${i.village}`, text: `Thank you for proposing to hold ${roles}. We can't say yes this time. You can take a quest, look at other open roles, or propose again next season.` };
+  }
 }
 
 // ── The notices ─────────────────────────────────────────────────────────────

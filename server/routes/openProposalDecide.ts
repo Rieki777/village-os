@@ -77,6 +77,7 @@ import { ADOPTING_POWER, adoptRefusal, applicationHref } from "../../shared/seat
 import { civilDayWords } from "../../shared/seasonPlans";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import type { AppDeps } from "../lib/appDeps";
+import { makeApplicantTeller } from "../lib/applicantUpdates";
 import { hashInviteToken, INVITE_DAYS, invitePath, mintInviteToken } from "../lib/invites";
 import { accountFor, decideRule, isFormerMemberAccount, placeOnRoles, type DecideDeps } from "../lib/openProposalDecide";
 import type { LapseContext } from "../lib/orgChart";
@@ -142,6 +143,9 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     lapse: deps.lapse,
     now,
   };
+
+  /** Updates to the person who proposed: their bell, once they have an account (the email already has its own letter). */
+  const tell = makeApplicantTeller({ getPool, members, notify: deps.notify, postEmail, projectName });
 
   /** The signed-in member holding `terms.read`, or null after answering 401. */
   async function reader(req: any, res: any): Promise<any | null> {
@@ -233,11 +237,15 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   }
 
   /** A letter as an essential email: the person asked for this answer. */
-  function letter(key: string, origin: string, to: { email: string; name: string | null }, words: { subject: string; text: string }): OutgoingEmail {
-    const body = words.text
-      .split("\n\n")
-      .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
-      .join("");
+  function letter(key: string, origin: string, to: { email: string; name: string | null }, words: { subject: string; text: string; button?: { label: string; url: string } }): OutgoingEmail {
+    const button = words.button
+      ? `<p><a href="${escapeHtml(words.button.url)}" style="display:inline-block;padding:12px 22px;background:#1f6f5c;color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600">${escapeHtml(words.button.label)}</a></p>`
+      : "";
+    const paras = words.text.split("\n\n").map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`);
+    // The button sits under the paragraph that carries the invitation's link.
+    const at = words.button ? paras.findIndex((para) => para.includes(escapeHtml(words.button!.url))) : -1;
+    if (at >= 0) paras.splice(at + 1, 0, button);
+    const body = paras.join("");
     return {
       idempotencyKey: key,
       kind: "essential",
@@ -284,10 +292,11 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const may = await deciding(p, viewerId);
     const holdsThePower = may.rule.who === "live-holders" && may.rule.holders.includes(viewerId);
     // The invitation's standing, for the holders of the power, on an adoption that made one.
-    let invitation: { state: "open" | "used" | "closed" } | null = null;
+    let invitation: { state: "open" | "used" | "closed"; sentAt: string | null; emailed: boolean | null } | null = null;
     if (p.status === "adopted" && holdsThePower && !may.own) {
       const inv = await inviteById(pool, openInviteId(p.id));
-      invitation = { state: !inv ? "closed" : inv.usedByUserId ? "used" : inv.revokedAt || inv.expired ? "closed" : "open" };
+      const sentNote = await store.invitationSentOf(pool, p.id);
+      invitation = { state: !inv ? "closed" : inv.usedByUserId ? "used" : inv.revokedAt || inv.expired ? "closed" : "open", sentAt: sentNote ? sentNote.at.toISOString() : null, emailed: sentNote ? sentNote.emailed : null };
     }
     // A former member's address, told only to those who decide it (coordinator, 2026-10-31).
     const former = open && may.ok && !!may.own && (await isFormerMemberAccount(work, may.own));
@@ -445,6 +454,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
           ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine }))
           : null,
       );
+      await tell(p.id, "adopted");
       return res.json({
         success: true,
         status: "adopted",
@@ -486,6 +496,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
+    await store.noteInvitationSent(pool, p.id, at, why === null);
     res.json({
       success: true,
       status: "adopted",
@@ -518,9 +529,10 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:declined`, "open_proposal.declined", { email: p.email, name: firstName }, declinedLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)) }))
+        ? letter(`open-proposal:${p.id}:declined`, "open_proposal.declined", { email: p.email, name: firstName }, declinedLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), site: site() }))
         : null,
     );
+    await tell(p.id, "declined");
     res.json({ success: true, status: "declined", decided, emailed: why === null, message: why === null ? DECIDE_WORDS.declinedEmailed : DECIDE_WORDS.declinedNotEmailed(why) });
   });
 
@@ -570,6 +582,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
+    await store.noteInvitationSent(pool, p.id, now(), why === null);
     res.json({
       success: true,
       link,

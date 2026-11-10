@@ -48,6 +48,7 @@ import { boolVar, stringVar } from "../lib/variables";
 import * as repo from "../repos/applicationReview";
 import * as store from "../repos/openProposals";
 import type { DecideRouteDeps } from "./openProposalDecide";
+import { makeApplicantTeller } from "../lib/applicantUpdates";
 
 const MINUTE = 60_000;
 const CLOCK_EVERY_MS = 60 * MINUTE;
@@ -68,6 +69,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     members: deps.members,
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
     onboardingRole: () => stringVar("org.onboarding_role"),
+    tellApplicant: makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail: deps.postEmail, projectName: deps.projectName }),
   };
 
   /** The signed-in member holding `terms.read`, or null after answering 401. */
@@ -191,7 +193,10 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     const mayReply = (roleId && (await repo.liveHoldersOfRole(getPool(), roleId)).includes(userId)) || (await deps.liveHoldersOf("org.seat")).includes(userId);
     if (!mayReply) return res.status(403).json({ error: "not_a_holder", message: "The first reply is for the role that welcomes people." });
     if (await isApplicant(work, ref, userId)) return res.status(403).json({ error: "own", message: REVIEW_WORDS.own });
-    res.json({ success: true, stamped: await stampFirstReply(work, ref, userId) });
+    const stamped = await stampFirstReply(work, ref, userId);
+    // Told once, on the stamp that made it: a retry stamps nothing and tells nobody again.
+    if (stamped && kindOfRef(ref) === "open") await work.tellApplicant?.(ref, "first_reply");
+    res.json({ success: true, stamped });
   });
 
   // ── The ballot fallback (G12) ─────────────────────────────────────────────

@@ -451,6 +451,9 @@ export default function ProposeARole() {
             </label>
             <input id="propose-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={FIELD} {...invalid("email")} />
             <p className="mt-2 text-sm text-muted-foreground">{OPEN_WORDS.emailNote}</p>
+            <p className="mt-1 text-sm text-muted-foreground" data-after-approval="">
+              {t`We will write to this address with every reply. If we approve your proposal, you will get an email with a button to create your profile, where your tasks and our replies live.`}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground" data-kept-for="">
               {OPEN_WORDS.keptFor}
             </p>
