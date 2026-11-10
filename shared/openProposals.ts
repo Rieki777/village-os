@@ -19,6 +19,7 @@
  */
 
 /** The village's public link. */
+import { cleanNote, isApplicantLanguage, wordsIn, type ApplicantLanguage } from "./applicantWords";
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
@@ -125,6 +126,10 @@ export interface OpenProposalBody {
   links?: ProposalLink[];
   /** Files the applicant attached, for the deciders only; the bytes are in a private folder (server/lib/proposalFiles.ts). */
   files?: ProposalFile[];
+  /** The language this person's emails, notices and status page use (shared/applicantLanguage.ts). Chosen once, when they proposed. */
+  locale?: ApplicantLanguage;
+  /** A note a decider wrote for the applicant. The applicant's own data: shown to them on the status page and in the email, never to anybody else, never to an AI, removed when the proposal is anonymised or deleted. */
+  note?: string;
 }
 
 export interface OpenProposalInput {
@@ -160,6 +165,8 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
     ...(linksOf(o.links).length ? { links: linksOf(o.links) } : {}),
     ...(filesOf(o.files).length ? { files: filesOf(o.files) } : {}),
+    ...(isApplicantLanguage(o.locale) ? { locale: o.locale } : {}),
+    ...(cleanNote(o.note) ? { note: cleanNote(o.note) as string } : {}),
   };
 }
 
@@ -230,21 +237,22 @@ export function andList(items: readonly string[]): string {
  */
 export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
 
-/** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
-export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
+/** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. `when` is already in the reader's language. */
+export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string; lang?: ApplicantLanguage }): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
   return {
-    subject: `Confirm your proposal to ${i.village}`,
+    subject: w.confirm.subject(i.village),
     text: [
-      i.firstName ? `Hi ${i.firstName},` : "Hi,",
+      w.hello(i.firstName),
       "",
-      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} ${i.when ? `for ${i.when}` : "next season"}.`,
+      w.confirm.proposed(w.list(i.roleNames) || w.aRole, i.village, i.when ?? null),
       "",
-      "Confirm it's you, and your proposal goes to the village:",
+      w.confirm.ask,
       i.link,
       "",
-      `The link works for ${OPEN_CONFIRM_HOURS} hours. If this wasn't you, leave it, and nothing happens.`,
+      w.confirm.validFor(OPEN_CONFIRM_HOURS),
       "",
-      OPEN_AI_DRAFTS,
+      w.confirm.aiDrafts,
       "",
     ].join("\n"),
   };
