@@ -150,7 +150,7 @@ export function ReferencesBlock({
       <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "References (optional)", context: "about you" })}</legend>
       <p className="text-sm text-muted-foreground">{t({ message: "Up to three people who know your work. Each needs a name, how you know them, and an email or phone number.", context: "about you" })}</p>
       {rows.map((r, i) => (
-        <div key={i} className="grid gap-2 sm:grid-cols-3" data-reference-row={i}>
+        <div key={i} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)]" data-reference-row={i}>
           <input
             aria-label={t({ message: `Reference ${i + 1}: name`, context: "about you" })}
             placeholder={t({ message: "Name", context: "about you reference" })}
@@ -223,8 +223,8 @@ export function AboutYouView({ about }: { about: ServedAboutYou | null | undefin
   const consent = backgroundCheck?.consent;
   const day = consent ? new Date(consent.at).toISOString().slice(0, 10) : "";
   return (
-    <section aria-labelledby="op-about-you" className="grid gap-3" data-about-you="">
-      <h2 id="op-about-you" className="text-lg font-bold text-foreground">
+    <section aria-labelledby="op-aboutyou" className="grid gap-3" data-aboutyou="">
+      <h2 id="op-aboutyou" className="text-lg font-bold text-foreground">
         {t({ message: "About you, references and background check", context: "about you heading" })}
       </h2>
       <p className="text-sm text-muted-foreground">{t({ message: "Only the people who decide this proposal see these. No AI reads them. They are deleted with the proposal.", context: "about you" })}</p>

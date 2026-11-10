@@ -43,7 +43,7 @@ export function useAlwaysChecked(ids: readonly string[]): boolean {
   return alwaysCheckedIn(org, ids);
 }
 
-const FIELD = "w-full min-h-[44px] rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep aria-[invalid=true]:border-coral";
+const FIELD = "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep aria-[invalid=true]:border-coral";
 
 export default function AboutYouField({
   field,
@@ -62,7 +62,7 @@ export default function AboutYouField({
   const always = useAlwaysChecked(pickedSeats(answers.seatIds ?? answers.seatId));
   return (
     <div className="grid gap-5" data-about-field="">
-      {field.help && <p className="text-sm text-stone-600">{field.help}</p>}
+      {field.help && <p className="text-sm text-muted-foreground">{field.help}</p>}
       <AboutYouFacts value={v} onChange={onChange} fieldClass={FIELD} idPrefix="door-about" />
       <ReferencesBlock value={v} onChange={onChange} alwaysChecked={always} fieldClass={FIELD} idPrefix="door-about" invalid={!!problem} />
       {problem && (

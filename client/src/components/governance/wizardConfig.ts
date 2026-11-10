@@ -127,7 +127,7 @@ export type FieldKind =
   | "termsOnOffer"
   /* Joining lane PR 1: the interactive goals list (GoalsField, GoalsList), stored as an array of goals. */
   | "goalsList"
-  /* Joining lane PR 2: the About-you step (AboutYouField): facts, references and the background-check consent. */
+  /* Joining lane PR 2: the About you step (AboutYouField): facts, references and the background-check consent. */
   | "aboutYou";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */

@@ -28,7 +28,7 @@ describe("the deciders' view", () => {
     expect(screen.getByText(ABOUT_WORDS.checkNeededRole)).toBeTruthy();
     expect(screen.getByText(ABOUT_WORDS.consentGiven("2026-11-10"))).toBeTruthy();
     // No score, no summary: the page holds only what was given.
-    expect(document.querySelector("[data-about-you]")?.textContent).not.toMatch(/score|rank|summary/i);
+    expect(document.querySelector("[data-aboutyou]")?.textContent).not.toMatch(/score|rank|summary/i);
   });
   it("says a check is needed when no references were given", () => {
     render(<AboutYouView about={{ references: [], about: {}, backgroundCheck: { needed: true, because: "no_references" } }} />);
