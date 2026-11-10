@@ -96,7 +96,7 @@ export function openRowLine(partner: string | null | undefined): string {
 
 /** The load card on a proposal: the hours are filled with the operations role. */
 export function loadHoursLine(partner: string | null | undefined): string {
-  return `We'll fill the hours together with ${opsPartner(partner)}.`;
+  return `We'll set the load together with ${opsPartner(partner)}.`;
 }
 
 /** An open row the member writes once they hold the role (runbook, how they hold it). */

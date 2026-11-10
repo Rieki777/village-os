@@ -158,6 +158,11 @@ export const CARD_WORDS = {
   newMoon: "New moon",
   fullMoon: "Full moon",
   tasksAgreed: "This moon's tasks agreed",
+  // Guide v2 (Rye, 10 Nov 2026): the moon rhythm, new moon to new moon.
+  newMoonCircle: "New moon circle: your recap, and 3 to 5 goals for the moon, each tied to a season goal. Tasks go on the task board",
+  fullMoonCheckIn: "Full moon: a 15-minute halfway check-in",
+  carryOn: "Carry on into the next moon?",
+  endOfMoon: "End of Moon: show the work delivered, celebrate wins, thank who helped, confirm your contract per role, and send your invoice",
   signedOff: "Last moon's work signed off and its bonus set",
   reviewOn: (role: string) => `Check in on how ${role} is going`,
   renewalOn: (role: string) => `Talk about next season for ${role}`,

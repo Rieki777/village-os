@@ -95,7 +95,7 @@ describe("withPartnerName", () => {
     const card = { a: { kind: "empty", words: openRowLine(null) }, list: [loadHoursLine(null), "Kept as written"] };
     const out = withPartnerName(card, "Operations Steward");
     expect(out.a.words).toBe("We'll fill this together with Operations Steward.");
-    expect(out.list).toEqual(["We'll fill the hours together with Operations Steward.", "Kept as written"]);
+    expect(out.list).toEqual(["We'll set the load together with Operations Steward.", "Kept as written"]);
     expect(withPartnerName(card, null)).toBe(card);
   });
 });

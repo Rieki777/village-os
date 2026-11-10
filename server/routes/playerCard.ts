@@ -52,6 +52,9 @@ import type { CycleClock } from "../../shared/cycleClock";
 import { mapShowsStructureTo, orgSeatTier } from "../lib/seatProjection";
 import { hiddenFromStranger } from "../lib/peopleLock";
 import { roleHeldBy } from "../repos/playerCard";
+import { effectiveLifecycle } from "../lib/modules";
+import { rhythmDoc } from "../lib/moonRecap";
+import { EMPTY_RHYTHM } from "../../shared/moonRhythm";
 
 export type CardDeps = Pick<AppDeps, "authedUser" | "isAdmin" | "capabilityCtx" | "getPool" | "firstName"> & {
   /** `seasonState()`: every season, the current and upcoming ones, and the village's zone. */
@@ -121,6 +124,8 @@ export async function cardContext(deps: CardDeps, viewerId: string | null, viewe
     firstName: deps.firstName,
     // 0274: the role card shows the CCOS terms under the circle card's own switch.
     frameworkTerms: deps.boolVar("org.ccos_terms"),
+    // Guide v2: the moon rhythm, from the end-of-moon review's own rhythm, while that review is on.
+    ...(effectiveLifecycle("moon-review") !== "off" ? { moonRhythm: await rhythmDoc(deps.getPool()).catch(() => EMPTY_RHYTHM) } : {}),
     // The owner's character portrait in the hero's gold ring.
     villageId: villageId(),
   };

@@ -149,7 +149,7 @@ describe("GameDashboard", () => {
     expect(line.textContent).toContain("Your next step didn't load");
     // The whole point: this is NOT an empty sheet. Nothing that would be
     // drawn from a real payload is on screen claiming to be a fact.
-    expect(container.textContent).not.toContain("No Quests yet");
+    expect(container.textContent).not.toContain("No quests yet");
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
