@@ -307,7 +307,7 @@ export default function ProposeARole() {
             data-door-back=""
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
-            {cameFrom.card ? t`Back to the role` : t`Back to the roles`}
+            {cameFrom.card ? t`Back to the role` : cameFrom.circle ? t`Back to the circle` : t`Back to the roles`}
           </Link>
         )}
         <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>

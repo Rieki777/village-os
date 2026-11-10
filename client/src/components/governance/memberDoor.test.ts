@@ -89,10 +89,11 @@ describe("where the door's back link goes", () => {
   });
 
   it("says Back to the role for a card and Back to the roles otherwise, and falls back to the board", () => {
-    expect(doorBack("?from=%2Froles%3Fseat%3Dgarden", "")).toEqual({ href: "/roles?seat=garden", card: true });
-    expect(doorBack("?from=%2Froles%2Fdraft", "")).toEqual({ href: "/roles/draft", card: false });
-    expect(doorBack("?from=%2F%2Fevil.example", "")).toEqual({ href: DOOR_HOME, card: false });
-    expect(doorBack("", "https://elsewhere.example/roles/draft")).toEqual({ href: DOOR_HOME, card: false });
+    expect(doorBack("?from=%2Froles%3Fseat%3Dgarden", "")).toEqual({ href: "/roles?seat=garden", card: true, circle: false });
+    expect(doorBack("?from=%2Fcircles%2Fland", "")).toEqual({ href: "/circles/land", card: false, circle: true });
+    expect(doorBack("?from=%2Froles%2Fdraft", "")).toEqual({ href: "/roles/draft", card: false, circle: false });
+    expect(doorBack("?from=%2F%2Fevil.example", "")).toEqual({ href: DOOR_HOME, card: false, circle: false });
+    expect(doorBack("", "https://elsewhere.example/roles/draft")).toEqual({ href: DOOR_HOME, card: false, circle: false });
   });
 });
 

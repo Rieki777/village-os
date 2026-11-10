@@ -7042,6 +7042,11 @@ msgstr "Gather it with other changes and send them to one vote."
 #~ msgid "Main Site"
 #~ msgstr "Main Site"
 
+#: client/src/pages/Propose.tsx
+#: client/src/pages/ProposeARole.tsx
+msgid "Back to the circle"
+msgstr "Back to the circle"
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "{pays} pay changes are left out. Pay is set by a person."

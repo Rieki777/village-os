@@ -7061,6 +7061,11 @@ msgstr ""
 #~ msgid "Main Site"
 #~ msgstr "Sitio principal"
 
+#: client/src/pages/Propose.tsx
+#: client/src/pages/ProposeARole.tsx
+msgid "Back to the circle"
+msgstr ""
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "{pays} pay changes are left out. Pay is set by a person."

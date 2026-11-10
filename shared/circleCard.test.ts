@@ -70,7 +70,7 @@ describe("the circle card model", () => {
       "See the card of holder 2 of Water Keeper",
     ]);
     expect(rows[0]!.href).toBe("/roles?seat=r-1");
-    expect(rows[1]!.applyHref).toBe("/propose?type=role_application&seat=r-2");
+    expect(rows[1]!.applyHref).toBe("/propose?type=role_application&seat=r-2&from=%2Fcircles%2Fc-garden");
     expect(rows[2]!.applyHref).toBeNull();
     expect(roles.note).toBeNull();
   });
@@ -89,7 +89,7 @@ describe("the circle card model", () => {
     };
     expect(rowsFor(false).map((r) => r.applyHref)).toEqual([null, "/propose-a-role?role=r-2", "/propose-a-role?role=r%203", null]);
     // A member, and a caller that says nothing, keep the member door.
-    expect(rowsFor(true).map((r) => r.applyHref)).toEqual([null, "/propose?type=role_application&seat=r-2", "/propose?type=role_application&seat=r%203", null]);
+    expect(rowsFor(true).map((r) => r.applyHref)).toEqual([null, "/propose?type=role_application&seat=r-2&from=%2Fcircles%2Fc-garden", "/propose?type=role_application&seat=r+3&from=%2Fcircles%2Fc-garden", null]);
     expect(rowsFor().map((r) => r.applyHref)).toEqual(rowsFor(true).map((r) => r.applyHref));
   });
 

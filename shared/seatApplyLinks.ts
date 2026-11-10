@@ -76,7 +76,7 @@ export const DOOR_HOME = "/roles/draft";
  * browser came from, else the roles board. `card` says whether it is one role's
  * card ("Back to the role") or a list ("Back to the roles").
  */
-export function doorBackOf(search: string, referrer: string, origin: string): { href: string; card: boolean } {
+export function doorBackOf(search: string, referrer: string, origin: string): { href: string; card: boolean; circle: boolean } {
   let href = doorFrom(new URLSearchParams(search).get("from"));
   if (!href && referrer) {
     try {
@@ -87,5 +87,5 @@ export function doorBackOf(search: string, referrer: string, origin: string): { 
     }
   }
   const to = href ?? DOOR_HOME;
-  return { href: to, card: /^\/roles\?(.*&)?seat=/.test(to) };
+  return { href: to, card: /^\/roles\?(.*&)?seat=/.test(to), circle: /^\/circles\/[^/?#]+$/.test(to) };
 }

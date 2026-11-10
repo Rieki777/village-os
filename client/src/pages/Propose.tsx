@@ -34,7 +34,7 @@ import { useLingui } from "@lingui/react/macro";
  * Where the door's back link goes: the `from` the role card or the board sent,
  * else the same-site page the browser came from, else the roles board.
  */
-export function doorBack(search: string, referrer: string = typeof document === "undefined" ? "" : document.referrer): { href: string; card: boolean } {
+export function doorBack(search: string, referrer: string = typeof document === "undefined" ? "" : document.referrer): { href: string; card: boolean; circle: boolean } {
   return doorBackOf(search, referrer, typeof window === "undefined" ? "" : window.location.origin);
 }
 
@@ -69,7 +69,7 @@ export default function Propose() {
             data-door-back=""
           >
             <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            {from.card ? t`Back to the role` : t`Back to the roles`}
+            {from.card ? t`Back to the role` : from.circle ? t`Back to the circle` : t`Back to the roles`}
           </Link>
         ) : (
           <Link

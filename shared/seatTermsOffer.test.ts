@@ -136,6 +136,6 @@ describe("the words", () => {
   it("names the empty state and where proposing terms starts", () => {
     expect(OFFER_WORDS.none).toBe("No terms on offer yet.");
     expect(OFFER_WORDS.propose).toBe("Propose terms");
-    expect(proposeTermsHref("seat water")).toBe("/propose?type=role_application&seat=seat%20water");
+    expect(proposeTermsHref("seat water")).toBe("/propose?type=role_application&seat=seat%20water&terms=write");
   });
 });
