@@ -103,7 +103,7 @@ export async function matchOutcome(
 export type SpaceCheck =
   /** The village recorded a space id and the delivery named the same one. */
   | { verdict: "match" }
-  /** The village recorded no space id. Nothing was checked and nothing is claimed. */
+  /** The village recorded no space id. Nothing was checked, so a passed outcome waits for a person (R039). */
   | { verdict: "unconfigured" }
   /** The village recorded one and the delivery named nothing. Accepted, reported. */
   | { verdict: "unstated" }

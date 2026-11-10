@@ -569,6 +569,32 @@ describe.skipIf(!DB_CONFIGURED)("a hub outcome that names no Hypha space (R039)"
     expect(await placeLine()).toBe("Meet at the long table");
   });
 
+  it("holds every outcome while the village has recorded no space, the default, whatever space the outcome names", async () => {
+    // Blank is how every village starts. A vote held in somebody else's Hypha
+    // space, carrying this proposal's [gm:] marker, arrives correctly signed by
+    // the shared hub, and with no space recorded there is nothing to compare it to.
+    expect((await call("PUT", "/api/admin/variables/hypha.space_id", { value: "" })).status).toBe(200);
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      title: "Meet under the fig", rationale: "The fig gives the widest shade.",
+      changes: [{ key: "sessions.place_line", to: "Meet under the fig" }],
+    });
+    expect(made.status, made.text).toBe(200);
+    const id = String(made.json?.id);
+    expect((await call("POST", `/api/game/mechanics/proposals/${id}/to-hypha`, {})).status).toBe(200);
+    const before = await placeLine();
+
+    for (const [deliveryId, extra] of [["r039-blank-unnamed", {}], ["r039-blank-named", { spaceId: "777" }]] as const) {
+      const held = await deliver(id, { deliveryId, ...extra });
+      expect(held.status, JSON.stringify(held.json)).toBe(200);
+      expect(held.json?.status, `${deliveryId}: nothing applies on its own`).toBe("passed_verified");
+      expect(String(held.json?.held)).toMatch(/recorded no Hypha space/);
+    }
+    expect(await placeLine(), "an outcome nobody could check changed nothing").toBe(before);
+
+    // Put the recorded space back for the tests below.
+    expect((await call("PUT", "/api/admin/variables/hypha.space_id", { value: "42" })).status).toBe(200);
+  });
+
   it("after launch, any member can ask the village to decide a held outcome, at its highest tier (Rye, 2026-11-06)", async () => {
     // This scratch village has started its Game, so the admin door is shut and
     // the held outcome would otherwise wait forever. The village's own vote
