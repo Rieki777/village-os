@@ -55,6 +55,7 @@ import { AGREEMENT, agreementDoc, parseAgreement, type StoredAgreement } from ".
 import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
 import { civilParts } from "../../shared/lunar";
+import { deadlineInVillage } from "../lib/villageReaders";
 import { CANVAS_MEMBERS_ONLY, mayReadCanvas } from "./canvas";
 
 type Deps = Pick<
@@ -238,7 +239,7 @@ export function register(app: Express, deps: Deps): void {
     void notifyRollRows({ pool, notify: deps.notify, link: decisionLink }, result.ballot, {
       type: "ballot_opened",
       title: `The village is deciding on an agreement: ${a.title}`,
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}. If it carries, it binds exactly as written.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}. If it carries, it binds exactly as written.`,
       keySuffix: "open",
       except: [String(user.id)],
     });

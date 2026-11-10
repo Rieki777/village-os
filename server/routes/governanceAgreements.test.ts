@@ -185,6 +185,8 @@ describe.skipIf(!configured)("the agreements route", () => {
     // Not awaited by the route; give the roll's line a moment to land.
     for (let i = 0; i < 50 && !told.length; i++) await new Promise((res) => setTimeout(res, 20));
     expect(told.map((t) => [t.userId, t.type])).toEqual([[PEOPLE.member.id, "ballot_opened"]]);
+    // R134: the deadline in words, in the village's calendar, never the container's M/D/Y.
+    expect(told[0].body).toMatch(/^Voting is open until \d{1,2} [A-Z][a-z]+ \d{4}\. If it carries, it binds exactly as written\.$/);
     expect(pulse).toEqual(["The village is deciding whether to adopt an agreement: Quiet hours in the common house"]);
   });
 

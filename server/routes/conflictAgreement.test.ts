@@ -451,6 +451,8 @@ describe.skipIf(!configured)("the conflict agreement's doors", () => {
       expect(ballot!.docMarkdown).toContain("- The safety contacts: the same as today.");
       expect(ballot!.docMarkdown).toContain("- Who each outside contact is, and how to reach them: the same as today.");
       expect(notices.filter((n) => n.type === "ballot_opened").map((n) => n.userId).sort()).toEqual(["ca-admin", "ca-member"]);
+      // R134: the deadline in words, in the village's calendar, never the container's M/D/Y.
+      for (const n of notices.filter((x) => x.type === "ballot_opened")) expect(n.body).toMatch(/^Voting is open until \d{1,2} [A-Z][a-z]+ \d{4}\.$/);
       expect(activity).toContain("The village is deciding whether to change its conflict agreement.");
       // The agreement itself has not moved yet.
       expect(agreementOfRepo().replyHours).toBe(48);
