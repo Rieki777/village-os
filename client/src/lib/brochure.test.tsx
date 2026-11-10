@@ -22,8 +22,11 @@ const config = { current: null as null | { brochurePages?: boolean; brochureHidd
 vi.mock("@/lib/gameApi", () => ({
   useGameConfig: () => config.current,
 }));
+// Who is signed in, for the member's door (the Love Letter). Undefined is no auth provider at all, as before.
+const auth = { current: undefined as undefined | { user: null | { id: string }; loading: boolean } };
+vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => auth.current }));
 
-import { brochurePage, isBrochurePath, storyPageShown } from "./brochure";
+import { brochurePage, isBrochurePath, memberDoorShown, storyPageShown } from "./brochure";
 
 function mount(loader: () => Promise<{ default: () => ReactElement }>) {
   const Page = brochurePage(loader);
@@ -155,5 +158,46 @@ describe("isBrochurePath", () => {
     for (const p of ["/", "/quests", "/gratitude", "/governance", "/claim", "/investor-relations"]) {
       expect(isBrochurePath(p)).toBe(false);
     }
+  });
+});
+
+describe("the Love Letter, a member's door (role journey L7)", () => {
+  beforeEach(() => {
+    config.current = { brochurePages: false };
+    auth.current = undefined;
+  });
+
+  const letter = async () => ({ default: () => <h1>Align with the letter</h1> });
+
+  it("opens for somebody signed in even with every story page off", async () => {
+    auth.current = { user: { id: "u-1" }, loading: false };
+    visit("/love-letter", "/love-letter", letter);
+    expect(await screen.findByText("Align with the letter")).toBeTruthy();
+  });
+
+  it("stays the not-found page for a visitor while the story pages are off", async () => {
+    auth.current = { user: null, loading: false };
+    visit("/love-letter", "/love-letter", letter);
+    expect(await screen.findByText("Off the trail")).toBeTruthy();
+    expect(screen.queryByText("Align with the letter")).toBeNull();
+  });
+
+  it("waits for the session before it decides, so a member never sees not-found first", () => {
+    auth.current = { user: null, loading: true };
+    const { container } = visit("/love-letter", "/love-letter", letter);
+    expect(container.textContent).toBe("");
+  });
+
+  it("CONTROL: every other story page stays shut to a signed-in member while the switches are off", async () => {
+    auth.current = { user: { id: "u-1" }, loading: false };
+    visit("/housing", "/housing", async () => ({ default: () => <h1>Our homes</h1> }));
+    expect(await screen.findByText("Off the trail")).toBeTruthy();
+    expect(screen.queryByText("Our homes")).toBeNull();
+  });
+
+  it("a member's own surface may link it whatever the switches say; a visitor's follows the switches", () => {
+    expect(memberDoorShown({ brochurePages: false }, "/love-letter", true)).toBe(true);
+    expect(memberDoorShown({ brochurePages: false }, "/love-letter", false)).toBe(false);
+    expect(memberDoorShown({ brochurePages: false }, "/housing", true)).toBe(false);
   });
 });

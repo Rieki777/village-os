@@ -4663,8 +4663,8 @@ async function runRetentionSweep(): Promise<string> {
  */
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
-  // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
-  const joining = brochurePageServed("/love-letter") && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  // The letter is a member's door (shared/brochure.ts, MEMBER_DOORS), served to anybody signed in; a signing it has not answered is its own step (lib/nextAction.ts).
+  const joining = !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
     trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)),
   });
