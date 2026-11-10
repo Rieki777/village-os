@@ -43,6 +43,8 @@ import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLingui } from "@lingui/react/macro";
+import VoiceArea from "@/components/voice/VoiceArea";
 import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { m, AnimatePresence } from "framer-motion";
@@ -61,6 +63,7 @@ import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
 import AsksPanel from "@/components/asks/AsksPanel";
 import YourCompanions from "@/components/profileDash/YourCompanions";
+import GuideChoiceCard from "@/components/guide/GuideChoiceCard";
 import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
@@ -120,6 +123,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  */
 
 export default function Profile() {
+  const { t } = useLingui();
   const storyShown = useStoryPageShown();
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
@@ -527,6 +531,11 @@ export default function Profile() {
               <TodayStrip data={dash} />
             </div>
 
+            {/* WHO HELPS YOU: the member's guide, chosen once (2026-11-09). On Today, so a phone finds it first. */}
+            <div className={tabOf("today")}>
+              <GuideChoiceCard />
+            </div>
+
             {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
             <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
               <AsksPanel />
@@ -677,6 +686,14 @@ export default function Profile() {
                     <label htmlFor="profile-bio" className="sr-only">
                       Your bio
                     </label>
+                    <VoiceArea
+                      value={bioText}
+                      onValue={setBioText}
+                      talk={{
+                        label: t({ message: "Your bio", context: "voice field label: profile bio" }),
+                        purpose: t({ message: "A few sentences about who you are and what you bring to the village.", context: "voice field purpose: profile bio" }),
+                      }}
+                    >
                     <textarea
                       id="profile-bio"
                       value={bioText}
@@ -685,6 +702,7 @@ export default function Profile() {
                       className="w-full rounded-lg border border-border bg-background p-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       rows={4}
                     />
+                    </VoiceArea>
                     {bioError && (
                       <p role="alert" className="mt-2 text-sm text-destructive">
                         {bioError}

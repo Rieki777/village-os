@@ -438,11 +438,16 @@ describe("the growing box", () => {
     expect(onValue).toHaveBeenLastCalledWith("one two three");
   });
 
-  it("puts the voice button beside it when asked, and adds what is said to the end", () => {
+  // A long box carries the mic by default since 2026-11-09 (Rye: "whenever long text is
+  // about to be used ... offer a mic option"); a one-line box, or one that says no, does not.
+  it("puts the voice button beside a long box by default, and adds what is said to the end", () => {
     const onValue = vi.fn();
-    const { unmount } = render(<Box />);
+    const first = render(<Box singleLine />);
     expect(screen.queryByRole("button", { name: "Speak" })).not.toBeInTheDocument();
-    unmount();
+    first.unmount();
+    const second = render(<Box mic={false} />);
+    expect(screen.queryByRole("button", { name: "Speak" })).not.toBeInTheDocument();
+    second.unmount();
     render(<Box initial="Gutters" mic onValue={onValue} />);
     fireEvent.click(screen.getByRole("button", { name: "Speak" }));
     expect(onValue).toHaveBeenLastCalledWith("Gutters spoken words");

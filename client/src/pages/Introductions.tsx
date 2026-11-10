@@ -16,6 +16,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { actionError } from "@/lib/actionOutcome";
 import { Check, EyeOff, Handshake, Pause, Plus, X } from "lucide-react";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -383,6 +385,7 @@ function Suggestions({
 }
 
 function Compose({ onDone }: { onDone: (created: boolean) => void }) {
+  const { t } = useLingui();
   const [kind, setKind] = useState<"seek" | "offer">("seek");
   const [text, setText] = useState("");
   const [why, setWhy] = useState("");
@@ -430,6 +433,12 @@ function Compose({ onDone }: { onDone: (created: boolean) => void }) {
           </button>
         ))}
       </div>
+      <VoiceArea value={text} onValue={setText}
+        talk={{
+          label: t({ message: "What you seek or offer", context: "voice field label: introductions request" }),
+          purpose: t({ message: "What you are looking for, or what you could give a hand with, in your own words.", context: "voice field purpose: introductions request" }),
+        }}
+      >
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -438,6 +447,7 @@ function Compose({ onDone }: { onDone: (created: boolean) => void }) {
         placeholder={kind === "seek" ? "What are you looking for, in your own words?" : "What could you give a hand with?"}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
       />
+      </VoiceArea>
       <input
         value={why}
         onChange={(e) => setWhy(e.target.value)}

@@ -15,6 +15,7 @@ import {
 } from "@shared/villageDocuments";
 import { call } from "@/lib/notebookCopy";
 import { Trans, useLingui } from "@lingui/react/macro";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const button =
   "text-sm font-medium rounded-lg px-3 py-1.5 text-white bg-teal-deep hover:bg-teal-deep-dark disabled:opacity-40";
@@ -82,7 +83,9 @@ export function NotebookAdd({ onAdded }: { onAdded: () => void | Promise<void> }
       {mode === "paste" ? (
         <label className="block text-sm font-medium text-stone-900">
           <Trans context="pasted document body field">The text</Trans>
+          <VoiceArea value={body} onValue={setBody}>
           <textarea className={`${input} min-h-32`} value={body} onChange={(e) => setBody(e.target.value)} />
+          </VoiceArea>
         </label>
       ) : (
         <label className="block text-sm font-medium text-stone-900">

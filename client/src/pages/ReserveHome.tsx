@@ -41,6 +41,7 @@ import { Link } from "wouter";
 import { Home, ArrowLeft, Check, MapPin } from "lucide-react";
 import { hamletNumbers, homeChoices, preselectedHome, type PublicHome } from "@/lib/housingForm";
 import { useStoryPageOffAlone } from "@/lib/brochure";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 /*
  * THE FOUR HOME TYPES THAT USED TO LIVE HERE ARE GONE (0131).
@@ -403,12 +404,14 @@ export default function ReserveHome() {
               <span className="block text-sm font-medium text-foreground mb-1">
                 Anything we should know?
               </span>
+              <VoiceArea value={notes} onValue={setNotes}>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={4}
                 className="w-full px-4 py-3 rounded-xl border border-border bg-card"
               />
+              </VoiceArea>
             </label>
 
             <PathConsentBox checked={consent} onChange={setConsent} />

@@ -24,19 +24,15 @@
  * The credential never leaves `preflight()` (server/lib/saberraSync.ts); this
  * file is handed a client.
  */
-import { effectiveLifecycle } from "./modules";
-import { preflight } from "./saberraSync";
 import { saberraAgentName } from "./saberraGuide";
-import { callToolJson, listTools, openSession, type ClientOptions } from "./saberraClient";
-import { ASK_TOOL, answerText, questionArgs } from "./moonRecapSera";
+import { SERA_GUIDE_TIMEOUT_MS, seraGuideAsk, type SeraAsk } from "./seraGuideCall";
 import { fenceForPrompt } from "./villageReaders";
 import type { HelperTab } from "../../shared/adminHelper";
 
-/** One question to the agent, one answer in words, or a plain failure. */
-export type SeraAsk = (question: string) => Promise<{ ok: true; text: string } | { ok: false }>;
+export { makeSeraAsk, seraReplyText, type SeraAsk } from "./seraGuideCall";
 
 /** How long one helper answer may take before the panel is told it failed. */
-export const SERA_HELPER_TIMEOUT_MS = 60_000;
+export const SERA_HELPER_TIMEOUT_MS = SERA_GUIDE_TIMEOUT_MS;
 /** The question's ceiling, so a long conversation cannot grow it without bound. */
 export const SERA_QUESTION_MAX = 9000;
 
@@ -47,54 +43,7 @@ export function seraHelperName(): string {
 
 /** An ask function when the village's Sera connection can answer, or null. */
 export function seraHelperAsk(): SeraAsk | null {
-  if (effectiveLifecycle("saberra") === "off") return null;
-  const pre = preflight();
-  if (!pre.ok) return null;
-  return makeSeraAsk(pre.client);
-}
-
-/** The call itself: open a session, find `ask_sera`, ask once. */
-export function makeSeraAsk(client: ClientOptions, timeoutMs = SERA_HELPER_TIMEOUT_MS): SeraAsk {
-  return async (question) => {
-    const deadline = AbortSignal.timeout(timeoutMs);
-    const c: ClientOptions = {
-      ...client,
-      timeoutMs,
-      signal: deadline,
-      fetchImpl: (url, init) => client.fetchImpl(url, { ...init, signal: init.signal ?? deadline }),
-    };
-    try {
-      const session = await openSession(c);
-      if (!session) return { ok: false };
-      const tools = await listTools(c, session);
-      if (!tools.ok) return { ok: false };
-      const ask = tools.tools.find((t) => t.name === ASK_TOOL);
-      if (!ask) return { ok: false };
-      // No person rides along: the helper asks about Admin, never about somebody.
-      const args = questionArgs(ask, question, "");
-      for (const k of Object.keys(args)) if (args[k] === "") delete args[k];
-      const answer = await callToolJson(c, session, ASK_TOOL, args);
-      if (!answer.ok) return { ok: false };
-      const text = seraReplyText(answer.value).trim();
-      return text ? { ok: true, text } : { ok: false };
-    } catch {
-      return { ok: false };
-    }
-  };
-}
-
-/**
- * The answer as text the route can parse. We ask Sera for a JSON object, and
- * the client parses a JSON answer into an object before it reaches us
- * (`callToolJson`), so an answer shaped exactly as asked carries none of the
- * text fields `answerText` looks for and would read as empty. An object that
- * is our reply shape goes back as JSON; anything else is read as words.
- */
-export function seraReplyText(value: unknown): string {
-  if (value && typeof value === "object" && !Array.isArray(value) && "reply" in (value as Record<string, unknown>)) {
-    return JSON.stringify(value);
-  }
-  return answerText(value);
+  return seraGuideAsk();
 }
 
 /** Whether a question is about the org, so the org chart's shape is worth sending. */

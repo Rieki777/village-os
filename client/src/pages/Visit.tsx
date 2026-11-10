@@ -13,6 +13,7 @@ import {
   Home as HomeIcon,
   Backpack,
 } from "lucide-react";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 interface VisitType {
   id: string;
@@ -287,6 +288,7 @@ export default function Visit() {
               )}
               <div>
                 <label htmlFor="visit-message" className="text-xs font-semibold text-stone-500 uppercase tracking-wide block mb-1.5">Anything we should know?</label>
+                <VoiceArea value={form.message} onValue={(v) => setForm((f) => ({ ...f, message: v }))}>
                 <textarea
                   id="visit-message"
                   value={form.message}
@@ -294,6 +296,7 @@ export default function Visit() {
                   rows={3}
                   className="w-full px-3 py-2 border border-stone-200 rounded-lg outline-none focus:border-teal-deep resize-y"
                 />
+                </VoiceArea>
               </div>
               {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
               <button
