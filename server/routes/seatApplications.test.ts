@@ -274,6 +274,21 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect((await apply({ seatIds: [s] })).status).toBe(201);
   });
 
+  it("keeps the member door's answers on the proposal, and forgets them with the member's other words (0369, guide v2 B1)", async () => {
+    const s = await seat("Answer keeper");
+    const answers = { aim: "Every newcomer feels at home.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The moon rate" } };
+    const a = await apply({ seatIds: [s], answers });
+    expect(a.status).toBe(201);
+    expect((await readApplication(pool, a.body.id))!.answers).toEqual({ ...answers, timeZone: null, windows: [], earliestStart: null });
+    // CONTROL: a proposal sent with no answers keeps none.
+    const b = await apply({ seatIds: [await seat("Answerless keeper")] });
+    expect((await readApplication(pool, b.body.id))!.answers).toBeNull();
+    const { eraseApplicationWords } = await import("../repos/seatApplications");
+    const stored = await readApplication(pool, a.body.id);
+    await eraseApplicationWords(pool, stored!.candidateUserId);
+    expect((await readApplication(pool, a.body.id))!.answers).toBeNull();
+  });
+
   it("refuses an example seat, a full seat and more than three roles (D3)", async () => {
     const example = await seat("Demo seat");
     await pool.query("UPDATE org_roles SET is_example = 1 WHERE id = ?", [example]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table

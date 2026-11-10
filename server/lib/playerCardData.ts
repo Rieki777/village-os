@@ -226,6 +226,12 @@ export interface CardProposal {
    * to roles is drawn with no edit here; roles the village has not created
    * yet; and the member's own season words in place of their filed plan.
    */
+  /**
+   * The member door's answers (0369, guide v2 B1): the aim and the season goal
+   * the proposal serves, drawn in place of the filed plan, so the status card
+   * shows what the member just wrote. A draft's own season words win.
+   */
+  answers?: { aim: string | null; servesGoal: string | null } | null;
   draft?: {
     words: Record<string, Record<string, unknown>>;
     newRoles: Array<{ id: string; circleId: string | null; circleName: string | null; seats: number; words: Record<string, unknown> }>;
@@ -629,6 +635,8 @@ export async function buildPlayerCards(
       plan: memberUp
         ? draftSeason
           ? { aim: draftSeason.aim, goals: draftSeason.servesGoals }
+          : proposal?.answers && (proposal.answers.aim || proposal.answers.servesGoal)
+            ? { aim: proposal.answers.aim, goals: proposal.answers.servesGoal ? [{ goal: proposal.answers.servesGoal, howItHelps: null }] : [] }
           : plan
             ? {
                 aim: plan.aim ?? null,
