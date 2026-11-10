@@ -28,6 +28,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+// These suites prove the guard goes red on drift, which is STRICT mode. Pull requests run the guards in
+// pr mode (scripts/lib/generatedDocs.mjs); this file asks for the other one.
+process.env.GENERATED_DOCS_MODE = "strict";
 import { fileURLToPath } from "node:url";
 import {
   REGION_NAMES,
