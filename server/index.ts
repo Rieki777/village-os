@@ -20534,11 +20534,17 @@ Send an empty drafts array when you are still listening. A role payload is {name
       await notifyAdmins("governance", `Verified on-chain but applying is off: ${p.title}${(await readGameStart(getPool())).started ? ". Any member can ask the village to decide it from Game Mechanics." : ""}`, `gmp:${p.id}:frozen`);
       return res.json({ received: true, status: "passed_verified", held: "applying is switched off" });
     }
-    // R039: with a space id recorded, an outcome naming no space could be another
-    // village's vote, so it waits for a person (POST /api/admin/mechanics/proposals/:id/apply).
-    if (space.verdict === "unstated") {
-      await notifyAdmins("governance", (await readGameStart(getPool())).started ? `Verified, but the outcome named no Hypha space. Any member can ask the village to decide it from Game Mechanics: ${p.title}` : `Verified, but the outcome named no Hypha space, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:unstated-space`);
-      return res.json({ received: true, status: "passed_verified", held: "the outcome named no Hypha space, so a person applies it" });
+    // R039: an outcome nobody could check waits for a person
+    // (POST /api/admin/mechanics/proposals/:id/apply, or the village's vote after launch).
+    // With a space id recorded, an outcome naming no space could be another village's vote.
+    // With NO space id recorded, which is the default, nothing was checked at all, and the
+    // vote that passed may have been held in anybody's Hypha space: one hub listener serves
+    // every village, and a [gm:] marker is just text anyone can put in a proposal. An empty
+    // field must never be the setting that applies outcomes on its own.
+    if (space.verdict === "unstated" || space.verdict === "unconfigured") {
+      const why = space.verdict === "unstated" ? "the outcome named no Hypha space" : "this village has recorded no Hypha space to check it against";
+      await notifyAdmins("governance", (await readGameStart(getPool())).started ? `Verified, but ${why}. Any member can ask the village to decide it from Game Mechanics: ${p.title}` : `Verified, but ${why}, so it waits for you to apply it: ${p.title}`, `gmp:${p.id}:${space.verdict}-space`);
+      return res.json({ received: true, status: "passed_verified", held: `${why}, so a person applies it` });
     }
     const result = await applyMechanicsProposal(fresh, null);
     return res.json({ received: true, status: result.ok ? "applied" : "passed_verified", applied: result.applied, failed: result.failed });
