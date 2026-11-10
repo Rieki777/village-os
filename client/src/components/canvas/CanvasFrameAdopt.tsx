@@ -302,7 +302,7 @@ function ProposalCard({
                 type="button"
                 disabled={!!busy}
                 onClick={() => void decide("decline")}
-                className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
+                className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
               >
                 {busy === "decline"
                   ? t({ message: "Declining", context: "a suggestion is being declined" })
@@ -314,7 +314,7 @@ function ProposalCard({
                 type="button"
                 disabled={!!busy}
                 onClick={() => void decide("withdraw")}
-                className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
+                className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
               >
                 {busy === "withdraw" ? t({ message: "Withdrawing", context: "a suggestion is being withdrawn" }) : t({ message: "Withdraw my suggestion", context: "button on a canvas suggestion its author made" })}
               </button>
@@ -324,7 +324,7 @@ function ProposalCard({
                 type="button"
                 disabled={!!busy}
                 onClick={() => void decide("set-aside")}
-                className="min-h-[44px] rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60"
+                className="min-h-[44px] rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-60"
               >
                 {busy === "set-aside"
                   ? t({ message: "Setting aside", context: "a canvas suggestion is being set aside by the story's holder" })

@@ -213,7 +213,7 @@ export function ClosingSuggestDoor({ closing }: { closing: ClosingSectionForRead
         <Trans>Everyone in the village can read what you write here.</Trans>
       </p>
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
