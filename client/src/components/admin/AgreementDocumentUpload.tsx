@@ -65,17 +65,17 @@ export default function AgreementDocumentUpload({ password }: { password: string
   const docTitle = doc?.title ?? "";
   const kb = doc ? Math.max(1, Math.round(doc.size / 1024)) : 0;
   return (
-    <section aria-labelledby="agreement-doc-h" data-agreement-document="" className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
-      <h3 id="agreement-doc-h" className="flex items-center gap-2 text-sm font-bold text-gray-900">
+    <section aria-labelledby="agreement-doc-h" data-agreement-document="" className="mb-6 rounded-xl border border-border bg-card p-4">
+      <h3 id="agreement-doc-h" className="flex items-center gap-2 text-sm font-bold text-foreground">
         <FileText className="size-4" aria-hidden="true" />
         {t({ message: "The agreement's document", context: "admin confidentiality section" })}
       </h3>
-      <p className="mt-1 text-sm text-gray-600">
+      <p className="mt-1 text-sm text-muted-foreground">
         {doc ? t({ message: `Attached: ${docTitle} (${kb} KB).`, context: "admin confidentiality section" }) : t`No document attached yet.`} {t`Members read it only when they are signed in to align. It is never on a public page.`}
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="agreement-doc-title" className="mb-1 block text-xs font-medium text-gray-900">
+          <label htmlFor="agreement-doc-title" className="mb-1 block text-xs font-medium text-foreground">
             {t({ message: "Document title", context: "admin confidentiality section" })}
           </label>
           <input
@@ -85,17 +85,17 @@ export default function AgreementDocumentUpload({ password }: { password: string
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={file ? file.name.replace(/\.pdf$/i, "") : t`Blank takes the file's name`}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-deep/40"
           />
         </div>
         <div>
-          <label htmlFor="agreement-doc-file" className="mb-1 block text-xs font-medium text-gray-900">
+          <label htmlFor="agreement-doc-file" className="mb-1 block text-xs font-medium text-foreground">
             {t({ message: "The PDF", context: "admin confidentiality section" })}
           </label>
           <input id="agreement-doc-file" type="file" accept="application/pdf,.pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
         </div>
       </div>
-      <p className="mt-2 text-xs text-gray-600">{t`Attaching a new document changes the agreement, so everybody who aligned is asked to align again.`}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{t`Attaching a new document changes the agreement, so everybody who aligned is asked to align again.`}</p>
       <button
         type="button"
         onClick={() => void attach()}
@@ -106,12 +106,12 @@ export default function AgreementDocumentUpload({ password }: { password: string
         {busy ? t({ message: "Attaching...", context: "admin confidentiality section" }) : doc ? t`Attach a new document` : t({ message: "Attach the document", context: "admin confidentiality section" })}
       </button>
       {message && (
-        <p role="status" className="mt-2 text-sm text-gray-900">
+        <p role="status" className="mt-2 text-sm text-foreground">
           {message}
         </p>
       )}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-600">
+        <p role="alert" className="mt-2 text-sm text-destructive">
           {error}
         </p>
       )}
