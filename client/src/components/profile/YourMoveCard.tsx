@@ -16,7 +16,9 @@ import { authToken } from "@/lib/gameApi";
 import { fetchMyAlignments, type ServedAlignment } from "@/components/alignment/alignmentsApi";
 
 /** What waits on this reader: a text they are a party to, have not aligned with, and may align with now. */
-export function waitingOnYou(alignments: readonly ServedAlignment[]): ServedAlignment[] {
+export function waitingOnYou(alignments: readonly ServedAlignment[] | null | undefined): ServedAlignment[] {
+  // A response without the list (an older server, a page's own test mock) waits on nothing.
+  if (!Array.isArray(alignments)) return [];
   return alignments.filter((a) => a.you && !a.you.aligned && a.you.mayAlign);
 }
 
@@ -27,7 +29,7 @@ export default function YourMoveCard() {
     if (!authToken()) return;
     let alive = true;
     void fetchMyAlignments().then((r) => {
-      if (alive && r.ok) setWaiting(waitingOnYou(r.data.alignments));
+      if (alive && r.ok) setWaiting(waitingOnYou(r.data?.alignments));
     });
     return () => {
       alive = false;
