@@ -80,6 +80,8 @@ export interface OrgRole {
   criticality: "normal" | "high";
   active: boolean;
   recruiting: boolean;
+  /** Role journey PR-A: null and true read as listed, false hides the role from every discovery surface (shared/roleListing.ts). */
+  listed?: boolean | null;
   expiresEachSeason: boolean | null;
   statusOverride: SeatState | null;
   statusOverrideExpiresAt: Date | null;
@@ -283,7 +285,9 @@ export const ROLE_COLS =
   // 0060: the building on the land this seat lives in. Written by the scene
   // import and read by /api/admin/map/structures, and selected by nobody here,
   // so the Living Map placed every seat by its circle's NAME (map lane R1).
-  "structure_key";
+  "structure_key, " +
+  // 0362: whether a steward has confirmed the role for discovery. NULL reads as listed.
+  "listed";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -326,6 +330,7 @@ export function rowToRole(r: any): OrgRole {
     criticality: r.criticality === "high" ? "high" : "normal",
     active: !!r.active,
     recruiting: !!r.recruiting,
+    listed: r.listed === null || r.listed === undefined ? null : !!r.listed,
     expiresEachSeason: r.expires_each_season === null || r.expires_each_season === undefined ? null : !!r.expires_each_season,
     statusOverride: (r.status_override ?? null) as SeatState | null,
     statusOverrideExpiresAt: r.status_override_expires_at ?? null,
@@ -882,6 +887,11 @@ export function describeOrgChange(before: OrgRole | null, after: Partial<OrgRole
   }
   if (after.active !== undefined) say(after.active ? "reopened" : "rested", before.active, after.active);
   if (after.recruiting !== undefined) say("recruiting", before.recruiting, after.recruiting);
+  if (after.listed !== undefined) {
+    const was = before.listed !== false;
+    const now = after.listed === null || after.listed === undefined ? true : !!after.listed;
+    if (was !== now) lines.push(now ? "listed" : "unlisted");
+  }
   if (after.criticality !== undefined) say("criticality", before.criticality, after.criticality);
   if (after.expiresEachSeason !== undefined) {
     say("expires each season", before.expiresEachSeason, after.expiresEachSeason);
@@ -906,6 +916,7 @@ const WRITABLE: Record<string, string> = {
   criticality: "criticality",
   active: "active",
   recruiting: "recruiting",
+  listed: "listed",
   expiresEachSeason: "expires_each_season",
   authority: "authority",
   firstYearOutcomes: "first_year_outcomes",
@@ -1001,7 +1012,7 @@ function writableColumn(js: string, body: any): { col: string; value: unknown } 
   if (js === "seats") return { col, value: Math.max(1, Number(body[js] ?? 1)) };
   if (js === "order") return { col, value: Number(body[js] ?? 0) };
   if (js === "active" || js === "recruiting" || js === "representsCircle") return { col, value: body[js] ? 1 : 0 };
-  if (js === "expiresEachSeason") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
+  if (js === "expiresEachSeason" || js === "listed") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
   return { col, value: body[js] === "" ? null : body[js] };
 }
 
