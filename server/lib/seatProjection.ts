@@ -420,6 +420,7 @@ function statedCash(role: OrgRole): StatedCash | null {
     minMinor: pay.minMinor ?? null,
     maxMinor: pay.maxMinor ?? null,
     per: pay.per ?? null,
+    note: pay.note?.trim() ? pay.note.trim() : null,
   };
 }
 
