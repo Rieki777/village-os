@@ -921,4 +921,115 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect((await openProposalsWaitingOn(deps, rule, FOUNDER.id)).filter((r) => r.id === id)).toEqual([]);
     });
   });
+  describe("the applicant's language and a decider's note (messages 2)", () => {
+    /** Like `send`, with the language the page chose and the browser's header, and the status link read back from the confirmation. */
+    const proposeIn = async (email: string, opts: { locale?: string; acceptLanguage?: string } = {}) => {
+      const before = state.sent.length;
+      const res = await fetch(`${base}/api/open-proposals`, { // module-review-ok: a test calling its own local server, never an outside host
+        method: "POST",
+        headers: { "content-type": "application/json", ...(opts.acceptLanguage ? { "accept-language": opts.acceptLanguage } : {}) },
+        body: JSON.stringify({
+          name: "Rowan Field",
+          email,
+          roles: [{ roleId: gate, note: "I open gates for a living." }],
+          why: "I live up the road and the gate is always shut.",
+          aim: "The gate opens at dawn every day.",
+          ...(opts.locale ? { locale: opts.locale } : {}),
+        }),
+      });
+      expect(res.status).toBe(200);
+      const mail = state.sent[before];
+      const id = mail.idempotencyKey.split(":")[1];
+      const stored = await readOpenProposal(pool, id);
+      return { id, mail, token: tokenOf(mail), locale: stored?.body.locale };
+    };
+    const confirmIt = async (token: string) => {
+      const ok = await call("POST", "/api/open-proposals/confirm", { token }, null);
+      expect(ok.status).toBe(200);
+      return String(ok.body.statusPath);
+    };
+    const statusOf = async (statusPath: string) => {
+      const u = new URL(statusPath, ORIGIN);
+      return call("GET", `/api/application-status/${u.pathname.split("/").pop()}?token=${u.searchParams.get("token")}`, undefined, null);
+    };
+
+    it("the language chosen on the site is kept and the confirmation comes in it", async () => {
+      const p = await proposeIn("es-chosen@example.test", { locale: "es", acceptLanguage: "en" });
+      expect(p.locale).toBe("es");
+      expect(p.mail.subject).toBe("Confirma tu propuesta a Test Village");
+      expect(p.mail.text).toContain("Hola Rowan,");
+    });
+
+    it("else the email list, else the profile, else the browser, else the village default", async () => {
+      // No language from the page, a browser that says Spanish.
+      expect((await proposeIn("es-browser@example.test", { acceptLanguage: "fr;q=0.9, es-CR;q=0.8" })).locale).toBe("es");
+      // An address book entry in Spanish wins over an English browser.
+      await q("INSERT INTO comms_contacts (id, village_id, email_key, email, first_source, locale) VALUES ('ct_lang1', 'local', 'es-list@example.test', 'es-list@example.test', 'guest', 'es')");
+      expect((await proposeIn("es-list@example.test", { acceptLanguage: "en" })).locale).toBe("es");
+      // A member's saved language wins over an English browser, and the address book is silent.
+      await usersRepo(pool).add({ id: "u-es-prof", name: "Pura Vida", email: "es-prof@example.test", passwordHash: "x", paths: [], prefs: { locale: "es" } } as any);
+      expect((await proposeIn("es-prof@example.test", { acceptLanguage: "en" })).locale).toBe("es");
+      // Nothing says Spanish: the village default (English here), never a guess.
+      expect((await proposeIn("en-none@example.test", { acceptLanguage: "fr" })).locale).toBe("en");
+      // The page's own choice beats the address book.
+      expect((await proposeIn("es-list@example.test", { locale: "en" })).locale).toBe("en");
+    });
+
+    it("a Spanish applicant gets Spanish emails and notices, and the note, escaped, on the status page and in the email", async () => {
+      const p = await proposeIn("ana-es@example.test", { locale: "es" });
+      const statusPath = await confirmIt(p.token);
+      const statusMail = state.sent.find((m) => m.origin === "open_proposal.status");
+      expect(statusMail?.subject).toBe("Dónde está tu propuesta");
+      const note = "Gracias <b>de verdad</b> & hasta pronto";
+      const r = await call("POST", `/api/governance/open-proposals/${p.id}/decline`, { note }, FOUNDER.id);
+      expect(r.status).toBe(200);
+      const mail = state.sent.find((m) => m.origin === "open_proposal.declined");
+      expect(mail?.subject).toBe("Tu propuesta a Test Village");
+      expect(mail?.text).toContain("Gracias por proponerte");
+      expect(mail?.text).toContain(note);
+      expect(mail?.html).toContain(escapeHtml(note));
+      expect(mail?.html).not.toContain("<b>de verdad</b>");
+      // The status page, reloaded, shows it with the language it was written in.
+      const status = await statusOf(statusPath);
+      expect(status.status).toBe(200);
+      expect(status.body.status).toMatchObject({ note, locale: "es", outcome: "declined" });
+      // Not shown to anyone else: a wrong token reads nothing, and a decider's own read of the proposal carries no note.
+      expect((await call("GET", `/api/application-status/${p.id}?token=wrong`, undefined, null)).status).toBe(404);
+      expect(JSON.stringify((await page(p.id, FOUNDER.id)).body)).not.toContain("hasta pronto");
+      // The one email the applicant got is the only one that carries it.
+      expect(state.sent.filter((m) => m.text.includes("hasta pronto")).map((m) => m.origin)).toEqual(["open_proposal.declined"]);
+    });
+
+    it("a note is optional, and an English applicant's emails stay English", async () => {
+      const p = await proposeIn("ana-en@example.test", { locale: "en" });
+      const statusPath = await confirmIt(p.token);
+      await call("POST", `/api/governance/open-proposals/${p.id}/decline`, {}, FOUNDER.id);
+      const mail = state.sent.find((m) => m.origin === "open_proposal.declined");
+      expect(mail?.text).toContain("Thank you for proposing");
+      expect(mail?.text).not.toContain("A note from us");
+      expect((await statusOf(statusPath)).body.status.note).toBeNull();
+    });
+
+    it("an adoption carries the note too, and the note goes when the proposal is anonymised", async () => {
+      const p = await proposeIn("ana-adopt@example.test", { locale: "es" });
+      await confirmIt(p.token);
+      const r = await call("POST", `/api/governance/open-proposals/${p.id}/adopt`, { note: "Bienvenida." }, FOUNDER.id);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
+      expect(mail?.text).toContain("Bienvenida.");
+      expect(mail?.text).toContain("adoptó tu propuesta");
+      expect((await readOpenProposal(pool, p.id))?.body.note).toBe("Bienvenida.");
+      await tidyOpenProposals(pool, new Date(Date.now() + 91 * 24 * 60 * 60_000));
+      const after = await readOpenProposal(pool, p.id);
+      expect(after?.email).toBeNull();
+      expect(after?.body.note).toBeUndefined();
+    });
+
+    it("the note never travels past this door: it is capped and plain", async () => {
+      const p = await proposeIn("ana-cap@example.test", { locale: "en" });
+      await confirmIt(p.token);
+      await call("POST", `/api/governance/open-proposals/${p.id}/decline`, { note: "x".repeat(5000) }, FOUNDER.id);
+      expect((await readOpenProposal(pool, p.id))?.body.note?.length).toBe(600);
+    });
+  });
 });
