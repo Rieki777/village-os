@@ -30,6 +30,9 @@ describe("Your move", () => {
   it("keeps only what waits on you: a party, not yet aligned, and free to align now", () => {
     const rows = [row("Terms for Garden Steward", { aligned: false, mayAlign: true }), row("Done already", { aligned: true, mayAlign: false }), row("Not yours", null), row("Not yet open", { aligned: false, mayAlign: false })];
     expect(waitingOnYou(rows).map((r) => r.title)).toEqual(["Terms for Garden Steward"]);
+    // A response without the list waits on nothing, and never throws.
+    expect(waitingOnYou(undefined)).toEqual([]);
+    expect(waitingOnYou(null)).toEqual([]);
   });
 
   it("leads with each, linking to where you align", async () => {
