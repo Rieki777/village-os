@@ -557,7 +557,7 @@ export default function RoleDraft() {
               </div>
             </section>
 
-            <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-52">
+            <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-56">
               <Burst play={burst} />
               <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
