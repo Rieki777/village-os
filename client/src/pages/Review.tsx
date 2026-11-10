@@ -65,6 +65,7 @@ import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
 import { Link } from "wouter";
+import AgentProposalsCard from "@/components/review/AgentProposalsCard";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
 import type { Batch, ProposalCard, Queue, StuckDraft } from "@/components/review/queueTypes";
 import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
@@ -591,6 +592,7 @@ export default function Review() {
         <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} onReload={load} />
         {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
         <div className="max-w-4xl space-y-6">
+        <AgentProposalsCard headers={headers} />
 
         {/* Finished work, the summary line's other jump. Consent is the one step that
             releases value, and a claim sitting here is somebody's work going unpaid. */}
