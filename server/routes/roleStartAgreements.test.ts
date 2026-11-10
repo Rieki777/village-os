@@ -287,9 +287,10 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
    * turn run in that same second finds nothing due yet (CI, 9 Nov 2026, on this
    * file's "changed words" case; a MariaDB box truncates, so it passed locally).
    * The same rounding was a PRODUCT bug at adoption: an arrival in the second half
-   * of a second was adopted and not seated. `placeOnRoles` now writes whole
-   * seconds and `notYet` asks `startReached` (#1077, carried here), which the
-   * moon-mode control below and seatApplicationCloser.startReached.test.ts hold.
+   * of a second was adopted and not seated. The fix (whole seconds in
+   * `placeOnRoles`, and `startReached` in `notYet`) lands on main in its own PR
+   * from the role journey lane. Until this branch carries it, the moon-mode
+   * control below is red on MySQL 8 and green on MariaDB.
    */
   const soon = () => new Date(Date.now() + 60_000);
   const moonMode = async <T,>(fn: () => Promise<T>): Promise<T> => {
