@@ -39,7 +39,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { ballotById, openBallotFor } from "../lib/ballots";
 import type { LandingDeps, SubjectCloser } from "../lib/applyDue";
 import { createOrgRole, seatHolder } from "../lib/orgChart";
-import { readApplication, seatingsHolding } from "../repos/seatApplications";
+import { readApplication, rewriteTermsOffer, seatingsHolding } from "../repos/seatApplications";
 import { register, seatFromApplication } from "./seatApplications";
 import { WAITING_COPY } from "../../shared/waitingOnYou";
 
@@ -310,7 +310,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
 
     it("the terms step: each written setting is answered and the commitment chosen, and both are kept", async () => {
       const s = await goalSeat(["Food grows every season"]);
-      await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify({ v: 1, words: { term: "We renew each moon.", bonus: "Earned Equity." } }), s]);
+      await rewriteTermsOffer(pool, s, { v: 1, words: { term: "We renew each moon.", bonus: "Earned Equity." } });
       const terms = (answers: unknown, commitmentPct?: number) => ({ choice: "accept", note: "", answers, ...(commitmentPct === undefined ? {} : { commitmentPct }) });
       const goals = [{ ...GOAL, moves: "Food grows every season" }];
       // Bonus is written and not answered; no commitment; a commitment off the steps.

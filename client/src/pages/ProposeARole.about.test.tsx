@@ -66,7 +66,7 @@ const box = (id: string) => within(document.querySelector(`[data-role="${id}"]`)
 const fillRest = async () => {
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
-  fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+  fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
   fireEvent.click(await screen.findByLabelText(LETTER.intent));
@@ -95,7 +95,7 @@ describe("About you, on the open form", () => {
     const form = document.querySelector("[data-open-proposal]") as HTMLElement;
     const order = (sel: string) => Array.from(form.querySelectorAll("*")).indexOf(form.querySelector(sel) as Element);
     expect(order("[data-role-goals], [data-goals-list], [data-role]")).toBeLessThan(order("[data-about-you-section]"));
-    expect(order("[data-about-you-section]")).toBeLessThan(order('input[name="card-terms"]'));
+    expect(order("[data-about-you-section]")).toBeLessThan(order("[data-commitment]"));
   });
 
   it("says the lead's words beside the references and who sees them", async () => {
