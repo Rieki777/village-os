@@ -83,6 +83,9 @@ export const CHANGE_ITEM_KINDS = [
   "module_lifecycle",
   "brand_field",
   "role",
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ] as const;
 
 /** Which vocabulary one element of a change set is written in. */

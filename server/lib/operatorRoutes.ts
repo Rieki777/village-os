@@ -49,8 +49,6 @@ export const ROUTE_POWERS: Readonly<Record<string, Capability>> = {
   "POST /api/admin/network/peers/:id/resume": "story.tell",
   "POST /api/admin/network/sync": "story.tell",
   "POST /api/admin/assistant/organize": "operator.config",
-  "PUT /api/admin/brain/:section": "story.tell",
-  "POST /api/admin/brain/:section/confirm": "story.tell",
   "POST /api/admin/assistant/studio": "operator.config",
   "POST /api/admin/drafts/:id/accept": "operator.config",
   "POST /api/admin/drafts/:id/reject": "operator.config",

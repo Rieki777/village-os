@@ -194,6 +194,40 @@ describe("a name in a script written without spaces", () => {
   });
 });
 
+describe("a name with a particle or a prefix of its own script (AC2.4)", () => {
+  const names = namesToProtect([
+    { name: "김지민", email: "jimin@example.test", role: "member", membershipGranted: true },
+    { name: "김지", email: "kimji@example.test", role: "member", membershipGranted: true },
+    { name: "דוד", email: "david@example.test", role: "member", membershipGranted: true },
+    { name: "أحمد", email: "ahmad@example.test", role: "member", membershipGranted: true },
+  ]);
+
+  it("finds a Korean name followed by a particle", () => {
+    expect(nameInLine("김지민이 열쇠를 가진다", names)).toBe("김지민");
+    expect(nameInLine("열쇠는 김지민님에게 있다", names)).toBe("김지민");
+  });
+
+  it("finds a Hebrew or Arabic name behind a one-letter prefix, quoting the letters as typed", () => {
+    expect(nameInLine("המפתחות לדוד", names)).toBe("דוד");
+    // Folding strips the hamza (أ to ا); the quote is still the writer's own أحمد.
+    expect(nameInLine("اسأل لأحمد", names)).toBe("أحمد");
+  });
+
+  it("never ends a Korean name halfway through a syllable, and keeps the edge after Hebrew and Arabic (controls)", () => {
+    const kimJiOnly = namesToProtect([{ name: "김지", email: "kimji@example.test", role: "member", membershipGranted: true }]);
+    expect(nameInLine("김진이 열쇠를 가진다", kimJiOnly)).toBeNull();
+    expect(nameInLine("הדודה שומרת על המפתחות", names)).toBeNull();
+    expect(nameInLine("أحمدي هنا", names)).toBeNull();
+    expect(nameInLine("돌보미가 열쇠를 가진다", names)).toBeNull();
+  });
+
+  it("accepts a known false positive: a short name behind a prefix that is also an ordinary word", () => {
+    // "The water in the boiler is hot": בדוד is "in the boiler" as well as "in David".
+    // Recorded on purpose (see the header): the writer rewords one line.
+    expect(nameInLine("המים בדוד חמים", names)).toBe("דוד");
+  });
+});
+
 describe("nameRefusal", () => {
   it("quotes back only what the writer typed, and says what to write instead", () => {
     const said = nameRefusal("Ash");
