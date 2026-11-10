@@ -214,8 +214,20 @@ matching entry on that page is not allowed.
 
 `CODE_OF_CONDUCT.md` applies to everything in this repository and to every space the project runs.
 
-## Licence
+## Licence and contributor agreement
 
-This project is MIT, and the text is in `LICENSE`. By opening a pull request you agree that your
-contribution is licensed the same way, to everybody, including every village that forks this code
-and runs it on its own infrastructure. There is no contributor licence agreement to sign.
+<!-- PENDING A LAWYER'S READ. This agreement is a plain-words draft. A lawyer has not read it yet, and
+     it may change. No CLA bot enforces it; opening a pull request is the agreement. -->
+
+Village OS is licensed under the GNU AGPL-3.0-or-later, and the text is in `LICENSE`. Modules are
+under the same licence. By opening a pull request you agree to the following.
+
+1. **You keep your copyright.** The contribution stays yours.
+2. **You license it to everyone under the AGPL-3.0-or-later**, like the rest of the code, including
+   every village that forks this code and runs it on its own infrastructure.
+3. **You also grant ReGen Civics the right to relicense your contribution**, including under a
+   separate commercial licence. This lets the project offer the code on other terms, for example to
+   an organisation that cannot use the AGPL, without asking every contributor again. The open
+   AGPL version stays open.
+4. **You confirm you have the right to contribute it.** It is your own work, or you have permission
+   from whoever owns it, and it carries no code or text from elsewhere that its licence does not allow.
