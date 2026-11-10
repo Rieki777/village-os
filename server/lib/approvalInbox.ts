@@ -18,6 +18,7 @@ import { isTermMode } from "../../shared/openProposalTerm";
 import { isLifecycle } from "../../shared/moduleSwitch";
 import { INBOX_WORDS, TERM_WORDS, neverProposable, plain, type InboxBody, type InboxCall } from "../../shared/approvalInbox";
 import { getDraft as getMapDraft, publishedVersion } from "./mapScene";
+import { hasListingColumn, rolesWithListing } from "../repos/agentProposals";
 
 /** What filing reads from the village. Passed in, so the village's own state stays in server/index.ts. */
 export interface FilingDeps {
@@ -81,19 +82,9 @@ export async function fileSetting(deps: FilingDeps, args: Record<string, unknown
   return { ok: false, error: "target is variable, module or open_proposals_term." };
 }
 
-async function hasListing(pool: Pool): Promise<boolean> {
-  try {
-    await pool.query("SELECT `listed` FROM `org_roles` LIMIT 1");
-    return true;
-  } catch (e) {
-    if ((e as { errno?: number })?.errno === 1054) return false;
-    throw e;
-  }
-}
-
 export async function fileListing(deps: FilingDeps, args: Record<string, unknown>): Promise<Filing> {
-  if (!(await hasListing(deps.pool))) return { ok: false, error: INBOX_WORDS.listingNotHere };
-  const [roles] = await deps.pool.query<any[]>("SELECT `id`, `name`, `listed` FROM `org_roles` WHERE `is_example` = 0");
+  if (!(await hasListingColumn(deps.pool))) return { ok: false, error: INBOX_WORDS.listingNotHere };
+  const roles = await rolesWithListing(deps.pool);
   const byId = new Map(roles.map((r) => [String(r.id), r]));
   if (Array.isArray(args.only)) {
     const ids = args.only.map((x) => clip(x, 64)).filter(Boolean).slice(0, 200);
@@ -101,7 +92,7 @@ export async function fileListing(deps: FilingDeps, args: Record<string, unknown
     const unknown = ids.filter((id) => !byId.has(id));
     if (unknown.length) return { ok: false, error: `Those roles are not here: ${unknown.slice(0, 5).join(", ")}` };
     const nowListed = roles.filter((r) => r.listed === null || Number(r.listed) === 1).length;
-    const names = ids.map((id) => String(byId.get(id).name));
+    const names = ids.map((id) => String(byId.get(id)?.name ?? id));
     const call: InboxCall = { method: "POST", path: "/api/admin/org/listing/only", body: { ids } };
     const revert: InboxCall = { method: "POST", path: "/api/admin/org/listing/undo", body: {} };
     return { ok: true, kind: "listing", title: `List only ${ids.length === 1 ? names[0] : `${ids.length} roles`}`, body: { words: { what: "Which roles are listed", before: `${nowListed} roles listed`, after: `Only ${plain(names.join(", "), 300)} listed. Every other role is unlisted.` }, call, revert } };

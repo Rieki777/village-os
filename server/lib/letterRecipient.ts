@@ -8,6 +8,7 @@
 import type { Pool } from "mysql2/promise";
 import type { UsersRepo } from "../repos/users";
 import { readOpenProposal } from "../repos/openProposals";
+import { candidateOfApplication } from "../repos/agentProposals";
 
 export interface LetterRecipient {
   email: string;
@@ -21,8 +22,7 @@ export async function recipientFor(db: Pool, members: Pick<UsersRepo, "byId">, r
     return p?.email ? { email: p.email, name: p.name ?? null, userId: null } : null;
   }
   if (/^sa-[A-Za-z0-9_-]{4,60}$/.test(ref)) {
-    const [rows] = await db.query<any[]>("SELECT `candidate_user_id` FROM `seat_applications` WHERE `id` = ? LIMIT 1", [ref]);
-    const id = rows[0]?.candidate_user_id;
+    const id = await candidateOfApplication(db, ref);
     const m: any = id ? await members.byId(String(id)) : null;
     return m?.email ? { email: String(m.email), name: m.name ? String(m.name) : null, userId: String(m.id) } : null;
   }

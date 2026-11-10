@@ -143,3 +143,49 @@ export async function decideProposal(db: Db, id: string, from: ProposalState, to
   );
   return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
 }
+
+/** A role that is not a standing example, by id. */
+export async function liveRoleById(db: Db, id: string): Promise<{ id: string; name: string } | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name` FROM `org_roles` WHERE `id` = ? AND `is_example` = 0 LIMIT 1", [id]);
+  return rows[0] ? { id: String(rows[0].id), name: String(rows[0].name) } : null;
+}
+
+/**
+ * The interviews waiting on a holder, from the interview queue (role journey L5). Throws the database's own error when the
+ * queue is not in this village yet, so the route can say so in words. Ref, role and timing only.
+ */
+export async function conversationsWaitingOn(db: Db, userId: string): Promise<RowDataPacket[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT i.`id`, i.`application_ref`, i.`position`, i.`minutes`, i.`is_final`, i.`state`, i.`opened_at`, i.`booked_at`, r.`name` AS role_name " +
+      "FROM `application_interviews` i " +
+      "JOIN `org_role_assignments` a ON a.`org_role_id` = i.`interviewer_role_id` AND a.`user_id` = ? AND a.`ended_at` IS NULL AND a.`holder_kind` = 'member' " +
+      "LEFT JOIN `org_roles` r ON r.`id` = i.`interviewer_role_id` " +
+      "WHERE i.`state` IN ('open', 'booked') AND NOT EXISTS (SELECT 1 FROM `application_recusals` x WHERE x.`application_ref` = i.`application_ref` AND x.`user_id` = ?) " +
+      "ORDER BY i.`opened_at` ASC LIMIT 50",
+    [userId, userId],
+  );
+  return rows;
+}
+
+/** The candidate's user id on a member's application, or null. */
+export async function candidateOfApplication(db: Db, ref: string): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `candidate_user_id` FROM `seat_applications` WHERE `id` = ? LIMIT 1", [ref]);
+  return rows[0]?.candidate_user_id ? String(rows[0].candidate_user_id) : null;
+}
+
+/** Whether the village has role listing (the `listed` column). */
+export async function hasListingColumn(db: Db): Promise<boolean> {
+  try {
+    await db.query("SELECT `listed` FROM `org_roles` LIMIT 1");
+    return true;
+  } catch (e) {
+    if ((e as { errno?: number })?.errno === 1054) return false;
+    throw e;
+  }
+}
+
+/** Every role that is not a standing example, with its listing flag (null reads as listed). */
+export async function rolesWithListing(db: Db): Promise<Array<{ id: string; name: string; listed: number | null }>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `listed` FROM `org_roles` WHERE `is_example` = 0");
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), listed: r.listed === null || r.listed === undefined ? null : Number(r.listed) }));
+}

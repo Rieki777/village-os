@@ -24,7 +24,7 @@ import type { AppDeps } from "../lib/appDeps";
 import { addChange, createDraft, listDrafts, openDraftCap } from "../lib/orgDrafts";
 import { recordEvent } from "../lib/events";
 import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs";
-import { addProposal, listWaiting, proposalById, resolveProposal, seatingAlreadyWaiting, waitingCount } from "../repos/agentProposals";
+import { addProposal, conversationsWaitingOn, listWaiting, liveRoleById, proposalById, resolveProposal, seatingAlreadyWaiting, waitingCount } from "../repos/agentProposals";
 import {
   AI_APPROVAL_DOC, AI_APPROVAL_WORDS, LETTER_WORDS, approvalProblem, parseAiApproval, letterTitle, parseLetter, parseRoleChange, parseSeating, roleChangeReason,
 } from "../../shared/agentProposals";
@@ -100,7 +100,7 @@ export function register(app: Express, deps: Deps): void {
     if (!parsed.ok) return res.status(400).json({ error: "bad_request", message: parsed.error });
     const ask = parsed.value;
     const pool = getPool();
-    const [[role]] = await pool.query<any[]>("SELECT `id`, `name` FROM `org_roles` WHERE `id` = ? AND `is_example` = 0 LIMIT 1", [ask.roleId]);
+    const role = await liveRoleById(pool, ask.roleId);
     if (!role) return res.status(404).json({ error: "no_such_role", message: "There is no role by that id. Read the chart with get_roles." });
     const made = await createDraft(pool, {
       title: `Proposed change to ${String(role.name)}`,
@@ -137,7 +137,7 @@ export function register(app: Express, deps: Deps): void {
     if (!parsed.ok) return res.status(400).json({ error: "bad_request", message: parsed.error });
     const ask = parsed.value;
     const pool = getPool();
-    const [[role]] = await pool.query<any[]>("SELECT `id`, `name` FROM `org_roles` WHERE `id` = ? AND `is_example` = 0 LIMIT 1", [ask.roleId]);
+    const role = await liveRoleById(pool, ask.roleId);
     if (!role) return res.status(404).json({ error: "no_such_role", message: "There is no role by that id. Read the chart with get_roles." });
     const member = await members.byId(ask.memberId);
     if (!member) return res.status(404).json({ error: "no_such_member", message: "There is no member by that id." });
@@ -194,15 +194,7 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     try {
       // Read from the interview queue (role journey L5). A village that has not got it yet answers 404, in words.
-      const [rows] = await pool.query<any[]>(
-        "SELECT i.`id`, i.`application_ref`, i.`position`, i.`minutes`, i.`is_final`, i.`state`, i.`opened_at`, i.`booked_at`, r.`name` AS role_name " +
-          "FROM `application_interviews` i " +
-          "JOIN `org_role_assignments` a ON a.`org_role_id` = i.`interviewer_role_id` AND a.`user_id` = ? AND a.`ended_at` IS NULL AND a.`holder_kind` = 'member' " +
-          "LEFT JOIN `org_roles` r ON r.`id` = i.`interviewer_role_id` " +
-          "WHERE i.`state` IN ('open', 'booked') AND NOT EXISTS (SELECT 1 FROM `application_recusals` x WHERE x.`application_ref` = i.`application_ref` AND x.`user_id` = ?) " +
-          "ORDER BY i.`opened_at` ASC LIMIT 50",
-        [String(user.id), String(user.id)],
-      );
+      const rows = await conversationsWaitingOn(pool, String(user.id));
       // Ref, role and timing only. No name, no email, no time zone, no scores, no summary: scoring stays a person's act.
       res.set("Cache-Control", "no-store").json({
         conversations: rows.map((r) => ({
