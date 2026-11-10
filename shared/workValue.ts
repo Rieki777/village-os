@@ -89,6 +89,8 @@ export interface StatedCash {
   minMinor: number | null;
   maxMinor: number | null;
   per: "month" | "moon" | null;
+  /** What the steward wrote beside the range, as saved. Absent on an older server. */
+  note?: string | null;
 }
 
 /** Everything a card needs to say what a piece of work pays. */

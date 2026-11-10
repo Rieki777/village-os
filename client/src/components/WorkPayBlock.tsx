@@ -43,6 +43,7 @@ export default function WorkPayBlock({
   const headline = payHeadline(pay);
   const value = pay.value ? valueWords(pay.value, rates) : null;
   const cash = agreementCashWords(pay);
+  const cashNote = !pay.cashPay && pay.cash?.note ? pay.cash.note : null;
   // 0285: the cash the work itself pays, which the village owes and records.
   const ownCash = cashPayWords(pay, rates);
   const every = pay.cadence === "cycle" ? " each cycle" : "";
@@ -98,6 +99,11 @@ export default function WorkPayBlock({
               Worth {value.own}
               {value.converted && <span className="font-normal text-muted-foreground"> ({value.converted})</span>}
             </p>
+          ) : cash ? (
+            // The role states its cash, so the card leads with that and does not open on "no value": the cash line below is the pay.
+            <p className="font-semibold text-foreground">
+              {cash} in cash, per the role agreement.
+            </p>
           ) : (
             <p className="text-muted-foreground">No value set yet. Inquire for the full payment details.</p>
           )}
@@ -127,7 +133,8 @@ export default function WorkPayBlock({
           {pay.source === "standard" && pay.lines.length > 0 && (
             <p className="text-xs text-muted-foreground">These are the village&apos;s standard amounts.</p>
           )}
-          {cash && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {cash && value && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {cashNote && <p data-work-pay-note="" className="text-sm text-muted-foreground">{cashNote}</p>}
           {pay.lines.filter((l) => l.meaning).map((l) => (
             <p key={`meaning:${l.token}`} data-work-pay-meaning="" className="text-xs text-muted-foreground">
               {l.name}: {l.meaning}
