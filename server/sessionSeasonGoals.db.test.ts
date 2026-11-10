@@ -14,12 +14,14 @@
  * season editor would. No TEST_DATABASE_URL and the suite skips (harness rule).
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHash } from "crypto";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register as registerRoom } from "./routes/liveSessions";
 import { register as registerLibrary } from "./routes/sessionLibrary";
 import { register as registerTemplates } from "./routes/sessionTemplates";
 import { assignGoalIds, goalIdFor } from "./lib/seasonGoals";
+import { backfillSeasonGoalIds } from "./lib/seasonGoalIds";
 import { TEMPLATE_REFUSALS, type SeasonView, type SessionTemplate, type TemplateRoomView } from "../shared/sessionTemplates";
 
 type Handler = (req: any, res: any) => Promise<unknown> | unknown;
@@ -140,8 +142,10 @@ describe.skipIf(!configured)("season goals keep their names, tensions are told a
 
   it("the migration's backfill derives the same id as the server, for any words", async () => {
     for (const text of ["Water the land", "  Welcome new members ", "Agua para todos 🌱", "Rest & repair: \"slowly\""]) {
-      const [row] = await q("SELECT CONCAT('g', LEFT(LOWER(SHA1(TRIM(?))), 11)) AS id", [text]);
-      expect(row.id, text).toBe(goalIdFor(text));
+      // The id migration 0298 first computed in SQL (SHA1 of the trimmed words). Production's
+      // database has no SHA1(), so the formula is held here, in Node, which is where it runs now.
+      const historical = "g" + createHash("sha1").update(text.trim()).digest("hex").slice(0, 11);
+      expect(goalIdFor(text), text).toBe(historical);
     }
   });
 
@@ -168,9 +172,8 @@ describe.skipIf(!configured)("season goals keep their names, tensions are told a
     const welcome = goals[1];
     // As the 0292 release wrote it: the words, no id.
     await q("INSERT INTO `live_session_priorities` (`session_id`, `position`, `text`, `author_no`, `serves_goal`) VALUES (?, 9, 'Write the guide', 0, ?)", [monday, welcome.text]);
-    await q(
-      "UPDATE `live_session_priorities` SET `serves_goal_id` = CONCAT('g', LEFT(LOWER(SHA1(TRIM(`serves_goal`))), 11)) WHERE `serves_goal_id` IS NULL AND `serves_goal` IS NOT NULL AND `serves_goal` <> ''",
-    );
+    // The backfill production runs at boot (computed in TypeScript; SQL SHA1() does not exist there).
+    await backfillSeasonGoalIds(pool as never);
     const v = await view("m-dee");
     expect(v.goals.find((g) => g.id === welcome.id)?.priorities.map((p) => p.text)).toEqual(["Write the guide"]);
   });

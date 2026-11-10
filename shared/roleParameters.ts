@@ -273,6 +273,8 @@ export interface SourcePayLike {
   statusLabel: string | null;
   terms: string | null;
   monthlyUsd: number | null;
+  /** The range the source holds (shared/sourcePayRange.ts), in whole units of its currency. */
+  range?: { min: number; max: number; currency: string; per: string; status: string | null } | null;
 }
 
 /**
@@ -289,6 +291,10 @@ export function suggestPayGroup(src: SourcePayLike | null, currency = "USD"): Pa
   const fundingDependent = src.standing === "pending" || src.standing === "agreed-not-paying";
   const note = fundingDependent ? "Funding-dependent" : undefined;
   if (/volunteer|unpaid|honorary/.test(model)) return { kind: "honorary", ...(note ? { note } : {}) };
+  // A range the source states outright wins over a single target. Only a monthly or per-moon range fits a pay group; another period is shown, never converted.
+  if (src.range && (src.range.per === "month" || src.range.per === "moon")) {
+    return { kind: "range", currency: src.range.currency, minMinor: Math.round(src.range.min * 100), maxMinor: Math.round(src.range.max * 100), per: src.range.per, ...(note ? { note } : {}) };
+  }
   if (src.monthlyUsd !== null && src.monthlyUsd > 0) {
     const minor = Math.round(src.monthlyUsd * 100);
     return { kind: "range", currency, minMinor: minor, maxMinor: minor, per: "month", ...(note ? { note } : {}) };

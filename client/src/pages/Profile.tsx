@@ -11,6 +11,7 @@ import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
 import CashOwedPanel from "@/components/CashOwedPanel";
+import TimeZoneField from "@/components/TimeZoneField";
 import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
@@ -47,7 +48,8 @@ import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+const OnboardingPath = lazy(() => import("@/components/profile/OnboardingPath"));
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
 import { useStoryPageShown } from "@/lib/brochure";
@@ -572,6 +574,9 @@ export default function Profile() {
                 {/* The quest log: every task taken on in a live session, what
                     this member's roles hold, and what waits on a power they
                     hold. Emails and notices land on #my-tasks. */}
+                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
+                  <Suspense fallback={null}><OnboardingPath /></Suspense>
+                </div>
                 <div className={tabOf(["today", "quests"])}>
                   <TasksWaitingCard enabled={sessionsOn} />
                 </div>
@@ -864,6 +869,7 @@ export default function Profile() {
                   <RedemptionPanel />
                 </div>
               )}
+              {user && <TimeZoneField /> /* role journey L6 */}
               {user && <CashOwedPanel /> /* 0285: cash owed, and the books for whoever holds cash.pay */}
               {user && <SeasonSummarySection /> /* idea 4: your season summed up, shareable as a picture */}
               {/* S47: on-chain holdings, renders nothing until the village turns the economics section on */}

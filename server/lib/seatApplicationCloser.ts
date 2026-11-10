@@ -55,10 +55,12 @@ import { applicationHref, applicationNoticeTitle, type ApplicationStatus } from 
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import type { BallotRow } from "./ballots";
 import { isLapsed, seatHolder, type LapseContext } from "./orgChart";
+import { openPathFor } from "./onboarding";
 import { ensureApplicationText, recordVillageAlignment, settleText } from "./alignmentSubjects";
 import { civilDateKey } from "../../shared/lunar";
 import { APPLICATION_BALLOT_ACTOR } from "../../shared/seatApplications";
 import { applyProposalChanges } from "./roleProposals";
+import { raiseGrantTasks } from "./roleAccess";
 import { agreementWritten, stepHref, stepsBeforeStart, stepsBody, START_WORDS, type StartStep } from "./roleStartAgreements";
 import { revertDraft } from "./orgDrafts";
 import { proposalsForApplications } from "../repos/roleProposals";
@@ -205,6 +207,12 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
     // write this transaction cannot explain. Throwing rolls back every seat.
     if (!r.ok || !r.assignmentId) throw new Error(`seating ${seatId} for ${app.id} was refused: ${r.reason ?? "no reason"}`);
     seated.push({ assignmentId: r.assignmentId, seatId, renewed: !!renewed });
+    // A holder new to the role gets their first moons (server/lib/onboarding.ts). Best effort: a path that cannot be written never undoes an adoption.
+    if (!renewed) {
+      await openPathFor(conn, { assignmentId: r.assignmentId, userId: app.candidateUserId, orgRoleId: seatId, now: ctx.now, timeZone: ctx.calendar.timezone }).catch((e) => {
+        console.error("[onboarding] could not open a path", e instanceof Error ? e.message : e);
+      });
+    }
   };
   for (const r of toRenew) await seatOne(r.seatId, r);
   for (const seatId of toSeat) await seatOne(seatId, null);
@@ -346,6 +354,9 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
       // The same type and key grammar every seating door uses, keyed on this seating.
       const title = s.renewed ? `Your role as ${name} was renewed on your new terms` : `You were seated as ${name}`;
       await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
+      // The role has started: one grant task per item on its card (L8). Best effort; the seating stands.
+      // A renewal on new terms is the same person in the same role: the access they hold stays.
+      if (!s.renewed) await raiseGrantTasks(pool, s.assignmentId, { notify: deps.notify, notifyAdmins: deps.notifyAdmins }).catch(() => 0);
     }
   }
   if (outcome.kind === "held-full") {

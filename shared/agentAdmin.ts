@@ -114,7 +114,7 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; mode: 
     key: "personal",
     mode: "personal",
     words: "Applicant and member personal data (open proposals, applications, scores, join requests, member details) is closed to agents until the Anchor records its approval of AI agents, and changing it is always a person's act.",
-    test: (_m, p) => /join-?requests?|open-?proposals?|applications?|scorecards?|\/scores?(\/|$)|interviews?|recusals?|\/(players|users|members)(\/|$)/i.test(p),
+    test: (_m, p) => /join-?requests?|open-?proposals?|applications?|score-?cards?|\/scores?(\/|$)|interviews?|recusals?|\/(players|users|members)(\/|$)/i.test(p),
   },
   {
     key: "secrets",
