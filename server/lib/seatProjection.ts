@@ -47,6 +47,7 @@
  * `orgSeatTier` is the only place it is applied.
  */
 import type { ModuleLifecycle } from "../../shared/modules";
+import { isListed, visibleTo, type ListingViewer } from "../../shared/roleListing";
 import { readTermsOffer } from "../../shared/seatTermsOffer";
 import { overrideInForce, seatState, type OrgAssignment, type OrgRole } from "./orgChart";
 import type { MintRule } from "./economy";
@@ -146,6 +147,11 @@ export interface SeatProjectionCtx {
   health?: ReadonlyMap<string, unknown>;
   /** A member holder's handle, for the link to their card. Member tier, `/api/org` only. */
   handleOf?: (userId: string) => string | null;
+  /**
+   * Who may see unlisted roles (role journey PR-A). Absent means a reader who
+   * sees listed roles only, which is the safe default for every caller.
+   */
+  listing?: ListingViewer;
 }
 
 /**
@@ -454,6 +460,8 @@ export function projectSeat(
     seats: role.seats,
     criticality: role.criticality,
     recruiting: role.recruiting,
+    // The "Not listed" chip: present only when false, and only ever sent to a reader allowed to see an unlisted role.
+    ...(isListed(role) ? {} : { listed: false }),
     state: seatState(role, held, ctx.now),
     holderCount: held.length,
     isExample: role.isExample,
@@ -485,5 +493,6 @@ export function projectSeats(
     list.push(a);
     bySeat.set(a.orgRoleId, list);
   }
-  return roles.filter((r) => r.active).map((r) => projectSeat(r, bySeat.get(r.id) ?? [], tier, ctx));
+  const viewer: ListingViewer = ctx.listing ?? { seesUnlisted: false };
+  return roles.filter((r) => r.active && visibleTo(r, viewer)).map((r) => projectSeat(r, bySeat.get(r.id) ?? [], tier, ctx));
 }

@@ -82,6 +82,7 @@ import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
 import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
+import { isListed } from "../../shared/roleListing";
 
 type Deps = Pick<
   AppDeps,
@@ -180,13 +181,13 @@ export function register(app: Express, deps: Deps): void {
     return next ? { id: String(next.id), name: String(next.name ?? "").trim() || null, startsOn: String(next.startsOn), endsOn: next.endsOn ? String(next.endsOn) : null } : null;
   }
 
-  /** The roles a stranger may propose for: live, not an example, in a live circle. */
+  /** The roles a stranger may propose for: live, listed, not an example, in a live circle. */
   async function offered() {
     const pool = getPool();
     const [roles, circles] = await Promise.all([listOrgRoles(pool), villageCircles(pool)]);
     const live = new Map(circles.filter((c) => c.live).map((c) => [c.id, c.name]));
     return roles
-      .filter((r) => r.active && !r.isExample && r.circleId && live.has(r.circleId))
+      .filter((r) => r.active && !r.isExample && isListed(r) && r.circleId && live.has(r.circleId))
       .map((r) => ({
         id: r.id,
         name: r.name,
