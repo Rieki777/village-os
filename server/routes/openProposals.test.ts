@@ -257,7 +257,8 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     it("the link confirms it once, then the desk sees it; a second use, a wrong token and one past 48 hours are refused", async () => {
       const { id, token } = await send();
       const ok = await call("POST", "/api/open-proposals/confirm", { token });
-      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed });
+      // The applicant also gets the link to their own status page (role journey L5); only its hash is kept.
+      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`) });
       expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
       const again = await call("POST", "/api/open-proposals/confirm", { token });
       expect(again.status).toBe(410);
@@ -431,6 +432,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
         serves: [{ goalId: "g-roots", how: "A gate that opens lets people in." }],
         hours: "About 10 a week",
         agreed: { loveLetter: true, nda: true },
+        terms: { choice: "accept", note: "" },
       };
       const { id } = await send({ card, email: "carded@example.test" });
       const row = await readOpenProposal(pool, id);
@@ -440,6 +442,31 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(badGoal.status).toBe(400);
       const noAgree = await call("POST", "/api/open-proposals", proposal({ email: "noagree@example.test", card: { ...card, agreed: { loveLetter: true, nda: false } } }));
       expect(noAgree).toMatchObject({ status: 400, body: { field: "agreed" } });
+    });
+
+    it("form v2: a card needs an aim; the 90-day tidy clears the time zone, usual times and earliest start", async () => {
+      const card = {
+        roles: [{ roleId: gate, moves: [], firstMoon: [] }],
+        serves: [{ goalId: "g-roots", how: "" }],
+        hours: "",
+        agreed: { loveLetter: true, nda: true },
+        terms: { choice: "accept", note: "" },
+        timeZone: "America/Costa_Rica",
+        windows: ["weekday-mornings"],
+        earliestStart: "2026-11-16",
+      };
+      const noAim = await call("POST", "/api/open-proposals", proposal({ email: "noaim@example.test", aim: "", card }));
+      expect(noAim).toMatchObject({ status: 400, body: { field: "aim" } });
+      const { id, token } = await send({ email: "practical@example.test", card });
+      expect((await readOpenProposal(pool, id))?.body.card).toMatchObject({ timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-11-16" });
+      expect((await call("POST", "/api/open-proposals/confirm", { token })).status).toBe(200);
+      await q("UPDATE open_role_proposals SET confirmed_at = ? WHERE id = ?", [new Date(Date.now() - 91 * 24 * 60 * 60_000), id]);
+      await tidyOpenProposals(pool, new Date());
+      const kept = (await readOpenProposal(pool, id))?.body.card;
+      expect(kept?.timeZone).toBeUndefined();
+      expect(kept?.windows).toBeUndefined();
+      expect(kept?.earliestStart).toBeUndefined();
+      expect(kept?.terms).toEqual({ choice: "accept", note: "" });
     });
   });
 

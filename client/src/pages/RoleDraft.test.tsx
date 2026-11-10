@@ -77,7 +77,7 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("Roughly: 25 to 30 hours a week")).toBeTruthy();
+    expect(within(lfs).getByText("Roughly 25 to 30 hours a week")).toBeTruthy();
     // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
     expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
   });
@@ -193,12 +193,14 @@ describe("the draft", () => {
 });
 
 describe("what happens next", () => {
-  it("walks a visitor through the steps after applying, ending with the Love Letter before seating", async () => {
+  it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, conversations, consent, invitation, NDA", async () => {
     serve();
     render(<RoleDraft />);
     const steps = await screen.findByRole("list", { name: "After you apply" });
     const items = within(steps).getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(items[0]).toMatch(/confirm/i);
+    // Rye's answer 8 (9 Nov): membership is aligned with at application.
+    expect(items[0]).toMatch(/Love Letter.*when you apply/);
+    expect(items[1]).toMatch(/confirm/i);
     expect(items.some((t) => /Love Letter/.test(t))).toBe(true);
     // Rye, 9 Nov: the NDA comes after approval, before any confidential record.
     const nda = items.findIndex((t) => /NDA/.test(t));

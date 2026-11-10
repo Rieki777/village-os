@@ -47,6 +47,7 @@ export interface RegisterKind {
 export const REGISTER_KINDS: readonly RegisterKind[] = [
   { id: "seat_terms", label: "Role terms", capability: "terms.read" },
   { id: "membership", label: "Membership letter", capability: "terms.read" },
+  { id: "confidentiality", label: "Confidentiality agreement", capability: "terms.read" },
   // After the agreements lane lands: { id: "agreement", label: "Village agreement", capability: "terms.read" },
 ];
 

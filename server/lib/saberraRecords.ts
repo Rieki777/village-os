@@ -92,6 +92,18 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     "Compensation Status",
     "Compensation Terms",
     "Compensation Target (Monthly)",
+    /**
+     * The role's pay RANGE in structured fields, as the service's budget keeps
+     * it (D6, role journey L10). Numbers, selects and short labels; read into
+     * `sourcePay.range` by the translator and never written to a role's terms.
+     */
+    "Pay Min",
+    "Pay Max",
+    "Currency",
+    "Per",
+    "Budget Line",
+    "Funded From",
+    "Pay Status",
   ],
   /**
    * `Role Holder` is absent on purpose and so is `Active Holders` above. Who

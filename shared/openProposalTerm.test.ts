@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { LUNAR_CLOCK } from "./cycleClock";
 import { MOON_TERM_MIN_DAYS, moonTermFor, moonTermWords } from "./openProposalTerm";
-import { confirmLetter, openBodyOf } from "./openProposals";
+import { OPEN_AI_DRAFTS, confirmLetter, openBodyOf } from "./openProposals";
 import { adoptedInviteLetter } from "./openProposalDecide";
 
 const TZ = "America/Costa_Rica";
@@ -45,6 +45,13 @@ describe("the words", () => {
     expect(yes.text).toContain("adopted your proposal to hold Lead Financial Steward this moon.");
     expect(yes.text).toContain("Your roles run from 9 November 2026 to the next new moon, 8 December 2026.");
     expect(yes.text).not.toContain("next season");
+  });
+
+  it("says an AI may help draft the replies, a person sends them, and no AI chooses (Rye, 9 Nov 2026)", () => {
+    expect(confirmLetter({ firstName: null, village: "Willowmere", roleNames: ["Cook"], link: "https://x" }).text).toContain(
+      "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.",
+    );
+    expect(OPEN_AI_DRAFTS).toMatch(/no AI takes part in choosing/);
   });
 
   it("keeps a season proposal's words as they were", () => {

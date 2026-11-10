@@ -68,6 +68,7 @@ import type { Pool, PoolConnection } from "mysql2/promise";
 import { canonicalJson } from "../../shared/canonicalJson";
 import {
   CAPACITY,
+  CONFIDENTIALITY,
   carriesMoney,
   alignedOnWords,
   deriveAlignmentState,
@@ -84,6 +85,7 @@ import {
 } from "../../shared/alignments";
 import { applicationHref, seatList, STATUS_WORDS } from "../../shared/seatApplications";
 import { letterIntent, MEMBERSHIP, readMembershipRef } from "../../shared/membershipLetter";
+import { agreementIntent } from "../../shared/confidentiality";
 import { signingAnswer, type SigningAnswer } from "../../shared/membershipSigning";
 import type { SeatSettings } from "../../shared/seatSettings";
 import { signingStatuses } from "../repos/membershipSignings";
@@ -123,6 +125,8 @@ export { SEAT_TERMS };
 const SUBJECT_RULES: Record<string, { tellsInForce: boolean; endsByAct: boolean }> = {
   [SEAT_TERMS]: { tellsInForce: true, endsByAct: true },
   [MEMBERSHIP]: { tellsInForce: false, endsByAct: false },
+  // The village's own words, in force at the member's click and ended by leaving or aligning again (L7).
+  [CONFIDENTIALITY]: { tellsInForce: false, endsByAct: false },
 };
 
 /** Whether a party may end a text of this subject by notice or by agreement. A membership letter ends when its member leaves. */
@@ -723,7 +727,7 @@ export async function presentView(
   return {
     textId: v.text.id,
     kind: v.text.subjectType,
-    intent: letter ? letterIntent(v.text.title) : intentSentence(v.seatNames),
+    intent: letter ? letterIntent(v.text.title) : v.text.subjectType === CONFIDENTIALITY ? agreementIntent(v.text.title) : intentSentence(v.seatNames),
     // The village's answer to the signing is the member's own business: only they read it.
     answer: letter && mine && v.signing ? signingAnswer(v.signing.status) : null,
     title: v.text.title,

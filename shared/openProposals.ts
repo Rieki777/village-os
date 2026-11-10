@@ -113,6 +113,13 @@ export interface OpenProposalBody {
   term?: OpenProposalTerm;
   /** The applicant's own role card (shared/openProposalCard.ts). Absent on a proposal sent before it existed. */
   card?: OpenProposalCard;
+  /**
+   * The membership letter the applicant aligned with on the form, by the
+   * version the form drew (Rye's answer 8, 9 Nov 2026). Recorded against the
+   * address once it confirms (server/lib/applicationMembership.ts). Absent:
+   * they did not align on the form, and are asked before their role starts.
+   */
+  membership?: { letterVersion: string };
 }
 
 export interface OpenProposalInput {
@@ -125,6 +132,12 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; err
 
 /** Trimmed, and cut one past the cap so "too long" can still be told from "at the cap". `trim()`, never a regex: an anchored `\s+$` runs slow on a long run of spaces. */
 const text = (v: unknown, max: number): string => String(typeof v === "string" ? v : "").trim().slice(0, max + 1);
+
+/** A stored or sent membership alignment: a letter version, or nothing. */
+export function membershipOf(raw: unknown): { letterVersion: string } | null {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>).letterVersion : null;
+  return typeof v === "string" && /^lv-[0-9a-f]{16}$/.test(v) ? { letterVersion: v } : null;
+}
 
 /** What a stored body reads as, whatever was stored. Never throws. */
 export function openBodyOf(raw: unknown): OpenProposalBody {
@@ -139,6 +152,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
     ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
     ...(cardOf(o.card) ? { card: cardOf(o.card) } : {}),
+    ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
   };
 }
 
@@ -176,6 +190,8 @@ export function parseOpenProposal(
   if (aim.length > OPEN_AIM_MAX) return { ok: false, field: "aim", error: OPEN_WORDS.tooLong("Your aim", OPEN_AIM_MAX) };
   // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
   if (o.card !== undefined && o.card !== null) {
+    // Form v2 (brief v2, 5.4): the aim is required once the applicant writes their card.
+    if (!aim) return { ok: false, field: "aim", error: OPEN_WORDS.needAim };
     const card = parseCard(o.card, {
       roleIds: new Set(roles.map((r) => r.roleId)),
       accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
@@ -194,6 +210,14 @@ export function andList(items: readonly string[]): string {
   return `${clean.slice(0, -1).join(", ")} and ${clean[clean.length - 1]}`;
 }
 
+/**
+ * THE DATA PROMISE ON AI DRAFTING (Rye, 9 Nov 2026: the Anchor approved the
+ * connector's `draft_letter`). On the form's privacy note, where the page
+ * renders it through Lingui with these same words, and in the confirmation
+ * email. Village-neutral, so it is platform copy.
+ */
+export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
+
 /** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
 export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
   return {
@@ -207,6 +231,8 @@ export function confirmLetter(i: { firstName: string | null; village: string; ro
       i.link,
       "",
       `The link works for ${OPEN_CONFIRM_HOURS} hours. If this wasn't you, leave it, and nothing happens.`,
+      "",
+      OPEN_AI_DRAFTS,
       "",
     ].join("\n"),
   };
@@ -224,7 +250,7 @@ export const OPEN_WORDS = {
   pickRoles: `Pick up to ${OPEN_PROPOSAL_MAX_ROLES} roles`,
   noteLabel: "What you bring to this role",
   whyLabel: "Why you, and why now",
-  aimLabel: "Your aim for the season (optional)",
+  aimLabel: "Your aim for the season",
   nameLabel: "Your name",
   emailLabel: "Your email",
   emailNote: "We'll only write to you about this proposal.",
@@ -242,6 +268,7 @@ export const OPEN_WORDS = {
   unknownRole: "One of those roles isn't open any more. Reload the page and pick again.",
   sameRoleTwice: "You picked the same role twice.",
   needWhy: "Say why you, and why now.",
+  needAim: "Say your aim for this role.",
   tooLong: (what: string, max: number) => `${what} is too long. Keep it under ${max} characters.`,
   notSent: "We couldn't send the confirmation email just now. Try again later.",
   tooMany: "Too many proposals from here. Wait a little and try again.",

@@ -14,8 +14,11 @@
  *                                               with a "Done when" test
  *   the season's goals for the village      ->  which my work serves, and how
  *   the hours                               ->  what I can give
- *   the agreements                          ->  the Love Letter before seating,
- *                                               the NDA once approved
+ *   the agreements                          ->  the NDA once approved. The
+ *                                               Love Letter is no tick here: the
+ *                                               applicant ALIGNS with it on the form
+ *                                               (the proposal's own `membership`,
+ *                                               Rye's answer 8, 9 Nov 2026)
  *
  * It rides in the open proposal's own JSON body (no table of its own), is
  * shown to whoever decides beside the open card with the gaps marked
@@ -33,14 +36,53 @@ export const CARD_LIMITS = {
   serves: 3,
   how: 200,
   hours: 80,
+  timeZone: 64,
+  termsNote: 600,
 } as const;
+
+/**
+ * The usual windows a person can meet in, by part of the week and day (brief
+ * v2, 5.4). Fixed keys, so the reviewer's view and any later booking read one
+ * vocabulary; the words are the form's.
+ */
+export const CARD_WINDOWS = ["weekday-mornings", "weekday-afternoons", "weekday-evenings", "weekend-mornings", "weekend-afternoons", "weekend-evenings"] as const;
+export type CardWindow = (typeof CARD_WINDOWS)[number];
+
+/** The terms on offer: accepted as they stand, or a wish to talk about them (flagged to every reviewer). */
+export interface CardTerms {
+  choice: "accept" | "talk";
+  note: string;
+}
+
+const CIVIL_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Whether the runtime knows this IANA time zone. */
+export function isTimeZone(tz: string): boolean {
+  if (!tz || tz.length > CARD_LIMITS.timeZone) return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface OpenProposalCard {
   roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
   /** `goal` is the goal's words when the proposal was sent, written by the server, never the form. */
   serves: Array<{ goalId: string; how: string; goal?: string }>;
   hours: string;
+  /**
+   * `loveLetter` is kept as stored on a card sent before the alignment replaced
+   * the tick, and read by nothing that decides: the proposal's `membership` is
+   * the record now.
+   */
   agreed: { loveLetter: boolean; nda: boolean };
+  /** Form v2 (brief v2, 5.4). Optional on a card sent before them. */
+  timeZone?: string;
+  windows?: CardWindow[];
+  earliestStart?: string;
+  terms?: CardTerms;
 }
 
 export interface CardContext {
@@ -53,12 +95,18 @@ export interface CardContext {
 }
 
 export const CARD_WORDS = {
-  agreed: "Tick that you will sign the Love Letter before you are seated, and the NDA once you are approved.",
+  agreed: "Tick that you will align with the village's confidentiality agreement once you are approved.",
   notTheRole: "Pick what you will move from the role's own outcomes.",
   notAGoal: "Pick goals from this season's goals for the village.",
   tooMany: (what: string, n: number) => `Up to ${n} ${what}.`,
   tooLong: (what: string, n: number) => `${what} is too long. Keep it under ${n} characters.`,
   unknownRole: "Your card names a role that is not in this proposal.",
+  needGoal: "Pick at least one of the village's goals for the season that your work serves.",
+  badTimeZone: "Pick your time zone from the list.",
+  badWindow: "Pick your usual times from the list.",
+  badDate: "Write the earliest start as a date, like 2026-11-16.",
+  needTerms: "Say whether you accept the terms on offer, or would like to talk about them.",
+  needTermsNote: "Say what you would like to talk about in the terms.",
 } as const;
 
 type Parsed = { ok: true; card: OpenProposalCard } | { ok: false; field: string; error: string };
@@ -108,11 +156,41 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
     if (!serves.some((x) => x.goalId === goalId)) serves.push({ goalId, how });
   }
   if (serves.length > L.serves) return { ok: false, field: "card", error: CARD_WORDS.tooMany("goals", L.serves) };
+  // Form v2: at least one of the season's goals, when the season has any (brief v2, 5.4; Rye's D9).
+  if (ctx.goalIds.size > 0 && serves.length === 0) return { ok: false, field: "serves", error: CARD_WORDS.needGoal };
+  const timeZone = str(o.timeZone);
+  if (timeZone && !isTimeZone(timeZone)) return { ok: false, field: "timeZone", error: CARD_WORDS.badTimeZone };
+  const windows: CardWindow[] = [];
+  for (const w of list(o.windows)) {
+    if (typeof w !== "string" || !(CARD_WINDOWS as readonly string[]).includes(w)) return { ok: false, field: "windows", error: CARD_WORDS.badWindow };
+    if (!windows.includes(w as CardWindow)) windows.push(w as CardWindow);
+  }
+  const earliestStart = str(o.earliestStart);
+  if (earliestStart && !CIVIL_DAY.test(earliestStart)) return { ok: false, field: "earliestStart", error: CARD_WORDS.badDate };
+  const t = o.terms && typeof o.terms === "object" ? (o.terms as Record<string, unknown>) : null;
+  const choice = t?.choice === "accept" || t?.choice === "talk" ? t.choice : null;
+  const note = str(t?.note);
+  if (!choice) return { ok: false, field: "terms", error: CARD_WORDS.needTerms };
+  if (choice === "talk" && !note) return { ok: false, field: "terms", error: CARD_WORDS.needTermsNote };
+  if (note.length > L.termsNote) return { ok: false, field: "terms", error: CARD_WORDS.tooLong("Your note on the terms", L.termsNote) };
   const hours = str(o.hours);
   if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
   const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
-  if (agreed.loveLetter !== true || agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
-  return { ok: true, card: { roles, serves, hours, agreed: { loveLetter: true, nda: true } } };
+  // Only the NDA is ticked here. A Love Letter tick from a form sent before the alignment replaced it is kept, never asked.
+  if (agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
+  return {
+    ok: true,
+    card: {
+      roles,
+      serves,
+      hours,
+      agreed: { loveLetter: agreed.loveLetter === true, nda: true },
+      ...(timeZone ? { timeZone } : {}),
+      ...(windows.length ? { windows } : {}),
+      ...(earliestStart ? { earliestStart } : {}),
+      terms: { choice, note },
+    },
+  };
 }
 
 /** A stored card, read back safely; anything that is not one is no card. Never throws. */
@@ -136,6 +214,14 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
     agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
+    ...(isTimeZone(str(o.timeZone)) ? { timeZone: str(o.timeZone) } : {}),
+    ...(list(o.windows).some((w) => (CARD_WINDOWS as readonly unknown[]).includes(w))
+      ? { windows: list(o.windows).filter((w): w is CardWindow => (CARD_WINDOWS as readonly unknown[]).includes(w)) }
+      : {}),
+    ...(CIVIL_DAY.test(str(o.earliestStart)) ? { earliestStart: str(o.earliestStart) } : {}),
+    ...((o.terms as any)?.choice === "accept" || (o.terms as any)?.choice === "talk"
+      ? { terms: { choice: (o.terms as any).choice as CardTerms["choice"], note: cut((o.terms as any).note, L.termsNote) } }
+      : {}),
   };
 }
 
@@ -152,6 +238,11 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
     for (const s of card.serves) lines.push(`- ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
   if (card.hours) lines.push(`Time I can give: ${card.hours}`);
+  if (card.timeZone) lines.push(`Time zone: ${card.timeZone}`);
+  if (card.windows?.length) lines.push(`Usual times: ${card.windows.join(", ")}`);
+  if (card.earliestStart) lines.push(`Earliest start: ${card.earliestStart}`);
+  if (card.terms?.choice === "talk") lines.push(`Wants to talk about the terms: ${card.terms.note}`);
+  else if (card.terms?.choice === "accept") lines.push("Accepts the terms on offer.");
   const text = lines.join("\n");
   return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
 }

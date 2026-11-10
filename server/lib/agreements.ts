@@ -25,6 +25,7 @@
 import type { Pool } from "mysql2/promise";
 import { readConfigDocument, readConfigDocumentsByPrefix, writeConfigDocument } from "../repos/appConfigDocs";
 import { AGREEMENT_STATUSES, type AgreementStatus, type StoredAgreement } from "../../shared/agreements";
+import type { PresenceTest } from "./memberPresence";
 
 export const AGREEMENT_KEY_PREFIX = "village-agreement:";
 
@@ -91,4 +92,72 @@ export async function listAgreements(pool: Pool): Promise<StoredAgreement[]> {
     }
     return a.proposedAt < b.proposedAt ? 1 : a.proposedAt > b.proposedAt ? -1 : 0;
   });
+}
+
+/*
+ * ── THE REVIEW DATE COMES ROUND (D10b, 2026-11-09) ───────────────────────────
+ *
+ * An adopted agreement names the day the village looks at it again, and until
+ * this job nothing told anybody when that day came. The `agreement-review`
+ * job (server/index.ts) calls this once a day with the village's own civil
+ * date (`todayIn`, server/routes/governanceAgreements.ts).
+ *
+ * WHO: every present member (`isPresentMember`, server/lib/memberPresence.ts,
+ * the predicate every ballot roll and the season reminders use), handed in
+ * bound to the session secret.
+ *
+ * WHEN: on the review date, and on any later sweep while the agreement is
+ * still active, so a day the scheduler missed is caught the next day. ONCE per
+ * agreement, review date and member: the date is in the dedupe key, so moving
+ * the date re-arms it, because the date the village was told is no longer the
+ * date. Amending or retiring an agreement is later work; this only reminds.
+ */
+
+/** Where a review reminder lands: the governance page, which lists the village's agreements. */
+export const AGREEMENT_REVIEW_LINK = "/governance";
+
+/** One stable key per (agreement, review date, member). Well under the column's 191. */
+export const agreementReviewKey = (agreementId: string, reviewAt: string, userId: string): string =>
+  `agreement:${agreementId}:review:${reviewAt}:u${userId}`;
+
+export interface AgreementReviewDeps {
+  agreements: ReadonlyArray<StoredAgreement>;
+  /** The village's civil date today, `YYYY-MM-DD`, in its own timezone. */
+  today: string;
+  members: ReadonlyArray<Record<string, any>>;
+  isPresent: PresenceTest;
+  notify(input: {
+    userId: string;
+    type: string;
+    title: string;
+    body?: string | null;
+    link?: string | null;
+    dedupeKey: string;
+  }): Promise<{ fresh: boolean }>;
+}
+
+/** The daily sweep. One member's failure never stops the rest hearing. */
+export async function runAgreementReviews(deps: AgreementReviewDeps): Promise<{ due: number; told: number }> {
+  const due = deps.agreements.filter((a) => a.status === "active" && !!a.reviewAt && a.reviewAt <= deps.today);
+  let told = 0;
+  for (const a of due) {
+    for (const member of deps.members) {
+      if (!deps.isPresent(member)) continue;
+      const userId = String(member.id);
+      try {
+        const r = await deps.notify({
+          userId,
+          type: "governance",
+          title: `Today the village looks again at an agreement: ${a.title}`,
+          body: `The village adopted this agreement with ${a.reviewAt} as its review date, and that day has come. Read it again on the governance page and say whether it still serves. A member who holds the power to open votes can put a new version to the village.`,
+          link: AGREEMENT_REVIEW_LINK,
+          dedupeKey: agreementReviewKey(a.id, a.reviewAt!, userId),
+        });
+        if (r.fresh) told += 1;
+      } catch (e) {
+        console.error(`[agreements] reminding ${userId} that agreement ${a.id} is due for review failed (the rest continue)`, e);
+      }
+    }
+  }
+  return { due: due.length, told };
 }
