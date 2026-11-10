@@ -9,7 +9,9 @@
  * server/closingPolicy.routes.e2e.test.ts.
  */
 import { describe, expect, it } from "vitest";
-import { CLOSING_CHECK_KEY, closingCheckOf, closingWrite } from "./closingPolicy";
+import { CLOSING_BALLOT_NOW, CLOSING_CHECK_KEY, closingCheckOf, closingWrite } from "./closingPolicy";
+import { thresholdsForSubject } from "../../shared/ballotSubjects";
+import { CLOSING_POLICY } from "../../shared/closingPolicies";
 import { normalizeExitPolicy, withPolicyDefaults, DEFAULT_EXIT_POLICY } from "./exitPolicy";
 import { PROPORTIONAL_CLOSING_STATEMENT } from "../../shared/closingPolicies";
 import { LAUNCH_REQUIREMENTS } from "../../shared/launchRequirements";
@@ -102,6 +104,27 @@ describe("closingWrite", () => {
       expect(r.ok, String(adopt)).toBe(false);
       if (!r.ok) expect(r.message).toMatch(/keep the sentence that choice stands for/);
     }
+  });
+});
+
+describe("after the Birthing the closing words change only by a ballot (D6)", () => {
+  it("refuses every save once the Game has started, naming the closing policy vote", () => {
+    const stored = { ...DEFAULT_CHOICE, adoptedBy: "user-a", adoptedAt: EARLIER };
+    for (const body of [{ policyId: "own-words", statement: OWN_WORDS, adopt: true }, DEFAULT_CHOICE]) {
+      const r = closingWrite(body, stored, "user-a", NOW, { gameStarted: true });
+      expect(r).toEqual({ ok: false, status: 409, error: "closing_policy_ballot_now", message: CLOSING_BALLOT_NOW });
+    }
+    expect(CLOSING_BALLOT_NOW).toContain("closing policy vote at the structural tier");
+    // Before it, the same adoption goes through.
+    expect(closingWrite({ policyId: "own-words", statement: OWN_WORDS, adopt: true }, stored, "user-a", NOW, { gameStarted: false }).ok).toBe(true);
+  });
+
+  it("the closing_policy subject is priced at the structural tier, method custom", () => {
+    const t = thresholdsForSubject(CLOSING_POLICY);
+    expect(t).toMatchObject({ criticality: "structural", method: "custom" });
+    expect(t!.minUnityPct).toBeGreaterThanOrEqual(80);
+    expect(t!.minQuorumPct).toBeGreaterThanOrEqual(50);
+    expect(CLOSING_POLICY.length).toBeLessThanOrEqual(24);
   });
 });
 

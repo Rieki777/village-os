@@ -80,6 +80,7 @@ export const SUGGESTION_ROUTE: Record<Capability, SuggestionRoute> = {
   "intake.moderate": "holders",
   "library.keep": "holders",
   "story.tell": "holders",
+  "brief.private": "holders",
   "dial.set": "holders",
   "quest.approve": "holders",
   "redemption.confirm": "holders",

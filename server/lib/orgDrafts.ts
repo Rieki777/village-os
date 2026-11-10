@@ -1698,14 +1698,16 @@ async function applyChange(
     const ccos = new Map(ccosColumns(p));
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, listed) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
         words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null,
-        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null)],
+        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null),
+        // Role journey PR-A: a draft can only START a role unlisted (a sync accept with the village setting on). Nothing in a draft lists a role.
+        p.listed === false ? 0 : null],
     );
     return null;
   }

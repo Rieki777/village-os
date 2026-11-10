@@ -115,9 +115,27 @@ export function firstDayOf(app: Pick<StoredApplication, "startsAt" | "termSeason
   return app.startsAt ?? begins ?? null;
 }
 
+/**
+ * WHETHER A START HAS COME, AT THE COLUMN'S PRECISION. `starts_at` is a
+ * whole-second `datetime`. A start of "now" written with its milliseconds
+ * comes back ROUNDED on MySQL 8 (11.7 s reads as 12 s, in the future) and
+ * truncated on MariaDB. So on MySQL an arrival placed in the second half of a
+ * second was adopted, not seated, and waited for the hourly turn; the role
+ * journey e2e caught it on CI's mysql:8 and never locally. A start less than
+ * one second ahead has come.
+ */
+export function startReached(first: Date, now: Date): boolean {
+  return first.getTime() - now.getTime() < 1000;
+}
+
+/** An instant at the precision `starts_at` keeps, so what is written is what is read back, on either engine. */
+export function wholeSecond(d: Date): Date {
+  return new Date(Math.floor(d.getTime() / 1000) * 1000);
+}
+
 const notYet = (app: Pick<StoredApplication, "startsAt" | "termSeasonId">, ctx: SeatingContext) => {
   const first = firstDayOf(app, ctx.calendar);
-  return !!first && first.getTime() > ctx.now.getTime();
+  return !!first && !startReached(first, ctx.now);
 };
 
 /** The term a seating takes, following the season's end when the application said it would. */

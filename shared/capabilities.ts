@@ -82,6 +82,17 @@ export type Capability =
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
+  // ── The private brief key (canvas follow-up G.4, Rye 2026-11-06) ─────────
+  //
+  // Read and write the four brief sections that stay out of every public
+  // and member reading: people, legal, land and constraints
+  // (`ADMIN_ONLY_SECTIONS`, shared/canvasFrames.ts). Article 0: everything
+  // changes by a village vote, so the administrators' hold on these sections
+  // has to have a door. A `power_grant` vote seats it on a role; its live
+  // holders then hold the canvas admin pen and the Brain editor's four private
+  // sections, and an unseated admin is refused. With nobody holding it the
+  // administrators keep them, as before.
+  | "brief.private" // read and write the brief's four private sections
   | "dial.set" // turn the village's own dials, within the open ring
   // ── The proposal key (0141) ──────────────────────────────────────────────
   //
@@ -268,6 +279,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "intake.moderate",
   "library.keep",
   "story.tell",
+  "brief.private",
   "dial.set",
   "quest.approve",
   "redemption.confirm",
@@ -345,6 +357,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
+  "brief.private": "Read and write the brief's private sections: people, legal, land and constraints",
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
@@ -581,6 +594,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // Canvas follow-up G.4 (AC1.5, Rye 2026-11-06): born transferable, so the
+  // spec's "moves by a power_grant vote" is a real door. Its routes ask the
+  // one gate (`guardCapability`), so the escape hatch and the record are there.
+  "brief.private": true,
   "org.seat": true,
   "org.seatAgent": true,
   /*
@@ -744,12 +761,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 30 keys
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 31 keys
  * today. The other 24 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 30 in the founding seat and has
+ * Read this way, a launched village holds all 31 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -792,9 +809,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 30 and 21.
  * `place.tend` and `place.permit` (Living places, 0354) were born held back
  * until Rye gives his word on them (the places spec, C8), which moved only the
- * second: 30 and 23. `records.confidential` (role journey L7) was born held
- * back, a key no route gates behind yet and one the alignment binds on top,
- * which moved only the second: 30 and 24.
+ * second: 30 and 23.
+ * `brief.private` (the canvas follow-up, G.4) was born transferable, the
+ * spec Rye accepted on 2026-11-06 naming it so, which moved only the first:
+ * 31 and 23. `records.confidential` (role journey L7) was born held back, a
+ * key no route gates behind yet and one the alignment binds on top, which
+ * moved only the second: 31 and 24.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -1005,6 +1025,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // A job: a warning pauses somebody reading the private sections and takes
+  // away no say of theirs.
+  "brief.private": true,
   "dial.set": true,
   // A job, like `feed.announce`: pausing it stops somebody sending the
   // village's letters and changing its automations, and takes away nothing
@@ -1126,6 +1149,11 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "operator.config": false,
   "operator.secrets": false,
   "operator.recover": false,
+  // FALSE: the private sections name people, title holders and land, and they
+  // move onto a role by a `power_grant` vote (G.4). A badge is minted by an
+  // admin, so a badge carrying this would let an unseated admin hand
+  // themselves back the sections the village moved to a role.
+  "brief.private": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the

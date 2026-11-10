@@ -62,10 +62,13 @@
  *      agreement document had its conflict path rewritten by an admin alone
  *      while every member was told only a vote could change it.
  *
- * ALL THREE ONLY WHILE CONFLICT EVOLUTION IS ON (Rye's module ruling,
+ * THE FIRST TWO ONLY WHILE CONFLICT EVOLUTION IS ON (Rye's module ruling,
  * 2026-10-01). Off, `readExitPolicy()` serves the policy's own restorative
- * block, `agreementStored()` answers false, and the Birthing no longer locks
- * the block, because the vote that would change it is the module's route.
+ * block and `agreementStored()` answers false. The Birthing still locks the
+ * block (canvas follow-up G.2, 2026-11-09): with the module off its vote is
+ * the consequence vote (server/lib/consequenceVote.ts), and the refusal names
+ * that one instead. After the Birthing the exit terms are that vote's too
+ * (G.1), so the save refuses a change to them, naming it.
  * The public read's withholding (1) stays for every village: it is the
  * intake-privacy fix, and it reads the policy alone when there is no agreement.
  */
@@ -114,6 +117,7 @@ import type { DbDocument } from "../repos/store-db";
 import { markExitSettling } from "../repos/exits";
 import { raiseCanvasRevisit } from "../lib/canvasRevisit";
 import { EXIT_POLICY_MOVED, exitPolicyTermsVersion, withExitPolicyLock } from "../lib/exitPolicyWrites";
+import { MECHANICS_PROPOSAL_DOOR, changeWords, exitBodyWithChange, exitFieldsNow, type ExitItemKind, type ExitVoteDoor } from "../lib/consequenceVote";
 
 export type ExitDeps = Pick<
   AppDeps,
@@ -170,6 +174,36 @@ export type ExitDeps = Pick<
 export type ExitPolicySaveDeps = Pick<ExitDeps, "isAdmin" | "getPool" | "loadRoles" | "circlesRepo" | "exitPolicyRepo" | "readExitPolicy" | "agreementStored" | "conflictEvolutionOn">;
 
 /**
+ * Said to the Departures editor after the Birthing when a save changes the
+ * exit terms (canvas follow-up G.1, the hole beside the consequence vote).
+ * The vote it names is the consequence pen's (server/lib/consequenceVote.ts).
+ */
+export const EXIT_TERMS_ARE_A_VOTE =
+  "Nothing was saved. The Game has started, so the exit terms change only by a vote of the whole village at the structural tier. " +
+  "Suggest the change on the canvas's Team block, and the member who suggested it files it as a proposal the village decides. " +
+  "Reload this page to edit the rest of the policy.";
+
+/**
+ * Said after the Birthing when a save changes the restorative block while
+ * Conflict Evolution is off (G.2): the agreement's vote is that module's
+ * route, so the consequence vote is the door.
+ */
+export const RESTORATIVE_IS_A_CONSEQUENCE_VOTE =
+  "Nothing was saved. The Game has started, so the restorative path, the intake and cover roles, the reply time and the outside contact change only by a vote of the whole village at the structural tier. " +
+  "Suggest the change on the canvas's Conflict block, and the member who suggested it files it as a proposal the village decides. " +
+  "Reload this page to edit the rest of the policy.";
+
+/** Said to a consequence vote on the care door while Conflict Evolution is on: the agreement's vote is the door. */
+export const CARE_DOOR_BY_AGREEMENT_VOTE =
+  "with Conflict Evolution on, the care door changes by a vote on the village's conflict agreement, so this vote cannot carry it";
+
+/** The voluntary and involuntary blocks as a reader is served them, for "did this save change the terms". */
+const termsOf = (policy: unknown) => {
+  const p = normalizeExitPolicy(policy ?? {});
+  return JSON.stringify({ voluntary: p.voluntary, involuntary: p.involuntary });
+};
+
+/**
  * THE EXIT-POLICY SAVE, as one callable function (canvas-frames-server lane,
  * 2026-09-28). `PUT /api/admin/exit-policy` calls it, and so does the canvas
  * adopt door (server/routes/canvasFrames.ts) for the Team and Conflict doors
@@ -203,36 +237,64 @@ async function saveExitPolicyNow(
   if (was && was !== exitPolicyTermsVersion(deps.exitPolicyRepo.get())) {
     return { status: 409, body: { error: "exit_policy_moved", message: EXIT_POLICY_MOVED } };
   }
+  const judged = await judgeExitPolicyBody(deps, rawBody, "admin");
+  if (!judged.ok) return { status: judged.status, body: judged.body };
+  await deps.exitPolicyRepo.put(judged.next);
+  return { status: 200, body: { success: true, policy: deps.readExitPolicy(), policyVersion: exitPolicyTermsVersion(deps.exitPolicyRepo.get()) } };
+}
+
+/**
+ * Every refusal the save makes, writing nothing. `how` is who is saving: an
+ * administrator at the Departures editor (or the canvas before the Birthing),
+ * or a carried village vote (`exitVoteDoor` below). After the Birthing an
+ * administrator may not change the terms or the restorative block, because the
+ * village's vote is the door (Article 0), and each refusal names that vote.
+ * The vote IS that door, so it meets every other refusal and not those two.
+ */
+async function judgeExitPolicyBody(
+  deps: ExitPolicySaveDeps,
+  rawBody: unknown,
+  how: "admin" | "vote",
+): Promise<{ ok: true; next: ReturnType<typeof normalizeExitPolicy> } | { ok: false; status: number; body: Record<string, unknown> }> {
+  const refuse = (status: number, body: Record<string, unknown>) => ({ ok: false as const, status, body });
   const body: any = rawBody ?? {};
   if (typeof body !== "object" || !body.voluntary || !body.involuntary || !body.restorative) {
-    return { status: 400, body: {
+    return refuse(400, {
       error: "incomplete_policy",
       message: "The policy needs voluntary, involuntary and restorative sections",
-    } };
+    });
   }
-  // After the Birthing the restorative block is the village's to change, by a
-  // vote on its conflict agreement, whether or not an agreement is stored.
-  // Only while Conflict Evolution is on, because that vote is its route.
-  if ((deps.conflictEvolutionOn?.() ?? true) && (await readGameStart(deps.getPool())).started &&!sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
-    return { status: 409, body: { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_VOTE, door: AGREEMENT_CHANGE_DOOR } };
+  if (how === "admin" && (await readGameStart(deps.getPool())).started) {
+    // After the Birthing the restorative block is the village's to change,
+    // whatever the module state (G.2): by a vote on its conflict agreement
+    // while Conflict Evolution is on, by the consequence vote while it is off.
+    if (!sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
+      return (deps.conflictEvolutionOn?.() ?? true)
+        ? refuse(409, { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_VOTE, door: AGREEMENT_CHANGE_DOOR })
+        : refuse(409, { error: "restorative_is_a_vote", message: RESTORATIVE_IS_A_CONSEQUENCE_VOTE, door: MECHANICS_PROPOSAL_DOOR });
+    }
+    // And the terms are the consequence vote's (G.1).
+    if (termsOf(body) !== termsOf(deps.readExitPolicy())) {
+      return refuse(409, { error: "exit_terms_are_a_vote", message: EXIT_TERMS_ARE_A_VOTE, door: MECHANICS_PROPOSAL_DOOR });
+    }
   }
   // While the conflict agreement holds the restorative block, this save
   // carries the stored block forward and refuses a body that changes it.
   let body2 = body;
   if (deps.agreementStored()) {
     if (!sameRestorative(body.restorative, deps.readExitPolicy()?.restorative)) {
-      return { status: 409, body: { error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT } };
+      return refuse(409, { error: "restorative_in_agreement", message: RESTORATIVE_IN_AGREEMENT });
     }
     body2 = { ...body, restorative: deps.exitPolicyRepo.get()?.restorative ?? {} };
   } else {
     // The intake and cover roles, the reply time and the outside contact: server/lib/exitPolicy.ts.
     const door = restorativeDoorProblem(body.restorative, deps.loadRoles().map((r: any) => String(r.id)));
-    if (door) return { status: 400, body: door as unknown as Record<string, unknown> };
+    if (door) return refuse(400, door as unknown as Record<string, unknown>);
   }
   for (const [field, label] of [["decidingDomainId", "deciding circle"], ["appealDomainId", "appeal circle"]] as const) {
     const id = String(body.involuntary?.[field] ?? "");
     if (id && !deps.circlesRepo.all().some((c: any) => c.id === id)) {
-      return { status: 400, body: { error: "unknown_circle", message: `Unknown ${label} "${id}"` } };
+      return refuse(400, { error: "unknown_circle", message: `Unknown ${label} "${id}"` });
     }
   }
   // The RAW stored document, never readExitPolicy(): the closing section is
@@ -247,26 +309,59 @@ async function saveExitPolicyNow(
     : next;
   const blank = blankTerms(served);
   if (blank.length) {
-    return { status: 400, body: {
+    return refuse(400, {
       error: "blank_terms",
       message: `A published policy cannot leave a term empty. Still blank: ${blank.join(", ")}.`,
-    } };
+    });
   }
   if (!next.placeholder) {
     const stale = platformDefaultTerms(served);
     if (stale.length) {
-      return { status: 409, body: {
+      return refuse(409, {
         error: "terms_still_platform_default",
         fields: stale,
         message:
           `These terms are still word for word the platform's: ${stale.join(", ")}. ` +
           "Recording that the community decided them would publish the platform's boilerplate under the village's name. " +
           "Write each one in the community's own words, then clear the draft banner.",
-      } };
+      });
     }
   }
-  await deps.exitPolicyRepo.put(next);
-  return { status: 200, body: { success: true, policy: deps.readExitPolicy(), policyVersion: exitPolicyTermsVersion(deps.exitPolicyRepo.get()) } };
+  return { ok: true, next };
+}
+
+/**
+ * THE EXIT POLICY'S SIDE OF A CARRIED VOTE (G.1, G.2): the save above with no
+ * administrator check and no after-the-Birthing lock, because the vote is the
+ * door those refusals name. Everything else it refuses, a vote meets too: the
+ * blank and platform-wording refusals, unknown roles and circles, and the
+ * conflict agreement holding the care door.
+ */
+export function exitVoteDoor(deps: ExitPolicySaveDeps): ExitVoteDoor {
+  const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1).replace(/\.$/, "");
+  const judge = async (kind: ExitItemKind, change: Record<string, unknown>) => {
+    if (kind === "exit_restorative" && (deps.conflictEvolutionOn?.() ?? true)) return { ok: false as const, problem: CARE_DOOR_BY_AGREEMENT_VOTE };
+    const current = deps.readExitPolicy();
+    const judged = await judgeExitPolicyBody(deps, exitBodyWithChange(current, kind, change), "vote");
+    if (!judged.ok) return { ok: false as const, problem: lower(String(judged.body.message ?? judged.body.error ?? "refused")) };
+    const from = changeWords(exitFieldsNow(current, kind, change));
+    const to = changeWords(change);
+    if (from === to) return { ok: false as const, problem: "the exit policy already says this" };
+    return { ok: true as const, next: judged.next, from, to };
+  };
+  return {
+    judge: async (kind, change) => {
+      const j = await judge(kind, change);
+      return j.ok ? { from: j.from, to: j.to } : j.problem.charAt(0).toUpperCase() + j.problem.slice(1);
+    },
+    write: (kind, change) =>
+      withExitPolicyLock(async () => {
+        const j = await judge(kind, change);
+        if (!j.ok) return { ok: false as const, problem: j.problem };
+        await deps.exitPolicyRepo.put(j.next);
+        return { ok: true as const, from: j.from, to: j.to };
+      }),
+  };
 }
 
 export function register(app: Express, deps: ExitDeps): void {
