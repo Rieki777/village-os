@@ -36,6 +36,18 @@ import { pickedSeats } from "./SeatPicksField";
 import { fetchApplication } from "./seatApplicationsApi";
 import { OPEN_AIM_MAX } from "@shared/openProposals";
 import { isDoor } from "./wizardDoor";
+import { goalsAsText, parseGoals, type ProposalGoal } from "@shared/proposalGoals";
+
+/** The goals the member listed, as the list holds them (GoalsField), or none. */
+export function goalsOfAnswers(a: Record<string, unknown>): ProposalGoal[] {
+  return Array.isArray(a.goals) ? (a.goals as ProposalGoal[]) : [];
+}
+
+/** The goals step's verdict, in the shared rules' own words: at least one, each with a title and a done when. */
+export const goalsProblem = (v: unknown): string | null => {
+  const judged = parseGoals(v ?? [], {});
+  return judged.ok ? null : judged.error;
+};
 
 /** The door's terms answer: accepted or a wish to talk, and the terms on offer it showed (TermsOnOfferField). */
 export interface TermsChoice {
@@ -68,7 +80,16 @@ export function doorAnswers(a: Record<string, unknown>): Record<string, unknown>
     aim: String(a.aim ?? "").trim() || null,
     servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
     terms: t ? { choice: t.choice, note: t.note.trim() } : null,
+    goals: goalsForRoute(a),
   };
+}
+
+/** The goals as the route reads them: blank rows left out, each tied to a role (the only one, when there is one). */
+export function goalsForRoute(a: Record<string, unknown>): ProposalGoal[] {
+  const seats = pickedSeats(a.seatIds ?? a.seatId);
+  return goalsOfAnswers(a)
+    .filter((g) => g.title?.trim() || g.doneWhen?.trim() || g.moves || g.serves || g.date)
+    .map((g) => ({ ...g, roleId: g.roleId || seats[0] || "", serves: g.serves === NO_SEASON_GOALS ? "" : g.serves }));
 }
 
 /** No goals for the season yet: the goal field answers this for the member (SeasonGoalField). */
@@ -81,7 +102,7 @@ export const NO_SEASON_GOALS = "none";
  * publishes its deliverables as written.
  */
 export function doorDeliverables(a: Record<string, unknown>): unknown {
-  if (!isDoor(a)) return a.deliverables;
+  if (!isDoor(a)) return goalsForRoute(a).length ? goalsAsText(goalsForRoute(a)) : a.deliverables;
   const lines: string[] = [];
   const aim = String(a.aim ?? "").trim();
   if (aim) lines.push(`Aim: ${aim}`);
@@ -90,7 +111,7 @@ export function doorDeliverables(a: Record<string, unknown>): unknown {
   const t = termsChoiceOf(a.termsChoice);
   if (t?.choice === "accept") lines.push("Accepts the terms on offer.");
   if (t?.choice === "talk") lines.push(`Wants to talk about the terms: ${t.note.trim()}`);
-  const own = String(a.deliverables ?? "").trim();
+  const own = goalsForRoute(a).length ? goalsAsText(goalsForRoute(a)) : String(a.deliverables ?? "").trim();
   return [lines.join("\n"), own].filter(Boolean).join("\n\n");
 }
 
@@ -139,7 +160,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
       deliverables: doorDeliverables(a),
       fitStatement: a.fitStatement,
       // B1 (0369): the door's answers, structured, so the proposal's card shows them.
-      ...(isDoor(a) ? { answers: doorAnswers(a) } : {}),
+      ...(isDoor(a) ? { answers: doorAnswers(a) } : goalsForRoute(a).length ? { answers: { goals: goalsForRoute(a) } } : {}),
       // The door sends the terms on offer it showed, unchanged; every other start sends the terms written.
       seatSettings: isDoor(a) ? (termsChoiceOf(a.termsChoice)?.settings ?? null) : (a.seatSettings ?? null),
       // Sent only when picked: no first day means "as soon as it is adopted".
@@ -168,7 +189,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
     },
     details: {
       label: "Your season",
-      intro: "Why you, your aim, your first tasks this moon, and the season goal they serve.",
+      intro: "Why you, your aim, and your goals for this moon with how you will know each is done.",
       fields: [
         {
           key: "fitStatement",
@@ -193,17 +214,13 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : null),
         },
         {
-          key: "deliverables",
-          kind: "textarea",
-          rows: 6,
-          maxLength: 2000,
-          // Guide v2: the first tasks for this moon, each with how anyone will know it is done.
-          label: "Your first tasks this moon",
-          placeholder: "Plant the first three beds, done when they are planted and watered. Share the planting plan, done when every circle lead has it.",
+          // Joining lane PR 1: a list of goals, each with a "done when", where a textarea of tasks stood.
+          key: "goals",
+          kind: "goalsList",
+          label: "Your goals for your first moon",
           help: "Each with a \"done when\", so anyone can check it without asking you. Members read this; a vote never shows it.",
           required: true,
-          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
-          problem: atLeast(40, "Your list of first tasks"),
+          problem: goalsProblem,
         },
         {
           key: "servesGoal",

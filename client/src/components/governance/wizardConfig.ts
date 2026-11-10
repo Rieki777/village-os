@@ -122,7 +122,9 @@ export type FieldKind =
    * TermsOnOfferField).
    */
   | "seasonGoal"
-  | "termsOnOffer";
+  | "termsOnOffer"
+  /* Joining lane PR 1: the interactive goals list (GoalsField, GoalsList), stored as an array of goals. */
+  | "goalsList";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =

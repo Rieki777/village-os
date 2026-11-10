@@ -462,9 +462,31 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(noAgree).toMatchObject({ status: 400, body: { field: "agreed" } });
     });
 
+    it("goals: each role card needs one to eight, and each is checked against the role's goals, the season's goals and the moon", async () => {
+      const base = (firstMoon: unknown) => ({
+        roles: [{ roleId: gate, moves: [], firstMoon }],
+        serves: [{ goalId: "g-roots", how: "" }],
+        hours: "",
+        agreed: { loveLetter: true, nda: true },
+        terms: { choice: "accept", note: "" },
+      });
+      const post = (firstMoon: unknown, email: string) => call("POST", "/api/open-proposals", proposal({ email, card: base(firstMoon) }));
+      const g = { quest: "Oil the hinges", doneWhen: "the gate opens" };
+      expect(await post([], "none@example.test")).toMatchObject({ status: 400, body: { field: "card" } });
+      expect((await post([{ quest: "No test", doneWhen: "" }], "nodone@example.test")).status).toBe(400);
+      expect((await post(Array.from({ length: 9 }, () => g), "nine@example.test")).status).toBe(400);
+      expect((await post([{ ...g, moves: "A goal the role never had" }], "moves@example.test")).status).toBe(400);
+      expect((await post([{ ...g, serves: "g-unknown" }], "serves@example.test")).status).toBe(400);
+      expect((await post([{ ...g, date: "2031-01-01" }], "far@example.test")).status).toBe(400);
+      // CONTROL: eight goals, one naming a season goal and a day this moon, are taken and kept.
+      const day = new Date().toISOString().slice(0, 10);
+      const ok = await post([...Array.from({ length: 7 }, () => g), { ...g, serves: "g-roots", date: day }], "eight@example.test");
+      expect(ok.status).toBe(200);
+    });
+
     it("form v2: a card needs an aim; the 90-day tidy clears the time zone, usual times and earliest start", async () => {
       const card = {
-        roles: [{ roleId: gate, moves: [], firstMoon: [] }],
+        roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens" }] }],
         serves: [{ goalId: "g-roots", how: "" }],
         hours: "",
         agreed: { loveLetter: true, nda: true },

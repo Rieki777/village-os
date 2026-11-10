@@ -131,6 +131,7 @@ describe("See their card on /roles", () => {
         <Roles />
       </Router>,
     );
+    fireEvent.click(screen.getByRole("button", { name: "See all roles" }));
     await open("Water Keeper");
     const block = document.querySelector("[data-role-holder-cards]") as HTMLElement;
     expect(block).toBeTruthy();
@@ -154,6 +155,7 @@ describe("See their card on /roles", () => {
         <Roles />
       </Router>,
     );
+    fireEvent.click(screen.getByRole("button", { name: "See all roles" }));
     await open("Seed Keeper");
     expect(document.querySelector("[data-role-holder-cards]")).toBeNull();
     expect(screen.queryByText("See their card")).toBeNull();

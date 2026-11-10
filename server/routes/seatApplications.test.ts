@@ -279,7 +279,7 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     const answers = { aim: "Every newcomer feels at home.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The moon rate" } };
     const a = await apply({ seatIds: [s], answers });
     expect(a.status).toBe(201);
-    expect((await readApplication(pool, a.body.id))!.answers).toEqual({ ...answers, timeZone: null, windows: [], earliestStart: null });
+    expect((await readApplication(pool, a.body.id))!.answers).toEqual({ ...answers, timeZone: null, windows: [], earliestStart: null, goals: [] });
     // CONTROL: a proposal sent with no answers keeps none.
     const b = await apply({ seatIds: [await seat("Answerless keeper")] });
     expect((await readApplication(pool, b.body.id))!.answers).toBeNull();
@@ -287,6 +287,53 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     const stored = await readApplication(pool, a.body.id);
     await eraseApplicationWords(pool, stored!.candidateUserId);
     expect((await readApplication(pool, a.body.id))!.answers).toBeNull();
+  });
+
+  describe("the goals list (joining lane PR 1)", () => {
+    const GOAL = { title: "Plant the first three beds", doneWhen: "they are planted and watered", moves: "", serves: "", date: "", roleId: "" };
+    const goalSeat = async (goals: string[]) => {
+      n += 1;
+      return createOrgRole(pool, { id: `seat-${n}-goals`, name: `Goal keeper ${n}`, seats: 1, accountabilities: goals });
+    };
+
+    it("keeps a good list in the answers, shows it with the role goal it moves, and writes the older words from it", async () => {
+      const s = await goalSeat(["Food grows every season"]);
+      const a = await apply({ seatIds: [s], deliverables: undefined, answers: { aim: "Food grows.", goals: [{ ...GOAL, moves: "Food grows every season" }, { ...GOAL, title: "Share the plan", doneWhen: "every lead has it" }] } });
+      expect(a.status).toBe(201);
+      const stored = await readApplication(pool, a.body.id);
+      expect(stored!.answers!.goals.map((g) => g.title)).toEqual(["Plant the first three beds", "Share the plan"]);
+      expect(stored!.answers!.goals[0]).toMatchObject({ moves: "Food grows every season", roleId: s });
+      expect(stored!.deliverables).toContain("- Share the plan, done when every lead has it");
+      const read = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+      expect(read.body.application.goals).toHaveLength(2);
+    });
+
+    it("refuses a goal that moves a goal the role does not have, with the field and the words", async () => {
+      const s = await goalSeat(["Food grows every season"]);
+      const bad = await apply({ seatIds: [s], answers: { goals: [{ ...GOAL, moves: "Something the role never listed" }] } });
+      expect(bad.status).toBe(400);
+      expect(bad.body).toMatchObject({ field: "goals", error: expect.stringMatching(/does not have/) });
+      // CONTROL: the same goal moving one the role does have is taken.
+      expect((await apply({ seatIds: [s], answers: { goals: [{ ...GOAL, moves: "Food grows every season" }] } })).status).toBe(201);
+    });
+
+    it("refuses malformed goals: none, no done when, too many, a date outside this moon", async () => {
+      const s = await goalSeat([]);
+      for (const goals of [[], [{ ...GOAL, doneWhen: "" }], Array.from({ length: 9 }, () => GOAL), [{ ...GOAL, date: "2031-01-01" }], "beds"]) {
+        const r = await apply({ seatIds: [s], answers: { goals } });
+        expect(r.status, JSON.stringify(goals).slice(0, 40)).toBe(400);
+        expect(r.body.field).toBe("goals");
+      }
+    });
+
+    it("reads an application made before the list as one goal", async () => {
+      const s = await goalSeat([]);
+      const old = await apply({ seatIds: [s] });
+      expect(old.status).toBe(201);
+      const read = await h.call("GET", `/api/governance/role-applications/${old.body.id}`);
+      expect(read.body.application.goals).toEqual([expect.objectContaining({ title: DELIVERABLES })]);
+      expect(read.body.application.deliverables).toBeNull();
+    });
   });
 
   it("refuses an example seat, a full seat and more than three roles (D3)", async () => {

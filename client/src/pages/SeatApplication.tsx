@@ -77,7 +77,12 @@ export const APPLICATION_WORDS = {
   membersOnlyLine: "A proposal carries its terms, money included, so it opens at the member rung.",
   signIn: "Sign in to read this proposal",
   wordsHeading: "In their words",
-  deliverables: "By the end of the season",
+  deliverables: "Aim and terms",
+  goals: "Goals for the first moon",
+  doneWhen: (w: string) => `Done when ${w}`,
+  moves: (w: string) => `Moves: ${w}`,
+  serves: (w: string) => `Serves the season goal: ${w}`,
+  by: (d: string) => `By ${d}`,
   why: "Why them",
   wordsRemoved: "These words were removed at the member's request.",
   holderHeading: "For the village",
@@ -350,12 +355,30 @@ export default function SeatApplication() {
               <h2 id="sa-words" className="text-lg font-bold text-stone-900">
                 {APPLICATION_WORDS.wordsHeading}
               </h2>
-              {app.deliverables || app.note ? (
+              {app.deliverables || app.note || app.goals?.length ? (
                 <dl className="mt-3 space-y-4">
                   {app.deliverables && (
                     <div>
                       <dt className="text-sm font-semibold text-stone-700">{APPLICATION_WORDS.deliverables}</dt>
                       <dd className="mt-1 whitespace-pre-wrap text-stone-900">{app.deliverables}</dd>
+                    </div>
+                  )}
+                  {!!app.goals?.length && (
+                    <div data-application-goals="">
+                      <dt className="text-sm font-semibold text-muted-foreground">{APPLICATION_WORDS.goals}</dt>
+                      <dd className="mt-1">
+                        <ol className="space-y-3">
+                          {app.goals.map((g, i) => (
+                            <li key={i} className="rounded-lg border border-border bg-card p-3 text-foreground" data-goal={i + 1}>
+                              <p className="whitespace-pre-wrap font-medium">{g.title}</p>
+                              {g.doneWhen && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.doneWhen(g.doneWhen)}</p>}
+                              {g.moves && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.moves(g.moves)}</p>}
+                              {g.serves && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.serves(g.serves)}</p>}
+                              {g.date && <p className="mt-1 text-sm text-muted-foreground">{APPLICATION_WORDS.by(g.date)}</p>}
+                            </li>
+                          ))}
+                        </ol>
+                      </dd>
                     </div>
                   )}
                   {app.note && (

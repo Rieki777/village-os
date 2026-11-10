@@ -80,6 +80,21 @@ export function draftFromStored(v: unknown): RoleDraft {
   return { chars: cleanIds(o.chars, DRAFT_MAX_CHARACTERS), picks: cleanIds(o.picks, OPEN_PROPOSAL_MAX_ROLES) };
 }
 
+/** The query that carries one archetype from /roles to the board (`/roles/select?archetype=building`). */
+export const ARCHETYPE_PARAM = "archetype";
+
+/** An archetype key as the address may carry it: the keys are lowercase identifiers. */
+export function archetypeFromSearch(search: string): string | null {
+  const v = new URLSearchParams(search).get(ARCHETYPE_PARAM);
+  return v && /^[a-z0-9_-]{1,40}$/.test(v) ? v : null;
+}
+
+/** The stored draft with one more character on it. Picks stay as they were, and a character already there is not doubled. */
+export function draftWithArchetype(draft: RoleDraft, key: string | null): RoleDraft {
+  if (!key || draft.chars.includes(key) || draft.chars.length >= DRAFT_MAX_CHARACTERS) return draft;
+  return { ...draft, chars: [...draft.chars, key] };
+}
+
 /**
  * An unlisted role as any layer may have carried it: the boolean the server sends,
  * but also the 0 the column holds and the strings a hand-built payload or a

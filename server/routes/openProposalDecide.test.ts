@@ -770,7 +770,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
       const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
       expect(String(apps[0].deliverables)).toContain("Clean water all season.");
-      expect(String(apps[0].deliverables)).toContain("First task: Test the water: done when the lab says it is clean");
+      expect(String(apps[0].deliverables)).toContain("Goal: Test the water: done when the lab says it is clean");
       expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
       expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Could the rate be per moon?");
     });
@@ -802,6 +802,77 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       state.answer = { status: "skipped", messageId: null, reason: "not_configured" };
       const r = await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id);
       expect(r.body).toMatchObject({ emailed: false, message: DECIDE_WORDS.declinedNotEmailed("not_set_up") });
+    });
+  });
+
+  describe("the messages a proposal's person reads", () => {
+    it("the invitation says what to do next, has a button, goes once on adoption, and Admin shows when", async () => {
+      const { id } = await confirmed("invite-me@example.test");
+      state.sent.length = 0;
+      const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(r.status).toBe(200);
+      const invites = state.sent.filter((m) => m.origin === "open_proposal.adopted");
+      expect(invites).toHaveLength(1);
+      expect(invites[0].to.email).toBe("invite-me@example.test");
+      expect(invites[0].html).toContain(`<a href="${linkOf(r.body)}"`);
+      expect(invites[0].html).toContain("Create your profile");
+      expect(invites[0].text).toContain("Then check your profile. Your tasks for the moon appear there, and it is where we run our sessions and track our work together.");
+      // A retried adoption is refused and sends nothing more.
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(409);
+      expect(state.sent.filter((m) => m.origin === "open_proposal.adopted")).toHaveLength(1);
+      // Admin shows that it went and when.
+      const shown = await page(id, FOUNDER.id);
+      expect(shown.body.proposal.invitation).toMatchObject({ state: "open", emailed: true });
+      expect(Date.now() - new Date(shown.body.proposal.invitation.sentAt).getTime()).toBeLessThan(60_000);
+      // Send again: one new email, a new time.
+      const again = await call("POST", `/api/governance/open-proposals/${id}/invitation`, {}, FOUNDER.id);
+      expect(again.status).toBe(200);
+      expect(state.sent.filter((m) => m.origin === "open_proposal.adopted")).toHaveLength(2);
+    });
+
+    it("an email that did not go is recorded as not sent", async () => {
+      const { id } = await confirmed("no-mail@example.test");
+      state.answer = { status: "skipped", messageId: null, reason: "not_configured" };
+      await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect((await page(id, FOUNDER.id)).body.proposal.invitation).toMatchObject({ state: "open", emailed: false });
+    });
+
+    it("the kind no thanks them, points to a quest, the open roles and next season, and goes once", async () => {
+      const { id } = await confirmed("kind-no@example.test");
+      state.sent.length = 0;
+      expect((await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id)).status).toBe(200);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id)).status).toBe(409);
+      const no = state.sent.filter((m) => m.origin === "open_proposal.declined");
+      expect(no).toHaveLength(1);
+      expect(no[0].text).toContain("Thank you for proposing");
+      expect(no[0].text).toContain(`${ORIGIN}/quests`);
+      expect(no[0].text).toContain(`${ORIGIN}/roles`);
+      expect(no[0].text).toContain("propose again next season");
+      // The retention rule still holds: the address is gone 90 days on.
+      await tidyOpenProposals(pool, new Date(Date.now() + 91 * 24 * 60 * 60_000));
+      expect(await readOpenProposal(pool, id)).toMatchObject({ status: "declined", name: null, email: null });
+    });
+
+    it("an address with an account reads the no on its profile, once", async () => {
+      const { id } = await confirmed(HIGH.email);
+      state.notices.length = 0;
+      await call("POST", `/api/governance/open-proposals/${id}/decline`, {}, FOUNDER.id);
+      const bell = state.notices.filter((n) => n.type === "applicant_update");
+      expect(bell).toHaveLength(1);
+      expect(bell[0]).toMatchObject({ userId: HIGH.id, dedupeKey: `op:${id}:update:declined:${HIGH.id}` });
+    });
+
+    it("the account an invitation makes finds the earlier updates on its profile", async () => {
+      const { id } = await confirmed("arrives2@example.test");
+      await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      state.notices.length = 0;
+      const door = makeInviteDoor({ getPool: () => pool, members: usersRepo(pool) });
+      const inviter = await door.claim(openInviteId(id), "u-arrives2");
+      await usersRepo(pool).add({ id: "u-arrives2", name: "Rowan Field", email: "arrives2@example.test", passwordHash: "x", paths: [] } as any);
+      await door.welcome(inviter as string, "u-arrives2");
+      const bell = state.notices.filter((n) => n.type === "applicant_update" && n.userId === "u-arrives2");
+      expect(bell.map((n) => n.dedupeKey).sort()).toEqual([`op:${id}:update:adopted:u-arrives2`, `op:${id}:update:confirmed:u-arrives2`, `op:${id}:update:consent:u-arrives2`]);
+      expect(bell.find((n) => n.dedupeKey.includes(":adopted:"))?.body).toContain("Your tasks for the moon appear there");
     });
   });
 

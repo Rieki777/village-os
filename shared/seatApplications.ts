@@ -39,6 +39,7 @@
  *
  * Money in an application is a RECORD. Nothing here pays, posts or settles.
  */
+import { goalsAsText, goalsOf, legacyGoals, parseGoals, type ProposalGoal } from "./proposalGoals";
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
 import type { HandOpenerRule } from "./powerHands";
 import { roleWithHolders } from "./roleHolderLabel";
@@ -122,6 +123,12 @@ export interface ApplicationAnswers {
   windows: string[];
   earliestStart: string | null;
   terms: { choice: "accept" | "talk"; note: string } | null;
+  /**
+   * The goals for the first moon, as the member door's list wrote them (joining
+   * lane PR 1; shared/proposalGoals.ts). Empty on an application made before
+   * it, whose `deliverables` words are then read as one goal (`goalsOfApplication`).
+   */
+  goals: ProposalGoal[];
 }
 
 const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
@@ -148,8 +155,9 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     windows: Array.isArray(r.windows) ? r.windows.map((w) => text(w, ANSWER_LIMITS.window)).filter((w): w is string => !!w).slice(0, ANSWER_LIMITS.windows) : [],
     earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
     terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
+    goals: goalsOf(r.goals),
   };
-  const empty = !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  const empty = !answers.goals.length && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
   return empty ? null : answers;
 }
 
@@ -225,7 +233,23 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
   const supersedesId = words(b.supersedesId);
   if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers: parseApplicationAnswers(b.answers) } };
+  // The goals list, when the door sent one: judged whole, so a malformed goal is refused and never quietly dropped.
+  let answers = parseApplicationAnswers(b.answers);
+  let deliverablesOut = deliverables;
+  const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;
+  if (sentAnswers && sentAnswers.goals !== undefined && sentAnswers.goals !== null) {
+    // One role: every goal is for it, whether or not the door said so.
+    const only = seatIds.length === 1 ? seatIds[0]! : "";
+    const asked = Array.isArray(sentAnswers.goals)
+      ? sentAnswers.goals.map((g) => (g && typeof g === "object" && !Array.isArray(g) && !String((g as any).roleId ?? "").trim() ? { ...(g as object), roleId: only } : g))
+      : sentAnswers.goals;
+    const listed = parseGoals(asked, { roleIds: new Set(seatIds) });
+    if (!listed.ok) return { ok: false, field: "goals", error: listed.error };
+    answers = { ...(answers ?? { aim: null, servesGoal: null, timeZone: null, windows: [], earliestStart: null, terms: null, goals: [] }), goals: listed.goals };
+    // Older readers still show `deliverables`: the goals as lines, unless the door wrote its own.
+    deliverablesOut = deliverables ?? goalsAsText(listed.goals, WORDS_MAX);
+  }
+  return { ok: true, input: { seatIds, note, deliverables: deliverablesOut, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────
@@ -465,4 +489,29 @@ export function ballotNamesItsCloser(subjectType: string): boolean {
  */
 export function closeNoteFor(subjectType: string, typed: string): string {
   return subjectType === ROLE_APPLICATION ? APPLICATION_CLOSED_NOTE : typed;
+}
+
+/**
+ * The goals an application shows its deciders: the list the member door wrote,
+ * or, for an application made before it, the `deliverables` words as one goal.
+ */
+export function goalsOfApplication(a: { answers?: ApplicationAnswers | null; deliverables?: string | null }): ProposalGoal[] {
+  const listed = a.answers?.goals ?? [];
+  if (listed.length) return listed;
+  return legacyGoals(a.deliverables);
+}
+
+/**
+ * `deliverables` without the goals block the door wrote into it, for a page that
+ * draws the goals as a list beside it. What is left is the door's other lines
+ * (the aim, the terms choice), or null when nothing is. An application made
+ * before the list has its whole text shown as one goal, so nothing is left.
+ */
+export function deliverablesBesideGoals(a: { answers?: ApplicationAnswers | null; deliverables?: string | null }): string | null {
+  const text = (a.deliverables ?? "").trim();
+  const listed = a.answers?.goals ?? [];
+  // An application made before the list: its whole text is read as one goal (`goalsOfApplication`), so nothing is left beside it.
+  if (!listed.length) return null;
+  const rest = text.replace(goalsAsText(listed), "").trim();
+  return rest || null;
 }

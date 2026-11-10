@@ -11,6 +11,7 @@ import Layout from "@/components/Layout";
 import { BreathingLoader } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
 import { PANEL_WORDS } from "@shared/applicationReview";
+import { DECLINED_PAGE_WORDS, replyPromise } from "@shared/openProposalDecide";
 import { civilDayWords } from "@shared/seasonPlans";
 
 interface Served {
@@ -22,6 +23,8 @@ interface Served {
   path: Array<{ label: string; state: "done" | "now" | "later" }>;
   booking: string | null;
   mode: "block" | "split";
+  outcome?: "adopted" | "declined" | "withdrawn" | null;
+  replyDays?: number;
 }
 
 export default function ApplicationStatus() {
@@ -85,7 +88,19 @@ export default function ApplicationStatus() {
                 {s.actsNext}
               </p>
               {byDay && <p className="mt-1 text-foreground">{PANEL_WORDS.statusBy(byDay)}</p>}
+              {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{replyPromise(s.replyDays)}</p>}
             </section>
+            {s.outcome === "declined" && (
+              <section aria-label={DECLINED_PAGE_WORDS.heading} className="rounded-xl border border-border bg-card p-4" data-declined="">
+                <h2 className="font-display text-xl font-bold text-foreground">{DECLINED_PAGE_WORDS.heading}</h2>
+                <p className="mt-1 text-foreground">{DECLINED_PAGE_WORDS.line}</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground">
+                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.quests.href}>{DECLINED_PAGE_WORDS.quests.label}</a></li>
+                  <li><a className="font-semibold underline" href={DECLINED_PAGE_WORDS.roles.href}>{DECLINED_PAGE_WORDS.roles.label}</a></li>
+                  <li>{DECLINED_PAGE_WORDS.again}</li>
+                </ul>
+              </section>
+            )}
             <ol className="space-y-2">
               {s.path.map((p, i) => (
                 <li key={i} className="flex min-h-[44px] items-center gap-3 rounded-lg border border-border bg-card px-4" data-path-state={p.state}>

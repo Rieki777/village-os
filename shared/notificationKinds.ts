@@ -329,6 +329,15 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} role proposals from outside the village ask your circle to consent.",
     celebrate: false,
   },
+  // An update about a role proposal, for the person who made it, once they
+  // have an account. Bell only (no case in emailCadenceFor): the same words
+  // already went to their address as an email, so a digest would be a third.
+  applicant_update: {
+    group: "decisions",
+    blurb: "An update about a role you proposed to hold: a reply, a conversation, the circle weighing it, or the answer.",
+    many: "{n} updates about your role proposals.",
+    celebrate: false,
+  },
   open_role_proposal_waiting: {
     group: "decisions",
     blurb: "Somebody from outside the village proposes to hold roles. You hold the power to place people in roles, so it is yours to adopt or decline.",

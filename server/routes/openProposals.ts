@@ -80,13 +80,14 @@ import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/app
 import { currentLetter } from "../lib/membershipLetter";
 import { LETTER_WORDS, type LetterSource } from "../../shared/membershipLetter";
 import { inApplicationTransaction } from "../repos/seatApplications";
-import { OPEN_INVITE_PREFIX, openInviteId } from "../../shared/openProposalDecide";
+import { OPEN_INVITE_PREFIX, openInviteId, replyPromise } from "../../shared/openProposalDecide";
 import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
-import { boolVar } from "../lib/variables";
+import { boolVar, numberVar } from "../lib/variables";
+import { makeApplicantTeller } from "../lib/applicantUpdates";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
@@ -157,9 +158,12 @@ export function register(app: Express, deps: Deps): void {
     calendar: deps.seatCalendar,
     lapse: deps.lapse,
     now,
+    projectName,
     /** The village setting `org.consent_after_interviews` (role journey L5), off unless the village turned it on. */
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
   };
+
+  const tellApplicant = makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail, projectName });
 
   /** The switch, read fresh: one small row, and an admin who just flipped it sees it at once. */
   async function settings(): Promise<OpenProposalSettings> {
@@ -320,6 +324,8 @@ export function register(app: Express, deps: Deps): void {
       address: singlePublicAddress,
       accountabilitiesOf: (id) => outcomes.get(id) ?? [],
       goalIds: new Set(t.goals.map((g) => g.id)),
+      // A goal's date must fall in this moon (shared/proposalGoals.ts).
+      today: new Date().toISOString().slice(0, 10),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).
@@ -440,7 +446,7 @@ export function register(app: Express, deps: Deps): void {
 
 ${site()}${statusPath}
 
-Keep this link to yourself: it is how we know it is you.`;
+${replyPromise(numberVar("org.applicant_reply_days"))} Keep this link to yourself: it is how we know it is you.`;
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
@@ -459,6 +465,8 @@ Keep this link to yourself: it is how we know it is you.`;
         }
       }
     }
+    // Somebody who already has an account reads it on their profile too; the email above is theirs either way.
+    await tellApplicant(confirmed.proposal.id, "confirmed");
     res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath });
   });
 

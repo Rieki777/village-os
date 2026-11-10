@@ -19,6 +19,7 @@
  *     stated before the button, not after it, because "publish" means
  *     something different for each type and guessing is not a member's job.
  */
+import { goalsAsText } from "@shared/proposalGoals";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, ArrowRight, Check, Loader2, Save, Send } from "lucide-react";
@@ -592,7 +593,10 @@ export default function ProposalWizard({ start = null, leaveTo = "/decisions" }:
                   const shown =
                     field.kind === "changeSet"
                       ? (Array.isArray(v) ? v : []).map((c: any) => `${c.key} becomes ${c.to}`).join(", ")
-                      : field.kind === "seatSettings"
+                      : field.kind === "goalsList"
+                        ? // Joining lane PR 1: each goal on its own line, with its done-when.
+                          goalsAsText((Array.isArray(v) ? v : []).filter((g: any) => String(g?.title ?? "").trim()))
+                        : field.kind === "seatSettings"
                         ? // The headline of every group that is set; the card above shows the rest.
                           settingsWords(v as any)
                             .filter((r) => r.set)
