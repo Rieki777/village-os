@@ -14,7 +14,7 @@ import {
   Sprout,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, useOptionalAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
 import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useTokenNames";
@@ -34,7 +34,7 @@ import {
   type FieldSigns,
   type Ring,
 } from "@/lib/questBoard";
-import { useStoryPageShown } from "@/lib/brochure";
+import { memberDoorShown } from "@/lib/brochure";
 import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
@@ -76,7 +76,9 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
-  const letterOn = useStoryPageShown()("/love-letter");
+  // The letter is a member's door: open to anybody signed in, a story page for a visitor (shared/brochure.ts).
+  const letterConfig = useGameConfig();
+  const letterOn = memberDoorShown(letterConfig, "/love-letter", !!useOptionalAuth()?.user);
   // The recognition and value tokens' live names (Admin → Tokens) — a fork's
   // rename reaches every line below without a code change.
   const cfg = useGameConfig();

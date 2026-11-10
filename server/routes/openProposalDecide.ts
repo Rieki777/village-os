@@ -367,6 +367,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const roles = await rolesOf(pool, p);
     const firstName = greetingName(p.name);
     const village = projectName();
+    // The Love Letter line only for somebody not aligned yet: an applicant who aligned on the form is not asked again (Rye's answer 8).
+    const letterLine = await loveLetterLine(p, may.own ?? null);
 
     // An address with an account here: the place is made now, and no invitation is needed.
     if (may.own) {
@@ -388,7 +390,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: `${site()}/love-letter` }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine }))
           : null,
       );
       return res.json({
@@ -429,7 +431,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
     res.json({
@@ -470,6 +472,16 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     res.json({ success: true, status: "declined", decided, emailed: why === null, message: why === null ? DECIDE_WORDS.declinedEmailed : DECIDE_WORDS.declinedNotEmailed(why) });
   });
 
+  /**
+   * THE LETTER'S LOVE LETTER LINE: the link to the membership door, or nothing
+   * for somebody already aligned with the letter, on the form or from their
+   * account. The door is served to anybody signed in (shared/brochure.ts,
+   * MEMBER_DOORS), so the link never lands on not-found.
+   */
+  async function loveLetterLine(p: { email: string | null }, account: string | null): Promise<string | null> {
+    return (await membershipAlignedFor(getPool(), p.email, account)) ? null : `${site()}/love-letter`;
+  }
+
   // ── A new invitation ──────────────────────────────────────────────────────
   /*
    * For an adopted proposal whose invitation nobody used: lost, run out, or
@@ -484,6 +496,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (await limited(res, `open-proposal-decide:${actorId}`)) return;
     const p = await found(req, res);
     if (!p) return;
+    const letterLine = await loveLetterLine(p, null);
     const rule = await decideRule(work);
     if (rule.who !== "live-holders" || !rule.holders.includes(actorId)) {
       return res.status(403).json({ error: "not_a_holder", message: rule.who === "live-holders" ? DECIDE_WORDS.notAHolder : DECIDE_WORDS.door[rule.because] });
@@ -502,7 +515,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
     res.json({

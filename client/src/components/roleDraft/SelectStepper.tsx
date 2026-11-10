@@ -26,7 +26,7 @@ export default function SelectStepper({
       <div role="progressbar" aria-label={barLabel} aria-valuemin={1} aria-valuemax={labels.length} aria-valuenow={step + 1} className="h-2 overflow-hidden rounded-full bg-muted">
         <div className="sel-bar sel-bar-fill h-full rounded-full bg-gradient-to-r from-primary to-notice" style={{ width: `${pct}%` }} />
       </div>
-      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <ol className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {labels.map((label, i) => {
           const here = i === step;
           const done = i < step;

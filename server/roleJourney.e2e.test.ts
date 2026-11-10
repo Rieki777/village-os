@@ -207,6 +207,9 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     expect(adopted.status, JSON.stringify(adopted.json)).toBe(200);
     const invite = mailTo(APPLICANT.email, /adopted your proposal/).pop();
     expect(invite, "the adoption letter went").toBeTruthy();
+    // This applicant did not align with the letter on the form, so the letter still sends them to it. The door
+    // is served to anybody signed in, story pages on or off (shared/brochure.ts, MEMBER_DOORS). An applicant who
+    // aligned on the form gets no such line (server/routes/roleStartAgreements.test.ts, "the doors a new holder is sent to").
     expect(String(invite!.body.text)).toContain(`${BASE}/love-letter`);
     expect(String(invite!.body.text)).toContain("this moon");
   });
