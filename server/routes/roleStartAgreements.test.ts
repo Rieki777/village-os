@@ -666,6 +666,70 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
     });
   });
 
+  describe("the doors a new holder is sent to (role journey L7 follow-up)", () => {
+    const adoptionMail = (email: string) => state.sent.filter((m) => m.origin === "open_proposal.adopted" && JSON.stringify(m).includes(email)).pop();
+
+    it("the adoption letter drops the Love Letter line for an applicant who aligned on the form; CONTROL: it keeps it for one who did not", async () => {
+      const aligned = "letter-aligned@example.test";
+      const id = await proposeAndConfirm(aligned, true);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      const sent = adoptionMail(aligned);
+      expect(sent, "the adoption letter went").toBeTruthy();
+      expect(String(sent!.text)).not.toContain("/love-letter");
+      expect(String(sent!.text)).not.toMatch(/align with the Love Letter/i);
+
+      const unaligned = "letter-unaligned@example.test";
+      const other = await proposeAndConfirm(unaligned, false);
+      expect((await call("POST", `/api/governance/open-proposals/${other}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      expect(String(adoptionMail(unaligned)!.text)).toContain(`${ORIGIN}/love-letter`);
+    });
+
+    it("an account already here that aligned on the form gets no Love Letter line either", async () => {
+      const who = await newAccount("letter-account");
+      const id = await proposeAndConfirm(who.email, true);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      expect(String(adoptionMail(who.email)!.text)).not.toContain("/love-letter");
+    });
+
+    it("the profile lists the steps before a role starts, to its holder alone, and empties once aligned", async () => {
+      dialsOn(true);
+      await moonMode(async () => {
+        const who = await newAccount("steps");
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        const mine = await call("GET", "/api/profile/role-start-steps", undefined, who.id);
+        expect(mine.status).toBe(200);
+        expect(mine.body.waiting).toHaveLength(1);
+        expect(mine.body.waiting[0].roles).toEqual(["Gate Keeper"]);
+        expect(mine.body.waiting[0].steps).toEqual([
+          { step: "confidentiality", href: "/aligned" },
+          { step: "membership", href: "/love-letter" },
+        ]);
+        // Nobody else reads them, and a visitor is refused.
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, ANA.id)).body.waiting).toEqual([]);
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, null)).status).toBe(401);
+
+        await alignAgreement(who.id);
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, who.id)).body.waiting[0].steps.map((x: any) => x.step)).toEqual(["membership"]);
+        await alignLetter(who.id);
+        // Nothing waits on them now: the card goes, and the next turn seats them.
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, who.id)).body.waiting).toEqual([]);
+        await turn(soon());
+        expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, who.id)).body.waiting).toEqual([]);
+      });
+    });
+
+    it("CONTROL: with the switches off the profile lists nothing, as the role starts at once", async () => {
+      await moonMode(async () => {
+        const who = await newAccount("steps-off");
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        expect((await call("GET", "/api/profile/role-start-steps", undefined, who.id)).body.waiting).toEqual([]);
+      });
+    });
+  });
+
   it("no payment is ever a step: the gate knows the three agreements and nothing else", () => {
     expect([...START_STEPS]).toEqual(["confidentiality", "membership", "terms"]);
     for (const s of START_STEPS) expect(START_WORDS.step[s]).not.toMatch(/pay|contribut|dues|fee/i);
