@@ -60,6 +60,7 @@ import { ensureApplicationText, recordVillageAlignment, settleText } from "./ali
 import { civilDateKey } from "../../shared/lunar";
 import { APPLICATION_BALLOT_ACTOR } from "../../shared/seatApplications";
 import { applyProposalChanges } from "./roleProposals";
+import { agreementWritten, stepHref, stepsBeforeStart, stepsBody, START_WORDS, type StartStep } from "./roleStartAgreements";
 import { revertDraft } from "./orgDrafts";
 import { proposalsForApplications } from "../repos/roleProposals";
 import {
@@ -90,8 +91,11 @@ export interface Adoption {
 export type SeatingOutcome =
   /** Seated now. `seated` are the new seatings; `linked` names the seats where an existing seating was renewed. */
   | { kind: "seated"; seated: Array<{ assignmentId: string; seatId: string; renewed: boolean }>; linked: string[] }
-  /** Adopted, and the seats wait for `starts_at`. */
-  | { kind: "later" }
+  /**
+   * Adopted, and the seats wait: for `starts_at`, or for the agreements the
+   * village asks before a role starts (`steps`, server/lib/roleStartAgreements.ts).
+   */
+  | { kind: "later"; steps?: StartStep[] }
   /** A seat had no free place. Nobody was seated. */
   | { kind: "held-full"; full: string[] }
   /** A seat is gone, retired or an example, or the term ended before it could start. */
@@ -112,9 +116,27 @@ export function firstDayOf(app: Pick<StoredApplication, "startsAt" | "termSeason
   return app.startsAt ?? begins ?? null;
 }
 
+/**
+ * WHETHER A START HAS COME, AT THE COLUMN'S PRECISION. `starts_at` is a
+ * whole-second `datetime`. A start of "now" written with its milliseconds
+ * comes back ROUNDED on MySQL 8 (11.7 s reads as 12 s, in the future) and
+ * truncated on MariaDB. So on MySQL an arrival placed in the second half of a
+ * second was adopted, not seated, and waited for the hourly turn; the role
+ * journey e2e caught it on CI's mysql:8 and never locally. A start less than
+ * one second ahead has come.
+ */
+export function startReached(first: Date, now: Date): boolean {
+  return first.getTime() - now.getTime() < 1000;
+}
+
+/** An instant at the precision `starts_at` keeps, so what is written is what is read back, on either engine. */
+export function wholeSecond(d: Date): Date {
+  return new Date(Math.floor(d.getTime() / 1000) * 1000);
+}
+
 const notYet = (app: Pick<StoredApplication, "startsAt" | "termSeasonId">, ctx: SeatingContext) => {
   const first = firstDayOf(app, ctx.calendar);
-  return !!first && first.getTime() > ctx.now.getTime();
+  return !!first && !startReached(first, ctx.now);
 };
 
 /** The term a seating takes, following the season's end when the application said it would. */
@@ -239,10 +261,17 @@ export async function adoptApplication(
         tz,
       );
 
-    if (notYet(app, ctx)) {
+    /*
+     * THE AGREEMENTS BEFORE A ROLE STARTS (L7). Asked whether or not the day
+     * has come, so the holder hears the steps at adoption. A step left holds
+     * the application adopted with nobody seated, as an application for later
+     * waits; the hourly season turn seats it once the steps are done.
+     */
+    const steps = await stepsBeforeStart(conn, { ...app, textId: text.id, textHash: text.contentHash }, ctx.now);
+    if (notYet(app, ctx) || steps.length > 0) {
       await setStatus(conn, id, from, "adopted", adopted);
       await villageAligns();
-      return { outcome: { kind: "later" }, app, textId: text.id };
+      return { outcome: { kind: "later", ...(steps.length ? { steps } : {}) }, app, textId: text.id };
     }
     const outcome = await seatInTransaction(conn, app, ctx, how.ref);
     if (outcome.kind === "seated") await setStatus(conn, id, from, "adopted", adopted);
@@ -271,6 +300,9 @@ export async function seatFromApplication(pool: Pool, id: string, ctx: SeatingCo
     // Seated once is seated: a seating that has since ENDED (an unseat, an
     // erasure) is not re-made by the turn. Only a seating ever made counts.
     if ((await seatingsEverHolding(conn, id)) > 0) return { outcome: { kind: "lost", status: app.status }, app };
+    // The agreements before a role starts (L7): still waiting, nothing is seated, and the turn asks again next hour.
+    const steps = await stepsBeforeStart(conn, app, ctx.now);
+    if (steps.length > 0) return { outcome: { kind: "later", steps }, app };
     const outcome = await seatInTransaction(conn, app, ctx, app.adoptedRef ?? app.id);
     if (outcome.kind === "seated" && app.status === "held-full") await setStatus(conn, id, ["held-full"], "adopted");
     if (outcome.kind === "held-full" && app.status === "adopted") await setStatus(conn, id, ["adopted"], "held-full");
@@ -314,6 +346,7 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
   if (outcome.kind === "seated" || outcome.kind === "later") {
     await deps.notify({ userId: app.candidateUserId, type: "governance", title: applicationNoticeTitle("adopted", names), body: null, link, actorUserId: actorId, dedupeKey: `sa:${app.id}:adopted:${key}` });
   }
+  if (outcome.kind === "later" && outcome.steps?.length) await tellSteps(deps, app, outcome.steps, actorId);
   if (outcome.kind === "seated") {
     for (const s of outcome.seated) {
       const name = names[app.seatIds.indexOf(s.seatId)] ?? s.seatId;
@@ -330,6 +363,26 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
     await deps.notify({ userId: app.candidateUserId, type: "governance", title: applicationNoticeTitle("not-adopted", names), body: null, link, actorUserId: actorId, dedupeKey: `sa:${app.id}:cannot:${key}` });
     await deps.notifyAdmins("governance", applicationNoticeTitle("not-adopted", names), `sa:${app.id}:cannot:admins:${key}`, link);
   }
+}
+
+/**
+ * "Two steps before your role starts": the holder hears the steps once per set
+ * of steps, so an hourly retry says nothing new and a step done since says the
+ * shorter list. When the confidentiality step waits on words the village has
+ * not written, the admins hear that once.
+ */
+export async function tellSteps(deps: NoticeDeps, app: StoredApplication, steps: readonly StartStep[], actorId: string | null): Promise<void> {
+  const key = `sa:${app.id}:steps:${steps.join("+")}`;
+  await deps.notify({
+    userId: app.candidateUserId,
+    type: "governance",
+    title: START_WORDS.title(steps.length),
+    body: stepsBody(steps),
+    link: stepHref(steps[0], app),
+    actorUserId: actorId,
+    dedupeKey: key,
+  });
+  if (steps.includes("confidentiality") && !agreementWritten()) await deps.notifyAdmins("governance", START_WORDS.noAgreement, `sa:${app.id}:no-agreement`, "/admin?tab=content");
 }
 
 // ── The closer ──────────────────────────────────────────────────────────────

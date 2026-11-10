@@ -37,6 +37,7 @@
  */
 import { ALIGNMENT_MAX_CHARS, ALIGNMENT_MIN_WORDS, countWords, purposeStatementProblem } from "./governingPurpose";
 import { CANVAS_BLOCKS, isCanvasBlockId, type CanvasBlockId } from "./governanceCanvas";
+import { closingStatementProblem } from "./closingPolicies";
 import { ISSUANCE_CAP_KEY } from "./issuanceCap";
 import type { CanvasPen } from "./powerHands";
 import type { BriefSectionId } from "./villageBrief";
@@ -76,6 +77,7 @@ export const CANVAS_DOOR_IDS = [
   "exit:restorative",
   "dial:ledger.admin_mint_cycle_cap",
   "module:governance",
+  "exit:closing",
 ] as const;
 export type CanvasDoorId = (typeof CANVAS_DOOR_IDS)[number];
 
@@ -91,6 +93,12 @@ export interface CanvasDoor {
   moduleId?: string;
   /** The setting's own control, for a person who wants to see it there. */
   href: string;
+  /**
+   * Suggested from the setting's own page and never from the block's box:
+   * the box leaves it out of its list (`suggestionOptions`), and the Adopt
+   * card still shows the suggestion on its block.
+   */
+  suggestedOnItsPage?: true;
 }
 
 export const CANVAS_DOORS: Record<CanvasDoorId, CanvasDoor> = {
@@ -142,6 +150,21 @@ export const CANVAS_DOORS: Record<CanvasDoorId, CanvasDoor> = {
     label: "How widely governance is switched on",
     moduleId: "governance",
     href: "/admin?tab=modules&module=governance",
+  },
+  /*
+   * WHAT CLOSING THE VILLAGE MEANS (sweep decision D3, Rye 2026-11-06). Any
+   * member suggests new words from the closing card on /exit-policy; adoption
+   * keeps its gate: before the Birthing the exit policy's writers adopt them,
+   * through the one adoption the admin PUT uses, and after it the words change
+   * only by the `closing_policy` vote (D6).
+   */
+  "exit:closing": {
+    id: "exit:closing",
+    block: "team",
+    kind: "exit-policy",
+    label: "What closing the village means",
+    href: "/exit-policy",
+    suggestedOnItsPage: true,
   },
 };
 
@@ -266,6 +289,12 @@ export interface ExitTermsChange {
   involuntaryProcess?: string;
 }
 
+/** The closing words a suggestion proposes: a policy and its statement, checked by `closingStatementProblem`. */
+export interface ClosingChange {
+  policyId: string;
+  statement: string;
+}
+
 /** The restorative path a Conflict suggestion can set. Every field optional; at least one present. */
 export interface RestorativeChange {
   steps?: string[];
@@ -362,7 +391,7 @@ export function parseMatrixRow(raw: unknown): { ok: true; row: MatrixRowChange }
   };
 }
 
-function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | { ok: false; error: string } {
+export function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | { ok: false; error: string } {
   const b = (raw ?? {}) as Record<string, unknown>;
   const change: ExitTermsChange = {};
   if (b.noticePeriodDays !== undefined) {
@@ -386,7 +415,7 @@ function parseExitTerms(raw: unknown): { ok: true; change: ExitTermsChange } | {
   return { ok: true, change };
 }
 
-function parseRestorative(raw: unknown): { ok: true; change: RestorativeChange } | { ok: false; error: string } {
+export function parseRestorative(raw: unknown): { ok: true; change: RestorativeChange } | { ok: false; error: string } {
   const b = (raw ?? {}) as Record<string, unknown>;
   const change: RestorativeChange = {};
   if (b.steps !== undefined) {
@@ -417,7 +446,7 @@ export interface CanvasProposalInput {
   target: ProposalTarget;
   sectionId: BriefSectionId | null;
   door: CanvasDoorId | null;
-  change: DialChange | ModuleChange | ExitTermsChange | RestorativeChange | MatrixRowChange | DocumentShareChange | null;
+  change: DialChange | ModuleChange | ExitTermsChange | RestorativeChange | ClosingChange | MatrixRowChange | DocumentShareChange | null;
   body: string;
   source: ProposalSource;
 }
@@ -519,6 +548,13 @@ export function parseCanvasProposal(body: unknown): { ok: true; proposal: Canvas
       return { ok: false, error: "Say how widely the module should be switched on: off, preview, members or public." };
     }
     return { ok: true, proposal: { ...base, target: "setting", sectionId: null, door: door.id, change: { to: to as ModuleChange["to"] } } };
+  }
+  if (door.id === "exit:closing") {
+    const c = (b.change ?? {}) as Record<string, unknown>;
+    const change: ClosingChange = { policyId: str(c.policyId), statement: str(c.statement) };
+    const problem = closingStatementProblem(change.policyId, change.statement);
+    if (problem) return { ok: false, error: problem };
+    return { ok: true, proposal: { ...base, target: "setting", sectionId: null, door: door.id, change } };
   }
   const parsed = door.id === "exit:terms" ? parseExitTerms(b.change) : parseRestorative(b.change);
   if (!parsed.ok) return parsed;

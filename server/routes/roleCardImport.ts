@@ -108,6 +108,31 @@ const sendCard = (res: any, text: string) =>
     .set("Cache-Control", "no-store")
     .send(text);
 
+// Held in memory and never written: the bytes go to the extractor and are dropped with the request.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: ROLE_DOCUMENT_MAX_BYTES, files: 1, fields: 4, fieldSize: 1024 } });
+
+/** The words out of whatever the request carries, or the sentence why not. */
+export async function wordsOf(req: any, res: any): Promise<(Extracted & { source: "file" | "text" | "link" }) | null> {
+  if (req.is("multipart/form-data")) {
+    const err = await new Promise<any>((resolve) => upload.single("file")(req, res, resolve));
+    if (err) {
+      const tooBig = err?.code === "LIMIT_FILE_SIZE";
+      return { ok: false, status: tooBig ? 413 : 400, error: tooBig ? DOCUMENT_WORDS.tooBig : "That upload could not be read. Try the file again.", source: "file" };
+    }
+    if (!req.file) return { ok: false, status: 400, error: "Choose the file to bring in.", source: "file" };
+    return { ...(await extractRoleDocumentText({ bytes: req.file.buffer, filename: req.file.originalname })), source: "file" };
+  }
+  const b = req.body && typeof req.body === "object" ? req.body : {};
+  if (typeof b.link === "string" && b.link.trim()) return { ...(await fetchGoogleDocText(b.link)), source: "link" };
+  if (typeof b.text === "string") {
+    const text = b.text.replace(/\r\n?/g, "\n").trim();
+    if (!text) return { ok: false, status: 400, error: "Paste the words first.", source: "text" };
+    if (text.length > ROLE_DOCUMENT_TEXT_MAX) return { ok: false, status: 413, error: DOCUMENT_WORDS.tooLong, source: "text" };
+    return { ok: true, kind: "txt", text, source: "text" };
+  }
+  return { ok: false, status: 400, error: "Bring in a file, paste the words, or share a Google Doc link.", source: "text" };
+}
+
 export function registerRoleCardRoutes(app: Express, h: RoleCardRouteHelpers): void {
   const write = (body: ProposalBody, k: KnownLike) => writeRoleCard(docFromBody(body, { words: ROLE_WORD_FIELDS, ...rolesAndCircles(k), village: h.villageName() }));
 
@@ -129,31 +154,6 @@ export function registerRoleCardRoutes(app: Express, h: RoleCardRouteHelpers): v
     if (!p) return;
     sendCard(res, write(p.body, await h.known(h.getPool())));
   });
-
-  // Held in memory and never written: the bytes go to the extractor and are dropped with the request.
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: ROLE_DOCUMENT_MAX_BYTES, files: 1, fields: 4, fieldSize: 1024 } });
-
-  /** The words out of whatever the request carries, or the sentence why not. */
-  async function wordsOf(req: any, res: any): Promise<(Extracted & { source: "file" | "text" | "link" }) | null> {
-    if (req.is("multipart/form-data")) {
-      const err = await new Promise<any>((resolve) => upload.single("file")(req, res, resolve));
-      if (err) {
-        const tooBig = err?.code === "LIMIT_FILE_SIZE";
-        return { ok: false, status: tooBig ? 413 : 400, error: tooBig ? DOCUMENT_WORDS.tooBig : "That upload could not be read. Try the file again.", source: "file" };
-      }
-      if (!req.file) return { ok: false, status: 400, error: "Choose the file to bring in.", source: "file" };
-      return { ...(await extractRoleDocumentText({ bytes: req.file.buffer, filename: req.file.originalname })), source: "file" };
-    }
-    const b = req.body && typeof req.body === "object" ? req.body : {};
-    if (typeof b.link === "string" && b.link.trim()) return { ...(await fetchGoogleDocText(b.link)), source: "link" };
-    if (typeof b.text === "string") {
-      const text = b.text.replace(/\r\n?/g, "\n").trim();
-      if (!text) return { ok: false, status: 400, error: "Paste the words first.", source: "text" };
-      if (text.length > ROLE_DOCUMENT_TEXT_MAX) return { ok: false, status: 413, error: DOCUMENT_WORDS.tooLong, source: "text" };
-      return { ok: true, kind: "txt", text, source: "text" };
-    }
-    return { ok: false, status: 400, error: "Bring in a file, paste the words, or share a Google Doc link.", source: "text" };
-  }
 
   app.post(`${BASE}/:id/import`, async (req, res) => { // limit-ok: guarded by h.member (the role proposal routes' own guard, handed in: 401 to a visitor, 403 to a guest) and bounded by h.limited, which is their overLimit, 20 in ten minutes per member, before any read or Google call
     const user = await h.member(req, res);
