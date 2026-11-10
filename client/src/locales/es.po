@@ -962,6 +962,11 @@ msgstr ""
 msgid "Turn your village's moons over quickly and read what your settings would do: who the settlement thanks, what each rule pays, when Claims Week opens, and what a member can give. A good thing to do before the vote below."
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Already a member"
+msgstr ""
+
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "economics view heading"
 msgid "Module health"
@@ -2239,6 +2244,11 @@ msgstr "Elegir más roles"
 msgid "What you would like to talk about in the terms"
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Open admin"
+msgstr ""
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgctxt "role pay"
 msgid "Show the suggestion"
@@ -2796,6 +2806,10 @@ msgctxt "roles page archetypes"
 msgid "Step one"
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "Start with the open roles and what each one asks of you."
+msgstr ""
+
 #. placeholder {0}: season.name
 #. placeholder {1}: season.timezone
 #: client/src/components/canvas/CanvasSeason.tsx
@@ -3089,6 +3103,11 @@ msgctxt "role editor"
 msgid "Sera has sent no figures for this role to go on."
 msgstr ""
 
+#: client/src/pages/Approvals.tsx
+msgctxt "approval inbox"
+msgid "Sign in to see it"
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "From {author}"
@@ -3319,6 +3338,10 @@ msgstr ""
 msgid "The village has not written any rows of its own yet."
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "You have an account here. Go straight to proposing yourself for a role."
+msgstr ""
+
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, question box placeholder"
 msgid "How do I…"
@@ -3502,6 +3525,11 @@ msgctxt "funding rounds"
 msgid "Share or read ideas"
 msgstr ""
 
+#: client/src/pages/Approvals.tsx
+msgctxt "approval inbox"
+msgid "The approval inbox is for people who steward roles here."
+msgstr ""
+
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
 msgid "This village's records: {here}."
@@ -3613,6 +3641,11 @@ msgstr ""
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "heading of the closing policy card"
 msgid "If the village closes"
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Explore the map"
 msgstr ""
 
 #: client/src/components/review/SeraCompare.tsx
@@ -5000,6 +5033,11 @@ msgstr ""
 msgid "Your type is {0}, with lines {1} and {2}."
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "One moon"
+msgstr ""
+
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoice {ref}"
@@ -5328,6 +5366,10 @@ msgstr ""
 
 #: client/src/pages/RoleMeasures.tsx
 msgid "How roles are going"
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgid "Which door is yours?"
 msgstr ""
 
 #: client/src/components/modules/SuggestDial.tsx
@@ -5663,6 +5705,11 @@ msgstr ""
 #: client/src/components/admin/RoleCharacterTags.tsx
 msgctxt "admin role characters"
 msgid "Save characters"
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Propose a role"
 msgstr ""
 
 #: client/src/components/review/SeraInDraft.tsx
@@ -6058,6 +6105,11 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Choose one, or write your own."
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Find your role"
 msgstr ""
 
 #: client/src/pages/Propose.tsx
@@ -6786,6 +6838,11 @@ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgid "Nothing waits for you, and no draft is open."
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "Stewarding the roles"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -7936,6 +7993,10 @@ msgctxt "open the change request just added to"
 msgid "Open it"
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "How leaving a role works"
+msgstr ""
+
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, proposal"
 msgid "Proposed change"
@@ -8287,6 +8348,7 @@ msgid "the circle's lead role"
 msgstr "el rol que guía el círculo"
 
 #: client/src/pages/Review.tsx
+#: client/src/pages/StewardJourney.tsx
 msgid "Open the approval inbox"
 msgstr ""
 
@@ -8459,6 +8521,10 @@ msgctxt "sera answers"
 msgid "{name} purpose"
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "New here and ready for a role"
+msgstr ""
+
 #: client/src/components/admin/OpenProposalsPanel.tsx
 msgctxt "open proposals desk term"
 msgid "Proposals are for:"
@@ -8507,6 +8573,10 @@ msgctxt "language picker"
 msgid "Use my browser's language"
 msgstr "Usar el idioma del navegador"
 
+#: client/src/pages/StewardJourney.tsx
+msgid "For stewards and admins: proposals waiting on you, and the tools behind the roles."
+msgstr ""
+
 #: client/src/components/roleDraft/DiscoverStep.tsx
 msgid "Optional. You can skip it."
 msgstr ""
@@ -8518,6 +8588,10 @@ msgstr ""
 
 #: client/src/components/review/AgentProposalsCard.tsx
 msgid "That could not be published"
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgid "Not ready for a role yet"
 msgstr ""
 
 #: client/src/components/admin/AdminHelperPanel.tsx
@@ -8946,6 +9020,10 @@ msgctxt "journal guide tasks"
 msgid "That task is no longer open on your list."
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "Roles run from new moon to new moon. Each moon you and your circle agree what you will deliver, and we pay for the work delivered, never for hours."
+msgstr ""
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Pay settings adopted"
@@ -9051,6 +9129,10 @@ msgstr ""
 msgid "Something you want to understand before you decide."
 msgstr ""
 
+#: client/src/pages/StewardJourney.tsx
+msgid "Take a quest or look around the land first. A role will still be here when you are ready."
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 #: client/src/components/review/SeraMember.tsx
 msgctxt "sera answers"
@@ -9073,6 +9155,11 @@ msgstr ""
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"
 msgid "Save as Markdown"
+msgstr ""
+
+#: client/src/pages/StewardJourney.tsx
+msgctxt "steward front door"
+msgid "See the quests"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
