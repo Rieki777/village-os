@@ -1,4 +1,4 @@
--- 0365: a new holder has an onboarding path ("Your first moons in <role>").
+-- 0365: a new holder has an onboarding path, in phases the village names.
 --
 -- Three new tables and nothing else, so this file is expand-only: the previous
 -- release neither reads nor writes them. No ALTER, no foreign keys.
@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS `onboarding_paths` (
   `buddy_user_id` varchar(64) NULL,
   `opened_on` date NOT NULL,
   `due_on` date NOT NULL,
+  -- Copied from the village's document at opening, like the items.
+  `title` varchar(80) NOT NULL DEFAULT '',
+  -- Comma-separated day numbers; empty when the village has no check-ins.
+  `checkin_days` varchar(40) NOT NULL DEFAULT '',
   `status` enum('open','done','ended') NOT NULL DEFAULT 'open',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -36,9 +40,12 @@ CREATE TABLE IF NOT EXISTS `onboarding_items` (
   `kind` varchar(16) NOT NULL DEFAULT 'plain',
   `title` varchar(160) NOT NULL,
   `owner_key` varchar(16) NOT NULL DEFAULT 'holder',
-  `due_day` smallint NOT NULL DEFAULT 30,
+  `due_day` smallint NOT NULL DEFAULT 14,
   `done_when` varchar(200) NOT NULL DEFAULT '',
   `source` varchar(16) NOT NULL DEFAULT 'platform',
+  `phase` varchar(80) NOT NULL DEFAULT '',
+  `phase_from` smallint NOT NULL DEFAULT 1,
+  `phase_to` smallint NOT NULL DEFAULT 14,
   `sort_order` smallint NOT NULL DEFAULT 0,
   `done_at` timestamp NULL DEFAULT NULL,
   `done_by` varchar(64) NULL,

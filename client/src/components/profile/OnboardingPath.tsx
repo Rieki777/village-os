@@ -1,10 +1,10 @@
 /**
- * "Your first moons in <role>": the onboarding path on the profile.
+ * The onboarding path on the profile, in the phases the village named.
  *
  * Opens when a holder is seated; the profile loads it lazily and it renders
  * nothing for anybody with no path to show. Items are ticked by whoever owns
  * them (the holder, the buddy, or the holder of the owning role); a check-in at
- * day 30, 60 and 90 is filed by the holder and read by the holder, the buddy and
+ * a check-in, where the village has set any, is filed by the holder and read by the holder, the buddy and
  * the onboarding role (server/lib/onboarding.ts decides, this only draws).
  *
  * Its own file because Profile.tsx sits under the file-lines ratchet.
@@ -14,9 +14,10 @@ import { gameFetch } from "@/lib/gameApi";
 import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
 
 export const ONBOARDING_WORDS = {
-  heading: (role: string) => `Your first moons in ${role}`,
-  line: (day: number, due: string) => `Day ${day}. The first steps are due by ${due}.`,
-  holderOf: (role: string, who: string) => `${who}'s first moons in ${role}`,
+  heading: (title: string, role: string) => `${title} in ${role}`,
+  line: (day: number, due: string) => `Day ${day}. The steps are due by ${due}.`,
+  days: (a: number, b: number) => (a === b ? `Day ${a}` : `Days ${a} to ${b}`),
+  holderOf: (title: string, role: string) => `A new holder: ${title} in ${role}`,
   buddy: (name: string) => `Your buddy is ${name}.`,
   noBuddy: "No buddy is named yet. Ask the one who adopted you.",
   open: (n: number) => (n === 1 ? "1 step open" : `${n} steps open`),
@@ -35,13 +36,14 @@ export const ONBOARDING_WORDS = {
   load: "Hours given against hours expected. Any early signs of stretch?",
   oneThing: "One thing that would help most next moon",
   file: "File check-in",
-  failed: "Your first moons did not load.",
+  failed: "The onboarding path did not load.",
   retry: "Retry",
 } as const;
 
 interface Served {
   id: string;
   roleName: string;
+  title: string;
   openedOn: string;
   dueOn: string;
   day: number;
@@ -103,6 +105,17 @@ function CheckinForm({ pathId, day, onFiled }: { pathId: string; day: number; on
   );
 }
 
+/** The steps grouped by phase, in the order the path holds them. */
+export function phasesOf<T extends { phase: string; phaseFrom: number; phaseTo: number }>(items: readonly T[]): Array<{ name: string; from: number; to: number; items: T[] }> {
+  const out: Array<{ name: string; from: number; to: number; items: T[] }> = [];
+  for (const it of items) {
+    const at = out.find((g) => g.name === it.phase);
+    if (at) at.items.push(it);
+    else out.push({ name: it.phase, from: it.phaseFrom, to: it.phaseTo, items: [it] });
+  }
+  return out;
+}
+
 function PathCard({ p, onPaths }: { p: Served; onPaths: (paths: Served[]) => void }) {
   const [error, setError] = useState<string | null>(null);
   async function tick(key: string) {
@@ -115,28 +128,35 @@ function PathCard({ p, onPaths }: { p: Served; onPaths: (paths: Served[]) => voi
   return (
     <section aria-labelledby={`onb-${p.id}`} className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
       <h2 id={`onb-${p.id}`} className="font-display text-2xl font-bold text-card-foreground">
-        {p.mine ? ONBOARDING_WORDS.heading(p.roleName) : ONBOARDING_WORDS.holderOf(p.roleName, "A new holder")}
+        {p.mine ? ONBOARDING_WORDS.heading(p.title, p.roleName) : ONBOARDING_WORDS.holderOf(p.title, p.roleName)}
       </h2>
       <p className="mt-2 text-foreground">{ONBOARDING_WORDS.line(p.day, p.dueOn)}</p>
       <p className="mt-1 text-foreground">{p.buddyName ? ONBOARDING_WORDS.buddy(p.buddyName) : ONBOARDING_WORDS.noBuddy}</p>
       <p className="mt-1 text-sm text-muted-foreground">{p.openCount > 0 ? ONBOARDING_WORDS.open(p.openCount) : ONBOARDING_WORDS.allDone}</p>
-      <ul className="mt-3 space-y-2">
-        {p.items.map((it) => (
-          <li key={it.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2">
-            <span className={it.doneAt ? "text-muted-foreground line-through" : "font-medium text-card-foreground"}>
-              {it.title}
-              <span className="block text-sm font-normal text-muted-foreground">
-                {ONBOARDING_WORDS.doneWhen} {it.doneWhen} ({ONBOARDING_WORDS.due(it.dueDay)})
-              </span>
-            </span>
-            {!it.doneAt && it.mayTick && (
-              <button type="button" onClick={() => void tick(it.key)} className={BTN}>{ONBOARDING_WORDS.tick}</button>
-            )}
-          </li>
-        ))}
-      </ul>
+      {phasesOf(p.items).map((ph) => (
+        <div key={ph.name} className="mt-4">
+          <h3 className="font-semibold text-card-foreground">
+            {ph.name} <span className="text-sm font-normal text-muted-foreground">({ONBOARDING_WORDS.days(ph.from, ph.to)})</span>
+          </h3>
+          <ul className="mt-2 space-y-2">
+            {ph.items.map((it) => (
+              <li key={it.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2">
+                <span className={it.doneAt ? "text-muted-foreground line-through" : "font-medium text-card-foreground"}>
+                  {it.title}
+                  <span className="block text-sm font-normal text-muted-foreground">
+                    {ONBOARDING_WORDS.doneWhen} {it.doneWhen} ({ONBOARDING_WORDS.due(it.dueDay)})
+                  </span>
+                </span>
+                {!it.doneAt && it.mayTick && (
+                  <button type="button" onClick={() => void tick(it.key)} className={BTN}>{ONBOARDING_WORDS.tick}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
-      {p.checkins && (
+      {p.checkins && (p.checkins.length > 0 || p.checkinsDue.length > 0) && (
         <div className="mt-4">
           <h3 className="font-semibold text-card-foreground">{ONBOARDING_WORDS.checkins}</h3>
           <ul className="mt-1 text-sm text-foreground">

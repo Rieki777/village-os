@@ -624,7 +624,7 @@ export const GAME_CONFIG: GameConfig = {
     { id: "training", when: "no-training", label: "Finish your community training", href: "/training" },
     { id: "membership-waiting", when: "membership-waiting", label: "Your {commitment} is with the village. Take a Quest while you wait", href: "/quests" },
     { id: "membership", when: "no-membership", label: "Sign the {commitment}", href: "/love-letter" },
-    { id: "first-moons", when: "onboarding-open", label: "Finish your first moons in your role", href: "/profile#onboarding" },
+    { id: "first-days", when: "onboarding-open", label: "Finish your first days in your role", href: "/profile#onboarding" },
     { id: "first-quest", when: "no-quest-claimed", label: "Take your first Quest", href: "/quests" },
     { id: "finish-quest", when: "quest-in-progress", label: "Turn in your Quest", href: "/quests" },
     { id: "send-gratitude", when: "gratitude-unspent", label: "Thank someone this cycle", href: "/gratitude" },

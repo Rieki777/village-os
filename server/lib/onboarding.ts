@@ -1,5 +1,5 @@
 /**
- * "Your first moons in <role>": opening a path at adoption, and the rules for
+ * The onboarding path: opening a path at adoption, and the rules for
  * who may see and change it.
  *
  * THE CONTRACT IS shared/onboardingPath.ts (what an item is, who may read a
@@ -21,7 +21,7 @@ import { readConfigDocument } from "../repos/appConfigDocs";
 import * as repo from "../repos/onboarding";
 import { holderFirstName } from "../../shared/roleHolderLabel";
 import {
-  PATH_DUE_DAY, checkinsDue, mayFileCheckin, mayReadCheckins, mayTick, mergePath, openItems, ownerRoleNames, readCheckin, visibleItems,
+  checkinDays, checkinsDue, lastDayOf, mayFileCheckin, mayReadCheckins, mayTick, mergePath, openItems, ownerRoleNames, pathEnabled, pathTitle, readCheckin, visibleItems,
   type CheckinAnswers, type OwnerKey, type PathItemState, type VillagePathDoc,
 } from "../../shared/onboardingPath";
 
@@ -47,13 +47,15 @@ export async function openPathFor(db: Q, s: { assignmentId: string; userId: stri
   const role = await repo.roleFacts(db, s.orgRoleId);
   if (!role) return false;
   const doc = await villageDoc(db);
+  // Off until the village switches it on: onboarding needs the circle's consent.
+  if (!pathEnabled(doc)) return false;
   const items = mergePath({ village: doc, circleId: role.circleId, first90: role.first90 });
   const buddy = role.circleId ? await repo.buddyCandidate(db, role.circleId, s.userId) : null;
   const opened = dayIn(s.now, s.timeZone || "UTC");
   const id = randomUUID();
   const made = await repo.insertPath(db, {
     id, userId: s.userId, assignmentId: s.assignmentId, orgRoleId: s.orgRoleId, circleId: role.circleId, buddyUserId: buddy,
-    openedOn: opened, dueOn: addDays(opened, PATH_DUE_DAY),
+    openedOn: opened, dueOn: addDays(opened, lastDayOf(items) - 1), title: pathTitle(doc), checkinDays: checkinDays(doc),
   });
   if (!made) return false;
   await repo.insertItems(db, id, items.map((it, i) => ({ ...it, id: randomUUID(), sortOrder: i })));
@@ -76,6 +78,7 @@ async function holdsOwner(db: Q, userId: string, doc: VillagePathDoc | null, own
 export interface ServedPath {
   id: string;
   roleName: string;
+  title: string;
   openedOn: string;
   dueOn: string;
   day: number;
@@ -104,7 +107,7 @@ export async function servePath(env: OnboardingEnv, viewerId: string, p: repo.Pa
   for (const r of rows) {
     const holdsRole = r.owner === "holder" || r.owner === "buddy" ? false : await holdsOwner(env.db, viewerId, doc, r.owner);
     items.push({
-      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, source: r.source, doneAt: r.doneAt,
+      key: r.key, kind: r.kind, title: r.title, owner: r.owner, dueDay: r.dueDay, doneWhen: r.doneWhen, source: r.source, phase: r.phase, phaseFrom: r.phaseFrom, phaseTo: r.phaseTo, doneAt: r.doneAt,
       mayTick: mayTick(viewerId, people, r.owner, holdsRole),
     });
   }
@@ -115,9 +118,9 @@ export async function servePath(env: OnboardingEnv, viewerId: string, p: repo.Pa
   });
   const dayNo = Math.max(1, Math.floor((Date.parse(`${env.today}T00:00:00Z`) - Date.parse(`${p.openedOn}T00:00:00Z`)) / 86_400_000) + 1);
   return {
-    id: p.id, roleName: role?.name ?? "", openedOn: p.openedOn, dueOn: p.dueOn, day: dayNo, buddyUserId: p.buddyUserId,
+    id: p.id, roleName: role?.name ?? "", title: p.title || "Your first days", openedOn: p.openedOn, dueOn: p.dueOn, day: dayNo, buddyUserId: p.buddyUserId,
     buddyName: p.buddyUserId ? holderFirstName(await repo.nameOf(env.db, p.buddyUserId)) : "", mine,
-    items, openCount: openItems(items), checkinsDue: checkinsDue(p.openedOn, env.today).filter((d) => !checkins.some((c) => c.day === d)),
+    items, openCount: openItems(items), checkinsDue: checkinsDue(p.openedOn, env.today, p.checkinDays).filter((d) => !checkins.some((c) => c.day === d)),
     checkins, mayFile: mayFileCheckin(viewerId, people),
   };
 }
@@ -169,7 +172,7 @@ export async function tick(env: OnboardingEnv, viewerId: string, pathId: string,
 export async function fileCheckin(env: OnboardingEnv, viewerId: string, pathId: string, dayNo: number, body: unknown): Promise<{ ok: true } | Refusal> {
   const p = await repo.pathById(env.db, pathId);
   if (!p || viewerId !== p.userId) return { ok: false, status: 404, error: "Not found" };
-  if (!checkinsDue(p.openedOn, env.today).includes(dayNo as 30 | 60 | 90)) return { ok: false, status: 409, error: "That check-in is not open yet." };
+  if (!checkinsDue(p.openedOn, env.today, p.checkinDays).includes(dayNo)) return { ok: false, status: 409, error: "That check-in is not open yet." };
   const read = readCheckin(body);
   if (!read.ok) return { ok: false, status: 400, error: read.error };
   const made = await repo.insertCheckin(env.db, { id: randomUUID(), pathId, day: dayNo, authorUserId: viewerId, answers: JSON.stringify(read.answers) });

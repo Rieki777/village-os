@@ -1,13 +1,14 @@
 /**
  * THE VILLAGE'S OWN ONBOARDING PATH, in the Org chart tab.
  *
- * "Your first moons in <role>" opens from the platform's four steps plus this
- * document: the village's steps, each circle's defaults, and which role holds
- * each owner key (onboarding, access, memory, appointer). Paste the document
+ * The path a new holder gets opens from this document: the village's phases and
+ * steps, each circle's defaults, and which role holds each owner key
+ * (onboarding, access, memory, appointer). Paste the document
  * or edit it here; saving checks every row and names the one that is wrong.
  * A path already opened keeps the steps it was opened with.
  *
- * Its own file because OrgChartTab carries one line for it.
+ * The switch is OFF until a founder ticks it and saves: onboarding needs the
+ * circle's consent. Its own file because OrgChartTab carries one line for it.
  */
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,9 +17,10 @@ import { API_BASE, authHeaders, refusal } from "./adminApi";
 const WORDS = {
   heading: "Onboarding path",
   intro:
-    "The steps every new holder sees under \"Your first moons\", beyond the four the platform brings. Each step has a key, a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay and a doneWhen. The owners object names the role that holds each owner key. Paths already opened keep the steps they opened with.",
+    "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay and a doneWhen. Paths already opened keep the steps they opened with.",
   label: "Onboarding path document (JSON)",
   save: "Save onboarding path",
+  on: "Switched on: new holders get this path. Tick only once the circle has consented.",
   saved: "Onboarding path saved",
   badJson: "That is not valid JSON.",
   failed: "The onboarding path did not load.",
@@ -28,6 +30,14 @@ export default function OnboardingPathEditor({ password }: { password: string })
   const [text, setText] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const parsed = (() => {
+    try {
+      const d = JSON.parse(text);
+      return d && typeof d === "object" && !Array.isArray(d) ? (d as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  })();
 
   useEffect(() => {
     let live = true;
@@ -72,6 +82,16 @@ export default function OnboardingPathEditor({ password }: { password: string })
     <section aria-labelledby="onb-editor-h" className="rounded-xl border border-border bg-card p-4">
       <h3 id="onb-editor-h" className="font-semibold text-card-foreground">{WORDS.heading}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{WORDS.intro}</p>
+      <label className="mt-3 flex min-h-11 items-center gap-2 text-sm font-medium text-card-foreground">
+        <input
+          type="checkbox"
+          checked={parsed?.enabled === true}
+          disabled={!loaded || !parsed}
+          onChange={(e) => setText(JSON.stringify({ ...parsed, enabled: e.target.checked }, null, 2))}
+          className="h-5 w-5"
+        />
+        {WORDS.on}
+      </label>
       <label className="mt-3 block text-sm font-medium text-card-foreground">
         {WORDS.label}
         <textarea

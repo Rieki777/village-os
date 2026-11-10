@@ -21,6 +21,8 @@ export interface PathRow {
   buddyUserId: string | null;
   openedOn: string;
   dueOn: string;
+  title: string;
+  checkinDays: number[];
   status: "open" | "done" | "ended";
 }
 
@@ -34,6 +36,9 @@ export interface ItemRow {
   dueDay: number;
   doneWhen: string;
   source: ItemSource;
+  phase: string;
+  phaseFrom: number;
+  phaseTo: number;
   sortOrder: number;
   doneAt: string | null;
   doneBy: string | null;
@@ -51,8 +56,8 @@ export interface CheckinRow {
 const day = (v: unknown): string => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? "").slice(0, 10));
 const stamp = (v: unknown): string | null => (v ? (v instanceof Date ? v.toISOString() : String(v)) : null);
 
-const PATH_COLS = "id, user_id, assignment_id, org_role_id, circle_id, buddy_user_id, opened_on, due_on, status";
-const ITEM_COLS = "id, path_id, item_key, kind, title, owner_key, due_day, done_when, source, sort_order, done_at, done_by";
+const PATH_COLS = "id, user_id, assignment_id, org_role_id, circle_id, buddy_user_id, opened_on, due_on, title, checkin_days, status";
+const ITEM_COLS = "id, path_id, item_key, kind, title, owner_key, due_day, done_when, source, phase, phase_from, phase_to, sort_order, done_at, done_by";
 
 const pathOf = (r: RowDataPacket): PathRow => ({
   id: r.id,
@@ -63,6 +68,8 @@ const pathOf = (r: RowDataPacket): PathRow => ({
   buddyUserId: r.buddy_user_id ?? null,
   openedOn: day(r.opened_on),
   dueOn: day(r.due_on),
+  title: r.title ?? "",
+  checkinDays: String(r.checkin_days ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0),
   status: r.status,
 });
 
@@ -76,6 +83,9 @@ const itemOf = (r: RowDataPacket): ItemRow => ({
   dueDay: Number(r.due_day),
   doneWhen: r.done_when,
   source: r.source,
+  phase: r.phase ?? "",
+  phaseFrom: Number(r.phase_from),
+  phaseTo: Number(r.phase_to),
   sortOrder: Number(r.sort_order),
   doneAt: stamp(r.done_at),
   doneBy: r.done_by ?? null,
@@ -84,8 +94,8 @@ const itemOf = (r: RowDataPacket): ItemRow => ({
 /** Insert a path. False when the seating already has one. */
 export async function insertPath(db: Q, p: Omit<PathRow, "status">): Promise<boolean> {
   const [r]: any = await db.query(
-    "INSERT IGNORE INTO onboarding_paths (id, user_id, assignment_id, org_role_id, circle_id, buddy_user_id, opened_on, due_on) VALUES (?,?,?,?,?,?,?,?)",
-    [p.id, p.userId, p.assignmentId, p.orgRoleId, p.circleId, p.buddyUserId, p.openedOn, p.dueOn],
+    "INSERT IGNORE INTO onboarding_paths (id, user_id, assignment_id, org_role_id, circle_id, buddy_user_id, opened_on, due_on, title, checkin_days) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    [p.id, p.userId, p.assignmentId, p.orgRoleId, p.circleId, p.buddyUserId, p.openedOn, p.dueOn, p.title, p.checkinDays.join(",")],
   );
   return Number(r?.affectedRows ?? 0) === 1;
 }
@@ -93,8 +103,8 @@ export async function insertPath(db: Q, p: Omit<PathRow, "status">): Promise<boo
 export async function insertItems(db: Q, pathId: string, items: ReadonlyArray<Omit<ItemRow, "pathId" | "doneAt" | "doneBy"> & { id: string }>): Promise<void> {
   for (const it of items) {
     await db.query(
-      "INSERT IGNORE INTO onboarding_items (id, path_id, item_key, kind, title, owner_key, due_day, done_when, source, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)",
-      [it.id, pathId, it.key, it.kind, it.title, it.owner, it.dueDay, it.doneWhen, it.source, it.sortOrder],
+      "INSERT IGNORE INTO onboarding_items (id, path_id, item_key, kind, title, owner_key, due_day, done_when, source, phase, phase_from, phase_to, sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [it.id, pathId, it.key, it.kind, it.title, it.owner, it.dueDay, it.doneWhen, it.source, it.phase, it.phaseFrom, it.phaseTo, it.sortOrder],
     );
   }
 }

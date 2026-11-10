@@ -1,30 +1,25 @@
 /**
- * "Your first moons in <role>": the onboarding path a new holder gets at adoption.
+ * The onboarding path a new holder gets at adoption, in phases the village names.
  *
  * ONE PLACE FOR THE RULES, so the server, the Trail and the profile card read
  * the same answers and a test can hold them with no database.
  *
- * WHERE THE WORDS COME FROM. The platform ships four items every village has
- * (meet your companion, ask the guide three questions, book your access, take
- * your first quest) and nothing else. A village's own list, its owner roles and
- * its circle defaults live in village data (the `onboarding-path` document);
- * the role's card adds its "First 90 days" lines. `mergePath` lays the three
- * over each other, in that order, and nobody's words are in this file.
+ * THE VILLAGE OWNS THE PATH. Its phases (a name, a day range, the steps in it),
+ * its title, its owner roles, its circles' own steps and any check-in days all
+ * live in village data (the `onboarding-path` document). The platform ships one
+ * neutral default phase and nothing else, and the path is OFF until the village
+ * switches it on (`enabled`): onboarding needs the circle's consent.
  *
- * WHO SEES WHAT. The path is the holder's. A check-in is seen only by the
- * holder, the buddy and the holder of the village's onboarding role
- * (`mayReadCheckins`); nobody else, an admin included.
+ * WHO SEES WHAT. The path is the holder's. A check-in, where a village still
+ * has any, is seen only by the holder, the buddy and the holder of the village's
+ * onboarding role (`mayReadCheckins`); nobody else, an admin included.
  */
-
-export const PATH_DUE_DAY = 30;
-export const CHECKIN_DAYS = [30, 60, 90] as const;
-export type CheckinDay = (typeof CHECKIN_DAYS)[number];
 
 /** Who an item belongs to. The village document maps the role keys to its own roles. */
 export type OwnerKey = "holder" | "buddy" | "onboarding" | "access" | "memory" | "appointer";
 export const OWNER_KEYS: readonly OwnerKey[] = ["holder", "buddy", "onboarding", "access", "memory", "appointer"];
 
-export type ItemKind = "plain" | "companion" | "guide" | "access" | "quest";
+export type ItemKind = "plain" | "companion" | "guide" | "access";
 export type ItemSource = "platform" | "village" | "circle" | "card";
 
 export interface PathItem {
@@ -32,87 +27,148 @@ export interface PathItem {
   kind: ItemKind;
   title: string;
   owner: OwnerKey;
-  /** Days after the path opened. */
+  /** The day the step is due, counted from the day the path opened (day 1). */
   dueDay: number;
   doneWhen: string;
   source: ItemSource;
+  phase: string;
+  phaseFrom: number;
+  phaseTo: number;
 }
 
-/** The village's document: extra items, owner roles by name, and each circle's own defaults. */
+export interface Phase {
+  key: string;
+  name: string;
+  fromDay: number;
+  toDay: number;
+  items: PathItem[];
+}
+
+/** The village's document: its switch, title, phases, circle steps, owners and check-in days. */
 export interface VillagePathDoc {
-  items?: unknown;
+  enabled?: unknown;
+  title?: unknown;
+  phases?: unknown;
   circles?: unknown;
   /** owner key to the NAME of the role that holds it in this village. */
   owners?: unknown;
+  checkins?: unknown;
 }
 
-/** The four every village has. Plain words; a village may restate any of them by key. */
-export const PLATFORM_ITEMS: readonly PathItem[] = [
-  { key: "companion", kind: "companion", title: "Meet your role's companion", owner: "holder", dueDay: 7, doneWhen: "You have made a first request", source: "platform" },
-  { key: "guide", kind: "guide", title: "Ask the guide three questions", owner: "holder", dueDay: 7, doneWhen: "Three answers with sources", source: "platform" },
-  { key: "access", kind: "access", title: "Book your access", owner: "access", dueDay: 3, doneWhen: "Your access session is booked", source: "platform" },
-  { key: "quest", kind: "quest", title: "Take your first quest", owner: "holder", dueDay: 14, doneWhen: "A quest is consented", source: "platform" },
-];
+export const DEFAULT_TITLE = "Your first days";
+export const MAX_DAY = 365;
 
-const KINDS: readonly ItemKind[] = ["plain", "companion", "guide", "access", "quest"];
+const KINDS: readonly ItemKind[] = ["plain", "companion", "guide", "access"];
 const clip = (v: unknown, n: number): string => (typeof v === "string" ? v.trim().slice(0, n) : "");
+const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+const dayOr = (v: unknown, fallback: number): number => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 1 && n <= MAX_DAY ? n : fallback;
+};
+
+type Where = { phase: string; phaseFrom: number; phaseTo: number };
 
 /** One item from stored data, or null when it cannot stand. Never throws. */
-export function readItem(raw: unknown, source: ItemSource): PathItem | null {
+export function readItem(raw: unknown, source: ItemSource, where: Where): PathItem | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const title = clip(r.title, 160);
-  const key = clip(r.key, 64).toLowerCase().replace(/[^a-z0-9_-]+/g, "-") || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 48);
+  const key = slug(clip(r.key, 64)) || slug(title);
   if (!title || !key) return null;
   const owner = OWNER_KEYS.includes(r.owner as OwnerKey) ? (r.owner as OwnerKey) : "holder";
   const kind = KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "plain";
-  const due = Math.trunc(Number(r.dueDay));
-  const dueDay = Number.isFinite(due) && due >= 0 && due <= 365 ? due : PATH_DUE_DAY;
-  return { key, kind, title, owner, dueDay, doneWhen: clip(r.doneWhen, 200) || "Ticked", source };
+  return { key, kind, title, owner, dueDay: dayOr(r.dueDay, where.phaseTo), doneWhen: clip(r.doneWhen, 200) || "Ticked", source, ...where };
 }
 
-const readList = (v: unknown, source: ItemSource): PathItem[] =>
-  Array.isArray(v) ? v.map((x) => readItem(x, source)).filter((x): x is PathItem => !!x) : [];
+/** The neutral phase every village gets until it writes its own. */
+export const DEFAULT_PHASES: readonly Phase[] = [
+  {
+    key: "start",
+    name: DEFAULT_TITLE,
+    fromDay: 1,
+    toDay: 14,
+    items: [
+      { key: "companion", kind: "companion", title: "Meet your role's companion", owner: "holder", dueDay: 7, doneWhen: "You have made a first request", source: "platform", phase: DEFAULT_TITLE, phaseFrom: 1, phaseTo: 14 },
+      { key: "guide", kind: "guide", title: "Ask the guide three questions", owner: "holder", dueDay: 7, doneWhen: "Three answers with sources", source: "platform", phase: DEFAULT_TITLE, phaseFrom: 1, phaseTo: 14 },
+      { key: "access", kind: "access", title: "Book your access", owner: "access", dueDay: 7, doneWhen: "Your access session is booked", source: "platform", phase: DEFAULT_TITLE, phaseFrom: 1, phaseTo: 14 },
+    ],
+  },
+];
 
-/** The card's "First 90 days" text: one holder item per non-empty line, due by day 90. */
-export function cardItems(first90: string | null | undefined): PathItem[] {
+/** The village's phases, each read through `readItem`; empty when it names none. */
+export function readPhases(village: VillagePathDoc | null): Phase[] {
+  const raw = village?.phases;
+  if (!Array.isArray(raw)) return [];
+  const out: Phase[] = [];
+  for (const p of raw.slice(0, 12)) {
+    if (!p || typeof p !== "object") continue;
+    const r = p as Record<string, unknown>;
+    const name = clip(r.name, 80);
+    if (!name) continue;
+    const fromDay = dayOr(r.fromDay, 1);
+    const toDay = Math.max(fromDay, dayOr(r.toDay, fromDay));
+    const where = { phase: name, phaseFrom: fromDay, phaseTo: toDay };
+    const items = (Array.isArray(r.items) ? r.items : []).map((x) => readItem(x, "village", where)).filter((x): x is PathItem => !!x);
+    out.push({ key: slug(clip(r.key, 64)) || slug(name), name, fromDay, toDay, items });
+  }
+  return out;
+}
+
+/** The card's "First 90 days" text: one holder item per non-empty line. */
+export function cardItems(first90: string | null | undefined, where: Where): PathItem[] {
   const lines = String(first90 ?? "")
     .split(/\r?\n/)
     .map((l) => l.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
     .filter(Boolean)
     .slice(0, 12);
   return lines.map((title, i) => ({
-    key: `card-${i + 1}`,
-    kind: "plain" as const,
-    title: title.slice(0, 160),
-    owner: "holder" as const,
-    dueDay: 90,
-    doneWhen: "Ticked",
-    source: "card" as const,
+    key: `card-${i + 1}`, kind: "plain" as const, title: title.slice(0, 160), owner: "holder" as const, dueDay: where.phaseTo, doneWhen: "Ticked", source: "card" as const, ...where,
   }));
 }
 
 /**
- * The path: platform items, then the village's, then the circle's, then the card's.
- * A later layer that uses an earlier key restates that item in place (same slot);
- * everything else is appended. Order is stable, so a path reads the same twice.
+ * The path: the village's phases (or the neutral default), then the circle's own
+ * steps, then the card's lines. A circle step names a phase by key and lands in
+ * the last phase when it names none; a later layer that uses an earlier step's
+ * key restates it in place. Order is stable, so a path reads the same twice.
  */
 export function mergePath(input: { village: VillagePathDoc | null; circleId: string | null; first90: string | null }): PathItem[] {
-  const out: PathItem[] = PLATFORM_ITEMS.map((i) => ({ ...i }));
-  const lay = (layer: PathItem[]) => {
-    for (const it of layer) {
-      const at = out.findIndex((o) => o.key === it.key);
-      if (at >= 0) out[at] = it;
-      else out.push(it);
-    }
+  const phases = readPhases(input.village);
+  const used = phases.length > 0 ? phases : DEFAULT_PHASES.map((p) => ({ ...p, items: p.items.map((i) => ({ ...i })) }));
+  const out: PathItem[] = used.flatMap((p) => p.items);
+  const last = used[used.length - 1];
+  const lay = (it: PathItem) => {
+    const at = out.findIndex((o) => o.key === it.key);
+    if (at >= 0) out[at] = it;
+    else out.push(it);
   };
-  lay(readList(input.village?.items, "village"));
   const circles = input.village?.circles;
   if (input.circleId && circles && typeof circles === "object" && !Array.isArray(circles)) {
-    lay(readList((circles as Record<string, unknown>)[input.circleId], "circle"));
+    const list = (circles as Record<string, unknown>)[input.circleId];
+    for (const raw of Array.isArray(list) ? list : []) {
+      const want = raw && typeof raw === "object" ? clip((raw as Record<string, unknown>).phase, 64) : "";
+      const ph = used.find((p) => p.key === slug(want)) ?? last;
+      const it = readItem(raw, "circle", { phase: ph.name, phaseFrom: ph.fromDay, phaseTo: ph.toDay });
+      if (it) lay(it);
+    }
   }
-  lay(cardItems(input.first90));
+  for (const it of cardItems(input.first90, { phase: last.name, phaseFrom: last.fromDay, phaseTo: last.toDay })) lay(it);
   return out;
+}
+
+/** The path's last day, from its phases. */
+export const lastDayOf = (items: readonly Pick<PathItem, "phaseTo">[]): number => items.reduce((m, i) => Math.max(m, i.phaseTo), 14);
+
+/** The switch: off until the village turns it on after the circle has consented. */
+export const pathEnabled = (village: VillagePathDoc | null): boolean => village?.enabled === true;
+
+export const pathTitle = (village: VillagePathDoc | null): string => clip(village?.title, 80) || DEFAULT_TITLE;
+
+/** The village's check-in days (none by default), ascending, at most six. */
+export function checkinDays(village: VillagePathDoc | null): number[] {
+  const raw = village?.checkins;
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.map((d) => dayOr(d, 0)).filter((d) => d > 0))).sort((a, b) => a - b).slice(0, 6);
 }
 
 /** The role name each owner key means in this village. Holder and buddy are people, not roles. */
@@ -147,10 +203,10 @@ export function dayOfPath(openedOn: string, today: string): number {
   return Math.floor((b - a) / 86_400_000) + 1;
 }
 
-/** The check-in days that have come, in order. */
-export function checkinsDue(openedOn: string, today: string): CheckinDay[] {
+/** The path's check-in days that have come, in order. */
+export function checkinsDue(openedOn: string, today: string, days: readonly number[]): number[] {
   const d = dayOfPath(openedOn, today);
-  return CHECKIN_DAYS.filter((c) => d >= c);
+  return days.filter((c) => d >= c);
 }
 
 export interface PathPeople {
@@ -212,34 +268,62 @@ export function readCheckin(raw: unknown): { ok: true; answers: CheckinAnswers }
 }
 
 /**
- * The village's document as an editor may save it: every item read through
- * `readItem` (so a bad row is named, never silently kept), owners cleaned,
- * circle defaults keyed by circle id. Returns the sentence that says what is
- * wrong, or the document to store.
+ * The village's document as an editor may save it: every phase and item read
+ * through the same readers (a bad row is named, never silently kept), owners
+ * cleaned, circle steps keyed by circle id. Returns the sentence that says what
+ * is wrong, or the document to store.
  */
-export function readVillageDoc(raw: unknown): { ok: true; doc: { items: PathItem[]; circles: Record<string, PathItem[]>; owners: Partial<Record<OwnerKey, string>> } } | { ok: false; error: string } {
+export function readVillageDoc(raw: unknown): { ok: true; doc: Record<string, unknown> } | { ok: false; error: string } {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
-  if (!r) return { ok: false, error: "Send an object with items, circles and owners." };
-  const list = (v: unknown, source: ItemSource, where: string): PathItem[] | string => {
-    if (v === undefined || v === null) return [];
-    if (!Array.isArray(v) || v.length > 60) return `${where} has to be a list of at most 60 items.`;
-    const out: PathItem[] = [];
-    for (let i = 0; i < v.length; i++) {
-      const it = readItem(v[i], source);
-      if (!it) return `${where}, item ${i + 1}, needs a title.`;
-      out.push(it);
-    }
-    return out;
-  };
-  const items = list(r.items, "village", "The village list");
-  if (typeof items === "string") return { ok: false, error: items };
-  const circles: Record<string, PathItem[]> = {};
-  if (r.circles && typeof r.circles === "object" && !Array.isArray(r.circles)) {
-    for (const [id, v] of Object.entries(r.circles as Record<string, unknown>).slice(0, 100)) {
-      const l = list(v, "circle", `The list for circle ${id}`);
-      if (typeof l === "string") return { ok: false, error: l };
-      circles[id] = l;
+  if (!r) return { ok: false, error: "Send an object with the switch, title, phases, circles and owners." };
+  const phases = Array.isArray(r.phases) ? r.phases : [];
+  if (phases.length > 12) return { ok: false, error: "A path has at most 12 phases." };
+  for (let i = 0; i < phases.length; i++) {
+    const p = phases[i];
+    const pr = p && typeof p === "object" ? (p as Record<string, unknown>) : {};
+    if (!clip(pr.name, 80)) return { ok: false, error: `Phase ${i + 1} needs a name.` };
+    const items = Array.isArray(pr.items) ? pr.items : [];
+    if (items.length > 40) return { ok: false, error: `Phase ${i + 1} has at most 40 steps.` };
+    for (let j = 0; j < items.length; j++) {
+      const it = items[j];
+      if (!readItem(it, "village", { phase: "x", phaseFrom: 1, phaseTo: 1 })) return { ok: false, error: `Phase ${i + 1}, step ${j + 1}, needs a title.` };
     }
   }
-  return { ok: true, doc: { items, circles, owners: ownerRoleNames(r as VillagePathDoc) } };
+  const cleanPhases = phases.map((p) => {
+    const pr = p as Record<string, unknown>;
+    const fromDay = dayOr(pr.fromDay, 1);
+    return {
+      key: slug(clip(pr.key, 64)) || slug(clip(pr.name, 80)),
+      name: clip(pr.name, 80),
+      fromDay,
+      toDay: Math.max(fromDay, dayOr(pr.toDay, fromDay)),
+      items: (Array.isArray(pr.items) ? pr.items : []).map((it) => {
+        const x = it as Record<string, unknown>;
+        return { key: slug(clip(x.key, 64)) || slug(clip(x.title, 160)), title: clip(x.title, 160), owner: x.owner, kind: x.kind, dueDay: x.dueDay, doneWhen: clip(x.doneWhen, 200) };
+      }),
+    };
+  });
+  const circles: Record<string, unknown[]> = {};
+  if (r.circles && typeof r.circles === "object" && !Array.isArray(r.circles)) {
+    for (const [id, list] of Object.entries(r.circles as Record<string, unknown>).slice(0, 100)) {
+      const arr = Array.isArray(list) ? list : [];
+      if (arr.length > 40) return { ok: false, error: `The list for circle ${id} has at most 40 steps.` };
+      for (let j = 0; j < arr.length; j++) {
+        const it = arr[j];
+        if (!readItem(it, "circle", { phase: "x", phaseFrom: 1, phaseTo: 1 })) return { ok: false, error: `Circle ${id}, step ${j + 1}, needs a title.` };
+      }
+      circles[id] = arr;
+    }
+  }
+  return {
+    ok: true,
+    doc: {
+      enabled: r.enabled === true,
+      title: clip(r.title, 80),
+      phases: cleanPhases,
+      circles,
+      owners: ownerRoleNames(r as VillagePathDoc),
+      checkins: checkinDays(r as VillagePathDoc),
+    },
+  };
 }

@@ -1,9 +1,9 @@
 /**
- * Onboarding routes: `/api/onboarding/**`, "Your first moons in <role>".
+ * Onboarding routes: `/api/onboarding/**`, the onboarding path in the village's own phases.
  *
  *   GET   /api/onboarding/me                         the paths the member is part of
  *   POST  /api/onboarding/paths/:id/items/:key/done   tick a step they may tick
- *   POST  /api/onboarding/paths/:id/checkins/:day     the holder files a day 30, 60 or 90 check-in
+ *   POST  /api/onboarding/paths/:id/checkins/:day     the holder files a check-in on a day the village set
  *   GET   /api/admin/onboarding-path                  the village's own list (an admin reads)
  *   PUT   /api/admin/onboarding-path                  save it (the power to fill roles)
  *
