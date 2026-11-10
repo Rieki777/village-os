@@ -110,6 +110,14 @@ describe("Sera's range", () => {
     expect(suggestPayGroup({ ...base, model: "Contractor", monthlyUsd: 2000, standing: "pending" })?.note).toBe("Funding-dependent");
   });
 
+  it("proposes the range the service states, in minor units, when it is monthly or per moon, and leaves other periods alone", () => {
+    const range = { min: 800, max: 1200.5, currency: "USD", per: "month", status: "proposed" };
+    expect(suggestPayGroup({ ...base, model: "Contractor", monthlyUsd: 2000, range })).toEqual({ kind: "range", currency: "USD", minMinor: 80000, maxMinor: 120050, per: "month" });
+    expect(suggestPayGroup({ ...base, model: "Contractor", monthlyUsd: null, range: { ...range, per: "moon", currency: "EUR" } })?.per).toBe("moon");
+    // A weekly range is not converted; with no monthly target there is nothing to propose.
+    expect(suggestPayGroup({ ...base, model: "Contractor", monthlyUsd: null, range: { ...range, per: "week" } })).toBeNull();
+  });
+
   it("proposes no money for a volunteer, and nothing when Sera sent nothing to go on", () => {
     expect(suggestPayGroup({ ...base, model: "Volunteer", monthlyUsd: null })).toEqual({ kind: "honorary" });
     expect(suggestPayGroup(null)).toBeNull();

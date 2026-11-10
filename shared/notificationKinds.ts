@@ -335,6 +335,32 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} role proposals from outside the village wait on you.",
     celebrate: false,
   },
+  // Review, conversations and selection (role journey L5). Bell only. None of
+  // these carries a score, a name or an address; they say a role is waiting.
+  application_interview_turn: {
+    group: "decisions",
+    blurb: "An applicant is waiting to talk with a role you hold. Book the conversation, then write your scorecard alone.",
+    many: "{n} applicants wait to talk with you.",
+    celebrate: false,
+  },
+  application_arrived: {
+    group: "decisions",
+    blurb: "An application arrived for a role in a circle you hold a role in. You are asked to consent after the conversations.",
+    many: "{n} applications arrived in your circles.",
+    celebrate: false,
+  },
+  application_first_reply_due: {
+    group: "decisions",
+    blurb: "An applicant is owed a first reply within 3 business days.",
+    many: "{n} applicants are owed a first reply.",
+    celebrate: false,
+  },
+  application_stale: {
+    group: "decisions",
+    blurb: "An application has not moved for ten days. A person decides what happens next.",
+    many: "{n} applications have not moved for ten days.",
+    celebrate: false,
+  },
   // The three nudges to propose roles for next season. Bell only; the
   // profile banner says the same thing for as long as it is true.
   role_proposal_window_open: {

@@ -101,6 +101,8 @@ describe("the dials no module owns", () => {
       "exit.cooling_days",
       "needs.aggregate_floor",
       "org.public_people",
+      "org.consent_after_interviews",
+      "org.onboarding_role",
       "auth.session_days",
       "platform.feedback_relay",
       "village.first_moon_at",
