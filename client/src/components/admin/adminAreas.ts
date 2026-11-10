@@ -49,6 +49,7 @@ export const ADMIN_TABS: AdminTabEntry[] = [
   entry("players", "people", "Players", "Everyone in the village game, and how far they have come."),
   entry("game-roles", "people", "Power groups", "Groups of permissions you can hand to people."),
   entry("org-chart", "people", "Org chart", "The circles and the roles on the chart."),
+  entry("role-discover", "people", "Role discovery", "Which characters a Human Design type or a Gene Keys line points toward."),
   entry("handover", "people", "The handover", "Who receives the village when stewards change."),
   entry("governance-weights", "people", "Voting weights", "How much each voice counts in a vote."),
   entry("team", "people", "Team page", "The public cards for the people who show the village."),
