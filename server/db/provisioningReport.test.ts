@@ -85,14 +85,13 @@ describe("hollowRunVerdict", () => {
 });
 
 describe("runIsFiltered", () => {
-  // The argv pnpm hands vitest for each CI shard. If this ever read as a
+  // The argv pnpm hands vitest for each CI shard (the shard's files arrive through CI_SHARD_FILES, never as a positional argument). If this ever read as a
   // filtered run, every `test (i/N)` job would stop failing when it had no
   // database, which is the hollow green the teardown exists to refuse.
   it("reads a CI shard, reporters and all, as a whole run", () => {
     expect(
       runIsFiltered([
         "run",
-        "--shard=2/4",
         "--reporter=default",
         "--reporter=github-actions",
         "--reporter=json",
