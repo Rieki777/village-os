@@ -66,7 +66,7 @@ export const GROUP_LABELS: Record<SettingsGroup, string> = {
   pay: "Pay",
   allowance: "Allowance",
   bonus: "Bonus",
-  quests: "Goals",
+  quests: "Tasks",
   scoreboard: "Scoreboard",
   ending: "Ending",
 };

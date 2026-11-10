@@ -308,6 +308,22 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
       expect(read.body.application.goals).toHaveLength(2);
     });
 
+    it("the terms step: each written setting is answered and the commitment chosen, and both are kept", async () => {
+      const s = await goalSeat(["Food grows every season"]);
+      await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [JSON.stringify({ v: 1, words: { term: "We renew each moon.", bonus: "Earned Equity." } }), s]);
+      const terms = (answers: unknown, commitmentPct?: number) => ({ choice: "accept", note: "", answers, ...(commitmentPct === undefined ? {} : { commitmentPct }) });
+      const goals = [{ ...GOAL, moves: "Food grows every season" }];
+      // Bonus is written and not answered; no commitment; a commitment off the steps.
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" } }, 50) } })).body).toMatchObject({ field: "terms" });
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "accept" } }) } })).body).toMatchObject({ field: "terms" });
+      expect((await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "accept" } }, 45) } })).body).toMatchObject({ field: "terms" });
+      // CONTROL: all answered, commitment 0.
+      const ok = await apply({ seatIds: [s], answers: { goals, terms: terms({ term: { choice: "accept" }, bonus: { choice: "talk", note: "the mix" } }, 0) } });
+      expect(ok.status).toBe(201);
+      const kept = (await readApplication(pool, ok.body.id))!.answers!.terms;
+      expect(kept).toMatchObject({ commitmentPct: 0, answers: { bonus: { choice: "talk", note: "the mix" } } });
+    });
+
     it("refuses a goal that moves a goal the role does not have, with the field and the words", async () => {
       const s = await goalSeat(["Food grows every season"]);
       const bad = await apply({ seatIds: [s], answers: { goals: [{ ...GOAL, moves: "Something the role never listed" }] } });
