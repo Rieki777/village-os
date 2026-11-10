@@ -48,7 +48,8 @@
  * The desk side asks the gate on `intake.moderate`, as the other public queues do.
  */
 import crypto from "node:crypto";
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
+import multer from "multer";
 import type { Pool } from "mysql2/promise";
 
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
@@ -92,6 +93,8 @@ import { activeClock } from "../lib/gratitude-cycles";
 import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
 import { gateOf } from "../lib/roleCardProjection";
+import { ATTACHMENT_WORDS, PROPOSAL_FILES_MAX, PROPOSAL_FILE_MAX_BYTES } from "../../shared/proposalAttachments";
+import { checkProposalFiles, removeProposalFiles, sweepProposalFiles, writeProposalFiles, type UploadedFile } from "../lib/proposalFiles";
 
 type Deps = Pick<
   AppDeps,
@@ -264,8 +267,43 @@ export function register(app: Express, deps: Deps): void {
     });
   });
 
+  /*
+   * FILES COME AS multipart/form-data: the proposal as JSON in one field,
+   * `proposal`, and up to three files in `files`. Held in memory, capped by
+   * size and count before a byte reaches disk, and checked by their own
+   * first bytes (shared/proposalAttachments.ts). A plain JSON post still works.
+   */
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    defParamCharset: "utf8",
+    limits: { fileSize: PROPOSAL_FILE_MAX_BYTES, files: PROPOSAL_FILES_MAX, fields: 1, fieldSize: 512 * 1024 },
+  }).array("files", PROPOSAL_FILES_MAX);
+
   app.post("/api/open-proposals", async (req, res) => {
-    const body = req.body ?? {};
+    if (!req.is("multipart/form-data")) return intake(req, res, req.body ?? {}, []);
+    // Before any file is read: the per-connection cap on posts that carry files.
+    if (await overLimit(`open-proposal:upload:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
+    upload(req, res, (err: any) => {
+      if (err) {
+        const code = String(err?.code ?? "");
+        const error = code === "LIMIT_FILE_SIZE" ? ATTACHMENT_WORDS.fileTooBig : code === "LIMIT_FILE_COUNT" || code === "LIMIT_UNEXPECTED_FILE" ? ATTACHMENT_WORDS.tooManyFiles : ATTACHMENT_WORDS.fileUnreadable;
+        return void res.status(code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error, field: "files" });
+      }
+      let body: unknown;
+      try {
+        body = JSON.parse(String((req.body as Record<string, unknown> | undefined)?.proposal ?? ""));
+      } catch {
+        return void res.status(400).json({ error: OPEN_WORDS.notSent });
+      }
+      const files = ((req as Request & { files?: Express.Multer.File[] }).files ?? []).map((f) => ({ originalname: f.originalname, buffer: f.buffer }));
+      void intake(req, res, body && typeof body === "object" ? (body as Record<string, any>) : {}, files).catch((e) => {
+        console.error("[open-proposals] a proposal with files was not taken", e);
+        if (!res.headersSent) res.status(500).json({ error: OPEN_WORDS.notSent });
+      });
+    });
+  });
+
+  async function intake(req: Request, res: Response, body: Record<string, any>, files: UploadedFile[]) {
     // Honeypot: a hidden field only a bot fills. Pretend it went, keep nothing.
     if (body.hp) return res.json({ sent: true });
     if (await overLimit(`open-proposal:ip:${ipBucket(clientIp(req))}`, 5, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
@@ -284,6 +322,10 @@ export function register(app: Express, deps: Deps): void {
       goalIds: new Set(t.goals.map((g) => g.id)),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
+    // The files, every one checked before any is kept (Rye, 10 Nov 2026).
+    if (files.length && !deps.proposalFileDir) return res.status(400).json({ error: ATTACHMENT_WORDS.fileUnreadable, field: "files" });
+    const checked = checkProposalFiles(files);
+    if (!checked.ok) return res.status(400).json({ error: checked.error, field: "files" });
     const { name, email } = parsed.value;
     // The term is the village's, set here and never taken from the form.
     // The goals' words are kept with the card as they read when it was sent, never taken from the form.
@@ -312,7 +354,15 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const id = `op-${crypto.randomBytes(10).toString("hex")}`;
     const token = newToken();
-    await store.insertOpenProposal(pool, { id, name: name.slice(0, OPEN_NAME_MAX), email, emailKey, targetSeasonId: season.id, body: proposal, confirmHash: hashOf(token), linkId: d.linkId, now: now() });
+    // The files go on disk BEFORE the row, so a row never names a file that is not there.
+    const fileDir = deps.proposalFileDir;
+    const kept = files.length && fileDir ? await writeProposalFiles(fileDir, id, files) : [];
+    try {
+      await store.insertOpenProposal(pool, { id, name: name.slice(0, OPEN_NAME_MAX), email, emailKey, targetSeasonId: season.id, body: { ...proposal, ...(kept.length ? { files: kept } : {}) }, confirmHash: hashOf(token), linkId: d.linkId, now: now() });
+    } catch (e) {
+      if (fileDir) await removeProposalFiles(fileDir, id);
+      throw e;
+    }
 
     const byId = new Map(roles.map((r) => [r.id, r.name]));
     const words = confirmLetter({
@@ -337,10 +387,11 @@ export function register(app: Express, deps: Deps): void {
     if (!WENT.has(sent.status)) {
       // Nobody can confirm a proposal whose link never went, so it is not kept.
       await store.deleteOpenProposal(pool, id);
+      if (fileDir) await removeProposalFiles(fileDir, id);
       return res.status(503).json({ error: OPEN_WORDS.notSent });
     }
     res.json({ sent: true, email, message: OPEN_WORDS.sent(email) });
-  });
+  }
 
   /**
    * The applicant's alignment with the letter, against the address that just
@@ -479,7 +530,7 @@ Keep this link to yourself: it is how we know it is you.`;
 
   // ── The tidy job (sheet 19i) ──────────────────────────────────────────────
 
-  registerJob(TIDY_JOB, TIDY_EVERY_MS, async () => tidyOpenProposals(getPool(), now()));
+  registerJob(TIDY_JOB, TIDY_EVERY_MS, async () => tidyOpenProposals(getPool(), now(), deps.proposalFileDir));
 
   // ── The decision (part B) ─────────────────────────────────────────────────
 
@@ -513,7 +564,7 @@ Keep this link to yourself: it is how we know it is you.`;
  * account already here made no invitation: that person is a member, and keeps
  * theirs.
  */
-export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
+export async function tidyOpenProposals(pool: Pool, at: Date, fileDir?: string): Promise<string> {
   const deleted = await store.deleteUnconfirmedBefore(pool, new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000));
   const cutoff = new Date(at.getTime() - OPEN_ANONYMISE_DAYS * 24 * 60 * 60_000);
   // Confirmed, and nobody decided it in 90 days: closed as withdrawn, and the name and address go now (red team, 9 Nov).
@@ -527,5 +578,7 @@ export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
   // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
   const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
   if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised`;
+  // Files follow the row (Rye, 10 Nov 2026): a deleted or anonymised proposal keeps none.
+  const files = fileDir ? await sweepProposalFiles(fileDir, (ids) => store.proposalsKeepingFiles(pool, ids)) : 0;
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${files ? `, ${files} file folders removed` : ""}`;
 }

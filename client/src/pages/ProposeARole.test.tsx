@@ -12,6 +12,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
+import { ATTACHMENT_WORDS } from "@shared/proposalAttachments";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -35,14 +36,20 @@ const FORM = {
 const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend, welcome home.", intent: "I align with the Membership agreement.", parts: {} };
 
 let posted: any[] = [];
+/** How each post went: its files, and the headers set by hand. */
+let sentAs: Array<{ files: File[]; headers: RequestInit["headers"] }> = [];
 
 function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: OPEN_WORDS.sent("rowan@example.test") } }) {
   posted = [];
+  sentAs = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") {
-        posted.push({ url, body: JSON.parse(String(init.body)) });
+        // With files the proposal is one field of a multipart post (Rye, 10 Nov 2026).
+        const multipart = init.body instanceof FormData ? init.body : null;
+        posted.push({ url, body: JSON.parse(String(multipart ? multipart.get("proposal") : init.body)) });
+        sentAs.push({ files: multipart ? (multipart.getAll("files") as File[]) : [], headers: init.headers });
         return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "content-type": "application/json" } });
       }
       if (String(url).startsWith("/api/membership-letter")) return new Response(JSON.stringify(LETTER), { status: 200, headers: { "content-type": "application/json" } });
@@ -143,6 +150,38 @@ describe("the form", () => {
     render(<ProposeARole />);
     expect(await screen.findByText(/already aligned with the village's membership letter/)).toBeTruthy();
     expect(screen.queryByLabelText(LETTER.intent)).toBeNull();
+  });
+
+  it("links and files: a link is sent with its label, a file goes as multipart, and the data promise is on the form (Rye, 10 Nov 2026)", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    expect(document.querySelector("[data-attachments-promise]")?.textContent).toBe(ATTACHMENT_WORDS.promise);
+    fireEvent.change(screen.getByLabelText("Link 1: what it is"), { target: { value: "Gates I built" } });
+    fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "http://gates.example.org" } });
+    // Said at once: an address that is not https.
+    expect(screen.getByRole("alert").textContent).toBe(ATTACHMENT_WORDS.linkNotHttps);
+    fireEvent.change(screen.getByLabelText("Link 1: web address"), { target: { value: "https://gates.example.org/rowan" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    const pdf = new File(["%PDF-1.7"], "portfolio.pdf", { type: "application/pdf" });
+    fireEvent.change(document.querySelector('[data-attachments] input[type="file"]') as HTMLInputElement, { target: { files: [pdf] } });
+    expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
+    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].body.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
+    expect(sentAs[0].files.map((f) => f.name)).toEqual(["portfolio.pdf"]);
+    // The browser writes the multipart boundary itself: no content type is set by hand.
+    expect(sentAs[0].headers).toBeUndefined();
+  });
+
+  it("without files the proposal goes as JSON, and blank link rows are not sent", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
+    expect(posted[0].body).not.toHaveProperty("links");
   });
 
   it("a refusal says why and marks its field, and nothing is lost", async () => {
