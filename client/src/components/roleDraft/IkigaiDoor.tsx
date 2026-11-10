@@ -131,7 +131,7 @@ export default function IkigaiDoor({
                   <li key={s.roleId} className="text-sm">
                     <strong>{nameOf(s.roleId)}</strong>: {s.why}{" "}
                     <button type="button" onClick={() => onDraft(s.roleId)} className="min-h-11 font-semibold underline underline-offset-2">
-                      {t({ message: "Draft this role", context: "role draft discover" })}
+                      {t({ message: "Select this role", context: "role draft discover" })}
                     </button>
                   </li>
                 ))}

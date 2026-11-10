@@ -381,6 +381,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} reminders that the window closes soon.",
     celebrate: false,
   },
+  role_access: {
+    group: "decisions",
+    blurb: "Access to give or take back for a role: a shared drive, a portal, a list. Open the task and mark it done once you have done it in the tool itself.",
+    many: "{n} access tasks are waiting for you.",
+    celebrate: false,
+  },
   term_expiring: {
     group: "decisions",
     blurb: "The agreement to keep holding your role is running out. In a role that carries permissions those end with the term (0171), so it is the moment to renew or hand it on.",
