@@ -49,6 +49,11 @@ msgctxt "change request note kind"
 msgid "Concern"
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season dates"
+msgid "{seasonName}, to {seasonTo}"
+msgstr ""
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Door"
@@ -436,10 +441,6 @@ msgstr ""
 msgid "Your numbers, from every source"
 msgstr ""
 
-#: client/src/pages/RoleDraft.tsx
-msgid "{seasonName}, {seasonFrom} to {seasonTo}"
-msgstr ""
-
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Interviewer role"
@@ -542,10 +543,6 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "See which one"
-msgstr ""
-
-#: client/src/pages/RoleDraft.tsx
-msgid "{seasonName}, to {seasonTo}"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
@@ -2311,6 +2308,11 @@ msgstr ""
 msgid "Back to the role"
 msgstr ""
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season dates"
+msgid "{seasonName}, {seasonFrom} to {seasonTo}"
+msgstr ""
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The time you can give (optional)"
 msgstr ""
@@ -2779,10 +2781,6 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Waiting for a signer"
-msgstr ""
-
-#: client/src/pages/RoleDraft.tsx
-msgid "This season's goals"
 msgstr ""
 
 #. placeholder {0}: cycle.poolCredited
@@ -4931,6 +4929,11 @@ msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They will align with the confidentiality agreement once approved."
+msgstr ""
+
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season goals heading"
+msgid "This season's goals"
 msgstr ""
 
 #: client/src/components/review/SeraInDraft.tsx

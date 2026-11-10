@@ -285,11 +285,11 @@ export default function RoleDraft() {
           {seasonDoc && (
             <section id="season-goals" className="mt-6 scroll-mt-24 rounded-2xl border border-border bg-card p-5" aria-labelledby="draft-goals" data-season-goals-step="">
               <h2 id="draft-goals" className="font-display text-2xl font-bold text-card-foreground">
-                {t`This season's goals`}
+                {t({ message: "This season's goals", context: "role draft season goals heading" })}
               </h2>
               {seasonName && (
                 <p className="mt-1 text-sm font-semibold text-card-foreground">
-                  {seasonFrom && seasonTo ? t`${seasonName}, ${seasonFrom} to ${seasonTo}` : seasonTo ? t`${seasonName}, to ${seasonTo}` : seasonName}
+                  {seasonFrom && seasonTo ? t({ message: `${seasonName}, ${seasonFrom} to ${seasonTo}`, context: "role draft season dates" }) : seasonTo ? t({ message: `${seasonName}, to ${seasonTo}`, context: "role draft season dates" }) : seasonName}
                 </p>
               )}
               <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">

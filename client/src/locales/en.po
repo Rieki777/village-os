@@ -49,6 +49,11 @@ msgctxt "change request note kind"
 msgid "Concern"
 msgstr "Concern"
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season dates"
+msgid "{seasonName}, to {seasonTo}"
+msgstr "{seasonName}, to {seasonTo}"
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Door"
@@ -436,10 +441,6 @@ msgstr "Starting…"
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
 
-#: client/src/pages/RoleDraft.tsx
-msgid "{seasonName}, {seasonFrom} to {seasonTo}"
-msgstr "{seasonName}, {seasonFrom} to {seasonTo}"
-
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Interviewer role"
@@ -543,10 +544,6 @@ msgstr "Every invoice, sent to paid"
 msgctxt "sera changes"
 msgid "See which one"
 msgstr "See which one"
-
-#: client/src/pages/RoleDraft.tsx
-msgid "{seasonName}, to {seasonTo}"
-msgstr "{seasonName}, to {seasonTo}"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They aligned with the membership letter when they proposed."
@@ -2308,6 +2305,11 @@ msgstr "Funded"
 msgid "Back to the role"
 msgstr "Back to the role"
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season dates"
+msgid "{seasonName}, {seasonFrom} to {seasonTo}"
+msgstr "{seasonName}, {seasonFrom} to {seasonTo}"
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "The time you can give (optional)"
 msgstr "The time you can give (optional)"
@@ -2774,10 +2776,6 @@ msgstr "Changed since it was taken"
 msgctxt "pricing desk"
 msgid "Waiting for a signer"
 msgstr "Waiting for a signer"
-
-#: client/src/pages/RoleDraft.tsx
-msgid "This season's goals"
-msgstr "This season's goals"
 
 #. placeholder {0}: cycle.poolCredited
 #. placeholder {1}: cycle.poolToken ?? ""
@@ -4919,6 +4917,11 @@ msgstr "Time"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They will align with the confidentiality agreement once approved."
 msgstr "They will align with the confidentiality agreement once approved."
+
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft season goals heading"
+msgid "This season's goals"
+msgstr "This season's goals"
 
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
