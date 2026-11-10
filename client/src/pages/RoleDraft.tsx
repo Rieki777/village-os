@@ -39,6 +39,7 @@ import SeatTradingCard from "@/components/power/SeatTradingCard";
 import { useClassNames } from "@/components/power/useClassNames";
 import { readsTerms } from "@/components/characters/RolesThatFit";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
+import DiscoverStep from "@/components/roleDraft/DiscoverStep";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
@@ -245,7 +246,7 @@ export default function RoleDraft() {
 
           <ol className="mt-6 flex flex-wrap gap-2" aria-label={t({ message: "Your way in", context: "role draft steps" })}>
             {[
-              t({ message: "Pick your characters", context: "role draft step" }),
+              t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
               t({ message: "Scout the open roles", context: "role draft step" }),
               t({ message: "Draft up to three", context: "role draft step" }),
               t({ message: "Apply", context: "role draft step" }),
@@ -257,12 +258,13 @@ export default function RoleDraft() {
             ))}
           </ol>
 
-          <section className="mt-8" aria-labelledby="draft-chars">
+          <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
+          <section aria-labelledby="draft-chars">
             <h2 id="draft-chars" className="font-display text-2xl font-bold text-foreground">{t`Who do you play? Pick one or more.`}</h2>
             {load.kind === "ready" && roles.length > 0 && !tagsKnown && (
               <p className="mt-1 text-sm text-muted-foreground">{t`This village has not tagged its roles by character for visitors yet, so every role is shown for every character.`}</p>
             )}
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {cast.map((c) => {
                 const on = chars.includes(c.key);
                 const n = fitCount(c.key);
@@ -289,6 +291,7 @@ export default function RoleDraft() {
               })}
             </div>
           </section>
+          </DiscoverStep>
 
           <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
             <section aria-labelledby="draft-roles" className="min-w-0">
