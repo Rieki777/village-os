@@ -105,8 +105,7 @@ repository (`START_HERE.md`, step 2, says how to get either). It needs
 Node 22 or newer:
 
 ```
-node scripts/fork-init.mjs --village-name "Your Village Name" \
-     --admin-email you@example.org --domain your-domain.example.org
+node scripts/fork-init.mjs --village-name "Your Village Name" \ --admin-email you@example.org --domain your-domain.example.org
 ```
 
 Leave off `--domain` if you do not have one yet; you can fill `FRONTEND_URL`
