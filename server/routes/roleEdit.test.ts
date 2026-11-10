@@ -220,9 +220,46 @@ describe.skipIf(!configured)("Edit this role", () => {
       const { id } = await seedRole();
       const live = await liveParameterKeys(pool);
       if (!live.includes("listed")) return;
+      // A role with no answer reads as listed, so take it off the list first.
+      expect((await call("POST", `/api/org/role-edit/${id}`, "holder-1", { parameters: { listed: false } })).status).toBe(200);
       const r = await call("POST", `/api/org/role-edit/${id}`, "holder-1", { parameters: { listed: true } });
       expect(r.status).toBe(409);
       expect(r.json.fields).toContain("Selection criteria");
+    });
+
+    it("writes the listing details, the ordered conversations and the mode, and puts them back", async () => {
+      const { id } = await seedRole();
+      const live = await liveParameterKeys(pool);
+      if (!live.includes("conversations")) return;
+      const other = await seedRole();
+      const [[before]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      expect(before.track).toBeNull();
+      const body = {
+        parameters: {
+          track: "contractor",
+          conversationMode: "separate",
+          bookingUrl: "https://cal.example/lead",
+          conversations: [
+            { roleId: other.id, minutes: 60, final: false },
+            { roleId: id, minutes: 20, final: true },
+          ],
+        },
+      };
+      const saved = await call("POST", `/api/org/role-edit/${id}`, "holder-1", body);
+      expect(saved.status).toBe(200);
+      const [[after]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      expect([after.track, after.conversation_mode, after.booking_url]).toEqual(["contractor", "separate", "https://cal.example/lead"]);
+      const steps = typeof after.conversations === "string" ? JSON.parse(after.conversations) : after.conversations;
+      expect(steps).toEqual(body.parameters.conversations);
+      // Two final approvals are refused.
+      const two = await call("POST", `/api/org/role-edit/${id}`, "holder-1", { parameters: { conversations: [{ roleId: other.id, minutes: 20, final: true }, { roleId: id, minutes: 20, final: true }] } });
+      expect(two.status).toBe(400);
+      const h = await call("GET", `/api/org/role-edit/${id}/history`, "holder-1");
+      const edit = h.json.entries.find((e: any) => e.fromEditor);
+      expect(edit.canRevert).toBe(true);
+      expect((await call("POST", `/api/org/role-edit/${id}/history/${edit.draftId}/revert`, "holder-1")).status).toBe(200);
+      const [[back]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      expect([back.track, back.conversations, back.conversation_mode, back.booking_url]).toEqual([null, null, null, null]);
     });
   });
 

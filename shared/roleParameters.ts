@@ -19,6 +19,7 @@
  *
  * Pure: no pool, no clock, no Node builtins.
  */
+import { CONVERSATION_MODES, INTERVIEW_MAX_MINUTES, INTERVIEW_MAX_STEPS, INTERVIEW_MIN_MINUTES, type ConversationMode } from "./interviewerRoles";
 import { looksLikePaymentDetails, PAY_KINDS, parseSeatSettings, type PaySettings } from "./seatSettings";
 
 /** Every parameter key, in the order the editor and the card text show them. */
@@ -70,8 +71,7 @@ export const TRACK_WORDS: Record<Track, string> = {
   ai: "AI",
 };
 
-export const CONVERSATION_MODES = ["block", "separate"] as const;
-export type ConversationMode = (typeof CONVERSATION_MODES)[number];
+export { CONVERSATION_MODES, type ConversationMode };
 
 export const WHERE_WORKED = ["land", "remote", "both"] as const;
 export type WhereWorked = (typeof WHERE_WORKED)[number];
@@ -84,9 +84,9 @@ export const LIMITS_PARAMETERS = {
   criteriaMin: 3,
   criteriaMax: 5,
   criterionChars: 200,
-  interviewersMax: 6,
-  minutesMin: 5,
-  minutesMax: 240,
+  interviewersMax: INTERVIEW_MAX_STEPS,
+  minutesMin: INTERVIEW_MIN_MINUTES,
+  minutesMax: INTERVIEW_MAX_MINUTES,
   bundleItems: 12,
   bundleChars: 160,
   budgetLineChars: 120,
