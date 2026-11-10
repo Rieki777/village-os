@@ -111,7 +111,7 @@ export default function DraftCarry({
 
   return (
     <section aria-labelledby="draft-carry" className="rounded-2xl border-2 border-notice bg-card p-4 text-card-foreground">
-      <h2 id="draft-carry" className="font-display text-lg font-bold">{t({ message: "From your draft", context: "role draft carry" })}</h2>
+      <h2 id="draft-carry" className="font-display text-lg font-bold">{t({ message: "From your selection", context: "role draft carry" })}</h2>
       {chars.length > 0 && (
         <div className="mt-2">
           <p className="text-sm">{t`The characters you picked. Show one, then choose Play this character to keep it.`}</p>
@@ -144,10 +144,10 @@ export default function DraftCarry({
       {open.length > 0 && propose && (
         <div className="mt-3">
           <p className="text-sm">
-            {named.length ? t`The roles you drafted: ${roleList}.` : t`You drafted roles before you joined.`}
+            {named.length ? t`The roles you selected: ${roleList}.` : t`You selected roles before you joined.`}
           </p>
           <Link href={propose} className="mt-2 inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
-            {member ? t`Apply for the roles you drafted` : t`Apply with your draft`}
+            {member ? t`Apply for the roles you selected` : t`Apply with your selection`}
           </Link>
         </div>
       )}
@@ -161,7 +161,7 @@ export default function DraftCarry({
         }}
         className="mt-3 min-h-11 text-sm text-muted-foreground underline underline-offset-2"
       >
-        {t({ message: "Clear my draft", context: "role draft carry" })}
+        {t({ message: "Clear my selection", context: "role draft carry" })}
       </button>
     </section>
   );

@@ -34,6 +34,7 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import { ApplicationChip, QuestPips } from "@/components/seasonPlans/PlanCard";
+import RoleCarryOn from "@/components/seasonPlans/RoleCarryOn";
 import { fetchMine, fileMine, saveMine, type MinePayload, type PlanBody } from "@/components/seasonPlans/seasonPlansApi";
 import {
   SeasonalGoalsField,
@@ -386,6 +387,8 @@ export default function MySeason() {
                 {data.changedSinceFiling ? ` ${MY_SEASON_WORDS.changed}` : ""}
               </p>
             </header>
+
+            <RoleCarryOn />
 
             <section aria-labelledby="ms-seats">
               <h2 id="ms-seats" className="text-xl font-bold text-stone-900">

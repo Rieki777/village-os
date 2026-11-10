@@ -14,6 +14,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import type { Player } from "./PlayerCard";
+import AiAgentsApprovalPanel from "./AiAgentsApprovalPanel";
+import LetterDraftsPanel from "./LetterDraftsPanel";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 interface PathEntry { method: Method; path: string; confirm: "agent" | "person"; label: string }
@@ -155,6 +157,8 @@ export default function AgentsPanel({ password, players }: { password: string; p
           </ul>
         </div>
       </div>
+      <AiAgentsApprovalPanel password={password} />
+      <LetterDraftsPanel password={password} />
     </section>
   );
 }
