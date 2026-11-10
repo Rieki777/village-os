@@ -91,6 +91,7 @@ export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-
 export const DOOR = { villageHolds: "village-holds-it", nobodyHolds: "nobody-holds-it", aRoleHolds: "a-role-holds-it" } as const satisfies Record<string, DoorReason>;
 
 export const DECIDE_WORDS = {
+  moonEnded: "The moon this was proposed for has ended. You can adopt it for the moon running now; the letter will say so.",
   // The page.
   heading: (proposer: string | null, roles: readonly string[], moon = false) =>
     `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} ${moon ? "this moon" : "next season"}`,

@@ -22,8 +22,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Check, Loader2, Send, X } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { HelperAnswer, HelperProposal, HelperStatus } from "@shared/adminHelper";
+import type { HelperAnswer, HelperProposal, HelperProvider, HelperStatus } from "@shared/adminHelper";
 import { guideNameAtSentenceStart } from "@shared/guideName";
+import MicButton from "@/components/MicButton";
+import { appendSpoken } from "@/components/journal/GrowingTextarea";
 import type { NavGroup } from "./adminNavGroups";
 import { applyProposal, askHelper, fetchHelperStatus, tabsFromGroups, type HelperLine } from "./adminHelperApi";
 
@@ -90,7 +92,17 @@ export default function AdminHelperPanel({
     return () => document.removeEventListener("keydown", key);
   }, [onClose]);
 
-  const guide = guideNameAtSentenceStart(status?.guide || t({ message: "your village guide", context: "admin helper, unnamed guide" }));
+  // When both Claude and Sera can answer, the admin picks; the pick is remembered on this device.
+  const [picked, setPicked] = useState<HelperProvider | null>(() => readPicked());
+  const chosen: HelperProvider | null =
+    status && picked && status.available.includes(picked) ? picked : status?.provider ?? null;
+  const pick = (p: HelperProvider) => {
+    setPicked(p);
+    rememberPicked(p);
+  };
+  const guide = guideNameAtSentenceStart(
+    (chosen && status?.names?.[chosen]) || status?.guide || t({ message: "your village guide", context: "admin helper, unnamed guide" }),
+  );
 
   const send = useCallback(
     async (e?: FormEvent) => {
@@ -106,16 +118,17 @@ export default function AdminHelperPanel({
         messages: next.map(({ role, content }) => ({ role, content })),
         tabs: tabsFromGroups(groups),
         tab,
+        provider: chosen,
       });
       setBusy(false);
       if (!out.ok) {
-        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off }));
+        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off, provider: null, available: [], names: {} }));
         else setError(out.error);
         return;
       }
       setTurns([...next, { role: "assistant", content: out.answer.reply, answer: out.answer }]);
     },
-    [draft, busy, turns, password, groups, tab],
+    [draft, busy, turns, password, groups, tab, chosen],
   );
 
   const apply = async (index: number, p: HelperProposal) => {
@@ -146,6 +159,10 @@ export default function AdminHelperPanel({
         <div className="min-w-0">
           <h2 className="truncate font-display text-lg font-semibold text-foreground">{guide}</h2>
           <p className="text-xs text-muted-foreground"><Trans context="admin helper panel">Helps you find things and proposes changes for you to approve.</Trans></p>
+          {chosen && <ProviderLine provider={chosen} />}
+          {status && status.on && status.available.length > 1 && (
+            <ProviderPicker available={status.available} names={status.names} chosen={chosen} onPick={pick} />
+          )}
         </div>
         <button
           type="button"
@@ -165,7 +182,7 @@ export default function AdminHelperPanel({
       )}
       {statusError && <p role="alert" className="p-4 text-sm text-destructive">{statusError}</p>}
 
-      {status && !status.on && (status.off === "switch" ? <SwitchedOff /> : <ConnectSteps />)}
+      {status && !status.on && (status.off === "switch" ? <SwitchedOff /> : <ConnectSteps onOpenIntegrations={() => onOpenTab("integrations")} />)}
 
       {status?.on && (
         <>
@@ -240,6 +257,7 @@ export default function AdminHelperPanel({
               placeholder={t({ message: "How do I…", context: "admin helper, question box placeholder" })}
               className="min-h-11 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            <MicButton onText={(chunk) => setDraft((d) => appendSpoken(d, chunk))} disabled={busy} />
             <button
               type="submit"
               disabled={busy || !draft.trim()}
@@ -272,19 +290,93 @@ function SwitchedOff() {
 }
 
 /** The off state: what Rye (or any admin with the hosting) does to turn it on. */
-function ConnectSteps() {
+const PICK_KEY = "admin-helper-provider";
+function readPicked(): HelperProvider | null {
+  try {
+    const v = localStorage.getItem(PICK_KEY);
+    return v === "anthropic" || v === "sera" ? v : null;
+  } catch {
+    return null;
+  }
+}
+function rememberPicked(p: HelperProvider): void {
+  try {
+    localStorage.setItem(PICK_KEY, p);
+  } catch {
+    /* a private window keeps the pick for this visit only */
+  }
+}
+
+/** Claude or Sera, when both are connected. Switching mid-conversation is fine: the next answer comes from the pick. */
+function ProviderPicker({
+  available,
+  names,
+  chosen,
+  onPick,
+}: {
+  available: HelperProvider[];
+  names: Partial<Record<HelperProvider, string>>;
+  chosen: HelperProvider | null;
+  onPick: (p: HelperProvider) => void;
+}) {
+  const { t } = useLingui();
+  const label = (p: HelperProvider) =>
+    p === "sera" ? names.sera || "Sera" : t({ message: "Claude", context: "admin helper, the Anthropic provider's name" });
+  return (
+    <div role="radiogroup" aria-label={t({ message: "Who answers", context: "admin helper, provider choice" })} className="mt-2 inline-flex rounded-full border border-border p-0.5">
+      {available.map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="radio"
+          aria-checked={chosen === p}
+          onClick={() => onPick(p)}
+          className={`min-h-9 rounded-full px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${chosen === p ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}
+        >
+          {label(p)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Who answers, said once under the heading, so an admin knows where their words go. */
+function ProviderLine({ provider }: { provider: "anthropic" | "sera" }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      {provider === "sera"
+        ? <Trans context="admin helper panel, who answers">Answers come from Sera, through your village's org memory connection.</Trans>
+        : <Trans context="admin helper panel, who answers">Answers come from Claude, on your village's own Anthropic key.</Trans>}
+    </p>
+  );
+}
+
+/** No AI connected yet: the simplest way in first, then the others. It turns on by itself once one is set. */
+export function ConnectSteps({ onOpenIntegrations }: { onOpenIntegrations: () => void }) {
   return (
     <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 text-sm text-foreground">
       <h3 className="font-semibold"><Trans context="admin helper panel">Connect Claude to turn on your helper</Trans></h3>
       <p className="text-muted-foreground">
-        <Trans context="admin helper panel">The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser.</Trans>
+        <Trans context="admin helper panel">The helper runs on Claude, using an Anthropic key that belongs to your village. It turns on by itself as soon as the key is saved, and the key never comes back to your browser.</Trans>
       </p>
       <ol className="list-decimal space-y-2 pl-5">
         <li><Trans context="admin helper, connect step">Sign in at console.anthropic.com and create an API key for the village.</Trans></li>
-        <li><Trans context="admin helper, connect step">Open your hosting (Railway), choose the village's service, and open Variables.</Trans></li>
-        <li><Trans context="admin helper, connect step">Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes.</Trans></li>
+        <li><Trans context="admin helper, connect step">Open Integrations, find "Anthropic, the AI guide", paste the key and save.</Trans></li>
         <li><Trans context="admin helper, connect step">Come back here and open the helper again.</Trans></li>
       </ol>
+      <button
+        type="button"
+        onClick={onOpenIntegrations}
+        className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Trans context="admin helper, opens the Integrations page">Open Integrations</Trans>
+      </button>
+      <p className="text-muted-foreground">
+        <Trans context="admin helper panel">Prefer your hosting? Add a variable named ANTHROPIC_API_KEY to the village's service in Railway instead. Railway restarts the service, which takes roughly two minutes.</Trans>
+      </p>
+      <p className="text-muted-foreground">
+        <Trans context="admin helper panel">If your village uses Sera for its org memory, connecting Sera also turns the helper on. A village Anthropic key is used first when both are set.</Trans>
+      </p>
     </div>
   );
 }

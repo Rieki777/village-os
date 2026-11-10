@@ -83,6 +83,9 @@ import { OPEN_INVITE_PREFIX, openInviteId } from "../../shared/openProposalDecid
 import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
 import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposalDecide";
+import { registerApplicationReview } from "./applicationReview";
+import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
+import { boolVar } from "../lib/variables";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
@@ -149,6 +152,8 @@ export function register(app: Express, deps: Deps): void {
     calendar: deps.seatCalendar,
     lapse: deps.lapse,
     now,
+    /** The village setting `org.consent_after_interviews` (role journey L5), off unless the village turned it on. */
+    consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
   };
 
   /** The switch, read fresh: one small row, and an admin who just flipped it sees it at once. */
@@ -364,7 +369,35 @@ export function register(app: Express, deps: Deps): void {
       // The asks are written and wait under Tasks; a notice that did not go is not the person's problem.
       console.error("[open-proposals] the circle could not all be told", e);
     }
-    res.json({ confirmed: true, message: OPEN_WORDS.confirmed });
+    // The applicant's own page: the step, who acts next, by when. The link is shown once and mailed; only its hash is kept.
+    let statusPath: string | null = null;
+    if (confirmed.review?.statusToken) {
+      statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
+      if (confirmed.proposal.email) {
+        const text = `Your application is with the village. Follow where it is, who acts next and by when:
+
+${site()}${statusPath}
+
+Keep this link to yourself: it is how we know it is you.`;
+        try {
+          await postEmail({
+            idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
+            kind: "essential",
+            origin: "open_proposal.status",
+            to: { email: confirmed.proposal.email },
+            subject: "Where your application is",
+            html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
+              .split("\n\n")
+              .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
+              .join("")}</body></html>`,
+            text,
+          });
+        } catch (e) {
+          console.error("[open-proposals] the status link could not be mailed", e);
+        }
+      }
+    }
+    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath });
   });
 
   // ── The desk ──────────────────────────────────────────────────────────────
@@ -454,6 +487,8 @@ export function register(app: Express, deps: Deps): void {
       await carryToAccount(getPool(), signings, { userId, name: String(m.name ?? ""), email: String(m.email), now: now() });
     });
   }
+  // Review, interviews and selection (role journey L5): scorecards, recusal, the applicant's page and the ballot fallback.
+  registerApplicationReview(app, { ...deps, postEmail, now });
   // A sign-up through an adopted proposal's invitation finishes the adoption, whichever door it came by.
   whenInvitedArrives(OPEN_INVITE_PREFIX, arrivalFor(decide));
   // The sign-up page names the roles and gives back the name and address sent (role audit, 10 Nov 2026).
@@ -478,5 +513,8 @@ export async function tidyOpenProposals(pool: Pool, at: Date): Promise<string> {
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
+  // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
+  const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
+  if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
   return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised`;
 }

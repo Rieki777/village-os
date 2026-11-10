@@ -7,7 +7,7 @@
  * by hand meets. Nothing here knows or carries the Anthropic key: the browser
  * only ever learns whether the helper is on.
  */
-import type { HelperAnswer, HelperProposal, HelperStatus, HelperTab } from "@shared/adminHelper";
+import type { HelperAnswer, HelperProposal, HelperProvider, HelperStatus, HelperTab } from "@shared/adminHelper";
 import type { NavGroup } from "./adminNavGroups";
 import { whatIsThis } from "./adminWords";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
@@ -22,7 +22,12 @@ export async function fetchHelperStatus(password: string, signal?: AbortSignal):
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(refusal(d, "The helper could not be reached."));
   const off = d?.off === "switch" || d?.off === "key" ? d.off : null;
-  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "", off: d?.on === true ? null : off ?? "key" };
+  const isProvider = (v: unknown): v is HelperProvider => v === "anthropic" || v === "sera";
+  const provider: HelperProvider | null = isProvider(d?.provider) ? d.provider : null;
+  const available: HelperProvider[] = Array.isArray(d?.available) ? (d.available as unknown[]).filter(isProvider) : provider ? [provider] : [];
+  const names: Partial<Record<HelperProvider, string>> = {};
+  for (const p of available) if (typeof d?.names?.[p] === "string") names[p] = d.names[p];
+  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "", off: d?.on === true ? null : off ?? "key", provider, available, names };
 }
 
 /** The pages this admin can open, as the nav shows them, for the guide's map of Admin. */
@@ -34,7 +39,7 @@ export type AskOutcome = { ok: true; answer: HelperAnswer } | { ok: false; off: 
 
 export async function askHelper(
   password: string,
-  input: { messages: HelperLine[]; tabs: HelperTab[]; tab: string },
+  input: { messages: HelperLine[]; tabs: HelperTab[]; tab: string; provider?: HelperProvider | null },
 ): Promise<AskOutcome> {
   try {
     const r = await fetch(`${API_BASE}/admin/helper/ask`, {
