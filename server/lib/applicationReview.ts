@@ -63,6 +63,8 @@ import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
 import type { DecideDeps } from "./openProposalDecide";
 import { numberVar } from "./variables";
+import { languageOf } from "./applicantLanguage";
+import type { ApplicantLanguage } from "../../shared/applicantWords";
 
 type Db = Pool | PoolConnection;
 
@@ -493,7 +495,7 @@ export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok:
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; locale: ApplicantLanguage; note: string | null }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -518,7 +520,9 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   const mode = d?.mode ?? "block";
   const booking = interviews.length ? bookingWords(mode, names.get(interviews[0].roleId) ?? null, interviews.reduce((n, i) => n + i.minutes, 0)) : null;
   const outcome = how === "adopted" || how === "declined" || how === "withdrawn" ? how : decidedStep ? "declined" : null;
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days") };
+  // The language and the decider's note belong to the applicant: they ride on the applicant's own page only (token or their account), never on a decider's read.
+  const own = kindOfRef(ref) === "open" ? await proposals.readOpenProposal(pool, ref) : null;
+  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), locale: own ? languageOf(own) : "en", note: own?.body.note ?? null };
 }
 
 /** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */

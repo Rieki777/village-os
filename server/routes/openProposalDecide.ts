@@ -74,7 +74,8 @@ import {
 } from "../../shared/openProposalDecide";
 import { consentState, shortDay } from "../../shared/roleProposalConsent";
 import { ADOPTING_POWER, adoptRefusal, applicationHref } from "../../shared/seatApplications";
-import { civilDayWords } from "../../shared/seasonPlans";
+import { cleanNote, wordsIn } from "../../shared/applicantWords";
+import { languageOf } from "../lib/applicantLanguage";
 import type { SeatCalendar } from "../../shared/seatTerms";
 import type { AppDeps } from "../lib/appDeps";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
@@ -268,10 +269,14 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   const seasonWords = (p: store.StoredOpenProposal) => {
     const s = seasonOf(p);
     const t = p.body.term;
+    const lang = languageOf(p);
+    const w = wordsIn(lang);
+    const civilDayWords = w.day;
     return {
       season: s?.name ? String(s.name) : null,
-      startsOn: t ? civilDayWords(t.startsOn) : s?.startsOn ? civilDayWords(String(s.startsOn)) : "the season's first day",
+      startsOn: t ? civilDayWords(t.startsOn) : s?.startsOn ? civilDayWords(String(s.startsOn)) : w.adopt.firstDay,
       moon: t ? { from: civilDayWords(t.startsOn), to: civilDayWords(t.endsOn) } : null,
+      lang,
     };
   };
 
@@ -425,6 +430,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const decidedBase = decisionFor(consentState(asks, at), at, tz(), carrying.find((r) => r.id === seatedIn)?.name ?? null);
     const decided = theMoonNow ? `${decidedBase}, for the moon running now` : decidedBase;
     const decision = { words: decided, authority: `${ADOPTING_POWER}@${seatedIn}`.slice(0, 64) };
+    // A note for the applicant, when the decider wrote one: kept on the proposal, shown on their status page, in the letter.
+    const note = cleanNote(req.body?.note);
     const roles = await rolesOf(pool, p);
     const firstName = greetingName(p.name);
     const village = projectName();
@@ -435,7 +442,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (may.own) {
       // Somebody who left the village: welcoming them back is its own act. Nothing is granted, seated or sent.
       if (await isFormerMemberAccount(work, may.own)) return res.status(409).json({ error: "former_member", message: DECIDE_WORDS.formerMember });
-      if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at, note))) return res.status(409).json({ error: DECIDE_WORDS.raced });
       await stampDecided(work, p.id, "adopted");
       let placed: Awaited<ReturnType<typeof placeOnRoles>>;
       try {
@@ -451,7 +458,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine, note }))
           : null,
       );
       await tell(p.id, "adopted");
@@ -473,7 +480,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     let held: { ok: boolean };
     try {
       held = await whileSessionHolds(pool, actorId, Number(viewer.tokenVersion ?? 0), async (conn) => {
-        if (!(await store.decideOpenProposal(conn, p.id, "adopted", decision, at))) throw Object.assign(new Error("decided a moment ago"), { code: RACED });
+        if (!(await store.decideOpenProposal(conn, p.id, "adopted", decision, at, note))) throw Object.assign(new Error("decided a moment ago"), { code: RACED });
         try {
           await createInviteOn(conn, input);
         } catch (e: any) {
@@ -493,7 +500,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine, note }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, at, why === null);
@@ -523,13 +530,14 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const pool = getPool();
     const at = now();
     const decided = declinedWords(shortDay(at, tz()));
+    const note = cleanNote(req.body?.note);
     // decided_at is set here, so the tidy job takes the name and address off after 90 days.
-    if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+    if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at, note))) return res.status(409).json({ error: DECIDE_WORDS.raced });
     await stampDecided(work, p.id, "declined");
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:declined`, "open_proposal.declined", { email: p.email, name: firstName }, declinedLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), site: site() }))
+        ? letter(`open-proposal:${p.id}:declined`, "open_proposal.declined", { email: p.email, name: firstName }, declinedLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), site: site(), lang: languageOf(p), note }))
         : null,
     );
     await tell(p.id, "declined");
@@ -579,7 +587,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine, note: p.body.note ?? null }))
         : null,
     );
     await store.noteInvitationSent(pool, p.id, now(), why === null);

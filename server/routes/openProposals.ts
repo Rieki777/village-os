@@ -87,11 +87,13 @@ import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposal
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
 import { boolVar, numberVar } from "../lib/variables";
+import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
+import { wordsIn } from "../../shared/applicantWords";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
-import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
+import { isTermMode, moonTermFor, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
 import { gateOf } from "../lib/roleCardProjection";
 import { ATTACHMENT_WORDS, PROPOSAL_FILES_MAX, PROPOSAL_FILE_MAX_BYTES } from "../../shared/proposalAttachments";
@@ -351,7 +353,9 @@ export function register(app: Express, deps: Deps): void {
       if (!asked || asked.letterVersion !== letter.version) return res.status(409).json({ error: LETTER_WORDS.changed, field: "membership", letter });
       membership = asked;
     }
-    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}) };
+    // The language their emails come in: chosen once, here, by the rule in shared/applicantLanguage.ts.
+    const locale = await languageForNewProposal({ getPool, members: deps.members }, { clientLocale: body.locale, email, acceptLanguage: req.headers["accept-language"] });
+    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}), locale };
     const emailKey = emailKeyOf(email);
     if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.
@@ -376,7 +380,8 @@ export function register(app: Express, deps: Deps): void {
       village: projectName(),
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
-      ...(t.term ? { when: moonTermWords(t.term) } : {}),
+      lang: locale,
+      ...(t.term ? { when: wordsIn(locale).confirm.thisMoon(wordsIn(locale).day(t.term.startsOn), wordsIn(locale).day(t.term.endsOn)) } : {}),
     });
     const sent = await postEmail({
       idempotencyKey: `open-proposal:${id}:confirm`,
@@ -442,18 +447,15 @@ export function register(app: Express, deps: Deps): void {
     if (confirmed.review?.statusToken) {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
-        const text = `Your proposal is with the village. Follow where it is, who acts next and by when:
-
-${site()}${statusPath}
-
-${replyPromise(numberVar("org.applicant_reply_days"))} Keep this link to yourself: it is how we know it is you.`;
+        const lang = languageOf(confirmed.proposal);
+        const text = wordsIn(lang).statusEmail.text(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")));
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: "Where your proposal is",
+            subject: wordsIn(lang).statusEmail.subject,
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
