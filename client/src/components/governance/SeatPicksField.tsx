@@ -15,6 +15,7 @@
  */
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { useEffect, useRef, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import InfoTip from "@/components/InfoTip";
 import type { FieldSpec } from "./wizardConfig";
@@ -43,6 +44,7 @@ export default function SeatPicksField({
   invalid: boolean;
   footerNode: React.ReactNode;
 }) {
+  const { t } = useLingui();
   const [options, setOptions] = useState<PickOption[] | null>(null);
   const me = String((useOptionalAuth()?.user as any)?.id ?? "");
   const [dropped, setDropped] = useState<string[]>([]);
@@ -152,6 +154,14 @@ export default function SeatPicksField({
             );
           })}
         </ul>
+      )}
+      {picked.length < 3 && (
+        <a
+          href="/roles/select"
+          className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+        >
+          {t({ message: "Pick more roles", context: "role application: link from the roles step to the role picker" })}
+        </a>
       )}
       {footerNode}
     </fieldset>

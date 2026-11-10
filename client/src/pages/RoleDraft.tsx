@@ -399,7 +399,7 @@ export default function RoleDraft() {
                     onClick={() => toggleChar(c.key)}
                     className={`sel-lift group relative flex min-h-11 flex-col overflow-hidden rounded-2xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
                   >
-                    <ArtImage src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                    <ArtImage portrait src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
                     {on && (
                       <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
                         <Check className="size-3.5" aria-hidden="true" />

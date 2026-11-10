@@ -514,7 +514,7 @@ export default function Roles() {
             <div className="mt-4 flex justify-center">
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
             </div>
-            {user && (
+            {canTagNeeds && (
               <p className="mt-3 text-sm">
                 <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
                   {t({ message: "How roles are going", context: "roles page measures door" })}

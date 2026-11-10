@@ -544,7 +544,6 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
             className={FIELD}
           />
         )}
-        <p className="text-xs text-muted-foreground">{t`Everyone who reads your proposal sees a wish to talk about the terms.`}</p>
       </fieldset>
     </div>
   );

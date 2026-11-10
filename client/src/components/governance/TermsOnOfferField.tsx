@@ -103,7 +103,6 @@ export default function TermsOnOfferField({
           className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground"
         />
       )}
-      <p className="text-xs text-muted-foreground">{t`Everyone who reads your application sees a wish to talk about the terms.`}</p>
       {problem && (
         <p role="alert" className="text-sm font-medium text-destructive">
           {problem}

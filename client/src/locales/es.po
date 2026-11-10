@@ -134,8 +134,8 @@ msgid "Save and update the role"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Everyone who reads your proposal sees a wish to talk about the terms."
-msgstr ""
+#~ msgid "Everyone who reads your proposal sees a wish to talk about the terms."
+#~ msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -2143,6 +2143,11 @@ msgctxt "notebook document kind and date"
 msgid "{0}, added {1}."
 msgstr ""
 
+#: client/src/components/governance/SeatPicksField.tsx
+msgctxt "role application: link from the roles step to the role picker"
+msgid "Pick more roles"
+msgstr "Elegir más roles"
+
 #: client/src/components/governance/TermsOnOfferField.tsx
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "What you would like to talk about in the terms"
@@ -2871,6 +2876,10 @@ msgstr ""
 
 #: client/src/components/review/SeraMember.tsx
 msgid "{agent} suggests {nChanges} for the chart"
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -6865,8 +6874,8 @@ msgid "<0>Write them in Admin, under Departures</0>. They are the restorative st
 msgstr ""
 
 #: client/src/components/governance/TermsOnOfferField.tsx
-msgid "Everyone who reads your application sees a wish to talk about the terms."
-msgstr ""
+#~ msgid "Everyone who reads your application sees a wish to talk about the terms."
+#~ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Contacts outside the village"
@@ -7648,6 +7657,10 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "consent queue empty"
 msgid "Nothing waiting."
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators. Sign in with an administrator account to see it."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
