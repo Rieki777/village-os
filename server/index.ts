@@ -164,6 +164,7 @@ import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
 import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
 import { orgStructureForHelper } from "./lib/adminHelperReaders";
+import { seraHelperAsk, seraHelperName } from "./lib/adminHelperSera";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -12877,6 +12878,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     guideSource: () => getWorkWithUs().assistantName,
     dials: () => allVariables(),
     switchOn: () => boolVar("platform.admin_helper"),
+    seraAsk: seraHelperAsk,
+    seraName: seraHelperName,
     readOrgStructure: async () => {
       const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool())]);
       return orgStructureForHelper({ roles, assignments, circles: circleViews(circlesRepo.all()) });
