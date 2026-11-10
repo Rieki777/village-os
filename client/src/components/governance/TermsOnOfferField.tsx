@@ -6,27 +6,31 @@
  * read the role's own terms on offer, then accept them or say what they would
  * like to talk about, which every decider sees. The answer carries the terms
  * it showed (`settings`), and the publish sends them unchanged: the first
- * picked role's offer, or, for a role whose card offers none, the platform's
- * volunteer terms the editor has always started from.
+ * picked role's offer, or, for a role whose card offers none, no terms at all
+ * (`{ v: 1 }`), exactly what the open form sends. The village agrees them with
+ * the holder. Never the platform's volunteer preset: that read as a volunteer
+ * track (Rye, 10 Nov 2026: every role is a contract), and a village's own
+ * default belongs to its data, not to a door.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useLingui } from "@lingui/react/macro";
-import { applyWholePreset, wholePresetById } from "@shared/seatPresets";
 import { readTermsOffer } from "@shared/seatTermsOffer";
 import { termsSlotFor } from "@/components/power/SeatTermsSlot";
 import type { FieldSpec } from "./wizardConfig";
 import { loadOrg } from "./pickSources";
 import { pickedSeats } from "./SeatPicksField";
-import { ROLE_APPLICATION_PREFILL, termsChoiceOf } from "./roleApplicationType";
+import { termsChoiceOf } from "./roleApplicationType";
 
-/** The terms a door application holds: the first picked role's offer, else the volunteer terms. */
+/** No terms written: the village agrees a role's terms with its holder (the open form sends the same). */
+export const NO_TERMS_YET = { v: 1 } as const;
+
+/** The terms a door application holds: the first picked role's offer, else none written yet. */
 export function doorSettings(seats: ReadonlyArray<Record<string, any>>): unknown {
   for (const seat of seats) {
     const offer = readTermsOffer(seat?.termsOffer ?? null);
     if (offer.ok && offer.settings) return offer.settings;
   }
-  const whole = wholePresetById(ROLE_APPLICATION_PREFILL);
-  return whole ? applyWholePreset(null, whole, []) : null;
+  return { ...NO_TERMS_YET };
 }
 
 export default function TermsOnOfferField({

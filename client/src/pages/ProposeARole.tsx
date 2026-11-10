@@ -85,13 +85,16 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 
 /** The link in the confirmation email. */
 export function ConfirmProposal() {
-  const [said, setSaid] = useState<{ ok: boolean; message: string } | null>(null);
+  const { t } = useLingui();
+  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null } | null>(null);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
     fetch("/api/open-proposals/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone });
+        // The applicant's own page (role journey L5): shown once here as well as mailed, and only an address of its own.
+        const statusPath = typeof data?.statusPath === "string" && data.statusPath.startsWith("/application-status/") ? data.statusPath : null;
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone, statusPath });
       })
       .catch(() => setSaid({ ok: false, message: OPEN_WORDS.confirmGone }));
   }, []);
@@ -100,6 +103,14 @@ export function ConfirmProposal() {
       {said ? (
         <Notice title={said.ok ? "Confirmed" : "That link didn't work"}>
           <p>{said.message}</p>
+          {said.ok && said.statusPath && (
+            <>
+              <a href={said.statusPath} className={`${BUTTON} mt-6`} data-status-link="">
+                {t`Follow where your proposal is`}
+              </a>
+              <p className="mt-3 text-sm text-muted-foreground">{t`We emailed you this link too. Keep it to yourself: it is how we know it is you.`}</p>
+            </>
+          )}
           {!said.ok && (
             <a href="/propose-a-role" className={`${BUTTON} mt-6`}>
               Propose again

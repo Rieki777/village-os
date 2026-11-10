@@ -3114,6 +3114,10 @@ msgstr ""
 msgid "Why not, in one line"
 msgstr ""
 
+#: client/src/pages/ProposeARole.tsx
+msgid "We emailed you this link too. Keep it to yourself: it is how we know it is you."
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "In a draft, not live yet: 1 change"
@@ -6994,6 +6998,10 @@ msgstr ""
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Someone here renamed it on {at}."
+msgstr ""
+
+#: client/src/pages/ProposeARole.tsx
+msgid "Follow where your proposal is"
 msgstr ""
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx

@@ -3108,6 +3108,10 @@ msgstr "The five columns are the Decision Matrix of the <0>{creditText}<1/></0>.
 msgid "Why not, in one line"
 msgstr "Why not, in one line"
 
+#: client/src/pages/ProposeARole.tsx
+msgid "We emailed you this link too. Keep it to yourself: it is how we know it is you."
+msgstr "We emailed you this link too. Keep it to yourself: it is how we know it is you."
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "In a draft, not live yet: 1 change"
@@ -6977,6 +6981,10 @@ msgstr "Save safety"
 msgctxt "sera answers"
 msgid "Someone here renamed it on {at}."
 msgstr "Someone here renamed it on {at}."
+
+#: client/src/pages/ProposeARole.tsx
+msgid "Follow where your proposal is"
+msgstr "Follow where your proposal is"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx

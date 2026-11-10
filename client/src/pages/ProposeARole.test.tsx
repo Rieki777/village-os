@@ -224,6 +224,20 @@ describe("the confirmation link", () => {
     await waitFor(() => expect(posted[0]).toEqual({ url: "/api/open-proposals/confirm", body: { token: "abc" } }));
   });
 
+  it("shows the private status link the confirmation hands back, and only a status address (role journey L5)", async () => {
+    window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "/application-status/op-1?token=s3cret" } });
+    render(<ConfirmProposal />);
+    const link = await screen.findByRole("link", { name: "Follow where your proposal is" });
+    expect(link.getAttribute("href")).toBe("/application-status/op-1?token=s3cret");
+    cleanup();
+    // Anything else the server might hand back is not drawn as a link.
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "https://elsewhere.example/x" } });
+    render(<ConfirmProposal />);
+    await screen.findByText(OPEN_WORDS.confirmed);
+    expect(screen.queryByRole("link", { name: "Follow where your proposal is" })).toBeNull();
+  });
+
   it("a link that ran out says so, and offers to start again", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=old");
     serve({}, { status: 410, body: { error: OPEN_WORDS.confirmGone } });

@@ -14,6 +14,9 @@ import { applyHrefFor } from "@shared/roleDraft";
 import { NO_SEASON_GOALS, ROLE_APPLICATION_TYPE, doorDeliverables, roleApplicationStart, termsChoiceProblem } from "./roleApplicationType";
 import { fieldsFor, nextStep, prevStep, problemsFor, walkFor } from "./wizardWalk";
 import { doorBack } from "@/pages/Propose";
+import { doorSettings } from "./TermsOnOfferField";
+import { applyWholePreset, wholePresetById } from "@shared/seatPresets";
+import { parseSeatSettings } from "@shared/seatSettings";
 
 const DOOR = roleApplicationStart("?type=role_application&seat=garden&seat=host&from=%2Froles%2Fdraft")!;
 const RENEWAL = roleApplicationStart("?type=role_application&seat=garden&renew=garden&season=s-next")!;
@@ -90,5 +93,18 @@ describe("where the door's back link goes", () => {
     expect(doorBack("?from=%2Froles%2Fdraft", "")).toEqual({ href: "/roles/draft", card: false });
     expect(doorBack("?from=%2F%2Fevil.example", "")).toEqual({ href: DOOR_HOME, card: false });
     expect(doorBack("", "https://elsewhere.example/roles/draft")).toEqual({ href: DOOR_HOME, card: false });
+  });
+});
+
+describe("the terms a door sends (Rye, 10 Nov 2026: every role is a contract)", () => {
+  it("sends the role's own terms on offer unchanged", () => {
+    const offer = applyWholePreset(null, wholePresetById("platform:whole-stipend-seat")!, []);
+    expect(doorSettings([{ id: "garden", termsOffer: offer }])).toEqual(offer);
+  });
+  it("for a role that offers none, writes no terms (as the open form does), never the volunteer preset", () => {
+    const none = doorSettings([{ id: "garden", termsOffer: null }]);
+    expect(none).toEqual({ v: 1 });
+    expect(JSON.stringify(none)).not.toMatch(/unpaid|volunteer/i);
+    expect(parseSeatSettings(none).ok).toBe(true);
   });
 });
