@@ -327,7 +327,17 @@ export function statusFor(i: StatusInput): Status {
   path.push({ label: STEP_WORDS.consent, state: i.decided ? "done" : done && i.firstReplyAt ? "now" : "later" });
   path.push({ label: STEP_WORDS.decided, state: i.decided ? "done" : "later" });
 
-  if (i.decided) return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: "Nobody. The village has answered.", by: null, path };
+  if (i.decided) {
+    // Guide v2 (Rye, 10 Nov 2026): whose move it is. Once decided, the steps that never happened leave the path.
+    const walked = path.filter((p) => p.state !== "later");
+    const move =
+      i.decided === "adopted"
+        ? "Yours: make your account. The link to make it is in your email."
+        : i.decided === "withdrawn"
+          ? "Nobody. You withdrew this proposal."
+          : "Nobody. The village has answered.";
+    return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: move, by: null, path: walked };
+  }
   if (!i.firstReplyAt) {
     path[1] = { label: STEP_WORDS.first_reply, state: "now" };
     return { step: "first_reply", stepWords: STEP_WORDS.first_reply, actsNext: "The role that welcomes people replies with a time to talk.", by: firstReplyDueAt(i.confirmedAt, i.timeZone), path };
@@ -414,7 +424,7 @@ export const PANEL_WORDS = {
   toTheVillage: "Take it to the village's vote",
   toTheVillageLine: "Nobody can adopt this at the door. It becomes a proposal the village can vote on.",
   statusHeading: "Where your proposal is",
-  statusNext: "Who acts next",
+  statusNext: "Whose move",
   statusBy: (day: string) => `By ${day}`,
   statusMissing: "That link does not match a proposal. Check the link in your email.",
   splitAsk: "Split the conversations over days",

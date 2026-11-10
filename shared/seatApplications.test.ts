@@ -24,6 +24,7 @@ import {
   whoAdoptsWords,
 } from "./seatApplications";
 import { whoApprovesWords } from "./roleProposalConsent";
+import { whoseMove } from "./seatApplications";
 
 const body = (over: Record<string, unknown> = {}) => ({
   seatIds: ["seat-a"],
@@ -196,5 +197,22 @@ describe("the subject", () => {
 
   it("has words for every status", () => {
     for (const s of APPLICATION_STATUSES) expect(STATUS_WORDS[s], s).toBeTruthy();
+  });
+});
+
+describe("whose move it is (guide v2, Rye 10 Nov 2026)", () => {
+  it("names the holder of the power while it waits, and says yours only to the reader whose move it is", () => {
+    expect(whoseMove("awaiting-holder", { isCandidate: true })).toMatch(/^A holder of the power to place people in roles/);
+    expect(whoseMove("awaiting-holder", { holdsThePower: true })).toMatch(/^Yours: read it/);
+    // A holder reading their own proposal never adopts it: it is still the other holders' move.
+    expect(whoseMove("awaiting-holder", { isCandidate: true, holdsThePower: true })).toMatch(/^A holder of the power/);
+  });
+  it("is the village's while it votes, the proposer's once adopted, and nobody's once closed", () => {
+    expect(whoseMove("voting", null)).toBe("The village's: it is voting.");
+    expect(whoseMove("adopted", { isCandidate: true })).toMatch(/^Yours: align/);
+    expect(whoseMove("adopted", null)).toMatch(/^Theirs:/);
+    expect(whoseMove("withdrawn", { isCandidate: true })).toBe("Nobody's: this proposal is closed.");
+    expect(whoseMove("not-adopted", null)).toBe("Nobody's: this proposal is closed.");
+    expect(whoseMove("held-full", null)).toMatch(/waits for a place/);
   });
 });

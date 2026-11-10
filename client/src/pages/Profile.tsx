@@ -29,6 +29,7 @@ import PlayerRoleCard from "@/components/playerCard/PlayerRoleCard";
 import MyMoonMount from "@/components/myMoon/MyMoonMount";
 import ProposeBanner from "@/components/roleProposal/ProposeBanner";
 import ProposeRolesEntry from "@/components/roleProposal/ProposeRolesEntry";
+import YourMoveCard from "@/components/profile/YourMoveCard";
 import SurfacedBanner from "@/components/profile/SurfacedBanner";
 import { useSurfaced } from "@/components/profile/useSurfaced";
 import TheVessel from "@/components/profile/TheVessel";
@@ -392,6 +393,8 @@ export default function Profile() {
                 Today and on Roles, so it is the first thing on either tab.
                 A desktop shows it here, above the hero. */}
             <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
+              {/* Guide v2: whose move it is, first: what waits on you to align with, above proposing for next season. */}
+              <YourMoveCard />
               <ProposeBanner />
               <ProposeRolesEntry />
             </div>
