@@ -136,6 +136,12 @@ describe("no public event anywhere in the alignment store", () => {
     "server/lib/membershipLetter.ts",
     "server/routes/membershipLetter.ts",
     "server/repos/membershipSignings.ts",
+    // The confidentiality agreement and the agreements before a role starts (role journey L7).
+    "shared/confidentiality.ts",
+    "server/lib/confidentiality.ts",
+    "server/routes/confidentiality.ts",
+    "server/lib/applicationMembership.ts",
+    "server/lib/roleStartAgreements.ts",
   ];
   const code = (f: string) => fs.readFileSync(path.join(ROOT, f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 

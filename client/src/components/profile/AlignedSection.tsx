@@ -109,6 +109,7 @@ function Own() {
         <ScrollText className="size-5 text-notice" aria-hidden="true" />
         {ALIGNED_SECTION_WORDS.heading}
       </h2>
+      <p className="mt-1 text-sm text-muted-foreground">{ALIGN_WORDS.waysOfSigning}</p>
       {backFromGoogle && !confirmed && <ReconfirmPanel onConfirmed={() => setConfirmed(true)} />}
       {confirmed && (
         <p role="status" className="mt-2 text-sm text-foreground">

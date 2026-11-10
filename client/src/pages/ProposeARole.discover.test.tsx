@@ -17,6 +17,8 @@ vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: null 
 import ProposeARole from "./ProposeARole";
 
 const FORM = { open: true, village: "Test Village", season: { id: "s", name: "S", startsOn: "2099-01-01" }, roles: [{ id: "r-gate", name: "Gate Keeper", circle: "Land Circle", aim: null }] };
+/** The membership letter the form aligns with (PR-E, Rye's answer 8): its own sentence is the one box about it. */
+const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend, welcome home.", intent: "I align with the Membership agreement.", parts: {} };
 let posted: any[] = [];
 
 function serve() {
@@ -28,6 +30,7 @@ function serve() {
         posted.push({ url, raw: String(init.body), body: JSON.parse(String(init.body)) });
         return new Response(JSON.stringify({ sent: true, message: OPEN_WORDS.sent("a@b.test") }), { status: 200, headers: { "content-type": "application/json" } });
       }
+      if (String(url).startsWith("/api/membership-letter")) return new Response(JSON.stringify(LETTER), { status: 200, headers: { "content-type": "application/json" } });
       return new Response(JSON.stringify(FORM), { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -39,8 +42,9 @@ async function fillAndSend() {
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "a@b.test" } });
   const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
   const before = why.value;
-  fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
-  fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+  // The agreements as PR-E draws them: the membership letter aligned with here, the NDA promised for once approved.
+  fireEvent.click(await screen.findByLabelText(LETTER.intent));
+  fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
   fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
   await screen.findByRole("heading", { name: "Check your email" });
   return before;
@@ -65,7 +69,9 @@ describe("the open form after the discover step", () => {
     expect(before).toContain("growing food");
     expect(posted).toHaveLength(1);
     const keys = Object.keys(posted[0].body).sort();
-    expect(keys).toEqual(["aim", "card", "email", "hp", "link", "name", "roles", "why"].filter((k) => keys.includes(k)));
+    // `membership` is PR-E's letter version (Rye's answer 8): an `lv-` fingerprint, never a discover value.
+    expect(keys).toEqual(["aim", "card", "email", "hp", "link", "membership", "name", "roles", "why"].filter((k) => keys.includes(k)));
+    expect(posted[0].body.membership).toEqual({ letterVersion: LETTER.version });
     expect(posted[0].body.why).toContain("growing food");
     expect(posted[0].raw).not.toMatch(/Projector|humanDesign|geneKeys|ikigai/i);
   });

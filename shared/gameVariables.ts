@@ -1007,6 +1007,41 @@ export const VARIABLES: VariableDef[] = [
     max: 10000,
     unit: "changes",
   },
+  /*
+   * A ROLE STARTS ONLY AFTER (role journey L7). Each agreement a person aligns
+   * with before an adopted role starts, as its own switch, every one off by
+   * default so a village that sets nothing keeps today's behaviour. Read
+   * together by `roleStartDials` (server/lib/roleStartAgreements.ts): the role
+   * waits, adopted, until each one that is on exists, and the hourly
+   * `season-plan-turn` starts it within the hour after.
+   */
+  {
+    key: "org.start_after_confidentiality",
+    category: "Progression",
+    label: "A role starts only after: confidentiality",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's confidentiality agreement as it reads now. Write the agreement's words first (Admin, content, the confidentiality section): with no words written, nobody can align, and roles wait.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_membership",
+    category: "Progression",
+    label: "A role starts only after: membership",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's membership letter. Somebody who aligned when they applied is not asked again. No payment is ever part of it.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_paid_terms",
+    category: "Progression",
+    label: "A paid role starts only after its terms",
+    description:
+      "When on, a role whose terms carry pay, an allowance or a bonus does not start until its holder has aligned with those terms, the agreed rate included. Roles with no money in their terms are not asked.",
+    type: "boolean",
+    default: "false",
+  },
 
   // ── Quests: how finished work is witnessed ────────────────────────────────
   // The three dials that bounded a Gratitude grant at consent left with the

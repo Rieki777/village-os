@@ -257,7 +257,7 @@ export const LETTER_WORDS = {
   heading: (title: string) => `Align with the ${title}`,
   lede: (village: string, member: string) =>
     `Read the letter above, add a few words about yourself, and align from your account to join ${village} as ${articleFor(member)} ${member}.`,
-  asYou: (name: string) => `Aligning as ${name}, from your account. No typed name.`,
+  asYou: (name: string) => `Aligning as ${name}, from your account. No typed name. Aligning is the village's way of signing.`,
   button: (village: string) => `Align and join ${village}`,
   busy: "Aligning…",
   kept: "Your alignment is kept under What you have aligned with, on your profile.",

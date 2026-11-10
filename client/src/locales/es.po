@@ -191,6 +191,10 @@ msgctxt "role pay"
 msgid "Reason"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts."
+msgstr ""
+
 #: client/src/components/journey/TestRun.tsx
 msgid "What this run looked at"
 msgstr ""
@@ -702,11 +706,16 @@ msgid "The village is deciding a change to this right now."
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
-msgstr ""
+#~ msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
+#~ msgstr ""
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
+msgstr ""
+
+#: client/src/components/openProposal/MembershipAtApplication.tsx
+msgctxt "membership letter on the open form"
+msgid "Read the {title}"
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -849,6 +858,10 @@ msgstr ""
 
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "{notesArePublic} \"Nobody yet\" is an answer."
+msgstr ""
+
+#: client/src/components/openProposal/MembershipAtApplication.tsx
+msgid "You are already aligned with the village's membership letter, so there is nothing to do here."
 msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
@@ -1227,6 +1240,10 @@ msgstr ""
 msgid "It goes on the calendar's list as a draft that recurs every new moon. Nothing is published until you publish it."
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "The confidentiality agreement is not promised"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "That did not load."
 msgstr ""
@@ -1377,6 +1394,10 @@ msgstr ""
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "button that adds a practice that keeps tensions small"
 msgid "Add a practice"
+msgstr ""
+
+#: client/src/components/openProposal/MembershipAtApplication.tsx
+msgid "It takes effect once you confirm your address, and you won't be asked again when you make your account. No payment is asked: any contribution the letter suggests stays your choice."
 msgstr ""
 
 #: client/src/pages/ExitPolicy.tsx
@@ -2086,6 +2107,10 @@ msgctxt "sera answers"
 msgid "including 1 role inside {name}"
 msgstr ""
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They aligned with the membership letter when they applied."
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "Keep the vote"
@@ -2131,6 +2156,10 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Adopted. The exit policy and the governance page read it from now on."
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They have not promised the confidentiality agreement."
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -3031,8 +3060,8 @@ msgid "added:"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "The agreements are not given"
-msgstr ""
+#~ msgid "The agreements are not given"
+#~ msgstr ""
 
 #: client/src/components/roleDraft/IkigaiDoor.tsx
 msgctxt "role draft discover"
@@ -3217,6 +3246,10 @@ msgstr ""
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft tray"
 msgid "Your draft"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Not aligned with the membership letter"
 msgstr ""
 
 #: client/src/components/fundingRounds/common.tsx
@@ -3976,8 +4009,8 @@ msgid "Paper"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "They have not agreed to the Love Letter and the NDA."
-msgstr ""
+#~ msgid "They have not agreed to the Love Letter and the NDA."
+#~ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "No open role carries these characters yet. Every role is still open to you."
@@ -4048,6 +4081,10 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "start a change request"
 msgid "Start it"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They have not aligned with the membership letter yet."
 msgstr ""
 
 #: client/src/pages/FundingRounds.tsx
@@ -4336,6 +4373,10 @@ msgstr "Tu siguiente paso"
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft stat"
 msgid "Time"
+msgstr ""
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "They will align with the confidentiality agreement once approved."
 msgstr ""
 
 #: client/src/components/review/SeraInDraft.tsx
@@ -6165,8 +6206,8 @@ msgid "Characters saved"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
-msgstr ""
+#~ msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
+#~ msgstr ""
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgctxt "heading of the season panel"
@@ -6222,6 +6263,10 @@ msgstr ""
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "Decision Matrix column"
 msgid "Who is told"
+msgstr ""
+
+#: client/src/components/openProposal/MembershipAtApplication.tsx
+msgid "Loading the membership letter..."
 msgstr ""
 
 #: client/src/components/valuation/PricingDesk.tsx
@@ -6769,6 +6814,10 @@ msgctxt "admin age band"
 msgid "That did not save. Try again."
 msgstr ""
 
+#: client/src/components/openProposal/MembershipAtApplication.tsx
+msgid "The membership letter didn't load. Reload the page to read it and align."
+msgstr ""
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That did not reach the server, so nothing was saved."
 msgstr ""
@@ -6861,8 +6910,8 @@ msgid "Paste text"
 msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "I will sign the Love Letter, the village's membership agreement, before I am seated."
-msgstr ""
+#~ msgid "I will sign the Love Letter, the village's membership agreement, before I am seated."
+#~ msgstr ""
 
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"

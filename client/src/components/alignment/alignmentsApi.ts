@@ -97,6 +97,12 @@ export async function call<T>(path: string, method: "GET" | "POST" = "GET", body
 /** True when an answer is the money re-confirm asking first, rather than a refusal. */
 export const asksReconfirm = (a: Answer<unknown>): boolean => !a.ok && a.status === 403 && a.code === "reconfirm_required";
 
+/** The village's confidentiality agreement now, and whether this member holds it (L7). */
+export const fetchConfidentiality = () =>
+  call<{ agreement: { title: string; body: string; intent: string; version: string } | null; you: { holds: boolean } | null; message: string | null }>("/api/confidentiality");
+/** Align with it: one click, identity re-confirmed. The version is the one the page drew. */
+export const alignConfidentiality = (version: string) =>
+  call<{ success: true; textId: string; already: boolean; alignedAt: string }>("/api/profile/confidentiality", "POST", { version });
 export const fetchMyAlignments = () => call<{ alignments: ServedAlignment[] }>("/api/profile/alignments");
 export const fetchTheirAlignments = (handle: string) =>
   call<{ alignments: ServedAlignment[] }>(`/api/alignments?party=${encodeURIComponent(handle)}`);
