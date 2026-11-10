@@ -1,4 +1,5 @@
-import CastStrip from "@/components/roleDraft/CastStrip";
+import ArchetypeStep from "@/components/roleDraft/ArchetypeStep";
+import SeasonGoals from "@/components/roleDraft/SeasonGoals";
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -354,6 +355,15 @@ export default function Roles() {
   const [linked] = useState<string | null>(seatFromUrl);
   const [expandedRole, setExpandedRole] = useState<string | null>(linked);
   const [linkMissed, setLinkMissed] = useState(false);
+  // The roles stay behind step one until the visitor picks an archetype (which leaves the
+  // page) or presses "See all roles". A link to one seat is a question about that seat, so it shows them.
+  const [showAll, setShowAll] = useState(linked !== null);
+  const allHeading = useRef<HTMLHeadingElement>(null);
+  const revealed = useRef(linked !== null);
+  useEffect(() => {
+    if (showAll && !revealed.current) allHeading.current?.focus();
+    revealed.current = showAll;
+  }, [showAll]);
   const [roles, setRoles] = useState<RoleEntry[] | null>(null);
   const [circles, setCircles] = useState<any[]>([]);
   const [failed, setFailed] = useState(false);
@@ -454,8 +464,6 @@ export default function Roles() {
   const coordinator = coordinatingCircle(circles);
   const orgPending = roles === null && !failed;
   // A link to one role (?seat=) names that role in the page heading, not the whole page.
-  const seasonEntry = ((season as unknown as { current?: { name?: string } | null } | null)?.current ?? (season as unknown as { name?: string } | null)) as { name?: string } | null;
-  const seasonLine = typeof seasonEntry?.name === "string" && seasonEntry.name.trim() ? t({ message: `This season: ${seasonEntry.name.trim()}.`, context: "roles page season" }) : "";
   const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
   const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
     coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
@@ -514,14 +522,6 @@ export default function Roles() {
               </p>
             )}
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
-            {seasonLine && (
-              <p className="mt-4 text-sm text-muted-foreground">
-                {seasonLine}{" "}
-                <a href="/roles/select#sel-season" className="font-semibold text-foreground underline underline-offset-2">
-                  {t({ message: "See its goals", context: "roles page season" })}
-                </a>
-              </p>
-            )}
             <Link
               href="/roles/select"
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -529,8 +529,10 @@ export default function Roles() {
               {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <CastStrip />
           </m.div>
+
+          <SeasonGoals />
+          <ArchetypeStep allShown={showAll} onSeeAll={() => setShowAll(true)} />
 
           <div className="max-w-4xl mx-auto">
             {/* Offered here because this is the page that names you: the
@@ -557,6 +559,11 @@ export default function Roles() {
               ))}
             </m.div>
 
+            {showAll && (
+              <div>
+                <h2 ref={allHeading} tabIndex={-1} className="mb-8 font-display text-3xl font-bold text-foreground focus:outline-none">
+                  {t({ message: "All roles and circles", context: "roles page archetypes" })}
+                </h2>
             {/* Members-only people: every seat card below still carries its
                 aim, its domain and whether it is held. This says whose names
                 are missing and how to reach them. */}
@@ -617,6 +624,9 @@ export default function Roles() {
                 </div>
               </div>
             ))}
+
+              </div>
+            )}
 
             {/* When a tension is between people: the village's own restorative
                 steps, the same ones /governance prints. This block used to be
