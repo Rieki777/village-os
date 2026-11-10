@@ -633,3 +633,10 @@ export async function goalsOfRoles(db: Db, roleIds: readonly string[]): Promise<
   }
   return own;
 }
+
+/** Which of these roles are always background-checked (0370), whatever a candidate's references say. */
+export async function alwaysCheckedAmong(db: Db, roleIds: readonly string[]): Promise<string[]> {
+  if (!roleIds.length) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id FROM org_roles WHERE always_checked = 1 AND id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  return rows.map((r) => String(r.id));
+}

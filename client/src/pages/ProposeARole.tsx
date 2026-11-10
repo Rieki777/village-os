@@ -24,6 +24,7 @@ import { EMPTY_ROLE_CARD, goalsToFirstMoon, RoleAsks, SeasonServes, type RoleCar
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { AttachmentFields, linksToSend } from "@/components/openProposal/ProposalAttachments";
 import type { ProposalLink } from "@shared/proposalAttachments";
+import { AboutYouFacts, ReferencesBlock, EMPTY_ABOUT_YOU, aboutYouBody, aboutYouProblem, type AboutYouValue } from "@/components/openProposal/AboutYou";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -57,6 +58,8 @@ interface FormRole {
   /** Filled by the role-conversations lane and PR-A; nothing shows until they are. */
   conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>;
   bookingUrl?: string | null;
+  /** A check happens for this role whatever the references say (0370). */
+  alwaysChecked?: boolean;
 }
 
 type FormState =
@@ -153,6 +156,8 @@ export default function ProposeARole() {
   /** Links to their work and files, for the deciders only (Rye, 10 Nov 2026). */
   const [links, setLinks] = useState<ProposalLink[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  /** About you: facts, references and the consent (components/openProposal/AboutYou.tsx). */
+  const [about, setAbout] = useState<AboutYouValue>(EMPTY_ABOUT_YOU);
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
   const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
   const [letterRead, setLetterRead] = useState(0);
@@ -211,6 +216,12 @@ export default function ProposeARole() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sending) return;
+    // The consent is asked before anything goes, in the words the shared rules use; the server judges it again.
+    const aboutProblem = form.kind === "open" ? aboutYouProblem(about, form.roles.some((r) => r.id in picked && r.alwaysChecked === true)) : null;
+    if (aboutProblem) {
+      setError({ field: "checkConsent", message: aboutProblem });
+      return;
+    }
     setSending(true);
     setError(null);
     try {
@@ -246,6 +257,8 @@ export default function ProposeARole() {
         ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
         // Links only when there are some: a proposal without them sends what it always sent.
         ...(linksToSend(links).length ? { links: linksToSend(links) } : {}),
+        // About you: references, facts and the consent with the wording version shown.
+        ...aboutYouBody(about),
       };
       // With files, the proposal goes as one field of a multipart post (server/routes/openProposals.ts).
       let request: RequestInit;
@@ -394,6 +407,11 @@ export default function ProposeARole() {
                           {r.aim && <span className="break-words text-sm text-muted-foreground">{r.aim}</span>}
                         </span>
                       </label>
+                      {on && r.alwaysChecked && (
+                        <p className="mt-3 text-sm text-foreground" data-role-checked="">
+                          {t({ message: "A background check happens for this role whatever the references say.", context: "open proposal role" })}
+                        </p>
+                      )}
                       {on && (
                         <label className="mt-3 grid gap-1 text-sm font-medium text-card-foreground">
                           {OPEN_WORDS.noteLabel} <span className="font-normal text-muted-foreground">(optional)</span>
@@ -427,17 +445,26 @@ export default function ProposeARole() {
 
           {/* The practicalities (the time first), then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
           <HoursField hours={hours} onHours={setHours} />
-          <Practicalities value={practical} onChange={setPractical} />
+          {/* About you: after the goals, before the terms. The links and files moved here from below. */}
+          <section aria-labelledby="propose-about-h" className="grid gap-5 border-t border-border pt-6" data-about-you-section="">
+            <h2 id="propose-about-h" className="font-display text-2xl font-bold text-card-foreground">
+              {t({ message: "About you", context: "open proposal section" })}
+            </h2>
+            <AboutYouFacts value={about} onChange={setAbout} idPrefix="propose-about" />
+            <Practicalities value={practical} onChange={setPractical} part="about" />
+            <AttachmentFields
+              links={links}
+              onLinks={setLinks}
+              files={files}
+              onFiles={setFiles}
+              invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
+            />
+            <ReferencesBlock value={about} onChange={setAbout} idPrefix="propose-about" alwaysChecked={form.roles.some((r) => r.id in picked && r.alwaysChecked === true)} invalid={error?.field === "checkConsent" || error?.field === "references"} />
+          </section>
+          <Practicalities value={practical} onChange={setPractical} part="rest" />
           <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
-          />
-          <AttachmentFields
-            links={links}
-            onLinks={setLinks}
-            files={files}
-            onFiles={setFiles}
-            invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
           />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">

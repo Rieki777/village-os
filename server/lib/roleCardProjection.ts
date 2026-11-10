@@ -94,6 +94,8 @@ export function roleCard(
     whereWorked: role.whereWorked ?? null,
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
+    // Joining lane PR 2 (0370): a check happens for this role whatever the references say; the forms tell the applicant.
+    alwaysChecked: role.alwaysChecked === true,
     firstConversation: opts.words?.firstConversationRole ?? null,
     ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
     ...(pay && open && isListed(role) ? { publicPay: pay } : {}),

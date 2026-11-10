@@ -321,7 +321,7 @@ export function register(app: Express, deps: Deps): void {
     const season = t.season;
     const roles = await offered();
     const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
-    const checked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
+    const alwaysChecked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
     const parsed = parseOpenProposal(body, {
       roleIds: new Set(roles.map((r) => r.id)),
       address: singlePublicAddress,
@@ -329,7 +329,7 @@ export function register(app: Express, deps: Deps): void {
       goalIds: new Set(t.goals.map((g) => g.id)),
       // A goal's date must fall in this moon (shared/proposalGoals.ts).
       today: new Date().toISOString().slice(0, 10),
-      alwaysChecked: (id) => checked.has(id),
+      alwaysChecked: (id) => alwaysChecked.has(id),
       now: now(),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });

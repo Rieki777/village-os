@@ -79,6 +79,8 @@ export const WIZARD_STEPS = [
   { key: "type", label: "Kind" },
   { key: "subject", label: "Subject" },
   { key: "details", label: "In your words" },
+  /* Joining lane PR 2: a role application only; every other type skips it. */
+  { key: "about", label: "About you" },
   { key: "terms", label: "Terms" },
   { key: "review", label: "Review" },
 ] as const;
@@ -124,7 +126,9 @@ export type FieldKind =
   | "seasonGoal"
   | "termsOnOffer"
   /* Joining lane PR 1: the interactive goals list (GoalsField, GoalsList), stored as an array of goals. */
-  | "goalsList";
+  | "goalsList"
+  /* Joining lane PR 2: the About-you step (AboutYouField): facts, references and the background-check consent. */
+  | "aboutYou";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -265,6 +269,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "The dials",
         intro: "Which rules move, and what they become.",
@@ -346,6 +351,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       // An agreement is its own subject: there is nothing to pick before you
       // write it, so this type starts on the words.
       subject: { skip: true },
@@ -421,6 +427,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "Badge and holder",
         intro: "Which badge, and who would wear it.",
@@ -481,6 +488,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "The quest",
         intro: "Which finished quest this pays for.",
@@ -560,6 +568,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "The power",
         intro: "Which power the village is asking to hold, and who would look after it.",
@@ -653,6 +662,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "The power",
         intro: "What the village would be letting a role do, and which role.",
@@ -750,6 +760,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
       }),
     },
     steps: {
+      about: { skip: true },
       subject: {
         label: "The power",
         intro: "Which of the powers this village holds would go back.",

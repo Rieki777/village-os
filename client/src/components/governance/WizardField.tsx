@@ -39,6 +39,7 @@ import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from 
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 import SeatSettingsEditor from "./SeatSettingsEditor";
 import SeatPicksField from "./SeatPicksField";
+import AboutYouField from "./AboutYouField";
 import GoalsField from "./GoalsField";
 import SeasonGoalField from "./SeasonGoalField";
 import TermsOnOfferField from "./TermsOnOfferField";
@@ -292,6 +293,9 @@ export default function WizardField({
 
     case "seasonGoal":
       return <SeasonGoalField field={field} value={value} onChange={onChange} problem={problem} />;
+
+    case "aboutYou":
+      return <AboutYouField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
 
     case "goalsList":
       return <GoalsField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;

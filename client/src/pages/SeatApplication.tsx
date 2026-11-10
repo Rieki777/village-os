@@ -37,6 +37,8 @@
  * Money in the terms is a record: the drawer prints "Recorded here. Paid
  * outside the platform." beside every money row.
  */
+import { AboutYouView } from "@/components/openProposal/AboutYou";
+import { ABOUT_WORDS } from "@shared/proposalAbout";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -392,6 +394,13 @@ export default function SeatApplication() {
                 <p className="mt-2 text-stone-600">{APPLICATION_WORDS.wordsRemoved}</p>
               )}
             </section>
+
+            <AboutYouView about={app.aboutYou} />
+            {typeof app.referencesGiven === "number" && (
+              <p className="text-sm text-muted-foreground" data-references-given="">
+                {ABOUT_WORDS.given(app.referencesGiven)}
+              </p>
+            )}
 
             {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
             {app.proposal?.consent && (
