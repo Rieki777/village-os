@@ -675,7 +675,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
       const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
       expect(String(apps[0].deliverables)).toContain("Clean water all season.");
-      expect(String(apps[0].deliverables)).toContain("First moon: Test the water: done when the lab says it is clean");
+      expect(String(apps[0].deliverables)).toContain("First task: Test the water: done when the lab says it is clean");
       expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
       expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Could the rate be per moon?");
     });

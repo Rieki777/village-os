@@ -92,8 +92,8 @@ describe("focus follows the step (red team U10)", () => {
 });
 
 describe("no error before any input (red team U11)", () => {
-  const PICK = "Pick the role you are applying for.";
-  const SHORT_DELIVERABLES = /^Your list of deliverables needs at least 40 characters/;
+  const PICK = "Pick the role you are proposing for.";
+  const SHORT_DELIVERABLES = /^Your list of first tasks needs at least 40 characters/;
   const SHORT_WHY = /^"Why you" needs at least 30 characters/;
 
   it("arriving at a step shows no error; leaving a field shows its own; Next then Back shows the step's", async () => {
@@ -108,7 +108,7 @@ describe("no error before any input (red team U11)", () => {
     await screen.findByRole("heading", { level: 2, name: label("details") });
     expect(screen.queryByText(SHORT_DELIVERABLES)).toBeNull();
     // Writing too little and leaving the field: that field's problem, and only that one.
-    const deliverables = screen.getByLabelText(/Deliverables for the season/);
+    const deliverables = screen.getByLabelText(/Your first tasks this moon/);
     fireEvent.focus(deliverables);
     fireEvent.change(deliverables, { target: { value: "Too short." } });
     fireEvent.blur(deliverables);

@@ -240,12 +240,20 @@ export default function RoleDraft() {
   const pickCount = picks.length;
   const moonEnds = form?.term ? civilDayWords(form.term.endsOn) : "";
   // The village's goals for this season, live (the Season tab in Admin). Done ones drop off.
-  const seasonDoc = season as unknown as { name?: string | null; goals?: Array<{ id?: string; text?: string; done?: boolean }> } | null;
+  const seasonDoc = season as unknown as { name?: string | null; startsOn?: string | null; endsOn?: string | null; goals?: Array<{ id?: string; text?: string; done?: boolean }> } | null;
   const seasonName = typeof seasonDoc?.name === "string" ? seasonDoc.name.trim() : "";
+  const seasonFrom = typeof seasonDoc?.startsOn === "string" && seasonDoc.startsOn ? civilDayWords(seasonDoc.startsOn) : "";
+  const seasonTo = typeof seasonDoc?.endsOn === "string" && seasonDoc.endsOn ? civilDayWords(seasonDoc.endsOn) : "";
   const goals = (Array.isArray(seasonDoc?.goals) ? seasonDoc!.goals : [])
     .filter((g) => g && typeof g.text === "string" && g.text.trim() && !g.done)
     .map((g, i) => ({ id: String(g.id ?? i), text: String(g.text).trim() }));
   const playing = chars.map(castName).join(", ");
+  // The /roles header links straight to the season's goals (#season-goals); a client-side visit does not scroll there itself.
+  const seasonLoaded = !!seasonDoc;
+  useEffect(() => {
+    if (!seasonLoaded || typeof window === "undefined" || window.location.hash !== "#season-goals") return;
+    document.getElementById("season-goals")?.scrollIntoView({ block: "start" });
+  }, [seasonLoaded]);
 
   return (
     <Layout>
@@ -254,11 +262,13 @@ export default function RoleDraft() {
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-notice">{t({ message: "Open roles · the draft", context: "role draft eyebrow" })}</p>
           <h1 className="mt-2 font-display text-4xl font-bold text-foreground text-balance">{t`Draft your roles at ${villageName}`}</h1>
           <p className="mt-3 max-w-[66ch] text-muted-foreground">
-            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then.`}
+            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you propose, and nothing is sent before then.`}
           </p>
 
           <ol className="mt-6 flex flex-wrap gap-2" aria-label={t({ message: "Your way in", context: "role draft steps" })}>
             {[
+              // Guide v2 (Rye, 10 Nov 2026): the season's goals come first.
+              t({ message: "This season's goals", context: "role draft step" }),
               t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
               t({ message: "Scout the open roles", context: "role draft step" }),
               t({ message: "Draft up to three", context: "role draft step" }),
@@ -270,6 +280,35 @@ export default function RoleDraft() {
               </li>
             ))}
           </ol>
+
+          {/* Step 1, guide v2: THIS SEASON'S GOALS, read live from Admin's Season tab (the /roles header links here). */}
+          {seasonDoc && (
+            <section id="season-goals" className="mt-6 scroll-mt-24 rounded-2xl border border-border bg-card p-5" aria-labelledby="draft-goals" data-season-goals-step="">
+              <h2 id="draft-goals" className="font-display text-2xl font-bold text-card-foreground">
+                {t`This season's goals`}
+              </h2>
+              {seasonName && (
+                <p className="mt-1 text-sm font-semibold text-card-foreground">
+                  {seasonFrom && seasonTo ? t`${seasonName}, ${seasonFrom} to ${seasonTo}` : seasonTo ? t`${seasonName}, to ${seasonTo}` : seasonName}
+                </p>
+              )}
+              <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
+                {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
+              </p>
+              {goals.length > 0 ? (
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {goals.map((g) => (
+                    <li key={g.id} className="flex items-start gap-2 text-sm text-card-foreground">
+                      <Check className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
+                      {g.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-card-foreground">{t`The village has not set its goals for this season yet.`}</p>
+              )}
+            </section>
+          )}
 
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
@@ -489,24 +528,6 @@ export default function RoleDraft() {
             </aside>
           </div>
 
-          {goals.length > 0 && (
-            <section className="mt-12 rounded-2xl border border-border bg-card p-5" aria-labelledby="draft-goals">
-              <h2 id="draft-goals" className="font-display text-2xl font-bold text-card-foreground">
-                {seasonName ? t`What the whole village is working toward in ${seasonName}` : t`What the whole village is working toward this season`}
-              </h2>
-              <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
-                {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
-              </p>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {goals.map((g) => (
-                  <li key={g.id} className="flex items-start gap-2 text-sm text-card-foreground">
-                    <Check className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
-                    {g.text}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
 
           <section className="mt-12 grid gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>

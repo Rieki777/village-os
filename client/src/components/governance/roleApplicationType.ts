@@ -155,8 +155,19 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
     },
     details: {
       label: "Your season",
-      intro: "What you will have done by the end of the season, and why you.",
+      intro: "Why you, your aim, your first tasks this moon, and the season goal they serve.",
       fields: [
+        {
+          key: "fitStatement",
+          kind: "textarea",
+          rows: 4,
+          maxLength: 1500,
+          label: "Why you",
+          placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
+          required: true,
+          // The member reads the label "Why you", so the problem names it the same way (red team U11).
+          problem: atLeast(30, '"Why you"'),
+        },
         {
           // The open form asks it, so the member door does too (brief v2, 5.4).
           key: "aim",
@@ -169,35 +180,25 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : null),
         },
         {
+          key: "deliverables",
+          kind: "textarea",
+          rows: 6,
+          maxLength: 2000,
+          // Guide v2: the first tasks for this moon, each with how anyone will know it is done.
+          label: "Your first tasks this moon",
+          placeholder: "Plant the first three beds, done when they are planted and watered. Share the planting plan, done when every circle lead has it.",
+          help: "Each with a \"done when\", so anyone can check it without asking you. Members read this; a vote never shows it.",
+          required: true,
+          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
+          problem: atLeast(40, "Your list of first tasks"),
+        },
+        {
           key: "servesGoal",
           kind: "seasonGoal",
           label: "Which of the village's goals for the season your work serves",
           required: true,
           showWhen: isDoor,
           problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Pick the village goal your work serves." : null),
-        },
-        {
-          key: "deliverables",
-          kind: "textarea",
-          rows: 6,
-          maxLength: 2000,
-          label: "Deliverables for the season",
-          placeholder: "By the end of the season, the spring runs clear and two people besides me know how to keep it that way.",
-          help: "Write what will be TRUE at season's end, so anyone can check it without asking you. Members read this; a vote never shows it.",
-          required: true,
-          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
-          problem: atLeast(40, "Your list of deliverables"),
-        },
-        {
-          key: "fitStatement",
-          kind: "textarea",
-          rows: 4,
-          maxLength: 1500,
-          label: "Why you",
-          placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
-          required: true,
-          // The member reads the label "Why you", so the problem names it the same way (red team U11).
-          problem: atLeast(30, '"Why you"'),
         },
       ],
     },

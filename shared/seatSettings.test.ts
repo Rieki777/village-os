@@ -118,7 +118,7 @@ describe("parseSeatSettings refuses payment details (economics ruling 23)", () =
       expect(looksLikePaymentDetails(text), text).toBe(true);
     }
     // CONTROL: real dates, a time and short counts stay ordinary words.
-    for (const text of ["From 2026-10-09 to 2027-03-21", "Gather at 10:00 on 2027-01-05", "1 to 12 quests a moon, 3 measures", "Room B12 on the north side"]) {
+    for (const text of ["From 2026-10-09 to 2027-03-21", "Gather at 10:00 on 2027-01-05", "1 to 12 tasks a moon, 3 measures", "Room B12 on the north side"]) {
       expect(looksLikePaymentDetails(text), text).toBe(false);
     }
   });
@@ -173,7 +173,7 @@ describe("whole numbers only", () => {
     expect(ok({ pay: { kind: "fixed", amountMinor: 1000 }, term: { noticeDays: 2 }, quests: { perMoonMin: 2 } }).ok).toBe(true);
   });
 
-  it("holds quests a moon to 1 through 12, fewest at or under most", () => {
+  it("holds tasks a moon to 1 through 12, fewest at or under most", () => {
     expect(ok({ quests: { perMoonMin: 0 } }).ok).toBe(false);
     expect(ok({ quests: { perMoonMax: 13 } }).ok).toBe(false);
     expect(ok({ quests: { perMoonMin: 5, perMoonMax: 3 } }).ok).toBe(false);
@@ -254,7 +254,7 @@ describe("settingsWords", () => {
     expect(byGroup.clocks.headline).toBe("Paid by the calendar month, works by the moon");
     expect(byGroup.pay.headline).toBe("Between €500 and €900 a month");
     expect(byGroup.allowance.headline).toBe("A flat allowance of €100 a month");
-    expect(byGroup.quests.headline).toBe("3 to 5 quests a moon");
+    expect(byGroup.quests.headline).toBe("3 to 5 tasks a moon");
     expect(byGroup.quests.pips).toEqual({ filled: 3, outlined: 2 });
     expect(byGroup.scoreboard.lines).toEqual(["Quests done: all agreed quests (read from the quest board)"]);
     expect(byGroup.ending.headline).toBe("14 days notice");

@@ -29,6 +29,7 @@ import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLingui } from "@lingui/react/macro";
+import { civilDayWords } from "@shared/seasonPlans";
 import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
@@ -368,6 +369,9 @@ export default function Roles() {
   // The card's clock and the village's class names: one cached read each for
   // the whole page, however many rows are opened.
   const season = useSeason();
+  const rolesSeasonDoc = season as unknown as { name?: string | null; endsOn?: string | null } | null;
+  const rolesSeasonName = typeof rolesSeasonDoc?.name === "string" ? rolesSeasonDoc.name.trim() : "";
+  const rolesSeasonTo = typeof rolesSeasonDoc?.endsOn === "string" && rolesSeasonDoc.endsOn ? civilDayWords(rolesSeasonDoc.endsOn) : "";
   const classNames = useClassNames();
   // A raised hand posts under `/api/map`, which the map module gates. Offered
   // only while this reader's catalog lists the module as on: a catalog that
@@ -509,6 +513,14 @@ export default function Roles() {
               {t({ message: "Draft your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
+            {/* Guide v2 (Rye, 10 Nov 2026): one line naming the season, linking to its goals, the board's first step. */}
+            {rolesSeasonName && (
+              <p className="mt-3 text-sm text-muted-foreground" data-roles-season="">
+                <Link href="/roles/draft#season-goals" className="font-semibold text-foreground underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring">
+                  {rolesSeasonTo ? t`${rolesSeasonName}, to ${rolesSeasonTo}: see this season's goals` : t`${rolesSeasonName}: see this season's goals`}
+                </Link>
+              </p>
+            )}
           </m.div>
 
           <div className="max-w-4xl mx-auto">

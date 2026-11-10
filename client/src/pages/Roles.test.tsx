@@ -58,6 +58,9 @@ beforeEach(() => {
         }),
       };
     }
+    if (String(url).startsWith("/api/season")) {
+      return { ok: true, status: 200, json: async () => ({ name: "Season of Foundations", startsOn: "2026-06-23", endsOn: "2026-12-31", goals: [], current: null, upcoming: null, seasons: [] }) };
+    }
     if (url === "/api/org") {
       return { ok: true, status: 200, json: async () => ({ roles: [], circles: [], people: null }) };
     }
@@ -84,5 +87,17 @@ describe("the Roles page's tension section", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/exit-policy");
     expect(screen.queryByText(/Leadership Circle/)).toBeNull();
     expect(screen.queryByText(/tries the change for an agreed period/)).toBeNull();
+  });
+});
+
+describe("the Roles header names the season (guide v2, Rye 10 Nov 2026)", () => {
+  it("links to the season's goals, the board's first step", async () => {
+    render(
+      <Router>
+        <Roles />
+      </Router>,
+    );
+    const link = await screen.findByRole("link", { name: "Season of Foundations, to 31 December 2026: see this season's goals" });
+    expect(link.getAttribute("href")).toBe("/roles/draft#season-goals");
   });
 });

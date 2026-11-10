@@ -236,10 +236,23 @@ describe("the season's goals", () => {
     seasonRef.value = { name: "Season of Foundations", goals: [{ id: "g1", text: "Investor ready", done: false }, { id: "g2", text: "Old goal", done: true }], current: null, upcoming: null, seasons: [] };
     serve();
     render(<RoleDraft />);
-    expect(await screen.findByRole("heading", { name: "What the whole village is working toward in Season of Foundations" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This season's goals" })).toBeTruthy();
     expect(screen.getByText("Investor ready")).toBeTruthy();
     expect(screen.queryByText("Old goal")).toBeNull();
     expect(screen.getByText(/what you would like to contribute each moon and this season/)).toBeTruthy();
+  });
+
+  it("is the board's first step, naming the season and its dates, and says so when no goal is set yet (guide v2)", async () => {
+    seasonRef.value = { name: "Season of Foundations", startsOn: "2026-06-23", endsOn: "2026-12-31", goals: [], current: null, upcoming: null, seasons: [] } as any;
+    serve();
+    render(<RoleDraft />);
+    const step = (await screen.findByRole("heading", { name: "This season's goals" })).closest("[data-season-goals-step]") as HTMLElement;
+    expect(step.id).toBe("season-goals");
+    expect(step.textContent).toContain("Season of Foundations, 23 June 2026 to 31 December 2026");
+    expect(step.textContent).toContain("The village has not set its goals for this season yet.");
+    // The first of the board's steps names it.
+    const steps = screen.getByRole("list", { name: "Your way in" });
+    expect(within(steps).getAllByRole("listitem")[0].textContent).toContain("This season's goals");
   });
 });
 

@@ -216,7 +216,7 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
     expect(within(row).getByText(/I'll move: Open at dawn/)).toBeTruthy();
     expect(within(row).getByText("(not picked)")).toBeTruthy();
     const gaps = document.querySelector("[data-card-gaps]") as HTMLElement;
-    expect(gaps.textContent).toContain("No first-moon quest for Gate Keeper");
+    expect(gaps.textContent).toContain("No first task for Gate Keeper");
     expect(gaps.textContent).toContain("No season goal served");
     expect(gaps.textContent).toContain("They want to talk about the terms");
     expect((document.querySelector("[data-terms-flag]") as HTMLElement).textContent).toBe("Wants to talk about the terms: The rate");

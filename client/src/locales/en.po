@@ -138,6 +138,11 @@ msgctxt "sera changes"
 msgid "Check again"
 msgstr "Check again"
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card field"
+msgid "Task {n} for {roleName}"
+msgstr "Task {n} for {roleName}"
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Nothing is being weighed right now."
 msgstr "Nothing is being weighed right now."
@@ -290,10 +295,6 @@ msgstr "Save the file to this device"
 msgid "Names a person, so members only."
 msgstr "Names a person, so members only."
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "No first-moon quest for {roleName}"
-msgstr "No first-moon quest for {roleName}"
-
 #: client/src/components/roleEdit/NewRoleFromCard.tsx
 msgctxt "new role from a card"
 msgid "Paste"
@@ -353,6 +354,11 @@ msgstr "How what is left is shared"
 msgctxt "quest editor"
 msgid "Posted, priced by the village's rule"
 msgstr "Posted, priced by the village's rule"
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card"
+msgid "Add a task"
+msgstr "Add a task"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "label of an answer box"
@@ -429,6 +435,10 @@ msgstr "Starting…"
 #: client/src/components/TreasurySync.tsx
 msgid "Your numbers, from every source"
 msgstr "Your numbers, from every source"
+
+#: client/src/pages/RoleDraft.tsx
+msgid "{seasonName}, {seasonFrom} to {seasonTo}"
+msgstr "{seasonName}, {seasonFrom} to {seasonTo}"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -533,6 +543,10 @@ msgstr "Every invoice, sent to paid"
 msgctxt "sera changes"
 msgid "See which one"
 msgstr "See which one"
+
+#: client/src/pages/RoleDraft.tsx
+msgid "{seasonName}, to {seasonTo}"
+msgstr "{seasonName}, to {seasonTo}"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They aligned with the membership letter when they proposed."
@@ -705,6 +719,10 @@ msgstr "Pricing desk"
 #: client/src/components/governance/ExportByVote.tsx
 msgid "The vote is open. <0>Read it and vote</0>."
 msgstr "The vote is open. <0>Read it and vote</0>."
+
+#: client/src/pages/RoleDraft.tsx
+msgid "The village has not set its goals for this season yet."
+msgstr "The village has not set its goals for this season yet."
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Nobody holds the {careName} role today, so a private intake would reach nobody."
@@ -928,6 +946,10 @@ msgstr "Worked examples"
 msgctxt "the new value of a setting"
 msgid "New value"
 msgstr "New value"
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "How your work in {roleName} serves: {goalText}"
+msgstr "How your work in {roleName} serves: {goalText}"
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgctxt "a public line is being saved"
@@ -1387,6 +1409,16 @@ msgctxt "role editor card"
 msgid "Choose the file to bring in."
 msgstr "Choose the file to bring in."
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side goals"
+msgid "Named on each role above."
+msgstr "Named on each role above."
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "First task: {quest}"
+msgstr "First task: {quest}"
+
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, builder section"
 msgid "Copy it into the AI you build with, then add what your module should do."
@@ -1483,6 +1515,16 @@ msgstr "Set up your AI guide first"
 msgctxt "delete a change request"
 msgid "Delete"
 msgstr "Delete"
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card field"
+msgid "Done when, for task {n} for {roleName}"
+msgstr "Done when, for task {n} for {roleName}"
+
+#. placeholder {0}: CARD_LIMITS.movesPerRole
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Which of {roleName}'s goals will you move? Pick up to {0}, each with a target."
+msgstr "Which of {roleName}'s goals will you move? Pick up to {0}, each with a target."
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "No season goal served"
@@ -1595,6 +1637,10 @@ msgstr "Confirm with your password"
 msgctxt "sera answers"
 msgid "1 marked Check first is left out. Take it on its own."
 msgstr "1 marked Check first is left out. Take it on its own."
+
+#: client/src/pages/Roles.tsx
+msgid "{rolesSeasonName}: see this season's goals"
+msgstr "{rolesSeasonName}: see this season's goals"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgctxt "invoice desk"
@@ -2583,11 +2629,6 @@ msgstr "You have none yet. Gather several changes here and the village votes on 
 msgid "The village can ask, raise concerns and objections, and suggest edits. The people whose roles look after these settings are asked to look."
 msgstr "The village can ask, raise concerns and objections, and suggest edits. The people whose roles look after these settings are asked to look."
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal side by side"
-msgid "First moon: {quest}"
-msgstr "First moon: {quest}"
-
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Choose a language"
@@ -2733,6 +2774,10 @@ msgstr "Changed since it was taken"
 msgctxt "pricing desk"
 msgid "Waiting for a signer"
 msgstr "Waiting for a signer"
+
+#: client/src/pages/RoleDraft.tsx
+msgid "This season's goals"
+msgstr "This season's goals"
 
 #. placeholder {0}: cycle.poolCredited
 #. placeholder {1}: cycle.poolToken ?? ""
@@ -3353,6 +3398,11 @@ msgstr "Everyone in the village can read what you write here."
 msgid "The guide is reading"
 msgstr "The guide is reading"
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal card"
+msgid "The task"
+msgstr "The task"
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
 msgid "Talk to {label}"
@@ -3663,10 +3713,6 @@ msgctxt "a button that opens a new matrix row"
 msgid "Add a row"
 msgstr "Add a row"
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "No outcome of {roleName} picked"
-msgstr "No outcome of {roleName} picked"
-
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Languages"
@@ -3895,11 +3941,6 @@ msgctxt "admin heading for the conflict steps"
 msgid "The restorative path"
 msgstr "The restorative path"
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal card"
-msgid "The quest"
-msgstr "The quest"
-
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Translated automatically"
@@ -3972,10 +4013,6 @@ msgstr "Loading..."
 msgctxt "a suggestion is being declined"
 msgid "Declining"
 msgstr "Declining"
-
-#: client/src/pages/RoleDraft.tsx
-msgid "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then."
-msgstr "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then."
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Loading this village's conflict agreement…"
@@ -4221,6 +4258,10 @@ msgstr "Open this block"
 msgid "Places looking for a steward:"
 msgstr "Places looking for a steward:"
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "This role lists no goals yet."
+msgstr "This role lists no goals yet."
+
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "Propose a change to what closing means"
 msgstr "Propose a change to what closing means"
@@ -4293,6 +4334,11 @@ msgstr "Grow"
 msgctxt "role editor card"
 msgid "Now:"
 msgstr "Now:"
+
+#. placeholder {0}: CARD_LIMITS.serves
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Which of the village's goals for the season does your work in {roleName} serve? Pick up to {0}, and say how."
+msgstr "Which of the village's goals for the season does your work in {roleName} serve? Pick up to {0}, and say how."
 
 #. placeholder {0}: cr.review.consents
 #: client/src/pages/ChangeRequests.tsx
@@ -4419,6 +4465,10 @@ msgctxt "sera answers"
 msgid "Untick all"
 msgstr "Untick all"
 
+#: client/src/pages/RoleDraft.tsx
+msgid "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you propose, and nothing is sent before then."
+msgstr "Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you propose, and nothing is sent before then."
+
 #: client/src/components/modules/SuggestDial.tsx
 msgid "Set by the village"
 msgstr "Set by the village"
@@ -4453,6 +4503,11 @@ msgstr "What this vote would adopt could not be read just now. The vote's page s
 msgctxt "heading of the public canvas page"
 msgid "Our Canvas, Block by Block"
 msgstr "Our Canvas, Block by Block"
+
+#. placeholder {0}: CARD_LIMITS.questsPerRole
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "Your first tasks this moon in {roleName}: up to {0}, each with a \"Done when\" test"
+msgstr "Your first tasks this moon in {roleName}: up to {0}, each with a \"Done when\" test"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "When two of us disagree"
@@ -4922,11 +4977,6 @@ msgstr "{0} waiting for a signer"
 msgid "Apply for the roles you drafted"
 msgstr "Apply for the roles you drafted"
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal card"
-msgid "Add a quest"
-msgstr "Add a quest"
-
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgctxt "link to the page where a setting is set"
 msgid "Where it is set"
@@ -5060,11 +5110,6 @@ msgstr "The copy did not download"
 msgctxt "funding round stage"
 msgid "Ideas are being shaped into quests"
 msgstr "Ideas are being shaped into quests"
-
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal card field"
-msgid "Done when, for quest {n} for {roleName}"
-msgstr "Done when, for quest {n} for {roleName}"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -5456,11 +5501,6 @@ msgctxt "sera answers"
 msgid "Write your own"
 msgstr "Write your own"
 
-#. placeholder {0}: CARD_LIMITS.movesPerRole
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Which of {roleName}'s outcomes will you move? Pick up to {0}, each with a target."
-msgstr "Which of {roleName}'s outcomes will you move? Pick up to {0}, each with a target."
-
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take this season off? The canvas goes back to canvas order, and every reading stays. The season itself is removed: to load it again you will need its file."
 msgstr "Take this season off? The canvas goes back to canvas order, and every reading stays. The season itself is removed: to load it again you will need its file."
@@ -5572,10 +5612,6 @@ msgstr "As little as"
 msgctxt "open a notebook document"
 msgid "Open {0}"
 msgstr "Open {0}"
-
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "This role lists no outcomes yet."
-msgstr "This role lists no outcomes yet."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Loading the conflict agreement…"
@@ -5696,10 +5732,6 @@ msgstr "Hours"
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "No suggestions are open on {name}."
 msgstr "No suggestions are open on {name}."
-
-#: client/src/pages/RoleDraft.tsx
-msgid "What the whole village is working toward in {seasonName}"
-msgstr "What the whole village is working toward in {seasonName}"
 
 #: client/src/components/canvas/DecisionMatrix.tsx
 msgctxt "loading the Decision Matrix"
@@ -6203,11 +6235,6 @@ msgctxt "sera changes"
 msgid "Small changes {nSmall}"
 msgstr "Small changes {nSmall}"
 
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgctxt "open proposal card field"
-msgid "Quest {n} for {roleName}"
-msgstr "Quest {n} for {roleName}"
-
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Small changes"
@@ -6452,11 +6479,6 @@ msgctxt "funding rounds"
 msgid "Who would it help?"
 msgstr "Who would it help?"
 
-#. placeholder {0}: CARD_LIMITS.questsPerRole
-#: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Your first moon in {roleName}: up to {0} quests, each with a \"Done when\" test"
-msgstr "Your first moon in {roleName}: up to {0} quests, each with a \"Done when\" test"
-
 #: client/src/components/notebook/NotebookPanel.tsx
 msgctxt "open a notebook document"
 msgid "Open"
@@ -6575,10 +6597,6 @@ msgctxt "sera compare"
 msgid "Here now"
 msgstr "Here now"
 
-#: client/src/pages/RoleDraft.tsx
-msgid "What the whole village is working toward this season"
-msgstr "What the whole village is working toward this season"
-
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "The blocks below are in canvas order. Take the stored season off below, or load a season file in its place."
 msgstr "The blocks below are in canvas order. Take the stored season off below, or load a season file in its place."
@@ -6691,6 +6709,10 @@ msgstr "Started by {author}"
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "No quest gathered enough support to be funded."
 msgstr "No quest gathered enough support to be funded."
+
+#: client/src/pages/Roles.tsx
+msgid "{rolesSeasonName}, to {rolesSeasonTo}: see this season's goals"
+msgstr "{rolesSeasonName}, to {rolesSeasonTo}: see this season's goals"
 
 #: client/src/components/review/SeraOnReview.tsx
 msgid "Arrived {at}, with 1 proposal."
@@ -6924,6 +6946,10 @@ msgstr "Characters saved"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
 #~ msgstr "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "No goal of {roleName} picked"
+msgstr "No goal of {roleName} picked"
 
 #: client/src/components/roleEdit/EditRoleButton.tsx
 msgctxt "role card, opens the role editor"
@@ -7582,6 +7608,11 @@ msgstr "The village has not set its goals for this season yet. You can still app
 msgid "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 msgstr "Anyone can read this line, signed in or not. Name the role that does the work, never a person. Leave it empty and save to take the line down."
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft step"
+msgid "This season's goals"
+msgstr "This season's goals"
+
 #: client/src/components/admin/AgeBandCorrection.tsx
 msgctxt "admin age band"
 msgid "That did not save. Try again."
@@ -7708,6 +7739,10 @@ msgctxt "open proposal side by side"
 msgid "Usual times: {windowList}"
 msgstr "Usual times: {windowList}"
 
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgid "No first task for {roleName}"
+msgstr "No first task for {roleName}"
+
 #: client/src/components/Layout.tsx
 #~ msgid "Sign in or join"
 #~ msgstr "Sign in or join"
@@ -7720,6 +7755,11 @@ msgstr "Usual times: {windowList}"
 msgctxt "start a new change request"
 msgid "A new change request"
 msgstr "A new change request"
+
+#: client/src/components/openProposal/RoleCardBridge.tsx
+msgctxt "open proposal side by side"
+msgid "Serves the season goal: {goalWords}"
+msgstr "Serves the season goal: {goalWords}"
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "Each column needs an answer. \"Nobody yet\" is an answer."
