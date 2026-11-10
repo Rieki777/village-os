@@ -17,7 +17,7 @@
  * around them did.
  */
 import type { LucideIcon } from "lucide-react";
-import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MapPin, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, Compass, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MapPin, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
 import type { TabBadge } from "@/lib/adminNav";
 import { CONTENT_SECTIONS } from "./contentSections";
 
@@ -70,6 +70,7 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         { key: "players", label: "Players", icon: Users },
         { key: "game-roles", label: "Power groups", icon: Users2 },
         { key: "org-chart", label: "Org Chart", icon: Users2 },
+        { key: "role-discover", label: "Role discovery", icon: Compass },
         { key: "handover", label: "The Handover", icon: KeyRound },
         { key: "governance-weights", label: "Voting Weights", icon: Scale },
       ],

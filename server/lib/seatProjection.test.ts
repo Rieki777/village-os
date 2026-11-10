@@ -116,6 +116,8 @@ const MAP_BEFORE = [
   "bringMe", "notMine", "runbook",
   // 0274: the CCOS words, on the same rule.
   "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment",
+  // Role journey PR-C: the full card's parameters, ONE key at every tier. What is inside it per tier is pinned in roleCardProjection.test.ts.
+  "card",
 ];
 const ORG_BEFORE = [
   "id", "circleId", "name", "aim", "domain", "accountabilities", "whyItMatters", "seats",
@@ -124,6 +126,7 @@ const ORG_BEFORE = [
   "bringMe", "notMine", "runbook",
   // 0274: the CCOS words, at the domain's tier too.
   "existsWhile", "authorities", "responsibilities", "signsStretched", "flowsBack", "stepBack", "timeCommitment",
+  "card",
 ];
 const PACK = [
   "authority", "firstYearOutcomes", "first90DayOutcomes", "locationExpectations",
@@ -562,7 +565,10 @@ describe("the terms tier: no termsOffer below the member rung", () => {
       for (const [route, tier] of [["map", t.map], ["org", t.org]] as const) {
         const seat = projectSeat(offered, HELD, tier, ctx(route));
         for (const k of TERMS_KEYS) expect(seat, `${route} ${reader} ${k}`).not.toHaveProperty(k);
-        expect(JSON.stringify(seat), `${route} ${reader} carries no figure`).not.toContain("12345");
+        // Role journey PR-C: the pay group of a listed open role is public (20 Oct ruling), and only there.
+        const { card: cardOut, ...rest } = seat as { card: { publicPay?: unknown } } & Record<string, unknown>;
+        expect(JSON.stringify(rest), `${route} ${reader} carries no figure outside the public pay`).not.toContain("12345");
+        expect(cardOut.publicPay, `${route} ${reader} reads the pay range, the control`).toMatchObject({ kind: "fixed", amountMinor: 12345 });
       }
     });
   }

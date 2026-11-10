@@ -124,3 +124,10 @@ export async function holderFacts(pool: Pool): Promise<HolderFact[]> {
     };
   });
 }
+
+/** Circle names by id, for the page. A circle is not a person. */
+export async function circleNames(pool: Pool): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const r of await rows(pool, "SELECT id, name FROM circles")) out.set(String(r.id), String(r.name));
+  return out;
+}

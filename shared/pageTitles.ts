@@ -122,6 +122,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/propose": "Start a proposal",
   "/role-applications": "Role application",
   "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
+  "/role-measures": "How roles are going", // members only, counts and medians from stamped times
+  "/application-status": "Where your application is", // the applicant's own page, by the emailed link (role journey L5)
   "/seat-applications": "Role application",
   "/season-plans": "The village's season",
   "/season-plans/mine": "Your season",

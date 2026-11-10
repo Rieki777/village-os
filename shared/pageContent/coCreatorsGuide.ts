@@ -95,6 +95,15 @@ export const CO_CREATORS_GUIDE_PAGE: PageSpec = {
             { key: "label", label: "Label on the diagram", kind: "text", max: 22, default: "" },
             { key: "title", label: "Box title", kind: "text", max: 40, default: "" },
             { key: "body", label: "Box description", kind: "long", max: 130, default: "" },
+            {
+              key: "ask",
+              label: "Question on the role draft board",
+              help: "The short question this circle asks a newcomer on the role draft board. Their answers stay in their browser.",
+              kind: "text",
+              max: 120,
+              default: "",
+              optional: true,
+            },
           ],
           default: [
             {

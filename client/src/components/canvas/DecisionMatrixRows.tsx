@@ -12,9 +12,10 @@
  *
  *   before the Birthing   the founders (administrators) add, change and remove
  *                         rows here, straight away
- *   after it              a vote of the whole village at the structural tier,
- *                         which is not built yet; every write answers 409, so
- *                         nothing here is offered, and the sentence says so
+ *   after it              a vote of the whole village at the structural tier:
+ *                         a suggested row's author files it as a proposal
+ *                         (canvas follow-up G.1); every write here answers 409
+ *                         naming that vote, so nothing here is offered
  *
  * Anybody else reads the rows and suggests one with the suggestion box below
  * (a "row of the Decision Matrix"), which the pen adopts or declines.
@@ -248,9 +249,11 @@ export function DecisionMatrixRows({
             )
           ) : (
             <p className="text-stone-700" data-testid="matrix-human-rows-pen">
-              {data.pen.how === "ballot"
-                ? "The Game has started, so these rows change by a vote of the whole village, which is not built yet. You can still suggest a row below, and it waits for that vote."
-                : // A suggestion only ever adds a row (the box cannot name one to overwrite),
+              {data.pen.how === "ballot" ? (
+                <Trans>
+                  The Game has started, so these rows change by a vote of the whole village at the structural tier. Suggest a row below, and the member who suggested it files it as a proposal the village decides.
+                </Trans>
+              ) : // A suggestion only ever adds a row (the box cannot name one to overwrite),
                   // so the line promises what the box can carry (audit of Wave 3b, 2026-09-28).
                   `${data.pen.sentence} To suggest a new row, use the box below. To change a row, suggest it as it should read and say which row it replaces.`}
             </p>

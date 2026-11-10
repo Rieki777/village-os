@@ -3569,27 +3569,26 @@ touches that.
 
 ### The two halves of the exit promise are governed differently
 
-The ten dials are Ring 2, so a village votes them. The PUBLISHED policy those
-dials must agree with is not: `PUT /api/admin/exit-policy` writes the
-`exit-policy` document through `dbDocument`, guarded by `isAdmin` alone, and
-`CHANGE_ITEM_KINDS` (`shared/dryRun/types.ts`) is dial, mint_rule,
-weight_allocation, mode_switch, module_lifecycle, brand_field and role, with no
-document kind at all; `brand_field` reaches the brand document and nothing else.
-So after the Birthing, an administrator still edits by hand what a departing
-member is told they get, while the numbers that decide what they actually get go
-to a vote.
+The ten dials are Ring 2, so a village votes them. Since the canvas follow-up
+(G.1 and G.2, 2026-11-09) the PUBLISHED policy goes to a vote too, once the Game
+has started. `CHANGE_ITEM_KINDS` (`shared/dryRun/types.ts`) now carries
+`exit_terms` and `exit_restorative`, priced at the structural tier, and a carried
+change set saves the `exit-policy` document through the exit policy's own save
+(`server/lib/consequenceVote.ts`, which lays the change over the policy as every
+reader is served it). After the Birthing, `PUT /api/admin/exit-policy` refuses a
+change to the exit terms with 409 `exit_terms_are_a_vote`, naming that vote, and
+it locks the care door whether or not Conflict Evolution is on. Before the
+Birthing the administrators still write the policy directly, as they write every
+founding document.
 
-The consequence for the cooling period is exact. The save-time guard refuses a
-cooling period longer than the published notice, and it reads that notice at the
-moment a DIAL is written. Because the exit policy route is outside the changeset
-path, the published notice can be lowered BELOW an already-saved cooling period
-afterwards with nothing re-checking, and the governance session's landing-time
-reading does not catch it either, because that reading only sees what a
-changeset carries. What that can no longer do is hold a member's balance past
-the date their own exit row promised, because the settle date is capped at
-`notice_ends_at`. A repair is a named Phase 2 task for the governance lane: a
-`document` item kind covering exit-policy, that route behind the post-Birthing
-refuse-and-redirect, and these two exit levers in the set-level predicates.
+The consequence for the cooling period still holds in one place. The save-time
+guard refuses a cooling period longer than the published notice, and it reads
+that notice at the moment a DIAL is written. A carried `exit_terms` change that
+lowers the published notice is saved through the exit policy's own save, and
+nothing re-reads an already-saved cooling period against it at landing. What
+that can no longer do is hold a member's balance past the date their own exit
+row promised, because the settle date is capped at `notice_ends_at`. The
+remaining repair is these two exit levers in the set-level predicates.
 
 ### Redemption is this act for a member who stays, and the two share a shape and no code
 

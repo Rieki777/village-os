@@ -8,7 +8,7 @@
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { buildMeasures } from "../../shared/roleMeasures";
-import { applicationFacts, holderFacts } from "../repos/roleMeasures";
+import { applicationFacts, circleNames, holderFacts } from "../repos/roleMeasures";
 
 type Deps = Pick<AppDeps, "getPool" | "authedUser"> & Partial<Pick<AppDeps, "overLimit">>;
 
@@ -21,13 +21,7 @@ export function register(app: Express, deps: Deps): void {
     try {
       const pool = getPool();
       const [apps, holders] = await Promise.all([applicationFacts(pool), holderFacts(pool)]);
-      const names = new Map<string, string>();
-      try {
-        const [c] = await pool.query<any[]>("SELECT id, name FROM circles");
-        for (const r of c) names.set(String(r.id), String(r.name));
-      } catch {
-        /* circle names are a nicety */
-      }
+      const names = await circleNames(pool).catch(() => new Map<string, string>());
       const rows = buildMeasures(apps, holders, Date.now()).map((r) => ({ ...r, circleName: r.circleId ? (names.get(r.circleId) ?? null) : null }));
       res.json({ rows });
     } catch {

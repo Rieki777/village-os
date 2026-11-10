@@ -131,25 +131,29 @@
         "id": "love",
         "body": "Your authentic desires and what brings you alive. What would you do even if no one paid you?",
         "label": "What You LOVE",
-        "title": "What You LOVE (Passion)"
+        "title": "What You LOVE (Passion)",
+        "ask": "What would you do even if nobody paid you?"
       },
       {
         "id": "good",
         "body": "Your natural abilities, experience, and expertise. What do others come to you for?",
         "label": "What You're GOOD AT",
-        "title": "What You're GOOD AT (Skills)"
+        "title": "What You're GOOD AT (Skills)",
+        "ask": "What do people come to you for?"
       },
       {
         "id": "needs",
         "body": "The gaps we need filled to create a thriving, regenerative community. Where can you fill a real need?",
         "label": "What the VILLAGE NEEDS",
-        "title": "What {village} NEEDS (Regeneration)"
+        "title": "What {village} NEEDS (Regeneration)",
+        "ask": "Where do you see a need you could fill?"
       },
       {
         "id": "pays",
         "body": "The roles and quests {village} needs, each on its own card.",
         "label": "What PAYS",
-        "title": "What PAYS (Compensation)"
+        "title": "What PAYS (Compensation)",
+        "ask": "What work would you like to be paid or recognised for?"
       }
     ],
     "heading": "Your R-Ikigai",

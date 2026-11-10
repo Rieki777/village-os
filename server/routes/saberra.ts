@@ -100,6 +100,8 @@ import { pruneByAge, SNAPSHOT_MAX_AGE_DAYS } from "../lib/saberraSnapshot";
 import { doorsNow, type Deciders } from "../lib/seraDoors";
 import { waitingChartProposals } from "../repos/seraDifferences";
 import { saberraAgentName } from "../lib/saberraGuide";
+import { recentSnapshots } from "../repos/saberraSnapshots";
+import { latestRolePay } from "../lib/saberraRolePay";
 import { villageTimezone } from "../lib/villageReaders";
 
 /**
@@ -529,6 +531,22 @@ export function register(app: Express, deps: Deps): void {
       res.json({ facts });
     } catch {
       res.status(500).json({ error: "Could not read what the service holds." });
+    }
+  });
+  /**
+   * The newest pay range the service holds for each role, for the role
+   * editor's "Use Sera's range" (role journey L10). Read-only: it writes no
+   * term, and the editor copies a range into a role's terms only on a person's
+   * own save. Gated like the terms themselves, `terms.read`, because a range
+   * with its budget line is the same class of fact as the terms it informs.
+   */
+  app.get("/api/saberra/role-pay", async (req, res) => {
+    if (!(await guardCapability(req, res, "terms.read"))) return;
+    try {
+      const reading = latestRolePay(await recentSnapshots(getPool(), 5));
+      res.json({ readAt: reading?.readAt ?? null, byRole: reading?.byRole ?? {} });
+    } catch {
+      res.status(500).json({ error: "Could not read the ranges." });
     }
   });
 }

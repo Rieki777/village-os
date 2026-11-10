@@ -22,6 +22,8 @@ import { proposeTermsHref } from "@shared/seatTermsOffer";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import SeatTermsDrawer from "./SeatTermsDrawer";
 import WorkPayBlock from "@/components/WorkPayBlock";
+import RoleCardParams from "./RoleCardParams";
+import { roleCardView } from "@shared/roleCardView";
 
 function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
   const presets = useVillagePresets();
@@ -78,10 +80,20 @@ function SeatTermsSlot({ seat }: { seat: Record<string, any> }) {
  */
 export function applyHrefFor(seat: Record<string, any> | null | undefined): string | null {
   if (!seat || typeof seat !== "object" || !("termsOffer" in seat) || seat.isExample) return null;
+  // Role journey PR-C: no Apply while the village holds a card back as Being written.
+  if (!roleCardView(seat).applyAllowed) return null;
   // A full seat has no place to apply for (red team U4).
   if (seat.state === "filled") return null;
   const id = String(seat.id ?? "").trim();
   return id ? proposeTermsHref(id) : null;
+}
+
+/**
+ * The card's action (a raised hand, or Apply) while the village allows it. While a card is held back as
+ * Being written the action is left off and the parameters block says so (role journey PR-C).
+ */
+export function guardedAction(seat: Record<string, any> | null | undefined, action: ReactNode): ReactNode {
+  return seat && !roleCardView(seat).applyAllowed ? null : action;
 }
 
 /**
@@ -93,9 +105,12 @@ export function applyHrefFor(seat: Record<string, any> | null | undefined): stri
  * (server/lib/seatProjection.ts), so a reader who may not read terms sees neither.
  */
 export function termsSlotFor(seat: Record<string, any> | null | undefined): ReactNode | undefined {
-  if (!seat || typeof seat !== "object" || !("termsOffer" in seat)) return undefined;
+  if (!seat || typeof seat !== "object") return undefined;
+  // The parameters block reaches everyone; the terms drawer only a reader of terms.
+  if (!("termsOffer" in seat)) return seat.card ? <RoleCardParams seat={seat} /> : undefined;
   return (
     <div className="space-y-2">
+      <RoleCardParams seat={seat} />
       {"pay" in seat && <WorkPayBlock pay={seat.pay} variant="full" />}
       <SeatTermsSlot seat={seat} />
     </div>

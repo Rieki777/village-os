@@ -68,11 +68,28 @@
  * matched anywhere in the line: 王伟 is named in 王伟负责钥匙, where a
  * boundary rule would find a letter touching each side and let it through.
  *
- * NOT CAUGHT, and known: a name in a spaced script other than Latin with a
- * particle or prefix of its own script attached (Korean 김지민이, Hebrew
- * לדוד, Arabic لأحمد). Matching those anywhere would refuse ordinary words
- * that contain a short name, which is the choice this rule declines to make
- * on its own.
+ * A KOREAN NAME MAY CARRY A PARTICLE. Korean writes its particles straight
+ * after the name (김지민이, 김지민을, 김지민님), so after a name in Hangul
+ * the next letter is no word edge. What still is one is the rest of the
+ * name's own last syllable: the line is folded with NFKD, which takes each
+ * syllable apart into its jamo, so a name could otherwise end halfway through
+ * a syllable and 김지 would be found in 김진. After a Hangul name the one
+ * thing refused is a trailing final consonant (U+11A8 to U+11FF, U+D7CB to
+ * U+D7FB), the jamo that closes a syllable.
+ *
+ * A HEBREW OR ARABIC NAME MAY CARRY A PREFIX. Both scripts set one-letter
+ * words straight before the next word (Hebrew ו ה ב כ ל מ ש, Arabic و ف ب
+ * ك ل), so לדוד names David and لأحمد names Ahmad. Before a name in either
+ * script there is no word edge; after it the edge stays, so הדודה does not
+ * name דוד. Folding strips the hamza (أحمد is compared as احمد), and the
+ * refusal still quotes the letters the writer typed.
+ *
+ * THE COST, KNOWN AND ACCEPTED: a short Hebrew or Arabic name is also found
+ * where an ordinary word is that name behind a prefix (בדוד is "in the
+ * boiler" as well as "to David"), and a Korean name is found at the start of
+ * a longer name it begins (김지 in 김지민). The line is refused with the word
+ * quoted, so a writer who meant the boiler rewords one line, which costs less
+ * than a public page that names somebody.
  */
 import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
@@ -96,6 +113,12 @@ const UNSPACED_SCRIPT = new RegExp(
 const ANY_WORD_CHARACTER = "[\\p{L}\\p{N}]";
 /** What continues a word, for a name in Latin letters. */
 const LATIN_WORD_CHARACTER = "[\\p{Script=Latin}\\p{N}]";
+/** Korean: a name may be followed by a particle (see the header). */
+const HANGUL = new RegExp("\\p{Script=Hangul}", "u");
+/** The jamo that close a Hangul syllable: a name never ends where one follows. */
+const HANGUL_FINAL_CONSONANT = "[\\u11A8-\\u11FF\\uD7CB-\\uD7FB]";
+/** Hebrew and Arabic: a name may be preceded by a one-letter prefix (see the header). */
+const PREFIXED_SCRIPT = new RegExp("[\\p{Script=Hebrew}\\p{Script=Arabic}]", "u");
 
 /** The member fields this reads. Any member record satisfies it. */
 export interface NameFacts extends AdmissionRecord {
@@ -203,9 +226,17 @@ function patternFor(name: string): RegExp {
   const body = name.split(" ").map(escapeRegExp).join("\\s+");
   if (UNSPACED_SCRIPT.test(name)) return new RegExp(body, "gu");
   const chars = Array.from(name);
-  const before = LATIN.test(chars[0] ?? "") ? LATIN_WORD_CHARACTER : ANY_WORD_CHARACTER;
-  const after = LATIN.test(chars[chars.length - 1] ?? "") ? LATIN_WORD_CHARACTER : ANY_WORD_CHARACTER;
-  return new RegExp(`(?<!${before})${body}(?!${after})`, "gu");
+  const first = chars[0] ?? "";
+  const last = chars[chars.length - 1] ?? "";
+  // A Hebrew or Arabic name may carry a one-letter prefix, so nothing before it is an edge.
+  const before = PREFIXED_SCRIPT.test(first)
+    ? ""
+    : `(?<!${LATIN.test(first) ? LATIN_WORD_CHARACTER : ANY_WORD_CHARACTER})`;
+  // A Korean name may carry a particle; only the rest of its own last syllable is an edge.
+  const after = HANGUL.test(last)
+    ? `(?!${HANGUL_FINAL_CONSONANT})`
+    : `(?!${LATIN.test(last) ? LATIN_WORD_CHARACTER : ANY_WORD_CHARACTER})`;
+  return new RegExp(`${before}${body}${after}`, "gu");
 }
 
 /**

@@ -53,6 +53,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { openBallot, openBallotFor } from "../lib/ballots";
 import { decisionLink, notifyRollRows } from "../lib/ballotNotices";
+import { deadlineInVillage } from "../lib/villageReaders";
 import {
   AGREEMENT_FOUNDERS_NOW,
   AGREEMENT_MEMBERS_ONLY,
@@ -410,7 +411,7 @@ export function register(app: Express, deps: Deps): void {
     void notifyRollRows({ pool, notify: deps.notify, link: decisionLink }, result.ballot, {
       type: "ballot_opened",
       title: "The village is asked whether to change its conflict agreement",
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),
