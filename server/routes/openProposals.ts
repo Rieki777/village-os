@@ -209,6 +209,7 @@ export function register(app: Express, deps: Deps): void {
     const live = new Map(circles.filter((c) => c.live).map((c) => [c.id, c.name]));
     // Role journey PR-C: with the village setting on, a card that is not complete offers nothing to apply for.
     const needsCard = deps.boolVar?.("org.apply_needs_complete_card") === true;
+    const nameOf = new Map(roles.map((r) => [r.id, r.name]));
     return roles
       .filter((r) => r.active && !r.isExample && isListed(r) && r.circleId && live.has(r.circleId))
       .filter((r) => !needsCard || gateOf(r).gate.complete)
@@ -221,6 +222,14 @@ export function register(app: Express, deps: Deps): void {
         accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
         whyItMatters: r.whyItMatters ?? null,
         timeCommitment: (r as any).timeCommitment ?? null,
+        // The conversations in the role's order, as its public card shows them (role journey L5), so the
+        // form and the board can say what happens next (role audit, 10 Nov 2026). The booking link is
+        // not here: it is offered once the address is confirmed (L6).
+        conversations: (Array.isArray(r.conversations) ? r.conversations : []).map((s) => ({
+          role: nameOf.get(s.roleId) ?? s.roleId,
+          minutes: s.minutes,
+          ...(s.final ? { finalApproval: true } : {}),
+        })),
       }));
   }
 

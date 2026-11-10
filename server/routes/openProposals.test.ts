@@ -189,11 +189,29 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
   };
 
   describe("who can open the form", () => {
+    it("names each role's conversations in its order, the final approval marked, and never its booking link (role audit, 10 Nov 2026)", async () => {
+      await pool.query("UPDATE `org_roles` SET `conversations` = ?, `booking_url` = ? WHERE `id` = ?", [ // module-review-ok: fixture SQL against this suite's scratch schema
+        JSON.stringify([{ roleId: gate, minutes: 20, final: false }, { roleId: well, minutes: 30, final: true }]),
+        "https://book.example.test/well",
+        well,
+      ]);
+      try {
+        const r = await call("GET", "/api/open-proposals/form");
+        expect(r.body.roles.find((x: any) => x.id === well).conversations).toEqual([
+          { role: "Gate Keeper", minutes: 20 },
+          { role: "Well Keeper", minutes: 30, finalApproval: true },
+        ]);
+        expect(JSON.stringify(r.body)).not.toContain("book.example.test");
+      } finally {
+        await pool.query("UPDATE `org_roles` SET `conversations` = NULL, `booking_url` = NULL WHERE `id` = ?", [well]); // module-review-ok: fixture SQL against this suite's scratch schema
+      }
+    });
+
     it("the public link is on unless switched off, and offers only live roles in live circles", async () => {
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body).toMatchObject({ open: true, village: "Test Village", season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" } });
       expect(r.body.roles.map((x: any) => x.id).sort()).toEqual([gate, well].sort());
-      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null });
+      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null, conversations: [] });
       expect(JSON.stringify(r.body)).not.toContain(example);
       expect(JSON.stringify(r.body)).not.toContain(dormant);
     });
