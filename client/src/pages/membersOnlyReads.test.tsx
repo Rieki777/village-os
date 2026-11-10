@@ -360,8 +360,17 @@ class NoopIntersectionObserver {
   }
 }
 
+/** The roles sit behind step one (the archetype pick) until "See all roles"; a seat link, or a URL a test before left behind, opens them already. */
+async function openAllRoles() {
+  await waitFor(() => expect(screen.queryByRole("button", { name: "See all roles" }) ?? screen.queryAllByRole("heading", { level: 3 })[0]).toBeTruthy());
+  const seeAll = screen.queryByRole("button", { name: "See all roles" });
+  if (seeAll) fireEvent.click(seeAll);
+}
+
 async function openRolesRow() {
   inRouter(<Roles />);
+  // The roles sit behind step one (the archetype pick) until "See all roles".
+  await openAllRoles();
   const row = (await screen.findByRole("heading", { level: 3, name: "Seed Keeper" })).closest("button")!;
   fireEvent.click(row);
 }
