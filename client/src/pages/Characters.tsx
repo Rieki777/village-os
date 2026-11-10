@@ -356,7 +356,7 @@ export default function Characters() {
             ) : null}
           </div>
 
-          {/* What they drafted on /roles/draft before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
+          {/* What they drafted on /roles/select before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
           {user && (
             <div className="mb-4">
               <DraftCarry
