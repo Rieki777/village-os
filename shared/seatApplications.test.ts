@@ -203,7 +203,7 @@ describe("the subject", () => {
 describe("the member door's answers (0369, guide v2 B1)", () => {
   it("keeps the open form's field set, trimmed and capped, and reads a stored string", () => {
     const raw = { aim: "  Money kept true. ", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "", 3], earliestStart: "2026-12-01", terms: { choice: "talk", note: " The rate " } };
-    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" } };
+    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" }, goals: [] };
     expect(parseApplicationAnswers(raw)).toEqual(want);
     expect(parseApplicationAnswers(JSON.stringify(raw))).toEqual(want);
   });

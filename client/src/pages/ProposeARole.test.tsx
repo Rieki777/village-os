@@ -333,7 +333,7 @@ describe("a village whose proposals are for this moon (Rye, 9 Nov 2026)", () => 
 });
 
 describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () => {
-  it("asks for the role's outcomes with targets, first-moon quests, the season's goals and the agreements, and sends them as the card", async () => {
+  it("asks for the role's outcomes with targets, first-moon goals, the season's goals and the agreements, and sends them as the card", async () => {
     window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
     serve({
       ...FORM,
@@ -346,8 +346,8 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     expect(document.querySelector("[data-no-season-goals]")).toBeNull();
     fireEvent.click(screen.getByLabelText("A cash view every Monday"));
     fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
-    fireEvent.change(screen.getByLabelText("Task 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
-    fireEvent.change(screen.getByLabelText("Done when, for task 1 for Lead Financial Steward"), { target: { value: "every circle lead has it" } });
+    fireEvent.change(screen.getByLabelText("The goal"), { target: { value: "Publish the first cash view" } });
+    fireEvent.change(screen.getByLabelText("Done when"), { target: { value: "every circle lead has it" } });
     fireEvent.click(screen.getByLabelText("Investor ready"));
     fireEvent.change(screen.getByLabelText("How your work in Lead Financial Steward serves: Investor ready"), { target: { value: "One set of numbers" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });

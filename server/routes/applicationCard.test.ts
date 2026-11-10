@@ -217,7 +217,7 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
   });
 
   it("draws the member door's aim and goal on the proposal's card, in place of an unfiled plan (0369, guide v2 B1)", async () => {
-    await file("sa-00000000000000c9", { answers: { aim: "Money kept true.", servesGoal: "One set of numbers everyone trusts", timeZone: null, windows: [], earliestStart: null, terms: null } });
+    await file("sa-00000000000000c9", { answers: { aim: "Money kept true.", servesGoal: "One set of numbers everyone trusts", timeZone: null, windows: [], earliestStart: null, terms: null, goals: [] } });
     try {
       const r = await h.call("/api/governance/role-applications/sa-00000000000000c9/card");
       expect(r.status).toBe(200);

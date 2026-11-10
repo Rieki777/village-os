@@ -50,6 +50,7 @@ import { greetingName, OPEN_NOTICE_WORDS, openInviteId, openProposalHref, propos
 import { whoMayPutHandToVillage, type HandOpenerRule } from "../../shared/powerHands";
 import { CONSENT_WORDS, consentClosesAt } from "../../shared/roleProposalConsent";
 import { ADOPTING_POWER, parseApplicationInput } from "../../shared/seatApplications";
+import type { ProposalGoal } from "../../shared/proposalGoals";
 import { civilDateInstant, type SeatCalendar } from "../../shared/seatTerms";
 import { emailKeyOf } from "../../shared/comms/address";
 import type { WaitingOpenProposal } from "../../shared/waitingOnYou";
@@ -262,6 +263,22 @@ function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ i
   return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
 }
 
+/** The card's goals for the first moon as the application's list holds them. */
+function goalsOfCard(body: store.StoredOpenProposal["body"]): ProposalGoal[] {
+  const card = body.card;
+  if (!card) return [];
+  return card.roles.flatMap((r) =>
+    r.firstMoon.map((q) => ({
+      title: q.quest,
+      doneWhen: q.doneWhen,
+      moves: q.moves ?? "",
+      serves: (q.serves && card.serves.find((s) => s.goalId === q.serves)?.goal) || "",
+      date: q.date ?? "",
+      roleId: r.roleId,
+    })),
+  );
+}
+
 export async function placeOnRoles(
   deps: DecideDeps,
   p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string; /** False writes the application and stops: it waits for a vote (role journey L5, the ballot fallback). */ adopt?: boolean },
@@ -289,6 +306,8 @@ export async function placeOnRoles(
     seatIds,
     note: p.proposal.body.why || null,
     deliverables: deliverablesOf(p.proposal.body, seats) || null,
+    // The goals as a list, so the proposal's page draws them as one (joining lane PR 1).
+    ...(goalsOfCard(p.proposal.body).length ? { answers: { goals: goalsOfCard(p.proposal.body) } } : {}),
     ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
   });
   if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };

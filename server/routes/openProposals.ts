@@ -320,6 +320,8 @@ export function register(app: Express, deps: Deps): void {
       address: singlePublicAddress,
       accountabilitiesOf: (id) => outcomes.get(id) ?? [],
       goalIds: new Set(t.goals.map((g) => g.id)),
+      // A goal's date must fall in this moon (shared/proposalGoals.ts).
+      today: new Date().toISOString().slice(0, 10),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).

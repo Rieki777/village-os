@@ -10,7 +10,7 @@
  * matching section of their own, in the shape of a member's season card:
  *
  *   the role's outcomes (accountabilities)  ->  what I'll move, with a target
- *   the first 90 days                       ->  my first moon's quests, each
+ *   the first 90 days                       ->  my first moon's goals, each
  *                                               with a "Done when" test
  *   the season's goals for the village      ->  which my work serves, and how
  *   the hours                               ->  what I can give
@@ -26,13 +26,15 @@
  * application's own words (`cardSummary`, server/lib/openProposalDecide.ts).
  */
 
+import { GOAL_LIMITS, goalsOf, parseGoals } from "./proposalGoals";
+
 export const CARD_LIMITS = {
   movesPerRole: 3,
   moveText: 200,
   target: 120,
-  questsPerRole: 3,
-  quest: 160,
-  doneWhen: 200,
+  questsPerRole: GOAL_LIMITS.max,
+  quest: GOAL_LIMITS.title,
+  doneWhen: GOAL_LIMITS.doneWhen,
   serves: 3,
   how: 200,
   hours: 80,
@@ -67,8 +69,22 @@ export function isTimeZone(tz: string): boolean {
   }
 }
 
+/**
+ * One goal for the first moon (joining lane PR 1). Stored under `firstMoon`,
+ * with `quest` as its title, so a card sent before goals grew fields reads as it
+ * always did. `moves` is the role goal it moves, `serves` the season goal's id,
+ * `date` a day in this moon; each absent when the candidate left it.
+ */
+export interface FirstMoonGoal {
+  quest: string;
+  doneWhen: string;
+  moves?: string;
+  serves?: string;
+  date?: string;
+}
+
 export interface OpenProposalCard {
-  roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
+  roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: FirstMoonGoal[] }>;
   /**
    * `goal` is the goal's words when the proposal was sent, written by the server, never the form.
    * `roleId`: the role card the pick was made on (guide v2). Absent on a card sent before that, which named goals once for all its roles.
@@ -95,6 +111,8 @@ export interface CardContext {
   accountabilitiesOf: (roleId: string) => readonly string[];
   /** The season's goals for the village, by id. */
   goalIds: ReadonlySet<string>;
+  /** Today's civil day, so a goal's date can be held to this moon. Absent: the date is only read as a day. */
+  today?: string;
 }
 
 export const CARD_WORDS = {
@@ -138,16 +156,17 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
       if (!moves.some((x) => x.text === text)) moves.push({ text, target });
     }
     if (moves.length > L.movesPerRole) return { ok: false, field: "card", error: CARD_WORDS.tooMany("outcomes a role", L.movesPerRole) };
-    const firstMoon: OpenProposalCard["roles"][number]["firstMoon"] = [];
-    for (const q of list(r?.firstMoon) as any[]) {
-      const quest = str(q?.quest);
-      const doneWhen = str(q?.doneWhen);
-      if (!quest) continue;
-      if (quest.length > L.quest) return { ok: false, field: "card", error: CARD_WORDS.tooLong("A quest", L.quest) };
-      if (doneWhen.length > L.doneWhen) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Done when", L.doneWhen) };
-      firstMoon.push({ quest, doneWhen });
-    }
-    if (firstMoon.length > L.questsPerRole) return { ok: false, field: "card", error: CARD_WORDS.tooMany("quests a role", L.questsPerRole) };
+    // Joining lane PR 1: the first moon's goals, one to eight, each judged by the shared goal rules.
+    const asked = list(r?.firstMoon).map((q: any) => ({ title: q?.quest, doneWhen: q?.doneWhen, moves: q?.moves, serves: q?.serves, date: q?.date, roleId }));
+    const parsedGoals = parseGoals(asked, { roleGoalsOf: () => own, seasonKeys: ctx.goalIds, today: ctx.today });
+    if (!parsedGoals.ok) return { ok: false, field: "card", error: parsedGoals.error };
+    const firstMoon: FirstMoonGoal[] = parsedGoals.goals.map((g) => ({
+      quest: g.title,
+      doneWhen: g.doneWhen,
+      ...(g.moves ? { moves: g.moves } : {}),
+      ...(g.serves ? { serves: g.serves } : {}),
+      ...(g.date ? { date: g.date } : {}),
+    }));
     if (!roles.some((x) => x.roleId === roleId)) roles.push({ roleId, moves, firstMoon });
   }
   const serves: OpenProposalCard["serves"] = [];
@@ -216,7 +235,13 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       .map((r) => ({
         roleId: String(r.roleId),
         moves: list(r.moves).slice(0, L.movesPerRole).map((m: any) => ({ text: cut(m?.text, L.moveText), target: cut(m?.target, L.target) })).filter((m) => m.text),
-        firstMoon: list(r.firstMoon).slice(0, L.questsPerRole).map((q: any) => ({ quest: cut(q?.quest, L.quest), doneWhen: cut(q?.doneWhen, L.doneWhen) })).filter((q) => q.quest),
+        firstMoon: goalsOf(list(r.firstMoon).map((q: any) => ({ title: q?.quest, doneWhen: q?.doneWhen, moves: q?.moves, serves: q?.serves, date: q?.date }))).map((g) => ({
+          quest: g.title,
+          doneWhen: g.doneWhen,
+          ...(g.moves ? { moves: g.moves } : {}),
+          ...(g.serves ? { serves: g.serves } : {}),
+          ...(g.date ? { date: g.date } : {}),
+        })),
       })),
     serves: list(o.serves)
       .slice(0, L.serves * 3) // three role cards at most (D3)
@@ -246,7 +271,7 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
   for (const r of card.roles) {
     lines.push(roleName(r.roleId));
     for (const m of r.moves) lines.push(`- I'll move: ${m.text}${m.target ? ` (${m.target})` : ""}`);
-    for (const q of r.firstMoon) lines.push(`- First task: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}`);
+    for (const q of r.firstMoon) lines.push(`- Goal: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}${q.moves ? `. Moves: ${q.moves}` : ""}${q.date ? `. By ${q.date}` : ""}`);
     // Guide v2: the season goals this role's work serves, under the role.
     for (const s of card.serves.filter((x) => x.roleId === r.roleId)) lines.push(`- Serves the season goal: ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }

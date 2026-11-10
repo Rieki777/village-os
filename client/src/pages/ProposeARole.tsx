@@ -20,7 +20,7 @@
  */
 import CastStrip from "@/components/roleDraft/CastStrip";
 import Burst from "@/components/roleDraft/Burst";
-import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
+import { EMPTY_ROLE_CARD, goalsToFirstMoon, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { AttachmentFields, linksToSend } from "@/components/openProposal/ProposalAttachments";
 import type { ProposalLink } from "@shared/proposalAttachments";
@@ -229,7 +229,7 @@ export default function ProposeARole() {
             return {
               roleId,
               moves: Object.entries(c.moves).map(([text, target]) => ({ text, target })),
-              firstMoon: c.quests.filter((q) => q.quest.trim()),
+              firstMoon: goalsToFirstMoon(c.goals),
             };
           }),
           timeZone: practical.timeZone.trim(),
@@ -350,7 +350,7 @@ export default function ProposeARole() {
             </p>
           )}
 
-          {/* Guide v2: why you and your aim, then each role card (its goals, first tasks, the season goal it serves), then the practicalities. */}
+          {/* Guide v2: why you and your aim, then each role card (its goals, the first moon's goals, the season goal it serves), then the practicalities. */}
           <div>
             <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.whyLabel}

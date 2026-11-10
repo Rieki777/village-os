@@ -245,7 +245,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const apps = (await call("GET", "/api/governance/role-applications", undefined, state.founder)).json?.applications ?? [];
     const app = apps.find((a: any) => String(a?.candidate?.id) === state.applicantId);
     expect(app?.status).toBe("adopted");
-    expect(String(app?.deliverables ?? "")).toContain("First task: Publish the first cash view");
+    expect(String(app?.deliverables ?? "")).toContain("Goal: Publish the first cash view");
     expect(String(app?.deliverables ?? "")).toContain("Accepts the terms on offer.");
   });
 
