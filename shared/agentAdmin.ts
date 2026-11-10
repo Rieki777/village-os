@@ -93,7 +93,7 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
     // sending a first reply or a decision letter, and setting a role's pay or terms (the 24 Sept ruling: a person or a vote adopts).
     key: "tier_c",
     words: "Adopting, seating, publishing, changing powers, sending, setting pay or terms, inviting and erasing are always a person's act. A connector proposes them and a person does them.",
-    test: (_m, p) => /adopt|seat-?claims?|seatings?|publish|first-?repl|decision-?letter|role-?pay|\/terms?(\/|$)|terms-?offer|\/hold(s|ers)(\/|$)/i.test(p),
+    test: (_m, p) => /adopt|seat-?claims?|seatings?|publish|first-?repl|decision-?letter|letter-?drafts?|role-?pay|\/terms?(\/|$)|terms-?offer|\/hold(s|ers)(\/|$)/i.test(p),
   },
   {
     key: "secrets",

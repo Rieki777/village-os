@@ -87,7 +87,7 @@ export async function proposalById(db: Db, id: string): Promise<StoredProposal |
 }
 
 /** Close a waiting proposal. False when it was not waiting. */
-export async function resolveProposal(db: Db, id: string, status: "taken" | "dismissed", by: string): Promise<boolean> {
+export async function resolveProposal(db: Db, id: string, status: "taken" | "dismissed" | "sent", by: string): Promise<boolean> {
   const [res] = await db.query("UPDATE `agent_proposals` SET `status` = ?, `resolved_by` = ?, `resolved_at` = CURRENT_TIMESTAMP(3) WHERE `id` = ? AND `status` = 'waiting'", [status, by, id]);
   return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
 }
@@ -113,4 +113,22 @@ export async function conversationsWaitingOn(db: Db, userId: string): Promise<Ro
     [userId, userId],
   );
   return rows;
+}
+
+/** A person's edit of a waiting letter. False when it is no longer waiting. */
+export async function editWaitingLetter(db: Db, id: string, title: string, body: string): Promise<boolean> {
+  const [res] = await db.query("UPDATE `agent_proposals` SET `title` = ?, `body` = ? WHERE `id` = ? AND `kind` = 'letter' AND `status` = 'waiting'", [title.slice(0, 200), body, id]);
+  return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
+}
+
+/** Every waiting letter, oldest first, for the screen where a person reads and sends them. */
+export async function listAllWaitingLetters(db: Db, limit = 100): Promise<StoredProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `agent_proposals` WHERE `kind` = 'letter' AND `status` = 'waiting' ORDER BY `created_at` ASC LIMIT ?", [Math.min(Math.max(limit, 1), 200)]);
+  return rows.map(toProposal);
+}
+
+/** The candidate's user id on a member's application, or null. */
+export async function candidateOfApplication(db: Db, ref: string): Promise<string | null> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `candidate_user_id` FROM `seat_applications` WHERE `id` = ? LIMIT 1", [ref]);
+  return rows[0]?.candidate_user_id ? String(rows[0].candidate_user_id) : null;
 }
