@@ -77,7 +77,7 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("Roughly: 25 to 30 hours a week")).toBeTruthy();
+    expect(within(lfs).getByText("Roughly 25 to 30 hours a week")).toBeTruthy();
     // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
     expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
   });

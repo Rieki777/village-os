@@ -430,6 +430,11 @@ msgstr "(done when {doneWhen})"
 msgid "Apply for these {pickCount} roles"
 msgstr "Apply for these {pickCount} roles"
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card: the pay range heading"
+msgid "What it pays"
+msgstr "What it pays"
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "What the village's settings and records show"
 msgstr "What the village's settings and records show"
@@ -1180,6 +1185,11 @@ msgctxt "age band option"
 msgid "16 or 17"
 msgstr "16 or 17"
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card parameters block"
+msgid "About this role"
+msgstr "About this role"
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook section heading"
 msgid "Key moments"
@@ -1445,6 +1455,10 @@ msgstr "Compare them"
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "What would it change?"
 msgstr "What would it change?"
+
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "About this role"
+#~ msgstr "About this role"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -3408,9 +3422,9 @@ msgid "Loading this village's conflict agreement…"
 msgstr "Loading this village's conflict agreement…"
 
 #: client/src/pages/RoleDraft.tsx
-msgctxt "role draft stat"
-msgid "Roughly: {hours}"
-msgstr "Roughly: {hours}"
+#~ msgctxt "role draft stat"
+#~ msgid "Roughly: {hours}"
+#~ msgstr "Roughly: {hours}"
 
 #. placeholder {0}: row.updatedBy.name || aFounder
 #. placeholder {1}: readingDate(row.updatedAt)
@@ -3763,6 +3777,10 @@ msgstr "Suggest a change"
 msgctxt "economics view heading"
 msgid "Cycle settlement report"
 msgstr "Cycle settlement report"
+
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "What it pays"
+#~ msgstr "What it pays"
 
 #: client/src/pages/ExitPolicy.tsx
 msgid "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."

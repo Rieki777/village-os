@@ -34,6 +34,7 @@ import { circlesOnCycles } from "../../shared/circleView";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
 import { ccosWordsFromRow } from "../../shared/roleCcos";
+import { carriesRoleParams, parseRoleParams, roleParamColumns, roleParamsFromRow, type RoleParams } from "../../shared/roleParams";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -68,7 +69,7 @@ export interface LapseContext {
   now?: Date;
 }
 
-export interface OrgRole {
+export interface OrgRole extends Partial<RoleParams> {
   id: string;
   circleId: string | null;
   name: string;
@@ -287,7 +288,9 @@ export const ROLE_COLS =
   // so the Living Map placed every seat by its circle's NAME (map lane R1).
   "structure_key, " +
   // 0362: whether a steward has confirmed the role for discovery. NULL reads as listed.
-  "listed";
+  "listed, " +
+  // 0362: the parameters of the full card (shared/roleParams.ts).
+  "village_goals, track, selection_criteria, conversations, conversation_mode, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -362,6 +365,8 @@ export function rowToRole(r: any): OrgRole {
     runbook: readStoredRunbook(r.runbook),
     // 0274: the CCOS words, each through its reader.
     ...ccosWordsFromRow(r),
+    // 0362: the full card's parameters, each through the one tolerant reader.
+    ...roleParamsFromRow(r),
   };
 }
 
@@ -887,6 +892,7 @@ export function describeOrgChange(before: OrgRole | null, after: Partial<OrgRole
   }
   if (after.active !== undefined) say(after.active ? "reopened" : "rested", before.active, after.active);
   if (after.recruiting !== undefined) say("recruiting", before.recruiting, after.recruiting);
+  if (carriesRoleParams(after)) lines.push("card details updated");
   if (after.listed !== undefined) {
     const was = before.listed !== false;
     const now = after.listed === null || after.listed === undefined ? true : !!after.listed;
@@ -932,6 +938,18 @@ const WRITABLE: Record<string, string> = {
   order: "sort_order",
 };
 
+/**
+ * The card's parameters a body names, as column and value pairs. The route has
+ * already refused a bad value with a sentence (`parseRoleParams`), so a refusal
+ * here is a caller that skipped the route, and it throws rather than store a guess.
+ */
+function paramColumnsOf(body: any): Array<[string, string | number | null]> {
+  if (!carriesRoleParams(body)) return [];
+  const parsed = parseRoleParams(body);
+  if (!parsed.ok) throw new Error(parsed.problem);
+  return roleParamColumns(parsed.value);
+}
+
 export async function createOrgRole(pool: Pool, body: any): Promise<string> {
   const id =
     dashSlug(String(body?.id ?? body?.name ?? "")).slice(0, 64) ||
@@ -957,6 +975,10 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
     if (!w || cols.includes(w.col)) continue;
     cols.push(w.col);
     vals.push(w.value);
+  }
+  for (const [col, v] of paramColumnsOf(body)) {
+    cols.push(col);
+    vals.push(v);
   }
   await pool.query(
     `INSERT INTO org_roles (${cols.map((c) => `\`${c}\``).join(", ")})
@@ -1025,6 +1047,10 @@ export async function updateOrgRole(pool: Pool, id: string, body: any, value?: O
     if (!w) continue;
     sets.push(`\`${w.col}\` = ?`);
     args.push(w.value);
+  }
+  for (const [col, v] of paramColumnsOf(body)) {
+    sets.push("`" + col + "` = ?");
+    args.push(v);
   }
   if (body.accountabilities !== undefined) {
     sets.push("`accountabilities` = ?");

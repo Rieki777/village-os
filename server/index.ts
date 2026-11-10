@@ -863,6 +863,7 @@ import {
   type OrgRole,
 } from "./lib/orgChart";
 import { listingViewerFor } from "./lib/listingViewer";
+import { cardWordsFrom } from "./lib/roleCardProjection";
 import { circlesToShow } from "../shared/roleListing";
 import { mapSeatTier, mapShowsStructureTo, orgSeatTier, payBadgeBoosts, projectSeats, villageWay } from "./lib/seatProjection";
 // ── Lane L3: how resources flow — declarations, never movements ─────────────
@@ -9758,7 +9759,7 @@ async function startServer() {
     // ONE seat object, shared with `/api/org` (server/lib/seatProjection.ts).
     const mapListing = listingViewerFor({ admin, capCtx: viewerCapCtx, userId: viewer?.id, assignments: orgAssignments });
     const roles = projectSeats(orgRoles, orgAssignments, mapSeatTier(viewPeople, !!viewerCapCtx && hasCapability("terms.read", viewerCapCtx)), {
-      route: "map", listing: mapListing, now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
+      route: "map", listing: mapListing, cardGate: boolVar("org.apply_needs_complete_card"), cardWords: cardWordsFrom(orgRoles, circlesRepo.all() as Array<{ id: string; name: string }>, { firstConversationRole: stringVar("org.first_conversation_role"), paidConsentCircle: stringVar("org.paid_consent_circle") }), now: new Date(), nameOf, firstName, avatarOf: (id) => avatarByUser.get(id) ?? null,
       heldTerms: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await heldTermsFor(getPool(), orgAssignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: viewerCapCtx && hasCapability("terms.read", viewerCapCtx) ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined,
     });
 
@@ -24039,7 +24040,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext }); // a role proposal from somebody with no account (0305), and its decision
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext, boolVar }); // a role proposal from somebody with no account (0305), and its decision
   registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
@@ -24397,7 +24398,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       ...(tier.structure ? { village: villageWay(villagePowerDeclared()) } : {}),
       circles,
       // ONE seat object, shared with `/api/map` (server/lib/seatProjection.ts).
-      roles: projectSeats(roles, assignments, tier, { route: "org", listing: orgListing, now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: tier.terms ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
+      roles: projectSeats(roles, assignments, tier, { route: "org", listing: orgListing, cardGate: boolVar("org.apply_needs_complete_card"), cardWords: cardWordsFrom(roles, circlesRepo.all() as Array<{ id: string; name: string }>, { firstConversationRole: stringVar("org.first_conversation_role"), paidConsentCircle: stringVar("org.paid_consent_circle") }), now: new Date(), nameOf, firstName, heldTerms: tier.terms ? await heldTermsFor(getPool(), assignments, { timezone: seatCalendar().timezone || "UTC", nameOf }) : undefined, payRules: tier.terms ? await rulesFor(getPool(), "role.cycle") : undefined, payBadges: tier.terms ? await payBadgeBoosts(getPool(), await dormantBadgeIds()).catch(() => []) : undefined, ...(await orgRoleExtras(getPool(), roles, assignments, tier, { now: new Date(), timeZone: seatCalendar().timezone || "UTC", seasonId: seatCalendar().currentSeasonId })) }), // heldTerms: red team U2, server/lib/heldTerms.ts; health and handles: server/lib/orgRoleHealth.ts
     });
   });
 
