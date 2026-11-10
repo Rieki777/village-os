@@ -3,7 +3,7 @@
  * PR 5), the half a model reads. The route is server/routes/proposalDrafts.ts.
  *
  * MODEL-FACING, so it names no reference, consent, link, file, name or email
- * (server/lib/proposalAbout.privacy.test.ts scans it). It is handed what the
+ * (the privacy test beside the About-you rules scans it). It is handed what the
  * route's `forAssistants` let through (the candidate's roles, "Why you" and
  * aim), the roles' own public card words and the season's goals for the
  * village. Nothing else exists here to hand on.
