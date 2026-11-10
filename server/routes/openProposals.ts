@@ -61,6 +61,7 @@ import {
   OPEN_NAME_MAX,
   OPEN_WORDS,
   parseOpenProposal,
+  membershipOf,
   OPEN_GLOBAL_HOURLY,
   ipBucket,
   limiterAddressKey,
@@ -72,8 +73,12 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
-import { arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
+import { accountFor, arrivalFor, confirmAndAsk, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInvitedArrives } from "../lib/inviteDoor";
+import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/applicationMembership";
+import { currentLetter } from "../lib/membershipLetter";
+import { LETTER_WORDS, type LetterSource } from "../../shared/membershipLetter";
+import { inApplicationTransaction } from "../repos/seatApplications";
 import { OPEN_INVITE_PREFIX, openInviteId } from "../../shared/openProposalDecide";
 import { inviteById } from "../repos/memberInvites";
 import { dbDocument } from "../repos/store-db";
@@ -94,6 +99,14 @@ type Deps = Pick<
   postEmail?: (email: OutgoingEmail) => Promise<PostResult>;
   /** The governance module's lifecycle; the roles are its own. */
   governanceLifecycle?: () => string;
+  /**
+   * The membership letter's inputs now (`letterSourceFrom`), so an applicant
+   * aligns on the form with the words they read (Rye's answer 8). Absent: the
+   * form's alignment is refused as unreadable and nothing is recorded.
+   */
+  letterSource?: () => LetterSource;
+  /** The submissions collection's insert: an address that already has an account gets its signing request at confirm. */
+  signings?: SigningDoor;
   now?: () => Date;
   /** A village variable read as a flag. Absent reads as off. */
   boolVar?: (key: string) => boolean;
@@ -260,7 +273,21 @@ export function register(app: Express, deps: Deps): void {
     // The goals' words are kept with the card as they read when it was sent, never taken from the form.
     const goalText = new Map(t.goals.map((g) => [g.id, g.text]));
     const card = parsed.value.body.card ? { ...parsed.value.body.card, serves: parsed.value.body.card.serves.map((x) => ({ ...x, goal: goalText.get(x.goalId) ?? "" })) } : undefined;
-    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}) };
+    /*
+     * MEMBERSHIP AT APPLICATION (Rye's answer 8). The form names the letter
+     * version it drew; it must be the letter as the village renders it now,
+     * or nothing is sent and the form shows the letter again. Recorded only
+     * once the address confirms. No payment is asked here or anywhere after.
+     */
+    let membership: { letterVersion: string } | null = null;
+    if (body.membership !== undefined && body.membership !== null) {
+      const asked = membershipOf(body.membership);
+      const letter = deps.letterSource ? currentLetter(deps.letterSource()) : null;
+      if (!letter) return res.status(409).json({ error: LETTER_WORDS.unreadable, field: "membership" });
+      if (!asked || asked.letterVersion !== letter.version) return res.status(409).json({ error: LETTER_WORDS.changed, field: "membership", letter });
+      membership = asked;
+    }
+    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}) };
     const emailKey = emailKeyOf(email);
     if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.
@@ -299,6 +326,30 @@ export function register(app: Express, deps: Deps): void {
     res.json({ sent: true, email, message: OPEN_WORDS.sent(email) });
   });
 
+  /**
+   * The applicant's alignment with the letter, against the address that just
+   * confirmed, when the form carried one and the letter still reads as it did.
+   * Changed words since: nothing is recorded, and the role start gate asks
+   * them to align from their account. A failure is logged, never the person's.
+   */
+  async function alignedAtApplication(p: { id: string; email: string | null; body: { membership?: { letterVersion: string } } }, at: Date): Promise<void> {
+    const asked = p.body.membership;
+    if (!asked || !p.email || !deps.letterSource) return;
+    try {
+      const letter = currentLetter(deps.letterSource());
+      if (letter.version !== asked.letterVersion) return;
+      await inApplicationTransaction(getPool(), (conn) => alignAtApplication(conn, { letter, email: p.email as string, proposalId: p.id, now: at }));
+      // An account already here with this address: carried now, with the signing request a steward accepts.
+      const account = await accountFor(deps.members, p.email);
+      if (account && deps.signings) {
+        const m: any = await deps.members.byId(account);
+        await carryToAccount(getPool(), deps.signings, { userId: account, name: String(m?.name ?? ""), email: p.email, now: at });
+      }
+    } catch (e) {
+      console.error("[open-proposals] the membership alignment at application was not recorded", e);
+    }
+  }
+
   app.post("/api/open-proposals/confirm", async (req, res) => {
     if (await overLimit(`open-proposal:confirm:${clientIp(req)}`, 30, 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
@@ -306,6 +357,7 @@ export function register(app: Express, deps: Deps): void {
     // Confirmed, and the circle asked, in one transaction (part B). A used, old or unknown token asks nobody.
     const confirmed = token && token.length <= 100 ? await confirmAndAsk(decide, hashOf(token), new Date(at.getTime() - OPEN_CONFIRM_HOURS * 60 * 60_000), at) : null;
     if (!confirmed) return res.status(410).json({ error: OPEN_WORDS.confirmGone });
+    await alignedAtApplication(confirmed.proposal, at);
     try {
       await tellTheCircle(decide, confirmed);
     } catch (e) {
@@ -388,6 +440,20 @@ export function register(app: Express, deps: Deps): void {
   // ── The decision (part B) ─────────────────────────────────────────────────
 
   registerOpenProposalDecide(app, { ...deps, postEmail, now });
+  /*
+   * FIRST, THE MEMBERSHIP MADE AT APPLICATION (Rye's answer 8). An account made
+   * through the invitation carries it, and queues the signing a steward accepts.
+   * Registered before the placement below, because the hooks run in order and
+   * the role start gate then reads the letter on the account.
+   */
+  if (deps.signings) {
+    const signings = deps.signings;
+    whenInvitedArrives(OPEN_INVITE_PREFIX, async ({ userId }) => {
+      const m: any = await deps.members.byId(userId);
+      if (!m?.email) return;
+      await carryToAccount(getPool(), signings, { userId, name: String(m.name ?? ""), email: String(m.email), now: now() });
+    });
+  }
   // A sign-up through an adopted proposal's invitation finishes the adoption, whichever door it came by.
   whenInvitedArrives(OPEN_INVITE_PREFIX, arrivalFor(decide));
 }

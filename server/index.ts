@@ -208,6 +208,8 @@ import { register as registerSeatPresetsRoutes } from "./routes/seatPresets";
 import { register as registerSeatApplicationRoutes, ballotNamesItsCloser, closeNoteFor, heldTermsFor } from "./routes/seatApplications";
 import { register as registerAlignmentRoutes, alignmentsForExport } from "./routes/alignments";
 import { register as registerMembershipLetterRoutes, legacySigningOf, letterSourceFrom } from "./routes/membershipLetter";
+import { holdsConfidentiality, register as registerConfidentialityRoutes } from "./routes/confidentiality";
+import { alignmentRefusal } from "../shared/confidentiality";
 import { register as registerSeasonPlanRoutes, seasonPlansForMember } from "./routes/seasonPlans";
 import { register as registerPlayerCardRoutes } from "./routes/playerCard";
 import { register as registerCircleCardRoutes } from "./routes/circleCard";
@@ -3166,6 +3168,8 @@ async function capabilityCtx(user: any) {
     villageHeld: agent
       ? Array.from(new Set([...(await villageHeldCapabilities(getPool())), ...AGENT_NEVER_KEYS]))
       : await villageHeldCapabilities(getPool()),
+    // L7: `records.confidential` reaches nobody without the confidentiality agreement as it reads now (cached a minute).
+    alignedConfidentiality: !agent && (await holdsConfidentiality(String(user.id))),
   };
 }
 
@@ -3471,6 +3475,8 @@ async function guardCapability(
   markAdminGate(req);
   const verdict = await mayAct(req, cap);
   if (verdict.ok) return true;
+  // L7: a key bound to the confidentiality agreement says where to align, to everybody, the admin included.
+  if (verdict.source === "needs an alignment") { res.status(403).json(alignmentRefusal()); return false; }
   const hatch = overrideRefusal(cap, verdict);
   if (hatch) {
     res.status(409).json(hatch);
@@ -23988,11 +23994,12 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerSeatApplicationRoutes(app, { authedUser, capabilityCtx, guardCapability, getPool, notify, notifyAdmins, overLimit, members, firstName, liveHoldersOf, rolesCarrying, loadRoleHolders, roleBallotSetup, seatCalendar, lapse: lapseContext, landingDeps, closers: SUBJECT_CLOSERS });
   registerApplicationCardRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
-  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext, boolVar }); // a role proposal from somebody with no account (0305), and its decision
+  registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext, boolVar, letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()), signings: submissionsRepo }); // a role proposal from somebody with no account (0305), and its decision
   registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
   registerRoleGuideRoutes(app, { authedUser, mayAct, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
+  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET }); // the confidentiality agreement, and the agreements before a role starts (L7)
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────
