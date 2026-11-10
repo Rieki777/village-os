@@ -187,12 +187,12 @@ export default function Login() {
                 Create an account
                 <ArrowRight className="w-5 h-5" />
               </m.a>
-              {/* Somebody here with no account and no link starts at the roles,
-                  the one front door (2026-11-10). It was a second, separate
-                  intake at /request-membership (Rye, 2026-09-09). */}
+              {/* The second way to ask to join (Rye, 2026-09-09): in a village
+                  that joins by invitation, somebody here with no account and
+                  no link is exactly who needs it. */}
               <p className="mt-4 text-sm text-stone-600">
                 No invitation yet?{" "}
-                <a href="/roles" className="font-semibold text-teal-deep underline underline-offset-2">
+                <a href="/request-membership" className="font-semibold text-teal-deep underline underline-offset-2">
                   Ask to join
                 </a>
               </p>
