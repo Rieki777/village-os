@@ -61,7 +61,7 @@ import { useSeason } from "@/lib/gameApi";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { parseSeatSettings } from "@shared/seatSettings";
-import { applicationHref, seatList } from "@shared/seatApplications";
+import { WHOSE_MOVE, applicationHref, seatList, whoseMove, type ApplicationStatus } from "@shared/seatApplications";
 import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
 import AlignButton from "@/components/alignment/AlignButton";
@@ -320,6 +320,11 @@ export default function SeatApplication() {
               <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
                 {app.candidate.name ?? "A former member"} proposes to hold {seatList(app.seats.map((s) => s.name))}
               </h1>
+              {/* Guide v2: whose move it is, first. */}
+              <p className="mt-2 text-foreground" data-whose-move="">
+                <span className="font-semibold">{`${WHOSE_MOVE}: `}</span>
+                {whoseMove(app.status as ApplicationStatus, app.you)}
+              </p>
               <p className="mt-2 text-stone-600 leading-relaxed">
                 {app.term.followsSeason
                   ? `Until the season ends on ${civilDayWords(app.term.endsOn)}.`

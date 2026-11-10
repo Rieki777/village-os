@@ -80,7 +80,10 @@ export default function ApplicationStatus() {
             </header>
             <section aria-label={PANEL_WORDS.statusNext} className="rounded-xl border-2 border-teal-deep/40 bg-card p-5">
               <p className="text-sm font-semibold text-teal-deep">{s.stepWords}</p>
-              <p className="mt-1 text-lg text-foreground">{s.actsNext}</p>
+              <p className="mt-1 text-lg text-foreground">
+                <span className="font-semibold">{PANEL_WORDS.statusNext}: </span>
+                {s.actsNext}
+              </p>
               {byDay && <p className="mt-1 text-foreground">{PANEL_WORDS.statusBy(byDay)}</p>}
             </section>
             <ol className="space-y-2">

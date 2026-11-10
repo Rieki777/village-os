@@ -72,6 +72,33 @@ export const STATUS_WORDS: Record<ApplicationStatus, string> = {
   "held-full": "Held, the role is full",
 };
 
+/**
+ * WHOSE MOVE IT IS (guide v2, Rye 10 Nov 2026), in the reader's own terms:
+ * "Yours" only for the person proposing, or for a holder of the power to place
+ * people in roles when the proposal waits on them.
+ */
+/** The label the status page puts before it. */
+export const WHOSE_MOVE = "Whose move";
+
+export function whoseMove(status: ApplicationStatus, you: { isCandidate?: boolean; holdsThePower?: boolean } | null | undefined): string {
+  const mine = you?.isCandidate === true;
+  switch (status) {
+    case "awaiting-holder":
+      return you?.holdsThePower && !mine
+        ? "Yours: read it, then adopt it or put it to the village."
+        : "A holder of the power to place people in roles: they read it, then adopt it or put it to the village.";
+    case "voting":
+      return "The village's: it is voting.";
+    case "adopted":
+      return mine ? "Yours: align with anything still waiting below, and your role starts." : "Theirs: aligning with anything still waiting, then the role starts.";
+    case "held-full":
+      return "Nobody's yet: it waits for a place in the role to open.";
+    case "not-adopted":
+    case "withdrawn":
+      return "Nobody's: this proposal is closed.";
+  }
+}
+
 /** Where an application is read. Members only. */
 export function applicationHref(id: string): string {
   return `/role-applications/${encodeURIComponent(id)}`;

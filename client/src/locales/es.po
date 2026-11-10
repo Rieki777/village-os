@@ -3920,6 +3920,10 @@ msgstr ""
 msgid "The public line for {name}"
 msgstr ""
 
+#: client/src/components/profile/YourMoveCard.tsx
+msgid "Aligning is the village's way of signing. Your role starts once every agreement it needs is aligned with."
+msgstr ""
+
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgid "Attached. Every holder is asked to align again with the agreement as it reads now."
 msgstr ""
@@ -8013,6 +8017,11 @@ msgstr ""
 msgid "Which of the village's goals for the season will your work serve? Pick up to {0}, and say how."
 msgstr ""
 
+#: client/src/components/profile/YourMoveCard.tsx
+msgctxt "profile, your move"
+msgid "Align with {title}"
+msgstr ""
+
 #: client/src/i18n/LanguagePicker.tsx
 #, fuzzy
 msgctxt "language picker"
@@ -8762,6 +8771,11 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "To decide {nDecide}"
+msgstr ""
+
+#: client/src/components/profile/YourMoveCard.tsx
+msgctxt "profile, what waits on you"
+msgid "Your move"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
