@@ -158,7 +158,7 @@ export default function SeatPicksField({
       {picked.length < 3 && (
         <a
           href="/roles/select"
-          className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          className="mt-3 inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
         >
           {t({ message: "Pick more roles", context: "role application: link from the roles step to the role picker" })}
         </a>
