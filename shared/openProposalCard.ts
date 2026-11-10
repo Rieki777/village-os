@@ -69,8 +69,11 @@ export function isTimeZone(tz: string): boolean {
 
 export interface OpenProposalCard {
   roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
-  /** `goal` is the goal's words when the proposal was sent, written by the server, never the form. */
-  serves: Array<{ goalId: string; how: string; goal?: string }>;
+  /**
+   * `goal` is the goal's words when the proposal was sent, written by the server, never the form.
+   * `roleId`: the role card the pick was made on (guide v2). Absent on a card sent before that, which named goals once for all its roles.
+   */
+  serves: Array<{ goalId: string; how: string; goal?: string; roleId?: string }>;
   hours: string;
   /**
    * `loveLetter` is kept as stored on a card sent before the alignment replaced
@@ -96,7 +99,8 @@ export interface CardContext {
 
 export const CARD_WORDS = {
   agreed: "Tick that you will align with the village's confidentiality agreement once you are approved.",
-  notTheRole: "Pick what you will move from the role's own outcomes.",
+  notTheRole: "Pick what you will move from the role's own goals.",
+  notThisProposal: "A season goal was picked for a role that is not in this proposal.",
   notAGoal: "Pick goals from this season's goals for the village.",
   tooMany: (what: string, n: number) => `Up to ${n} ${what}.`,
   tooLong: (what: string, n: number) => `${what} is too long. Keep it under ${n} characters.`,
@@ -150,12 +154,18 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   for (const s of list(o.serves) as any[]) {
     const goalId = str(s?.goalId);
     const how = str(s?.how);
+    // Guide v2: a pick made on a role card names its role, which must be one of this card's.
+    const roleId = str(s?.roleId);
     if (!goalId) continue;
     if (!ctx.goalIds.has(goalId)) return { ok: false, field: "card", error: CARD_WORDS.notAGoal };
+    if (roleId && !roles.some((r) => r.roleId === roleId)) return { ok: false, field: "card", error: CARD_WORDS.notThisProposal };
     if (how.length > L.how) return { ok: false, field: "card", error: CARD_WORDS.tooLong("How it serves", L.how) };
-    if (!serves.some((x) => x.goalId === goalId)) serves.push({ goalId, how });
+    if (!serves.some((x) => x.goalId === goalId && (x.roleId ?? "") === roleId)) serves.push({ goalId, how, ...(roleId ? { roleId } : {}) });
   }
-  if (serves.length > L.serves) return { ok: false, field: "card", error: CARD_WORDS.tooMany("goals", L.serves) };
+  // Up to the limit for each role card, and for the one list a card sent before goals went on each role.
+  const perRole = new Map<string, number>();
+  for (const x of serves) perRole.set(x.roleId ?? "", (perRole.get(x.roleId ?? "") ?? 0) + 1);
+  if (Array.from(perRole.values()).some((n) => n > L.serves)) return { ok: false, field: "card", error: CARD_WORDS.tooMany("goals", L.serves) };
   // Form v2: at least one of the season's goals, when the season has any (brief v2, 5.4; Rye's D9).
   if (ctx.goalIds.size > 0 && serves.length === 0) return { ok: false, field: "serves", error: CARD_WORDS.needGoal };
   const timeZone = str(o.timeZone);
@@ -209,8 +219,13 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
         firstMoon: list(r.firstMoon).slice(0, L.questsPerRole).map((q: any) => ({ quest: cut(q?.quest, L.quest), doneWhen: cut(q?.doneWhen, L.doneWhen) })).filter((q) => q.quest),
       })),
     serves: list(o.serves)
-      .slice(0, L.serves)
-      .map((s: any) => ({ goalId: cut(s?.goalId, 64), how: cut(s?.how, L.how), ...(str(s?.goal) ? { goal: cut(s?.goal, 300) } : {}) }))
+      .slice(0, L.serves * 3) // three role cards at most (D3)
+      .map((s: any) => ({
+        goalId: cut(s?.goalId, 64),
+        how: cut(s?.how, L.how),
+        ...(str(s?.goal) ? { goal: cut(s?.goal, 300) } : {}),
+        ...(str(s?.roleId) ? { roleId: cut(s?.roleId, 128) } : {}),
+      }))
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
     agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
@@ -231,11 +246,14 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
   for (const r of card.roles) {
     lines.push(roleName(r.roleId));
     for (const m of r.moves) lines.push(`- I'll move: ${m.text}${m.target ? ` (${m.target})` : ""}`);
-    for (const q of r.firstMoon) lines.push(`- First moon: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}`);
+    for (const q of r.firstMoon) lines.push(`- First task: ${q.quest}${q.doneWhen ? `: done when ${q.doneWhen}` : ""}`);
+    // Guide v2: the season goals this role's work serves, under the role.
+    for (const s of card.serves.filter((x) => x.roleId === r.roleId)) lines.push(`- Serves the season goal: ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
-  if (card.serves.length) {
+  const once = card.serves.filter((x) => !x.roleId);
+  if (once.length) {
     lines.push("Serves the season's goals:");
-    for (const s of card.serves) lines.push(`- ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
+    for (const s of once) lines.push(`- ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
   if (card.hours) lines.push(`Time I can give: ${card.hours}`);
   if (card.timeZone) lines.push(`Time zone: ${card.timeZone}`);

@@ -65,7 +65,7 @@ export const GROUP_LABELS: Record<SettingsGroup, string> = {
   pay: "Pay",
   allowance: "Allowance",
   bonus: "Bonus",
-  quests: "Quests",
+  quests: "Tasks",
   scoreboard: "Scoreboard",
   ending: "Ending",
 };
@@ -581,10 +581,10 @@ function readQuests(r: Reader, raw: unknown): QuestSettings | undefined {
     agreedHow: r.text("quests.agreedHow", g.agreedHow, LIMITS.wordsChars),
   });
   if (out.perMoonMin !== undefined && out.perMoonMax !== undefined && out.perMoonMin > out.perMoonMax) {
-    r.refuse("quests.perMoonMax", "The most quests a moon is below the fewest.");
+    r.refuse("quests.perMoonMax", "The most tasks a moon is below the fewest.");
   }
   if (g.doneWhenRequired !== undefined && g.doneWhenRequired !== true) {
-    r.refuse("quests.doneWhenRequired", "Every quest has a done when. That part is always on.");
+    r.refuse("quests.doneWhenRequired", "Every task has a done when. That part is always on.");
   }
   return { ...out, doneWhenRequired: true };
 }
@@ -885,16 +885,16 @@ function questWords(q: QuestSettings): Pick<SettingsRow, "headline" | "lines" | 
   const headline =
     min !== undefined && max !== undefined
       ? min === max
-        ? `${plural(min, "quest", "quests")} a moon`
-        : `${min} to ${max} quests a moon`
+        ? `${plural(min, "task", "tasks")} a moon`
+        : `${min} to ${max} tasks a moon`
       : min !== undefined
-        ? `At least ${plural(min, "quest", "quests")} a moon`
+        ? `At least ${plural(min, "task", "tasks")} a moon`
         : max !== undefined
-          ? `Up to ${plural(max, "quest", "quests")} a moon`
-          : "Quests a moon not set";
+          ? `Up to ${plural(max, "task", "tasks")} a moon`
+          : "Tasks a moon not set";
   const lines: string[] = [];
   if (q.agreedHow) lines.push(`Agreed: ${q.agreedHow}`);
-  lines.push("Every quest has a done when");
+  lines.push("Every task has a done when");
   const filled = min ?? 0;
   const pips = max !== undefined || min !== undefined ? { filled, outlined: Math.max(0, (max ?? filled) - filled) } : undefined;
   return { headline, lines, pips };

@@ -38,9 +38,9 @@ describe("a door start", () => {
   });
 
   it("asks the open form's questions, and a renewal keeps its terms editor", () => {
-    expect(fieldsFor("role_application", "details", DOOR.answers).map((f) => f.key)).toEqual(["aim", "servesGoal", "deliverables", "fitStatement"]);
+    expect(fieldsFor("role_application", "details", DOOR.answers).map((f) => f.key)).toEqual(["fitStatement", "aim", "deliverables", "servesGoal"]);
     expect(fieldsFor("role_application", "terms", DOOR.answers).map((f) => f.key)).toEqual(["termsChoice", "startsNoEarlierThan"]);
-    expect(fieldsFor("role_application", "details", RENEWAL.answers).map((f) => f.key)).toEqual(["deliverables", "fitStatement"]);
+    expect(fieldsFor("role_application", "details", RENEWAL.answers).map((f) => f.key)).toEqual(["fitStatement", "deliverables"]);
     expect(fieldsFor("role_application", "terms", RENEWAL.answers).map((f) => f.key)).toEqual(["seatSettings", "startsNoEarlierThan"]);
   });
 

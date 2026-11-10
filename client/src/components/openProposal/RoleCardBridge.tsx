@@ -19,12 +19,15 @@ import { useLingui } from "@lingui/react/macro";
 import { CARD_LIMITS, CARD_WINDOWS } from "@shared/openProposalCard";
 
 export interface RoleCardState {
-  /** Outcome text -> target. */
+  /** The role's goal (one of its accountabilities) -> target. */
   moves: Record<string, string>;
+  /** The first tasks for this moon. Stored as `firstMoon` for older readers; the words say tasks (guide v2). */
   quests: Array<{ quest: string; doneWhen: string }>;
+  /** Season goal id -> how the work in THIS role serves it (guide v2: the pick lives on each role card). */
+  serves?: Record<string, string>;
 }
 
-export const EMPTY_ROLE_CARD: RoleCardState = { moves: {}, quests: [{ quest: "", doneWhen: "" }] };
+export const EMPTY_ROLE_CARD: RoleCardState = { moves: {}, quests: [{ quest: "", doneWhen: "" }], serves: {} };
 
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -34,6 +37,7 @@ export function RoleAsks({
   aim,
   timeCommitment,
   accountabilities,
+  goals,
   value,
   onChange,
 }: {
@@ -42,10 +46,14 @@ export function RoleAsks({
   aim: string | null;
   timeCommitment: string | null;
   accountabilities: readonly string[];
+  /** The season's goals, to pick which this role's work serves (guide v2). Absent: the card asks nothing about them. */
+  goals?: ReadonlyArray<{ id: string; text: string }>;
   value: RoleCardState;
   onChange: (next: RoleCardState) => void;
 }) {
   const { t } = useLingui();
+  const serves = value.serves ?? {};
+  const servesFull = Object.keys(serves).length >= CARD_LIMITS.serves;
   const picked = Object.keys(value.moves);
   const full = picked.length >= CARD_LIMITS.movesPerRole;
   const setQuest = (i: number, patch: Partial<{ quest: string; doneWhen: string }>) =>
@@ -61,7 +69,7 @@ export function RoleAsks({
       {accountabilities.length > 0 && (
         <fieldset className="grid gap-2">
           <legend className="text-sm font-semibold text-card-foreground">
-            {t`Which of ${roleName}'s outcomes will you move? Pick up to ${CARD_LIMITS.movesPerRole}, each with a target.`}
+            {t`Which of ${roleName}'s goals will you move? Pick up to ${CARD_LIMITS.movesPerRole}, each with a target.`}
           </legend>
           {accountabilities.map((a, i) => {
             const on = a in value.moves;
@@ -100,21 +108,21 @@ export function RoleAsks({
         </fieldset>
       )}
       <fieldset className="grid gap-2">
-        <legend className="text-sm font-semibold text-card-foreground">{t`Your first moon in ${roleName}: up to ${CARD_LIMITS.questsPerRole} quests, each with a "Done when" test`}</legend>
+        <legend className="text-sm font-semibold text-card-foreground">{t`Your first tasks this moon in ${roleName}: up to ${CARD_LIMITS.questsPerRole}, each with a "Done when" test`}</legend>
         {value.quests.map((q, i) => {
           const n = i + 1;
           return (
           <div key={i} className="grid gap-1 sm:grid-cols-2">
             <input
-              aria-label={t({ message: `Quest ${n} for ${roleName}`, context: "open proposal card field" })}
-              placeholder={t({ message: "The quest", context: "open proposal card" })}
+              aria-label={t({ message: `Task ${n} for ${roleName}`, context: "open proposal card field" })}
+              placeholder={t({ message: "The task", context: "open proposal card" })}
               maxLength={CARD_LIMITS.quest}
               value={q.quest}
               onChange={(e) => setQuest(i, { quest: e.target.value })}
               className={FIELD}
             />
             <input
-              aria-label={t({ message: `Done when, for quest ${n} for ${roleName}`, context: "open proposal card field" })}
+              aria-label={t({ message: `Done when, for task ${n} for ${roleName}`, context: "open proposal card field" })}
               placeholder={t({ message: "Done when...", context: "open proposal card" })}
               maxLength={CARD_LIMITS.doneWhen}
               value={q.doneWhen}
@@ -130,10 +138,53 @@ export function RoleAsks({
             onClick={() => onChange({ ...value, quests: [...value.quests, { quest: "", doneWhen: "" }] })}
             className="min-h-11 justify-self-start text-sm font-medium text-foreground underline underline-offset-2"
           >
-            {t({ message: "Add a quest", context: "open proposal card" })}
+            {t({ message: "Add a task", context: "open proposal card" })}
           </button>
         )}
       </fieldset>
+      {/* Guide v2: which season goal THIS role's work serves, on the card, after its goals and first tasks. */}
+      {goals && goals.length > 0 && (
+        <fieldset className="grid gap-2" data-card-serves={roleId}>
+          <legend className="text-sm font-semibold text-card-foreground">
+            {t`Which of the village's goals for the season does your work in ${roleName} serve? Pick up to ${CARD_LIMITS.serves}, and say how.`}
+          </legend>
+          {goals.map((g, i) => {
+            const on = g.id in serves;
+            const id = `card-${roleId}-goal-${i}`;
+            const goalText = g.text;
+            return (
+              <div key={g.id} className="grid gap-1">
+                <label htmlFor={id} className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+                  <input
+                    id={id}
+                    type="checkbox"
+                    className="mt-1 size-4 shrink-0 accent-primary"
+                    checked={on}
+                    disabled={!on && servesFull}
+                    onChange={() => {
+                      const next = { ...serves };
+                      if (on) delete next[g.id];
+                      else next[g.id] = "";
+                      onChange({ ...value, serves: next });
+                    }}
+                  />
+                  <span className="min-w-0 break-words">{goalText}</span>
+                </label>
+                {on && (
+                  <input
+                    aria-label={t`How your work in ${roleName} serves: ${goalText}`}
+                    placeholder={t({ message: "How your work serves it", context: "open proposal card" })}
+                    maxLength={CARD_LIMITS.how}
+                    value={serves[g.id]}
+                    onChange={(e) => onChange({ ...value, serves: { ...serves, [g.id]: e.target.value } })}
+                    className={`${FIELD} ml-6 w-auto`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -147,7 +198,13 @@ export function SeasonServes({
   agreed,
   onAgreed,
   membership,
+  showGoals = true,
+  showHours = true,
 }: {
+  /** Off when each role card asks its own goal (guide v2); the no-goals line still shows. */
+  showGoals?: boolean;
+  /** Off when the practicalities ask the time first (guide v2). */
+  showHours?: boolean;
   goals: ReadonlyArray<{ id: string; text: string }>;
   serves: Record<string, string>;
   onServes: (next: Record<string, string>) => void;
@@ -172,7 +229,7 @@ export function SeasonServes({
           {t`The village has not set its goals for this season yet. You can still propose: say in your aim what you would bring.`}
         </p>
       )}
-      {goals.length > 0 && (
+      {showGoals && goals.length > 0 && (
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-semibold text-card-foreground">
             {t`Which of the village's goals for the season will your work serve? Pick up to ${CARD_LIMITS.serves}, and say how.`}
@@ -214,13 +271,7 @@ export function SeasonServes({
           })}
         </fieldset>
       )}
-      <div>
-        <label htmlFor="card-hours" className="mb-2 block text-sm font-semibold text-card-foreground">
-          {t`The time you can give (optional)`}
-        </label>
-        <input id="card-hours" maxLength={CARD_LIMITS.hours} value={hours} onChange={(e) => onHours(e.target.value)} placeholder={t({ message: "e.g. roughly 25 hours a week", context: "open proposal card" })} className={FIELD} />
-        <p className="mt-1 text-xs text-muted-foreground">{t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season.`}</p>
-      </div>
+      {showHours && <HoursField hours={hours} onHours={onHours} />}
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
         {membership}
@@ -250,7 +301,7 @@ export function CardSideBySide({
   roles: ReadonlyArray<{ id: string; name: string | null; accountabilities?: string[]; timeCommitment?: string | null }>;
   card: {
     roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
-    serves: Array<{ goalId: string; how: string; goal?: string }>;
+    serves: Array<{ goalId: string; how: string; goal?: string; roleId?: string }>;
     hours: string;
     agreed: { loveLetter?: boolean; nda: boolean };
     timeZone?: string;
@@ -268,8 +319,8 @@ export function CardSideBySide({
     const mine = card.roles.find((x) => x.roleId === r.id);
     const asks = r.accountabilities ?? [];
     const roleName = r.name ?? r.id;
-    if (asks.length && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No outcome of ${roleName} picked`);
-    if (!(mine?.firstMoon ?? []).length) gaps.push(t`No first-moon quest for ${roleName}`);
+    if (asks.length && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No goal of ${roleName} picked`);
+    if (!(mine?.firstMoon ?? []).length) gaps.push(t`No first task for ${roleName}`);
   }
   if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);
   if (!card.serves.length) gaps.push(t`No season goal served`);
@@ -294,7 +345,7 @@ export function CardSideBySide({
                 <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "The role asks", context: "open proposal side by side" })}</p>
                 {time && <p className="mt-1 text-xs text-muted-foreground">{t({ message: `Time: roughly ${time}`, context: "open proposal side by side" })}</p>}
                 <ul className="mt-2 grid gap-1 text-sm">
-                  {asks.length === 0 && <li className="text-muted-foreground">{t`This role lists no outcomes yet.`}</li>}
+                  {asks.length === 0 && <li className="text-muted-foreground">{t`This role lists no goals yet.`}</li>}
                   {asks.map((a) => {
                     const m = mine.moves.find((x) => x.text === a);
                     return (
@@ -324,12 +375,24 @@ export function CardSideBySide({
                     const doneWhen = q.doneWhen;
                     return (
                       <li key={i}>
-                        {t({ message: `First moon: ${quest}`, context: "open proposal side by side" })}
+                        {t({ message: `First task: ${quest}`, context: "open proposal side by side" })}
                         {doneWhen && <span className="text-muted-foreground"> {t({ message: `(done when ${doneWhen})`, context: "open proposal side by side" })}</span>}
                       </li>
                     );
                   })}
-                  {!mine.moves.length && !mine.firstMoon.length && <li className="text-muted-foreground">{t`Nothing offered for this role beyond their note.`}</li>}
+                  {/* Guide v2: the season goals this role's work serves, picked on its card. */}
+                  {card.serves
+                    .filter((s) => s.roleId === r.id)
+                    .map((s) => {
+                      const goalWords = s.goal || s.goalId;
+                      return (
+                        <li key={`serves-${s.goalId}`} data-serves-goal="">
+                          {t({ message: `Serves the season goal: ${goalWords}`, context: "open proposal side by side" })}
+                          {s.how && <span className="text-muted-foreground">: {s.how}</span>}
+                        </li>
+                      );
+                    })}
+                  {!mine.moves.length && !mine.firstMoon.length && !card.serves.some((s) => s.roleId === r.id) && <li className="text-muted-foreground">{t`Nothing offered for this role beyond their note.`}</li>}
                 </ul>
               </div>
             </div>
@@ -338,9 +401,11 @@ export function CardSideBySide({
       })}
       <div className="rounded-xl border border-border p-3 text-sm">
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "The season's goals they serve", context: "open proposal side by side" })}</p>
-        {card.serves.length ? (
+        {card.serves.length && card.serves.every((s) => s.roleId) ? (
+          <p className="mt-1 text-muted-foreground">{t({ message: "Named on each role above.", context: "open proposal side by side goals" })}</p>
+        ) : card.serves.length ? (
           <ul className="mt-2 grid gap-1 text-foreground">
-            {card.serves.map((s) => (
+            {card.serves.filter((s) => !s.roleId).map((s) => (
               <li key={s.goalId}>
                 {s.goal || s.goalId}
                 {s.how && <span className="text-muted-foreground">: {s.how}</span>}
@@ -532,6 +597,20 @@ export function NextForRoles({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** "The time you can give", with the line that pay is never for hours. Asked first among the practicalities (guide v2). */
+export function HoursField({ hours, onHours }: { hours: string; onHours: (v: string) => void }) {
+  const { t } = useLingui();
+  return (
+    <div>
+      <label htmlFor="card-hours" className="mb-2 block text-sm font-semibold text-card-foreground">
+        {t`The time you can give (optional)`}
+      </label>
+      <input id="card-hours" maxLength={CARD_LIMITS.hours} value={hours} onChange={(e) => onHours(e.target.value)} placeholder={t({ message: "e.g. roughly 25 hours a week", context: "open proposal card" })} className={FIELD} />
+      <p className="mt-1 text-xs text-muted-foreground">{t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season.`}</p>
     </div>
   );
 }

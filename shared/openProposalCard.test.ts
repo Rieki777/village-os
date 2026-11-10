@@ -61,6 +61,47 @@ describe("parseCard", () => {
   });
 });
 
+describe("each role card names the season goals its work serves (guide v2, Rye 10 Nov 2026)", () => {
+  const PER_ROLE = {
+    ...GOOD,
+    serves: [
+      { goalId: "g-investor", how: "One model.", roleId: "lfs" },
+      { goalId: "g-community", how: "Monthly potlucks.", roleId: "events" },
+      { goalId: "g-investor", how: "Sponsors see the numbers.", roleId: "events" },
+    ],
+  };
+
+  it("keeps each pick with its role, the same goal on two roles as two picks", () => {
+    const r = parseCard(PER_ROLE, CTX);
+    expect(r.ok && r.card.serves).toEqual(PER_ROLE.serves);
+  });
+
+  it("refuses a pick named for a role that is not in the proposal", () => {
+    expect(parseCard({ ...GOOD, serves: [{ goalId: "g-investor", how: "", roleId: "gate" }] }, CTX)).toMatchObject({ ok: false, field: "card" });
+  });
+
+  it("holds the limit for each role card, not for the whole proposal", () => {
+    const three = ["g-investor", "g-community"].map((goalId) => ({ goalId, how: "", roleId: "lfs" }));
+    expect(parseCard({ ...GOOD, serves: [...three, { goalId: "g-investor", how: "", roleId: "events" }, { goalId: "g-community", how: "", roleId: "events" }] }, CTX).ok).toBe(true);
+  });
+
+  it("still reads a card sent before goals went on each role", () => {
+    const r = parseCard(GOOD, CTX);
+    expect(r.ok && r.card.serves).toEqual([{ goalId: "g-investor", how: "Investors read one set of numbers." }]);
+  });
+
+  it("writes each role's goals under that role, and first tasks, in the application's words", () => {
+    const text = cardSummary(cardOf(PER_ROLE)!, (id) => ({ lfs: "Lead Financial Steward", events: "Events Manager" })[id] ?? id, (g) => ({ "g-investor": "Investor ready", "g-community": "Community" })[g] ?? g);
+    const lfs = text.indexOf("Lead Financial Steward");
+    const events = text.indexOf("Events Manager");
+    expect(text).toContain("- First task: Publish the first Monday cash view");
+    expect(text.indexOf("- Serves the season goal: Investor ready: One model.")).toBeGreaterThan(lfs);
+    expect(text.indexOf("- Serves the season goal: Investor ready: One model.")).toBeLessThan(events);
+    expect(text.indexOf("- Serves the season goal: Community: Monthly potlucks.")).toBeGreaterThan(events);
+    expect(text).not.toContain("Serves the season's goals:");
+  });
+});
+
 describe("cardOf and cardSummary", () => {
   it("reads a stored card back safely, and drops what is not one", () => {
     expect(cardOf("nonsense")).toBeUndefined();

@@ -35,7 +35,9 @@ import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 // Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
-import { NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+import { HoursField, NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+/** The goals are asked on each role card now (guide v2); the global pick is left empty. */
+const NO_GLOBAL_SERVES: Record<string, string> = {};
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -144,7 +146,6 @@ export default function ProposeARole() {
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
   const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
-  const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
   const [agreed, setAgreed] = useState({ nda: false });
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
@@ -233,7 +234,8 @@ export default function ProposeARole() {
             windows: practical.windows,
             earliestStart: practical.earliestStart,
             terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
-            serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
+            // Guide v2: each role card names the season goals its work serves.
+            serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
             hours,
             // The NDA promise only: the membership letter is aligned with below, never ticked.
             agreed,
@@ -334,6 +336,19 @@ export default function ProposeARole() {
             </p>
           )}
 
+          {/* Guide v2: why you and your aim, then each role card (its goals, first tasks, the season goal it serves), then the practicalities. */}
+          <div>
+            <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
+              {OPEN_WORDS.whyLabel}
+            </label>
+            <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
+          </div>
+          <div>
+            <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
+              {OPEN_WORDS.aimLabel}
+            </label>
+            <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+          </div>
           <fieldset className="space-y-4" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.pickRoles} <span className="font-normal text-muted-foreground">({count} of {OPEN_PROPOSAL_MAX_ROLES})</span>
@@ -384,6 +399,7 @@ export default function ProposeARole() {
                           aim={r.aim}
                           timeCommitment={r.timeCommitment ?? null}
                           accountabilities={r.accountabilities ?? []}
+                          goals={form.goals}
                           value={cards[r.id] ?? EMPTY_ROLE_CARD}
                           onChange={(next) => setCards((c) => ({ ...c, [r.id]: next }))}
                         />
@@ -395,21 +411,10 @@ export default function ProposeARole() {
             ))}
           </fieldset>
 
-          <div>
-            <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.whyLabel}
-            </label>
-            <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
-          </div>
-          <div>
-            <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.aimLabel}
-            </label>
-            <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
-          </div>
-          {/* The practicalities, then the season, then the agreements, then who you are (role audit, 10 Nov 2026). */}
+          {/* The practicalities (the time first), then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
+          <HoursField hours={hours} onHours={setHours} />
           <Practicalities value={practical} onChange={setPractical} />
-          <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed}
+          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
           />
