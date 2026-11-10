@@ -42,6 +42,15 @@ export function changeKeyOf(change: ChangeLike): string {
       return mintRuleCreateKey(s(c.trigger), s(c.tokenSlug));
     case "role":
       return `role:${s(c.role)}`;
+    case "exit_terms":
+      return "exit:terms";
+    case "exit_restorative":
+      return "exit:restorative";
+    case "matrix_row": {
+      const id = Number(c.rowId);
+      if (Number.isInteger(id) && id > 0 && c.act !== "insert") return `matrix:row:${id}`;
+      return `matrix:new:${s((c.row as { subject?: unknown } | undefined)?.subject).toLowerCase()}`.slice(0, 120);
+    }
     default:
       // A dial, a minting-rule field, or the untyped `{ key, to }` pair.
       return s(c.key);

@@ -77,8 +77,8 @@ seat (`villageHandoverState().complete`).
 | `admin` | `words` in `people`, `legal`, `land`, `constraints` | administrators | administrators |
 | `purpose` | `purpose` | the founders (the same `isAdmin` test `PUT /api/admin/purpose` applies), until the handover | the same until the handover; after it, a vote through `POST /api/governance/purpose-changes` |
 | `dial` | the three dial doors | `dial.set`, asked of the gate inside the dial write | the member who wrote the suggestion files it as a mechanics proposal in their own name; the village votes |
-| `module` | `module:governance` | administrators (the lifecycle route's own guard) | a mechanics proposal for a module a vote can move; the governance module is never moved by a change set (`NEVER_BY_CHANGESET`), so it stays with administrators |
-| `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators; for `exit:restorative`, only while no conflict agreement is stored (once one is, adopting answers 409 `restorative_in_agreement` with `CARE_DOOR_IN_AGREEMENT`, and the agreement is changed on /governance) | a vote of the whole village at the structural tier. For `exit:terms` and the matrix it is **not built yet**: adopting answers 409 `CONSEQUENCE_VOTE_NOT_BUILT` and the suggestion stays open. For `exit:restorative` the vote is the conflict agreement's own (`POST /api/governance/conflict-agreement-changes`), which carries the whole agreement, so adopting answers 409 `CARE_DOOR_IS_THE_AGREEMENT_VOTE` and the suggestion cannot go to it as it stands |
+| `module` | `module:governance` | administrators (the lifecycle route's own guard) | the live holders of `module.switch` switch it straight away (`who: "live-holders"`); with nobody holding it, a mechanics proposal the suggestion's author files. Governance itself is votable (canvas follow-up G.3), priced at the village's highest tier; a vote taking it below members is refused while nobody holds `module.switch` live, and the refusal names the vote that gives that power a holder |
+| `consequence` | `exit:terms`, `exit:restorative`, `matrix`, and the matrix rows below | administrators; for `exit:restorative`, only while no conflict agreement is stored (once one is, adopting answers 409 `restorative_in_agreement` with `CARE_DOOR_IN_AGREEMENT`, and the agreement is changed on /governance) | a vote of the whole village at the structural tier: the suggestion's author files a mechanics proposal carrying an `exit_terms`, `exit_restorative` or `matrix_row` change-set item (canvas follow-up G.1), which the change-set executor lands through the exit policy's own save or the matrix's own write. For `exit:restorative` while Conflict Evolution is on, the vote is the conflict agreement's own (`POST /api/governance/conflict-agreement-changes`), which carries the whole agreement, so adopting answers 409 `CARE_DOOR_IS_THE_AGREEMENT_VOTE`; with the module off it files like the exit terms (G.2) |
 
 Each proposal and each block carries a `PenView` so the page can name the pen and offer a button
 only where it will work:
@@ -221,6 +221,7 @@ Responses:
   "status": "declined",
   "withdrawn": false,                  // declined by its own author
   "filed": false,                      // adopted by filing a mechanics proposal
+  "setAside": false,                   // set aside by the story's holder (D7)
   "decidedBy": { "id": "u2", "name": "Moss" }, "decidedAt": "ISO",
   "decisionNote": "...",               // null when none was written
   "youProposedIt": false
@@ -246,7 +247,8 @@ What adopting does, by pen and moment:
 | `purpose`, before the handover | `founderPenRefusal`, then `writeGoverningPurpose` | `{ "wrote": "purpose-statement", "writtenAt" }` |
 | `dial`, before the Birthing | `writeDial` (the body of `PUT /api/admin/variables/:key`) | `{ "wrote": "dial", "key", "value", "previous" }` |
 | `dial`, after the Birthing | `openMechanicsProposal` (the body of `POST /api/game/mechanics/proposals`), filed by the suggestion's author and nobody else | `{ "filed": "mechanics-proposal", "id", "status" }`; `status` is `open`, or `draft` when the author is below the proposer bar, and `message` then says it waits for a sponsor |
-| `module` (administrators) | `setModuleLifecycle`, the write behind `PUT /api/admin/modules/:id/lifecycle`, with its shared-password posture; no example content is seeded | `{ "wrote": "module-lifecycle", "module", "lifecycle" }` |
+| `module` (administrators before the Birthing, live holders of `module.switch` after it) | `setModuleLifecycle`, the write behind `PUT /api/admin/modules/:id/lifecycle`, with its shared-password posture; no example content is seeded | `{ "wrote": "module-lifecycle", "module", "lifecycle" }` |
+| `module` and `consequence`, after the Birthing, by vote | `openMechanicsProposal`, filed by the suggestion's author and nobody else | `{ "filed": "mechanics-proposal", "id", "status" }` |
 | `consequence`, before the Birthing | `saveExitPolicy` (the body of `PUT /api/admin/exit-policy`) with the suggestion's fields laid over the policy, or `writeDecisionMatrixRow` (always a new row) | `{ "wrote": "exit-policy", "door", "fields" }` or `{ "wrote": "matrix-row", "rowId" }` |
 
 Responses:
@@ -264,10 +266,10 @@ Responses:
   nothing is recorded as adopted.
 - `403 { "error": FILED_BY_PROPOSER }` anybody but the author pressing Adopt on a suggestion that
   files a mechanics proposal. The suggestion stays open.
-- `409 { "error": CONSEQUENCE_VOTE_NOT_BUILT }` the consequence pen after the Birthing, for the exit
-  terms and the matrix
 - `409 { "error": CARE_DOOR_IS_THE_AGREEMENT_VOTE }` the care door (`exit:restorative`) after the
-  Birthing: its vote is the conflict agreement's own, opened from /governance
+  Birthing while Conflict Evolution is on: its vote is the conflict agreement's own, opened from /governance
+- `403 { "error": MODULE_HOLDERS_REFUSAL }` a module door after the Birthing, to anybody who is not a
+  live holder of `module.switch` while somebody is
 - `409 { "error": "restorative_in_agreement", "message": CARE_DOOR_IN_AGREEMENT }` the care door
   before the Birthing, once a conflict agreement is stored: the agreement holds those fields
 - `409 { "error": "...", "door": "/api/governance/purpose-changes" }` the purpose statement after the
@@ -289,6 +291,20 @@ Body: `{ "note"?: string }`.
 - Where the pen is a vote (`how: "ballot"`), nobody declines alone: `409`, and only the proposer can
   withdraw.
 - `200 { "proposal": ProposalView }`; `403`, `404` and `409` as for adopt.
+
+## POST /api/canvas/proposals/:id/set-aside
+
+Body: `{ "note": string }` (canvas follow-up D7).
+
+- A live holder of `story.tell` (asked of the one gate) sets aside somebody else's OPEN suggestion,
+  whatever pen would adopt it, the village's vote included. It is recorded as `declined` with
+  `outcome: { "setAside": true }` and the note; nothing is adopted or filed.
+- The note is required, at least two characters (`400 SET_ASIDE_NEEDS_A_NOTE`), and public like the
+  pen's. The author is told (a `governance` notice, dedupe key `canvas-proposal:<id>:set-aside`).
+  An admin audit event `canvas:set-aside:<id>` is written.
+- `403 SET_ASIDE_REFUSAL` without the power; `409 SET_ASIDE_OWN` to its author, who withdraws it
+  instead; `409` already decided, `404` no such suggestion.
+- `ProposalView.youMaySetAside` says whether this viewer may press it.
 
 ## The Decision Matrix's human rows
 
@@ -312,8 +328,9 @@ The human columns only; the platform half is generated on every read by
 | `PUT /api/canvas/decision-matrix/rows/:id` | the consequence pen | the same | `200 { "row" }`, `404` no such row |
 | `DELETE /api/canvas/decision-matrix/rows/:id` | the consequence pen | none | `200 { "removed": id }`, `404` |
 
-After the Birthing every write answers `409` and says to suggest the row on the Power block (a
-`matrix` suggestion), which waits for the structural vote.
+After the Birthing every write answers `409 { "error": CONSEQUENCE_VOTE + ..., "door": "/api/game/mechanics/proposals" }`,
+naming the structural vote: suggest the row on the Power block (a `matrix` suggestion) and its author
+files it, or file a `matrix_row` change (`act` `insert`, `update` or `remove`) directly.
 
 ## Limits the UI should know
 

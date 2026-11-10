@@ -121,6 +121,7 @@ const GIVEN_TO_IT = [
   "reward-moments-after-tombstone",
   "budget-attribution-after-tombstone",
   "notebook-after-tombstone",
+  "ombuds-asks-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ];

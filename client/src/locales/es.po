@@ -153,6 +153,11 @@ msgctxt "admin role characters legend"
 msgid "Characters {roleName} suits"
 msgstr ""
 
+#: client/src/components/ClosingPolicyCard.tsx
+msgctxt "button that suggests a change to what closing means"
+msgid "Suggest a change"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request step"
 msgid "In review"
@@ -399,6 +404,10 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement table column"
 msgid "Member"
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "The words you suggest, whole, as members would read them"
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -904,6 +913,10 @@ msgstr ""
 
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgid "The characters you picked. Show one, then choose Play this character to keep it."
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "Your suggestion is with the village. It waits on the canvas Team block, where whoever may adopt it decides."
 msgstr ""
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
@@ -1580,6 +1593,10 @@ msgstr ""
 msgid "{name}, held by {0, plural, one {one person} other {# people}} today"
 msgstr ""
 
+#: client/src/components/admin/PurposeStatementPanel.tsx
+msgid "You write this. Any member who can open a proposal can also put a new statement to a vote of the whole village, at its highest bar. Once the village holds every one of its powers, that vote is the only way to change it."
+msgstr ""
+
 #: client/src/components/canvas/CanvasBaseline.tsx
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 #: client/src/components/canvas/CanvasPublicLines.tsx
@@ -1777,6 +1794,10 @@ msgstr ""
 msgid "Nothing refused across the whole run"
 msgstr ""
 
+#: client/src/components/canvas/DecisionMatrixRows.tsx
+msgid "The Game has started, so these rows change by a vote of the whole village at the structural tier. Suggest a row below, and the member who suggested it files it as a proposal the village decides."
+msgstr ""
+
 #: client/src/components/canvas/CanvasMoon.tsx
 msgctxt "heading of the canvas moon card"
 msgid "The canvas moon"
@@ -1785,6 +1806,11 @@ msgstr ""
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "Take {owner} for {n}"
+msgstr ""
+
+#: client/src/components/canvas/CanvasFrameAdopt.tsx
+msgctxt "button: the story's holder sets aside a canvas suggestion"
+msgid "Set it aside"
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -2081,6 +2107,11 @@ msgstr ""
 msgid "No quest reached the ballot in this round."
 msgstr ""
 
+#: client/src/components/ClosingPolicyCard.tsx
+msgctxt "button that sends a closing policy suggestion"
+msgid "Send the suggestion"
+msgstr ""
+
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "Something here changed since it was taken. Undo it or take it again before this draft is published."
@@ -2134,6 +2165,11 @@ msgstr ""
 
 #: client/src/components/review/SeraMember.tsx
 msgid "{agent} suggests {n} small changes for the chart"
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgctxt "button that closes the closing policy suggestion"
+msgid "Not now"
 msgstr ""
 
 #. placeholder {0}: report.refusals.length
@@ -2647,6 +2683,10 @@ msgctxt "module tag"
 msgid "core"
 msgstr ""
 
+#: client/src/components/canvas/CanvasFrameAdopt.tsx
+msgid "Say in a sentence why this is set aside. The note is public, like the suggestion."
+msgstr ""
+
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Its owner asked to share it."
 msgstr ""
@@ -2884,6 +2924,7 @@ msgctxt "sera answers"
 msgid "Leaving out {circle} also leaves out its role."
 msgstr ""
 
+#: client/src/components/ClosingPolicyCard.tsx
 #: client/src/pages/ChangeRequests.tsx
 msgid "Everyone in the village can read what you write here."
 msgstr ""
@@ -3801,6 +3842,11 @@ msgstr ""
 msgid "The steps of leaving, one per line"
 msgstr ""
 
+#: client/src/components/canvas/CanvasFrameAdopt.tsx
+msgctxt "a canvas suggestion is being set aside by the story's holder"
+msgid "Setting aside"
+msgstr ""
+
 #. placeholder {0}: preview.ignored.join(", ")
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "This release does not keep these fields, so they are left out: {0}."
@@ -3959,6 +4005,10 @@ msgctxt "signing key"
 msgid "Ask for a new key"
 msgstr ""
 
+#: client/src/components/canvas/CanvasFrameAdopt.tsx
+msgid "Your note (needed to set it aside)"
+msgstr ""
+
 #: client/src/components/admin/RoleListingPanel.tsx
 msgctxt "role listing: how many roles are ticked"
 msgid "ticked"
@@ -4017,6 +4067,10 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "days since a milestone was touched"
 msgid "{0}d quiet"
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "That suggestion did not reach the server, so nothing was kept."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -4449,6 +4503,10 @@ msgctxt "sera answers"
 msgid "Choose one, or write your own."
 msgstr ""
 
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "Suggest a change to what closing means"
+msgstr ""
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Hide the valuation engine"
 msgstr ""
@@ -4660,6 +4718,10 @@ msgstr ""
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft filter"
 msgid "Only roles that fit"
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "Why this change, in a sentence or more"
 msgstr ""
 
 #: client/src/components/admin/AdminHelperPanel.tsx
@@ -5072,6 +5134,10 @@ msgstr ""
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "heading on the change requests page"
 msgid "In review across the village"
+msgstr ""
+
+#: client/src/components/canvas/CanvasFrameAdopt.tsx
+msgid "Set aside. The suggestion and your note are listed under Decided lately on this block, and the member who made it is told."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
@@ -6097,6 +6163,11 @@ msgctxt "sera answers"
 msgid "{pays} pay changes are left out. Pay is set by a person."
 msgstr ""
 
+#: client/src/components/ClosingPolicyCard.tsx
+msgctxt "label of the closing policy choice"
+msgid "Which policy"
+msgstr ""
+
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgctxt "role draft carry"
 msgid "Clear my draft"
@@ -6311,6 +6382,10 @@ msgstr ""
 #: client/src/components/roleDraft/DraftCarry.tsx
 msgctxt "role draft carry button"
 msgid "Show {cn}"
+msgstr ""
+
+#: client/src/components/ClosingPolicyCard.tsx
+msgid "That suggestion was not kept."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx

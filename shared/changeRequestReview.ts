@@ -123,6 +123,12 @@ export function powersTouchedBy(
     case "mode_switch":
     case "weight_allocation":
       return ["dial.set"];
+    // The consequence pen: no transferable power covers the exit policy or the
+    // matrix (shared/powerHands.ts), so no power's holders are asked first.
+    case "exit_terms":
+    case "exit_restorative":
+    case "matrix_row":
+      return [];
     default: {
       const caps = moduleCapsOf(String(change.key ?? ""));
       return caps && caps.length ? (caps as Capability[]) : ["dial.set"];
