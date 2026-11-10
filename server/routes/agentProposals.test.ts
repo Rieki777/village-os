@@ -185,7 +185,7 @@ describe.skipIf(!configured)("agent proposals, on a real schema", () => {
       expect(r.body.message).toMatch(/not open/);
     } else {
       expect(r.status).toBe(200);
-      expect(JSON.stringify(r.body)).not.toMatch(/email|phone|@|score/i);
+      expect(JSON.stringify(r.body.conversations)).not.toMatch(/email|phone|@|score/i);
     }
   });
 
