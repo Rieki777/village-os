@@ -617,6 +617,62 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
     });
   });
 
+  describe("updates about a proposal reach the person who made it", () => {
+    const updates = () => state.sent.filter((m) => m.origin === "open_proposal.update");
+
+    it("a first reply goes once by email with the right recipient, and a retry sends nothing more", async () => {
+      const { id } = await confirmed("fr-person@example.test");
+      state.sent.length = 0;
+      expect((await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id)).body.stamped).toBe(true);
+      expect((await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id)).body.stamped).toBe(false);
+      expect(updates()).toHaveLength(1);
+      expect(updates()[0]).toMatchObject({ kind: "essential", idempotencyKey: `open-proposal:${id}:update:first_reply`, to: { email: "fr-person@example.test" }, subject: "We have taken up your proposal" });
+      expect(updates()[0].text).toContain("We reply within 7 days.");
+      // No account yet: email only, nothing on any profile.
+      expect(state.notices.filter((n) => n.type === "applicant_update")).toEqual([]);
+    });
+
+    it("an address with an account gets the same update on its profile, once", async () => {
+      const { id } = await confirmed(APPLICANT.email);
+      state.notices.length = 0;
+      await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
+      await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
+      const bell = state.notices.filter((n) => n.type === "applicant_update");
+      expect(bell).toHaveLength(1);
+      expect(bell[0]).toMatchObject({ userId: APPLICANT.id, dedupeKey: `op:${id}:update:first_reply:${APPLICANT.id}`, link: "/profile" });
+      expect(updates()).toHaveLength(1);
+    });
+
+    it("the next conversation is asked for once, by email, after the one before it is scored", async () => {
+      const { id } = await confirmed("conv-person@example.test");
+      state.sent.length = 0;
+      const ivs = await interviews(id);
+      await score(id, Number(ivs[0].id), IA.id);
+      expect(updates()).toHaveLength(1);
+      expect(updates()[0]).toMatchObject({ idempotencyKey: `open-proposal:${id}:update:conversation:2`, to: { email: "conv-person@example.test" } });
+      expect(updates()[0].text).toContain("Data Role");
+      expect(updates()[0].text).toContain("about 20 minutes");
+      // Scoring the same one again is refused, and tells nobody again.
+      await score(id, Number(ivs[0].id), IA.id);
+      expect(updates()).toHaveLength(1);
+    });
+
+    it("the status page promises the number of days the village set, 7 until it sets one", async () => {
+      const { id, confirm } = await confirmed("days@example.test");
+      const token = new URL(`${ORIGIN}${confirm.statusPath}`).searchParams.get("token");
+      expect((await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null)).body.status.replyDays).toBe(7);
+      await q("INSERT INTO game_variables (config_key, value) VALUES ('org.applicant_reply_days', '3') ON DUPLICATE KEY UPDATE value = VALUES(value)");
+      await loadVariables(pool);
+      try {
+        expect((await call("GET", `/api/application-status/${id}?token=${token}`, undefined, null)).body.status.replyDays).toBe(3);
+        // The email that carries the link says it too.
+      } finally {
+        await q("DELETE FROM game_variables WHERE config_key = 'org.applicant_reply_days'");
+        await loadVariables(pool);
+      }
+    });
+  });
+
   describe("the applicant's status page", () => {
     it("shows the step, who acts next and by when through the emailed link, and nothing else", async () => {
       const { id, confirm } = await confirmed("status@example.test");

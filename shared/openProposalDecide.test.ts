@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicantUpdate,
+  replyPromise,
   adoptedAccountLetter,
   adoptedInviteLetter,
   declinedLetter,
@@ -52,7 +54,7 @@ describe("open proposals, the decision: the pure half", () => {
     expect(account.text.startsWith("Hi,\n")).toBe(true);
     expect(account.text).toContain("Your roles start when next season begins, on 1 January 2099.");
     expect(account.text).not.toContain("invite");
-    const no = declinedLetter({ firstName: "Rowan", village: "Test Village", roleNames: ["Gate Keeper"] });
+    const no = declinedLetter({ firstName: "Rowan", village: "Test Village", roleNames: ["Gate Keeper"], site: "https://v.test" });
     expect(no.subject).toBe("Your proposal to Test Village");
     expect(no.text).toContain("Thank you for proposing to hold Gate Keeper in Test Village. We can't say yes this time.");
   });
@@ -62,5 +64,15 @@ describe("open proposals, the decision: the pure half", () => {
     const read = readWaiting({ applications: [], drafts: [], openProposals: [row, { id: 3 }, { ...row, id: "op-x", ask: "vote" }] });
     expect(read?.openProposals).toEqual([row]);
     expect(readWaiting({ applications: [], drafts: [] })?.openProposals).toEqual([]);
+  });
+
+  it("the reply promise carries the village's number, and the kind no carries no reasons of its own", () => {
+    expect(replyPromise(7)).toBe("We reply within 7 days.");
+    expect(replyPromise(1)).toBe("We reply within 1 day.");
+    const no = declinedLetter({ firstName: null, village: "Test Village", roleNames: ["Gate Keeper"], site: "https://v.test" });
+    expect(no.text).toContain("https://v.test/quests");
+    expect(no.text).not.toMatch(/because|unfortunately|reason/i);
+    const u = applicantUpdate("first_reply", { firstName: "Rowan", village: "Test Village", roleNames: ["Gate Keeper"], replyDays: 5 });
+    expect(u.text).toContain("We reply within 5 days.");
   });
 });

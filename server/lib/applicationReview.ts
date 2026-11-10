@@ -62,6 +62,7 @@ import { listOrgRoles } from "./orgChart";
 import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
 import type { DecideDeps } from "./openProposalDecide";
+import { numberVar } from "./variables";
 
 type Db = Pool | PoolConnection;
 
@@ -70,6 +71,8 @@ export interface ReviewDeps extends Pick<DecideDeps, "getPool" | "notify" | "not
   consentAfterInterviews?: () => boolean;
   /** The role that sends first replies (`org.onboarding_role`). Absent or empty reads as nobody. */
   onboardingRole?: () => string;
+  /** Tells the person who proposed, by email and on their profile (server/lib/applicantUpdates.ts). Absent tells nobody. */
+  tellApplicant?: import("./applicantUpdates").TellApplicant;
 }
 
 const ADOPTING_POWER = "org.seat";
@@ -146,14 +149,19 @@ export async function beginReview(
 }
 
 /** After commit: the first interviewer's holders hear it waits on them. A retry writes nothing twice (stable keys). */
-export async function announceReview(deps: Pick<ReviewDeps, "getPool" | "notify">, start: ReviewStart, applicantFirstName: string | null): Promise<void> {
+export async function announceReview(deps: Pick<ReviewDeps, "getPool" | "notify" | "tellApplicant">, start: ReviewStart, applicantFirstName: string | null): Promise<void> {
   const first = start.interviews[0];
   if (!first) return;
   await tellInterviewers(deps, start.ref, 1, first.roleId, first.minutes, applicantFirstName);
 }
 
-async function tellInterviewers(deps: Pick<ReviewDeps, "getPool" | "notify">, ref: string, position: number, roleId: string, minutes: number, applicant: string | null): Promise<void> {
+async function tellInterviewers(deps: Pick<ReviewDeps, "getPool" | "notify" | "tellApplicant">, ref: string, position: number, roleId: string, minutes: number, applicant: string | null): Promise<void> {
   const pool = deps.getPool();
+  // The person who proposed hears the next conversation is asked for, once each (stable part). The first opens as they confirm, and their status email covers it.
+  if (kindOfRef(ref) === "open" && deps.tellApplicant && position > 1) {
+    const withRole = (await repo.roleNamesById(pool, [roleId])).get(roleId) ?? null;
+    await deps.tellApplicant(ref, "conversation", { part: String(position), withRole, minutes });
+  }
   const recused = new Set(await repo.recusedUsers(pool, ref));
   for (const userId of await repo.liveHoldersOfRole(pool, roleId)) {
     if (recused.has(userId)) continue;
@@ -303,6 +311,7 @@ export async function openConsentRound(deps: ReviewDeps, ref: string): Promise<b
   // An AI agent holding a role is never asked (D31); the round says so.
   const agents = await repo.agentRoleNamesInCircles(pool, circles);
   await repo.stampStep(pool, { ref, kind: "consent", at, detail: agents.length ? { skippedAgents: agents } : undefined });
+  if (deps.tellApplicant) await deps.tellApplicant(ref, "consent");
   const names = await roleNamesOf(deps, ref);
   const closesOn = civilDateKey(new Date(closesAt.getTime() - 1), deps.calendar().timezone || "UTC");
   for (const a of asked) {
@@ -484,7 +493,7 @@ export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok:
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -508,7 +517,8 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   const roleNames = await repo.roleNamesById(pool, d?.roleIds ?? []);
   const mode = d?.mode ?? "block";
   const booking = interviews.length ? bookingWords(mode, names.get(interviews[0].roleId) ?? null, interviews.reduce((n, i) => n + i.minutes, 0)) : null;
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode };
+  const outcome = how === "adopted" || how === "declined" || how === "withdrawn" ? how : decidedStep ? "declined" : null;
+  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days") };
 }
 
 /** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */

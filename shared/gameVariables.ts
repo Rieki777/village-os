@@ -2521,6 +2521,18 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
   {
+    key: "org.applicant_reply_days",
+    category: "The village's people",
+    label: "Days we promise to reply to a role proposal",
+    description:
+      "The number of days the applicant's status page says we reply within. It is a promise to the person, so set the number the people who reply can keep. The reminder to the role that sends first replies runs on its own clock (3 business days) and is not changed by this.",
+    type: "integer",
+    default: "7",
+    min: 1,
+    max: 60,
+    unit: "days",
+  },
+  {
     key: "org.sync_starts_unlisted",
     category: "The village's people",
     label: "Roles accepted from a sync start unlisted",

@@ -104,6 +104,29 @@ export async function openProposalsByIds(db: Db, ids: readonly string[]): Promis
 }
 
 /**
+ * WHEN AN ADOPTED PROPOSAL'S INVITATION LAST WENT, and whether the email did:
+ * kept in the body beside the decision, so no column is needed. Each send
+ * (the adoption, then every "send again") replaces it.
+ */
+export async function noteInvitationSent(db: Db, id: string, at: Date, emailed: boolean): Promise<void> {
+  await db.query(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.invitationSentAt', ?, '$.invitationEmailed', ?) WHERE id = ? AND status = 'adopted'",
+    [at.toISOString(), emailed ? 1 : 0, id],
+  );
+}
+
+export async function invitationSentOf(db: Db, id: string): Promise<{ at: Date; emailed: boolean } | null> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(body_json, '$.invitationSentAt')) AS at, JSON_EXTRACT(body_json, '$.invitationEmailed') AS emailed FROM open_role_proposals WHERE id = ? LIMIT 1",
+    [id],
+  );
+  const raw = rows[0]?.at;
+  if (!raw || raw === "null") return null;
+  const at = new Date(String(raw));
+  return Number.isNaN(at.getTime()) ? null : { at, emailed: Number(rows[0]?.emailed) === 1 };
+}
+
+/**
  * DECIDE A CONFIRMED PROPOSAL, once (part B): adopted or declined, the moment
  * it was decided, and the decision kept in the body. Guarded on `confirmed`, so
  * of two deciders at once exactly one moves it. True when this call did.

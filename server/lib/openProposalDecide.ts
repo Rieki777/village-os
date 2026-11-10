@@ -70,6 +70,7 @@ import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
+import { carryUpdatesToAccount } from "./applicantUpdates";
 import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
 import { agentRoleNamesInCircles, stampStep } from "../repos/applicationReview";
 import { REVIEW_WORDS } from "../../shared/applicationReview";
@@ -85,6 +86,8 @@ export interface DecideDeps extends Pick<AppDeps, "members" | "stageOf" | "recor
   calendar(): SeatCalendar;
   lapse(): LapseContext;
   now(): Date;
+  /** The village's name, for the updates an arrival carries onto the new profile. Absent skips them. */
+  projectName?(): string;
 }
 
 /** The address's account here, when it is a real, present person: never an example, never a tombstone. */
@@ -413,6 +416,8 @@ export function arrivalFor(deps: DecideDeps): InvitedArrival {
           authority: place.proposal.decision.authority ?? `${ADOPTING_POWER}@badge`,
         });
         failed = !out.ok && out.code === "cannot";
+        // The updates already sent about it are there to read on the new profile.
+        if (deps.projectName) await carryUpdatesToAccount({ getPool: deps.getPool, notify: deps.notify, projectName: deps.projectName }, place.proposal, userId);
       } catch (err) {
         failed = true;
         console.warn(`[open-proposals] the place for ${userId} was not made: ${String((err as Error)?.message ?? err)}`);

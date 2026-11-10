@@ -67,7 +67,7 @@ export interface ServedOpenProposal {
   decided: string | null;
   consent: ConsentOut;
   door: { because: DoorReason; words: string };
-  invitation: { state: "open" | "used" | "closed" } | null;
+  invitation: { state: "open" | "used" | "closed"; sentAt?: string | null; emailed?: boolean | null } | null;
   /** Links and files, sent to the people who decide it and nobody else (Rye, 10 Nov 2026). */
   attached?: ServedAttachments | null;
   you: { holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
@@ -350,6 +350,11 @@ export default function OpenProposal() {
                   <p className="mt-1 text-stone-700">{DECIDE_WORDS.invitationUsed}</p>
                 ) : (
                   <>
+                    {p.invitation.sentAt && (
+                      <p className="mt-1 text-foreground" data-invitation-sent="">
+                        {DECIDE_WORDS.invitationSent(new Date(p.invitation.sentAt).toLocaleString(), p.invitation.emailed !== false)}
+                      </p>
+                    )}
                     <p className="mt-1 text-stone-700">{DECIDE_WORDS.reissueLine}</p>
                     {p.you.mayReissue && (
                       <button type="button" disabled={busy} onClick={() => void act(`${base(p.id)}/invitation`)} className={`${SECONDARY} mt-3`}>
