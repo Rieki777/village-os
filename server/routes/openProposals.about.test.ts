@@ -27,6 +27,8 @@ import { insertApplication, readApplication, eraseApplicationWords } from "../re
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
+import { createInviteOn } from "../repos/memberInvites";
+import { openInviteId } from "../../shared/openProposalDecide";
 import { readOpenProposal } from "../repos/openProposals";
 import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
@@ -211,6 +213,14 @@ describe.skipIf(!configured)("a proposal's About-you section at the intake, on a
     await q("UPDATE open_role_proposals SET status = 'confirmed', confirmed_at = ? WHERE id = ?", [dayAgo(91), expired]);
     await q("UPDATE open_role_proposals SET status = 'adopted', confirmed_at = ?, decided_at = ? WHERE id = ?", [dayAgo(95), dayAgo(91), adopted]);
     await q("UPDATE open_role_proposals SET status = 'declined', confirmed_at = ?, decided_at = ? WHERE id = ?", [new Date(), dayAgo(10), recent]);
+
+    // A real adoption makes an invitation; without one the person is a member already and keeps theirs, so the fixture needs it unused.
+    const conn = await pool.getConnection();
+    try {
+      await createInviteOn(conn, { id: openInviteId(adopted), tokenHash: `h-${adopted}`, inviterUserId: "u-inviter", days: 30 });
+    } finally {
+      conn.release();
+    }
 
     await tidyOpenProposals(pool, new Date(), dir);
 
