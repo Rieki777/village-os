@@ -81,7 +81,7 @@ export default function TermsEight({
 
   return (
     <fieldset className="grid gap-3" data-terms-eight="">
-      <legend className="sr-only">{t`The terms`}</legend>
+      <legend className="sr-only">{t({ message: "The terms", context: "terms step" })}</legend>
       <p className={HINT} data-terms-hint="">
         {t`Mark anything you'd like to talk through. Nothing is final until we agree together.`}
       </p>
@@ -114,11 +114,11 @@ export default function TermsEight({
               <div className="mt-3 grid gap-1" role="radiogroup" aria-label={labels[k]}>
                 <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
                   <input type="radio" name={name} className="size-4 accent-notice" checked={answer?.choice === "accept"} onChange={() => setAnswer(k, { choice: "accept", note: answer?.note ?? "" })} />
-                  {t`I accept`}
+                  {t({ message: "I accept", context: "terms setting answer" })}
                 </label>
                 <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
                   <input type="radio" name={name} className="size-4 accent-notice" checked={answer?.choice === "talk"} onChange={() => setAnswer(k, { choice: "talk", note: answer?.note ?? "" })} />
-                  {t`Let's talk`}
+                  {t({ message: "Let's talk", context: "terms setting answer" })}
                 </label>
                 {answer?.choice === "talk" && (
                   <textarea
@@ -136,7 +136,7 @@ export default function TermsEight({
             {k === "clocks" && (
               <div className="mt-4 border-t border-border pt-4" data-commitment="">
                 <label htmlFor={`${idPrefix}-commitment`} className="text-sm font-semibold text-foreground">
-                  {t`Your commitment`}
+                  {t({ message: "Your commitment", context: "terms commitment" })}
                 </label>
                 <p className={`${HINT} mt-1`}>{t`How much of your energy and attention this role gets in a week. 100% is full commitment, and you manage your own workload.`}</p>
                 <select
@@ -146,7 +146,7 @@ export default function TermsEight({
                   className={`${FIELD} mt-2 min-h-11 sm:max-w-xs`}
                   required
                 >
-                  <option value="">{t`Choose your commitment`}</option>
+                  <option value="">{t({ message: "Choose your commitment", context: "terms commitment" })}</option>
                   {COMMITMENT_CHOICES.map((n) => (
                     <option key={n} value={n}>
                       {n}%

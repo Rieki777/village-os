@@ -34,20 +34,20 @@ export default function TermsWordsEditor({ value, onChange }: { value: unknown; 
     onChange({ ...offer, v: 1, clocks: Object.keys(clocks).length ? clocks : undefined });
   };
   return (
-    <div className="mb-4 grid gap-3 rounded-lg border border-gray-100 p-3" data-terms-words-editor="">
+    <div className="mb-4 grid gap-3 rounded-lg border border-border p-3" data-terms-words-editor="">
       <div>
-        <p className="text-sm font-medium text-gray-800">{WORDS_EDITOR.title}</p>
-        <p className="text-xs text-gray-500">{WORDS_EDITOR.sub}</p>
+        <p className="text-sm font-medium text-foreground">{WORDS_EDITOR.title}</p>
+        <p className="text-xs text-muted-foreground">{WORDS_EDITOR.sub}</p>
       </div>
       {TERM_KEYS.map((k) => (
-        <label key={k} className="grid gap-1 text-sm text-gray-700">
+        <label key={k} className="grid gap-1 text-sm text-foreground">
           {TERM_LABELS[k]}
-          <textarea rows={2} maxLength={600} value={words[k] ?? ""} onChange={(e) => setWord(k, e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+          <textarea rows={2} maxLength={600} value={words[k] ?? ""} onChange={(e) => setWord(k, e.target.value)} className="w-full rounded-lg border border-border px-3 py-2 text-sm" />
         </label>
       ))}
-      <label className="grid gap-1 text-sm text-gray-700">
+      <label className="grid gap-1 text-sm text-foreground">
         {WORDS_EDITOR.commitment}
-        <select value={pct === undefined ? "" : String(pct)} onChange={(e) => setPct(e.target.value)} className="min-h-[44px] w-full rounded-lg border border-gray-200 px-3 text-sm sm:max-w-xs">
+        <select value={pct === undefined ? "" : String(pct)} onChange={(e) => setPct(e.target.value)} className="min-h-[44px] w-full rounded-lg border border-border px-3 text-sm sm:max-w-xs">
           <option value="">{WORDS_EDITOR.commitmentNone}</option>
           {COMMITMENT_CHOICES.map((n) => (
             <option key={n} value={n}>
@@ -55,7 +55,7 @@ export default function TermsWordsEditor({ value, onChange }: { value: unknown; 
             </option>
           ))}
         </select>
-        <span className="text-xs text-gray-500">{WORDS_EDITOR.commitmentHint}</span>
+        <span className="text-xs text-muted-foreground">{WORDS_EDITOR.commitmentHint}</span>
       </label>
     </div>
   );

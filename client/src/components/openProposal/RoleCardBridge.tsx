@@ -397,7 +397,7 @@ export function CardSideBySide({
         )}
         {card.commitmentPct !== undefined && (
           <p className="mt-2 text-foreground" data-their-commitment="">
-            {t`Their commitment: ${card.commitmentPct}%`}
+            {t({ message: `Their commitment: ${card.commitmentPct}%`, context: "open proposal side by side" })}
           </p>
         )}
         {card.timeZone && <p className="mt-1 text-foreground">{t({ message: `Time zone: ${tz}`, context: "open proposal side by side" })}</p>}
@@ -419,7 +419,7 @@ export function CardSideBySide({
                 <li key={k}>
                   <span className="font-semibold">{label}</span>
                   {": "}
-                  {a.choice === "accept" ? t`Accepts` : t`Wants to talk`}
+                  {a.choice === "accept" ? t({ message: "Accepts", context: "open proposal side by side answer" }) : t({ message: "Wants to talk", context: "open proposal side by side answer" })}
                   {a.note ? `: ${a.note}` : ""}
                 </li>
               );
