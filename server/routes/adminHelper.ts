@@ -73,6 +73,7 @@ import type { AssistantPath } from "../lib/assistantUsage";
 import { guideName, guidePromptName } from "../../shared/guideName";
 import {
   buildProposal,
+  chooseProvider,
   cleanTabs,
   searchAdmin,
   type HelperAnswer,
@@ -204,19 +205,27 @@ export function register(app: Express, deps: AdminHelperDeps): void {
   const keyOwner = deps.keyOwner ?? (() => assistantKeyOwner());
 
   /** Who would answer right now: the village's own Anthropic key first, then Sera. */
-  const provider = (): HelperProvider | null => (keyOwner() === "own" ? "anthropic" : deps.seraAsk?.() ? "sera" : null);
+  /** Who could answer right now, the village's own Anthropic key first, then Sera. */
+  const availableNow = (): HelperProvider[] => [
+    ...(keyOwner() === "own" ? (["anthropic"] as const) : []),
+    ...(deps.seraAsk?.() ? (["sera"] as const) : []),
+  ];
+  const provider = (asked?: unknown): HelperProvider | null => chooseProvider(asked, availableNow());
   const guideFor = (p: HelperProvider | null) =>
     p === "sera" && deps.seraName ? deps.seraName() : guideName(deps.guideSource(), "admin").name;
 
   app.get("/api/admin/helper", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const p = provider();
+    const available = availableNow();
+    const p = available[0] ?? null;
     const off = !deps.switchOn() ? "switch" : p === null ? "key" : null;
     const status: HelperStatus = {
       on: off === null,
       guide: guideFor(p),
       off,
       provider: p,
+      available,
+      names: Object.fromEntries(available.map((a) => [a, guideFor(a)])),
     };
     res.json(status);
   });
@@ -230,7 +239,7 @@ export function register(app: Express, deps: AdminHelperDeps): void {
       return res.status(429).json({ error: "Slow down a moment, then keep going." });
     }
     if (!deps.switchOn()) return res.status(503).json({ error: "helper-off", off: "switch" });
-    const p = provider();
+    const p = provider(req.body?.provider);
     if (p === null) return res.status(503).json({ error: "helper-off", off: "key" });
 
     const clean = sanitizeMessages(req.body?.messages);

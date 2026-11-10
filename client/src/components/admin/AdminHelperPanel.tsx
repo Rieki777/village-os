@@ -22,8 +22,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Check, Loader2, Send, X } from "lucide-react";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { HelperAnswer, HelperProposal, HelperStatus } from "@shared/adminHelper";
+import type { HelperAnswer, HelperProposal, HelperProvider, HelperStatus } from "@shared/adminHelper";
 import { guideNameAtSentenceStart } from "@shared/guideName";
+import MicButton from "@/components/MicButton";
+import { appendSpoken } from "@/components/journal/GrowingTextarea";
 import type { NavGroup } from "./adminNavGroups";
 import { applyProposal, askHelper, fetchHelperStatus, tabsFromGroups, type HelperLine } from "./adminHelperApi";
 
@@ -90,7 +92,17 @@ export default function AdminHelperPanel({
     return () => document.removeEventListener("keydown", key);
   }, [onClose]);
 
-  const guide = guideNameAtSentenceStart(status?.guide || t({ message: "your village guide", context: "admin helper, unnamed guide" }));
+  // When both Claude and Sera can answer, the admin picks; the pick is remembered on this device.
+  const [picked, setPicked] = useState<HelperProvider | null>(() => readPicked());
+  const chosen: HelperProvider | null =
+    status && picked && status.available.includes(picked) ? picked : status?.provider ?? null;
+  const pick = (p: HelperProvider) => {
+    setPicked(p);
+    rememberPicked(p);
+  };
+  const guide = guideNameAtSentenceStart(
+    (chosen && status?.names?.[chosen]) || status?.guide || t({ message: "your village guide", context: "admin helper, unnamed guide" }),
+  );
 
   const send = useCallback(
     async (e?: FormEvent) => {
@@ -106,16 +118,17 @@ export default function AdminHelperPanel({
         messages: next.map(({ role, content }) => ({ role, content })),
         tabs: tabsFromGroups(groups),
         tab,
+        provider: chosen,
       });
       setBusy(false);
       if (!out.ok) {
-        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off, provider: null }));
+        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off, provider: null, available: [], names: {} }));
         else setError(out.error);
         return;
       }
       setTurns([...next, { role: "assistant", content: out.answer.reply, answer: out.answer }]);
     },
-    [draft, busy, turns, password, groups, tab],
+    [draft, busy, turns, password, groups, tab, chosen],
   );
 
   const apply = async (index: number, p: HelperProposal) => {
@@ -146,7 +159,10 @@ export default function AdminHelperPanel({
         <div className="min-w-0">
           <h2 className="truncate font-display text-lg font-semibold text-foreground">{guide}</h2>
           <p className="text-xs text-muted-foreground"><Trans context="admin helper panel">Helps you find things and proposes changes for you to approve.</Trans></p>
-          {status?.provider && <ProviderLine provider={status.provider} />}
+          {chosen && <ProviderLine provider={chosen} />}
+          {status && status.on && status.available.length > 1 && (
+            <ProviderPicker available={status.available} names={status.names} chosen={chosen} onPick={pick} />
+          )}
         </div>
         <button
           type="button"
@@ -241,6 +257,7 @@ export default function AdminHelperPanel({
               placeholder={t({ message: "How do I…", context: "admin helper, question box placeholder" })}
               className="min-h-11 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
+            <MicButton onText={(chunk) => setDraft((d) => appendSpoken(d, chunk))} disabled={busy} />
             <button
               type="submit"
               disabled={busy || !draft.trim()}
@@ -273,6 +290,56 @@ function SwitchedOff() {
 }
 
 /** The off state: what Rye (or any admin with the hosting) does to turn it on. */
+const PICK_KEY = "admin-helper-provider";
+function readPicked(): HelperProvider | null {
+  try {
+    const v = localStorage.getItem(PICK_KEY);
+    return v === "anthropic" || v === "sera" ? v : null;
+  } catch {
+    return null;
+  }
+}
+function rememberPicked(p: HelperProvider): void {
+  try {
+    localStorage.setItem(PICK_KEY, p);
+  } catch {
+    /* a private window keeps the pick for this visit only */
+  }
+}
+
+/** Claude or Sera, when both are connected. Switching mid-conversation is fine: the next answer comes from the pick. */
+function ProviderPicker({
+  available,
+  names,
+  chosen,
+  onPick,
+}: {
+  available: HelperProvider[];
+  names: Partial<Record<HelperProvider, string>>;
+  chosen: HelperProvider | null;
+  onPick: (p: HelperProvider) => void;
+}) {
+  const { t } = useLingui();
+  const label = (p: HelperProvider) =>
+    p === "sera" ? names.sera || "Sera" : t({ message: "Claude", context: "admin helper, the Anthropic provider's name" });
+  return (
+    <div role="radiogroup" aria-label={t({ message: "Who answers", context: "admin helper, provider choice" })} className="mt-2 inline-flex rounded-full border border-border p-0.5">
+      {available.map((p) => (
+        <button
+          key={p}
+          type="button"
+          role="radio"
+          aria-checked={chosen === p}
+          onClick={() => onPick(p)}
+          className={`min-h-9 rounded-full px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${chosen === p ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"}`}
+        >
+          {label(p)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Who answers, said once under the heading, so an admin knows where their words go. */
 function ProviderLine({ provider }: { provider: "anthropic" | "sera" }) {
   return (

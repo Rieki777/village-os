@@ -701,6 +701,11 @@ msgctxt "sera answers"
 msgid "Keep {n}"
 msgstr ""
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, the Anthropic provider's name"
+msgid "Claude"
+msgstr ""
+
 #: client/src/components/journey/TestRun.tsx
 msgid "Turn your village's moons over quickly and read what your settings would do: who the settlement thanks, what each rule pays, when Claims Week opens, and what a member can give. A good thing to do before the vote below."
 msgstr ""
@@ -5380,6 +5385,11 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The line holds the name of someone in this village, so the public page hides it. The word that matched is \"{matched}\". Write it again with the role in place of the name."
+msgstr ""
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, provider choice"
+msgid "Who answers"
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx

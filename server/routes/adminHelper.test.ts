@@ -114,11 +114,11 @@ describe("GET /api/admin/helper", () => {
   });
 
   it("is off by the village's switch first, whatever the key", async () => {
-    expect((await setup({ switchOn: false, owner: "own" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "switch", provider: "anthropic" });
+    expect((await setup({ switchOn: false, owner: "own" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "switch", provider: "anthropic", available: ["anthropic"], names: { anthropic: "Sol" } });
   });
 
   it("says off until the village's own key is set, and names the guide", async () => {
-    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "key", provider: null });
+    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "key", provider: null, available: [], names: {} });
     // A borrowed platform key does not turn the admin helper on.
     expect((await setup({ owner: "platform" }).call("GET", "/api/admin/helper")).body.on).toBe(false);
     expect((await setup({ owner: "own" }).call("GET", "/api/admin/helper")).body.on).toBe(true);
@@ -128,7 +128,7 @@ describe("GET /api/admin/helper", () => {
     wire([]);
     const out = await setup().call("GET", "/api/admin/helper");
     const raw = JSON.stringify(out.body);
-    expect(Object.keys(out.body).sort()).toEqual(["guide", "off", "on", "provider"]);
+    expect(Object.keys(out.body).sort()).toEqual(["available", "guide", "names", "off", "on", "provider"]);
     expect(raw).not.toContain(SECRET);
     expect(raw).not.toContain(SECRET.slice(-4));
   });
@@ -323,7 +323,7 @@ describe("who answers: the village's own Anthropic key first, then Sera", () => 
 
   it("uses Sera, named Sera, when there is no Anthropic key and the connection works", async () => {
     const out = await setup({ owner: "none", sera: seraSays("x") }).call("GET", "/api/admin/helper");
-    expect(out.body).toEqual({ on: true, guide: "Sera", off: null, provider: "sera" });
+    expect(out.body).toEqual({ on: true, guide: "Sera", off: null, provider: "sera", available: ["sera"], names: { sera: "Sera" } });
   });
 
   it("prefers the village's Anthropic key when both are set, and never asks Sera", async () => {
@@ -371,6 +371,27 @@ describe("who answers: the village's own Anthropic key first, then Sera", () => 
     const out = await setup({ owner: "none", sera: async () => ({ ok: false as const }) }).call("POST", "/api/admin/helper/ask", ask("hi"));
     expect(out.status).toBe(502);
     expect(out.body.error).toContain("Sera could not answer");
+  });
+
+  it("lets the admin choose when both are set: Claude by default, Sera when asked for", async () => {
+    const asked: string[] = [];
+    const w = wire([text({ reply: "From Claude." })]);
+    const { call } = setup({ owner: "own", sera: seraSays("From Sera.", asked) });
+    const status = (await call("GET", "/api/admin/helper")).body;
+    expect(status.available).toEqual(["anthropic", "sera"]);
+    expect(status.names).toEqual({ anthropic: "Sol", sera: "Sera" });
+    expect((await call("POST", "/api/admin/helper/ask", { ...ask("hi"), provider: "sera" })).body.reply).toBe("From Sera.");
+    expect(asked.length).toBe(1);
+    expect(w.sent.length).toBe(0);
+    expect((await call("POST", "/api/admin/helper/ask", { ...ask("hi"), provider: "anthropic" })).body.reply).toBe("From Claude.");
+    expect(w.sent.length).toBe(1);
+  });
+
+  it("ignores a provider that cannot answer and uses the one that can", async () => {
+    const w = wire([text({ reply: "From Claude." })]);
+    const out = await setup({ owner: "own", sera: null }).call("POST", "/api/admin/helper/ask", { ...ask("hi"), provider: "sera" });
+    expect(out.body.reply).toBe("From Claude.");
+    expect(w.sent.length).toBe(1);
   });
 
   it("is off, asking for a key, with neither", async () => {

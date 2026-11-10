@@ -99,6 +99,19 @@ export interface HelperStatus {
   guide: string;
   off: "switch" | "key" | null;
   provider: HelperProvider | null;
+  /**
+   * Every provider that could answer right now, default first. Two entries
+   * means the admin may choose (Rye, 2026-11-09: "When both the anthropic key
+   * and sera are set we should be able to choose between them").
+   */
+  available: HelperProvider[];
+  /** The name each provider answers under. */
+  names: Partial<Record<HelperProvider, string>>;
+}
+
+/** The provider a request asked for, when it is one that could answer; else the default. */
+export function chooseProvider(asked: unknown, available: readonly HelperProvider[]): HelperProvider | null {
+  return available.find((p) => p === asked) ?? available[0] ?? null;
 }
 
 /** The village's own switch for the helper. Ships on; a village may turn it off. */
