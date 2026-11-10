@@ -23,6 +23,7 @@ import { ExternalLink } from "lucide-react";
 import { authToken, useSeason } from "@/lib/gameApi";
 import { useHypha } from "@/modules/ModuleProvider";
 import { fromMapSeat, seasonForSheet } from "@shared/roleSheetInputs";
+import NotListedChip from "@/components/NotListedChip";
 import SeatAction from "./SeatAction";
 import SeatHistory from "./SeatHistory";
 import SeatTradingCard from "./SeatTradingCard";
@@ -50,6 +51,11 @@ export default function MapSeatCard({
 
   return (
     <div data-power-card>
+      {seat.listed === false && (
+        <p className="mb-2">
+          <NotListedChip role={seat} />
+        </p>
+      )}
       <SeatTradingCard
         input={input}
         ctx={{ now: new Date(), season: seasonForSheet(season), classNames }}

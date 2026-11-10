@@ -105,6 +105,8 @@ export const NEW_PROPOSAL_HREF = "/role-proposals/new";
 export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "id",
   "circleId",
+  // Role journey: whether a steward has confirmed the role for discovery. A steward decision, never a word a member proposes.
+  "listed",
   // 0060: the building on the land the seat lives in. Structure, set where seats are placed (map lane R1).
   "structureKey",
   "circleName",

@@ -525,6 +525,12 @@ export interface StructureDecisions {
   conflicts?: Readonly<Record<string, ConflictChoice>>;
   /** Retire what the old chart leaves empty, in the same change. */
   retireOldChart?: boolean;
+  /**
+   * The village setting "Roles accepted from a sync start unlisted"
+   * (org.sync_starts_unlisted). Every role this accept creates is written
+   * unlisted, so a steward confirms it before any visitor can find it.
+   */
+  startUnlisted?: boolean;
 }
 
 export interface DecidedChange {
@@ -746,7 +752,12 @@ export function decideStructure(
   }
   for (const s of creates) {
     const renamed = renames.get(s.key);
-    changes.push(seatCreate(s.id, renamed !== undefined ? { ...s.payload, name: renamed } : s.payload));
+    changes.push(
+      seatCreate(s.id, {
+        ...(renamed !== undefined ? { ...s.payload, name: renamed } : s.payload),
+        ...(decisions.startUnlisted === true ? { listed: false } : {}),
+      }),
+    );
   }
   if (retiring) {
     for (const s of retire.seats) changes.push(seatRest(s.id, actor, "old-chart"));
