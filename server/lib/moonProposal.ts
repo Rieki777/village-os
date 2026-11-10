@@ -42,7 +42,8 @@ import {
   settlementVoteDaysFrom,
   type FrozenShare,
 } from "../../shared/moonSettlement";
-import type { BallotMethod } from "../../shared/governanceEngine";
+import type { BallotMethod, MethodDials } from "../../shared/governanceEngine";
+import { dialsForSubject, thresholdSettingsFrom, type ThresholdSettings } from "../../shared/ballotSubjects";
 import type { WeightMode } from "./governanceWeights";
 import {
   freezeCycleSplit,
@@ -53,7 +54,7 @@ import {
 import { dueCycles, unreadableCycleProblem } from "./gratitude-cycles";
 import { openBallot, type BallotRow } from "./ballots";
 import { tokenDef } from "./ledger";
-import { stringVar } from "./variables";
+import { numberVar, stringVar } from "./variables";
 import { cyclePoolProblem } from "./cyclePool";
 import { recordEvent } from "./events";
 import { settlementAsks } from "../repos/settlementBallots";
@@ -95,6 +96,30 @@ export interface MoonProposalDeps extends SettlementDeps {
    * test can run the whole decision without a module registry.
    */
   governanceOn(): boolean;
+  /**
+   * The village's threshold settings (its tier floors), read at the tick.
+   * Optional: absent, the live variables are read, which is what the server
+   * wants; a test passes its own so the floor is provable without a database.
+   */
+  thresholdSettings?(): ThresholdSettings;
+}
+
+/** The village's threshold settings as the variables hold them now. */
+function liveThresholdSettings(): ThresholdSettings {
+  return thresholdSettingsFrom((key) => Number(numberVar(key)), (key) => stringVar(key));
+}
+
+/**
+ * THE DIALS A SETTLEMENT BALLOT FREEZES (AC2.5).
+ *
+ * The village's own dials for its method, raised to the floor of the subject
+ * `cycle_settlement`, which the registry marks routine. So a village that
+ * raised its routine tier (governance.tier_routine_quorum_pct, say) settles its
+ * moons at that raised bar, which is the number the Decision Matrix already
+ * prints for this vote. The same arithmetic `orgDraftDecide` stamps a draft with.
+ */
+export function settlementDials(setup: Pick<BallotSetup, "method" | "dials">, settings: ThresholdSettings): MethodDials {
+  return dialsForSubject(CYCLE_SETTLEMENT, setup.method, setup.dials, settings);
 }
 
 /**
@@ -189,6 +214,7 @@ export async function runMoonProposal(deps: MoonProposalDeps): Promise<ProposalR
     shares,
   });
 
+  const dials = settlementDials(setup, (deps.thresholdSettings ?? liveThresholdSettings)());
   const opened = await openBallot(deps.getPool(), {
     subjectType: CYCLE_SETTLEMENT,
     subjectRef: cycle.id,
@@ -197,8 +223,8 @@ export async function runMoonProposal(deps: MoonProposalDeps): Promise<ProposalR
     method: setup.method,
     weightMode: setup.snapshot.mode,
     weightToken: setup.snapshot.token ?? null,
-    unityPct: setup.dials.unityPct,
-    quorumPct: setup.dials.quorumPct,
+    unityPct: dials.unityPct,
+    quorumPct: dials.quorumPct,
     durationDays: settlementVoteDaysFrom(stringVar("cycle.settlement_vote_days")),
     openedBy: MOON_PROPOSER,
     electorate: setup.electorate,

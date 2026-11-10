@@ -48,6 +48,16 @@
  * Changing adopted words is therefore adopting new ones. Before anything is
  * adopted, a save without `adopt` is a draft, and the launch row reads that
  * honestly.
+ *
+ * ── AFTER THE BIRTHING THE PEN IS A BALLOT (sweep decision D6) ───────────
+ *
+ * Rye, 2026-11-06 (Article 0): everything changes by a village vote, and the
+ * closing words are a promise to every member about their holdings. Once the
+ * Game has started (`readGameStart`), `closingWrite` refuses every save with
+ * 409 and names the vote: a `closing_policy` ballot at the structural tier,
+ * opened by `POST /api/governance/closing-policy-changes`. The proposed words
+ * wait under one key per ballot (`closingProposalKeyFor`), the shape the
+ * conflict agreement keeps, and the closer stamps them `ballot:<id>`.
  */
 import type { Pool } from "mysql2/promise";
 import { readConfigDocument } from "../repos/appConfigDocs";
@@ -64,6 +74,23 @@ export const CLOSING_CHECK_KEY = "closing-policy-named";
 
 /** The app_config key the exit policy lives under (server/index.ts `exitPolicyRepo`). */
 const EXIT_POLICY_KEY = "exit-policy";
+
+/** The prefix each closing ballot's proposed words wait under, one key per ballot. */
+export const CLOSING_PROPOSAL_KEY = "closing-policy-proposal";
+
+/** `closing-policy-proposal:bal-<ms>-<6>` is 48 characters, inside `config_key` varchar(64). */
+export const closingProposalKeyFor = (ballotId: string): string => `${CLOSING_PROPOSAL_KEY}:${ballotId}`;
+
+/** What an admin is told once the Game has started. It names the vote, as every refusal must (Article 0.4). */
+export const CLOSING_BALLOT_NOW =
+  "The Game has started, so a change to what closing this village means goes to the village as a closing policy vote at the structural tier. A member who can open votes opens it from the exit policy page.";
+
+/** What a member is told before the Birthing when they try to open the vote. */
+export const CLOSING_FOUNDERS_NOW =
+  "Before the Game starts, the exit policy's writers adopt what closing means. Once it starts, a change goes to the village as a vote.";
+
+/** The `adoptedBy` a carried ballot stamps, so the record says the village did it. */
+export const adoptedByClosingBallot = (ballotId: string): string => `ballot:${ballotId}`;
 
 export type ClosingWrite =
   | { ok: true; section: ClosingSection }
@@ -83,8 +110,17 @@ const sameWords = (a: unknown, b: unknown): boolean =>
  * @param stored the section already on record, or anything else
  * @param by     the admin account writing, from the session
  * @param now    the instant an adoption is stamped with
+ * @param opts   `gameStarted`: once the Game has started every save is refused
+ *               with 409, because the pen is the `closing_policy` ballot now
  */
-export function closingWrite(body: unknown, stored: unknown, by: string | null, now: Date): ClosingWrite {
+export function closingWrite(
+  body: unknown,
+  stored: unknown,
+  by: string | null,
+  now: Date,
+  opts: { gameStarted?: boolean } = {},
+): ClosingWrite {
+  if (opts.gameStarted) return { ok: false, status: 409, error: "closing_policy_ballot_now", message: CLOSING_BALLOT_NOW };
   const b = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const policyId = typeof b.policyId === "string" ? b.policyId.trim() : "";
   const statement = typeof b.statement === "string" ? b.statement.trim() : "";

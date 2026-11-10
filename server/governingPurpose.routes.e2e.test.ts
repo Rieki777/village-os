@@ -38,6 +38,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { purposeStatementProblem } from "../shared/governingPurpose";
+import { overrideDials } from "../shared/ballotSubjects";
 import { writeGoverningPurpose } from "./lib/governingPurpose";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -408,16 +409,43 @@ describe.skipIf(!DB_CONFIGURED)("the governing purpose statement", () => {
   });
 
   /*
-   * ── THE CHANGE BALLOT IS DORMANT UNTIL THE HANDOVER COMPLETES ─────────────
+   * ── THE CHANGE BALLOT OPENS BEFORE THE HANDOVER TOO (AC1.6) ───────────────
+   *
+   * Rye, 2026-11-06: Article 0 wins over "founder keeps the pen". It used to
+   * 409 here until every power was handed over; now it opens at the village's
+   * highest set tier, counted as `custom` so unity is counted. This village
+   * leaves `governance.highest_tier` at its shipped value, so the bar is the
+   * top tier's own dials. The ballot is released after, because the open key
+   * is one per subject and the next case opens its own.
    */
-  it("refuses a change ballot while the founder holds the pen, and counts what is left", async () => {
+  it("opens a change ballot before the handover, priced at the highest tier with method custom", async () => {
     await seedHoldings(0);
     const r = await call("POST", "/api/governance/purpose-changes", {
       statement: A_SECOND_STATEMENT,
       purposeAlignment: A_REAL_LINE,
     });
-    expect(r.status).toBe(409);
-    expect(String(r.json?.error)).toMatch(new RegExp(`${HANDOVER_SET.length} of ${HANDOVER_SET.length} are still on the admin panel`));
+    expect(r.status, r.text).toBe(200);
+    const ballotId = String(r.json?.ballot?.id ?? "");
+    expect(ballotId).toBeTruthy();
+
+    try {
+      const [rows] = await pool.query<any[]>( // module-review-ok: a readback on the scratch schema this suite provisioned
+        "SELECT method, unity_pct, quorum_pct FROM ballots WHERE id = ?",
+        [ballotId],
+      );
+      expect(String(rows[0]?.method)).toBe("custom");
+      expect({ unityPct: Number(rows[0]?.unity_pct), quorumPct: Number(rows[0]?.quorum_pct) }).toEqual(overrideDials());
+
+      // The founder's direct pen is still theirs beside the vote.
+      const read = await call("GET", "/api/governance/purpose");
+      expect(read.json?.founderHoldsPen).toBe(true);
+    } finally {
+      // Released either way, so a failure here never cascades into the next case's open.
+      await pool.query( // module-review-ok: a fixture on the scratch schema this suite provisioned
+        "UPDATE ballots SET status='withdrawn', open_key=CONCAT(open_key, ':', id) WHERE id = ?",
+        [ballotId],
+      );
+    }
   });
 
   it("opens the change ballot once the handover is complete, carrying the line and the statement", async () => {
@@ -431,9 +459,11 @@ describe.skipIf(!DB_CONFIGURED)("the governing purpose statement", () => {
     expect(ballotId).toBeTruthy();
 
     const [ballots] = await pool.query<any[]>( // module-review-ok: a readback on the scratch schema this suite provisioned
-      "SELECT subject_type, subject_ref, purpose_alignment FROM ballots WHERE id = ?",
+      "SELECT subject_type, subject_ref, purpose_alignment, unity_pct, quorum_pct FROM ballots WHERE id = ?",
       [ballotId],
     );
+    // After the handover the price is the ordinary one, not the highest tier the earlier case froze.
+    expect({ unityPct: Number(ballots[0]?.unity_pct), quorumPct: Number(ballots[0]?.quorum_pct) }).not.toEqual(overrideDials());
     expect(String(ballots[0]?.subject_type)).toBe("gps_change");
     expect(String(ballots[0]?.subject_ref)).toBe("statement");
     expect(String(ballots[0]?.purpose_alignment)).toBe(A_REAL_LINE);
