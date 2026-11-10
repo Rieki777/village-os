@@ -138,6 +138,11 @@ msgstr ""
 msgid "Start with a quest. Quests walk a path, and a path leads to a role."
 msgstr ""
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Times across the village show in this zone."
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "Nothing is being weighed right now."
 msgstr ""
@@ -1053,6 +1058,11 @@ msgctxt "role editor"
 msgid "How the conversations are held"
 msgstr ""
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Times across the village show in this zone. You have not chosen one, so we use your browser's ({zone})."
+msgstr ""
+
 #: client/src/pages/Roles.tsx
 msgctxt "roles page button"
 msgid "Select your roles"
@@ -1566,6 +1576,11 @@ msgstr ""
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Save"
+msgstr ""
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Use a place name, such as Europe/Lisbon."
 msgstr ""
 
 #: client/src/components/valuation/PricingDesk.tsx
@@ -2428,6 +2443,11 @@ msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "They aligned with the membership letter when they applied."
+msgstr ""
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Saved."
 msgstr ""
 
 #: client/src/components/review/SeraInDraft.tsx
@@ -4864,6 +4884,11 @@ msgctxt "role editor"
 msgid "Selection criteria (3 to 5 lines)"
 msgstr ""
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Clear"
+msgstr ""
+
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 msgstr ""
@@ -5660,6 +5685,11 @@ msgstr ""
 msgid "The season, week by week"
 msgstr ""
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Your time zone"
+msgstr ""
+
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run button"
 msgid "Run the test"
@@ -5830,6 +5860,11 @@ msgstr ""
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgctxt "the closing policy is being saved"
 msgid "Saving..."
+msgstr ""
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Use my browser's ({browser})"
 msgstr ""
 
 #: client/src/components/valuation/PricingDesk.tsx
@@ -6213,6 +6248,11 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "<0>The canvas's own article<1/></0>, where its authors describe the canvas."
+msgstr ""
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Time zone"
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
@@ -7349,6 +7389,11 @@ msgstr ""
 #~ msgid "Your account, {firstName}"
 #~ msgstr "Cuenta de {firstName}"
 
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "Save"
+msgstr ""
+
 #. placeholder {0}: catalyst.aName
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Could not load. Are you signed in as {0}?"
@@ -7989,6 +8034,11 @@ msgstr ""
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "when a practice happens"
 msgid "When"
+msgstr ""
+
+#: client/src/components/TimeZoneField.tsx
+msgctxt "time zone field"
+msgid "That did not save. Try again."
 msgstr ""
 
 #: client/src/components/ClosingPolicyCard.tsx
