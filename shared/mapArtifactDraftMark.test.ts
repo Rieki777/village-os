@@ -25,6 +25,7 @@ import path from "path";
 import { createRequire } from "module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type ArtifactWindow, evalIn, ownCopy } from "./test/artifactWindow";
+import { settleFor, speedUp } from "./test/artifactClock";
 
 const ARTIFACT = path.resolve(__dirname, "../docs/prototypes/grounds-v0.html");
 const html = fs.readFileSync(ARTIFACT, "utf8");
@@ -47,7 +48,8 @@ interface Jsdom {
 }
 const { JSDOM, VirtualConsole } = createRequire(import.meta.url)("jsdom") as Jsdom;
 
-const settle = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** Waits in the page's time, which `speedUp` below runs faster than the test's (see artifactClock). */
+const settle = settleFor;
 
 function inert<T extends object>(known: T): T {
   return new Proxy(known, {
@@ -168,6 +170,7 @@ function boot(localSave?: Scene | null, opts: BootOptions = {}): Booted {
     beforeParse(w) {
       w.addEventListener("error", (ev) => uncaught.push(ev.error ?? ev.message));
       Object.assign(w, { innerWidth: 1440, innerHeight: 900 });
+      speedUp(w);
       stubTheMissingPlatform(w);
       if (opts.shell) {
         // The one thing that makes the map believe it is framed. Its

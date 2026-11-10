@@ -14,6 +14,7 @@
  * is held back, and its batch id names the submission, never the member
  * (server/lib/publicForms.ts).
  */
+import { createHash } from "crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { PROPOSE_QUEST_MODULE } from "../../shared/questIdeas";
 
@@ -66,6 +67,17 @@ export async function ideasProposedBy(pool: Pool, userId: string): Promise<Array
 }
 
 /**
+ * The lock's name, hashed here and not in SQL. Production's database has no SHA1()
+ * (MySQL 9.7.2, read 2026-11-10), so the SQL form threw "FUNCTION SHA1 does not
+ * exist" on every submission; CI's old mysql:8 still had it and never showed it.
+ * Same 40 hex characters as before, derived from the same two strings.
+ */
+async function ideaLockName(conn: PoolConnection): Promise<string> {
+  const [[row]]: any = await conn.query("SELECT DATABASE() AS name");
+  return createHash("sha1").update(`${String(row?.name ?? "")}${LOCK_SUFFIX}`).digest("hex");
+}
+
+/**
  * Run `fn` holding the form's named lock, on the connection that holds it.
  *
  * Counting open ideas and inserting one are two statements, and two requests
@@ -84,12 +96,13 @@ export async function ideasProposedBy(pool: Pool, userId: string): Promise<Array
 export async function withIdeaLock<T>(pool: Pool, fn: (conn: PoolConnection) => Promise<T>): Promise<T> {
   const conn = await pool.getConnection();
   try {
-    const [[got]]: any = await conn.query("SELECT GET_LOCK(SHA1(CONCAT(DATABASE(), ?)), 10) AS ok", [LOCK_SUFFIX]);
+    const lockName = await ideaLockName(conn);
+    const [[got]]: any = await conn.query("SELECT GET_LOCK(?, 10) AS ok", [lockName]);
     if (Number(got?.ok) !== 1) throw new Error("Another quest idea held the queue's lock for ten seconds.");
     try {
       return await fn(conn);
     } finally {
-      await conn.query("SELECT RELEASE_LOCK(SHA1(CONCAT(DATABASE(), ?)))", [LOCK_SUFFIX]);
+      await conn.query("SELECT RELEASE_LOCK(?)", [lockName]);
     }
   } finally {
     conn.release();

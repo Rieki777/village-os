@@ -37,7 +37,7 @@ describe("DraftCarry", () => {
     // A stored key the cast does not know is never offered.
     expect(screen.queryByRole("button", { name: /made-up/ })).toBeNull();
     expect(screen.getByText(/Lead Financial Steward/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Apply with your draft/ }).getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&from=%2Froles%2Fdraft");
+    expect(screen.getByRole("link", { name: /Apply with your selection/ }).getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&from=%2Froles%2Fdraft");
     vi.unstubAllGlobals();
   });
 
@@ -45,7 +45,7 @@ describe("DraftCarry", () => {
     localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: [], picks: ["lfs", "garden"] }));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ roles: [{ id: "lfs", name: "Lead Financial Steward", termsOffer: null }] }), { status: 200 })));
     render(<DraftCarry cast={CAST} onPickCharacter={() => {}} />);
-    const link = await screen.findByRole("link", { name: /Apply for the roles you drafted/ });
+    const link = await screen.findByRole("link", { name: /Apply for the roles you selected/ });
     expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=lfs&seat=garden&from=%2Froles%2Fdraft");
     vi.unstubAllGlobals();
   });
@@ -53,9 +53,9 @@ describe("DraftCarry", () => {
   it("clears the draft when they are done with it", () => {
     localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing"], picks: [] }));
     render(<DraftCarry cast={CAST} roleNames={{}} onPickCharacter={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "Clear my draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear my selection" }));
     expect(localStorage.getItem(ROLE_DRAFT_KEY)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Clear my draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear my selection" })).toBeNull();
   });
 });
 
@@ -73,7 +73,7 @@ describe("a drafted role they were already adopted for", () => {
     );
     render(<DraftCarry cast={CAST} userId="u-juno" onPickCharacter={() => {}} />);
     expect(await screen.findByText("Adopted, and yours from the start of next season: Lead Financial Steward.")).toBeTruthy();
-    const link = await screen.findByRole("link", { name: /Apply with your draft/ });
+    const link = await screen.findByRole("link", { name: /Apply with your selection/ });
     expect(link.getAttribute("href")).toBe("/propose-a-role?role=events&from=%2Froles%2Fdraft");
   });
 

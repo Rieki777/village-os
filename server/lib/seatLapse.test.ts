@@ -56,6 +56,28 @@ const role = (over: Partial<OrgRole> = {}): OrgRole => ({
   ...over,
 });
 
+describe("a moon term crosses the season's end (D34)", () => {
+  const role: Pick<OrgRole, "expiresEachSeason"> = { expiresEachSeason: null };
+  // The December moon runs 8 Dec to 7 Jan; the season ends 31 Dec and the next one starts.
+  const started = new Date("2026-12-08T00:00:00Z");
+  const ends = new Date("2027-01-07T00:00:00Z");
+  const turned = ctx({ currentSeasonId: "next-2027", now: new Date("2027-01-02T12:00:00Z") });
+
+  it("the season turn leaves a running moon term alone", () => {
+    expect(isLapsed({ ...seating({ seasonId: "rooting-2026", termEndsAt: ends }), startedAt: started }, role, turned).lapsed).toBe(false);
+  });
+
+  it("its own date still ends it", () => {
+    const after = ctx({ currentSeasonId: "next-2027", now: new Date("2027-01-08T00:00:00Z") });
+    expect(isLapsed({ ...seating({ seasonId: "rooting-2026", termEndsAt: ends }), startedAt: started }, role, after)).toEqual({ lapsed: true, reason: "term" });
+  });
+
+  it("a season-long term from an old season still lapses at the turn", () => {
+    const longEnds = new Date("2027-03-01T00:00:00Z");
+    expect(isLapsed({ ...seating({ seasonId: "rooting-2026", termEndsAt: longEnds }), startedAt: new Date("2026-09-01T00:00:00Z") }, role, turned).reason).toBe("season");
+  });
+});
+
 describe("when an org-chart mandate runs out", () => {
   it("lapses a term whose date has passed", () => {
     const v = isLapsed(seating({ termEndsAt: new Date("2026-07-01T00:00:00Z") }), role(), ctx());
