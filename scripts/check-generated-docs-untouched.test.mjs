@@ -165,6 +165,27 @@ try {
   fs.writeFileSync(GOV, original);
 }
 
+// 3b: the real case. A pull request adds a governance route and changes NO document.
+const ROUTE = path.join(ROOT, "server", "routes", "governanceMode.ts");
+const routeOriginal = fs.readFileSync(ROUTE);
+try {
+  fs.writeFileSync(ROUTE, `${routeOriginal.toString("utf8")}\napp.get("/api/governance/zz-probe", requireAuth, (_req, res) => res.json({}));\n`);
+  const summary = path.join(os.tmpdir(), `gendocs-route-${process.pid}.md`);
+  fs.rmSync(summary, { force: true });
+  check("a PR that adds a governance route and changes no document passes the governance guard, and the diff names the route", () => {
+    const r = run("check-governance-doc.mjs", { GITHUB_STEP_SUMMARY: summary });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(fs.readFileSync(summary, "utf8"), /zz-probe/);
+  });
+  check("CONTROL: the same route change with no regenerated document fails in strict mode", () => {
+    const r = run("check-governance-doc.mjs", { GENERATED_DOCS_MODE: "strict" });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+  });
+  fs.rmSync(summary, { force: true });
+} finally {
+  fs.writeFileSync(ROUTE, routeOriginal);
+}
+
 // 4: idempotent.
 check("the governance generator is idempotent: two runs write the same bytes", () => {
   const a = run("generate-governance-doc.mjs", {}, ["--stdout"]);
