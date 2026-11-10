@@ -36,7 +36,7 @@ Work on `main` that has not been published as an image yet. No village runs
 it. It is written here as it lands, so the next release entry is a record
 made at the time.
 
-Nothing yet: everything up to 1.3.0 is in its entry below.
+To word with Rye and the Legal session for the next release, left out of 1.3.0 on purpose: the invoice and pay half of the approvals module; what work states it pays, Earned Equity, cash owed, draft invoices and the cash-payouts page; and the flat role mint going blank (#776) with the seeded dues note being blanked. Everything else up to 1.3.0 is in its entry below.
 
 ---
 
@@ -96,7 +96,7 @@ and `sessions`. None of them is core, so all five ship off.
   what they delivered, checks it against their role cards and the season
   goals, and sends a recap. Two different people approve, neither of them the
   member. The one interim exception, the Treasury power group approving its
-  own, is marked on every such approval. *[To word with Rye and the Legal session before tagging: the invoice and pay half of this module.]*
+  own, is marked on every such approval.
 
 **Every village's email**, whether or not Village Comms is on: each email is
 recorded before it goes, carries a one-click stop and a preferences page, and
@@ -203,8 +203,6 @@ an address that bounces or complains stops being written to.
 - **Village Tokens:** Admin, Tokens names each token and says what it means in
   the village's own words, and a badge's multiplier names the token it
   multiplies.
-
-**Value and work.** *[To word with Rye and the Legal session before tagging: what work states it pays, Earned Equity, cash owed, draft invoices, and the cash-payouts page.]*
 
 **Finding your way**
 
@@ -426,7 +424,6 @@ change what you have:
 | An established village's words | A village that already holds page words of its own keeps the path and stage, How We Govern and Circles words it shows today, written into its stored content. A village that used the first Command Centre plan keeps that plan as its own | Harmless either way: these are the words and the plan it already shows |
 | The address book and paths | Fills the new Comms tables from members' accounts, form submissions and housing requests, and records who is already on a path. Sends nothing and grants nothing | No; 1.2.0 ignores them |
 | Season goal ids | Gives each link 0298 made by words the id those words derive, on tables this release made | No; 1.2.0 ignores them |
-| *[To word with Rye and the Legal session before tagging: the flat role mint going blank (#776) and the seeded dues note being blanked]* | | **No** |
 
 **What the village keeps from now on:** every email it sends is recorded, with
 its words, for 18 months by default (`comms.retention_months`). A password
