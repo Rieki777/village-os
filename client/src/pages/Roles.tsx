@@ -1,3 +1,4 @@
+import CastStrip from "@/components/roleDraft/CastStrip";
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -503,12 +504,13 @@ export default function Roles() {
             </div>
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
             <Link
-              href="/roles/draft"
+              href="/roles/select"
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              {t({ message: "Draft your roles", context: "roles page button" })}
+              {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
+            <CastStrip />
           </m.div>
 
           <div className="max-w-4xl mx-auto">

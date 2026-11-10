@@ -121,18 +121,18 @@ describe("the board, read live", () => {
 });
 
 describe("the draft", () => {
-  it("drafts up to three in order, keeps them in this browser, and applies with all of them", async () => {
+  it("selects up to three in order, keeps them in this browser, and applies with all of them", async () => {
     serve();
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    for (const n of ["Lead Financial Steward", "Gardener", "Welcome Host"]) fireEvent.click(within(card(n)).getByRole("button", { name: `Draft ${n}` }));
+    for (const n of ["Lead Financial Steward", "Gardener", "Welcome Host"]) fireEvent.click(within(card(n)).getByRole("button", { name: `Select ${n}` }));
     // A fourth is refused out loud, never by a silent disabled button.
-    const cook = within(card("Cook")).getByRole("button", { name: "Draft Cook" });
+    const cook = within(card("Cook")).getByRole("button", { name: "Select Cook" });
     expect(cook.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(cook);
-    expect(screen.getByText("Your draft holds three. Take one off to draft another.")).toBeTruthy();
+    expect(screen.getByText("Your selection holds three. Take one off to select another.")).toBeTruthy();
 
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       expect.stringContaining("Lead Financial Steward"),
       expect.stringContaining("Gardener"),
@@ -143,7 +143,7 @@ describe("the draft", () => {
     expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}")).toEqual({ chars: [], picks: ["lfs", "garden", "host"] });
 
     // Taking one off frees a place.
-    fireEvent.click(within(tray).getByRole("button", { name: "Remove Gardener from your draft" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Remove Gardener from your selection" }));
     expect(cook.getAttribute("aria-disabled")).toBe("false");
   });
 
@@ -151,7 +151,7 @@ describe("the draft", () => {
     localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing"], picks: ["held", "lfs"] }));
     serve();
     render(<RoleDraft />);
-    const tray = await screen.findByRole("complementary", { name: "Your draft" });
+    const tray = await screen.findByRole("complementary", { name: "Your selection" });
     await waitFor(() => expect(within(tray).getAllByRole("listitem")).toHaveLength(1));
     expect(within(tray).getByText("Lead Financial Steward")).toBeTruthy();
     expect(screen.getByRole("button", { name: /The Catalyst/ }).getAttribute("aria-pressed")).toBe("true");
@@ -161,18 +161,18 @@ describe("the draft", () => {
     serve({ org: { ...ORG, roles: ORG.roles.map((r) => ({ ...r, termsOffer: null })) } });
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
-    fireEvent.click(within(card("Cook")).getByRole("button", { name: "Draft Cook" }));
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
+    fireEvent.click(within(card("Cook")).getByRole("button", { name: "Select Cook" }));
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).getByRole("link", { name: /Apply for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook");
   });
 
-  it("offers no Apply to a visitor while applications are closed, and keeps the draft", async () => {
+  it("offers no Apply to a visitor while applications are closed, and keeps the selection", async () => {
     serve({ form: { open: false, message: "This page isn't taking proposals right now." } });
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).queryByRole("link", { name: /Apply/ })).toBeNull();
     expect(within(tray).getByText("This page isn't taking proposals right now.")).toBeTruthy();
   });

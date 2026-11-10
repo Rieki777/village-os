@@ -1,5 +1,5 @@
 /**
- * THE ROLE DRAFT BOARD, /roles/draft (Rye, 9 Nov 2026, approved from the
+ * THE ROLE SELECTION BOARD, /roles/select (it was /roles/draft until 9 Nov 2026, which still redirects here) (Rye, 9 Nov 2026, approved from the
  * mockup at https://claude.ai/artifact/LcUhUhgYeF9Kq2wufcHGTv).
  *
  * A visitor picks the characters they play, scouts every open role by its key
@@ -31,7 +31,7 @@ import { NextForRoles } from "@/components/openProposal/RoleCardBridge";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowRight, Check, Compass, MapPin, Sparkles, X } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
@@ -42,6 +42,9 @@ import { useClassNames } from "@/components/power/useClassNames";
 import { readsTerms } from "@/components/characters/RolesThatFit";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
 import DiscoverStep from "@/components/roleDraft/DiscoverStep";
+import SelectStepper from "@/components/roleDraft/SelectStepper";
+import ArtImage from "@/components/roleDraft/ArtImage";
+import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
@@ -54,7 +57,11 @@ import {
   ROLE_DRAFT_KEY,
   addPick,
   applyHrefFor,
+  boardRoles,
+  characterArt,
   charactersKnown,
+  fitCountFor,
+  roleArtFor,
   draftFromStored,
   openRolesFrom,
   rankForCharacters,
@@ -184,6 +191,10 @@ export default function RoleDraft() {
   const [open, setOpen] = useState<string | null>(null);
   const [full, setFull] = useState(false);
   const [saveBlocked, setSaveBlocked] = useState(stored.blocked);
+  const [step, setStep] = useState(0);
+  const [burst, setBurst] = useState(0);
+  const [applyBurst, setApplyBurst] = useState(0);
+  const [, navigate] = useLocation();
 
   useEffect(() => {
     gameFetch("/api/org")
@@ -208,13 +219,13 @@ export default function RoleDraft() {
   // A reader the chart sends terms to holds terms.read: a member, who applies through a role application.
   const member = load.kind === "ready" && readsTerms(load.org);
   const allRoles = load.kind === "ready" ? load.roles : [];
-  // A visitor sees only what the open proposal would take, so a draft never ends in a refusal.
-  const roles = !member && form?.open && form.offered ? allRoles.filter((r) => form.offered!.has(r.id)) : allRoles;
+  // ONE set feeds the board, the character counts and the tray: listed roles the open form would take (boardRoles).
+  const roles = boardRoles(allRoles, { member, form: form ? { open: form.open, offered: form.offered } : null });
   const tagsKnown = charactersKnown(roles);
   const visitorClosed = !member && form !== null && !form.open;
   const ranked = rankForCharacters(roles, chars);
   const shown = onlyFits && chars.length ? ranked.filter((r) => r.fits.length > 0) : ranked;
-  const fitCount = (key: string) => roles.filter((r) => r.archetypes.includes(key)).length;
+  const fitCount = (key: string) => fitCountFor(roles, key);
   const byId = new Map(roles.map((r) => [r.id, r]));
   const applyHref = visitorClosed ? null : applyHrefFor(picks, member);
 
@@ -225,10 +236,50 @@ export default function RoleDraft() {
     if (open) cardRef.current?.focus();
   }, [open]);
 
+  // Each step is a section of this one page. A step button or Next glides to it; reading down the page moves the bar too.
+  const STEP_IDS = ["sel-you", "sel-scout", "sel-select", "sel-apply"] as const;
+  const go = (i: number) => {
+    setStep(i);
+    const el = document.getElementById(STEP_IDS[i]);
+    el?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+  };
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const seen = new Map<string, number>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id, e.isIntersecting ? e.intersectionRatio : 0);
+        let best = -1;
+        let ratio = 0;
+        STEP_IDS.forEach((id, i) => {
+          if (i === 2) return; // the tray stays in view beside the board, so it never wins on its own: Next and the step button take you there
+          const r = seen.get(id) ?? 0;
+          if (r > ratio) {
+            ratio = r;
+            best = i;
+          }
+        });
+        if (best >= 0) setStep(best);
+      },
+      { threshold: [0.15, 0.4, 0.7] },
+    );
+    for (const id of STEP_IDS) {
+      const el = document.getElementById(id);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [load.kind]);
+  const applyWithBurst = (e: React.MouseEvent, href: string) => {
+    e.preventDefault();
+    setApplyBurst((n) => n + 1);
+    window.setTimeout(() => navigate(href), reducedMotion() ? 0 : 650);
+  };
+
   const toggleChar = (key: string) => setChars((c) => (c.includes(key) ? c.filter((k) => k !== key) : [...c, key]));
   const togglePick = (id: string) => {
     const next = addPick(picks, id);
     setFull(next.full);
+    if (next.picks.length > picks.length) setBurst((n) => n + 1);
     setPicks(next.picks);
   };
 
@@ -247,33 +298,35 @@ export default function RoleDraft() {
     <Layout>
       <div className="min-h-screen bg-background py-10 sm:py-14">
         <div className="container max-w-6xl">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-notice">{t({ message: "Open roles · the draft", context: "role draft eyebrow" })}</p>
-          <h1 className="mt-2 font-display text-4xl font-bold text-foreground text-balance">{t`Draft your roles at ${villageName}`}</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-notice">{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
+          <h1 className="mt-2 font-display text-4xl font-bold text-foreground text-balance">{t`Select your roles at ${villageName}`}</h1>
           <p className="mt-3 max-w-[66ch] text-muted-foreground">
-            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and draft up to three. Your draft stays in this browser until you apply, and nothing is sent before then.`}
+            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you apply, and nothing is sent before then.`}
           </p>
 
-          <ol className="mt-6 flex flex-wrap gap-2" aria-label={t({ message: "Your way in", context: "role draft steps" })}>
-            {[
-              t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
-              t({ message: "Scout the open roles", context: "role draft step" }),
-              t({ message: "Draft up to three", context: "role draft step" }),
-              t({ message: "Apply", context: "role draft step" }),
-            ].map((s, i) => (
-              <li key={s} className="flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-1.5 pr-4 text-sm font-semibold text-card-foreground">
-                <span className="grid size-7 place-items-center rounded-full bg-muted text-xs" aria-hidden="true">{i + 1}</span>
-                {s}
-              </li>
-            ))}
-          </ol>
+          <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
+            <SelectStepper
+              labels={[
+                t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
+                t({ message: "Scout the open roles", context: "role draft step" }),
+                t({ message: "Select up to three", context: "role draft step" }),
+                t({ message: "Apply", context: "role draft step" }),
+              ]}
+              step={step}
+              reached={3}
+              onGo={go}
+              barLabel={t({ message: "Your progress through the four steps", context: "role draft steps" })}
+            />
+          </div>
 
+          <div id="sel-you" className="scroll-mt-52"></div>
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
             <h2 id="draft-chars" className="font-display text-2xl font-bold text-foreground">{t`Who do you play? Pick one or more.`}</h2>
             {load.kind === "ready" && roles.length > 0 && !tagsKnown && (
               <p className="mt-1 text-sm text-muted-foreground">{t`This village has not tagged its roles by character for visitors yet, so every role is shown for every character.`}</p>
             )}
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {cast.map((c) => {
                 const on = chars.includes(c.key);
                 const n = fitCount(c.key);
@@ -282,27 +335,40 @@ export default function RoleDraft() {
                     key={c.key}
                     type="button"
                     aria-pressed={on}
+                    data-on={on}
                     onClick={() => toggleChar(c.key)}
-                    className={`flex min-h-11 flex-col items-start gap-1 rounded-2xl border-2 p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
+                    className={`sel-lift group relative flex min-h-11 flex-col overflow-hidden rounded-2xl border-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${on ? "border-notice bg-primary text-primary-foreground" : "border-border bg-card text-card-foreground"}`}
                   >
-                    <span className="flex w-full items-center justify-between gap-2">
-                      <span className="font-display text-lg font-bold">{c.name}</span>
-                      {on && <Check className="size-4 shrink-0" aria-hidden="true" />}
-                    </span>
-                    <span className={`text-xs ${on ? "text-primary-foreground/85" : "text-muted-foreground"}`}>{c.subtitle}</span>
-                    {load.kind === "ready" && tagsKnown && (
-                      <span className={`text-xs font-semibold ${on ? "text-primary-foreground" : "text-foreground"}`}>
-                        {n === 1 ? t({ message: "1 open role fits", context: "role draft character count" }) : t({ message: `${n} open roles fit`, context: "role draft character count" })}
+                    <ArtImage src={characterArt(c.key)} className="relative aspect-[4/5] w-full" imgClassName="object-top" />
+                    {on && (
+                      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
+                        <Check className="size-3.5" aria-hidden="true" />
+                        {t({ message: "You play this", context: "role draft character" })}
                       </span>
                     )}
+                    <span className="flex flex-col gap-1 p-3">
+                      <span className="font-display text-lg font-bold leading-tight">{c.name}</span>
+                      <span className={`text-xs ${on ? "text-primary-foreground/85" : "text-muted-foreground"}`}>{c.subtitle}</span>
+                      {load.kind === "ready" && tagsKnown && (
+                        <span className={`text-xs font-semibold ${on ? "text-primary-foreground" : "text-foreground"}`}>
+                          {n === 1 ? t({ message: "1 open role fits", context: "role draft character count" }) : t({ message: `${n} open roles fit`, context: "role draft character count" })}
+                        </span>
+                      )}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={() => go(1)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {t({ message: "Next: scout the open roles", context: "role draft next" })}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
           </section>
           </DiscoverStep>
 
-          <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+          <div id="sel-scout" className="sel-rise mt-10 grid scroll-mt-52 gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
             <section aria-labelledby="draft-roles" className="min-w-0">
               <h2 id="draft-roles" className="font-display text-2xl font-bold text-foreground">{t({ message: "Open roles", context: "role draft heading" })}</h2>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -344,18 +410,25 @@ export default function RoleDraft() {
                   const hours = role.timeCommitment ?? "";
                   const seats = role.seats;
                   return (
-                    <article key={role.id} className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-primary" : "border-border"}`}>
-                      <div className="flex items-start gap-3 bg-primary px-4 py-3 text-primary-foreground">
-                        <div className="min-w-0 flex-1">
-                          <h3 className="font-display text-lg font-bold leading-tight break-words">{roleName}</h3>
-                          <p className="text-sm text-primary-foreground/85">{role.circleName}</p>
-                        </div>
+                    <article key={role.id} data-on={drafted} className={`sel-lift flex min-w-0 flex-col overflow-hidden rounded-2xl border-2 bg-card ${isOpen ? "sm:col-span-2" : ""} ${drafted ? "border-notice" : "border-border"}`}>
+                      <div className="relative h-36 bg-primary text-primary-foreground">
+                        <ArtImage src={roleArtFor(role)} className="absolute inset-0" imgClassName="object-top" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/55 to-transparent" aria-hidden="true" />
                         {fits.length > 0 && (
-                          <span className="shrink-0 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
+                          <span className="absolute right-2 top-2 rounded-full bg-notice px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-background">
                             <Sparkles className="mr-1 inline size-3" aria-hidden="true" />
                             {t({ message: `Fits ${fitsNames}`, context: "role draft badge" })}
                           </span>
                         )}
+                        {drafted && (
+                          <span className="absolute left-2 top-2 grid size-8 place-items-center rounded-full bg-notice text-background" aria-hidden="true">
+                            <Check className="size-4" />
+                          </span>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 px-4 pb-3">
+                          <h3 className="font-display text-lg font-bold leading-tight break-words">{roleName}</h3>
+                          <p className="text-sm text-primary-foreground/90">{role.circleName}</p>
+                        </div>
                       </div>
                       <dl className="grid grid-cols-2 border-b border-border text-center text-sm">
                         <div className="border-r border-border px-2 py-2">
@@ -418,13 +491,13 @@ export default function RoleDraft() {
                         <button
                           type="button"
                           aria-pressed={drafted}
-                          aria-label={t({ message: `Draft ${roleName}`, context: "role draft button label" })}
+                          aria-label={t({ message: `Select ${roleName}`, context: "role draft button label" })}
                           aria-disabled={!drafted && pickCount >= OPEN_PROPOSAL_MAX_ROLES}
                           onClick={() => togglePick(role.id)}
                           className={`min-h-11 flex-1 rounded-full px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:opacity-50 ${drafted ? "border-2 border-primary bg-card text-primary" : "bg-primary text-primary-foreground"}`}
                         >
                           {drafted && <Check className="mr-1 inline size-4" aria-hidden="true" />}
-                          {t({ message: "Draft", context: "role draft button" })}
+                          {drafted ? t({ message: "Selected", context: "role draft button" }) : t({ message: "Select", context: "role draft button" })}
                         </button>
                         )}
                       </div>
@@ -432,10 +505,17 @@ export default function RoleDraft() {
                   );
                 })}
               </div>
+              <div className="mt-6 flex justify-end">
+                <button type="button" onClick={() => go(2)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                  {t({ message: "Next: review my selection", context: "role draft next" })}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </button>
+              </div>
             </section>
 
-            <aside aria-label={t({ message: "Your draft", context: "role draft tray" })} className="order-first rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-24">
-              <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your draft", context: "role draft tray" })}</h2>
+            <aside id="sel-select" aria-label={t({ message: "Your selection", context: "role draft tray" })} className="relative order-first scroll-mt-52 rounded-2xl border-2 border-primary bg-card p-4 lg:order-last lg:sticky lg:top-52">
+              <Burst play={burst} />
+              <h2 className="font-display text-xl font-bold text-card-foreground">{t({ message: "Your selection", context: "role draft tray" })}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {chars.length ? t({ message: `Playing as ${playing}.`, context: "role draft tray" }) : t`No character picked yet.`}
               </p>
@@ -446,10 +526,11 @@ export default function RoleDraft() {
                     if (!r) return null;
                     const rn = r.name;
                     return (
-                      <li key={id} className="flex min-h-12 items-center gap-2 rounded-xl border border-border px-2 text-sm">
+                      <li key={id} className="sel-rise flex min-h-12 items-center gap-2 rounded-xl border border-border px-2 py-1 text-sm">
+                        <ArtImage src={roleArtFor(r)} className="relative size-10 shrink-0 rounded-lg" />
                         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-notice text-xs font-bold text-background" aria-hidden="true">{i + 1}</span>
                         <span className="min-w-0 flex-1 font-semibold text-card-foreground break-words">{rn}</span>
-                        <button type="button" onClick={() => togglePick(id)} aria-label={t`Remove ${rn} from your draft`} className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+                        <button type="button" onClick={() => togglePick(id)} aria-label={t`Remove ${rn} from your selection`} className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
                           <X className="size-4" aria-hidden="true" />
                         </button>
                       </li>
@@ -457,16 +538,16 @@ export default function RoleDraft() {
                   })}
                 </ol>
               ) : (
-                <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">{t`Draft up to three roles. The order is your preference.`}</p>
+                <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">{t`Select up to three roles. The order is your preference.`}</p>
               )}
-              {full && <p role="status" className="mt-2 text-sm text-foreground">{t`Your draft holds three. Take one off to draft another.`}</p>}
+              {full && <p role="status" className="mt-2 text-sm text-foreground">{t`Your selection holds three. Take one off to select another.`}</p>}
               {visitorClosed && pickCount > 0 && (
                 <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm text-foreground">
-                  {form?.message ?? t`Applications are closed right now. Your draft stays here, and you can apply when they open.`}
+                  {form?.message ?? t`Applications are closed right now. Your selection stays here, and you can apply when they open.`}
                 </p>
               )}
               {applyHref && (
-                <Link href={applyHref} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className="relative mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {member
                     ? pickCount === 1
                       ? t`Apply for this role`
@@ -475,11 +556,12 @@ export default function RoleDraft() {
                       ? t`Apply with my pick`
                       : t`Apply with my ${pickCount} picks`}
                   <ArrowRight className="size-4" aria-hidden="true" />
+                  <Burst play={applyBurst} />
                 </Link>
               )}
               <p className="mt-2 text-xs text-muted-foreground">
                 {saveBlocked
-                  ? t`This browser won't keep your draft (private mode or site data blocked). It stays until you leave the page.`
+                  ? t`This browser won't keep your selection (private mode or site data blocked). It stays until you leave the page.`
                   : t`Kept in this browser only. Nothing is sent until you apply.`}
               </p>
             </aside>
@@ -504,7 +586,7 @@ export default function RoleDraft() {
             </section>
           )}
 
-          <section className="mt-12 grid gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
+          <section id="sel-apply" className="mt-12 grid scroll-mt-52 gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>
               <h2 id="draft-next" className="font-display text-2xl font-bold text-foreground">{t`What happens after you apply`}</h2>
               {member ? (
