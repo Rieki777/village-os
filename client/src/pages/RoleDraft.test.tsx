@@ -138,6 +138,47 @@ describe("an archetype picked on /roles", () => {
   });
 });
 
+describe("the selection board opening with an archetype", () => {
+  // jsdom has no scrollIntoView; record which element each call was made on.
+  function stubScroll() {
+    const scrolled: string[] = [];
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { scrolled.push(this.id); });
+    return scrolled;
+  }
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("scrolls to the characters step once, when it arrives with an archetype in the address", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select?archetype=catalyzing");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).toEqual(["sel-chars"]);
+    expect(document.activeElement?.id).toBe("draft-chars");
+  });
+
+  it("does not scroll without an archetype in the address", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).toEqual([]);
+  });
+
+  it("keeps its place when the address carries a hash", async () => {
+    const scrolled = stubScroll();
+    window.history.replaceState(null, "", "/roles/select?archetype=catalyzing#sel-select");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Lead Financial Steward" });
+    expect(scrolled).not.toContain("sel-chars");
+  });
+});
+
 describe("the draft", () => {
   it("selects up to three in order, keeps them in this browser, and applies with all of them", async () => {
     serve();

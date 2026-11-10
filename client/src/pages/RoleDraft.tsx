@@ -262,6 +262,14 @@ export default function RoleDraft() {
     if (typeof window !== "undefined" && window.location.hash === "#sel-season") window.setTimeout(() => go(0), 300);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // An archetype picked on /roles lands the person on the characters step, where that pick shows. Once, on arrival; a hash keeps its own place.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash) return;
+    if (!archetypeFromSearch(window.location.search)) return;
+    document.getElementById("sel-chars")?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+    document.getElementById("draft-chars")?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
     const seen = new Map<string, number>();
@@ -374,7 +382,7 @@ export default function RoleDraft() {
           <div id="sel-chars" className="scroll-mt-52"></div>
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
-            <h2 id="draft-chars" className="font-display text-2xl font-bold text-foreground">{t`Who do you play? Pick one or more.`}</h2>
+            <h2 id="draft-chars" tabIndex={-1} className="font-display text-2xl font-bold text-foreground outline-none">{t`Who do you play? Pick one or more.`}</h2>
             {load.kind === "ready" && roles.length > 0 && !tagsKnown && (
               <p className="mt-1 text-sm text-muted-foreground">{t`This village has not tagged its roles by character for visitors yet, so every role is shown for every character.`}</p>
             )}
