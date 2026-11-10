@@ -71,6 +71,7 @@ import { writeConfigDocument } from "../repos/appConfigDocs";
 import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
+import { deadlineInVillage } from "../lib/villageReaders";
 import {
   CLOSING_POLICY,
   closingForReaders,
@@ -268,7 +269,7 @@ export function register(app: Express, deps: Deps): void {
     void notifyRollRows({ pool, notify: ballot.notify, link: decisionLink }, result.ballot, {
       type: "ballot_opened",
       title: "The village is asked whether to change what closing it means",
-      body: `Voting is open until ${new Date(result.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(result.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [user.id],
       roll: electorate.map((e) => e.userId),

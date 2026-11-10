@@ -168,6 +168,11 @@ describe.skipIf(!configured)("the closing words' pen (D6)", () => {
     expect(asked).toMatchObject({ ballotId: ballot.id, policyId: "own-words", statement: OWN_WORDS, proposedBy: "cp-proposer" });
     // Nothing moved yet.
     expect(exitPolicyRepo.get().closing).toEqual(ADOPTED);
+    // R134: the roll's notice gives the deadline in words, in the village's calendar.
+    for (let i = 0; i < 50 && !notices.some((n) => n.type === "ballot_opened"); i++) await new Promise((r) => setTimeout(r, 20));
+    const told = notices.filter((n) => n.type === "ballot_opened") as Array<{ body?: string }>;
+    expect(told.length).toBeGreaterThan(0);
+    for (const n of told) expect(n.body).toMatch(/^Voting is open until \d{1,2} [A-Z][a-z]+ \d{4}\.$/);
 
     const second = await call("POST", "/api/governance/closing-policy-changes", "proposer", { policyId: "own-words", statement: `${OWN_WORDS} Again.` });
     expect(second.status).toBe(409);
