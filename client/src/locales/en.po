@@ -134,8 +134,8 @@ msgid "Save and update the role"
 msgstr "Save and update the role"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Everyone who reads your proposal sees a wish to talk about the terms."
-msgstr "Everyone who reads your proposal sees a wish to talk about the terms."
+#~ msgid "Everyone who reads your proposal sees a wish to talk about the terms."
+#~ msgstr "Everyone who reads your proposal sees a wish to talk about the terms."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
