@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
+import { BTN_SECONDARY, CARD_FEATURED, EYEBROW, H1, TILE, WORLD } from "@/components/journey/look";
 import { Check } from "lucide-react";
 import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
@@ -70,6 +71,7 @@ export default function ApplicationStatus() {
 
   return (
     <Layout>
+      <div className={`${WORLD} py-4 sm:py-10`}>
       <div className="container max-w-2xl px-4 py-8">
         {state === "loading" && (
           <div className="flex justify-center py-16">
@@ -80,11 +82,11 @@ export default function ApplicationStatus() {
         {state === "ready" && s && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
-              <h1 className="font-display text-3xl font-bold text-foreground">{PANEL_WORDS.statusHeading}</h1>
+              <h1 className={H1}>{PANEL_WORDS.statusHeading}</h1>
               {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
-            <section aria-label={PANEL_WORDS.statusNext} className="sel-rise rounded-2xl border-2 border-notice bg-card p-5 shadow-sm">
-              <p className="text-sm font-semibold text-teal-deep">{s.stepWords}</p>
+            <section aria-label={PANEL_WORDS.statusNext} className={`sel-rise ${CARD_FEATURED}`}>
+              <p className={EYEBROW}>{s.stepWords}</p>
               <p className="mt-1 text-lg text-foreground">
                 <span className="font-semibold">{PANEL_WORDS.statusNext}: </span>
                 {s.actsNext}
@@ -123,13 +125,13 @@ export default function ApplicationStatus() {
               ))}
             </ol>
             {s.booking && (
-              <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-2xl border border-border bg-card p-4">
+              <section aria-label={PANEL_WORDS.bookingLabel} className={TILE}>
                 <p className="text-foreground">{s.booking}</p>
                 {s.mode === "block" && (
                   <button
                     type="button"
                     onClick={() => void split()}
-                    className="jw-btn mt-3 inline-flex min-h-[44px] items-center rounded-full border-2 border-primary bg-card px-5 text-sm font-semibold text-foreground hover:bg-muted"
+                    className={`mt-3 ${BTN_SECONDARY}`}
                   >
                     {PANEL_WORDS.splitAsk}
                   </button>
@@ -140,6 +142,7 @@ export default function ApplicationStatus() {
             <p className="text-sm text-muted-foreground">{PANEL_WORDS.statusPrivate}</p>
           </article>
         )}
+      </div>
       </div>
     </Layout>
   );

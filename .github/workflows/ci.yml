@@ -791,6 +791,14 @@ jobs:
         # compiled in and no Admin setting reaches it; the per-file count only falls.
         run: node scripts/check-tailwind-palette.mjs
 
+      - name: Design rule (the joining journey draws in the profile's look)
+        # docs/DESIGN_RULE.md. A hard rule on a declared list of files, not a
+        # ratchet: the sheet's world on every journey page, semantic colour
+        # tokens, the display face, three corner sizes and one shadow.
+        # `--report` prints what it would flag elsewhere. Its self-test runs
+        # with the others.
+        run: node scripts/check-design-rule.mjs
+
       - name: Generated docs are main's, not this pull request's
         # Main regenerates GOVERNANCE.md, governance-lineage.md, TOKENS.md, VARIABLES.md,
         # MODULES.md, CAPABILITIES.md, the generated regions of ECONOMICS.md and en.po after

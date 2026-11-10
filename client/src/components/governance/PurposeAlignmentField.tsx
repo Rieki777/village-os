@@ -76,7 +76,7 @@ export default function PurposeAlignmentField({
 
   if (!hasStatement) return null;
   return (
-    <label className="flex flex-col gap-1 basis-full text-xs text-stone-600">
+    <label className="flex flex-col gap-1 basis-full text-xs text-muted-foreground">
       <span>
         How does this serve the village's governing purpose? The whole roll reads this
         beside your proposal.
@@ -86,7 +86,7 @@ export default function PurposeAlignmentField({
         maxLength={2000}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="max-w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm text-stone-800"
+        className="max-w-full rounded-lg border border-border px-2 py-1.5 text-sm text-foreground"
         placeholder="This raises the quorum on rule changes, which serves the part of the purpose about agreements the members write and can change themselves."
       />
     </label>

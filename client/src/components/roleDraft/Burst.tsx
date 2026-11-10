@@ -31,7 +31,7 @@ export default function Burst({ play }: { play: number }) {
         return (
           <span
             key={i}
-            className={`sel-spark absolute left-1/2 top-1/2 h-2 w-3 rounded-[0_100%_0_100%] ${i % 3 === 0 ? "bg-notice" : "bg-primary"}`}
+            className={`sel-spark absolute left-1/2 top-1/2 h-2 w-3 rounded-tr-full rounded-bl-full ${i % 3 === 0 ? "bg-notice" : "bg-open"}`}
             style={{
               ["--sx" as string]: `${Math.round(Math.cos(a) * d)}px`,
               ["--sy" as string]: `${Math.round(Math.sin(a) * d)}px`,

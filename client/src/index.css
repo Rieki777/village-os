@@ -1954,10 +1954,11 @@ html:has(#sera-changes [data-sera-strip-on]) {
   font-size: 0.8rem;
   font-weight: 700;
 }
+/* A passed stone is a gold ring, the way the sheet draws what is held (its stat tiles); the stone you stand on is filled gold. */
 .jw-stone[data-state="done"] .jw-stone-face {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--muted);
+  border-color: var(--jw-gold);
+  color: var(--jw-gold);
 }
 .jw-stone[data-state="here"] .jw-stone-face {
   background: var(--jw-gold);
@@ -1997,7 +1998,7 @@ html:has(#sera-changes [data-sera-strip-on]) {
 .jw-trail-v > li[data-path-state="done"]::before,
 .jw-trail-v > li[data-path-state="done"]::after,
 .jw-trail-v > li[data-path-state="now"]::before {
-  background: var(--primary);
+  background: var(--jw-gold);
   transform-origin: top;
 }
 .jw-trail-v .jw-stone-face {

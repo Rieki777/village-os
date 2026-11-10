@@ -32,6 +32,7 @@ import { Link, useParams } from "wouter";
 import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
 import { doorBackOf } from "@shared/seatApplyLinks";
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, FIELD as LOOK_FIELD, WORLD } from "@/components/journey/look";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
@@ -41,10 +42,9 @@ import { HoursField, NextForRoles, Practicalities, browserTimeZone, type Practic
 /** The goals are asked on each role card now (guide v2); the global pick is left empty. */
 const NO_GLOBAL_SERVES: Record<string, string> = {};
 
-const FIELD =
-  "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-const BUTTON =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 font-semibold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+// The sheet's field and main button (docs/DESIGN_RULE.md, components/journey/look.ts).
+const FIELD = `${LOOK_FIELD} py-3`;
+const BUTTON = `${BTN_PRIMARY} py-3`;
 
 interface FormRole {
   id: string;
@@ -68,7 +68,7 @@ type FormState =
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <Layout>
-      <div className="min-h-screen bg-background py-16">
+      <div className={`${WORLD} py-12 sm:py-16`}>
         <div className="container max-w-2xl">{children}</div>
       </div>
     </Layout>
@@ -380,11 +380,11 @@ export default function ProposeARole() {
                 {roles.map((r) => {
                   const on = r.id in picked;
                   return (
-                    <div key={r.id} className={`rounded-xl border p-4 ${on ? "border-primary bg-primary/5" : "border-border"}`} data-role={r.id}>
+                    <div key={r.id} className={`rounded-xl border p-4 ${on ? "border-notice bg-notice/10" : "border-border"}`} data-role={r.id}>
                       <label className="flex min-h-11 cursor-pointer items-start gap-3">
                         <input
                           type="checkbox"
-                          className="mt-1 size-5 shrink-0 accent-primary"
+                          className="mt-1 size-5 shrink-0 accent-notice"
                           checked={on}
                           disabled={!on && count >= OPEN_PROPOSAL_MAX_ROLES}
                           onChange={() => toggle(r.id)}
