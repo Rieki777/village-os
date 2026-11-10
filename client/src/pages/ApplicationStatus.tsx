@@ -52,7 +52,7 @@ interface ServedOffer {
 type Pick = { choice: "accept" | "talk"; note: string };
 
 /** The terms we changed: each one beside the applicant's own answer, with "I accept" and "Let's talk" again. */
-function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer; answerUrl: string; onSaved: (o: ServedOffer | null) => void }) {
+export function ChangedTerms({ offer, answerUrl, onSaved }: { offer: ServedOffer; answerUrl: string; onSaved: (o: ServedOffer | null) => void }) {
   const { t } = useLingui();
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [busy, setBusy] = useState(false);

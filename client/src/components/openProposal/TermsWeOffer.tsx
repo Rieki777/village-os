@@ -97,7 +97,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
       <p className="mt-1 text-sm text-muted-foreground">
         {mayEdit
           ? t`Word any setting for this proposal. Each save is a new revision, the applicant sees what changed and answers it, and the history stays here.`
-          : t`The terms as they stand for this proposal. Whoever seats this role can change them.`}
+          : t`The terms as they stand for this proposal. Whoever holds the power to fill roles can change them.`}
       </p>
 
       <ul className="mt-4 grid gap-3">
@@ -107,7 +107,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
               <h3 className="font-semibold text-foreground">{r.label}</h3>
               <span className="flex flex-wrap gap-1.5">
                 {r.theirs && <span className={CHIP}>{t`They said: ${choiceWords(r.theirs.choice)}`}</span>}
-                {(r.changed || r.state === "talk") && <span className={CHIP} data-term-state={r.state}>{stateWords(r.state)}</span>}
+                {r.changed && <span className={CHIP} data-term-state={r.state}>{stateWords(r.state)}</span>}
               </span>
             </div>
             <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">{t`The role suggests`}</p>
@@ -135,7 +135,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
             <span className={CHIP}>{offer.theirCommitment == null ? t`They have not chosen` : t`They chose ${offer.theirCommitment}%`}</span>
           </div>
           {offer.roleCommitment != null && <p className="mt-2 text-sm text-foreground">{t`The role asks ${offer.roleCommitment}%`}</p>}
-          <p className="mt-1 text-sm text-muted-foreground">{t`Energy and attention, never hours. We agree it together.`}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t`Energy and attention. We agree it together.`}</p>
           {mayEdit ? (
             <label className="mt-3 block">
               <span className="text-sm font-semibold text-foreground">{t`The commitment we'd agree on`}</span>
