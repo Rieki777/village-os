@@ -92,7 +92,7 @@ describe("focus follows the step (red team U10)", () => {
 });
 
 describe("no error before any input (red team U11)", () => {
-  const PICK = "Pick the role you are applying for.";
+  const PICK = "Pick the role you are proposing for.";
   const SHORT_DELIVERABLES = /^Your list of deliverables needs at least 40 characters/;
   const SHORT_WHY = /^"Why you" needs at least 30 characters/;
 
