@@ -9,6 +9,8 @@
  * never carries it.
  */
 import Layout from "@/components/Layout";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { authToken } from "@/lib/gameApi";
 import { Bug, Check, Lightbulb, Loader2 } from "lucide-react";
@@ -19,6 +21,7 @@ const headers = (): Record<string, string> => {
 };
 
 export default function Feedback() {
+  const { t } = useLingui();
   const [cfg, setCfg] = useState<{ relayOn: boolean; villageName: string } | null>(null);
   const [kind, setKind] = useState<"bug" | "idea">("bug");
   const [title, setTitle] = useState("");
@@ -131,6 +134,14 @@ export default function Feedback() {
                 <label htmlFor="feedback-detail" className="block text-xs font-medium text-muted-foreground mb-1.5">
                   {kind === "bug" ? "What did you do, what did you expect, what happened instead?" : "How would it work, and who does it serve?"}
                 </label>
+                <VoiceArea
+                  value={detail}
+                  onValue={setDetail}
+                  talk={{
+                    label: t({ message: "The details", context: "voice field label: feedback detail" }),
+                    purpose: t({ message: "For a bug: what you did, what you expected and what happened. For an idea: how it would work and who it serves.", context: "voice field purpose: feedback detail" }),
+                  }}
+                >
                 <textarea
                   id="feedback-detail"
                   value={detail}
@@ -139,6 +150,7 @@ export default function Feedback() {
                   maxLength={8000}
                   className="w-full text-base border border-border rounded-lg px-3 py-2.5 bg-background"
                 />
+                </VoiceArea>
               </div>
 
               {/* Honeypot — humans never see it, bots can't resist it. */}

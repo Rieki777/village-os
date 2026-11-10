@@ -32,6 +32,7 @@
  * of them changeable by the village that had to live with it.
  */
 import { useEffect, useState } from "react";
+import VoiceArea from "@/components/voice/VoiceArea";
 import { m } from "framer-motion";
 import { Heart } from "lucide-react";
 
@@ -292,15 +293,17 @@ export default function TheVessel({
           <span className="mb-1 block text-sm font-medium text-card-foreground">
             What for{requireMessage === false ? " (optional)" : ""}
           </span>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            /* The village's own setting, never a hardcoded true. */
-            required={requireMessage === true}
-            rows={2}
-            placeholder="What are you thanking them for?"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-card-foreground placeholder:text-muted-foreground"
-          />
+          <VoiceArea value={message} onValue={setMessage}>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              /* The village's own setting, never a hardcoded true. */
+              required={requireMessage === true}
+              rows={2}
+              placeholder="What are you thanking them for?"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-card-foreground placeholder:text-muted-foreground"
+            />
+          </VoiceArea>
         </label>
         <button
           type="submit"

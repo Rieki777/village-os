@@ -46,6 +46,7 @@ import {
 } from "@/components/seasonPlans/SeasonGoalsFields";
 import { AIM_MAX, applyHref, civilDayWords, PLAN_MEASURES_MAX } from "@shared/seasonPlans";
 import { questHint, type MeasureSuggestion } from "@shared/seasonPartSuggestions";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 export const MY_SEASON_WORDS = {
   title: "Your season",
@@ -498,6 +499,7 @@ export default function MySeason() {
                   <p id="ms-aim-help" className="text-sm text-stone-600">
                     {MY_SEASON_WORDS.aimHelp}
                   </p>
+                  <VoiceArea value={aim} onValue={setAim} talk={{ label: MY_SEASON_WORDS.aim, purpose: MY_SEASON_WORDS.aimHelp }}>
                   <textarea
                     id="ms-aim"
                     aria-describedby="ms-aim-help"
@@ -507,6 +509,7 @@ export default function MySeason() {
                     onChange={(e) => setAim(e.target.value)}
                     className={`mt-1 ${inputClass}`}
                   />
+                  </VoiceArea>
                   <p className="text-right text-xs text-stone-600">
                     {aim.length} / {AIM_MAX}
                   </p>

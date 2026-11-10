@@ -36,6 +36,8 @@ import { Link } from "wouter";
 import { CheckCircle2, CircleMinus, GitBranch, Hand, MessageSquareWarning } from "lucide-react";
 import InfoTip from "@/components/InfoTip";
 import { fetchObjectionLineage, type BallotObjection, type ObjectionLineage } from "./governanceApi";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 
 /**
  * What each state of an objection means, and its authority is the server's
@@ -122,6 +124,7 @@ export default function ObjectionPanel({
   onFile: (text: string) => Promise<void>;
   onRule: (objectionId: string, ruling: string, note: string) => Promise<void>;
 }) {
+  const { t } = useLingui();
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [rulingFor, setRulingFor] = useState<string | null>(null);
@@ -281,6 +284,12 @@ export default function ObjectionPanel({
                         <label htmlFor={`note-${o.id}`} className="block text-sm font-medium text-stone-800">
                           Your reasoning, for the record
                         </label>
+                        <VoiceArea value={note} onValue={setNote}
+                          talk={{
+                            label: t({ message: "Your reasoning", context: "voice field label: objection ruling note" }),
+                            purpose: t({ message: "Why you ruled this objection the way you did, for the record.", context: "voice field purpose: objection ruling note" }),
+                          }}
+                        >
                         <textarea
                           id={`note-${o.id}`}
                           rows={3}
@@ -289,6 +298,7 @@ export default function ObjectionPanel({
                           onChange={(e) => setNote(e.target.value)}
                           className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
                         />
+                        </VoiceArea>
                         <div className="flex gap-2">
                           <button
                             type="button"
@@ -337,6 +347,12 @@ export default function ObjectionPanel({
             Naming a risk early is one of the more useful things anyone does here. You do not have to vote no to raise
             one, and raising one is not a vote.
           </p>
+          <VoiceArea value={text} onValue={setText}
+            talk={{
+              label: t({ message: "Your objection", context: "voice field label: raise an objection" }),
+              purpose: t({ message: "A risk or concern you see in this proposal and what could go wrong.", context: "voice field purpose: raise an objection" }),
+            }}
+          >
           <textarea
             id="new-objection"
             rows={3}
@@ -346,6 +362,7 @@ export default function ObjectionPanel({
             placeholder="If we do this in the wet season the track will not carry the load, and we lose the deliveries."
             className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
           />
+          </VoiceArea>
           <button
             type="button"
             disabled={busy}

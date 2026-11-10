@@ -380,6 +380,55 @@ export interface GuideReply {
   nextQuestion: string;
   /** A distilled version for "did I get that right?", or empty. */
   reflection: string;
+  /** Who answered: the village guide or Sera, by the member's own choice (shared/guideChoice.ts). */
+  guide?: { id: "village" | "saberra"; name: string };
+  /**
+   * Small next steps the guide noticed, for the member to add to their list
+   * with one tap (Rye, 2026-11-09: "Sera in the journal ... updating tasks,
+   * helping with tasks"). The guide never adds one itself.
+   */
+  suggestedTasks?: string[];
+  /** Open tasks of the member's own the sitting says are finished, for one tap to mark done. */
+  doneTasks?: { id: string; title: string }[];
+}
+
+/** At most this many task suggestions in one reply, so a sitting never turns into a to-do list. */
+export const JOURNAL_TASK_SUGGESTIONS_MAX = 3;
+/** A suggested task title, in characters. */
+export const JOURNAL_TASK_TITLE_MAX = 120;
+
+/**
+ * The guide's task suggestions, cleaned: strings only, one line each, clipped,
+ * deduplicated against each other and against what the member already has
+ * open, at most JOURNAL_TASK_SUGGESTIONS_MAX.
+ */
+export function cleanTaskSuggestions(raw: unknown, openTitles: readonly string[]): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set(openTitles.map((t) => t.trim().toLowerCase()));
+  const out: string[] = [];
+  for (const r of raw) {
+    const text = typeof r === "string" ? r : r && typeof r === "object" && typeof (r as any).title === "string" ? (r as any).title : "";
+    const title = text.replace(/\s+/g, " ").trim().slice(0, JOURNAL_TASK_TITLE_MAX);
+    if (!title || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push(title);
+    if (out.length >= JOURNAL_TASK_SUGGESTIONS_MAX) break;
+  }
+  return out;
+}
+
+/** The ids the guide says are done, kept only when they are this member's own open tasks. */
+export function cleanDoneTasks(raw: unknown, open: readonly { id: string; title: string }[]): { id: string; title: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const byId = new Map(open.map((t) => [t.id, t]));
+  const out: { id: string; title: string }[] = [];
+  for (const r of raw) {
+    const id = typeof r === "string" ? r : r && typeof r === "object" ? String((r as any).id ?? "") : "";
+    const hit = byId.get(id);
+    if (hit && !out.some((o) => o.id === id)) out.push({ id: hit.id, title: hit.title });
+    if (out.length >= JOURNAL_TASK_SUGGESTIONS_MAX) break;
+  }
+  return out;
 }
 
 // ── Feedback ─────────────────────────────────────────────────────────────────

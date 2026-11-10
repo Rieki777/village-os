@@ -21,6 +21,11 @@ import {
 } from "@shared/journal";
 import { askGuide, isAssistantUnavailable, problemText } from "@/lib/journalApi";
 import GrowingTextarea from "./GrowingTextarea";
+import GuideTasks from "./GuideTasks";
+import MyGuide, { useGuideState } from "@/components/guide/MyGuide";
+import { journalGuide, type GuideState } from "@shared/guideChoice";
+import { saveGuide } from "@/lib/guideApi";
+import { useLingui } from "@lingui/react/macro";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "./ui";
 
 export const GUIDE_RESTING = "The guide is resting. Your journal works without it.";
@@ -71,6 +76,8 @@ export default function GuidePanel({
   const [editing, setEditing] = useState<string | null>(null);
   const [kept, setKept] = useState(false);
   const inputId = "journal-guide-input";
+  // Who answers: the member's own choice, the village guide or Sera (shared/guideChoice.ts).
+  const [guideState, setGuideState] = useGuideState();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Opening puts the cursor in the box; Escape closes.
@@ -143,6 +150,14 @@ export default function GuidePanel({
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
+          <MyGuide state={guideState ? journalGuide(guideState) : null} onChange={setGuideState} />
+          {guideState && !journalGuide(guideState).answering && journalGuide(guideState).note && (
+            <JournalChooseSera
+              note={journalGuide(guideState).note!}
+              name={guideState.options.find((o) => o.id === "saberra")?.name ?? ""}
+              onChosen={setGuideState}
+            />
+          )}
           {messages.length === 0 && (
             <p className={HINT}>
               Ask anything about what you have written, or let the guide reflect it back to you. It asks; it never
@@ -211,6 +226,14 @@ export default function GuidePanel({
               )}
             </div>
           )}
+          {latest && ((latest.suggestedTasks?.length ?? 0) > 0 || (latest.doneTasks?.length ?? 0) > 0) && (
+            <GuideTasks
+              key={messages.length}
+              suggested={latest.suggestedTasks ?? []}
+              done={latest.doneTasks ?? []}
+              guideName={latest.guide?.name ?? guideState?.options.find((o) => o.id === guideState.answering)?.name ?? "The guide"}
+            />
+          )}
           {kept && <p role="status" className="text-sm text-open">Kept as your reflection. You can change it when you read the page back.</p>}
 
           {problem && (
@@ -250,5 +273,29 @@ export default function GuidePanel({
         </form>
       </div>
     </>
+  );
+}
+
+/** Only the outside agent can answer here, and the member has not chosen it: one tap chooses it, saved like the picker saves. */
+function JournalChooseSera({ note, name, onChosen }: { note: string; name: string; onChosen: (s: GuideState) => void }) {
+  const { t } = useLingui();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+      <p className="text-foreground">{note}</p>
+      <button
+        type="button"
+        disabled={busy}
+        className={`${BTN_SECONDARY} mt-2`}
+        onClick={async () => {
+          setBusy(true);
+          const next = await saveGuide("saberra");
+          setBusy(false);
+          if (next) onChosen(next);
+        }}
+      >
+        {t({ message: `Talk to ${name} in my journal`, context: "journal guide: choose the outside agent here" })}
+      </button>
+    </div>
   );
 }

@@ -17,6 +17,8 @@ import { ExampleChip, ExamplesBanner, forgetExamplesCache } from "@/components/E
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
 import { toast } from "sonner";
 import { REPORT_FAILED, reportFeedback } from "@/lib/reportFeedback";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -38,6 +40,7 @@ export default function Forum() {
 }
 
 function ThreadList() {
+  const { t } = useLingui();
   const { user } = useAuth();
   const feedModule = useModule("feed");
   const [categories, setCategories] = useState<any[]>([]);
@@ -145,9 +148,16 @@ function ThreadList() {
               </div>
               <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                 placeholder="Title" className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+              <VoiceArea value={draft.body} onValue={(v) => setDraft((d) => ({ ...d, body: v }))}
+                talk={{
+                  label: t({ message: "Your post", context: "voice field label: new forum post" }),
+                  purpose: t({ message: "A post for the village forum: what you want to say, ask or propose, in your own words.", context: "voice field purpose: new forum post" }),
+                }}
+              >
               <textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={4}
                 placeholder="Say it. Mention people with @handle."
                 className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+              </VoiceArea>
               {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
               <button onClick={post} disabled={busy || !draft.body.trim() || !draft.category}
                 className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40">
@@ -436,12 +446,14 @@ function ThreadView({ id }: { id: string }) {
                 permanent — see the PATCH route's rule 2. */}
             {editing === "thread" ? (
               <div className="space-y-2">
+                <VoiceArea value={draft} onValue={setDraft}>
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   rows={6}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
                 />
+                </VoiceArea>
                 <div className="flex gap-2">
                   <button
                     onClick={() => saveEdit("threads", thread.id)}
@@ -537,12 +549,14 @@ function ThreadView({ id }: { id: string }) {
                 </p>
                 {editing === r.id ? (
                   <div className="space-y-2">
+                    <VoiceArea value={draft} onValue={setDraft}>
                     <textarea
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={4}
                       className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
                     />
+                    </VoiceArea>
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveEdit("replies", r.id)}
@@ -582,9 +596,11 @@ function ThreadView({ id }: { id: string }) {
                 </div>
                 {replyingTo === r.id && (
                   <div className="mt-2 space-y-2 border-t border-border pt-2">
+                    <VoiceArea value={reply} onValue={setReply}>
                     <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2}
                       placeholder={`Answering ${r.author.name}…`}
                       className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+                    </VoiceArea>
                     <button
                       onClick={() => act(`/api/forum/threads/${id}/replies`, { body: reply, parentReplyId: r.id }, "reply")}
                       disabled={busy || !reply.trim()}
@@ -603,9 +619,11 @@ function ThreadView({ id }: { id: string }) {
               so both on screen would mirror each other's typing. */}
           {user && !thread.lockedAt && !isExample && !replyingTo && (
             <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+              <VoiceArea value={reply} onValue={setReply}>
               <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3}
                 placeholder="Reply… mention people with @handle."
                 className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+              </VoiceArea>
               <button onClick={() => act(`/api/forum/threads/${id}/replies`, { body: reply }, "reply")} disabled={busy || !reply.trim()}
                 className="text-sm bg-teal-deep text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40">
                 Reply
@@ -620,9 +638,11 @@ function ThreadView({ id }: { id: string }) {
           {user && thread.kind === "decision" && !decided && !isExample && (
             <div className="bg-card border border-purple-200 rounded-xl p-4 space-y-2">
               <p className="text-xs font-semibold text-purple-700 flex items-center gap-1.5"><Gavel className="w-3.5 h-3.5" /> Record the outcome</p>
+              <VoiceArea value={outcome} onValue={setOutcome}>
               <textarea value={outcome} onChange={(e) => setOutcome(e.target.value)} rows={2}
                 placeholder="What was decided, and by what process?"
                 className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+              </VoiceArea>
               <button onClick={() => act(`/api/forum/threads/${id}/decide`, { outcome }, "decide")} disabled={busy || !outcome.trim()}
                 className="text-sm bg-purple-700 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40">
                 Record decision

@@ -31,6 +31,7 @@ import {
   type TaskStatus,
 } from "@shared/moonRecap";
 import { CHIP, ERROR, INPUT, LABEL, MUTED, SMALL_BTN, SMALL_BTN_ON } from "./moonUi";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 export interface ItemCardProps {
   item: RecapItem;
@@ -91,6 +92,8 @@ export default function ItemCard({ item, roles, seasonGoals, ownGoals, villageRo
 
       <label className={LABEL} htmlFor={`${id}-text`}>
         {MY_MOON_WORDS.itemWords}
+        {/* This box saves on blur; spoken words arrive without a blur, so they save as they land. */}
+        <VoiceArea value={text} onValue={(v) => { setText(v); saveIfChanged("text", v, item.text); }} disabled={!editable}>
         <textarea
           id={`${id}-text`}
           value={text}
@@ -100,6 +103,7 @@ export default function ItemCard({ item, roles, seasonGoals, ownGoals, villageRo
           onBlur={() => saveIfChanged("text", text, item.text)}
           className={INPUT}
         />
+        </VoiceArea>
       </label>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label={ITEM_STATE_WORDS.kept}>

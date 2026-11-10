@@ -72,7 +72,7 @@ export default function GrowingText({
   max,
   minRows = 2,
   singleLine = false,
-  mic = false,
+  mic,
   id,
   autoFocus = false,
   disabled = false,
@@ -152,7 +152,9 @@ export default function GrowingText({
     </div>
   );
 
-  if (!mic) return box;
+  // A long box gets the mic unless the page says otherwise (Rye, 2026-11-09:
+  // "whenever long text is about to be used ... offer a mic option").
+  if (!(mic ?? !singleLine)) return box;
   return (
     <div className="flex items-start gap-2">
       {box}

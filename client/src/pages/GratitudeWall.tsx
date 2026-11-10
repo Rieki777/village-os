@@ -31,6 +31,8 @@
  * order to play are in the send panel, below, where they are labelled.
  */
 import Layout from "@/components/Layout";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 import { useAuth } from "@/contexts/AuthContext";
 import { gameFetch, fetchGameMe, GameMe } from "@/lib/gameApi";
 import { useTokenName } from "@/hooks/useTokenNames";
@@ -66,6 +68,7 @@ function prefilledTo(): string {
 }
 
 export default function GratitudeWall() {
+  const { t } = useLingui();
   const { user } = useAuth();
   const [wall, setWall] = useState<WallEntry[]>([]);
   // undefined = not loaded (or the load failed); null = loaded, no game state.
@@ -325,6 +328,14 @@ export default function GratitudeWall() {
                 optimistic client costs a round trip and a sentence, while a
                 pessimistic one blocks a legitimate send outright.
               */}
+              <VoiceArea
+                value={form.message}
+                onValue={(v) => setForm((f) => ({ ...f, message: v }))}
+                talk={{
+                  label: t({ message: "Your thank you", context: "voice field label: the thank-you note on the wall" }),
+                  purpose: t({ message: "A short note thanking someone for what they did and what it meant to you.", context: "voice field purpose: the thank-you note on the wall" }),
+                }}
+              >
               <textarea
                 required={requireMessage === true}
                 value={form.message}
@@ -333,6 +344,7 @@ export default function GratitudeWall() {
                 rows={2}
                 className="mb-3 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-ring"
               />
+              </VoiceArea>
               {feedback && (
                 <p
                   // Announced, not merely displayed: the result of a submit is

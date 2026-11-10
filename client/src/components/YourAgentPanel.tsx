@@ -13,6 +13,7 @@
  * secret anywhere but the state that shows it once; the panel is the only
  * place a member ever sees the value, and closing the reveal is the end of it.
  */
+import VoiceArea from "@/components/voice/VoiceArea";
 import { useEffect, useState } from "react";
 import { Bot, Copy, KeyRound, ShieldCheck, Trash2, Webhook } from "lucide-react";
 import { gameFetch } from "@/lib/gameApi";
@@ -529,16 +530,25 @@ export default function YourAgentPanel() {
         <Card title="About me for my agent" icon={<Bot className="w-4 h-4 text-notice" />}>
           <p className="text-xs text-muted-foreground mb-2">A note your agent reads to serve you. Yours to write, yours to clear. You choose who else may read it.</p>
           <label htmlFor="agent-about" className="sr-only">About me for my agent</label>
-          <textarea
-            id="agent-about"
+          {/* The mic, for a box that saves on blur: spoken words save as they land. */}
+          <VoiceArea
             value={profile.aboutMe}
-            onChange={(e) => setProfile({ ...profile, aboutMe: e.target.value })}
-            onBlur={() => saveProfile({ aboutMe: profile.aboutMe })}
-            rows={3}
-            maxLength={2000}
-            placeholder="What you are here for, what you cook, when you are around, what to leave you out of."
-            className="w-full text-sm border border-border rounded-lg px-3 py-2 mb-2"
-          />
+            onValue={(v) => {
+              setProfile({ ...profile, aboutMe: v });
+              saveProfile({ aboutMe: v });
+            }}
+          >
+            <textarea
+              id="agent-about"
+              value={profile.aboutMe}
+              onChange={(e) => setProfile({ ...profile, aboutMe: e.target.value })}
+              onBlur={() => saveProfile({ aboutMe: profile.aboutMe })}
+              rows={3}
+              maxLength={2000}
+              placeholder="What you are here for, what you cook, when you are around, what to leave you out of."
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 mb-2"
+            />
+          </VoiceArea>
           <div className="space-y-1 mb-2">
             {(Object.keys(TIER_WORDS) as Profile["aboutTier"][]).map((tier) => (
               <label key={tier} className="flex items-start gap-2 text-xs text-card-foreground">

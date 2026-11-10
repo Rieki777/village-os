@@ -21,6 +21,7 @@ import { ArrowLeft, Check, Clock, GitPullRequest, MessageSquare } from "lucide-r
 import { headers, refusal, type ChangeRequestSummary } from "@/components/governance/changeRequestClient";
 import { authToken } from "@/lib/gameApi";
 import { PageLanguageBar } from "@/i18n/PageLanguageBar";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 type State = "gathering" | "in_review" | "voting" | "closed";
 
@@ -278,7 +279,9 @@ function ListPage() {
           </label>
           <label className="block text-sm font-medium text-stone-900">
             <Trans context="the reason for a change request">Why</Trans>
+            <VoiceArea value={why} onValue={setWhy}>
             <textarea value={why} onChange={(e) => setWhy(e.target.value)} maxLength={4000} rows={3} className={`${field} py-2`} />
+            </VoiceArea>
           </label>
           <button type="submit" className={primary} disabled={busy || !title.trim() || !why.trim()}>
             {busy ? t({ message: "Starting…", context: "starting a change request" }) : t({ message: "Start it", context: "start a change request" })}
@@ -427,7 +430,9 @@ function NoteItem({ n, cr, notes, act }: { n: Note; cr: ChangeRequest; notes: No
             {n.kind === "edit" ? (
               <input value={text} onChange={(e) => setText(e.target.value)} maxLength={280} className={field} />
             ) : (
+              <VoiceArea value={text} onValue={setText}>
               <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} rows={3} className={`${field} py-2`} />
+              </VoiceArea>
             )}
           </label>
           <div className="flex flex-wrap gap-2">
@@ -532,7 +537,9 @@ function ReviewForm({ cr, act }: { cr: ChangeRequest; act: Act }) {
               : kind === "edit"
                 ? t({ message: "Why (optional)", context: "label of a suggested edit's reason" })
                 : t({ message: "Your words", context: "label of a note box" })}
+            <VoiceArea value={body} onValue={setBody}>
             <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={3} className={`${field} py-2`} />
+            </VoiceArea>
           </label>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={primary} disabled={kind === "edit" ? position === "" || !to.trim() : !body.trim()}>
@@ -667,7 +674,9 @@ function DetailPage({ id }: { id: string }) {
             </label>
             <label className="block text-sm font-medium text-stone-900">
               <Trans context="the reason for a change request">Why</Trans>
+              <VoiceArea value={why} onValue={setWhy}>
               <textarea value={why} onChange={(e) => setWhy(e.target.value)} maxLength={4000} rows={4} className={`${field} py-2`} />
+              </VoiceArea>
             </label>
             <div className="flex flex-wrap gap-2">
               <button type="submit" className={primary}>

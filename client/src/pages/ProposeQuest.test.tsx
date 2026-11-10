@@ -14,7 +14,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: null }), useOptionalAuth: () => ({ user: null }) }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => null,
   fetchConfigCached: async () => ({ project: { name: "Sample Village" } }),

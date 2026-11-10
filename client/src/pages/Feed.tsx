@@ -15,6 +15,7 @@ import { Calendar, Heart, Megaphone, MessageCircle, Sparkles, Send } from "lucid
 import { Image } from "@/components/Image";
 import { ExampleChip, ExamplesBanner, forgetExamplesCache } from "@/components/ExamplesBanner";
 import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -147,9 +148,11 @@ export default function Feed() {
         <div className="container max-w-xl space-y-4">
           {user && data && (
             <div className="bg-card border border-border rounded-xl p-4 space-y-2">
+              <VoiceArea value={draft} onValue={setDraft}>
               <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2}
                 placeholder="Share a moment… mention people with @handle."
                 className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+              </VoiceArea>
               <div className="flex items-center justify-between">
                 {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : <span />}
                 <button onClick={post} disabled={!draft.trim()}

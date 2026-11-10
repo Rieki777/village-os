@@ -26,6 +26,7 @@
  * `/api/governance` mount in server/index.ts.
  */
 import type { Express } from "express";
+import { seraGuideAsk } from "../lib/seraGuideCall";
 import type { Pool } from "mysql2/promise";
 import type { AppDeps } from "../lib/appDeps";
 import { DEFAULT_ASSISTANT_MODEL, callAssistant, readReplyFields, type AssistantResult } from "../lib/assistant";
@@ -131,18 +132,19 @@ export function register(app: Express, deps: Deps): void {
     const card = writeRoleCard({ ...docFromBody(p.body, { words: ROLE_WORD_FIELDS, roles: ctx.card.roles, circles: ctx.card.circles, village: villageName() }), measures: [] });
     const brief = guideBrief(step, card, ctx, document, conversation);
 
-    // The outside agent has no guide call yet (server/lib/saberraGuide.ts), so
-    // it never answers here; `guideStateFor` already falls back to the village
-    // guide, with the note, for a member who chose it.
-    const villageOption = state.options.find((o) => o.id === "village");
-    if (state.answering !== "village" || !villageOption) {
+    // Whoever answers this member: the village guide, or Sera when they chose
+    // her and the connection can answer (server/lib/seraGuideCall.ts). The
+    // brief Sera reads is the same one the village guide reads, names swapped.
+    const answering = state.options.find((o) => o.id === state.answering);
+    const sera = state.answering === "saberra" ? seraGuideAsk() : null;
+    if (!answering || (state.answering === "saberra" && !sera)) {
       return res.status(503).json({ error: "The guide can't answer right now. Your words are safe, and you can carry on by hand." });
     }
 
     const call = await callAssistant({
       mode: "roleGuide",
       // The prompt's own form of the name: "You are your village guide" is not a sentence.
-      system: guideSystemPrompt(guidePromptName(villageGuideName()), villageName()),
+      system: guideSystemPrompt(sera ? answering.name : guidePromptName(villageGuideName()), villageName()),
       messages: [{ role: "user", content: "Read what the village knows and suggest my card." }],
       model: DEFAULT_ASSISTANT_MODEL,
       clientIp: clientIp(req),
@@ -151,6 +153,7 @@ export function register(app: Express, deps: Deps): void {
       userId: uid,
       prefetch: [{ key: "role.proposal", data: brief }],
       memberKey,
+      sera,
     });
     await noteUsage(pool, call, uid);
     if (!call.ok) return res.status(call.status).json({ error: call.error });
@@ -162,7 +165,7 @@ export function register(app: Express, deps: Deps): void {
     // The member's own words, names swapped, so a quoted source never prints a person's name either.
     const sources = sentencesOf(ctx.swap([document ?? "", ...conversation.filter((l) => l.from === "member").map((l) => l.text)].join("\n")));
     const answer: GuideAnswer = {
-      guide: { id: "village", name: villageOption.name },
+      guide: { id: answering.id, name: answering.name },
       note: state.note,
       suggestions: suggestionsFrom(step, p.body, reading.proposalBody, reading.problems, { roles: ctx.roles, swap: tidy }, sources),
       question: read?.question ? tidy(read.question).slice(0, QUESTION_MAX) || null : null,
