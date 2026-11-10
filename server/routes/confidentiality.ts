@@ -40,9 +40,10 @@ import { storedFileProblem } from "../lib/villageDocuments";
 import type { AppDeps } from "../lib/appDeps";
 import { alignConfidentiality, currentAgreement, holdsCurrentAgreement } from "../lib/confidentiality";
 import { confirmedUntil, confirmWithFor } from "../lib/identityConfirm";
-import { installRoleStartGate, makeRoleStartGate, roleStartDials } from "../lib/roleStartAgreements";
+import { installRoleStartGate, makeRoleStartGate, roleStartDials, stepHref, stepsBeforeStart, type StartStep } from "../lib/roleStartAgreements";
+import { seatNamesFor } from "../lib/alignmentSubjects";
 import { seasonSaved } from "../lib/seasonTurn";
-import { inApplicationTransaction } from "../repos/seatApplications";
+import { applicationsOfCandidates, inApplicationTransaction, seatingsEverHolding } from "../repos/seatApplications";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members" | "guardCapability"> & {
   /**
@@ -228,6 +229,37 @@ export function register(app: Express, deps: Deps): void {
     await attached.put({});
     holds.clear();
     res.json({ success: true, document: null });
+  });
+
+  /*
+   * THE STEPS BEFORE YOUR ROLE STARTS, ON YOUR OWN PROFILE (role journey L7).
+   * Every role of yours that was adopted and has not started, with the
+   * agreements it still waits on, the same answer the seating path gives. A
+   * new holder lands on their profile after sign-up, so this is where they are
+   * asked; the notice in the bell says the same thing. Yours alone: nobody
+   * reads another member's steps.
+   */
+  app.get("/api/profile/role-start-steps", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required" });
+    const pool = getPool();
+    const waiting = (await applicationsOfCandidates(pool, [String(user.id)])).filter((a) => a.status === "adopted" || a.status === "held-full");
+    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }> }> = [];
+    if (waiting.length) {
+      const conn = await pool.getConnection();
+      try {
+        for (const app of waiting) {
+          if ((await seatingsEverHolding(conn, app.id)) > 0) continue;
+          const steps = await stepsBeforeStart(conn, app, now());
+          if (!steps.length) continue;
+          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })) });
+        }
+      } finally {
+        conn.release();
+      }
+    }
+    res.json({ waiting: out });
   });
 
   app.post("/api/profile/confidentiality", async (req, res) => {

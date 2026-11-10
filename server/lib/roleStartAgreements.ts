@@ -39,15 +39,13 @@ import { carriesMoney, userParty } from "../../shared/alignments";
 import { civilDateKey } from "../../shared/lunar";
 import { MEMBERSHIP } from "../../shared/membershipLetter";
 import type { ServedAgreement } from "../../shared/confidentiality";
-import { applicationHref } from "../../shared/seatApplications";
 import { alignmentsOf, textsForParty } from "../repos/alignments";
 import type { StoredApplication } from "../repos/seatApplications";
 import { viewTexts } from "./alignmentSubjects";
 import { holdsCurrentAgreement } from "./confidentiality";
 
-/** The steps, in the order the holder meets them: the board's shipped order, confidentiality first. */
-export const START_STEPS = ["confidentiality", "membership", "terms"] as const;
-export type StartStep = (typeof START_STEPS)[number];
+import { START_STEPS, type StartStep } from "../../shared/roleStartWords";
+export { START_STEPS, type StartStep };
 
 export interface RoleStartDials {
   confidentiality: boolean;
@@ -129,29 +127,5 @@ export async function stepsBeforeStart(conn: PoolConnection, app: StoredApplicat
   return installed ? installed(conn, app, now) : [];
 }
 
-// ── Telling the holder ──────────────────────────────────────────────────────
-
-const COUNT = ["No steps", "One step", "Two steps", "Three steps"] as const;
-
-export const START_WORDS = {
-  title: (n: number) => `${COUNT[Math.min(n, 3)]} before your role starts`,
-  step: {
-    confidentiality: "Align with the village's confidentiality agreement.",
-    membership: "Align with the membership letter.",
-    terms: "Align with your role's terms, the agreed rate included.",
-  } satisfies Record<StartStep, string>,
-  after: "Your role starts within the hour after the last one. Aligning is the village's way of signing.",
-  noAgreement: "A role is waiting on the confidentiality agreement, and the village has not written it yet",
-} as const;
-
-/** Where each step is done. */
-export function stepHref(step: StartStep, app: Pick<StoredApplication, "id">): string {
-  if (step === "confidentiality") return "/aligned";
-  if (step === "membership") return "/love-letter";
-  return applicationHref(app.id);
-}
-
-/** The notice's words: the steps, one a line, then when the role starts. */
-export function stepsBody(steps: readonly StartStep[]): string {
-  return [...steps.map((s) => START_WORDS.step[s]), START_WORDS.after].join("\n");
-}
+// ── Telling the holder: the words live in shared/roleStartWords.ts, read by the profile too ──
+export { START_WORDS, stepHref, stepsBody } from "../../shared/roleStartWords";

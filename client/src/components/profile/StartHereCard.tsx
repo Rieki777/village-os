@@ -45,7 +45,7 @@ import { pageVarsFrom } from "@shared/pageContent/vars";
 import { articleFor } from "@shared/villageWord";
 import { useModule } from "@/modules/ModuleProvider";
 import { useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
-import { storyPageShown } from "@/lib/brochure";
+import { memberDoorShown } from "@/lib/brochure";
 
 /**
  * The rung whose rule is being admitted. The server names it `ADMISSION_RUNG`
@@ -213,8 +213,8 @@ export default function StartHereCard({ ownerId, me, signing, config, catalogue 
     // both facts the card waits for. Guessing either one is how a person who
     // has already signed is told to sign.
     if (signing === undefined || config === null) return null;
-    // The letter is a door only where the village serves its page.
-    const letterOn = storyPageShown(config, "/love-letter");
+    // The letter is a member's door: open to whoever reads their own profile, whatever the story switches say.
+    const letterOn = memberDoorShown(config, "/love-letter", true);
     const commitment = config.project?.commitmentName?.trim() ?? "";
     const letterDoor: Door = {
       href: "/love-letter",
