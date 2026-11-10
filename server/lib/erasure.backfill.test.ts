@@ -104,6 +104,7 @@ const GIVEN_TO_IT = [
   "investor-fact-words-after-tombstone",
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
+  "application-review-after-tombstone",
   "role-proposals-after-tombstone",
   "seat-journal-after-tombstone",
   "seat-claims-after-tombstone",
@@ -121,6 +122,7 @@ const GIVEN_TO_IT = [
   "reward-moments-after-tombstone",
   "budget-attribution-after-tombstone",
   "notebook-after-tombstone",
+  "ombuds-asks-after-tombstone",
   "companions-after-tombstone",
   "product-subscriptions-after-tombstone",
 ];

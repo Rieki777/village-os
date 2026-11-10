@@ -37,6 +37,8 @@
  * the suite skips (harness rule).
  */
 import { insertTask, setListOn } from "../repos/memberTasks";
+import { appendToConfigList, readConfigDocument } from "../repos/appConfigDocs";
+import { OMBUDS_ASKS_KEY } from "./conflictAgreement";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -527,6 +529,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "investor-fact-words-after-tombstone",
       "stay-notes-after-tombstone",
       "purchase-emails-after-tombstone",
+      "application-review-after-tombstone",
       "role-proposals-after-tombstone",
       "seat-journal-after-tombstone",
       "seat-claims-after-tombstone",
@@ -545,6 +548,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "reward-moments-after-tombstone",
       "budget-attribution-after-tombstone",
       "notebook-after-tombstone",
+      "ombuds-asks-after-tombstone",
       "companions-after-tombstone",
       "sera-answers-after-tombstone",
       "audit",
@@ -849,6 +853,25 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // The village's own pick is never a member's.
     expect(await resourcePicksFor(pool, VILLAGE_PICK)).toContain("governance-canvas");
     expect((await erasureRecord(pool, id))?.stepsDone).toContain("notebook-after-tombstone");
+  });
+
+  it("keeps every ombuds-door record and blanks only who asked, and a second run changes nothing (D10a)", async () => {
+    const id = "er-ombuds-1";
+    const target = await seedMember(id);
+    const mine = { id: "oa-mine", askedBy: id, askedAt: "2026-11-01T10:00:00.000Z", contactId: "oc-1", contactLabel: "Valley Mediation" };
+    const theirs = { id: "oa-theirs", askedBy: "er-ombuds-other", askedAt: "2026-11-02T10:00:00.000Z", contactId: "oc-2", contactLabel: "Ombuds" };
+    await appendToConfigList(pool, OMBUDS_ASKS_KEY, "asks", mine);
+    await appendToConfigList(pool, OMBUDS_ASKS_KEY, "asks", theirs);
+
+    await anonymizeMember(pool, target, "admin-1", deps());
+
+    const after = (await readConfigDocument<{ asks: any[] }>(pool, OMBUDS_ASKS_KEY))!.asks;
+    expect(after).toEqual([{ ...mine, askedBy: "" }, theirs]);
+    expect((await erasureRecord(pool, id))?.stepsDone).toContain("ombuds-asks-after-tombstone");
+
+    // Idempotent: a second sweep, or a resume, finds nobody left to blank.
+    await anonymizeMember(pool, target, "admin-1", deps());
+    expect((await readConfigDocument<{ asks: any[] }>(pool, OMBUDS_ASKS_KEY))!.asks).toEqual(after);
   });
 
   it("takes the member's own agent with them: inbox, queue, key, drafts, tokens, note and statements", async () => {

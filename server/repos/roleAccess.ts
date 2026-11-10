@@ -224,3 +224,32 @@ export async function renewSeating(pool: Pool, r: RenewalRow, nextEnds: Date, by
   );
   return true;
 }
+
+type Db = { query: Pool["query"] };
+
+/** Live seatings of a member, by id. */
+export async function liveAssignmentIdsOfUser(db: Db, userId: string): Promise<string[]> {
+  const [rows]: any = await (db as Pool).query("SELECT id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [userId]);
+  return (rows as any[]).map((r) => String(r.id));
+}
+
+/** Live seatings of a role held under one holder key, by id. */
+export async function liveAssignmentIdsForHolder(db: Db, orgRoleId: string, holderKey: string): Promise<string[]> {
+  const [rows]: any = await (db as Pool).query(
+    "SELECT id FROM org_role_assignments WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
+    [orgRoleId, holderKey],
+  );
+  return (rows as any[]).map((r) => String(r.id));
+}
+
+/** Roles a member holds now. */
+export async function liveRoleIdsOfUser(db: Db, userId: string): Promise<string[]> {
+  const [rows]: any = await (db as Pool).query("SELECT org_role_id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [userId]);
+  return (rows as any[]).map((r) => String(r.org_role_id));
+}
+
+/** Granting roles that have an open task. */
+export async function grantingRolesWithOpenTasks(db: Db): Promise<string[]> {
+  const [rows]: any = await (db as Pool).query("SELECT DISTINCT granting_role_id FROM role_access_tasks WHERE state = 'open' AND granting_role_id IS NOT NULL");
+  return (rows as any[]).map((r) => String(r.granting_role_id));
+}

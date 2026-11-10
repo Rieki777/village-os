@@ -14,8 +14,9 @@
  *
  * The admin palette's tokens only (theme audit, 9 Nov).
  */
+import type { ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
-import { CARD_LIMITS } from "@shared/openProposalCard";
+import { CARD_LIMITS, CARD_WINDOWS } from "@shared/openProposalCard";
 
 export interface RoleCardState {
   /** Outcome text -> target. */
@@ -145,19 +146,32 @@ export function SeasonServes({
   onHours,
   agreed,
   onAgreed,
+  membership,
 }: {
   goals: ReadonlyArray<{ id: string; text: string }>;
   serves: Record<string, string>;
   onServes: (next: Record<string, string>) => void;
   hours: string;
   onHours: (v: string) => void;
-  agreed: { loveLetter: boolean; nda: boolean };
-  onAgreed: (next: { loveLetter: boolean; nda: boolean }) => void;
+  agreed: { nda: boolean };
+  onAgreed: (next: { nda: boolean }) => void;
+  /**
+   * The membership alignment itself, made here when they apply
+   * (MembershipAtApplication.tsx, Rye's answer 8). There is no Love Letter
+   * tick: this is the agreement.
+   */
+  membership: ReactNode;
 }) {
   const { t } = useLingui();
   const full = Object.keys(serves).length >= CARD_LIMITS.serves;
   return (
     <div className="grid gap-5">
+      {/* Brief v3: a season with no goals yet says so, and never blocks applying. */}
+      {goals.length === 0 && (
+        <p className="rounded-lg bg-muted p-3 text-sm text-foreground" data-no-season-goals="">
+          {t`The village has not set its goals for this season yet. You can still apply: say in your aim what you would bring.`}
+        </p>
+      )}
       {goals.length > 0 && (
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-semibold text-card-foreground">
@@ -209,13 +223,10 @@ export function SeasonServes({
       </div>
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.loveLetter} onChange={(e) => onAgreed({ ...agreed, loveLetter: e.target.checked })} />
-          {t`I will sign the Love Letter, the village's membership agreement, before I am seated.`}
-        </label>
+        {membership}
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
           <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-primary" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
-          {t`Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records.`}
+          {t`Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts.`}
         </label>
       </fieldset>
     </div>
@@ -232,13 +243,20 @@ export function SeasonServes({
 export function CardSideBySide({
   roles,
   card,
+  membershipAligned = false,
 }: {
+  /** The applicant aligned with the membership letter, on the form or from their account (Rye's answer 8). */
+  membershipAligned?: boolean;
   roles: ReadonlyArray<{ id: string; name: string | null; accountabilities?: string[]; timeCommitment?: string | null }>;
   card: {
     roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: Array<{ quest: string; doneWhen: string }> }>;
     serves: Array<{ goalId: string; how: string; goal?: string }>;
     hours: string;
-    agreed: { loveLetter: boolean; nda: boolean };
+    agreed: { loveLetter?: boolean; nda: boolean };
+    timeZone?: string;
+    windows?: string[];
+    earliestStart?: string;
+    terms?: { choice: "accept" | "talk"; note: string };
   } | null;
 }) {
   const { t } = useLingui();
@@ -253,8 +271,14 @@ export function CardSideBySide({
     if (asks.length && !(mine?.moves ?? []).some((m) => asks.includes(m.text))) gaps.push(t`No outcome of ${roleName} picked`);
     if (!(mine?.firstMoon ?? []).length) gaps.push(t`No first-moon quest for ${roleName}`);
   }
+  if (card.terms?.choice === "talk") gaps.push(t`They want to talk about the terms`);
   if (!card.serves.length) gaps.push(t`No season goal served`);
-  if (!card.agreed.loveLetter || !card.agreed.nda) gaps.push(t`The agreements are not given`);
+  if (!membershipAligned) gaps.push(t`Not aligned with the membership letter`);
+  if (!card.agreed.nda) gaps.push(t`The confidentiality agreement is not promised`);
+  const tz = card.timeZone ?? "";
+  const start = card.earliestStart ?? "";
+  const windowList = (card.windows ?? []).join(", ");
+  const termsNote = card.terms?.note ?? "";
   return (
     <div className="grid gap-4">
       {roles.map((r) => {
@@ -327,10 +351,19 @@ export function CardSideBySide({
           <p className="mt-1 text-muted-foreground">{t({ message: "None picked.", context: "open proposal side by side goals" })}</p>
         )}
         {card.hours && <p className="mt-2 text-foreground">{t`Time they can give: ${card.hours}`}</p>}
+        {card.timeZone && <p className="mt-1 text-foreground">{t({ message: `Time zone: ${tz}`, context: "open proposal side by side" })}</p>}
+        {card.earliestStart && <p className="mt-1 text-foreground">{t({ message: `Earliest start: ${start}`, context: "open proposal side by side" })}</p>}
+        {card.windows && card.windows.length > 0 && <p className="mt-1 text-foreground">{t({ message: `Usual times: ${windowList}`, context: "open proposal side by side" })}</p>}
+        {card.terms?.choice === "talk" ? (
+          <p className="mt-2 rounded-lg bg-muted p-2 font-semibold text-foreground" data-terms-flag="">
+            {t`Wants to talk about the terms: ${termsNote}`}
+          </p>
+        ) : card.terms?.choice === "accept" ? (
+          <p className="mt-1 text-foreground">{t`Accepts the terms on offer.`}</p>
+        ) : null}
         <p className="mt-2 text-foreground">
-          {card.agreed.loveLetter && card.agreed.nda
-            ? t`They agreed to sign the Love Letter before seating, and the NDA once approved.`
-            : t`They have not agreed to the Love Letter and the NDA.`}
+          {membershipAligned ? t`They aligned with the membership letter when they applied.` : t`They have not aligned with the membership letter yet.`}{" "}
+          {card.agreed.nda ? t`They will align with the confidentiality agreement once approved.` : t`They have not promised the confidentiality agreement.`}
         </p>
       </div>
       {gaps.length > 0 && (
@@ -338,6 +371,167 @@ export function CardSideBySide({
           {t({ message: "Gaps to talk through:", context: "open proposal side by side" })} {gaps.join("; ")}.
         </p>
       )}
+    </div>
+  );
+}
+
+/** The browser's own zone, or "" where the runtime cannot say. */
+export function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+/** Every zone the runtime knows, for the picker; empty on an older engine (the field then takes typing). */
+function knownZones(): string[] {
+  try {
+    const f = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+    return f ? f("timeZone") : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface Practical {
+  timeZone: string;
+  windows: string[];
+  earliestStart: string;
+  terms: { choice: "" | "accept" | "talk"; note: string };
+}
+
+/**
+ * FORM V2's PRACTICALITIES (role journey brief v2, 5.4): the time zone (from
+ * the browser, editable), the usual times they can meet, the earliest start,
+ * and the terms on offer: accepted, or a wish to talk about them, which every
+ * reviewer sees flagged. Conversations are booked across time zones, so the zone
+ * leads.
+ */
+export function Practicalities({ value, onChange }: { value: Practical; onChange: (next: Practical) => void }) {
+  const { t } = useLingui();
+  const zones = knownZones();
+  const windowWords: Record<(typeof CARD_WINDOWS)[number], string> = {
+    "weekday-mornings": t({ message: "Weekday mornings", context: "open proposal card window" }),
+    "weekday-afternoons": t({ message: "Weekday afternoons", context: "open proposal card window" }),
+    "weekday-evenings": t({ message: "Weekday evenings", context: "open proposal card window" }),
+    "weekend-mornings": t({ message: "Weekend mornings", context: "open proposal card window" }),
+    "weekend-afternoons": t({ message: "Weekend afternoons", context: "open proposal card window" }),
+    "weekend-evenings": t({ message: "Weekend evenings", context: "open proposal card window" }),
+  };
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="card-tz" className="mb-2 block text-sm font-semibold text-card-foreground">
+            {t({ message: "Your time zone", context: "open proposal card" })}
+          </label>
+          <input id="card-tz" list="card-tz-list" maxLength={CARD_LIMITS.timeZone} value={value.timeZone} onChange={(e) => onChange({ ...value, timeZone: e.target.value })} className={FIELD} />
+          {zones.length > 0 && (
+            <datalist id="card-tz-list">
+              {zones.map((z) => (
+                <option key={z} value={z} />
+              ))}
+            </datalist>
+          )}
+        </div>
+        <div>
+          <label htmlFor="card-start" className="mb-2 block text-sm font-semibold text-card-foreground">
+            {t`The earliest you could start (optional)`}
+          </label>
+          <input id="card-start" type="date" value={value.earliestStart} onChange={(e) => onChange({ ...value, earliestStart: e.target.value })} className={FIELD} />
+        </div>
+      </div>
+      <fieldset className="grid gap-1">
+        <legend className="mb-1 text-sm font-semibold text-card-foreground">{t`When you can usually meet (optional)`}</legend>
+        <div className="grid gap-1 sm:grid-cols-3">
+          {CARD_WINDOWS.map((w) => (
+            <label key={w} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={value.windows.includes(w)}
+                onChange={() => onChange({ ...value, windows: value.windows.includes(w) ? value.windows.filter((x) => x !== w) : [...value.windows, w] })}
+              />
+              {windowWords[w]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="grid gap-2">
+        <legend className="mb-1 text-sm font-semibold text-card-foreground">{t`The terms on offer`}</legend>
+        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "accept"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "accept" } })} />
+          {t`I accept the terms on offer.`}
+        </label>
+        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
+          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "talk"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "talk" } })} />
+          {t`I'd like to talk about the terms.`}
+        </label>
+        {value.terms.choice === "talk" && (
+          <textarea
+            aria-label={t`What you would like to talk about in the terms`}
+            required
+            rows={3}
+            maxLength={CARD_LIMITS.termsNote}
+            value={value.terms.note}
+            onChange={(e) => onChange({ ...value, terms: { ...value.terms, note: e.target.value } })}
+            className={FIELD}
+          />
+        )}
+        <p className="text-xs text-muted-foreground">{t`Everyone who reads your application sees a wish to talk about the terms.`}</p>
+      </fieldset>
+    </div>
+  );
+}
+
+/**
+ * WHAT HAPPENS NEXT, for the roles picked (brief v2, 13.6; Rye's answer 7):
+ * the conversations in order, with their length and which is the final approval,
+ * when a role carries them (the role-conversations lane fills `conversations`), and
+ * the booking link when the role has one (`bookingUrl`, PR-A).
+ */
+export function NextForRoles({
+  roles,
+}: {
+  roles: ReadonlyArray<{ id: string; name: string; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null }>;
+}) {
+  const { t } = useLingui();
+  const withSteps = roles.filter((r) => (r.conversations?.length ?? 0) > 0 || r.bookingUrl);
+  if (!withSteps.length) return null;
+  return (
+    <div className="mt-4 grid gap-3 text-left" data-next-for-roles="">
+      {withSteps.map((r) => {
+        const roleName = r.name;
+        const conversations = r.conversations ?? [];
+        return (
+          <div key={r.id} className="rounded-xl border border-border p-3">
+            <p className="text-sm font-semibold text-card-foreground">{t`For ${roleName}, if the village takes your application forward:`}</p>
+            {conversations.length > 0 && (
+              <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm text-foreground">
+                {conversations.map((i, n) => {
+                  const who = i.role;
+                  const minutes = i.minutes;
+                  return (
+                    <li key={n}>
+                      {i.finalApproval
+                        ? t({ message: `${minutes} minutes with ${who}, the final approval`, context: "open proposal conversations" })
+                        : t({ message: `${minutes} minutes with ${who}`, context: "open proposal conversations" })}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            {r.bookingUrl && /^https:\/\//.test(r.bookingUrl) ? (
+              <a href={r.bookingUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-foreground underline underline-offset-2">
+                {t`Book your first conversation`}
+              </a>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t`We'll write to you to find a time.`}</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

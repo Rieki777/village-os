@@ -69,6 +69,8 @@ import {
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
+import { CLOSING_POLICY } from "./closingPolicies";
 
 export interface SubjectThresholds {
   /**
@@ -521,6 +523,37 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     method: "custom",
     why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
   },
+  /*
+   * A VILLAGE AGREEMENT (shared/agreements.ts; D8 of the canvas follow-up,
+   * accepted 2026-11-09). An agreement binds the whole village, exactly as
+   * written, until its review date, so it is decided at the STRUCTURAL tier,
+   * the CONFLICT_AGREEMENT shape: the tier's floor is the village's own
+   * structural setting, raised to at least TIER_FLOORS.structural, and it
+   * moves with that setting. Each agreement is its own subject ref
+   * (`agreement:<id>` as the open key), so two can be weighed at once.
+   */
+  [AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    // `custom` for CONFLICT_AGREEMENT's reason: only it reads the unity a ballot freezes.
+    method: "custom",
+    why: "An agreement binds the whole village exactly as written until its review date, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * WHAT CLOSING THIS VILLAGE MEANS, ONCE THE GAME HAS STARTED (sweep decision
+   * D6, Rye 2026-11-06). The same consequence pen as the conflict agreement:
+   * before the Birthing the exit policy's writers adopt the words, after it a
+   * change is this ballot, at the structural tier, `custom` for the same
+   * reason as above.
+   */
+  [CLOSING_POLICY]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    method: "custom",
+    why: "This one changes what every member is promised if the village closes, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
   [ADMIN_EDIT]: {
     minUnityPct: 0,
     minQuorumPct: 0,
@@ -874,6 +907,9 @@ export function evaluationRulesFor(
  *   module_lifecycle  a part of the Game is turned on, opened or closed.
  *   brand_field       a name, a word or an image the village calls itself by.
  *   role              a role is declared, seated or handed back.
+ *   exit_terms        the exit policy's voluntary and involuntary terms.
+ *   exit_restorative  the care door, while Conflict Evolution is off.
+ *   matrix_row        a human row of the Decision Matrix is added, changed or removed.
  *
  * Each kind names the subject that prices it, so a bundle is priced at the
  * highest floor among its elements with no second table to keep in step.
@@ -889,6 +925,10 @@ export const CHANGE_ITEM_KINDS = [
   "module_lifecycle",
   "brand_field",
   "role",
+  // The consequence pen after the Birthing (canvas follow-up G.1 and G.2, server/lib/consequenceVote.ts).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ] as const;
 export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 
@@ -907,6 +947,9 @@ export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
   module_lifecycle: "mechanics",
   brand_field: "mechanics",
   role: "mechanics",
+  exit_terms: "mechanics",
+  exit_restorative: "mechanics",
+  matrix_row: "mechanics",
 };
 
 /**
@@ -926,6 +969,10 @@ export const CRITICALITY_FOR_ITEM_KIND: Readonly<Record<Exclude<ChangeItemKind, 
   module_lifecycle: "structural",
   brand_field: "routine",
   role: "structural",
+  // Plan 2.3: the consequence pen, after the Birthing, is a vote at the structural tier.
+  exit_terms: "structural",
+  exit_restorative: "structural",
+  matrix_row: "structural",
 };
 
 /** The tier of a bundle: its most critical element, `routine` when empty. */

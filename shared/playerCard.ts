@@ -169,6 +169,12 @@ export interface PlayerRoleIn {
   flowsBack?: Read<string | null>;
   stepBack?: Read<string | null>;
   timeCommitment?: Read<string | null>;
+  /**
+   * The full card's parameters block (role journey PR-C): the seat object /api/org sends, cut to
+   * what `roleCardView` reads (`timeCommitment` and `card`). Optional, so a host written before
+   * it draws the card exactly as before.
+   */
+  cardSeat?: Record<string, unknown> | null;
   worksWith: Read<WorksWithIn[]>;
   /** What the village has handed to this role (`capability_holding`). */
   powers: Read<PowerIn[]>;
@@ -446,6 +452,8 @@ export interface RoleOut {
    */
   tensionDoor: TensionDoor;
   handover: HandoverOut;
+  /** The parameters block, off the same view model /roles reads. Null where the seat could not be read. */
+  cardSeat: Record<string, unknown> | null;
   /** Role words a proposed change is waiting on consent for. */
   pending: RoleEditKey[];
   /** The open proposals for this role's words, oldest first; empty when none or unread. */
@@ -759,6 +767,7 @@ function roleOut(role: PlayerRoleIn, input: PlayerCardInput): RoleOut {
 
   return {
     id: role.id,
+    cardSeat: role.cardSeat ?? null,
     anchor: ROLE_ANCHOR(role.id),
     title: role.name,
     purpose: {

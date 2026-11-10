@@ -112,7 +112,7 @@ export function currentLetter(src: LetterSource): ServedLetter {
  * there; `supersedesId` names the letter this one replaces, if one is in force.
  */
 export function prepareMembershipText(input: {
-  letter: ServedLetter;
+  letter: Pick<ServedLetter, "version" | "title" | "body">;
   signingId: string;
   userId: string;
   version: number;

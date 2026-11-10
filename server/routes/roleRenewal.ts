@@ -21,7 +21,7 @@ import { carryOnCardsFor, fileCarryOn, renewAllFiled, withdrawCarryOn } from "..
 import { holderView } from "../lib/roleAccess";
 import { villageClock } from "../lib/stewardship";
 import { filedRenewals, openTasksForRoles, setTaskState, taskById, tasksForHolder } from "../repos/roleAccess";
-import { liveHolderIds } from "../repos/roleAccess";
+import { grantingRolesWithOpenTasks, liveHolderIds, liveRoleIdsOfUser } from "../repos/roleAccess";
 
 type Deps = Pick<AppDeps, "authedUser" | "guardCapability" | "getPool" | "notify" | "capabilityCtx">;
 
@@ -82,11 +82,9 @@ export function register(app: Express, deps: Deps): void {
     const all = hasCapability("org.seat", await capabilityCtx(user));
     let roleIds: string[] = [];
     if (all) {
-      const [rows]: any = await pool.query("SELECT DISTINCT granting_role_id FROM role_access_tasks WHERE state = 'open' AND granting_role_id IS NOT NULL");
-      roleIds = rows.map((r: any) => String(r.granting_role_id));
+      roleIds = await grantingRolesWithOpenTasks(pool);
     } else {
-      const [rows]: any = await pool.query("SELECT org_role_id FROM org_role_assignments WHERE user_id = ? AND ended_at IS NULL", [String(user.id)]);
-      roleIds = rows.map((r: any) => String(r.org_role_id));
+      roleIds = await liveRoleIdsOfUser(pool, String(user.id));
     }
     const tasks = await openTasksForRoles(pool, roleIds);
     res.json({ tasks: tasks.map((t) => ({ id: t.id, kind: t.kind, label: t.itemLabel, roleId: t.orgRoleId, state: t.state })) });

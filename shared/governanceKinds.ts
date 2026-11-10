@@ -156,6 +156,9 @@ export const KIND_FOR_ITEM_KIND: Readonly<Record<string, GovernanceKind>> = {
   module_lifecycle: "game_change",
   brand_field: "game_change",
   role: "game_change",
+  exit_terms: "game_change",
+  exit_restorative: "game_change",
+  matrix_row: "game_change",
   token_send: "token_send",
 };
 
