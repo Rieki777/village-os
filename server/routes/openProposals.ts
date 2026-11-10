@@ -231,6 +231,8 @@ export function register(app: Express, deps: Deps): void {
         accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
         whyItMatters: r.whyItMatters ?? null,
         timeCommitment: (r as any).timeCommitment ?? null,
+        // A role always background-checked (0370): the form says a check happens whatever the references say.
+        alwaysChecked: r.alwaysChecked === true,
         // The conversations in the role's order, as its public card shows them (role journey L5), so the
         // form and the board can say what happens next (role audit, 10 Nov 2026). The booking link is
         // not here: it is offered once the address is confirmed (L6).
@@ -319,6 +321,7 @@ export function register(app: Express, deps: Deps): void {
     const season = t.season;
     const roles = await offered();
     const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
+    const checked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
     const parsed = parseOpenProposal(body, {
       roleIds: new Set(roles.map((r) => r.id)),
       address: singlePublicAddress,
@@ -326,6 +329,8 @@ export function register(app: Express, deps: Deps): void {
       goalIds: new Set(t.goals.map((g) => g.id)),
       // A goal's date must fall in this moon (shared/proposalGoals.ts).
       today: new Date().toISOString().slice(0, 10),
+      alwaysChecked: (id) => checked.has(id),
+      now: now(),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).

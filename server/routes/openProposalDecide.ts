@@ -305,6 +305,10 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const attached = decidesIt(may, asks, viewerId)
       ? { links: p.body.links ?? [], files: (p.body.files ?? []).map((f) => ({ id: f.id, kind: f.kind, name: f.name, size: f.size, href: proposalFileHref(p.id, f.id) })) }
       : null;
+    // About you (joining lane PR 2): the references, the check and its consent are third-party data. Same gate as the links and files, nobody else, gone once anonymised.
+    const aboutYou = decidesIt(may, asks, viewerId)
+      ? { references: p.body.references ?? [], about: p.body.about ?? {}, backgroundCheck: p.body.backgroundCheck ?? null }
+      : null;
     res.set("Cache-Control", "no-store").json({
       proposal: {
         id: p.id,
@@ -328,6 +332,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         door: { because: may.rule.because, words: DECIDE_WORDS.door[may.rule.because] },
         invitation,
         attached,
+        aboutYou,
         you: {
           holdsThePower,
           own: !!may.own && may.own === viewerId,

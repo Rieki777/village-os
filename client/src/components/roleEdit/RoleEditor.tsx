@@ -38,6 +38,7 @@ const WORD_SPECS = ROLE_CARD_FIELDS.filter((f) => !String(f.key).startsWith("par
 interface Form {
   words: Record<string, string>;
   listed: boolean;
+  alwaysChecked: boolean;
   recruiting: boolean;
   track: string;
   whereWorked: string;
@@ -60,6 +61,7 @@ function formOf(s: EditorState): Form {
   return {
     words: Object.fromEntries(Object.entries(s.words).map(([k, v]) => [k, text(v)])),
     listed: p.listed ?? true,
+    alwaysChecked: p.alwaysChecked ?? false,
     recruiting: p.recruiting ?? false,
     track: p.track ?? "",
     whereWorked: p.whereWorked ?? "",
@@ -83,6 +85,7 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   const has = (k: string) => (s.parameterKeys as string[]).includes(k);
   const parameters: Record<string, unknown> = { recruiting: f.recruiting };
   if (has("listed")) parameters.listed = f.listed;
+  if (has("alwaysChecked")) parameters.alwaysChecked = f.alwaysChecked;
   if (has("track")) parameters.track = f.track || null;
   if (has("whereWorked")) parameters.whereWorked = f.whereWorked || null;
   if (has("languages")) parameters.languages = lines(f.languages);
@@ -257,6 +260,14 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
               {open.lacksToList.length > 0 && !form.listed && (
                 <p className="text-sm text-muted-foreground"><Trans context="role editor">Still to write before it can be listed:</Trans> {open.lacksToList.join(", ")}.</p>
               )}
+            </Frame>
+          )}
+          {has("alwaysChecked") && (
+            <Frame label={t({ message: "Background check", context: "role editor" })} changed={form.alwaysChecked !== start.alwaysChecked}>
+              <label className="flex min-h-[44px] items-center gap-2">
+                <input type="checkbox" className="size-5 accent-dash-gold" checked={form.alwaysChecked} onChange={(e) => set("alwaysChecked", e.target.checked)} />
+                <span><Trans context="role editor">Always background-checked, whatever the references say (roles that hold money or work near children)</Trans></span>
+              </label>
             </Frame>
           )}
           <Frame label={t({ message: "Door", context: "role editor" })} changed={form.recruiting !== start.recruiting}>

@@ -21,6 +21,7 @@
 /** The village's public link. */
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
+import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
@@ -125,6 +126,10 @@ export interface OpenProposalBody {
   links?: ProposalLink[];
   /** Files the applicant attached, for the deciders only; the bytes are in a private folder (server/lib/proposalFiles.ts). */
   files?: ProposalFile[];
+  /** About you (joining lane PR 2): references and the background check are third-party data, for the deciders only, never read by an AI (shared/proposalAbout.ts). */
+  references?: ProposalReference[];
+  backgroundCheck?: BackgroundCheck;
+  about?: ProposalAbout;
 }
 
 export interface OpenProposalInput {
@@ -160,6 +165,9 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
     ...(linksOf(o.links).length ? { links: linksOf(o.links) } : {}),
     ...(filesOf(o.files).length ? { files: filesOf(o.files) } : {}),
+    ...(referencesOf(o.references).length ? { references: referencesOf(o.references) } : {}),
+    ...(backgroundCheckOf(o.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(o.backgroundCheck) as BackgroundCheck } : {}),
+    ...(Object.keys(aboutOf(o.about)).length ? { about: aboutOf(o.about) } : {}),
   };
 }
 
@@ -170,7 +178,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  */
 export function parseOpenProposal(
   raw: unknown,
-  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string },
+  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string; alwaysChecked?: (roleId: string) => boolean; now?: Date },
 ): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
@@ -199,6 +207,20 @@ export function parseOpenProposal(
   const linked = parseProposalLinks(o.links);
   if (!linked.ok) return { ok: false, field: "links", error: linked.error };
   const links = linked.links.length ? { links: linked.links } : {};
+  // About you (joining lane PR 2): only when the form sent the section, so a form from before it still goes through.
+  let aboutYou: Pick<OpenProposalBody, "references" | "about" | "backgroundCheck"> = {};
+  if (o.references !== undefined || o.about !== undefined || o.checkConsent !== undefined) {
+    const judged = parseAboutYou(
+      { references: o.references, about: o.about, consent: o.checkConsent },
+      { alwaysChecked: roles.some((r) => ctx.alwaysChecked?.(r.roleId) === true), at: ctx.now ?? new Date() },
+    );
+    if (!judged.ok) return { ok: false, field: judged.field, error: judged.error };
+    aboutYou = {
+      ...(judged.value.references.length ? { references: judged.value.references } : {}),
+      ...(Object.keys(judged.value.about).length ? { about: judged.value.about } : {}),
+      backgroundCheck: judged.value.backgroundCheck,
+    };
+  }
   // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
   if (o.card !== undefined && o.card !== null) {
     // Form v2 (brief v2, 5.4): the aim is required once the applicant writes their card.
@@ -210,9 +232,9 @@ export function parseOpenProposal(
       today: ctx.today,
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
-    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links } } };
+    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links, ...aboutYou } } };
   }
-  return { ok: true, value: { name, email, body: { roles, why, aim, ...links } } };
+  return { ok: true, value: { name, email, body: { roles, why, aim, ...links, ...aboutYou } } };
 }
 
 /** "A", "A and B", "A, B and C". */

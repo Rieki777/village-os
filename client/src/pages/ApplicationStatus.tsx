@@ -5,6 +5,7 @@
  * (server/routes/applicationReview.ts, shared/applicationReview.ts `statusFor`).
  * A visitor reaches it by the link in their email; a member by their profile.
  */
+import { ABOUT_WORDS } from "@shared/proposalAbout";
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
@@ -25,6 +26,8 @@ interface Served {
   mode: "block" | "split";
   outcome?: "adopted" | "declined" | "withdrawn" | null;
   replyDays?: number;
+  /** A count only: how many references the applicant gave (shared/proposalAbout.ts). */
+  referencesGiven?: number | null;
 }
 
 export default function ApplicationStatus() {
@@ -110,6 +113,9 @@ export default function ApplicationStatus() {
                 </li>
               ))}
             </ol>
+            {typeof s.referencesGiven === "number" && (
+              <p className="text-sm text-muted-foreground" data-references-given="">{ABOUT_WORDS.given(s.referencesGiven)}</p>
+            )}
             {s.booking && (
               <section aria-label={PANEL_WORDS.bookingLabel} className="rounded-xl border border-border bg-card p-4">
                 <p className="text-foreground">{s.booking}</p>

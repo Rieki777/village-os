@@ -112,7 +112,8 @@ async function storedParameters(pool: Pool, roleId: string, live: readonly Param
   const out: Record<string, unknown> = {};
   for (const k of live) {
     const v = row[PARAMETER_COLUMNS[k]];
-    if (k === "listed") out[k] = v === null || v === undefined ? true : Number(v) === 1;
+    if (k === "alwaysChecked") out[k] = Number(v) === 1;
+    else if (k === "listed") out[k] = v === null || v === undefined ? true : Number(v) === 1;
     else if (k === "languages" || k === "villageGoals" || k === "selectionCriteria" || k === "accessBundle") out[k] = asList(v).map(String);
     else if (k === "conversations") out[k] = asList(v);
     else if (k === "fundedFrom") out[k] = v ? (v instanceof Date ? v.toISOString() : String(v)).slice(0, 10) : null;
