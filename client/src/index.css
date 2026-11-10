@@ -1800,3 +1800,38 @@ html:has(#sera-changes [data-sera-strip-on]) {
 .admin-fit :where(fieldset) {
   min-inline-size: 0;
 }
+
+/*
+ * The role selection journey (/roles/select): lift on hover, a pop when a card
+ * is chosen, a rise between steps, and a small burst of sparks. Only transform
+ * and opacity move, all of it sits inside no-preference, and the global
+ * reduce-motion rule above already flattens anything that slips through.
+ */
+@keyframes sel-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sel-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.045); }
+  100% { transform: scale(1); }
+}
+@keyframes sel-spark {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0.4); }
+}
+@keyframes sel-bar-glow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sel-rise { animation: sel-rise 0.45s ease-out both; }
+  .sel-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .sel-lift:hover, .sel-lift:focus-within { transform: translateY(-4px); box-shadow: 0 14px 28px -16px color-mix(in srgb, var(--foreground) 45%, transparent); }
+  .sel-lift[data-on="true"] { animation: sel-pop 0.4s ease-out; }
+  .sel-art { transition: transform 0.5s ease; }
+  .sel-lift:hover .sel-art { transform: scale(1.06); }
+  .sel-spark { animation: sel-spark 0.9s ease-out forwards; }
+  .sel-bar { transition: width 0.5s ease; }
+  .sel-bar-fill { animation: sel-bar-glow 2.4s ease-in-out infinite; }
+}

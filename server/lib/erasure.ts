@@ -173,6 +173,7 @@ import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberFundingRounds } from "./fundingRounds";
 import { forgetMemberTasks } from "../repos/memberTasks";
+import { forgetTimeZone } from "../repos/memberTimeZone";
 import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
@@ -1633,6 +1634,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "member-tasks-after-tombstone",
       run: async () => {
         await forgetMemberTasks(pool, target.id);
+        await forgetTimeZone(pool, target.id); // role journey L6
       },
     },
     {
