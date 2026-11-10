@@ -662,7 +662,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
         roles: [{ roleId: well, note: "" }],
         why: "I know wells.",
         aim: "Clean water all season.",
-        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true } },
+        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true }, terms: { choice: "talk", note: "Could the rate be per moon?" } },
       }, null);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       const mail = state.sent[before];
@@ -677,6 +677,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(String(apps[0].deliverables)).toContain("Clean water all season.");
       expect(String(apps[0].deliverables)).toContain("First moon: Test the water: done when the lab says it is clean");
       expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
+      expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Could the rate be per moon?");
     });
   });
 
