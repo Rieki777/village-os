@@ -49,7 +49,7 @@ describe("a structured range from a sync", () => {
     for (const s of out.payload.seats) {
       expect(Object.keys(s).filter((k) => /pay|terms|offer|reward|range/i.test(k)).every((k) => k === "sourcePay")).toBe(true);
     }
-    const read = readProposedSeats(out.payload.seats);
+    const read = readProposedSeats(out.payload, []);
     expect(JSON.stringify(read)).not.toMatch(/"min":800/);
   });
   it("reports no structured pay field as unmapped", () => {
