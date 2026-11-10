@@ -89,6 +89,13 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
     test: (_m, p) => /\/letters?(\/|$)|\/send(\/|$)|email-?config|\/comms(\/|$)|\/modules?(\/|$)|variables|settings|\/brand(\/|$)|\/launch(\/|$)/i.test(p),
   },
   {
+    // Role journey L13, tier C: the acts a machine only ever proposes. Adopting an application, seating, publishing a draft,
+    // sending a first reply or a decision letter, and setting a role's pay or terms (the 24 Sept ruling: a person or a vote adopts).
+    key: "tier_c",
+    words: "Adopting, seating, publishing, changing powers, sending, setting pay or terms, inviting and erasing are always a person's act. A connector proposes them and a person does them.",
+    test: (_m, p) => /adopt|seat-?claims?|seatings?|publish|first-?repl|decision-?letter|letter-?drafts?|role-?pay|\/terms?(\/|$)|terms-?offer|\/hold(s|ers)(\/|$)/i.test(p),
+  },
+  {
     key: "secrets",
     words: "Secrets and integration keys are always a person's act.",
     test: (_m, p) => /secret|integration|api-?key|credential|\/keys?(\/|$)/i.test(p),
@@ -101,7 +108,7 @@ export const ALWAYS_A_PERSON: ReadonlyArray<{ key: string; words: string; test: 
   {
     key: "agents",
     words: "The agent accounts, their admin flag and their tokens are always a person's act.",
-    test: (_m, p) => /\/agent(s)?(\/|$)|agent-admin-paths|agent-accounts|agent-actions|\/api\/agent\//i.test(p),
+    test: (_m, p) => /\/agent(s)?(\/|$)|agent-admin-paths|agent-accounts|agent-actions|ai-?agents?-?approval|agent-proposals|\/api\/agent\//i.test(p),
   },
 ];
 

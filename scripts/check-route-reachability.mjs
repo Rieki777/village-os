@@ -73,6 +73,9 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // The old address of the role selection board. It redirects to /roles/select and nothing links to it on purpose; old bookmarks and shared links are its doors.
+  "/roles/draft": "a redirect to /roles/select kept for old links",
+
   // One funding round (0338). Its doors are the round cards on /funding-rounds and
   // the link every idea's forum thread carries, which the server writes into the
   // thread body, so the scan cannot see the second one.
