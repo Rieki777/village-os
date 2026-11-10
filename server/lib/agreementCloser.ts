@@ -7,8 +7,12 @@
  *
  *   carried     nothing at the close; at the landing, after the veto window
  *               like every Game change (`kindOfSubject` answers game_change),
- *               the stored agreement becomes ACTIVE, the proposer is told and
- *               the village's pulse carries one line
+ *               the stored agreement becomes ACTIVE, the proposer is told,
+ *               the roll is told once each (D10b, 2026-11-09: the close told
+ *               them it carried, and this is the day it binds) and the
+ *               village's pulse carries one line. On its review date the
+ *               `agreement-review` job reminds every present member
+ *               (`runAgreementReviews`, server/lib/agreements.ts).
  *   not carried the agreement is marked not adopted and the proposer is told
  *               why, in the closer's own note
  *   withdrawn   marked withdrawn; the words stay on record
@@ -28,6 +32,7 @@ import type { Pool } from "mysql2/promise";
 import type { BallotRow } from "./ballots";
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import { markAgreement, readAgreement } from "./agreements";
+import { notifyRollRows, type RollNotice } from "./ballotNotices";
 
 export interface AgreementCloserDeps {
   getPool: () => Pool;
@@ -84,16 +89,31 @@ export function agreementCloser(deps: AgreementCloserDeps): SubjectCloser {
         return { applied: [], held: "the agreement this vote would adopt was not recorded, so there is nothing to adopt", proposerTold: null };
       }
       await markAgreement(deps.getPool(), stored.id, "active", now());
+      const binds = stored.reviewAt
+        ? `It binds from today, exactly as written. Its words name ${stored.reviewAt} as the day the village looks at it again, and on that day the village reminds every present member.`
+        : "It binds from today, exactly as written. No review date is set.";
       await deps.notify({
         userId: b.openedBy,
         type: "governance",
         title: `The village adopted this agreement: ${stored.title}`,
-        body: stored.reviewAt
-          ? `It binds from today, exactly as written. Its words name ${stored.reviewAt} as the day the village looks at it again, and nothing reminds anyone when that day comes yet, so put it on the calendar.`
-          : "It binds from today, exactly as written. No review date is set.",
+        body: binds,
         link: deps.ballotLink(b),
         actorUserId: actorId,
         dedupeKey: `bal:${b.id}:agreement-adopted`,
+      });
+      // The roll, each member once, the proposer already told above in their own words.
+      const notifyRoll = (ballot: { id: string }, notice: RollNotice) =>
+        notifyRollRows(
+          { pool: deps.getPool(), notify: (input) => deps.notify({ ...input, body: input.body ?? "" }), link: () => deps.ballotLink(b) },
+          ballot,
+          notice,
+        );
+      await notifyRoll(b, {
+        type: "governance",
+        title: `The village adopted an agreement: ${stored.title}`,
+        body: binds,
+        keySuffix: "agreement-adopted",
+        except: [b.openedBy],
       });
       await deps.addActivity("governance", `The village adopted an agreement by its own vote: ${stored.title}`, {
         actorUserId: actorId,

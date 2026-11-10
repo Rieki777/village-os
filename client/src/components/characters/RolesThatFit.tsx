@@ -99,7 +99,7 @@ export function fittingSeats(org: { roles?: any[]; circles?: any[] } | null, fit
   const out: FitSeat[] = [];
   for (const id of fitIds) {
     const r = roles.find((x) => String(x?.id ?? "") === id);
-    if (!r || r.isExample || r.state === "filled") continue;
+    if (!r || r.isExample || r.listed === false || r.state === "filled") continue;
     const circle = circles.find((c) => String(c?.id ?? "") === String(r.circleId ?? ""));
     out.push({
       id,

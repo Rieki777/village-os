@@ -1007,6 +1007,41 @@ export const VARIABLES: VariableDef[] = [
     max: 10000,
     unit: "changes",
   },
+  /*
+   * A ROLE STARTS ONLY AFTER (role journey L7). Each agreement a person aligns
+   * with before an adopted role starts, as its own switch, every one off by
+   * default so a village that sets nothing keeps today's behaviour. Read
+   * together by `roleStartDials` (server/lib/roleStartAgreements.ts): the role
+   * waits, adopted, until each one that is on exists, and the hourly
+   * `season-plan-turn` starts it within the hour after.
+   */
+  {
+    key: "org.start_after_confidentiality",
+    category: "Progression",
+    label: "A role starts only after: confidentiality",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's confidentiality agreement as it reads now. Write the agreement's words first (Admin, content, the confidentiality section): with no words written, nobody can align, and roles wait.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_membership",
+    category: "Progression",
+    label: "A role starts only after: membership",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's membership letter. Somebody who aligned when they applied is not asked again. No payment is ever part of it.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_paid_terms",
+    category: "Progression",
+    label: "A paid role starts only after its terms",
+    description:
+      "When on, a role whose terms carry pay, an allowance or a bonus does not start until its holder has aligned with those terms, the agreed rate included. Roles with no money in their terms are not asked.",
+    type: "boolean",
+    default: "false",
+  },
 
   // ── Quests: how finished work is witnessed ────────────────────────────────
   // The three dials that bounded a Gratitude grant at consent left with the
@@ -2468,6 +2503,42 @@ export const VARIABLES: VariableDef[] = [
     ring: "founder",
   },
   {
+    key: "org.sync_starts_unlisted",
+    category: "The village's people",
+    label: "Roles accepted from a sync start unlisted",
+    description:
+      "On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.apply_needs_complete_card",
+    category: "The village's people",
+    label: "A role needs a complete card before anyone can apply",
+    description:
+      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.first_conversation_role",
+    category: "The village's people",
+    label: "The role that holds first conversations",
+    description:
+      "The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.paid_consent_circle",
+    category: "The village's people",
+    label: "The circle that consents paid roles",
+    description:
+      "The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.ccos_terms",
     category: "The village's people",
     label: "Show the CCOS term on circle and role card headings",
@@ -3102,6 +3173,22 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 720,
     unit: "hours",
+  },
+  /*
+   * THE ADMIN HELPER'S SWITCH (server/routes/adminHelper.ts, 2026-11-09).
+   * Ships OFF: AI touching a village's settings is the village's call, made by
+   * whoever governs AI use there, so the helper waits for that yes even after
+   * the key is set. The helper may never propose this dial itself
+   * (shared/adminHelper.ts).
+   */
+  {
+    key: "platform.admin_helper",
+    category: "Platform",
+    label: "The guide's helper in Admin",
+    description:
+      "Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It also needs the village's own Anthropic key on the server. Off until the village decides to use it.",
+    type: "boolean",
+    default: "false",
   },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude

@@ -38,6 +38,7 @@ import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
+import AdminHelperHost from "@/components/admin/AdminHelperHost";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
@@ -50,6 +51,7 @@ import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
+const RoleDiscoverTab = lazy(() => import("@/components/admin/RoleDiscoverTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { adminNavRailClass, filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7864,6 +7866,8 @@ export default function Admin() {
   // collapsed — 224px of menu on a 390px screen left the settings themselves
   // in a column too narrow to read — and anything laptop-sized starts open,
   // where there is room for both. A stored choice beats both defaults.
+  // The Admin helper panel (AdminHelperHost): the header menu and Ctrl+/ open it.
+  const [helperOpen, setHelperOpen] = useState(false);
   const [navOpen, setNavOpen] = useState<boolean>(() => {
     const saved = storedText("local", "admin.navOpen");
     if (saved !== null) return saved === "1";
@@ -7910,6 +7914,15 @@ export default function Admin() {
         onSignOut={() => setPassword(null)}
         extra={<AdminSeraChip password={password} />}
         defaultLocale={cfg?.defaultLocale ?? null}
+        onHelper={() => setHelperOpen(true)}
+      />
+      <AdminHelperHost
+        open={helperOpen}
+        setOpen={setHelperOpen}
+        password={password}
+        groups={shownGroups}
+        tab={activeTab}
+        onOpenTab={setActiveTab}
       />
 
       <div className="flex w-full">
@@ -7972,6 +7985,7 @@ export default function Admin() {
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
+          {activeTab === "role-discover" && <Suspense fallback={null}><RoleDiscoverTab password={password} /></Suspense>}
           {activeTab === "pricing-desk" && <Suspense fallback={null}><PricingDeskTab password={password} /></Suspense>}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}

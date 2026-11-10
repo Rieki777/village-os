@@ -22,7 +22,7 @@ import {
   changeSetSnapsToBoundary,
   changeSetWaitsForCycleClose,
   elementsFor,
-  NEVER_BY_CHANGESET,
+  VOTE_RUNS_ON,
   UntypedElementError,
   validateElements,
   type ChangesetDeps,
@@ -30,7 +30,8 @@ import {
 import { dryRunProposal } from "./proposalDryRun";
 import { loadVariables, numberVar, rawValue, setVariable, wireVariableGuard } from "./variables";
 import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
-import { loadModuleSettings } from "./modules";
+import { effectiveLifecycle, loadModuleSettings } from "./modules";
+import { GOVERNANCE_NARROWING_NEEDS_A_HOLDER } from "../../shared/moduleSwitch";
 import { villageId } from "./economy";
 import { mintRuleKey } from "../../shared/mintRuleKeys";
 import { VARIABLES, applyTimingOf } from "../../shared/gameVariables";
@@ -115,11 +116,31 @@ describe.skipIf(!configured)("phase one refuses before anything is written", () 
     expect(out.ok, JSON.stringify(out)).toBe(true);
   });
 
-  it("refuses to switch the part of the Game that holds the vote", async () => {
-    expect(NEVER_BY_CHANGESET.has("governance")).toBe(true);
-    const out = await validateElements(deps(), [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }]);
-    expect(out.ok).toBe(false);
-    expect(out.ok === false && out.problem).toContain("cannot be switched by a vote");
+  /*
+   * G.3 (canvas follow-up, Article 0): the part of the Game that holds the vote
+   * is votable now. What stays refused is the one narrowing that would strand
+   * every vote after it, and only while nobody holds module.switch live; the
+   * refusal names the seat vote that gets past it.
+   */
+  it("lets a vote switch the part of the Game that holds the vote, except below members with nobody to switch it back (AC1.4)", async () => {
+    expect(VOTE_RUNS_ON.has("governance")).toBe(true);
+    await loadModuleSettings(pool);
+    const start = effectiveLifecycle("governance");
+    const switchTo = (to: string) => [{ kind: "module_lifecycle" as const, moduleId: "governance", to }];
+    // Widening is always allowed, holder or not, and it lands.
+    const up = await applyChangeSet(deps(), { ballotId: "bal-gov-up", proposalRef: "gm:gov-up", actor: null, changes: switchTo("members") });
+    expect(up, JSON.stringify(up)).toMatchObject({ ok: true, applied: ["module:governance"] });
+    expect(effectiveLifecycle("governance")).toBe("members");
+    // Below members with nobody holding module.switch: refused, naming the seat vote.
+    const refused = await validateElements(deps(), switchTo("off"));
+    expect(refused.ok).toBe(false);
+    const said = GOVERNANCE_NARROWING_NEEDS_A_HOLDER.charAt(0).toLowerCase() + GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(1, -1);
+    expect(refused.ok === false && refused.problem).toBe(said);
+    expect(refused.ok === false && refused.problem).toContain("which votes on who holds it");
+    // Somebody holds module.switch live: they could turn it back on, so the vote may narrow it.
+    const down = await applyChangeSet({ ...deps(), anySwitchHolder: async () => true }, { ballotId: "bal-gov-down", proposalRef: "gm:gov-down", actor: null, changes: switchTo(start) });
+    expect(down, JSON.stringify(down)).toMatchObject({ ok: true });
+    expect(effectiveLifecycle("governance")).toBe(start);
   });
 
   it("refuses to switch into token mode on a token that cannot weigh a vote", async () => {

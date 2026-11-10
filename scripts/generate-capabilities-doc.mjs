@@ -375,6 +375,14 @@ export function resolutionSteps(sf, where = "shared/capabilities.ts") {
  * an orphan paragraph describing an authority nobody has.
  */
 const STEP_MEANINGS = {
+  "needs an alignment": {
+    beats:
+      "Everything, on a key `ALIGNMENT_BOUND` names: without the village's confidentiality agreement as it reads now, " +
+      "nobody holds it, the operator and the break-glass included.",
+    detail:
+      "Role journey L7. Private records are read under the words in force today, so changed words make every holder " +
+      "align again before the key reaches them. The alignment grants nothing by itself: a role, badge or rung still has to.",
+  },
   admin: {
     beats:
       "The deployment operator, on a key the village does NOT hold. It is the first thing the gate reads, so on those " +

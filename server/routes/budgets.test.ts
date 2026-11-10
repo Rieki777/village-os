@@ -33,7 +33,7 @@ import { HELD_WORDS, register as registerBudgets } from "./budgets";
 import { register as registerSuggestions } from "./adminSuggestions";
 import { register as registerPulse } from "./pulse";
 import { adminGateWasConsulted } from "../lib/adminGate";
-import { ADMIN_BEFORE_LAUNCH, BY_VILLAGE_VOTE } from "../../shared/budgets";
+import { ADMIN_BEFORE_LAUNCH, ADMIN_NO_STEWARD, BY_VILLAGE_VOTE } from "../../shared/budgets";
 import { ADMIN_EDIT } from "../../shared/ballotSubjects";
 import { configureBudgets, importBudgetLines, recheckSource, resetBudgetEnv } from "../lib/budgets";
 import { cashKeys } from "../lib/cashOwed";
@@ -136,6 +136,25 @@ function wire() {
     rolesCarrying: (cap: string) => (cap === "role.pay" ? [{ id: "role-treasury", name: "Treasury" }] : []),
     roleHolders: () => [{ roleId: "role-treasury", userId: "u-hana" }, { roleId: "role-treasury", userId: "u-hugo" }],
     launched: async () => launched,
+    // A gate shaped like the real one for these cases (as in holderDoor.test.ts): the admin
+    // short-circuit off a village-held key, the deny, a holder, and the 409 on a village-held key.
+    guardCapability: async (req: any, res: any, cap: string, refusal?: { status: number; body: Record<string, unknown> }) => {
+      const u = req.user;
+      const villageHolds = villageHeld.includes(cap);
+      if (u?.role === "admin" && !villageHolds) return true;
+      if ((u?.denies ?? []).includes(cap)) {
+        if (refusal) res.status(refusal.status).json(refusal.body);
+        return false;
+      }
+      if ((holders[cap] ?? []).includes(String(u?.id))) return true;
+      if (villageHolds) {
+        res.status(409).json({ error: "village_holds", needsOverride: true });
+        return false;
+      }
+      if (refusal) res.status(refusal.status).json(refusal.body);
+      else res.status(401).json({ error: "auth_required" });
+      return false;
+    },
     isFormerMember: async (u: any) => !!u.former,
     seatedRoleIds: async (uid: string) => seats[uid] ?? [],
   } as any);
@@ -213,7 +232,7 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
   beforeEach(async () => {
     for (const t of ["budget_lines", "budget_syncs", "cash_owed", "fx_rates", "budget_period_notes", "budget_sources", "budget_envelopes"]) await q(`DELETE FROM \`${t}\``);
     resetBudgetEnv();
-    holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"] };
+    holders = { "role.pay": ["u-hana", "u-hugo"], "cash.pay": ["u-cass"], "steward.veto": ["u-stew"] };
     villageHeld = [];
     launched = true;
     seats = {};
@@ -245,8 +264,16 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     expect((await stored())[0]).toMatchObject({ changed_by: "u-ada", changed_as: ADMIN_BEFORE_LAUNCH });
   });
 
-  it("refuses the admin after launch with nobody holding the power, naming the suggestion path, and writes nothing", async () => {
+  it("lets an admin write after launch while nobody sits in the steward's seat, the shared rule, and says so", async () => {
     holders = { "role.pay": [] };
+    const { p, c } = await importAs("u-ada");
+    expect(p.body.door).toEqual({ mayWrite: true, via: "admin_no_steward" });
+    expect(c.status).toBe(200);
+    expect((await stored())[0]).toMatchObject({ changed_by: "u-ada", changed_as: ADMIN_NO_STEWARD });
+  });
+
+  it("refuses the admin after launch with nobody holding the power and a steward seated, naming the suggestion path, and writes nothing", async () => {
+    holders = { "role.pay": [], "steward.veto": ["u-stew"] };
     const { p, c } = await importAs("u-ada");
     expect(p.status, "the preview still works, and says what the door would answer").toBe(200);
     expect(p.body.door).toMatchObject({ mayWrite: false, code: "nobody_holds_it", suggest: { path: "/api/admin/suggestions", control: "budget_lines" } });
@@ -262,18 +289,27 @@ describe.skipIf(!configured)("the cash budget's doors", () => {
     const { c } = await importAs("u-ada");
     expect(c.status).toBe(409);
     expect(c.body).toMatchObject({ code: "village_holds_it", suggest: { control: "budget_lines" } });
+    expect(c.body.gate, "the gate's own answer rides along, its break-glass offer included").toMatchObject({ needsOverride: true });
     expect(await stored()).toEqual([]);
   });
 
-  it("refuses a member who does not hold the power, and an admin while somebody else holds it, with the suggestion path", async () => {
+  it("refuses a member who does not hold the power, and an admin after launch while somebody else holds it and a steward sits, with the suggestion path", async () => {
     const member = await importAs("u-sam");
     expect(member.p.body.door).toMatchObject({ mayWrite: false, code: "holders_only" });
     expect(member.c.status).toBe(403);
     expect(member.c.body).toMatchObject({ code: "holders_only", suggest: { path: "/api/admin/suggestions" } });
-    launched = false;
     const admin = await importAs("u-ada");
-    expect(admin.c.status, "an admin is no exception while a role holds the power").toBe(403);
+    expect(admin.p.body.door).toMatchObject({ mayWrite: false, code: "holders_only" });
+    expect(admin.c.status, "after launch, with a steward seated, an admin is no exception").toBe(403);
     expect(await stored()).toEqual([]);
+  });
+
+  it("lets an admin write before launch while somebody holds the power, the same answer a role's pay gives (G-B3)", async () => {
+    launched = false;
+    const { p, c } = await importAs("u-ada");
+    expect(p.body.door).toEqual({ mayWrite: true, via: "admin_before_launch" });
+    expect(c.status).toBe(200);
+    expect((await stored())[0]).toMatchObject({ changed_by: "u-ada", changed_as: ADMIN_BEFORE_LAUNCH });
   });
 
   it("refuses a holder a warning badge denies the power to", async () => {

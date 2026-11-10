@@ -39,7 +39,13 @@ export const SEAT_TERMS = "seat_terms";
  * words into its own chunk.
  */
 export const MEMBERSHIP = "membership";
-export type AlignmentSubject = typeof SEAT_TERMS | typeof MEMBERSHIP;
+/**
+ * The village's confidentiality agreement (role journey L7). The village's own
+ * words, from its `confidentiality` content section (shared/confidentiality.ts),
+ * versioned by their fingerprint. A generic name: the words say whose they are.
+ */
+export const CONFIDENTIALITY = "confidentiality";
+export type AlignmentSubject = typeof SEAT_TERMS | typeof MEMBERSHIP | typeof CONFIDENTIALITY;
 
 /** The village, as a party. A member is `user:<id>`. */
 export const VILLAGE_PARTY = "village";
@@ -90,6 +96,8 @@ export const ALIGN_WORDS = {
   reconfirm: "Confirm it is you",
   reconfirmed: "Confirmed. You can align for the next fifteen minutes.",
   wordsChanged: "The words changed since you read them. Read them again before you align.",
+  /** D11 (Rye, 9 Nov 2026): one line, wherever a member aligns, that says what aligning is. */
+  waysOfSigning: "Aligning is the village's way of signing.",
 } as const;
 
 /** Whether these terms record money: pay, allowance or bonus of a kind other than none or honorary. */

@@ -113,6 +113,13 @@ export interface OpenProposalBody {
   term?: OpenProposalTerm;
   /** The applicant's own role card (shared/openProposalCard.ts). Absent on a proposal sent before it existed. */
   card?: OpenProposalCard;
+  /**
+   * The membership letter the applicant aligned with on the form, by the
+   * version the form drew (Rye's answer 8, 9 Nov 2026). Recorded against the
+   * address once it confirms (server/lib/applicationMembership.ts). Absent:
+   * they did not align on the form, and are asked before their role starts.
+   */
+  membership?: { letterVersion: string };
 }
 
 export interface OpenProposalInput {
@@ -125,6 +132,12 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; err
 
 /** Trimmed, and cut one past the cap so "too long" can still be told from "at the cap". `trim()`, never a regex: an anchored `\s+$` runs slow on a long run of spaces. */
 const text = (v: unknown, max: number): string => String(typeof v === "string" ? v : "").trim().slice(0, max + 1);
+
+/** A stored or sent membership alignment: a letter version, or nothing. */
+export function membershipOf(raw: unknown): { letterVersion: string } | null {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>).letterVersion : null;
+  return typeof v === "string" && /^lv-[0-9a-f]{16}$/.test(v) ? { letterVersion: v } : null;
+}
 
 /** What a stored body reads as, whatever was stored. Never throws. */
 export function openBodyOf(raw: unknown): OpenProposalBody {
@@ -139,6 +152,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
     ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
     ...(cardOf(o.card) ? { card: cardOf(o.card) } : {}),
+    ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
   };
 }
 
@@ -196,6 +210,14 @@ export function andList(items: readonly string[]): string {
   return `${clean.slice(0, -1).join(", ")} and ${clean[clean.length - 1]}`;
 }
 
+/**
+ * THE DATA PROMISE ON AI DRAFTING (Rye, 9 Nov 2026: the Anchor approved the
+ * connector's `draft_letter`). On the form's privacy note, where the page
+ * renders it through Lingui with these same words, and in the confirmation
+ * email. Village-neutral, so it is platform copy.
+ */
+export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
+
 /** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
 export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
   return {
@@ -209,6 +231,8 @@ export function confirmLetter(i: { firstName: string | null; village: string; ro
       i.link,
       "",
       `The link works for ${OPEN_CONFIRM_HOURS} hours. If this wasn't you, leave it, and nothing happens.`,
+      "",
+      OPEN_AI_DRAFTS,
       "",
     ].join("\n"),
   };

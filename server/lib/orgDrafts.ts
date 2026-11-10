@@ -655,7 +655,26 @@ export async function addChange(
   draftId: string,
   body: { op: DraftOp; orgRoleId: string; payload?: any },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
+  // Handed a pool, the change is added inside a transaction of its own, so the
+  // draft row's lock below holds until the change is written (PR C residual: a
+  // change could land in a draft a publish was already applying).
+  if ("getConnection" in pool) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const r = await addChange(conn, draftId, body);
+      if (r.ok) await conn.commit();
+      else await conn.rollback();
+      return r;
+    } catch (e) {
+      await conn.rollback().catch(() => {});
+      throw e;
+    } finally {
+      conn.release();
+    }
+  }
+  // The draft row first, the same order `publishDraft` and the answer path lock in.
+  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]); // module-review-ok: the lock step of this function's own transaction, the order publishDraft locks in; server/repos/orgDrafts.ts explains why a transaction step stays here
   if (!d) return { ok: false, error: "No such draft" };
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
@@ -1679,14 +1698,16 @@ async function applyChange(
     const ccos = new Map(ccosColumns(p));
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, listed) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
         words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null,
-        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null)],
+        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null),
+        // Role journey PR-A: a draft can only START a role unlisted (a sync accept with the village setting on). Nothing in a draft lists a role.
+        p.listed === false ? 0 : null],
     );
     return null;
   }
