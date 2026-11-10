@@ -170,7 +170,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  */
 export function parseOpenProposal(
   raw: unknown,
-  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string> },
+  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string },
 ): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
@@ -207,6 +207,7 @@ export function parseOpenProposal(
       roleIds: new Set(roles.map((r) => r.roleId)),
       accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
       goalIds: ctx.goalIds ?? new Set(),
+      today: ctx.today,
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
     return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links } } };

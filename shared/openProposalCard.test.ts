@@ -17,7 +17,7 @@ const CTX = {
 const GOOD = {
   roles: [
     { roleId: "lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first Monday cash view", doneWhen: "it reaches every circle lead" }] },
-    { roleId: "events", moves: [{ text: "Monthly potluck", target: "" }], firstMoon: [] },
+    { roleId: "events", moves: [{ text: "Monthly potluck", target: "" }], firstMoon: [{ quest: "Hold the first potluck", doneWhen: "twelve neighbours have eaten" }] },
   ],
   serves: [{ goalId: "g-investor", how: "Investors read one set of numbers." }],
   hours: "About 25 a week",
@@ -90,11 +90,11 @@ describe("each role card names the season goals its work serves (guide v2, Rye 1
     expect(r.ok && r.card.serves).toEqual([{ goalId: "g-investor", how: "Investors read one set of numbers." }]);
   });
 
-  it("writes each role's goals under that role, and first tasks, in the application's words", () => {
+  it("writes each role's goals under that role, and first-moon goals, in the application's words", () => {
     const text = cardSummary(cardOf(PER_ROLE)!, (id) => ({ lfs: "Lead Financial Steward", events: "Events Manager" })[id] ?? id, (g) => ({ "g-investor": "Investor ready", "g-community": "Community" })[g] ?? g);
     const lfs = text.indexOf("Lead Financial Steward");
     const events = text.indexOf("Events Manager");
-    expect(text).toContain("- First task: Publish the first Monday cash view");
+    expect(text).toContain("- Goal: Publish the first Monday cash view");
     expect(text.indexOf("- Serves the season goal: Investor ready: One model.")).toBeGreaterThan(lfs);
     expect(text.indexOf("- Serves the season goal: Investor ready: One model.")).toBeLessThan(events);
     expect(text.indexOf("- Serves the season goal: Community: Monthly potlucks.")).toBeGreaterThan(events);

@@ -78,6 +78,8 @@ import {
   APPLICATION_ID,
   APPLICATION_WITHDRAWN_NOTE,
   OPEN_STATUSES,
+  deliverablesBesideGoals,
+  goalsOfApplication,
   parseApplicationInput,
   proposalMayGoToVote,
   putToVillageRefusal,
@@ -137,6 +139,7 @@ import { applicationsWaitingOn, draftsWaiting, remindWaitingHolders } from "../l
 import { openDraftBallot, ORG_DECIDE, publishDoorFor } from "../lib/orgDraftDecide";
 import { WAITING_COPY, WAITING_URL, type WaitingPayload } from "../../shared/waitingOnYou";
 import { ACCEPTING_POWER } from "../../shared/sessionTasks";
+import { parseGoals } from "../../shared/proposalGoals";
 import { effectiveLifecycle } from "../lib/modules";
 import { tasksToAccept } from "../lib/sessionTasks";
 import { heldTensionsFor } from "../lib/roleTensions";
@@ -428,7 +431,9 @@ export function register(app: Express, deps: Deps): void {
         ? { id: proposal.id, changesRoles: changes, consent: answersCloseWith(consentView(asks, new Date(), tz, viewerId, askRoles), awaiting), decided: proposal.decidedWords }
         : null,
       note: a.note,
-      deliverables: a.deliverables,
+      // The goals the member listed, or the older words as one goal; `deliverables` is what is left beside them (joining lane PR 1).
+      goals: goalsOfApplication(a),
+      deliverables: deliverablesBesideGoals(a),
       settings: a.settings,
       term: { endsOn: civilDateKey(a.termEndsAt, tz), followsSeason: a.termFollowsSeason, seasonId: a.termSeasonId },
       startsOn: a.startsAt ? civilDateKey(a.startsAt, tz) : null,
@@ -588,6 +593,18 @@ export function register(app: Express, deps: Deps): void {
 
     // The seats: real, the village's own, live, and each with a place for this member.
     const seats = await seatsForUpdate(pool, input.seatIds);
+    // The goals list (joining lane PR 1): each goal moves a goal its role has, and any date falls in this moon.
+    if (input.answers?.goals.length) {
+      const [goalRows] = await pool.query<any[]>(`SELECT id, accountabilities FROM org_roles WHERE id IN (${input.seatIds.map(() => "?").join(",")})`, [...input.seatIds]);
+      const own = new Map<string, string[]>();
+      for (const r of goalRows) {
+        let list: unknown = r.accountabilities;
+        if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+        own.set(String(r.id), Array.isArray(list) ? list.map((x) => String(x ?? "").trim()).filter(Boolean) : []);
+      }
+      const judged = parseGoals(input.answers.goals.map((g) => ({ ...g, roleId: g.roleId || input.seatIds[0] })), { roleIds: new Set(input.seatIds), roleGoalsOf: (id) => own.get(id) ?? [], today: now.toISOString().slice(0, 10) });
+      if (!judged.ok) return answer(400, { error: judged.error, field: "goals" });
+    }
     const live = await liveSeatingsOf(pool, input.seatIds);
     const lapseNow = { ...lapse(), now };
     for (const id of input.seatIds) {

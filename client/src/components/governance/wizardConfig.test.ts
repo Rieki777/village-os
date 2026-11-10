@@ -52,6 +52,8 @@ const completeAnswersFor = (typeId: string): Record<string, unknown> => {
       else if (f.kind === "seatSettings") answers[f.key] = { v: 1 };
       // A list of seats: one picked is a complete answer.
       else if (f.kind === "seatPicks") answers[f.key] = ["seat-1"];
+      // The goals list: one goal with a title and a done when is a complete answer.
+      else if (f.kind === "goalsList") answers[f.key] = [{ title: "Plant the first three beds", doneWhen: "they are planted", moves: "", serves: "", date: "", roleId: "seat-1" }];
       /*
        * WORDS AND NOT ONE LONG TOKEN. `"x".repeat(80)` satisfied every
        * character-length validator this config had and is a single word, so

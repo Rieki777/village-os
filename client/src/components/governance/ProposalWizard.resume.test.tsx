@@ -93,7 +93,7 @@ describe("focus follows the step (red team U10)", () => {
 
 describe("no error before any input (red team U11)", () => {
   const PICK = "Pick the role you are proposing for.";
-  const SHORT_DELIVERABLES = /^Your list of first tasks needs at least 40 characters/;
+  const NO_GOALS = /^Add at least one goal for your first moon/;
   const SHORT_WHY = /^"Why you" needs at least 30 characters/;
 
   it("arriving at a step shows no error; leaving a field shows its own; Next then Back shows the step's", async () => {
@@ -106,14 +106,14 @@ describe("no error before any input (red team U11)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByRole("heading", { level: 2, name: label("details") });
-    expect(screen.queryByText(SHORT_DELIVERABLES)).toBeNull();
+    expect(screen.queryByText(NO_GOALS)).toBeNull();
     // Writing too little and leaving the field: that field's problem, and only that one.
-    const deliverables = screen.getByLabelText(/Your first tasks this moon/);
-    fireEvent.focus(deliverables);
-    fireEvent.change(deliverables, { target: { value: "Too short." } });
-    fireEvent.blur(deliverables);
-    expect(await screen.findByText(SHORT_DELIVERABLES)).toBeTruthy();
-    expect(screen.queryByText(SHORT_WHY)).toBeNull();
+    const why = screen.getByLabelText(/^Why you/);
+    fireEvent.focus(why);
+    fireEvent.change(why, { target: { value: "Too short." } });
+    fireEvent.blur(why);
+    expect(await screen.findByText(SHORT_WHY)).toBeTruthy();
+    expect(screen.queryByText(NO_GOALS)).toBeNull();
 
     // Moving on submits the step; coming back to it shows what it still lacks, in the label's words.
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -121,6 +121,7 @@ describe("no error before any input (red team U11)", () => {
     fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${label("details")}, completed`) })[0]);
     await screen.findByRole("heading", { level: 2, name: label("details") });
     expect(await screen.findByText(SHORT_WHY)).toBeTruthy();
+    expect(await screen.findByText(NO_GOALS)).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${label("subject")}, completed`) })[0]);
     await screen.findByRole("heading", { level: 2, name: label("subject") });
     expect(await screen.findByText(PICK)).toBeTruthy();

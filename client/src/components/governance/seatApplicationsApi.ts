@@ -6,6 +6,7 @@
  * does not hold terms.read, and the page says "members read applications"
  * rather than "something went wrong", so the status travels with the answer.
  */
+import type { ProposalGoal } from "@shared/proposalGoals";
 import { authToken } from "@/lib/gameApi";
 import type { ApplicationStatus } from "@shared/seatApplications";
 import type { ServedAlignment } from "@/components/alignment/alignmentsApi";
@@ -21,6 +22,9 @@ export interface ServedApplication {
   candidate: { id: string; name: string | null };
   seats: Array<{ id: string; name: string; aim: string | null }>;
   note: string | null;
+  /** The goals for the first moon: the member's list, or an older application's words as one goal (joining lane PR 1). */
+  goals?: ProposalGoal[];
+  /** What is left of the older words beside the goals: the aim and the terms choice. */
   deliverables: string | null;
   settings: unknown;
   term: { endsOn: string; followsSeason: boolean; seasonId: string | null };
