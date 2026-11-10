@@ -14,8 +14,11 @@
  *                                               with a "Done when" test
  *   the season's goals for the village      ->  which my work serves, and how
  *   the hours                               ->  what I can give
- *   the agreements                          ->  the Love Letter before seating,
- *                                               the NDA once approved
+ *   the agreements                          ->  the NDA once approved. The
+ *                                               Love Letter is no tick here: the
+ *                                               applicant ALIGNS with it on the form
+ *                                               (the proposal's own `membership`,
+ *                                               Rye's answer 8, 9 Nov 2026)
  *
  * It rides in the open proposal's own JSON body (no table of its own), is
  * shown to whoever decides beside the open card with the gaps marked
@@ -69,6 +72,11 @@ export interface OpenProposalCard {
   /** `goal` is the goal's words when the proposal was sent, written by the server, never the form. */
   serves: Array<{ goalId: string; how: string; goal?: string }>;
   hours: string;
+  /**
+   * `loveLetter` is kept as stored on a card sent before the alignment replaced
+   * the tick, and read by nothing that decides: the proposal's `membership` is
+   * the record now.
+   */
   agreed: { loveLetter: boolean; nda: boolean };
   /** Form v2 (brief v2, 5.4). Optional on a card sent before them. */
   timeZone?: string;
@@ -87,7 +95,7 @@ export interface CardContext {
 }
 
 export const CARD_WORDS = {
-  agreed: "Tick that you will sign the Love Letter before you are seated, and the NDA once you are approved.",
+  agreed: "Tick that you will align with the village's confidentiality agreement once you are approved.",
   notTheRole: "Pick what you will move from the role's own outcomes.",
   notAGoal: "Pick goals from this season's goals for the village.",
   tooMany: (what: string, n: number) => `Up to ${n} ${what}.`,
@@ -168,14 +176,15 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   const hours = str(o.hours);
   if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
   const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
-  if (agreed.loveLetter !== true || agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
+  // Only the NDA is ticked here. A Love Letter tick from a form sent before the alignment replaced it is kept, never asked.
+  if (agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
   return {
     ok: true,
     card: {
       roles,
       serves,
       hours,
-      agreed: { loveLetter: true, nda: true },
+      agreed: { loveLetter: agreed.loveLetter === true, nda: true },
       ...(timeZone ? { timeZone } : {}),
       ...(windows.length ? { windows } : {}),
       ...(earliestStart ? { earliestStart } : {}),

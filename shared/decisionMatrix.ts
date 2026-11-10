@@ -80,6 +80,7 @@ import {
   ADMIN_EDIT,
   DATABASE_EXPORT,
   GOVERNANCE_MODE,
+  highestTier,
   MINT_REQUEST,
   MINT_RULE,
   ORG_DRAFT,
@@ -107,6 +108,8 @@ import {
 import { ringOf, VARIABLES, VARIABLES_BY_KEY } from "./gameVariables";
 import { GPS_CHANGE } from "./governingPurpose";
 import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
+import { CLOSING_POLICY } from "./closingPolicies";
 import { CYCLE_SETTLEMENT, type SettlementMode } from "./moonSettlement";
 import { ADOPTING_POWER, ROLE_APPLICATION } from "./seatApplications";
 
@@ -127,7 +130,7 @@ export type RiskTag = (typeof RISK_TAGS)[number];
  *   hypha        the village's Hypha space, off this platform
  *   holder       whoever is seated in a role that carries the power
  *   admin-panel  admins and founders, before the village takes the power on
- *   founder      the founder, who keeps the purpose statement's pen
+ *   founder      the founders, who write the conflict agreement until the Birthing
  *   not-yet      no vote, because the vote cannot be held yet
  *   nobody       nobody can act on it today (the steward's veto with no steward seated)
  *
@@ -288,6 +291,8 @@ export const SUBJECT_DECISIONS: Readonly<Record<string, string>> = {
   [CYCLE_SETTLEMENT]: "Settling a moon and releasing its pool",
   [GPS_CHANGE]: "Changing the governing purpose statement",
   [CONFLICT_AGREEMENT]: "Changing the conflict agreement",
+  [AGREEMENT]: "Adopting a village agreement",
+  [CLOSING_POLICY]: "Changing what closing the village means",
   [ORG_DRAFT]: "Changing the village's circles and roles",
 };
 
@@ -687,10 +692,17 @@ function voteRow(
   }
 
   const villageMethod = villageBallotMethod(inp.defaultMethod);
-  const base: BallotMethod = villageMethod === "hypha" ? "custom" : villageMethod;
-  const bar = thresholdsFor({ subjects: [subject], criticality: tier }, base, inp.village, inp.settings);
+  /*
+   * The purpose vote before the handover (Rye, 2026-11-06: Article 0 wins
+   * over "founder keeps the pen"): priced at the village's highest set tier
+   * and counted as custom, as POST /api/governance/purpose-changes stamps it.
+   */
+  const purposeEarly = subject === GPS_CHANGE && !inp.handoverComplete;
+  const priceTier = purposeEarly ? highestTier(inp.settings) : tier;
+  const base: BallotMethod = purposeEarly || villageMethod === "hypha" ? "custom" : villageMethod;
+  const bar = thresholdsFor({ subjects: [subject], criticality: priceTier }, base, inp.village, inp.settings);
   const conducts: BallotMethod = bar.method ?? base;
-  const floor = tierFloorOf(subject, tier);
+  const floor = tierFloorOf(subject, priceTier);
 
   if (conducts === "consent") {
     consultation.push(
@@ -710,21 +722,30 @@ function voteRow(
   if (bar.warning) methodLines.push(bar.warning);
 
   let approval: DecisionMatrixRow["approval"];
-  if (subject === GPS_CHANGE && !inp.handoverComplete) {
-    approval = {
-      who: "founder",
-      text: "The founder, who writes the statement until every transferable power has left the founding role. Until then this vote cannot be opened.",
-    };
-  } else if (subject === CONFLICT_AGREEMENT && !inp.gameStarted) {
+  if (subject === CONFLICT_AGREEMENT && !inp.gameStarted) {
     // The consequence pen (plan 2.3): the founders write it until the Birthing.
     approval = {
       who: "founder",
       text: "The founders, who write the conflict agreement until the Game starts. Until then this vote cannot be opened.",
     };
+  } else if (subject === CLOSING_POLICY && !inp.gameStarted) {
+    // The same consequence pen (D6): the exit policy's writers adopt the words until the Birthing.
+    approval = {
+      who: "founder",
+      text: "The founders, who adopt what closing means until the Game starts. Until then this vote cannot be opened.",
+    };
   } else if (!inp.governanceOnForMembers) {
     approval = {
       who: "not-yet",
       text: withDoors("No vote can be held yet: the governance module is not on for members.", doors),
+    };
+  } else if (purposeEarly) {
+    approval = {
+      who: "roll",
+      text: withDoors(
+        `${rollText(subject)} Until every transferable power has left the founding role, the founder can also write the statement directly.`,
+        doors,
+      ),
     };
   } else {
     approval = { who: "roll", text: withDoors(rollText(subject), doors) };

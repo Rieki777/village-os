@@ -387,6 +387,7 @@ two from the admin panel and almost never touches the first.
   volume is content-addressed, cached correctly and swappable;
   `client/public` is served one-year-immutable and cannot be replaced for a
   year once a browser has it.
+- **The confidentiality agreement's PDF lives in `DATA_DIR/private-documents/`** (2026-11-09, role journey L7): attached in Admin, Content, Confidentiality Agreement, and read only by signed-in members through `GET /api/confidentiality/document`. It is deliberately outside the uploads volume, which `/api/uploads/:filename` serves to anybody, so the uploads-archive backup does NOT carry it. Keep your own copy of the signed PDF and attach it again after a volume is lost. No env var and no seed.
 - **The stock character art ships in the image, not in `client/public`** (2026-10-13): the thirty class drawings live in `server/assets/avatars/` and the server answers them at their old `/images/avatars/` URLs, with or without a volume. No env var and no seed; a fork with its own Dockerfile or deploy script must ship `server/assets/` beside `dist/`, as the stock `Dockerfile` does, or the class art falls back to sigils.
 - **Member uploads are shrunk in the browser** by
   `client/src/lib/imagePrep.ts`: it draws to a canvas, encodes WebP and

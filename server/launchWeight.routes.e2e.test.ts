@@ -687,7 +687,13 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     await turnOnByVote("forum", "off");
   });
 
-  it("control: the vote cannot switch governance, the module every vote runs on", async () => {
+  /*
+   * G.3 (canvas follow-up, Article 0): the module every vote runs on is
+   * votable now, at the highest tier. The one switch still refused is taking
+   * it below members while nobody holds module.switch live, since nothing
+   * could turn it back on, and the refusal names the vote on who holds that power.
+   */
+  it("control: the vote cannot take governance below members while nobody could switch it back, and says how to get past that", async () => {
     const made = await call("POST", "/api/game/mechanics/proposals", {
       body: {
         title: "Turn governance off",
@@ -695,8 +701,33 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
         changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }],
       },
     });
-    expect(made.status, JSON.stringify(made.json)).toBeGreaterThanOrEqual(400);
-    expect(JSON.stringify(made.json)).toContain("holds the vote itself");
+    expect(made.status, JSON.stringify(made.json)).toBe(400);
+    expect(JSON.stringify(made.json)).toContain("Give that power a holder first: raise a hand for the power to switch modules");
+    expect(JSON.stringify(made.json)).not.toContain("holds the vote itself");
+  });
+
+  it("a vote may widen governance, and its ballot is priced at the village's highest tier (AC1.4)", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Open governance to visitors",
+        rationale: "Visitors should see how the village decides.",
+        changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "public" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      body: { purposeAlignment: "Members asked for this together, and it lets the village run its own affairs in the open." },
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    // governance.highest_tier is unset here, so the highest tier is constitutional: 97 and 97.
+    expect(opened.json?.ballot, JSON.stringify(opened.json)).toMatchObject({ unityPct: 97, quorumPct: 97 });
+    // Nobody votes: the ballot fails, and governance stays where it was.
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Nobody came." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).not.toBe("passed");
+    const row = ((await call("GET", "/api/modules/catalog")).json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle).toBe("members");
   });
 
   it("still lets that admin narrow a module that is on", async () => {

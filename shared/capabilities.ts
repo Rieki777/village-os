@@ -41,6 +41,7 @@ export type Capability =
   // rung check anywhere: a village that wants its book closed moves the rung.
   // `map.viewPeople` is never used for this, because it opens at guest.
   | "terms.read" // read what each seat offers whoever holds it, money included
+  | "records.confidential" // read the village's private records; held only while aligned with its confidentiality agreement as it reads now
   | "map.contact" // reach a role holder through the contact relay
   | "map.edit" // enter build mode and keep a draft of the land
   | "map.publish" // push a draft onto the live map everyone sees
@@ -81,6 +82,17 @@ export type Capability =
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
+  // ── The private brief key (canvas follow-up G.4, Rye 2026-11-06) ─────────
+  //
+  // Read and write the four brief sections that stay out of every public
+  // and member reading: people, legal, land and constraints
+  // (`ADMIN_ONLY_SECTIONS`, shared/canvasFrames.ts). Article 0: everything
+  // changes by a village vote, so the administrators' hold on these sections
+  // has to have a door. A `power_grant` vote seats it on a role; its live
+  // holders then hold the canvas admin pen and the Brain editor's four private
+  // sections, and an unseated admin is refused. With nobody holding it the
+  // administrators keep them, as before.
+  | "brief.private" // read and write the brief's four private sections
   | "dial.set" // turn the village's own dials, within the open ring
   // ── The proposal key (0141) ──────────────────────────────────────────────
   //
@@ -241,6 +253,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "proposal.decide",
   "map.viewPeople",
   "terms.read",
+  "records.confidential",
   "map.contact",
   "map.edit",
   "map.publish",
@@ -266,6 +279,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "intake.moderate",
   "library.keep",
   "story.tell",
+  "brief.private",
   "dial.set",
   "quest.approve",
   "redemption.confirm",
@@ -315,6 +329,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "proposal.decide": "Record a decision's outcome",
   "map.viewPeople": "See who holds roles on the village map",
   "terms.read": "Read what each role offers, money included",
+  "records.confidential": "Read the village's private records, while aligned with its confidentiality agreement",
   "map.contact": "Reach a role holder through the contact relay",
   "map.edit": "Draft changes to the land in build mode",
   "map.publish": "Publish a draft onto the live map",
@@ -342,6 +357,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
+  "brief.private": "Read and write the brief's private sections: people, legal, land and constraints",
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
@@ -578,6 +594,10 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // Canvas follow-up G.4 (AC1.5, Rye 2026-11-06): born transferable, so the
+  // spec's "moves by a power_grant vote" is a real door. Its routes ask the
+  // one gate (`guardCapability`), so the escape hatch and the record are there.
+  "brief.private": true,
   "org.seat": true,
   "org.seatAgent": true,
   /*
@@ -669,6 +689,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "map.viewPeople": false,
   // Reading is a member's own act, so there is nobody for it to move to.
   "terms.read": false,
+  // A role grants it (a finance role, say); the alignment is asked on top, in the gate (ALIGNMENT_BOUND).
+  // Not a power the village takes back to itself: nothing gates behind it yet that carries the escape hatch.
+  "records.confidential": false,
   "map.contact": false,
   "map.edit": false,
   // A member-rung act, the same as opening a room: whoever runs sessions
@@ -738,12 +761,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 30 keys
- * today. The other 23 are not withheld from anybody: they are personal acts
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 31 keys
+ * today. The other 24 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 30 in the founding seat and has
+ * Read this way, a launched village holds all 31 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -787,6 +810,11 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * `place.tend` and `place.permit` (Living places, 0354) were born held back
  * until Rye gives his word on them (the places spec, C8), which moved only the
  * second: 30 and 23.
+ * `brief.private` (the canvas follow-up, G.4) was born transferable, the
+ * spec Rye accepted on 2026-11-06 naming it so, which moved only the first:
+ * 31 and 23. `records.confidential` (role journey L7) was born held back, a
+ * key no route gates behind yet and one the alignment binds on top, which
+ * moved only the second: 31 and 24.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -953,6 +981,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true, // a look, like map.viewPeople: a deny may pause it
+  "records.confidential": true, // a look at private records: a warning badge may pause it
   "map.edit": true,
   "map.publish": true,
   "map.curatePhotos": true,
@@ -996,6 +1025,9 @@ export const DENIABLE: Record<Capability, boolean> = {
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // A job: a warning pauses somebody reading the private sections and takes
+  // away no say of theirs.
+  "brief.private": true,
   "dial.set": true,
   // A job, like `feed.announce`: pausing it stops somebody sending the
   // village's letters and changing its automations, and takes away nothing
@@ -1117,6 +1149,11 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "operator.config": false,
   "operator.secrets": false,
   "operator.recover": false,
+  // FALSE: the private sections name people, title holders and land, and they
+  // move onto a role by a `power_grant` vote (G.4). A badge is minted by an
+  // admin, so a badge carrying this would let an unseated admin hand
+  // themselves back the sections the village moved to a role.
+  "brief.private": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the
@@ -1128,6 +1165,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true,
+  "records.confidential": true,
   "map.contact": true,
   "map.edit": true,
   "map.publish": true,
@@ -1209,7 +1247,18 @@ export type CapabilitySource =
   | "carried by a greater key"
   | "badge"
   | "stage"
-  | "not granted";
+  | "not granted"
+  | "needs an alignment";
+
+/**
+ * KEYS HELD ONLY WITH A CURRENT ALIGNMENT (role journey L7). Whatever grants
+ * `records.confidential` (a role, a badge, a stage, the admin short-circuit, the
+ * break-glass) grants nothing until the actor holds the village's
+ * confidentiality agreement as it reads NOW (`alignedConfidentiality`). Changed
+ * words make every holder align again before the key reaches them, which is the
+ * point: private records are read under the words in force today.
+ */
+export const ALIGNMENT_BOUND: readonly Capability[] = ["records.confidential"];
 
 export interface CapabilityCtx {
   stageIndex: number;
@@ -1267,6 +1316,12 @@ export interface CapabilityCtx {
    * request the gate refuses.
    */
   adminOverride?: boolean;
+  /**
+   * The actor holds the village's confidentiality agreement as it reads now
+   * (server/lib/confidentiality.ts). Read by step 0 alone, for ALIGNMENT_BOUND
+   * keys. Absent reads as not aligned, so a caller that never asks holds none.
+   */
+  alignedConfidentiality?: boolean;
 }
 
 export interface CapabilityDecision {
@@ -1287,6 +1342,8 @@ export interface CapabilityDecision {
  * and runs identically on client and server.
  *
  * Order of authority — this ordering IS the policy (Gate E, amended):
+ *   0. an ALIGNMENT_BOUND key without its alignment -> false, for everybody,
+ *      the admin and the break-glass included (role journey L7).
  *   1. isAdmin, on a key the village does NOT hold -> true. Unchanged: the
  *      operator can always act on the scaffolding they are responsible for.
  *   1b. isAdmin, on a key the village DOES hold:
@@ -1420,6 +1477,10 @@ export const BREAK_GLASS_WAY_THROUGH =
 
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
+  // Step 0 (L7): a key bound to an alignment is held by nobody without it, admins and the glass included.
+  if (ALIGNMENT_BOUND.includes(cap) && ctx.alignedConfidentiality !== true) {
+    return { allowed: false, source: "needs an alignment", villageHolds, reachedPastVillage: false };
+  }
   if (ctx.isAdmin && !villageHolds) {
     return { allowed: true, source: "admin", villageHolds: false, reachedPastVillage: false };
   }
