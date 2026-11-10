@@ -18,6 +18,8 @@
  * confirmed is deleted after 48 hours, and a declined one loses its name and
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
+import CastStrip from "@/components/roleDraft/CastStrip";
+import Burst from "@/components/roleDraft/Burst";
 import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
@@ -270,11 +272,14 @@ export default function ProposeARole() {
   if (sent) {
     return (
       <Shell>
-        <Notice title="Check your email">
-          <p>{sent}</p>
-          {/* The steps after confirming, for the roles picked (Rye's answer 7): conversations in order, the booking link. */}
-          {form.kind === "open" && <NextForRoles roles={form.roles.filter((r) => r.id in picked)} />}
-        </Notice>
+        <div className="relative">
+          <Burst play={1} />
+          <Notice title="Check your email">
+            <p>{sent}</p>
+            {/* The steps after confirming, for the roles picked (Rye's answer 7): conversations in order, the booking link. */}
+            {form.kind === "open" && <NextForRoles roles={form.roles.filter((r) => r.id in picked)} />}
+          </Notice>
+        </div>
       </Shell>
     );
   }
@@ -286,6 +291,7 @@ export default function ProposeARole() {
     <Shell>
       <div className="mb-8">
         <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>
+        <CastStrip href="/roles/select" size="size-16" />
         <p className="mt-3 text-muted-foreground">
           {form.term
             ? OPEN_WORDS.ledeMoon(civilDayWords(form.term.startsOn), civilDayWords(form.term.endsOn))

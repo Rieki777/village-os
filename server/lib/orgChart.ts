@@ -20,6 +20,9 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { isMoonTerm } from "../../shared/moonRenewal";
+import { raiseRevokeForEnded } from "./roleAccess";
+import { liveAssignmentIdsOfUser } from "../repos/roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
@@ -485,6 +488,8 @@ export function isLapsed(
     return { lapsed: true, reason: "term" };
   }
   if (ctx.cadence === "never") return { lapsed: false, reason: null };
+  // D34: a moon term may cross the season's end. The season turn leaves a running moon term alone; its own date still ends it.
+  if (a.termEndsAt && isMoonTerm(a.startedAt, a.termEndsAt)) return { lapsed: false, reason: null };
   // A seat may opt out on its own card; null inherits the village setting.
   if (role.expiresEachSeason === false) return { lapsed: false, reason: null };
   /*
@@ -1252,6 +1257,7 @@ export async function endSeating(pool: Pool | PoolConnection, assignmentId: stri
     [reason ?? null, assignmentId],
   );
   seatingsChanged();
+  if (r?.affectedRows) await raiseRevokeForEnded(pool, [assignmentId]);
   return !!r?.affectedRows;
 }
 
@@ -1279,11 +1285,13 @@ export async function releaseSeatingsForUser(
   userId: string,
   reason: string,
 ): Promise<number> {
+  const liveIds = await liveAssignmentIdsOfUser(pool, userId);
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE user_id = ? AND ended_at IS NULL",
     [reason, userId],
   );
   seatingsChanged();
+  await raiseRevokeForEnded(pool, liveIds);
   await pool.query(
     "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
     [userId],

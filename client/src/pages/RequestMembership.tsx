@@ -237,8 +237,8 @@ export default function RequestMembership() {
               </p>
               {/* The draft board: every open role by character, a shortlist, then apply (pages/RoleDraft.tsx). */}
               <p className="mt-3 text-center text-muted-foreground">
-                <a href="/roles/draft" className="font-medium text-foreground underline underline-offset-2">
-                  {t({ message: "Draft your roles", context: "join page link" })}
+                <a href="/roles/select" className="font-medium text-foreground underline underline-offset-2">
+                  {t({ message: "Select your roles", context: "join page link" })}
                 </a>
               </p>
             </>
