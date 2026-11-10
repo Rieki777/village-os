@@ -4882,6 +4882,11 @@ msgstr ""
 msgid "Ready for the village to review?"
 msgstr ""
 
+#: client/src/pages/Roles.tsx
+msgctxt "roles page measures door"
+msgid "How roles are going"
+msgstr ""
+
 #: client/src/components/journey/LaunchGuide.tsx
 msgctxt "launch guide tab"
 msgid "Organizing"
@@ -4957,6 +4962,10 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Chosen by {names}."
 #~ msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "How roles are going"
+msgstr ""
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
@@ -6923,6 +6932,10 @@ msgctxt "sera changes"
 msgid "Which changes"
 msgstr ""
 
+#: client/src/pages/RoleMeasures.tsx
+msgid "Nothing has been stamped yet."
+msgstr ""
+
 #. placeholder {0}: c.roleName
 #. placeholder {1}: day(c.termEndsAt)
 #. placeholder {2}: day(c.nextTermEndsAt)
@@ -8273,6 +8286,10 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "That did not reach the server, so nothing was decided."
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "Counts and medians per season and circle, from stamped times. No names. \"Too few\" means fewer than three people, so the number is withheld."
 msgstr ""
 
 #: client/src/components/roleEdit/RoleEditor.tsx

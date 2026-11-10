@@ -4871,6 +4871,11 @@ msgstr "Approval withdrawn"
 msgid "Ready for the village to review?"
 msgstr "Ready for the village to review?"
 
+#: client/src/pages/Roles.tsx
+msgctxt "roles page measures door"
+msgid "How roles are going"
+msgstr "How roles are going"
+
 #: client/src/components/journey/LaunchGuide.tsx
 msgctxt "launch guide tab"
 msgid "Organizing"
@@ -4945,6 +4950,10 @@ msgstr "Not approved. Both tools are closed."
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Chosen by {names}."
 #~ msgstr "Chosen by {names}."
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "How roles are going"
+msgstr "How roles are going"
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
@@ -6908,6 +6917,10 @@ msgctxt "sera changes"
 msgid "Which changes"
 msgstr "Which changes"
 
+#: client/src/pages/RoleMeasures.tsx
+msgid "Nothing has been stamped yet."
+msgstr "Nothing has been stamped yet."
+
 #. placeholder {0}: c.roleName
 #. placeholder {1}: day(c.termEndsAt)
 #. placeholder {2}: day(c.nextTermEndsAt)
@@ -8252,6 +8265,10 @@ msgstr "The newest decisions on {name}, with the note each was decided with, whe
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "That did not reach the server, so nothing was decided."
 msgstr "That did not reach the server, so nothing was decided."
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "Counts and medians per season and circle, from stamped times. No names. \"Too few\" means fewer than three people, so the number is withheld."
+msgstr "Counts and medians per season and circle, from stamped times. No names. \"Too few\" means fewer than three people, so the number is withheld."
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
