@@ -43,6 +43,7 @@ import { aboutOf, backgroundCheckOf, referencesOf, type BackgroundCheck, type Pr
 import { goalsAsText, goalsOf, legacyGoals, parseGoals, type ProposalGoal } from "./proposalGoals";
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
 import { judgeTermsStep, type TermAnswers } from "./termsWords";
+import { counterOfferOf, type CounterOffer } from "./counterOffer";
 import type { HandOpenerRule } from "./powerHands";
 import { roleWithHolders } from "./roleHolderLabel";
 
@@ -142,6 +143,8 @@ export interface ApplicationAnswers {
   references?: ProposalReference[];
   about?: ProposalAbout;
   backgroundCheck?: BackgroundCheck;
+  /** The deciders' counter-offer on the terms (shared/counterOffer.ts). Written by the decider door only: the member's own submission never carries it. */
+  counterOffer?: CounterOffer;
 }
 
 const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
@@ -182,6 +185,7 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     ...(referencesOf(r.references).length ? { references: referencesOf(r.references) } : {}),
     ...(Object.keys(aboutOf(r.about)).length ? { about: aboutOf(r.about) } : {}),
     ...(backgroundCheckOf(r.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(r.backgroundCheck) as BackgroundCheck } : {}),
+    ...(counterOfferOf(r.counterOffer) ? { counterOffer: counterOfferOf(r.counterOffer) as CounterOffer } : {}),
   };
   const empty = !answers.references && !answers.about && !answers.backgroundCheck && !answers.goals.length && !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
   return empty ? null : answers;
@@ -267,7 +271,7 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   let answers = parseApplicationAnswers(b.answers);
   // About you is judged by the route, with the roles in hand; whatever the door sent for it is never stored as it came.
   if (answers) {
-    const { references: _r, about: _a, backgroundCheck: _b, ...rest } = answers;
+    const { references: _r, about: _a, backgroundCheck: _b, counterOffer: _c, ...rest } = answers;
     answers = rest;
   }
   let deliverablesOut = deliverables;

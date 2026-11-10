@@ -24,6 +24,7 @@
  * score for a `waiting` interview is refused, and the update that closes an
  * interview is guarded on `open`, so two scorers at once cannot both win.
  */
+import { applicantOffer } from "./counterOffer";
 import crypto from "node:crypto";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import {
@@ -493,7 +494,7 @@ export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok:
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null; offer: Awaited<ReturnType<typeof applicantOffer>> }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -521,7 +522,7 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   // About you (joining lane PR 2): the applicant sees HOW MANY references they gave, never who, and nobody else reads this page.
   const sent = kindOfRef(ref) === "open" ? await proposals.readOpenProposal(pool, ref) : null;
   const referencesGiven = sent && sent.body.backgroundCheck ? (sent.body.references ?? []).length : null;
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven };
+  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven, offer: outcome ? null : await applicantOffer(pool, ref) };
 }
 
 /** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */

@@ -314,3 +314,16 @@ export async function proposalsKeepingFiles(db: Db, ids: readonly string[]): Pro
   const [rows] = await db.query<RowDataPacket[]>("SELECT id FROM open_role_proposals WHERE id IN (?) AND anonymised_at IS NULL", [ids]);
   return new Set(rows.map((r) => String(r.id)));
 }
+
+/**
+ * Write a proposal's counter-offer (shared/counterOffer.ts), whole. Guarded on `confirmed`, so a
+ * decided proposal's terms never change under its decision. The caller holds the row lock
+ * (`readOpenProposal(conn, id, true)`) and has checked the revision it read. True when written.
+ */
+export async function setCounterOffer(db: Db, id: string, counterOffer: unknown): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.counterOffer', CAST(? AS JSON)) WHERE id = ? AND status = 'confirmed'",
+    [JSON.stringify(counterOffer), id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}

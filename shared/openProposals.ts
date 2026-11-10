@@ -21,6 +21,7 @@
 /** The village's public link. */
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
+import { counterOfferOf, type CounterOffer } from "./counterOffer";
 import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
 import type { TermKey } from "./termsWords";
@@ -131,6 +132,8 @@ export interface OpenProposalBody {
   references?: ProposalReference[];
   backgroundCheck?: BackgroundCheck;
   about?: ProposalAbout;
+  /** The steward's counter-offer on the terms, appended revision by revision (shared/counterOffer.ts). Written only by the decider door, never by the form. */
+  counterOffer?: CounterOffer;
 }
 
 export interface OpenProposalInput {
@@ -169,6 +172,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(referencesOf(o.references).length ? { references: referencesOf(o.references) } : {}),
     ...(backgroundCheckOf(o.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(o.backgroundCheck) as BackgroundCheck } : {}),
     ...(Object.keys(aboutOf(o.about)).length ? { about: aboutOf(o.about) } : {}),
+    ...(counterOfferOf(o.counterOffer) ? { counterOffer: counterOfferOf(o.counterOffer) as CounterOffer } : {}),
   };
 }
 
