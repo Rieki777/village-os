@@ -22,7 +22,7 @@
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import type { SeatSettings } from "../../shared/seatSettings";
-import type { ApplicationStatus } from "../../shared/seatApplications";
+import { parseApplicationAnswers, type ApplicationAnswers, type ApplicationStatus } from "../../shared/seatApplications";
 import { seatingsChanged } from "../lib/orgChart";
 
 type Db = Pool | PoolConnection;
@@ -34,6 +34,8 @@ export interface StoredApplication {
   seatIds: string[];
   note: string | null;
   deliverables: string | null;
+  /** The member door's answers (0369), or null. */
+  answers: ApplicationAnswers | null;
   settings: SeatSettings;
   settingsHash: string;
   /** The alignment text this application's words live in (0259), null before PR5. */
@@ -56,7 +58,7 @@ export interface StoredApplication {
 const COLUMNS =
   "id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, settings_hash, text_id, text_hash, " +
   "term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status, adopted_via, adopted_ref, " +
-  "authority_ref, decided_at, created_at";
+  "authority_ref, decided_at, created_at, answers";
 
 /** MySQL hands JSON back parsed on some drivers and as text on others. */
 function json<T>(v: unknown, fallback: T): T {
@@ -85,6 +87,7 @@ function rowToApplication(r: any): StoredApplication {
     seatIds: json<unknown[]>(r.seat_ids, []).map(String),
     note: r.note ?? null,
     deliverables: r.deliverables ?? null,
+    answers: parseApplicationAnswers(r.answers),
     settings: json<SeatSettings>(r.settings_json, { v: 1 }),
     settingsHash: String(r.settings_hash),
     textId: r.text_id ?? null,
@@ -122,13 +125,15 @@ export interface NewApplication {
   /** The application this one amends (PR8). */
   supersedesId?: string | null;
   status: ApplicationStatus;
+  /** The member door's answers (0369). */
+  answers?: ApplicationAnswers | null;
 }
 
 export async function insertApplication(db: Db, a: NewApplication): Promise<void> {
   await db.query(
     "INSERT INTO seat_applications (id, candidate_user_id, proposed_by, seat_ids, note, deliverables, settings_json, " +
-      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status) " +
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "settings_hash, text_id, text_hash, term_ends_at, term_season_id, term_follows_season, starts_at, supersedes_id, status, answers) " +
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     [
       a.id,
       a.candidateUserId,
@@ -146,6 +151,7 @@ export async function insertApplication(db: Db, a: NewApplication): Promise<void
       a.startsAt,
       a.supersedesId ?? null,
       a.status,
+      a.answers ? JSON.stringify(a.answers) : null,
     ],
   );
 }
@@ -320,7 +326,7 @@ export async function setApplicationText(db: Db, id: string, textId: string, tex
 /** The member's own words go when they ask to be forgotten. The terms and the decision stay, de-attributed. */
 export async function eraseApplicationWords(db: Db, candidateUserId: string): Promise<number> {
   const [r]: any = await db.query(
-    "UPDATE seat_applications SET note = NULL, deliverables = NULL WHERE candidate_user_id = ?",
+    "UPDATE seat_applications SET note = NULL, deliverables = NULL, answers = NULL WHERE candidate_user_id = ?",
     [candidateUserId],
   );
   return Number(r?.affectedRows ?? 0);

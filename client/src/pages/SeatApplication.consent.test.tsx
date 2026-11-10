@@ -113,7 +113,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const heading = () => screen.findByRole("heading", { name: "Ana Quillfeather applies for Kitchen keeper" });
+const heading = () => screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Kitchen keeper" });
 
 describe("the circle's answer on the application page", () => {
   it("every member reads where it stands, with the tally by role title", async () => {
@@ -186,7 +186,7 @@ describe("Record the adoption", () => {
     expect(screen.queryByRole("button", { name: CONSENT_WORDS.record })).toBeNull();
     // A proposal that changes roles never goes to a village vote, and the line says only what can happen.
     expect(screen.queryByRole("button", { name: "Put it to the village" })).toBeNull();
-    expect(screen.getByText("You hold the power that seats people. Adopt it for the village.")).toBeTruthy();
+    expect(screen.getByText("You hold the power to place people in roles. Adopt it for the village.")).toBeTruthy();
   });
 
   it("is not drawn for a member who does not hold the power, even once the circle has consented", async () => {

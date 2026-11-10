@@ -24,6 +24,7 @@ import {
   whoAdoptsWords,
 } from "./seatApplications";
 import { whoApprovesWords } from "./roleProposalConsent";
+import { parseApplicationAnswers, whoseMove } from "./seatApplications";
 
 const body = (over: Record<string, unknown> = {}) => ({
   seatIds: ["seat-a"],
@@ -34,9 +35,10 @@ const body = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("parseApplicationInput", () => {
-  it("reads one to five distinct seats, and an old draft's single seat", () => {
+  it("reads one to three distinct roles (D3), and an old draft's single seat", () => {
     expect(parseApplicationInput(body()).ok).toBe(true);
-    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c", "d", "e"] })).ok).toBe(true);
+    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c"] })).ok).toBe(true);
+    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c", "d"] }))).toMatchObject({ ok: false, field: "seatIds" });
     const old = parseApplicationInput({ ...body(), seatIds: undefined, orgRoleId: "seat-old" });
     expect(old.ok && old.input.seatIds).toEqual(["seat-old"]);
   });
@@ -195,5 +197,40 @@ describe("the subject", () => {
 
   it("has words for every status", () => {
     for (const s of APPLICATION_STATUSES) expect(STATUS_WORDS[s], s).toBeTruthy();
+  });
+});
+
+describe("the member door's answers (0369, guide v2 B1)", () => {
+  it("keeps the open form's field set, trimmed and capped, and reads a stored string", () => {
+    const raw = { aim: "  Money kept true. ", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings", "", 3], earliestStart: "2026-12-01", terms: { choice: "talk", note: " The rate " } };
+    const want = { aim: "Money kept true.", servesGoal: "One set of numbers", timeZone: "America/Costa_Rica", windows: ["weekday-mornings"], earliestStart: "2026-12-01", terms: { choice: "talk", note: "The rate" } };
+    expect(parseApplicationAnswers(raw)).toEqual(want);
+    expect(parseApplicationAnswers(JSON.stringify(raw))).toEqual(want);
+  });
+  it("is null when nothing was answered, or the value is not answers", () => {
+    expect(parseApplicationAnswers({})).toBeNull();
+    expect(parseApplicationAnswers({ aim: " ", terms: { choice: "maybe" } })).toBeNull();
+    expect(parseApplicationAnswers("not json")).toBeNull();
+    expect(parseApplicationAnswers(null)).toBeNull();
+  });
+  it("drops a date that is not a date", () => {
+    expect(parseApplicationAnswers({ aim: "x", earliestStart: "next week" })?.earliestStart).toBeNull();
+  });
+});
+
+describe("whose move it is (guide v2, Rye 10 Nov 2026)", () => {
+  it("names the holder of the power while it waits, and says yours only to the reader whose move it is", () => {
+    expect(whoseMove("awaiting-holder", { isCandidate: true })).toMatch(/^A holder of the power to place people in roles/);
+    expect(whoseMove("awaiting-holder", { holdsThePower: true })).toMatch(/^Yours: read it/);
+    // A holder reading their own proposal never adopts it: it is still the other holders' move.
+    expect(whoseMove("awaiting-holder", { isCandidate: true, holdsThePower: true })).toMatch(/^A holder of the power/);
+  });
+  it("is the village's while it votes, the proposer's once adopted, and nobody's once closed", () => {
+    expect(whoseMove("voting", null)).toBe("The village's: it is voting.");
+    expect(whoseMove("adopted", { isCandidate: true })).toMatch(/^Yours: align/);
+    expect(whoseMove("adopted", null)).toMatch(/^Theirs:/);
+    expect(whoseMove("withdrawn", { isCandidate: true })).toBe("Nobody's: this proposal is closed.");
+    expect(whoseMove("not-adopted", null)).toBe("Nobody's: this proposal is closed.");
+    expect(whoseMove("held-full", null)).toMatch(/waits for a place/);
   });
 });

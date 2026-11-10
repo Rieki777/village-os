@@ -108,11 +108,21 @@ export type FieldKind =
    */
   | "seatSettings"
   /*
-   * One to five seats from the org chart, as a list (seat settings PR4): one
-   * application carries every seat a member would hold, so their terms are
-   * recorded once. SeatPicksField draws it.
+   * One to three roles from the org chart, as a list (seat settings PR4; D3,
+   * three everywhere): one application carries every role a member would
+   * hold, so their terms are recorded once. SeatPicksField draws it.
    */
-  | "seatPicks";
+  | "seatPicks"
+  /*
+   * THE MEMBER DOOR'S OPEN-FORM FIELDS (Rye, 10 Nov 2026: the member door
+   * asks what the open form asks). `seasonGoal`: which of the season's goals
+   * for the village the work serves, or, when the season has none yet, says so
+   * and answers for them. `termsOnOffer`: the picked roles' terms on offer,
+   * read-only, accepted or flagged to talk about (SeasonGoalField,
+   * TermsOnOfferField).
+   */
+  | "seasonGoal"
+  | "termsOnOffer";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -173,6 +183,11 @@ export interface FieldSpec {
   roleKey?: string;
   /** For a `seatSettings` field: the whole preset an empty field starts from. */
   prefillWhole?: string;
+  /**
+   * Whether this field is asked, from the answers so far. Absent is always.
+   * A field not asked is not drawn and never judged (wizardWalk's fieldsFor).
+   */
+  showWhen?: (answers: Record<string, unknown>) => boolean;
   /** A sentence naming what is wrong, or null. Runs on every keystroke. */
   problem?: (value: unknown, answers: Record<string, unknown>) => string | null;
 }
@@ -184,6 +199,9 @@ export interface TypeStepOverride {
   label?: string;
   /** One sentence at the top of the step, in the member's register. */
   intro?: string;
+  /** The label and intro a door start reads instead (wizardDoor.ts), where the step asks something else. */
+  doorLabel?: string;
+  doorIntro?: string;
   fields?: readonly FieldSpec[];
 }
 

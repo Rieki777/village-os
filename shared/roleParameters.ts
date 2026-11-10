@@ -21,6 +21,7 @@
  */
 import { CONVERSATION_MODES, INTERVIEW_MAX_MINUTES, INTERVIEW_MAX_STEPS, INTERVIEW_MIN_MINUTES, type ConversationMode } from "./interviewerRoles";
 import { looksLikePaymentDetails, PAY_KINDS, parseSeatSettings, type PaySettings } from "./seatSettings";
+import { TRACKS, TRACK_WORDS, readTrack, type Track } from "./roleTracks";
 
 /** Every parameter key, in the order the editor and the card text show them. */
 export const PARAMETER_KEYS = [
@@ -62,14 +63,9 @@ export const PARAMETER_COLUMNS: Record<ParameterKey, string> = {
 /** Keys whose column is stored as JSON text. */
 export const JSON_PARAMETERS: ReadonlySet<ParameterKey> = new Set<ParameterKey>(["languages", "villageGoals", "selectionCriteria", "conversations", "accessBundle"]);
 
-export const TRACKS = ["contractor", "volunteer", "employee", "ai"] as const;
-export type Track = (typeof TRACKS)[number];
-export const TRACK_WORDS: Record<Track, string> = {
-  contractor: "Paid contractor",
-  volunteer: "Volunteer",
-  employee: "Local employee",
-  ai: "AI",
-};
+// One list for the editor and the card (shared/roleTracks.ts, guide v2).
+export { TRACKS, TRACK_WORDS } from "./roleTracks";
+export type { Track } from "./roleTracks";
 
 export { CONVERSATION_MODES, type ConversationMode };
 
@@ -201,8 +197,7 @@ export function readParameter(key: ParameterKey, raw: unknown, isRole: (id: stri
     }
     case "track": {
       if (raw === null || raw === undefined || raw === "") return ok(null);
-      const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
-      const hit = (TRACKS as readonly string[]).includes(v) ? (v as Track) : (Object.entries(TRACK_WORDS).find(([, w]) => w.toLowerCase() === v)?.[0] as Track | undefined);
+      const hit = readTrack(raw);
       return hit ? ok(hit) : no(PARAMETER_WORDS.track);
     }
     case "whereWorked": {

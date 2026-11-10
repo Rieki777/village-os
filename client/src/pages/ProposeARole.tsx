@@ -26,15 +26,18 @@ import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "wouter";
-import { ArrowRight, MailCheck } from "lucide-react";
+import { Link, useParams } from "wouter";
+import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
+import { doorBackOf } from "@shared/seatApplyLinks";
 import Layout from "@/components/Layout";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { readStoredJson } from "@/lib/safeStorage";
 import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 // Form v2's pieces, on their own line so the membership lane's edit to the line above them merges clean.
-import { NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+import { HoursField, NextForRoles, Practicalities, browserTimeZone, type Practical } from "@/components/openProposal/RoleCardBridge";
+/** The goals are asked on each role card now (guide v2); the global pick is left empty. */
+const NO_GLOBAL_SERVES: Record<string, string> = {};
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -86,13 +89,16 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 
 /** The link in the confirmation email. */
 export function ConfirmProposal() {
-  const [said, setSaid] = useState<{ ok: boolean; message: string } | null>(null);
+  const { t } = useLingui();
+  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null } | null>(null);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
     fetch("/api/open-proposals/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone });
+        // The applicant's own page (role journey L5): shown once here as well as mailed, and only an address of its own.
+        const statusPath = typeof data?.statusPath === "string" && data.statusPath.startsWith("/application-status/") ? data.statusPath : null;
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone, statusPath });
       })
       .catch(() => setSaid({ ok: false, message: OPEN_WORDS.confirmGone }));
   }, []);
@@ -101,6 +107,14 @@ export function ConfirmProposal() {
       {said ? (
         <Notice title={said.ok ? "Confirmed" : "That link didn't work"}>
           <p>{said.message}</p>
+          {said.ok && said.statusPath && (
+            <>
+              <a href={said.statusPath} className={`${BUTTON} mt-6`} data-status-link="">
+                {t`Follow where your proposal is`}
+              </a>
+              <p className="mt-3 text-sm text-muted-foreground">{t`We emailed you this link too. Keep it to yourself: it is how we know it is you.`}</p>
+            </>
+          )}
           {!said.ok && (
             <a href="/propose-a-role" className={`${BUTTON} mt-6`}>
               Propose again
@@ -132,7 +146,6 @@ export default function ProposeARole() {
   /** The applicant's own card (components/openProposal/RoleCardBridge.tsx). */
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
   const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
-  const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
   const [agreed, setAgreed] = useState({ nda: false });
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
@@ -221,7 +234,8 @@ export default function ProposeARole() {
             windows: practical.windows,
             earliestStart: practical.earliestStart,
             terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
-            serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
+            // Guide v2: each role card names the season goals its work serves.
+            serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
             hours,
             // The NDA promise only: the membership letter is aligned with below, never ticked.
             agreed,
@@ -285,11 +299,24 @@ export default function ProposeARole() {
   }
 
   const seasonName = form.season?.name || "next season";
+  // Only when a door sent the visitor here with `from`; a shared link stands on its own.
+  const cameFrom = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("from") ? doorBackOf(window.location.search, "", window.location.origin) : null;
   const invalid = (field: string) => (error?.field === field ? { "aria-invalid": true, "aria-describedby": "propose-error" } : {});
 
   return (
     <Shell>
       <div className="mb-8">
+        {/* Back to the board or the role card the visitor came from (role audit, 10 Nov 2026). */}
+        {cameFrom && (
+          <Link
+            href={cameFrom.href}
+            className="mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            data-door-back=""
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {cameFrom.card ? t`Back to the role` : cameFrom.circle ? t`Back to the circle` : t`Back to the roles`}
+          </Link>
+        )}
         <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>
         <CastStrip href="/roles/select" size="size-16" />
         <p className="mt-3 text-muted-foreground">
@@ -309,6 +336,19 @@ export default function ProposeARole() {
             </p>
           )}
 
+          {/* Guide v2: why you and your aim, then each role card (its goals, first tasks, the season goal it serves), then the practicalities. */}
+          <div>
+            <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
+              {OPEN_WORDS.whyLabel}
+            </label>
+            <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
+          </div>
+          <div>
+            <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
+              {OPEN_WORDS.aimLabel}
+            </label>
+            <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
+          </div>
           <fieldset className="space-y-4" {...invalid("roles")}>
             <legend className="mb-2 text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.pickRoles} <span className="font-normal text-muted-foreground">({count} of {OPEN_PROPOSAL_MAX_ROLES})</span>
@@ -359,6 +399,7 @@ export default function ProposeARole() {
                           aim={r.aim}
                           timeCommitment={r.timeCommitment ?? null}
                           accountabilities={r.accountabilities ?? []}
+                          goals={form.goals}
                           value={cards[r.id] ?? EMPTY_ROLE_CARD}
                           onChange={(next) => setCards((c) => ({ ...c, [r.id]: next }))}
                         />
@@ -370,19 +411,10 @@ export default function ProposeARole() {
             ))}
           </fieldset>
 
-          <div>
-            <label htmlFor="propose-why" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.whyLabel}
-            </label>
-            <textarea id="propose-why" required rows={5} maxLength={OPEN_WHY_MAX} value={why} onChange={(e) => setWhy(e.target.value)} className={FIELD} {...invalid("why")} />
-          </div>
-          <div>
-            <label htmlFor="propose-aim" className="mb-2 block text-sm font-semibold text-card-foreground">
-              {OPEN_WORDS.aimLabel}
-            </label>
-            <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
-          </div>
-          <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed}
+          {/* The practicalities (the time first), then the agreements, then who you are (guide v2; role audit, 10 Nov 2026). */}
+          <HoursField hours={hours} onHours={setHours} />
+          <Practicalities value={practical} onChange={setPractical} />
+          <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
           />
@@ -406,7 +438,6 @@ export default function ProposeARole() {
               {t`An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.`}
             </p>
           </div>
-          <Practicalities value={practical} onChange={setPractical} />
           {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
           <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>
             <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />

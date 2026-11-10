@@ -14,6 +14,7 @@
  * the same offer, so a visitor learns which parts are unwritten and nothing
  * about their content.
  */
+import { PAID_TRACKS, readTrack, trackOf } from "../../shared/roleTracks";
 import { invitesApplications, isListed } from "../../shared/roleListing";
 import { conversationModeOf } from "../../shared/interviewerRoles";
 import { roleCardGate } from "../../shared/roleParams";
@@ -26,12 +27,14 @@ export interface RoleCardTier {
   editing: boolean;
 }
 
-function isPaid(role: OrgRole, payKind: string | undefined): boolean {
-  return role.track === "paid" || role.track === "local" || payKind === "fixed" || payKind === "range";
+function isPaid(role: OrgRole, payKind: string | undefined, defaultTrack?: string | null): boolean {
+  const track = trackOf(role.track, defaultTrack);
+  return (!!track && PAID_TRACKS.includes(track)) || payKind === "fixed" || payKind === "range";
 }
 
 /** The completeness gate for one role, read from the same offer the card shows. */
-export function gateOf(role: OrgRole) {
+/** `defaultTrack`: the village's track for a role with none (`org.default_track`, guide v2). */
+export function gateOf(role: OrgRole, defaultTrack?: string | null) {
   const offer = readTermsOffer(role.termsOffer);
   const settings = offer.ok ? offer.settings : null;
   const pay = publicPayOf(settings);
@@ -45,7 +48,7 @@ export function gateOf(role: OrgRole) {
       domain: role.domain,
       accountabilities: role.accountabilities,
       timeCommitment: role.timeCommitment,
-      track: role.track ?? null,
+      track: trackOf(role.track, defaultTrack),
       payKind: pay?.kind ?? null,
       hasRange: payStatesRange(pay),
       hasTerm,
@@ -64,6 +67,8 @@ export function gateOf(role: OrgRole) {
 export interface CardVillageWords {
   firstConversationRole?: string | null;
   paidConsentCircle?: string | null;
+  /** The track a role without one reads as (`org.default_track`, guide v2), or null for none. */
+  defaultTrack?: string | null;
 }
 
 export function roleCard(
@@ -73,7 +78,7 @@ export function roleCard(
   tier: RoleCardTier,
   opts: { roleNames?: ReadonlyMap<string, string>; gated?: boolean; words?: CardVillageWords },
 ): Record<string, unknown> {
-  const { pay, gate } = gateOf(role);
+  const { pay, gate } = gateOf(role, opts.words?.defaultTrack);
   const open = invitesApplications({ seats: role.seats, held, state, recruiting: role.recruiting });
   return {
     complete: gate.complete,
@@ -81,7 +86,7 @@ export function roleCard(
     written: gate.written,
     of: gate.of,
     gated: opts.gated === true,
-    track: role.track ?? null,
+    track: trackOf(role.track, opts.words?.defaultTrack),
     villageGoals: role.villageGoals ?? null,
     selectionCriteria: role.selectionCriteria ?? null,
     conversations: (role.conversations ?? []).map((s) => ({ ...s, roleName: opts.roleNames?.get(s.roleId) ?? null })),
@@ -90,7 +95,7 @@ export function roleCard(
     languages: role.languages ?? null,
     reviewAfterDays: role.reviewAfterDays ?? null,
     firstConversation: opts.words?.firstConversationRole ?? null,
-    ...(isPaid(role, pay?.kind) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
+    ...(isPaid(role, pay?.kind, opts.words?.defaultTrack) && opts.words?.paidConsentCircle ? { consentCircle: opts.words.paidConsentCircle } : {}),
     ...(pay && open && isListed(role) ? { publicPay: pay } : {}),
     ...(tier.terms ? { budgetLine: role.budgetLine ?? null, fundedFrom: role.fundedFrom ?? null } : {}),
     ...(tier.editing ? { accessBundle: role.accessBundle ?? null, bookingUrl: role.bookingUrl ?? null } : {}),
@@ -101,12 +106,13 @@ export function roleCard(
 export function cardWordsFrom(
   roles: ReadonlyArray<{ id: string; name: string }>,
   circles: ReadonlyArray<{ id: string; name: string }>,
-  settings: { firstConversationRole: string; paidConsentCircle: string },
+  settings: { firstConversationRole: string; paidConsentCircle: string; defaultTrack?: string },
 ): CardVillageWords {
   const roleId = settings.firstConversationRole.trim();
   const circleId = settings.paidConsentCircle.trim();
   return {
     firstConversationRole: roleId ? (roles.find((r) => r.id === roleId)?.name ?? null) : null,
     paidConsentCircle: circleId ? (circles.find((c) => c.id === circleId)?.name ?? null) : null,
+    defaultTrack: readTrack(settings.defaultTrack ?? ""),
   };
 }

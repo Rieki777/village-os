@@ -21,14 +21,17 @@ import { walkFor } from "./wizardWalk";
 
 export default function WizardStepper({
   typeId,
+  answers,
   current,
   onGoBack,
 }: {
   typeId: string | null;
+  /** The answers so far: a door start walks without the kind step (wizardDoor.ts). */
+  answers?: Record<string, unknown>;
   current: StepKey;
   onGoBack: (step: StepKey) => void;
 }) {
-  const walk = walkFor(typeId);
+  const walk = walkFor(typeId, answers);
   const at = Math.max(0, walk.findIndex((s) => s.key === current));
 
   return (

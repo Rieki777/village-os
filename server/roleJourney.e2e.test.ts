@@ -218,6 +218,9 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const invite = mailTo(APPLICANT.email, /adopted your proposal/).pop()!;
     const link = linkIn(invite.body.text, "/register");
     const inviteToken = new URL(link).searchParams.get("invite");
+    // The sign-up page names the roles and gives back what the person sent (role audit, 10 Nov 2026).
+    const check = await call("GET", `/api/invites/check?token=${encodeURIComponent(String(inviteToken))}`);
+    expect(check.json).toMatchObject({ valid: true, forRoles: ["Lead Financial Steward"], name: APPLICANT.name, email: APPLICANT.email });
     const made = await call("POST", "/api/auth/register", { name: APPLICANT.name, email: APPLICANT.email, password: APPLICANT.password, paths: ["steward"], invite: inviteToken });
     expect(made.status, JSON.stringify(made.json)).toBe(200);
     state.applicantToken = String(made.json?.token ?? "");
@@ -242,7 +245,7 @@ describe.skipIf(!DB_CONFIGURED)("the role journey: one stranger takes one role t
     const apps = (await call("GET", "/api/governance/role-applications", undefined, state.founder)).json?.applications ?? [];
     const app = apps.find((a: any) => String(a?.candidate?.id) === state.applicantId);
     expect(app?.status).toBe("adopted");
-    expect(String(app?.deliverables ?? "")).toContain("First moon: Publish the first cash view");
+    expect(String(app?.deliverables ?? "")).toContain("First task: Publish the first cash view");
     expect(String(app?.deliverables ?? "")).toContain("Accepts the terms on offer.");
   });
 

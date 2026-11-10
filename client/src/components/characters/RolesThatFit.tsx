@@ -4,7 +4,7 @@
  * Rye asked for the character selection to be a place "where you can click on
  * what roles you want to apply for and make a proposal". So under the chosen
  * class, the open seats that suit it, each a small card with its circle, its
- * aim and its open places, and a box to add it. Up to five, the most one
+ * aim and its open places, and a box to add it. Up to three, the most one
  * application holds, and "Propose these" opens "Apply for a seat" with every
  * picked seat already on the list (`applySeatsHref`).
  *
@@ -48,7 +48,7 @@ import { useMyGeneKeys } from "@/components/geneKeys/useMyGeneKeys";
 
 export const ROLES_FIT_WORDS = {
   heading: "Roles that fit this character",
-  line: (name: string) => `Open roles on the chart that suit ${name}. Add the ones you want, then propose them in one application.`,
+  line: (name: string) => `Open roles on the chart that suit ${name}. Add the ones you want, then propose them in one proposal.`,
   loading: "Finding the roles.",
   failed: "The roles did not load.",
   retry: "Retry",
@@ -57,7 +57,7 @@ export const ROLES_FIT_WORDS = {
   picked: (n: number) => `${n} of at most ${MAX_SEATS} picked.`,
   propose: "Propose these",
   pickFirst: "Pick a role to propose it.",
-  membersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
+  membersOnly: "Proposing for a role opens at the member rung. Once you reach it, you can propose here.",
   every: "See every role",
   places: (n: number) => (n === 1 ? "1 place open" : `${n} places open`),
   /** Every suggestion says why (Rye, 2026-10-23): the character always, and a line the circle lacks when the member carries one. */

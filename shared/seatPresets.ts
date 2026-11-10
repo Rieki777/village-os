@@ -235,7 +235,7 @@ export const SEAT_PRESETS: readonly SeatPreset[] = [
     // then measure something they never set (red team U7).
     values: {
       measures: [
-        { measure: "Quests done", target: "every agreed quest done by the moon's end", readFrom: "the quest board" },
+        { measure: "Tasks done", target: "every agreed task done by the moon's end", readFrom: "the task board" },
         { measure: "Handoffs written", target: "one handoff note each moon", readFrom: "the role's notes" },
       ],
     },
@@ -256,7 +256,7 @@ export const WHOLE_PRESETS: readonly WholeSeatPreset[] = [
     id: "platform:whole-volunteer-seat",
     group: "whole",
     label: "Volunteer role",
-    blurb: "Unpaid, async first, a few quests a moon, until the season ends.",
+    blurb: "Unpaid, async first, a few tasks a moon, until the season ends.",
     version: 1,
     picks: {
       term: "platform:until-season-end",

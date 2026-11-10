@@ -69,14 +69,14 @@ export const DISCOVER_WORDS = {
   charactersDoor: "Pick your characters",
   optionalDoor: "Add your Human Design or Gene Keys",
   kept: "Your answers stay in this browser. Nothing is sent unless you tick the box below or press Ask the guide.",
-  carry: "Copy my answers into Why you, in my application. The people deciding will read them there.",
+  carry: "Copy my answers into Why you, in my proposal. The people deciding will read them there.",
   askGuide: "Ask the guide",
   aiLabel: "AI suggestion",
   guideNote: "Only your four answers and the open role names go to the guide, and only now. Nothing is saved, and nobody deciding sees it.",
   signInToAsk: "Sign in to ask the guide.",
   noMapping:
     "This village has not yet said which characters a Human Design type or a Gene Keys line points toward, so nothing is suggested. You can still read your own chart here. It stays on this device, and no application ever carries it.",
-  private: "Private to you. It is never put on an application, never shown to anyone deciding, and never used to choose anyone.",
+  private: "Private to you. It is never put on a proposal, never shown to anyone deciding, and never used to choose anyone.",
 } as const;
 
 const text = (v: unknown, max: number): string => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");

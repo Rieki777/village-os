@@ -224,6 +224,20 @@ describe("the confirmation link", () => {
     await waitFor(() => expect(posted[0]).toEqual({ url: "/api/open-proposals/confirm", body: { token: "abc" } }));
   });
 
+  it("shows the private status link the confirmation hands back, and only a status address (role journey L5)", async () => {
+    window.history.pushState({}, "", "/propose-a-role/confirm?token=abc");
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "/application-status/op-1?token=s3cret" } });
+    render(<ConfirmProposal />);
+    const link = await screen.findByRole("link", { name: "Follow where your proposal is" });
+    expect(link.getAttribute("href")).toBe("/application-status/op-1?token=s3cret");
+    cleanup();
+    // Anything else the server might hand back is not drawn as a link.
+    serve({}, { status: 200, body: { confirmed: true, message: OPEN_WORDS.confirmed, statusPath: "https://elsewhere.example/x" } });
+    render(<ConfirmProposal />);
+    await screen.findByText(OPEN_WORDS.confirmed);
+    expect(screen.queryByRole("link", { name: "Follow where your proposal is" })).toBeNull();
+  });
+
   it("a link that ran out says so, and offers to start again", async () => {
     window.history.pushState({}, "", "/propose-a-role/confirm?token=old");
     serve({}, { status: 410, body: { error: OPEN_WORDS.confirmGone } });
@@ -293,10 +307,10 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     expect(document.querySelector("[data-no-season-goals]")).toBeNull();
     fireEvent.click(screen.getByLabelText("A cash view every Monday"));
     fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
-    fireEvent.change(screen.getByLabelText("Quest 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
-    fireEvent.change(screen.getByLabelText("Done when, for quest 1 for Lead Financial Steward"), { target: { value: "every circle lead has it" } });
+    fireEvent.change(screen.getByLabelText("Task 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
+    fireEvent.change(screen.getByLabelText("Done when, for task 1 for Lead Financial Steward"), { target: { value: "every circle lead has it" } });
     fireEvent.click(screen.getByLabelText("Investor ready"));
-    fireEvent.change(screen.getByLabelText("How your work serves: Investor ready"), { target: { value: "One set of numbers" } });
+    fireEvent.change(screen.getByLabelText("How your work in Lead Financial Steward serves: Investor ready"), { target: { value: "One set of numbers" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
     fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
@@ -308,7 +322,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card).toMatchObject({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
-      serves: [{ goalId: "g-investor", how: "One set of numbers" }],
+      serves: [{ goalId: "g-investor", how: "One set of numbers", roleId: "r-lfs" }],
       hours: "",
       agreed: { nda: true },
       terms: { choice: "accept", note: "" },

@@ -37,7 +37,7 @@ describe("DraftCarry", () => {
     // A stored key the cast does not know is never offered.
     expect(screen.queryByRole("button", { name: /made-up/ })).toBeNull();
     expect(screen.getByText(/Lead Financial Steward/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Apply with your selection/ }).getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden");
+    expect(screen.getByRole("link", { name: /Apply with your selection/ }).getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&from=%2Froles%2Fdraft");
     vi.unstubAllGlobals();
   });
 
@@ -46,7 +46,7 @@ describe("DraftCarry", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ roles: [{ id: "lfs", name: "Lead Financial Steward", termsOffer: null }] }), { status: 200 })));
     render(<DraftCarry cast={CAST} onPickCharacter={() => {}} />);
     const link = await screen.findByRole("link", { name: /Apply for the roles you selected/ });
-    expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=lfs&seat=garden");
+    expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=lfs&seat=garden&from=%2Froles%2Fdraft");
     vi.unstubAllGlobals();
   });
 
@@ -74,7 +74,7 @@ describe("a drafted role they were already adopted for", () => {
     render(<DraftCarry cast={CAST} userId="u-juno" onPickCharacter={() => {}} />);
     expect(await screen.findByText("Adopted, and yours from the start of next season: Lead Financial Steward.")).toBeTruthy();
     const link = await screen.findByRole("link", { name: /Apply with your selection/ });
-    expect(link.getAttribute("href")).toBe("/propose-a-role?role=events");
+    expect(link.getAttribute("href")).toBe("/propose-a-role?role=events&from=%2Froles%2Fdraft");
   });
 
   it("offers no Apply when every drafted role is already theirs", async () => {

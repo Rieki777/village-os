@@ -1,5 +1,5 @@
 /**
- * PICK ONE TO FIVE SEATS, FOR ONE APPLICATION (seat settings PR4).
+ * PICK ONE TO THREE ROLES, FOR ONE APPLICATION (seat settings PR4; D3), FROM THE LISTED ONES.
  *
  * A member who holds several seats records their terms once, so "Apply for a
  * seat" picks a LIST of seats from the org chart, the same `seats` source and
@@ -8,7 +8,7 @@
  * step.
  *
  * A checkbox per seat, each a 44px target with its own label, inside one
- * fieldset whose legend is the field's label. Once five are picked the rest are
+ * fieldset whose legend is the field's label. Once three are picked the rest are
  * disabled, and the count says why. A seat picked earlier that the list no
  * longer offers stays listed under its id, so a saved draft never loses a seat
  * without the member seeing it.
@@ -60,7 +60,9 @@ export default function SeatPicksField({
   const picked = pickedSeats(value);
   const max = field.max ?? MAX_SEATS;
   const atMost = picked.length >= max;
-  const listed = options ?? [];
+  // Only the roles the village lists, as on the board and the open form (role journey PR-A; Rye,
+  // 10 Nov 2026). One already picked stays, so a renewal of an unlisted role keeps its role.
+  const listed = (options ?? []).filter((o) => o.listed !== false || picked.includes(o.value));
   const strays = picked.filter((id) => !listed.some((o) => o.value === id)).map((id) => ({ value: id, label: id }) as PickOption);
 
   /*

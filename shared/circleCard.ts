@@ -31,7 +31,7 @@ import type { Slot } from "./playerCard";
 import { formatDay, type Read } from "./roleSheet";
 import type { SignReading } from "./roleSigns";
 import { openProposalHref } from "./openProposals";
-import { proposeTermsHref } from "./seatTermsOffer";
+import { applySeatsHref } from "./seatApplyLinks";
 import type { WorkPay } from "./workValue";
 
 export type { Read } from "./roleSheet";
@@ -277,7 +277,7 @@ function stateWords(r: CircleRoleIn): { words: string; filled: boolean } {
   }
 }
 
-function roleRow(r: CircleRoleIn, asMember: boolean): RoleRowOut {
+function roleRow(r: CircleRoleIn, asMember: boolean, circleId: string): RoleRowOut {
   const name = clean(r.name) ?? r.id;
   const { words, filled } = stateWords(r);
   const handles = (r.holderHandles ?? []).filter((h): h is string => typeof h === "string" && h.trim() !== "");
@@ -294,19 +294,20 @@ function roleRow(r: CircleRoleIn, asMember: boolean): RoleRowOut {
     stateWords: words,
     filled,
     holderCards,
-    applyHref: mayApply ? (asMember ? proposeTermsHref(r.id) : openProposalHref(r.id)) : null,
+    // The member door, back to this circle's card; a visitor gets the open form (role audit, 10 Nov 2026).
+    applyHref: mayApply ? (asMember ? applySeatsHref([r.id], { from: circleCardHref(circleId) }) : openProposalHref(r.id)) : null,
     applyLabel: W.apply,
     ...(r.pay ? { pay: r.pay } : {}),
   };
 }
 
-function rolesSection(roles: Read<CircleRoleIn[]>, terms: boolean, asMember: boolean): CircleSection {
+function rolesSection(roles: Read<CircleRoleIn[]>, terms: boolean, asMember: boolean, circleId: string): CircleSection {
   const b = base("roles", terms);
   if (roles === undefined) return { ...b, kind: "roles", slot: UNREAD, note: null };
   if (!roles.length) return { ...b, kind: "roles", slot: empty(W.noRoles), note: null };
   // Below the member tier no handle is read, so a filled role carries no link: say why once.
   const handlesUnread = roles.some((r) => r.holderHandles === undefined && r.holderCount > 0);
-  return { ...b, kind: "roles", slot: shown(roles.map((r) => roleRow(r, asMember))), note: handlesUnread ? W.holdersPrivate : null };
+  return { ...b, kind: "roles", slot: shown(roles.map((r) => roleRow(r, asMember, circleId))), note: handlesUnread ? W.holdersPrivate : null };
 }
 
 function adoptionSection(adoptions: Read<AdoptionIn[]>, timeZone: string, terms: boolean): CircleSection {
@@ -446,7 +447,7 @@ export function buildCircleCard(input: CircleCardIn): CircleCard {
       list("domains"),
       list("authorities"),
       list("responsibilities"),
-      rolesSection(roles, terms, input.readerMayApply !== false),
+      rolesSection(roles, terms, input.readerMayApply !== false, circle.id),
       ...liveSections(input, terms),
       list("stewardship"),
       list("checks"),

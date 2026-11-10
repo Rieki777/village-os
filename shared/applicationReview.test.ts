@@ -153,6 +153,16 @@ describe("the applicant's status", () => {
     expect(statusFor({ ...base, firstReplyAt: confirmedAt, interviews: done }).step).toBe("consent");
     expect(statusFor({ ...base, firstReplyAt: confirmedAt, interviews: done, decided: "adopted" }).step).toBe("decided");
   });
+  it("says whose move it is once decided, and drops the steps that never happened (guide v2, Rye 10 Nov 2026)", () => {
+    // Adopted straight away, with no first reply and no conversation held.
+    const adopted = statusFor({ ...base, decided: "adopted" });
+    expect(adopted.actsNext).toBe("Yours: make your account. The link to make it is in your email.");
+    expect(adopted.path.map((p) => p.state)).not.toContain("later");
+    expect(adopted.path.map((p) => p.label)).not.toContain("First reply");
+    expect(statusFor({ ...base, decided: "withdrawn" }).actsNext).toBe("Nobody. You withdrew this proposal.");
+    expect(statusFor({ ...base, decided: "declined" }).actsNext).toBe("Nobody. The village has answered.");
+  });
+
   it("carries no score, no name and no address", () => {
     const text = JSON.stringify(statusFor({ ...base, firstReplyAt: confirmedAt }));
     expect(text).not.toMatch(/@|level|evidence|score/i);

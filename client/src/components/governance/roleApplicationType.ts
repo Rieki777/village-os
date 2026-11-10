@@ -5,7 +5,7 @@
  * sits near the monolith ratchet's threshold (the same reason roleSeatType.ts
  * lives apart). wizardConfig.ts lists it first, where it always stood.
  *
- * ONE APPLICATION, ONE TO FIVE SEATS (seat settings PR4). A member who would
+ * ONE APPLICATION, ONE TO THREE ROLES (seat settings PR4; D3). A member who would
  * hold three seats applies once, so their pay, allowance and bonus are recorded
  * once. The subject step picks the seats (`seatPicks`), the terms step is one
  * `seatSettings` field judged by `parseSeatSettings`, the parser the route uses,
@@ -34,6 +34,65 @@ import type { WizardTypeConfig } from "./wizardConfig";
 import { atLeast } from "./wizardValidators";
 import { pickedSeats } from "./SeatPicksField";
 import { fetchApplication } from "./seatApplicationsApi";
+import { OPEN_AIM_MAX } from "@shared/openProposals";
+import { isDoor } from "./wizardDoor";
+
+/** The door's terms answer: accepted or a wish to talk, and the terms on offer it showed (TermsOnOfferField). */
+export interface TermsChoice {
+  choice: "accept" | "talk";
+  note: string;
+  settings: unknown;
+}
+
+export function termsChoiceOf(v: unknown): TermsChoice | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  if (o.choice !== "accept" && o.choice !== "talk") return null;
+  return { choice: o.choice, note: typeof o.note === "string" ? o.note : "", settings: o.settings ?? null };
+}
+
+/** The door's terms verdict: a choice, a note when talking, and terms the route will read. */
+export const termsChoiceProblem = (v: unknown, a: Record<string, unknown>): string | null => {
+  if (!isDoor(a)) return null;
+  const t = termsChoiceOf(v);
+  if (!t) return "Say whether you accept the terms on offer, or would like to talk about them.";
+  if (t.choice === "talk" && !t.note.trim()) return "Say what you would like to talk about in the terms.";
+  return settingsProblem(t.settings);
+};
+
+/** The member door's answers as the route stores them (shared/seatApplications.ts parseApplicationAnswers). */
+export function doorAnswers(a: Record<string, unknown>): Record<string, unknown> {
+  const goal = String(a.servesGoal ?? "").trim();
+  const t = termsChoiceOf(a.termsChoice);
+  return {
+    aim: String(a.aim ?? "").trim() || null,
+    servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
+    terms: t ? { choice: t.choice, note: t.note.trim() } : null,
+  };
+}
+
+/** No goals for the season yet: the goal field answers this for the member (SeasonGoalField). */
+export const NO_SEASON_GOALS = "none";
+
+/**
+ * THE DOOR'S DELIVERABLES: the aim, the goal served and the terms choice
+ * lead, then the member's own list, the way the open form's card reads to a
+ * decider (deliverablesOf, server/lib/openProposalDecide.ts). Any other start
+ * publishes its deliverables as written.
+ */
+export function doorDeliverables(a: Record<string, unknown>): unknown {
+  if (!isDoor(a)) return a.deliverables;
+  const lines: string[] = [];
+  const aim = String(a.aim ?? "").trim();
+  if (aim) lines.push(`Aim: ${aim}`);
+  const goal = String(a.servesGoal ?? "").trim();
+  if (goal && goal !== NO_SEASON_GOALS) lines.push(`Serves the village goal: ${goal}`);
+  const t = termsChoiceOf(a.termsChoice);
+  if (t?.choice === "accept") lines.push("Accepts the terms on offer.");
+  if (t?.choice === "talk") lines.push(`Wants to talk about the terms: ${t.note.trim()}`);
+  const own = String(a.deliverables ?? "").trim();
+  return [lines.join("\n"), own].filter(Boolean).join("\n\n");
+}
 
 /** The whole preset the terms step starts from when nothing is written yet. */
 export const ROLE_APPLICATION_PREFILL = "platform:whole-volunteer-seat";
@@ -50,8 +109,8 @@ export const settingsProblem = (v: unknown): string | null => {
 /** The seats field's verdict: one to five. */
 export const seatsProblem = (v: unknown): string | null => {
   const n = pickedSeats(v).length;
-  if (n === 0) return "Pick the role you are applying for.";
-  if (n > MAX_SEATS) return `One application holds at most ${MAX_SEATS} roles.`;
+  if (n === 0) return "Pick the role you are proposing for.";
+  if (n > MAX_SEATS) return `One proposal holds at most ${MAX_SEATS} roles.`;
   return null;
 };
 
@@ -59,11 +118,11 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   id: "role_application",
   group: "Recurring",
   icon: UserPlus,
-  title: "Apply for a role",
+  title: "Propose for a role",
   description:
-    "Apply to hold one role or up to five, with what you will have done by the end of the season and the terms you hold them on.",
+    "Propose to hold one role or up to three, with what you will have done by the end of the season and the terms you hold them on.",
   consequence:
-    "Publishing puts your application and its terms in front of whoever adopts roles: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the roles and never you or the money.",
+    "Sending puts your proposal and its terms in front of whoever adopts roles: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the roles and never you or the money.",
   opensVote: true,
   // Its route asks terms.read, the member rung, never proposal.open, so the
   // card stays live for a member who may not open the other votes (TypeCards).
@@ -75,9 +134,14 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
     path: "/api/governance/role-applications",
     body: (a) => ({
       seatIds: pickedSeats(a.seatIds ?? a.seatId),
-      deliverables: a.deliverables,
+      // The door's own answers (aim, the goal served, the terms choice) lead the
+      // deliverables, where every decider already reads them (doorDeliverables).
+      deliverables: doorDeliverables(a),
       fitStatement: a.fitStatement,
-      seatSettings: a.seatSettings ?? null,
+      // B1 (0369): the door's answers, structured, so the proposal's card shows them.
+      ...(isDoor(a) ? { answers: doorAnswers(a) } : {}),
+      // The door sends the terms on offer it showed, unchanged; every other start sends the terms written.
+      seatSettings: isDoor(a) ? (termsChoiceOf(a.termsChoice)?.settings ?? null) : (a.seatSettings ?? null),
       // Sent only when picked: no first day means "as soon as it is adopted".
       ...(String(a.startsNoEarlierThan ?? "").trim() ? { startsNoEarlierThan: String(a.startsNoEarlierThan).trim() } : {}),
       // From the member's season plan: a season still to come sets the first day to its own.
@@ -89,7 +153,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   steps: {
     subject: {
       label: "The roles",
-      intro: "Which roles you are applying to hold. Pick every role you would hold this season, up to five, and your terms cover them all.",
+      intro: "Which roles you propose to hold. Pick every role you would hold this season, up to three, and your terms cover them all.",
       fields: [
         {
           key: "seatIds",
@@ -98,26 +162,14 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           max: MAX_SEATS,
           required: true,
           problem: seatsProblem,
-          tip: "Roles come from the village's org chart. One application for several roles records your terms once.",
+          tip: "Roles come from the village's org chart. One proposal for several roles records your terms once.",
         },
       ],
     },
     details: {
       label: "Your season",
-      intro: "What you will have done by the end of the season, and why you.",
+      intro: "Why you, your aim, your first tasks this moon, and the season goal they serve.",
       fields: [
-        {
-          key: "deliverables",
-          kind: "textarea",
-          rows: 6,
-          maxLength: 2000,
-          label: "Deliverables for the season",
-          placeholder: "By the end of the season, the spring runs clear and two people besides me know how to keep it that way.",
-          help: "Write what will be TRUE at season's end, so anyone can check it without asking you. Members read this; a vote never shows it.",
-          required: true,
-          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
-          problem: atLeast(40, "Your list of deliverables"),
-        },
         {
           key: "fitStatement",
           kind: "textarea",
@@ -129,16 +181,60 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           // The member reads the label "Why you", so the problem names it the same way (red team U11).
           problem: atLeast(30, '"Why you"'),
         },
+        {
+          // The open form asks it, so the member door does too (brief v2, 5.4).
+          key: "aim",
+          kind: "text",
+          maxLength: OPEN_AIM_MAX,
+          label: "Your aim for the season",
+          placeholder: "Food grows here every season, and two more people know how.",
+          required: true,
+          showWhen: isDoor,
+          problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : null),
+        },
+        {
+          key: "deliverables",
+          kind: "textarea",
+          rows: 6,
+          maxLength: 2000,
+          // Guide v2: the first tasks for this moon, each with how anyone will know it is done.
+          label: "Your first tasks this moon",
+          placeholder: "Plant the first three beds, done when they are planted and watered. Share the planting plan, done when every circle lead has it.",
+          help: "Each with a \"done when\", so anyone can check it without asking you. Members read this; a vote never shows it.",
+          required: true,
+          // "Your deliverables needs" read wrong (red team U11): the subject is one list.
+          problem: atLeast(40, "Your list of first tasks"),
+        },
+        {
+          key: "servesGoal",
+          kind: "seasonGoal",
+          label: "Which of the village's goals for the season your work serves",
+          required: true,
+          showWhen: isDoor,
+          problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Pick the village goal your work serves." : null),
+        },
       ],
     },
     terms: {
+      doorLabel: "The terms",
+      doorIntro: "The terms each role offers. Accept them, or say what you would like to talk about: the people deciding see it. You don't write terms here.",
       label: "Your terms",
       intro: "The terms you would hold these roles on. Start from a preset, or from the role's own terms on offer, and change what does not fit.",
       fields: [
         {
+          // The door reads the terms on offer and accepts them or asks to talk (Rye, form v2); it never writes terms.
+          key: "termsChoice",
+          kind: "termsOnOffer",
+          label: "The terms on offer",
+          required: true,
+          showWhen: isDoor,
+          problem: termsChoiceProblem,
+        },
+        {
           key: "seatSettings",
           kind: "seatSettings",
           label: "Settings",
+          showWhen: (a) => !isDoor(a),
           prefillWhole: ROLE_APPLICATION_PREFILL,
           help: "Every member can read these terms. Money in them is recorded here and paid outside the platform.",
           problem: settingsProblem,
@@ -147,7 +243,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           key: "startsNoEarlierThan",
           kind: "date",
           label: "First day",
-          help: "Leave it empty to start as soon as the application is adopted. Pick the first day of next season to apply for next season's roles now.",
+          help: "Leave it empty to start as soon as the proposal is adopted. Pick the first day of next season to propose for next season's roles now.",
         },
       ],
     },
@@ -180,9 +276,17 @@ export function roleApplicationStart(search: string): { type: "role_application"
   const seats = listed.length > 0 ? listed : renew ? [renew] : [];
   const season = String(q.get("season") ?? "").trim();
   const supersedes = String(q.get("supersedes") ?? "").trim();
+  // A DOOR: roles picked on a role card, the roles board or "Roles that fit", to apply for them
+  // (Rye, 10 Nov 2026). A renewal, a supersession or a season plan writes its own terms, so it is not one.
+  const door = listed.length > 0 && !renew && !supersedes && !season && q.get("terms") !== "write";
   return {
     type: "role_application",
-    answers: { ...(seats.length ? { seatIds: seats } : {}), ...(season ? { seasonId: season } : {}), ...(supersedes ? { supersedesId: supersedes } : {}) },
+    answers: {
+      ...(seats.length ? { seatIds: seats } : {}),
+      ...(season ? { seasonId: season } : {}),
+      ...(supersedes ? { supersedesId: supersedes } : {}),
+      ...(door ? { door: true } : {}),
+    },
   };
 }
 

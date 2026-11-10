@@ -327,7 +327,17 @@ export function statusFor(i: StatusInput): Status {
   path.push({ label: STEP_WORDS.consent, state: i.decided ? "done" : done && i.firstReplyAt ? "now" : "later" });
   path.push({ label: STEP_WORDS.decided, state: i.decided ? "done" : "later" });
 
-  if (i.decided) return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: "Nobody. The village has answered.", by: null, path };
+  if (i.decided) {
+    // Guide v2 (Rye, 10 Nov 2026): whose move it is. Once decided, the steps that never happened leave the path.
+    const walked = path.filter((p) => p.state !== "later");
+    const move =
+      i.decided === "adopted"
+        ? "Yours: make your account. The link to make it is in your email."
+        : i.decided === "withdrawn"
+          ? "Nobody. You withdrew this proposal."
+          : "Nobody. The village has answered.";
+    return { step: "decided", stepWords: STEP_WORDS.decided, actsNext: move, by: null, path: walked };
+  }
   if (!i.firstReplyAt) {
     path[1] = { label: STEP_WORDS.first_reply, state: "now" };
     return { step: "first_reply", stepWords: STEP_WORDS.first_reply, actsNext: "The role that welcomes people replies with a time to talk.", by: firstReplyDueAt(i.confirmedAt, i.timeZone), path };
@@ -345,25 +355,25 @@ export function statusFor(i: StatusInput): Status {
 export const REVIEW_WORDS = {
   turnTitle: (applicant: string | null, minutes: number) => `${applicant ?? "An applicant"} is waiting to talk with you for ${minutes} minutes`,
   turnBody: "Book the conversation from the applicant's ask, then write your scorecard alone, against the role's criteria, before you read anyone else's.",
-  firstReplyDue: (roleNames: readonly string[]) => `A first reply is due for an application for ${roleNames.join(", ")}`,
+  firstReplyDue: (roleNames: readonly string[]) => `A first reply is due for a proposal for ${roleNames.join(", ")}`,
   firstReplyReminder: (roleNames: readonly string[]) => `A first reply is due tomorrow for ${roleNames.join(", ")}`,
-  stale: (roleNames: readonly string[]) => `An application for ${roleNames.join(", ")} has not moved in ${STALE_DAYS} days`,
+  stale: (roleNames: readonly string[]) => `A proposal for ${roleNames.join(", ")} has not moved in ${STALE_DAYS} days`,
   interviewsDone: (roleNames: readonly string[]) => `Every conversation is written up for ${roleNames.join(", ")}`,
   consentWaitsForInterviews: "The circle will be asked once the conversations are written up.",
   agentsSkipped: (names: readonly string[]) => `${names.join(", ")} ${names.length === 1 ? "is" : "are"} held by an AI agent and not asked: consent is a human act.`,
   splitAsked: "Recorded. The conversations will be booked over several days.",
   splitTooLate: "The conversations have started, so they stay as booked.",
-  arrived: (roleNames: readonly string[]) => `An application arrived for ${roleNames.join(", ")}`,
+  arrived: (roleNames: readonly string[]) => `A proposal arrived for ${roleNames.join(", ")}`,
   notYourTurn: "That conversation has not opened yet. It opens when the one before it is written up.",
   alreadyScored: "That scorecard is already in.",
   notAnInterviewer: "Only a holder of the role this conversation is with can write this scorecard.",
-  own: "Nobody scores their own application.",
+  own: "Nobody scores their own proposal.",
   recused: "You stepped out of this one.",
-  notFound: "That application is not here.",
-  gone: "That application has been decided, so scores can no longer be added.",
+  notFound: "That proposal is not here.",
+  gone: "That proposal has been decided, so scores can no longer be added.",
   mayNotRead: "Scorecards open to you once you have added your own.",
   interviewsNotDone: "The conversations are not all written up yet.",
-  recusalRecorded: "Recorded. You will not be asked again for this application.",
+  recusalRecorded: "Recorded. You will not be asked again for this proposal.",
   alignWords: "Aligning is the village's way of signing.",
 } as const;
 
@@ -399,8 +409,8 @@ export const PANEL_WORDS = {
   evidenceLabel: "One line of what you heard",
   submit: "Add my scorecard",
   submitted: "Your scorecard is in.",
-  recuse: "Step out of this application",
-  recuseAsk: "Stepping out is recorded. You will not be asked about this application again.",
+  recuse: "Step out of this proposal",
+  recuseAsk: "Stepping out is recorded. You will not be asked about this proposal again.",
   recuseYes: "Yes, step out",
   recuseNo: "Stay",
   reasonLabel: "Why (optional, one line)",
@@ -412,11 +422,11 @@ export const PANEL_WORDS = {
   minutes: (n: number) => `${n} minutes`,
   adoptThisMoon: "Adopt for the moon running now",
   toTheVillage: "Take it to the village's vote",
-  toTheVillageLine: "Nobody can adopt this at the door. It becomes an application the village can vote on.",
-  statusHeading: "Where your application is",
-  statusNext: "Who acts next",
+  toTheVillageLine: "Nobody can adopt this at the door. It becomes a proposal the village can vote on.",
+  statusHeading: "Where your proposal is",
+  statusNext: "Whose move",
   statusBy: (day: string) => `By ${day}`,
-  statusMissing: "That link does not match an application. Check the link in your email.",
+  statusMissing: "That link does not match a proposal. Check the link in your email.",
   splitAsk: "Split the conversations over days",
   bookingLabel: "How the conversations are booked",
   statusPrivate: "This page shows steps only. What the people who talk with you write down stays with them.",

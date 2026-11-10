@@ -10,6 +10,8 @@ import { useLocation } from "wouter";
 import { useVillageName } from "@/hooks/useVillageName";
 import { useVillagePaths } from "@/hooks/useVillagePaths";
 import { ACCOUNT_WORDS, NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "@shared/accountRules";
+import { andList } from "@shared/openProposals";
+import { useLingui } from "@lingui/react/macro";
 
 /**
  * Each path's colours. The words are the village's own (Admin, Make it yours,
@@ -49,6 +51,10 @@ interface InviteCheck {
   invitedBy?: string | null;
   daysLeft?: number;
   error?: string;
+  /** An adopted application's link: the roles it places you on, and what you sent (role audit, 10 Nov 2026). */
+  forRoles?: string[];
+  name?: string | null;
+  email?: string | null;
 }
 
 /** The `?invite=` token, read once. Empty when the page was opened without one. */
@@ -107,6 +113,7 @@ function InvitationNeeded({ villageName, reason }: { villageName: string; reason
 }
 
 export default function Register() {
+  const { t } = useLingui();
   const villageName = useVillageName();
   // Null until the village's words have arrived, so the choice paints once,
   // in this village's own names.
@@ -150,7 +157,12 @@ export default function Register() {
     fetch(`/api/invites/check?token=${encodeURIComponent(invite)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        if (alive) setCheck(d as InviteCheck);
+        if (!alive) return;
+        const c = d as InviteCheck;
+        setCheck(c);
+        // The application's own name and address carry forward; whatever was typed already stays.
+        if (c.valid && c.name) setName((now) => now || String(c.name));
+        if (c.valid && c.email) setEmail((now) => now || String(c.email));
       })
       .catch(() => {
         // A link that could not be checked is not a link that was refused. The
@@ -162,12 +174,23 @@ export default function Register() {
     };
   }, [invite]);
 
+  /** The roles an adopted application's link places the person on, as one phrase. */
+  const forRoles = andList(check?.forRoles ?? []);
+
   /** Still asking, so the page draws neither the form nor the invitation panel. */
   const deciding = inviteOnly === null || (invite !== "" && check === null);
   /** The link that opened this page works, as far as the server has said. */
   const goodLink = invite !== "" && check?.valid === true;
   /** Nobody makes an account here without a link, and this page has no working one. */
   const heldAtTheDoor = !deciding && inviteOnly === true && !goodLink;
+
+  // An adopted application is joining to hold roles: the steward's path is already the answer, and
+  // stays a choice the person can change (role audit, 10 Nov 2026).
+  const adoptedForRoles = goodLink && (check?.forRoles?.length ?? 0) > 0;
+  useEffect(() => {
+    if (!adoptedForRoles || !PATHS?.some((p) => p.id === "steward")) return;
+    setSelectedPaths((prev) => (prev.length ? prev : ["steward"]));
+  }, [adoptedForRoles, PATHS]);
 
   function togglePath(pathId: string) {
     setSelectedPaths((prev) =>
@@ -241,7 +264,13 @@ export default function Register() {
               {goodLink && (
                 <p className="p-4 bg-teal-deep/5 border border-teal-deep/20 rounded-lg text-teal-deep text-sm">
                   {check?.invitedBy ? `${check.invitedBy} invited you. ` : "You were invited. "}
-                  Create your account to step inside.
+                  {check?.forRoles?.length ? (
+                    <span data-invite-roles="">
+                      {t`The village adopted your application for ${forRoles}. Make your account to take them up.`}
+                    </span>
+                  ) : (
+                    "Create your account to step inside."
+                  )}
                   {/* R47: the expiry is only news when it is close. */}
                   {(check?.daysLeft ?? 0) <= 3 &&
                     ` This invitation ends in ${check?.daysLeft ?? 0} ${check?.daysLeft === 1 ? "day" : "days"}.`}

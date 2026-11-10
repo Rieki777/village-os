@@ -5,7 +5,7 @@
  *   - the seats shown are the ones the server's archetype join named (`fits`),
  *     in its order, less any full seat, example or id the chart does not have;
  *   - each card says its circle, its aim and its open places;
- *   - a member who reads terms picks up to five, the sixth box goes still, and
+ *   - a member who reads terms picks up to three, the fourth box goes still, and
  *     "Propose these" carries every picked seat to the wizard;
  *   - a reader below the member rung reads the cards and the MySeason sentence,
  *     with nothing to tick;
@@ -181,27 +181,27 @@ describe("Roles that fit this character", () => {
     expect(screen.getByText(ROLES_FIT_WORDS.line("The Builder"))).toBeTruthy();
   });
 
-  it("picks up to five, stills the sixth, and proposes every picked seat in one link", async () => {
+  it("picks up to three (D3), stills the fourth, and proposes every picked seat in one link", async () => {
     loadOrg.mockResolvedValue(ORG);
     render(<RolesThatFit archetypeName="The Builder" fits={FITS} />);
     await screen.findByText("Hearth host");
     expect(screen.queryByRole("link", { name: ROLES_FIT_WORDS.propose })).toBeNull();
     expect(screen.getByText(ROLES_FIT_WORDS.pickFirst)).toBeTruthy();
 
-    for (const name of ["Hearth host", "Orchard keeper", "Seat c", "Seat d", "Seat e"]) {
+    for (const name of ["Hearth host", "Orchard keeper", "Seat c"]) {
       fireEvent.click(screen.getByRole("checkbox", { name: ROLES_FIT_WORDS.add(name) }));
     }
-    expect(screen.getByText(ROLES_FIT_WORDS.picked(5))).toBeTruthy();
-    const sixth = screen.getByRole("checkbox", { name: ROLES_FIT_WORDS.add("Seat f") }) as HTMLInputElement;
+    expect(screen.getByText(ROLES_FIT_WORDS.picked(3))).toBeTruthy();
+    const sixth = screen.getByRole("checkbox", { name: ROLES_FIT_WORDS.add("Seat d") }) as HTMLInputElement;
     expect(sixth.disabled).toBe(true);
     fireEvent.click(sixth);
     expect(sixth.checked).toBe(false);
 
     const href = screen.getByRole("link", { name: ROLES_FIT_WORDS.propose }).getAttribute("href") ?? "";
     expect(href.startsWith("/propose?type=role_application&")).toBe(true);
-    expect(seatsFromSearch(href.slice(href.indexOf("?")))).toEqual(["b", "a", "c", "d", "e"]);
+    expect(seatsFromSearch(href.slice(href.indexOf("?")))).toEqual(["b", "a", "c"]);
 
-    // Unticking one frees the sixth.
+    // Unticking one frees the fourth.
     fireEvent.click(screen.getByRole("checkbox", { name: ROLES_FIT_WORDS.add("Seat c") }));
     expect(sixth.disabled).toBe(false);
   });

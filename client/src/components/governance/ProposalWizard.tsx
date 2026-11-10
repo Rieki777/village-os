@@ -82,11 +82,11 @@ export interface WizardStart {
   answers: Record<string, unknown>;
 }
 
-export default function ProposalWizard({ start = null }: { start?: WizardStart | null } = {}) {
+export default function ProposalWizard({ start = null, leaveTo = "/decisions" }: { start?: WizardStart | null; leaveTo?: string } = {}) {
   const [, navigate] = useLocation();
 
   const [type, setType] = useState<WizardType | null>(start?.type ?? null);
-  const [step, setStep] = useState<StepKey>(() => (start ? (nextStep(start.type, "type") ?? "type") : "type"));
+  const [step, setStep] = useState<StepKey>(() => (start ? (nextStep(start.type, "type", start.answers) ?? "type") : "type"));
   const [answers, setAnswers] = useState<Record<string, unknown>>(start?.answers ?? {});
   const [draftId, setDraftId] = useState<string | null>(null);
   // An untouched start is not work: a prefilled door (a seat card's) saves
@@ -113,7 +113,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   // The words an aligning type's Review step showed, sent back so the server binds the click to them.
   const [review, setReview] = useState<ReviewAlignment>({ words: null, ready: false });
 
-  const walk = walkFor(type);
+  const walk = walkFor(type, answers);
   const stepIndex = Math.max(0, walk.findIndex((s) => s.key === step));
   const stepMeta = walk[stepIndex];
   const cfg = type ? typeConfig(type) : null;
@@ -136,7 +136,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   // draws the seat card with its terms drawer (WizardSeatPreview), a role with
   // powers draws the permission card (WizardRolePreview). A type picking both
   // would show the seat, never two cards.
-  const walkFields = walk.flatMap((s) => fieldsFor(type, s.key));
+  const walkFields = walk.flatMap((s) => fieldsFor(type, s.key, answers));
   // A list of seats (`seatPicks`) previews its first seat: the one whose terms the step starts from.
   const seatPick = walkFields.find((f) => (f.kind === "pick" && f.source === "seats") || f.kind === "seatPicks");
   const settingsField = walkFields.find((f) => f.kind === "seatSettings");
@@ -161,7 +161,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
   const [pickLists, setPickLists] = useState<Record<string, PickOption[]>>({});
   useEffect(() => {
     if (step !== "review" || !type) return;
-    const picks = walkFor(type).flatMap((s) => fieldsFor(type, s.key));
+    const picks = walkFor(type, answers).flatMap((s) => fieldsFor(type, s.key, answers));
     const sources = Array.from(
       new Set(
         picks.flatMap((f) =>
@@ -375,7 +375,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     setAnswers(draft.payload ?? {});
     draftIdRef.current = draft.id;
     setDraftId(draft.id);
-    setStep(stepAtIndex(draft.wizardType, draft.stepIndex));
+    setStep(stepAtIndex(draft.wizardType, draft.stepIndex, draft.payload ?? {}));
     setDirty(false);
     setBusyDraft(null);
   };
@@ -404,7 +404,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
     if (save) await persist();
     setDirty(false);
     setLeaving(false);
-    navigate("/decisions");
+    navigate(leaveTo);
   };
 
   const publish = async () => {
@@ -494,7 +494,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
       <div className="min-w-0">
         {/* Mobile stepper sits above the step; the desktop rail is on the right. */}
         <div className="mb-4 lg:hidden">
-          <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
+          <WizardStepper typeId={type} answers={answers} current={step} onGoBack={(s) => void goTo(s)} />
         </div>
 
         {stepMeta && step !== "type" && step !== "review" && (
@@ -550,7 +550,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
 
         {step !== "type" && step !== "review" && (
           <div className="space-y-6">
-            {fieldsFor(type, step).map((field) => (
+            {fieldsFor(type, step, answers).map((field) => (
               // Leaving any control inside the field marks it touched (focusout bubbles in React).
               <div key={field.key} onBlur={() => markTouched(field.key)}>
                 <WizardField
@@ -564,7 +564,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               </div>
             ))}
             {/* On a phone the preview sits under the question that picked it. */}
-            {previewPick && (fieldsFor(type, step).includes(previewPick) || (settingsField && fieldsFor(type, step).includes(settingsField))) && (
+            {previewPick && (fieldsFor(type, step, answers).includes(previewPick) || (settingsField && fieldsFor(type, step, answers).includes(settingsField))) && (
               <div className="lg:hidden">{preview("inline")}</div>
             )}
           </div>
@@ -586,7 +586,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
             <dl className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
               {walk
                 .filter((s) => s.key !== "type" && s.key !== "review")
-                .flatMap((s) => fieldsFor(type, s.key).map((f) => ({ step: s.key, field: f })))
+                .flatMap((s) => fieldsFor(type, s.key, answers).map((f) => ({ step: s.key, field: f })))
                 .map(({ step: from, field }) => {
                   const v = answers[field.key];
                   const shown =
@@ -678,10 +678,10 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
 
         {/* The walk's controls. */}
         <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-4">
-          {prevStep(type, step) ? (
+          {prevStep(type, step, answers) ? (
             <button
               type="button"
-              onClick={() => void goTo(prevStep(type, step)!)}
+              onClick={() => void goTo(prevStep(type, step, answers)!)}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
             >
               <ArrowLeft className="w-4 h-4" aria-hidden="true" />
@@ -690,7 +690,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
           ) : (
             <button
               type="button"
-              onClick={() => (dirty ? setLeaving(true) : navigate("/decisions"))}
+              onClick={() => (dirty ? setLeaving(true) : navigate(leaveTo))}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
             >
               <ArrowLeft className="w-4 h-4" aria-hidden="true" />
@@ -709,11 +709,11 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
               {cfg?.publishLabel ?? "Put it in front of the village"}
             </button>
           ) : (
-            nextStep(type, step) && (
+            nextStep(type, step, answers) && (
               <button
                 type="button"
                 disabled={!type}
-                onClick={() => void goTo(nextStep(type, step)!)}
+                onClick={() => void goTo(nextStep(type, step, answers)!)}
                 className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-5 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 Next
@@ -744,7 +744,7 @@ export default function ProposalWizard({ start = null }: { start?: WizardStart |
             card control's outline (2px out, 2px offset) room inside it, and
             the matching negative margin keeps the rail where it was. */}
         <div className="sticky top-24 -mx-1 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain p-1">
-          <WizardStepper typeId={type} current={step} onGoBack={(s) => void goTo(s)} />
+          <WizardStepper typeId={type} answers={answers} current={step} onGoBack={(s) => void goTo(s)} />
           {dirty && (
             <p className="mt-4 px-2 text-xs text-stone-500">Unsaved changes. They save on their own in a moment.</p>
           )}

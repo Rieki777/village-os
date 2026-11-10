@@ -11,6 +11,9 @@ import { ROLE_DRAFT_KEY } from "@shared/roleDraft";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("@/hooks/useVillageName", () => ({ useVillageName: () => "Hollow Oak" }));
+// The places registry is asked only while the places module is on (the board's 404, role audit 10 Nov 2026).
+const placesOnRef = { value: true };
+vi.mock("@/modules/ModuleProvider", async (orig) => ({ ...(await orig<typeof import("@/modules/ModuleProvider")>()), useModuleOn: (id: string) => (id === "places" ? placesOnRef.value : true) }));
 // The full card is its own component with its own tests; here it only has to open.
 vi.mock("@/components/power/SeatTradingCard", () => ({ default: ({ input }: { input: { name: string } }) => <article data-testid="full-card">{input.name}</article> }));
 
@@ -138,8 +141,8 @@ describe("the draft", () => {
       expect.stringContaining("Gardener"),
       expect.stringContaining("Welcome Host"),
     ]);
-    const apply = within(tray).getByRole("link", { name: /Apply with my 3 picks/ });
-    expect(apply.getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&role=host");
+    const apply = within(tray).getByRole("link", { name: /Propose with my 3 picks/ });
+    expect(apply.getAttribute("href")).toBe("/propose-a-role?role=lfs&role=garden&role=host&from=%2Froles%2Fdraft");
     expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}")).toEqual({ chars: [], picks: ["lfs", "garden", "host"] });
 
     // Taking one off frees a place.
@@ -164,7 +167,7 @@ describe("the draft", () => {
     fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
     fireEvent.click(within(card("Cook")).getByRole("button", { name: "Select Cook" }));
     const tray = screen.getByRole("complementary", { name: "Your selection" });
-    expect(within(tray).getByRole("link", { name: /Apply for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook");
+    expect(within(tray).getByRole("link", { name: /Propose for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook&from=%2Froles%2Fdraft");
   });
 
   it("offers no Apply to a visitor while applications are closed, and keeps the selection", async () => {
@@ -196,10 +199,10 @@ describe("what happens next", () => {
   it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, conversations, consent, invitation, NDA", async () => {
     serve();
     render(<RoleDraft />);
-    const steps = await screen.findByRole("list", { name: "After you apply" });
+    const steps = await screen.findByRole("list", { name: "After you propose" });
     const items = within(steps).getAllByRole("listitem").map((li) => li.textContent ?? "");
     // Rye's answer 8 (9 Nov): membership is aligned with at application.
-    expect(items[0]).toMatch(/Love Letter.*when you apply/);
+    expect(items[0]).toMatch(/Love Letter.*when you propose/);
     expect(items[1]).toMatch(/confirm/i);
     expect(items.some((t) => /Love Letter/.test(t))).toBe(true);
     // Rye, 9 Nov: the NDA comes after approval, before any confidential record.
@@ -213,6 +216,14 @@ describe("what happens next", () => {
     render(<RoleDraft />);
     expect(await screen.findByText("Greenhouse")).toBeTruthy();
     expect(screen.queryByText("Cafe")).toBeNull();
+    cleanup();
+    // The places module off: the board never asks the registry, so no 404 on every visit.
+    placesOnRef.value = false;
+    serve({ places: { places: [{ key: "greenhouse", name: "Greenhouse", invitationOpen: true }] } });
+    render(<RoleDraft />);
+    await screen.findByText(/What happens after you propose/);
+    expect(screen.queryByText("Greenhouse")).toBeNull();
+    placesOnRef.value = true;
     cleanup();
     serve();
     render(<RoleDraft />);

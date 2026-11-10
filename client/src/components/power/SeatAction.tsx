@@ -189,11 +189,11 @@ export default function SeatAction({
      * who already has an account.
      */
     const seatName = view.seatName;
-    const applyLabel = t({ message: `Apply for ${seatName}`, context: "role card button, signed out" });
+    const applyLabel = t({ message: `Propose for ${seatName}`, context: "role card button, signed out" });
     return (
       <div className="flex flex-col gap-2">
         {seatId && (
-          <a href={openProposalHref(seatId)} className={`${GOLD} w-full`}>
+          <a href={`${openProposalHref(seatId)}&from=${encodeURIComponent(`/roles?seat=${seatId}`)}`} className={`${GOLD} w-full`}>
             <Hand className="size-[17px] shrink-0" aria-hidden="true" />
             {applyLabel}
           </a>

@@ -38,7 +38,8 @@ describe.skipIf(!testDbConfigured())("the card's parameters, stored", () => {
       reviewAfterDays: 90, accessBundle: ["Bank view"], bookingUrl: "https://cal.example/first",
     });
     const r = await read("rc-card");
-    expect(r.track).toBe("paid");
+    // The card's older word reads as the one list's (shared/roleTracks.ts, guide v2 H25).
+    expect(r.track).toBe("contractor");
     expect(r.villageGoals).toEqual(["Fund the land"]);
     expect(r.conversations).toEqual(ORDER);
     expect(r.conversationMode).toBe("separate");

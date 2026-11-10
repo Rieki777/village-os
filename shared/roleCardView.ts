@@ -13,6 +13,7 @@
 import {
   BEING_WRITTEN,
   TRACK_WORDS,
+  readTrack,
   WHERE_WORDS,
   beingWrittenLine,
   interviewLines,
@@ -54,7 +55,9 @@ export function roleCardView(seat: unknown, locale = "en-GB"): RoleCardView {
   if (hours) rows.push({ id: "hours", label: "Hours", lines: [hours] });
 
   const track = card.track as RoleTrack | null | undefined;
-  if (track && TRACK_WORDS[track]) rows.push({ id: "track", label: "Track", lines: [TRACK_WORDS[track]] });
+  // Read through the one list, so a track stored in older words ("paid", "local") still shows (guide v2).
+  const readT = readTrack(track);
+  if (readT) rows.push({ id: "track", label: "Track", lines: [TRACK_WORDS[readT]] });
 
   const goals = list(card.villageGoals);
   if (goals.length) rows.push({ id: "goals", label: "Village goals it serves", lines: goals });

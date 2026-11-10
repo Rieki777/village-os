@@ -126,6 +126,20 @@ describe("the card's parameters", () => {
     expect(card(role(), VISITOR).consentCircle).toBe("Anchor Circle");
   });
 
+  it("reads a role with no track as the village's default, a contractor as paid, and a role's own track first (guide v2)", () => {
+    // Unpaid terms on offer, so only the track can make it paid.
+    const none = role({ track: null, termsOffer: { v: 1, pay: { kind: "none" } } as unknown as string });
+    const withDefault = (r: OrgRole) => projectSeat(r, held, VISITOR, { ...ctx, cardWords: { ...ctx.cardWords, defaultTrack: "contractor" } }).card as Record<string, any>;
+    expect(card(none, VISITOR).track).toBeNull();
+    expect(card(none, VISITOR)).not.toHaveProperty("consentCircle");
+    expect(withDefault(none).track).toBe("contractor");
+    // Paid by its default track: the paid roles' consent circle is named.
+    expect(withDefault(none).consentCircle).toBe("Anchor Circle");
+    expect(withDefault(role({ track: "volunteer" })).track).toBe("volunteer");
+    // An older stored word reads as the one list's.
+    expect(card(role({ track: "paid" as any }), VISITOR).track).toBe("contractor");
+  });
+
   it("gates on the village setting only: the gate is always computed, and held back only when asked", () => {
     const incomplete = role({ aim: null });
     expect(card(incomplete, VISITOR)).toMatchObject({ complete: false, missing: ["aim"], gated: false });

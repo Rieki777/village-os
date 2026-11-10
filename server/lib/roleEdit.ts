@@ -27,6 +27,7 @@
  * read by the terms' own parser. A role is listed only once its card passes the
  * gate (`listingProblems`).
  */
+import { PAID_TRACKS, type Track } from "../../shared/roleTracks";
 import type { Pool } from "mysql2/promise";
 import { addChange, createDraft, getDraft, revertDraft, withdrawDraft } from "./orgDrafts";
 import { draftReadiness, publishOrgDraft, type PublishDeps } from "./orgDraftDecide";
@@ -166,7 +167,8 @@ export function listingProblems(state: Pick<EditorState, "words" | "parameters" 
   if (!(p.villageGoals && p.villageGoals.length)) missing.push("Village goals this role serves");
   if (!(p.selectionCriteria && p.selectionCriteria.length >= 3)) missing.push("Selection criteria");
   if (!(p.conversations && p.conversations.length)) missing.push("Interviewers");
-  if (p.track === "contractor" && !(state.pay && (state.pay.kind === "fixed" || state.pay.kind === "range"))) missing.push("Pay on offer");
+  // Every paid track asks for pay on offer, as the card's gate does (shared/roleTracks.ts, guide v2).
+  if (p.track && PAID_TRACKS.includes(p.track as Track) && !(state.pay && (state.pay.kind === "fixed" || state.pay.kind === "range"))) missing.push("Pay on offer");
   return missing;
 }
 

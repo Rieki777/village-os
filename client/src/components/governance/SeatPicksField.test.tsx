@@ -20,6 +20,7 @@ vi.mock("./pickSources", () => ({
     { value: "seat-open", label: "Open seat" },
     { value: "seat-full", label: "Full seat", full: true, holderIds: ["u-hal"] },
     { value: "seat-mine", label: "My seat", full: true, holderIds: ["u-ana"] },
+    { value: "seat-hidden", label: "Unlisted seat", listed: false },
   ],
 }));
 
@@ -28,6 +29,16 @@ afterEach(cleanup);
 const FIELD = { key: "seatIds", label: "The seats", kind: "seatPicks", required: true } as any;
 
 describe("picking seats", () => {
+  it("offers only the roles the village lists, and keeps an unlisted one already picked (Rye, 10 Nov 2026)", async () => {
+    render(<SeatPicksField field={FIELD} value={[]} onChange={() => {}} invalid={false} footerNode={null} />);
+    await screen.findByLabelText(/Open seat/);
+    expect(screen.queryByLabelText(/Unlisted seat/)).toBeNull();
+    cleanup();
+    // A renewal of an unlisted role the member holds keeps its role.
+    render(<SeatPicksField field={FIELD} value={["seat-hidden"]} onChange={() => {}} invalid={false} footerNode={null} />);
+    expect(await screen.findByLabelText(/Unlisted seat/)).toBeTruthy();
+  });
+
   it("marks a full seat and will not tick it, but lets a holder renew their own", async () => {
     render(<SeatPicksField field={FIELD} value={[]} onChange={() => {}} invalid={false} footerNode={null} />);
     const full = (await screen.findByLabelText(/Full seat/)) as HTMLInputElement;
