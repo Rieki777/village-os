@@ -28,6 +28,7 @@ import { AboutYouView, type ServedAboutYou } from "@/components/openProposal/Abo
 import { AttachedView, type ServedAttachments } from "@/components/openProposal/ProposalAttachments";
 import { useLingui } from "@lingui/react/macro";
 import { CardSideBySide } from "@/components/openProposal/RoleCardBridge";
+import TermsWeOffer, { OpenTalksWarning, type ServedDeciderOffer } from "@/components/openProposal/TermsWeOffer";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Check, Copy, Mail, X } from "lucide-react";
@@ -73,7 +74,9 @@ export interface ServedOpenProposal {
   attached?: ServedAttachments | null;
   /** About you: references, facts and the check, for the deciders only. */
   aboutYou?: ServedAboutYou | null;
-  you: { holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
+  /** The terms we offer, with the history: deciders only. */
+  offer?: ServedDeciderOffer | null;
+  you: { mayEditTerms?: boolean; holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
 }
 
 type Answer<T> = { ok: true; data: T } | { ok: false; status: number; error: string };
@@ -118,6 +121,8 @@ export default function OpenProposal() {
   const [said, setSaid] = useState<Said | null>(null);
   // Decline asks once before it acts.
   const [declining, setDeclining] = useState(false);
+  // Adopting while a setting is still being talked about asks once more (joining lane PR 4).
+  const [knowsOpenTalks, setKnowsOpenTalks] = useState(false);
 
   const load = useCallback(async () => {
     const answer = await ask<{ proposal: ServedOpenProposal }>(base(id));
@@ -137,10 +142,10 @@ export default function OpenProposal() {
     void load();
   }, [user, load]);
 
-  const act = async (path: string) => {
+  const act = async (path: string, body?: unknown) => {
     setBusy(true);
     setSaid(null);
-    const answer = await ask<{ message?: string; invitation?: { link: string } | null; link?: string }>(path, "POST");
+    const answer = await ask<{ message?: string; invitation?: { link: string } | null; link?: string }>(path, "POST", body);
     setBusy(false);
     if (!answer.ok) {
       setSaid({ ok: false, text: answer.error });
@@ -249,6 +254,8 @@ export default function OpenProposal() {
               <CardSideBySide roles={p.roles} card={p.card ?? null} membershipAligned={!!p.membership?.aligned} />
             </section>
 
+            {p.offer && <TermsWeOffer offer={p.offer} mayEdit={!!p.you.mayEditTerms} savePath={`${base(p.id)}/terms`} onSaved={() => void load()} />}
+
             <section aria-labelledby="op-words">
               <h2 id="op-words" className="text-lg font-bold text-stone-900">
                 {DECIDE_WORDS.wordsHeading}
@@ -300,10 +307,11 @@ export default function OpenProposal() {
                 {p.you.mayAdopt || p.you.mayDecline ? (
                   <>
                     <p className="mt-1 text-stone-700">{p.you.formerMember ? DECIDE_WORDS.formerMember : record ? CONSENT_WORDS.recordLine : DECIDE_WORDS.deciderLine}</p>
+                    {p.you.mayAdopt && p.offer && <div className="mt-3"><OpenTalksWarning settings={p.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
                     {!declining ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {p.you.mayAdopt && (
-                          <button type="button" disabled={busy} onClick={() => void act(`${base(p.id)}/adopt`)} className={PRIMARY}>
+                          <button type="button" disabled={busy || (!!p.offer?.openTalks.length && !knowsOpenTalks)} onClick={() => void act(`${base(p.id)}/adopt`, knowsOpenTalks ? { confirmOpenTalks: true } : undefined)} className={PRIMARY}>
                             <Check className="h-4 w-4" aria-hidden="true" />
                             {record ?? DECIDE_WORDS.adopt}
                           </button>
