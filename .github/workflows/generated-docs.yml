@@ -1,0 +1,167 @@
+# MAIN OWNS THE GENERATED FILES (Rye, 2026-11-09).
+#
+# Eight files are written by generators out of the code (the list is
+# GENERATED_FILES in scripts/lib/generatedDocs.mjs). A pull request used to commit
+# them regenerated, so every landing on main made every open pull request
+# conflict, GitHub ran no CI on the conflicted ones, and a night of re-merges
+# jammed the runners. Now a pull request never commits them. This workflow runs
+# every generator on each push to main and commits what changed as ONE bot commit.
+# The flow, in plain words, is docs/GENERATED_DOCS.md.
+#
+# PORTABLE: it uses only the built-in GITHUB_TOKEN. No secret, no repository name,
+# no app. It needs `contents: write` (declared below) and a main branch that lets
+# github-actions push; if the repository ever protects main, see the doc.
+#
+# NO LOOP: a push made with GITHUB_TOKEN starts no workflow run, so the bot commit
+# does not trigger ci.yml or this file again. The host deploys from the push itself,
+# so the bot commit deploys. That is wanted: docs/knowledge/governance-lineage.md
+# ships in the image and the assistant reads it.
+#
+# IF A GENERATOR FAILS the job goes red and ONE issue titled "Generated docs failed
+# on main" is opened or updated, naming the generator. A bad document never goes
+# out silently. Nothing is committed unless every generator ran.
+name: generated-docs
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+# One at a time, newest wins: every run regenerates from the head it checked out,
+# so a superseded run has nothing the next one will not do.
+concurrency:
+  group: generated-docs
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # The governance generator names the last commit that changed a source.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate
+        id: gen
+        # Every generator runs even when an earlier one fails, so the issue names
+        # all of them. Nothing is committed unless the list of failures is empty.
+        run: |
+          failed=""
+          run_one() {
+            local name="$1"; shift
+            echo "::group::$name"
+            if "$@"; then echo "ok: $name"; else echo "::error::generator failed: $name"; failed="$failed $name"; fi
+            echo "::endgroup::"
+          }
+          run_one governance   node scripts/generate-governance-doc.mjs
+          run_one economics    node scripts/generate-economics-doc.mjs
+          run_one tokens       node scripts/generate-token-doc.mjs
+          run_one variables    node scripts/generate-variables-doc.mjs
+          run_one modules      node scripts/generate-modules-doc.mjs
+          run_one capabilities node scripts/generate-capabilities-doc.mjs
+          run_one i18n-extract pnpm i18n:extract
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+          [ -z "$failed" ]
+
+      - name: Idempotent
+        # A second run over the output of the first must change nothing. A
+        # generator that cannot keep that promise would commit on every merge.
+        run: |
+          git add -A -- docs client/src/locales
+          git diff --cached > "$RUNNER_TEMP/first.diff"
+          node scripts/generate-governance-doc.mjs
+          node scripts/generate-economics-doc.mjs
+          node scripts/generate-token-doc.mjs
+          node scripts/generate-variables-doc.mjs
+          node scripts/generate-modules-doc.mjs
+          node scripts/generate-capabilities-doc.mjs
+          pnpm i18n:extract
+          git add -A -- docs client/src/locales
+          git diff --cached > "$RUNNER_TEMP/second.diff"
+          if ! cmp -s "$RUNNER_TEMP/first.diff" "$RUNNER_TEMP/second.diff"; then
+            echo "::error::a second generator run changed the output again; refusing to commit"
+            diff "$RUNNER_TEMP/first.diff" "$RUNNER_TEMP/second.diff" | head -60 || true
+            exit 1
+          fi
+
+      - name: Commit
+        id: commit
+        run: |
+          if git diff --cached --quiet; then
+            echo "Generated files already match main. No commit."
+            exit 0
+          fi
+          git diff --cached --stat
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Regenerate the generated docs and catalogs
+
+          Written by .github/workflows/generated-docs.yml from main at $(git rev-parse --short HEAD).
+          Pull requests do not commit these files; see docs/GENERATED_DOCS.md."
+          # If main moved while this ran, a newer run of this workflow owns the
+          # regeneration. Do not force anything.
+          git fetch -q origin main
+          if [ "$(git rev-parse origin/main)" != "$(git rev-parse HEAD~1)" ]; then
+            echo "::notice::main moved during this run; the newer run regenerates. Nothing pushed."
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push origin HEAD:refs/heads/main
+
+      - name: Strict check
+        # After the commit, and only now, "main's docs equal the code" is a claim
+        # worth making. GENERATED_DOCS_MODE=strict turns every guard back into the
+        # byte comparison. Skipped when a newer run owns the regeneration.
+        if: steps.commit.outputs.moved != 'true'
+        env:
+          GENERATED_DOCS_MODE: strict
+        run: |
+          node scripts/check-governance-doc.mjs
+          node scripts/check-economics-doc.mjs
+          node scripts/check-token-doc.mjs
+          node scripts/check-variables-doc.mjs
+          node scripts/check-modules-doc.mjs
+          node scripts/check-capabilities-doc.mjs
+          node scripts/check-i18n-catalogs.mjs
+
+      - name: Open or update the issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ steps.gen.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Generated docs failed on main"
+          what="${FAILED:-the check after generating (see the run)}"
+          body="The generated-docs workflow failed on main at $(git rev-parse --short HEAD). Failed: ${what}.
+
+          Nothing was committed, so the docs on main are stale. Run: ${RUN_URL}
+
+          Fix the generator or the code it reads. Close this issue when a run is green."
+          n="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

@@ -44,6 +44,7 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb } from "./test
 // it is imported for real rather than re-implemented here.
 // @ts-expect-error - scripts/ is untyped JavaScript, deliberately outside tsconfig
 import { collectFacts, generate, quorumSentence, renderLineage } from "../../scripts/generate-governance-doc.mjs";
+import { docsMode } from "../../scripts/lib/generatedDocs.mjs";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -294,6 +295,12 @@ describe.skipIf(!configured)("the governance doc's claims, against a real ballot
 describe("the committed document", () => {
   it("is what the generator writes today", () => {
     const wanted = generate(ROOT) as string;
+    // PR mode (scripts/lib/generatedDocs.mjs): main regenerates this file, so a pull request is not
+    // asked to commit it. The generator has just run without throwing, which is the part that binds.
+    if (docsMode() === "pr") {
+      expect(wanted.length).toBeGreaterThan(0);
+      return;
+    }
     const found = fs.readFileSync(path.join(ROOT, "docs", "GOVERNANCE.md"), "utf8");
     // Carriage returns are normalised for the same reason
     // scripts/check-governance-doc.mjs normalises them: git hands this file
@@ -337,6 +344,12 @@ describe("the committed document", () => {
   it("the lineage file on the assistant's shelf is what the generator writes today", () => {
     const facts = collectFacts(ROOT);
     const wanted = renderLineage(facts) as string;
+    // PR mode (scripts/lib/generatedDocs.mjs): main regenerates this file, so a pull request is not
+    // asked to commit it. The generator has just run without throwing, which is the part that binds.
+    if (docsMode() === "pr") {
+      expect(wanted.length).toBeGreaterThan(0);
+      return;
+    }
     const found = fs.readFileSync(path.join(ROOT, "docs", "knowledge", "governance-lineage.md"), "utf8");
     expect(found.replace(/\r\n/g, "\n")).toBe(wanted.replace(/\r\n/g, "\n"));
   });
