@@ -1,14 +1,17 @@
 /**
- * `/role-measures`: how the role journey is going, for members (L11).
+ * `/role-measures`: how the role journey is going, for administrators (L11).
  *
  * Counts and medians per season and circle, from stamped times. No names. A
  * number built from fewer than three people is withheld and shown as "too few",
- * so nobody can be picked out of it. The server is server/routes/roleMeasures.ts.
+ * so nobody can be picked out of it. Admin only: the page asks the server for
+ * nothing unless the viewer is signed in as an admin or founder. The server is
+ * server/routes/roleMeasures.ts, which refuses everybody else.
  */
 import { useEffect, useState } from "react";
 import { Trans } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import { BreathingLoader } from "@/components/natural";
+import { useAuth, useIsAdmin } from "@/contexts/AuthContext";
 import { gameFetch } from "@/lib/gameApi";
 import type { MeasureRow, Share } from "@shared/roleMeasures";
 
@@ -22,11 +25,15 @@ export default function RoleMeasures() {
   const [rows, setRows] = useState<Served[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
+  const { user, loading } = useAuth();
+  const admin = useIsAdmin();
+
   useEffect(() => {
+    if (!admin) return;
     let live = true;
     gameFetch("/api/role-measures")
       .then(async (r) => {
-        if (r.status === 401) throw new Error("Sign in as a member to see how roles are going.");
+        if (r.status === 401 || r.status === 403) throw new Error("Only administrators can see how roles are going.");
         if (!r.ok) throw new Error("Could not read the measures.");
         return r.json();
       })
@@ -35,7 +42,27 @@ export default function RoleMeasures() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [admin]);
+
+  if (loading) {
+    return (
+      <Layout>
+        <main className="mx-auto max-w-4xl px-4 py-8"><BreathingLoader /></main>
+      </Layout>
+    );
+  }
+  if (!admin) {
+    return (
+      <Layout>
+        <main className="mx-auto max-w-4xl px-4 py-8">
+          <h1 className="text-2xl font-semibold"><Trans>How roles are going</Trans></h1>
+          <p className="mt-4 text-sm" data-testid="measures-admin-only">
+            {user ? <Trans>This page is for administrators.</Trans> : <Trans>This page is for administrators. Sign in with an administrator account to see it.</Trans>}
+          </p>
+        </main>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
