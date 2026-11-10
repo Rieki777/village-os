@@ -95,6 +95,8 @@ describe("the form", () => {
     // the version the form drew (Rye's answer 8); the confidentiality agreement once approved.
     fireEvent.click(await screen.findByLabelText(LETTER.intent));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+    // About you: no references, so the background-check consent is ticked (joining lane PR 2).
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
@@ -166,6 +168,7 @@ describe("the form", () => {
     const pdf = new File(["%PDF-1.7"], "portfolio.pdf", { type: "application/pdf" });
     fireEvent.change(document.querySelector('[data-attachments] input[type="file"]') as HTMLInputElement, { target: { files: [pdf] } });
     expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
@@ -178,6 +181,7 @@ describe("the form", () => {
     serve(FORM);
     render(<ProposeARole />);
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
@@ -189,6 +193,7 @@ describe("the form", () => {
     render(<ProposeARole />);
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
@@ -357,6 +362,8 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
     fireEvent.click(await screen.findByLabelText(LETTER.intent));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+    // About you: no references, so the background-check consent is ticked (joining lane PR 2).
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card).toMatchObject({
@@ -401,6 +408,8 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
     fireEvent.click(await screen.findByLabelText(LETTER.intent));
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+    // About you: no references, so the background-check consent is ticked (joining lane PR 2).
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card.terms).toEqual({ choice: "talk", note: "The hours" });
