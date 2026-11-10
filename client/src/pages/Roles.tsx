@@ -454,6 +454,8 @@ export default function Roles() {
   const coordinator = coordinatingCircle(circles);
   const orgPending = roles === null && !failed;
   // A link to one role (?seat=) names that role in the page heading, not the whole page.
+  const seasonEntry = ((season as unknown as { current?: { name?: string } | null } | null)?.current ?? (season as unknown as { name?: string } | null)) as { name?: string } | null;
+  const seasonLine = typeof seasonEntry?.name === "string" && seasonEntry.name.trim() ? t({ message: `This season: ${seasonEntry.name.trim()}.`, context: "roles page season" }) : "";
   const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
   const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
     coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
@@ -505,6 +507,14 @@ export default function Roles() {
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
             </div>
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
+            {seasonLine && (
+              <p className="mt-4 text-sm text-muted-foreground">
+                {seasonLine}{" "}
+                <a href="/roles/select#sel-season" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "See its goals", context: "roles page season" })}
+                </a>
+              </p>
+            )}
             <Link
               href="/roles/select"
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

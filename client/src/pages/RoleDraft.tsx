@@ -68,6 +68,13 @@ import {
   type DraftRole,
 } from "@shared/roleDraft";
 
+interface SeasonDoc {
+  name?: string | null;
+  startsOn?: string | null;
+  endsOn?: string | null;
+  goals?: Array<{ id?: string; text?: string; done?: boolean }>;
+}
+
 interface CastMember {
   key: string;
   name: string;
@@ -237,12 +244,16 @@ export default function RoleDraft() {
   }, [open]);
 
   // Each step is a section of this one page. A step button or Next glides to it; reading down the page moves the bar too.
-  const STEP_IDS = ["sel-you", "sel-scout", "sel-select", "sel-apply"] as const;
+  const STEP_IDS = ["sel-season", "sel-you", "sel-scout", "sel-select", "sel-apply"] as const;
   const go = (i: number) => {
     setStep(i);
     const el = document.getElementById(STEP_IDS[i]);
     el?.scrollIntoView?.({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
   };
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#sel-season") window.setTimeout(() => go(0), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
     const seen = new Map<string, number>();
@@ -252,7 +263,7 @@ export default function RoleDraft() {
         let best = -1;
         let ratio = 0;
         STEP_IDS.forEach((id, i) => {
-          if (i === 2) return; // the tray stays in view beside the board, so it never wins on its own: Next and the step button take you there
+          if (i === 3) return; // the tray stays in view beside the board, so it never wins on its own: Next and the step button take you there
           const r = seen.get(id) ?? 0;
           if (r > ratio) {
             ratio = r;
@@ -287,11 +298,13 @@ export default function RoleDraft() {
   const pickCount = picks.length;
   const moonEnds = form?.term ? civilDayWords(form.term.endsOn) : "";
   // The village's goals for this season, live (the Season tab in Admin). Done ones drop off.
-  const seasonDoc = season as unknown as { name?: string | null; goals?: Array<{ id?: string; text?: string; done?: boolean }> } | null;
+  const seasonRaw = season as unknown as { current?: SeasonDoc | null } & SeasonDoc | null;
+  const seasonDoc: SeasonDoc | null = seasonRaw?.current ?? seasonRaw ?? null;
   const seasonName = typeof seasonDoc?.name === "string" ? seasonDoc.name.trim() : "";
+  const seasonDates = seasonDoc?.startsOn && seasonDoc?.endsOn ? `${civilDayWords(seasonDoc.startsOn)} to ${civilDayWords(seasonDoc.endsOn)}` : "";
   const goals = (Array.isArray(seasonDoc?.goals) ? seasonDoc!.goals : [])
-    .filter((g) => g && typeof g.text === "string" && g.text.trim() && !g.done)
-    .map((g, i) => ({ id: String(g.id ?? i), text: String(g.text).trim() }));
+    .filter((g) => g && typeof g.text === "string" && g.text.trim())
+    .map((g, i) => ({ id: String(g.id ?? i), text: String(g.text).trim(), done: !!g.done }));
   const playing = chars.map(castName).join(", ");
 
   return (
@@ -307,18 +320,49 @@ export default function RoleDraft() {
           <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
             <SelectStepper
               labels={[
+                t({ message: "This season's goals", context: "role draft step" }),
                 t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
                 t({ message: "Scout the open roles", context: "role draft step" }),
                 t({ message: "Select up to three", context: "role draft step" }),
                 t({ message: "Apply", context: "role draft step" }),
               ]}
               step={step}
-              reached={3}
+              reached={4}
               onGo={go}
               barLabel={t({ message: "Your progress through the four steps", context: "role draft steps" })}
             />
           </div>
 
+          <section id="sel-season" className="sel-rise mt-8 scroll-mt-52 rounded-2xl border-2 border-notice bg-card p-5" aria-labelledby="sel-season-h">
+            <h2 id="sel-season-h" className="font-display text-2xl font-bold text-card-foreground">
+              {seasonName ? t({ message: `This season's goals: ${seasonName}`, context: "role draft season" }) : t({ message: "This season's goals", context: "role draft season" })}
+            </h2>
+            {seasonDates && <p className="mt-1 text-sm font-semibold text-muted-foreground">{seasonDates}</p>}
+            <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
+              {t`A role card shows the work the village needs done. Your proposal is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
+            </p>
+            {goals.length > 0 ? (
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {goals.map((g) => (
+                  <li key={g.id} className="flex items-start gap-2 text-sm text-card-foreground">
+                    <Check className={`mt-0.5 size-4 shrink-0 ${g.done ? "text-muted-foreground" : "text-notice"}`} aria-hidden="true" />
+                    <span>
+                      {g.text}
+                      {g.done && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "Done", context: "role draft goal" })}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">{t`No goals are set for this season yet.`}</p>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={() => go(1)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {t({ message: "Next: your R-Ikigai and characters", context: "role draft next" })}
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          </section>
           <div id="sel-you" className="scroll-mt-52"></div>
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
@@ -360,7 +404,7 @@ export default function RoleDraft() {
               })}
             </div>
             <div className="mt-4 flex justify-end">
-              <button type="button" onClick={() => go(1)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <button type="button" onClick={() => go(2)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {t({ message: "Next: scout the open roles", context: "role draft next" })}
                 <ArrowRight className="size-4" aria-hidden="true" />
               </button>
@@ -506,7 +550,7 @@ export default function RoleDraft() {
                 })}
               </div>
               <div className="mt-6 flex justify-end">
-                <button type="button" onClick={() => go(2)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                <button type="button" onClick={() => go(3)} className="inline-flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {t({ message: "Next: review my selection", context: "role draft next" })}
                   <ArrowRight className="size-4" aria-hidden="true" />
                 </button>
@@ -566,25 +610,6 @@ export default function RoleDraft() {
               </p>
             </aside>
           </div>
-
-          {goals.length > 0 && (
-            <section className="mt-12 rounded-2xl border border-border bg-card p-5" aria-labelledby="draft-goals">
-              <h2 id="draft-goals" className="font-display text-2xl font-bold text-card-foreground">
-                {seasonName ? t`What the whole village is working toward in ${seasonName}` : t`What the whole village is working toward this season`}
-              </h2>
-              <p className="mt-2 max-w-[70ch] text-sm text-muted-foreground">
-                {t`A role card shows the work the village needs done. Your application is the other half: what you would like to contribute each moon and this season, and how it serves these goals.`}
-              </p>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {goals.map((g) => (
-                  <li key={g.id} className="flex items-start gap-2 text-sm text-card-foreground">
-                    <Check className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
-                    {g.text}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
 
           <section id="sel-apply" className="mt-12 grid scroll-mt-52 gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>

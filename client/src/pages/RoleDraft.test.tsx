@@ -220,14 +220,18 @@ describe("what happens next", () => {
   });
 });
 
-describe("the season's goals", () => {
-  it("shows the village's open goals for the season, and frames the application as what you would contribute", async () => {
-    seasonRef.value = { name: "Season of Foundations", goals: [{ id: "g1", text: "Investor ready", done: false }, { id: "g2", text: "Old goal", done: true }], current: null, upcoming: null, seasons: [] };
+describe("the season's goals, the first step", () => {
+  it("opens with the season's name, dates and every goal from Admin, the done ones marked", async () => {
+    seasonRef.value = { current: { name: "Season of Foundations", startsOn: "2026-09-22", endsOn: "2026-12-21", goals: [{ text: "Investor ready", done: false }, { text: "Old goal", done: true }] }, upcoming: null, seasons: [] };
     serve();
     render(<RoleDraft />);
-    expect(await screen.findByRole("heading", { name: "What the whole village is working toward in Season of Foundations" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This season's goals: Season of Foundations" })).toBeTruthy();
+    expect(screen.getByText("22 September 2026 to 21 December 2026")).toBeTruthy();
     expect(screen.getByText("Investor ready")).toBeTruthy();
-    expect(screen.queryByText("Old goal")).toBeNull();
+    expect(screen.getByText("Old goal")).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
+    const steps = screen.getAllByRole("listitem").map((li) => li.textContent ?? "").filter((x) => /goals$|Apply$/.test(x));
+    expect(steps[0]).toMatch(/This season's goals/);
     expect(screen.getByText(/what you would like to contribute each moon and this season/)).toBeTruthy();
   });
 });
