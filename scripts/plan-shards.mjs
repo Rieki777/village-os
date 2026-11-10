@@ -45,9 +45,15 @@ export function planShards(files, timings, n) {
   return shards;
 }
 
+/** The workflow sets CI_SHARD_FILES on the step that runs this planner, so the whole-suite listing must not see it. */
+function withoutShardFilter(env) {
+  const { CI_SHARD_FILES: _unused, ...rest } = env;
+  return rest;
+}
+
 function listFiles() {
   const vitest = path.join(ROOT, "node_modules", "vitest", "vitest.mjs");
-  const r = spawnSync(process.execPath, [vitest, "list", "--filesOnly", "--json"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync(process.execPath, [vitest, "list", "--filesOnly", "--json"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env: withoutShardFilter(process.env) });
   if (r.status !== 0) throw new Error(`vitest list exited ${r.status}: ${(r.stderr || "").slice(-400)}`);
   const out = r.stdout.slice(r.stdout.indexOf("["));
   return JSON.parse(out).map((e) => path.relative(ROOT, e.file ?? e).split(path.sep).join("/"));
