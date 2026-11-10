@@ -125,6 +125,8 @@ export interface PublicGameConfig {
   /** Whether this village serves the brochure pages (shared/brochure.ts).
    *  Absent on a server older than 1.2.0, which reads as off. */
   brochurePages?: boolean;
+  /** Where this village offers its source code (the footer link). Absent on an older server. */
+  sourceUrl?: string;
   /** The story pages this village switched off one by one, while the rest
    *  are served. Absent on an older server, which reads as none. */
   brochureHidden?: string[];

@@ -81,7 +81,7 @@ arcanepattern.com, and `shared/geneKeys.test.ts` pins what those sites printed:
   Generator.
 
 `astronomy-engine` (MIT) and Swiss Ephemeris disagreed on 2 of 20,000 random births by one line. Swiss
-Ephemeris is AGPL and this repository is MIT, so the browser uses `astronomy-engine`.
+Ephemeris is AGPL, and this repository was MIT when that choice was made. The repository is AGPL-3.0-or-later now, but the browser still uses `astronomy-engine`, which is lighter and agreed to within a line.
 
 ## Birth time
 

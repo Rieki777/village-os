@@ -5217,6 +5217,11 @@ msgstr ""
 msgid "Move to its own change request"
 msgstr ""
 
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Source code"
+msgstr "Código fuente"
+
 #: client/src/pages/RoleDraft.tsx
 msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr ""

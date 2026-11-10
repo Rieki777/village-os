@@ -19,6 +19,7 @@ import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
 import NextStepTrail from "./NextStepTrail";
 import { SITE_FOOTER_SIGNOFF } from "@shared/pageContent/site";
+import { servedSourceUrl } from "@shared/sourceUrl";
 import { storyPageShown } from "@/lib/brochure";
 
 interface LayoutProps {
@@ -810,6 +811,21 @@ export default function Layout({ children }: LayoutProps) {
                       className="text-white hover:underline transition-colors text-sm block py-1.5"
                     >
                       Events
+                    </a>
+                  </li>
+                )}
+                {/* The licence (AGPL-3.0-or-later, section 13) says people who use a
+                    changed version must be able to get its source. Every village
+                    links it here; the address is the village's own setting. */}
+                {cfg && (
+                  <li>
+                    <a
+                      href={servedSourceUrl(cfg.sourceUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                    >
+                      <Trans context="site footer">Source code</Trans>
                     </a>
                   </li>
                 )}

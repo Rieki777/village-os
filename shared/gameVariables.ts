@@ -3147,6 +3147,22 @@ export const VARIABLES: VariableDef[] = [
     default: "false",
   },
 
+  /*
+   * THE SOURCE-CODE LINK IN EVERY FOOTER (AGPL-3.0-or-later, section 13,
+   * shared/sourceUrl.ts). A village that runs changed code must offer its
+   * people that code, so this is where it says where. Blank, or anything that is
+   * not an http or https address, means the public Village OS repository.
+   */
+  {
+    key: "platform.source_url",
+    category: "Platform",
+    label: "Where this village shares its source code",
+    description:
+      "The footer's \"Source code\" link goes here. Leave it empty to point at the public Village OS repository. If this village runs a changed version of the software, set it to the address of your own copy of the code, because the licence says the people who use your village must be able to get it.",
+    type: "text",
+    default: "",
+  },
+
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
   // an accepted Work With Us proposal minted, 100 by default. Rye: "GRATITUDE is
   // only sent from player to player using the send gratitude function, gratitude

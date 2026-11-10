@@ -5203,6 +5203,11 @@ msgstr "That did not save. Try again."
 msgid "Move to its own change request"
 msgstr "Move to its own change request"
 
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Source code"
+msgstr "Source code"
+
 #: client/src/pages/RoleDraft.tsx
 msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."

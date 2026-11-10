@@ -663,6 +663,7 @@ import {
   type Candidate,
 } from "./lib/map";
 import { ensureInstanceIdentity, instanceIdentity, PLATFORM_VERSION, PRODUCT_NAME } from "./lib/identity";
+import { servedSourceUrl, SOURCE_URL_KEY } from "../shared/sourceUrl";
 import { brochureConfig, brochurePageServed, loadBrochurePages } from "./lib/brochurePages";
 import { listDrafts, measureVisionMetrics, tierDraftWords, visionProgress } from "./lib/orgDrafts";
 import { DECIDES_BY, DOMAINS, HOW_CHOSEN, SHAPES } from "../shared/power";
@@ -18049,6 +18050,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
       stages: servedLadder(mergedConfig().project.commitmentName),
       season: seasonState(),
       ...brochureConfig(),
+      sourceUrl: servedSourceUrl(stringVar(SOURCE_URL_KEY)), // the footer's "Source code" link (AGPL section 13): shared/sourceUrl.ts
       site: siteWords(contentRepo.get() ?? null, m),
       defaultLocale: String(stringVar("village.default_locale")), // the language a visitor gets when the browser names none we offer (spec i18n US3)
     });
