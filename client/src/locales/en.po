@@ -134,8 +134,8 @@ msgid "Save and update the role"
 msgstr "Save and update the role"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
-msgid "Everyone who reads your proposal sees a wish to talk about the terms."
-msgstr "Everyone who reads your proposal sees a wish to talk about the terms."
+#~ msgid "Everyone who reads your proposal sees a wish to talk about the terms."
+#~ msgstr "Everyone who reads your proposal sees a wish to talk about the terms."
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -2139,6 +2139,11 @@ msgstr "Sera records that name no invoice here"
 msgctxt "notebook document kind and date"
 msgid "{0}, added {1}."
 msgstr "{0}, added {1}."
+
+#: client/src/components/governance/SeatPicksField.tsx
+msgctxt "role application: link from the roles step to the role picker"
+msgid "Pick more roles"
+msgstr "Pick more roles"
 
 #: client/src/components/governance/TermsOnOfferField.tsx
 #: client/src/components/openProposal/RoleCardBridge.tsx
@@ -6851,8 +6856,8 @@ msgid "<0>Write them in Admin, under Departures</0>. They are the restorative st
 msgstr "<0>Write them in Admin, under Departures</0>. They are the restorative steps of the exit policy, and this page prints them once they are in the village's own words."
 
 #: client/src/components/governance/TermsOnOfferField.tsx
-msgid "Everyone who reads your application sees a wish to talk about the terms."
-msgstr "Everyone who reads your application sees a wish to talk about the terms."
+#~ msgid "Everyone who reads your application sees a wish to talk about the terms."
+#~ msgstr "Everyone who reads your application sees a wish to talk about the terms."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Contacts outside the village"

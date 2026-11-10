@@ -27,7 +27,7 @@ export default function CastStrip({ href = "/roles/select", size = "size-20 sm:s
   if (!cast.length) return null;
   const faces = cast.map((c, i) => (
     <li key={c.key} className="sel-rise text-center" style={{ animationDelay: `${i * 70}ms` }}>
-      <ArtImage src={characterArt(c.key)} className={`relative ${size} rounded-full border-2 border-notice`} imgClassName="object-top" />
+      <ArtImage portrait src={characterArt(c.key)} className={`relative ${size} rounded-full border-2 border-notice`} imgClassName="object-top" />
       <span className="mt-1 block max-w-24 text-xs font-semibold text-foreground">{c.name}</span>
     </li>
   ));
