@@ -20,6 +20,8 @@ import {
   Paperclip,
   X,
 } from "lucide-react";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 
 // ── Shared proposal shape ────────────────────────────────────────────────────
 
@@ -252,6 +254,7 @@ function ProposalForm({
   setForm: (p: Proposal) => void;
   onSubmitted: () => void;
 }) {
+  const { t } = useLingui();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [hp, setHp] = useState(""); // honeypot: real people never fill this
@@ -303,6 +306,7 @@ function ProposalForm({
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       <p className="text-xs text-muted-foreground mb-2">{hint}</p>
+      <VoiceArea value={String(form[key])} onValue={(v) => set(key, v)} talk={{ label, purpose: hint }}>
       <textarea
         id={`work-${String(key)}`}
         value={String(form[key])}
@@ -310,6 +314,7 @@ function ProposalForm({
         rows={rows}
         className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg outline-none focus:border-teal-deep resize-y"
       />
+      </VoiceArea>
     </div>
   );
 
@@ -386,7 +391,14 @@ function ProposalForm({
         )}
         <label htmlFor="work-reciprocity" className="block text-sm font-semibold text-foreground mb-1">Tell us more about the exchange you're proposing</label>
         <p className="text-xs text-muted-foreground mb-2">Amounts, structure, percentages, a blend, or something we haven't listed.</p>
+        <VoiceArea value={form.reciprocityDetail} onValue={(v) => set("reciprocityDetail", v)}
+          talk={{
+            label: t({ message: "What you offer in return", context: "voice field label: work with us reciprocity" }),
+            purpose: t({ message: "The exchange you are proposing: amounts, structure, percentages, a blend, or something else.", context: "voice field purpose: work with us reciprocity" }),
+          }}
+        >
         <textarea id="work-reciprocity" value={form.reciprocityDetail} onChange={(e) => set("reciprocityDetail", e.target.value)} rows={3} className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg outline-none focus:border-teal-deep resize-y" />
+        </VoiceArea>
       </div>
 
       {/* Optional attachment */}

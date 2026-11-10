@@ -302,7 +302,8 @@ describe("what cannot be read as the guide's words is never shown", () => {
       stopReason: "max_tokens",
     });
     const out = await handlersFor()(GUIDE, ask());
-    expect(out.body).toEqual({ reply: "I hear how much this weighs.", nextQuestion: "What would help tonight?", reflection: "" });
+    // The reply also says who answered and any tasks it noticed (2026-11-09); the words are what this pins.
+    expect(out.body).toMatchObject({ reply: "I hear how much this weighs.", nextQuestion: "What would help tonight?", reflection: "" });
   });
 
   it("serves the fallback sentence for a reply cut off mid-sentence, with no fragment of it", async () => {

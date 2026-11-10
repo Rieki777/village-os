@@ -19,6 +19,7 @@ import { ExampleRefusal, readRefusal } from "@/components/ExampleRefusal";
 import { formatHumanAmount, formatTokenAmount } from "@/lib/tokenAmount";
 import { useTokenNameFor, useTokenNameMap } from "@/hooks/useTokenNameFor";
 import { formatMoney } from "@shared/money";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -271,9 +272,11 @@ export default function Stay() {
                           <div className="space-y-2">
                             <input type="date" value={arriveOn} onChange={(e) => setArriveOn(e.target.value)}
                               className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+                            <VoiceArea value={notes} onValue={setNotes}>
                             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
                               placeholder="Anything the stewards should know?"
                               className="w-full text-sm border border-border rounded-lg px-3 py-2" />
+                            </VoiceArea>
                             <div className="flex gap-2">
                               <button onClick={() => request(a.id)}
                                 className="flex-1 inline-flex items-center justify-center gap-1.5 text-sm bg-teal-deep text-white rounded-lg px-3 py-2 font-medium">

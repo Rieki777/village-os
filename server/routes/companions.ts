@@ -28,6 +28,7 @@
  * The item is claimed before the door opens, so two yeses open it once, and
  * given back if the door refuses, so a refusal leaves the draft as it was.
  */
+import { seraGuideAsk } from "../lib/seraGuideCall";
 import http from "node:http";
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -365,15 +366,20 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json({ error: "That is a lot of chat for one hour. Pick it up in a little while." });
     }
     const e = env();
-    // The outside engine has no chat yet (its `companion_chat` is a seam), so every chat runs on the village guide.
-    const engine = engineName("village", e);
-    const line = await villageLine(user);
-    if (!line) return res.status(409).json({ error: `${engine} has no key in this village yet, so companions cannot talk in their own words.`, engine });
-    if (!consentFor(user.prefs, line.disclosure)) {
-      return res.status(409).json({ error: "consent_required", consent: { required: true, ...line.disclosure }, engine });
+    // WHO TALKS (2026-11-09): the member's own guide. Sera now has a guide road
+    // (server/lib/seraGuideCall.ts), so a member who chose her, in a village
+    // whose connection answers, talks through her, under her own consent line.
+    const sera = (await e.guideOf(uid)) === "saberra" ? seraGuideAsk() : null;
+    const provider = sera ? ("saberra" as const) : ("village" as const);
+    const engine = engineName(provider, e);
+    const line = sera ? null : await villageLine(user);
+    if (!sera && !line) return res.status(409).json({ error: `${engine} has no key in this village yet, so companions cannot talk in their own words.`, engine });
+    const disclosure = sera ? saberraDisclosure(c.name) : line!.disclosure;
+    if (!consentFor(user.prefs, disclosure)) {
+      return res.status(409).json({ error: "consent_required", consent: { required: true, ...disclosure }, engine });
     }
 
-    const messageId = await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "member", engine: "village", body: text });
+    const messageId = await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "member", engine: provider, body: text });
     const history = await repo.recentMessages(getPool(), c.id, uid, CHAT_HISTORY);
     const roleName = c.scope === "role" ? ((await repo.rosterFor(getPool(), [c.scopeId])).get(c.scopeId)?.name ?? null) : null;
     const system = companionSystemPrompt({
@@ -391,7 +397,8 @@ export function register(app: Express, deps: Deps): void {
       clientIp: String(req.ip ?? ""),
       burstKey: `companion:${uid}`,
       userId: uid,
-      memberKey: line.memberKey,
+      memberKey: line?.memberKey ?? null,
+      sera,
     });
     const paid = call.ok ? { keySource: call.keySource, usage: call.usage, iterations: call.iterations, stopReason: call.stopReason } : call.spent;
     if (paid) {
@@ -410,7 +417,7 @@ export function register(app: Express, deps: Deps): void {
     if (!call.ok) return res.status(call.status).json({ error: call.error, engine });
     const parsed = parseJsonReply<any>(call.text, { reply: call.text || "I don't see that anywhere." });
     const reply = typeof parsed?.reply === "string" && parsed.reply.trim() ? parsed.reply.trim().slice(0, 2000) : "I don't see that anywhere.";
-    await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "companion", engine: "village", body: reply });
+    await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "companion", engine: provider, body: reply });
 
     let refusal: string | null = null;
     let drafted: string | null = null;

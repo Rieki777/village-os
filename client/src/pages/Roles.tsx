@@ -506,6 +506,13 @@ export default function Roles() {
             <div className="mt-4 flex justify-center">
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
             </div>
+            {user && (
+              <p className="mt-3 text-sm">
+                <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "How roles are going", context: "roles page measures door" })}
+                </Link>
+              </p>
+            )}
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
             {seasonLine && (
               <p className="mt-4 text-sm text-muted-foreground">

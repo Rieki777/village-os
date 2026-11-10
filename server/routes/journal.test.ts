@@ -279,6 +279,21 @@ describe("the guide's rules, in its own words", () => {
     expect(guideSystemPrompt("Riverbend", "evening", "light")).not.toContain("smallest next step");
   });
 
+  // Rye, 2026-11-09: the guide (the village's or Sera) helps with the member's
+  // own tasks, and the member confirms every change with a tap.
+  it("names who answers, and with the task list on, may suggest tasks and say one is done, never acting itself", () => {
+    const p = guideSystemPrompt("Riverbend", "evening", "light", undefined, { guideName: "Sera", tasks: true });
+    expect(p).toContain("You are Sera, the journal guide in Riverbend");
+    expect(p).toContain('"suggestedTasks"');
+    expect(p).toContain('"doneTasks"');
+    expect(p).toContain("you never add anything yourself");
+    expect(p).toContain("you never close anything yourself");
+    expect(p).not.toMatch(/[–—]/);
+    const plain = guideSystemPrompt("Riverbend", "evening", "light");
+    expect(plain).toContain("You are the journal guide in Riverbend");
+    expect(plain).not.toContain("suggestedTasks");
+  });
+
   it("no longer tells the model the journal is private, since entries are shared unless kept private", () => {
     const p = guideSystemPrompt("Riverbend", "evening", "light");
     expect(p).toContain("nobody else in the village can read");
@@ -910,7 +925,9 @@ describe.skipIf(!configured)("the journal against a real schema", () => {
       },
     });
     expect(out.status).toBe(200);
-    expect(out.body).toEqual({ reply: "That sounds steady.", nextQuestion: "What helped?", reflection: "You kept a rhythm." });
+    expect(out.body).toMatchObject({ reply: "That sounds steady.", nextQuestion: "What helped?", reflection: "You kept a rhythm." });
+    // Who answered rides on every reply (2026-11-09); with no Sera connection it is the village guide.
+    expect(out.body.guide).toEqual({ id: "village", name: "the village guide" });
     const asked = JSON.stringify(bodies[0]);
     expect(asked).toContain("my own garden note");
     expect(asked).toContain("Mend the long bench");

@@ -25,6 +25,7 @@ vi.mock("@/components/Layout", () => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: SIGNED_IN }),
+  useOptionalAuth: () => ({ user: SIGNED_IN }),
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "governance", lifecycle: "members" }] }),

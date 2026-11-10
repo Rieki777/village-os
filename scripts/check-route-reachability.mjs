@@ -73,6 +73,9 @@ const ALLOWLIST = {
   // purpose. Excluded from the route list by the deriver too; belt and braces.
   "/404": "the not-found page, reached by failing to reach something else",
 
+  // A members-only report of the role journey (counts and medians, no names). Its one door is the signed-in link on /roles; a second link would only add a header entry nobody needs.
+  "/role-measures": "a members-only report reached from the roles page",
+
   // The old address of the role selection board. It redirects to /roles/select and nothing links to it on purpose; old bookmarks and shared links are its doors.
   "/roles/draft": "a redirect to /roles/select kept for old links",
 

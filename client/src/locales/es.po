@@ -347,6 +347,11 @@ msgstr ""
 msgid "The village's own rows"
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: where a member's words go"
+msgid "What you type here goes to {guide}, only to answer you."
+msgstr ""
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Access bundle"
@@ -431,6 +436,11 @@ msgstr ""
 msgid "Open the canvas workbook"
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: draft heading"
+msgid "A draft for the box"
+msgstr ""
+
 #: client/src/components/journey/TestRun.tsx
 msgid "Every rule this run reached would pay what it says it pays."
 msgstr ""
@@ -443,6 +453,11 @@ msgstr "Dale esto a tu agente"
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "starting a change request"
 msgid "Starting…"
+msgstr ""
+
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "voice field purpose: the thank-you note on the wall"
+msgid "A short note thanking someone for what they did and what it meant to you."
 msgstr ""
 
 #: client/src/components/TreasurySync.tsx
@@ -493,6 +508,11 @@ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Draft with words only"
+msgstr ""
+
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks: adds a suggested task"
+msgid "Add to my list"
 msgstr ""
 
 #: client/src/components/admin/LetterDraftsPanel.tsx
@@ -657,6 +677,11 @@ msgstr ""
 msgid "The amount must be a number above zero."
 msgstr ""
 
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks: added"
+msgid "On your list"
+msgstr ""
+
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
 msgid "Take {owner} for 1 change?"
@@ -760,6 +785,11 @@ msgctxt "open proposal card"
 msgid "e.g. roughly 25 hours a week"
 msgstr ""
 
+#: client/src/pages/ProposeQuest.tsx
+msgctxt "voice field label: propose quest description"
+msgid "Your quest"
+msgstr ""
+
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The line holds the name of someone in this village, so the public page hides it. Write it again with the role in place of the name."
 msgstr ""
@@ -771,6 +801,12 @@ msgstr ""
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgctxt "valuation receipt"
 msgid "Wide range"
+msgstr ""
+
+#. placeholder {0}: target.label
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out panel"
+msgid "Talk it out: {0}"
 msgstr ""
 
 #: client/src/pages/RequestMembership.tsx
@@ -950,6 +986,11 @@ msgstr ""
 msgid "Across the whole run"
 msgstr ""
 
+#: client/src/pages/RequestMembership.tsx
+msgctxt "voice field purpose: join request"
+msgid "Why you want to join the village and what you hope to bring and find here."
+msgstr ""
+
 #: client/src/pages/RoleDraft.tsx
 msgid "If it is adopted, an invitation to make your account comes to your email."
 msgstr ""
@@ -1004,6 +1045,11 @@ msgstr ""
 msgctxt "module library, builder section heading"
 msgid "Build a module"
 msgstr "Construye un módulo"
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: quick start button"
+msgid "Help me make it clearer"
+msgstr ""
 
 #: client/src/components/roleDraft/IkigaiDoor.tsx
 #~ msgctxt "role draft discover"
@@ -1423,6 +1469,11 @@ msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Back this quest, in {unit}"
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: adds the draft after the box's words"
+msgid "Add to mine"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -1903,6 +1954,11 @@ msgctxt "open proposal side by side"
 msgid "I'll move: {text}"
 msgstr ""
 
+#: client/src/pages/ProposeQuest.tsx
+msgctxt "voice field purpose: propose quest description"
+msgid "The quest you want to do: what you would create, and what it brings to the village."
+msgstr ""
+
 #: client/src/pages/RoleDraft.tsx
 #~ msgctxt "role draft step"
 #~ msgid "Pick your characters"
@@ -2128,6 +2184,11 @@ msgctxt "role editor"
 msgid "Funded from"
 msgstr ""
 
+#: client/src/pages/Forum.tsx
+msgctxt "voice field label: new forum post"
+msgid "Your post"
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Talk about it"
@@ -2278,6 +2339,11 @@ msgstr ""
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"
 msgid "The role asks"
+msgstr ""
+
+#: client/src/components/governance/ObjectionPanel.tsx
+msgctxt "voice field label: objection ruling note"
+msgid "Your reasoning"
 msgstr ""
 
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
@@ -2742,6 +2808,11 @@ msgctxt "admin helper, opens an admin page"
 msgid "Open {label}"
 msgstr ""
 
+#: client/src/pages/RequestMembership.tsx
+msgctxt "voice field label: join request"
+msgid "What draws you here"
+msgstr ""
+
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Work out this role's pay with the valuation engine"
 msgstr ""
@@ -2845,6 +2916,11 @@ msgctxt "copy settlement button, done"
 msgid "Copied ✓"
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: the journal, when it can go to the outside agent"
+msgid "Your journal goes to {outside} only once you choose {outside}."
+msgstr ""
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook block page, the quoted canvas question"
 msgid "The canvas asks"
@@ -2875,6 +2951,11 @@ msgstr ""
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Interviewers, in order"
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: failure"
+msgid "The guide could not answer just now. Your words are safe in the box."
 msgstr ""
 
 #: client/src/components/characters/RolesOpenNow.tsx
@@ -3057,6 +3138,11 @@ msgctxt "pricing desk"
 msgid "1 quest still needs yours"
 msgstr ""
 
+#: client/src/components/voice/VoiceArea.tsx
+msgctxt "voice field: opens a conversation with your guide about this box"
+msgid "Talk it out"
+msgstr ""
+
 #: client/src/components/admin/RoleDiscoverTab.tsx
 msgid "Choose which characters a type or a profile line points a newcomer toward. They see these as suggestions they can add or ignore. Their own chart stays in their browser and is never sent. Leave everything unticked and the board suggests nothing."
 msgstr ""
@@ -3099,6 +3185,11 @@ msgctxt "treasury sync"
 msgid "Invoices, by source"
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: no AI in selection"
+msgid "Nothing you type to a guide is used to choose people for roles."
+msgstr ""
+
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "One role can give the final approval. The interviews take {minutes} minutes in all."
@@ -3133,6 +3224,11 @@ msgctxt "workbook section heading"
 msgid "Decision Matrix"
 msgstr ""
 
+#: client/src/pages/GratitudeWall.tsx
+msgctxt "voice field label: the thank-you note on the wall"
+msgid "Your thank you"
+msgstr ""
+
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Conflicts {nConflicts}"
@@ -3150,6 +3246,11 @@ msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Your role starts on the first day of next season."
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: offline"
+msgid "That did not reach the village. Check your connection and try again."
 msgstr ""
 
 #: client/src/components/admin/AdminHelperPanel.tsx
@@ -3305,6 +3406,11 @@ msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "Shape it into a quest. Once it says what it delivers and what it asks, it goes on the ballot."
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: sends your words"
+msgid "Send"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
@@ -3465,6 +3571,11 @@ msgstr ""
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "Book your first conversation"
+msgstr ""
+
+#: client/src/pages/Introductions.tsx
+msgctxt "voice field purpose: introductions request"
+msgid "What you are looking for, or what you could give a hand with, in your own words."
 msgstr ""
 
 #: client/src/components/review/SeraDifferences.tsx
@@ -3920,6 +4031,11 @@ msgstr ""
 msgid "Vote on it again here"
 msgstr ""
 
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks hint"
+msgid "Nothing changes until you tap."
+msgstr ""
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Make a new key"
@@ -3980,6 +4096,11 @@ msgstr ""
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
 msgid "Changes show in gold. Saving updates the role at once and is kept in its history, where the newest change can be put back."
+msgstr ""
+
+#: client/src/components/governance/ObjectionPanel.tsx
+msgctxt "voice field purpose: objection ruling note"
+msgid "Why you ruled this objection the way you did, for the record."
 msgstr ""
 
 #: client/src/components/admin/ConflictDoorFields.tsx
@@ -4112,6 +4233,11 @@ msgctxt "pricing desk"
 msgid "{hoursLeft} quests still need yours"
 msgstr ""
 
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks: done"
+msgid "Marked done"
+msgstr ""
+
 #: client/src/components/admin/RoleDiscoverTab.tsx
 msgctxt "role discover admin"
 msgid "Line {r}"
@@ -4168,6 +4294,11 @@ msgstr ""
 #: client/src/components/ClosingPolicyCard.tsx
 msgctxt "the closing-policy vote form is loading"
 msgid "Loading..."
+msgstr ""
+
+#: client/src/components/governance/ObjectionPanel.tsx
+msgctxt "voice field purpose: raise an objection"
+msgid "A risk or concern you see in this proposal and what could go wrong."
 msgstr ""
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
@@ -4251,6 +4382,11 @@ msgstr ""
 msgctxt "role draft button"
 msgid "Selected"
 msgstr "Elegido"
+
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: where a member's words go, guide unnamed"
+msgid "What you type goes to your guide, only to answer you."
+msgstr ""
 
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgctxt "admin confidentiality section"
@@ -4604,6 +4740,11 @@ msgstr ""
 msgid "The suggestion was refused."
 msgstr ""
 
+#: client/src/pages/WorkWithUs.tsx
+msgctxt "voice field purpose: work with us reciprocity"
+msgid "The exchange you are proposing: amounts, structure, percentages, a blend, or something else."
+msgstr ""
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{title} is fully backed by pledges, so it goes ahead without the pot."
 msgstr ""
@@ -4741,6 +4882,11 @@ msgstr ""
 msgid "Ready for the village to review?"
 msgstr ""
 
+#: client/src/pages/Roles.tsx
+msgctxt "roles page measures door"
+msgid "How roles are going"
+msgstr ""
+
 #: client/src/components/journey/LaunchGuide.tsx
 msgctxt "launch guide tab"
 msgid "Organizing"
@@ -4816,6 +4962,10 @@ msgstr ""
 #: client/src/pages/FundingRounds.tsx
 #~ msgid "Chosen by {names}."
 #~ msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "How roles are going"
+msgstr ""
 
 #: client/src/components/modules/SuggestDial.tsx
 msgid "{changes, plural, one {Added. {title} has # change.} other {Added. {title} has # changes.}}"
@@ -4952,6 +5102,11 @@ msgstr ""
 
 #: client/src/components/journey/TestRun.tsx
 msgid "Background work over this span"
+msgstr ""
+
+#: client/src/pages/Forum.tsx
+msgctxt "voice field purpose: new forum post"
+msgid "A post for the village forum: what you want to say, ask or propose, in your own words."
 msgstr ""
 
 #: client/src/components/review/useSeraActs.ts
@@ -5327,6 +5482,11 @@ msgstr ""
 msgid "Notice period: {noticeDays} days. Nothing about your departure is automatic. Each step is walked with a person."
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: replaces the box's words with the draft"
+msgid "Use this"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgid "A different value for one of the changes. The author may take it in."
 msgstr ""
@@ -5411,6 +5571,11 @@ msgctxt "button that adds a conflict step"
 msgid "Add a step"
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: quick start with an empty box"
+msgid "Help me start this."
+msgstr ""
+
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgctxt "drafted letters"
 msgid "Save changes"
@@ -5419,6 +5584,11 @@ msgstr ""
 #: client/src/components/review/SeraInDraft.tsx
 msgctxt "sera answers"
 msgid "(including 1 role inside a new circle)"
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: quick start with words in the box"
+msgid "Help me make what I've written clearer."
 msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
@@ -5448,6 +5618,11 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Take the season off"
+msgstr ""
+
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks heading"
+msgid "{guideName} noticed, for your list"
 msgstr ""
 
 #: client/src/components/fundingRounds/RoundParts.tsx
@@ -5500,6 +5675,11 @@ msgstr ""
 
 #: client/src/components/admin/RoleValueEditor.tsx
 msgid "Hide the valuation engine"
+msgstr ""
+
+#: client/src/pages/Feedback.tsx
+msgctxt "voice field purpose: feedback detail"
+msgid "For a bug: what you did, what you expected and what happened. For an idea: how it would work and who it serves."
 msgstr ""
 
 #: client/src/components/roleEdit/NewRoleFromCard.tsx
@@ -5571,6 +5751,11 @@ msgstr ""
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"
 msgid "(not picked)"
+msgstr ""
+
+#: client/src/components/governance/ObjectionPanel.tsx
+msgctxt "voice field label: raise an objection"
+msgid "Your objection"
 msgstr ""
 
 #: client/src/components/admin/ConflictDoorFields.tsx
@@ -5803,6 +5988,11 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "A vote on changing the agreement is open until {openUntil}. <0>Read it and vote</0>."
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: waiting"
+msgid "{answering} is thinking"
 msgstr ""
 
 #: client/src/components/admin/ConflictDoorFields.tsx
@@ -6308,6 +6498,11 @@ msgctxt "admin helper panel, who answers"
 msgid "Answers come from Claude, on your village's own Anthropic key."
 msgstr ""
 
+#: client/src/pages/Feedback.tsx
+msgctxt "voice field label: feedback detail"
+msgid "The details"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value a member suggests"
 msgid "Your value"
@@ -6341,9 +6536,19 @@ msgstr ""
 msgid "This upload did not reach the server. Nothing changed."
 msgstr ""
 
+#: client/src/components/guide/GuideChoiceCard.tsx
+msgctxt "profile: the member's guide choice card"
+msgid "Who helps you"
+msgstr ""
+
 #: client/src/components/roleEdit/NewRoleFromCard.tsx
 msgctxt "new role from a card"
 msgid "Read the card"
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: quick start button"
+msgid "Help me start"
 msgstr ""
 
 #. placeholder {0}: answer.draft.noSection.map((b) => CANVAS_BLOCKS[b].name).join(", ")
@@ -6369,6 +6574,11 @@ msgstr ""
 msgid "Members see how many changes wait and who decides them. The changes themselves are read by the people who decide."
 msgstr ""
 
+#: client/src/pages/Profile.tsx
+msgctxt "voice field purpose: profile bio"
+msgid "A few sentences about who you are and what you bring to the village."
+msgstr ""
+
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "Who is asked first:"
 msgstr ""
@@ -6381,6 +6591,11 @@ msgstr ""
 #: client/src/components/review/SeraOnReview.tsx
 msgctxt "review page"
 msgid "Review"
+msgstr ""
+
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks: marks a task done"
+msgid "Mark done"
 msgstr ""
 
 #: client/src/components/journey/LaunchGuide.tsx
@@ -6617,6 +6832,11 @@ msgctxt "sera changes"
 msgid "Small changes"
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: closes the panel"
+msgid "Close"
+msgstr ""
+
 #: client/src/components/review/SeraMember.tsx
 msgid "These reach you as a draft to publish, once someone who reads the list puts them in one."
 msgstr ""
@@ -6710,6 +6930,10 @@ msgstr ""
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
 msgid "Which changes"
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "Nothing has been stamped yet."
 msgstr ""
 
 #. placeholder {0}: c.roleName
@@ -6832,6 +7056,12 @@ msgctxt "treasury sync"
 msgid "Reading your saved numbers."
 msgstr ""
 
+#. placeholder {0}: r.title
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks: a task the guide thinks is done"
+msgid "Sounds finished: {0}"
+msgstr ""
+
 #: client/src/components/review/SeraOnReview.tsx
 msgid "Arrived {at}, with {count} proposals."
 msgstr ""
@@ -6945,6 +7175,11 @@ msgstr ""
 msgid "Accepts the terms on offer."
 msgstr ""
 
+#: client/src/pages/Introductions.tsx
+msgctxt "voice field label: introductions request"
+msgid "What you seek or offer"
+msgstr ""
+
 #: client/src/pages/OpenProposal.tsx
 msgctxt "open proposal side by side"
 msgid "Their card beside the open card"
@@ -7016,6 +7251,11 @@ msgctxt "pick a change request to add to"
 msgid "Which change request"
 msgstr ""
 
+#: client/src/pages/WorkWithUs.tsx
+msgctxt "voice field label: work with us reciprocity"
+msgid "What you offer in return"
+msgstr ""
+
 #: client/src/components/Layout.tsx
 #, fuzzy
 msgctxt "site header"
@@ -7044,6 +7284,11 @@ msgstr ""
 
 #: client/src/components/admin/RoleCharacterTags.tsx
 msgid "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: input label"
+msgid "Your words to the guide"
 msgstr ""
 
 #: client/src/components/review/SeraMember.tsx
@@ -7198,6 +7443,11 @@ msgstr ""
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgid "How it is decided (optional)"
+msgstr ""
+
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: intro"
+msgid "Say what you want this to say, the way you'd say it to a friend. {answering} asks a question or two and offers a draft you can use or ignore."
 msgstr ""
 
 #: client/src/components/canvas/CanvasPublicLines.tsx
@@ -7692,6 +7942,11 @@ msgctxt "open proposal card window"
 msgid "Weekend evenings"
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: the guide, unnamed"
+msgid "your guide"
+msgstr ""
+
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Cancel"
@@ -7935,6 +8190,11 @@ msgstr ""
 msgid "<0><1/> Print the canvas workbook</0> to talk it through on paper first."
 msgstr ""
 
+#: client/src/components/journal/GuidePanel.tsx
+msgctxt "journal guide: choose the outside agent here"
+msgid "Talk to {name} in my journal"
+msgstr ""
+
 #. placeholder {0}: DOCUMENT_FILE_MAX_BYTES / (1024 * 1024)
 #: client/src/components/notebook/NotebookAdd.tsx
 msgid "A Markdown, text, PDF or Word (.docx) file, up to {0} MB"
@@ -7958,6 +8218,11 @@ msgstr "Las postulaciones están cerradas ahora. Tu selección se queda aquí y 
 #: client/src/components/admin/LetterDraftsPanel.tsx
 msgctxt "drafted letters"
 msgid "Decision letter"
+msgstr ""
+
+#: client/src/components/guide/GuideDataSection.tsx
+msgctxt "data settings: heading for where guide conversations go"
+msgid "Your words and the guides"
 msgstr ""
 
 #: client/src/components/journey/EconomicsView.tsx
@@ -8021,6 +8286,10 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "That did not reach the server, so nothing was decided."
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "Counts and medians per season and circle, from stamped times. No names. \"Too few\" means fewer than three people, so the number is withheld."
 msgstr ""
 
 #: client/src/components/roleEdit/RoleEditor.tsx
@@ -8115,6 +8384,11 @@ msgstr ""
 msgid "This village has not tagged its roles by character for visitors yet, so every role is shown for every character."
 msgstr ""
 
+#: client/src/components/voice/TalkItOut.tsx
+msgctxt "talk it out: draft used"
+msgid "In the box. Change anything you like before you send."
+msgstr ""
+
 #: client/src/pages/RoleDraft.tsx
 msgid "You meet the people the role works with, in the order the role sets, when it sets one."
 msgstr ""
@@ -8147,6 +8421,11 @@ msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "That did not reach the server, so nothing was saved."
+msgstr ""
+
+#: client/src/components/journal/GuideTasks.tsx
+msgctxt "journal guide tasks"
+msgid "That task is no longer open on your list."
 msgstr ""
 
 #: client/src/components/valuation/PricingDesk.tsx
@@ -8187,6 +8466,11 @@ msgctxt "admin helper, declines the proposed change"
 msgid "Not now"
 msgstr ""
 
+#: client/src/components/guide/GuideChoiceCard.tsx
+msgctxt "profile: guide choice explainer"
+msgid "Your guide answers in the journal, beside long boxes when you talk it out, and with your companions."
+msgstr ""
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "The agreement could not be read just now."
 msgstr ""
@@ -8202,6 +8486,11 @@ msgstr ""
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "The desk could not be read."
+msgstr ""
+
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: the journal stays in the village"
+msgid "Your journal never goes to {outside}."
 msgstr ""
 
 #: client/src/components/valuation/ValuationReceipt.tsx
@@ -8329,6 +8618,11 @@ msgctxt "when a practice happens"
 msgid "When"
 msgstr ""
 
+#: client/src/components/myMoon/GatherPanel.tsx
+msgctxt "my moon: where Ask Sera's words go"
+msgid "Asking sends your name and this moon's dates to Sera, only to gather what you took part in. Nothing is used to choose people for roles. Your journal never goes with it."
+msgstr ""
+
 #: client/src/components/TimeZoneField.tsx
 msgctxt "time zone field"
 msgid "That did not save. Try again."
@@ -8410,6 +8704,11 @@ msgstr ""
 #: client/src/components/canvas/DecisionMatrixRows.tsx
 msgctxt "a button that edits a matrix row"
 msgid "Change this row"
+msgstr ""
+
+#: client/src/pages/Profile.tsx
+msgctxt "voice field label: profile bio"
+msgid "Your bio"
 msgstr ""
 
 #: client/src/components/valuation/PricingDesk.tsx

@@ -40,7 +40,7 @@ vi.mock("@/components/Layout", () => ({
 }));
 vi.mock("@/components/MicButton", () => ({ default: () => null }));
 vi.mock("@/components/journey/EconomicsView", () => ({ EconomicsView: () => null }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => auth.current, useOptionalAuth: () => auth.current }));
 vi.mock("@/lib/gameApi", () => ({
   authToken: () => "a-token",
   useGameConfig: () => ({ brochurePages: true }),

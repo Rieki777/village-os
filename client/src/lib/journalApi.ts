@@ -131,6 +131,15 @@ export async function askGuide(req: GuideRequest): Promise<GuideReply> {
     reply: String(raw?.reply ?? ""),
     nextQuestion: String(raw?.nextQuestion ?? ""),
     reflection: String(raw?.reflection ?? ""),
+    // Who answered, and the tasks the guide noticed (2026-11-09). Read as
+    // the server sends them; a missing or odd field simply draws nothing.
+    ...(raw?.guide && (raw.guide.id === "village" || raw.guide.id === "saberra") && typeof raw.guide.name === "string"
+      ? { guide: { id: raw.guide.id, name: raw.guide.name } }
+      : {}),
+    suggestedTasks: Array.isArray(raw?.suggestedTasks) ? raw!.suggestedTasks.filter((x): x is string => typeof x === "string") : [],
+    doneTasks: Array.isArray(raw?.doneTasks)
+      ? raw!.doneTasks.filter((x): x is { id: string; title: string } => !!x && typeof x.id === "string" && typeof x.title === "string")
+      : [],
   };
 }
 

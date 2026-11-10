@@ -132,6 +132,7 @@ import { register as registerCircleRoutes } from "./routes/circles";
 import { register as registerReviewRoutes } from "./routes/review";
 import { register as registerHoldersRoutes } from "./routes/holders";
 import { register as registerSaberraRoutes } from "./routes/saberra";
+import { register as registerRoleMeasuresRoutes } from "./routes/roleMeasures";
 import { register as registerErasureQueueRoutes } from "./routes/erasureQueue";
 import { register as registerFailedActionsRoutes } from "./routes/failedActions";
 import { register as registerCircleBurnRoutes } from "./routes/circleBurn";
@@ -165,6 +166,7 @@ import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasP
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
 import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
+import { register as registerFieldGuideRoutes } from "./routes/fieldGuide";
 import { orgStructureForHelper } from "./lib/adminHelperReaders";
 import { seraHelperAsk, seraHelperName } from "./lib/adminHelperSera";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
@@ -17657,7 +17659,9 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerLandRoutes(app, { isAdmin, authedUser, guardCapability, getPool, uploadsDir: UPLOADS_DIR });
   registerBrandPreviewRoutes(app, { isAdmin, getPool, brandRepo });
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
-  registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
+  registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo, villageGuideName: () => getWorkWithUs().assistantName });
+  // "Talk it out" beside long text boxes: the member's own guide helps draft (server/routes/fieldGuide.ts).
+  registerFieldGuideRoutes(app, { authedUser, clientIp, overLimit, noteAssistantUsage, villageName: () => mergedConfig().project.name, villageGuideName: () => getWorkWithUs().assistantName });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
   registerOnboardingRoutes(app, { authedUser, getPool, overLimit, isAdmin, guardCapability, village: () => ({ timeZone: getSeasonConfig().timezone }) });
   registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members, questsRepo, electorate: buildElectorate });
@@ -24854,6 +24858,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   });
   registerHoldersRoutes(app, { guardCapability, getPool });
   registerSaberraRoutes(app, { guardCapability, getPool, authedUser, mayStillSee, overLimit, members, lapseContext, isAdmin, liveHoldersOf, deciders: { roles: loadRoles, roleHolders: loadPowerHoldings, orgRoles: () => listOrgRoles(getPool()), villageHolder: async (cap: string) => { const h = (await capabilityHoldings(getPool())).find((x) => x.capability === cap); return h ? { roleId: String(h.holderRoleId), roleName: String(h.holderRoleName ?? h.holderRoleId) } : null; } } });
+  registerRoleMeasuresRoutes(app, { getPool, authedUser, overLimit });
   registerErasureQueueRoutes(app, { guardCapability, getPool, erasureDeps, authedUser });
   registerFailedActionsRoutes(app, { isAdmin, getPool, notifyAdmins, erasureDeps });
 
