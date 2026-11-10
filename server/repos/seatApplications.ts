@@ -620,3 +620,16 @@ export async function inApplicationTransaction<T>(pool: Pool, work: (conn: PoolC
     conn.release();
   }
 }
+
+/** Each role's own goals (its accountabilities), trimmed, keyed by role id. A role with none maps to an empty list. */
+export async function goalsOfRoles(db: Db, roleIds: readonly string[]): Promise<Map<string, string[]>> {
+  const own = new Map<string, string[]>();
+  if (!roleIds.length) return own;
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id, accountabilities FROM org_roles WHERE id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  for (const r of rows) {
+    let list: unknown = r.accountabilities;
+    if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
+    own.set(String(r.id), Array.isArray(list) ? list.map((x) => String(x ?? "").trim()).filter(Boolean) : []);
+  }
+  return own;
+}

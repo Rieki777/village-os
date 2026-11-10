@@ -126,6 +126,7 @@ import {
   type ApplicationBallot,
   type SeatForCapacity,
   type StoredApplication,
+  goalsOfRoles,
 } from "../repos/seatApplications";
 import { readTexts } from "../repos/alignments";
 import { asksFor, proposalsForApplications, setDecidedWords, type StoredAsk, type StoredProposal } from "../repos/roleProposals";
@@ -595,13 +596,7 @@ export function register(app: Express, deps: Deps): void {
     const seats = await seatsForUpdate(pool, input.seatIds);
     // The goals list (joining lane PR 1): each goal moves a goal its role has, and any date falls in this moon.
     if (input.answers?.goals.length) {
-      const [goalRows] = await pool.query<any[]>(`SELECT id, accountabilities FROM org_roles WHERE id IN (${input.seatIds.map(() => "?").join(",")})`, [...input.seatIds]);
-      const own = new Map<string, string[]>();
-      for (const r of goalRows) {
-        let list: unknown = r.accountabilities;
-        if (typeof list === "string") { try { list = JSON.parse(list); } catch { list = []; } }
-        own.set(String(r.id), Array.isArray(list) ? list.map((x) => String(x ?? "").trim()).filter(Boolean) : []);
-      }
+      const own = await goalsOfRoles(pool, input.seatIds);
       const judged = parseGoals(input.answers.goals.map((g) => ({ ...g, roleId: g.roleId || input.seatIds[0] })), { roleIds: new Set(input.seatIds), roleGoalsOf: (id) => own.get(id) ?? [], today: now.toISOString().slice(0, 10) });
       if (!judged.ok) return answer(400, { error: judged.error, field: "goals" });
     }
