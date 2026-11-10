@@ -83,6 +83,7 @@ import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
 import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
+import { gateOf } from "../lib/roleCardProjection";
 
 type Deps = Pick<
   AppDeps,
@@ -94,6 +95,8 @@ type Deps = Pick<
   /** The governance module's lifecycle; the roles are its own. */
   governanceLifecycle?: () => string;
   now?: () => Date;
+  /** A village variable read as a flag. Absent reads as off. */
+  boolVar?: (key: string) => boolean;
 };
 
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
@@ -186,8 +189,11 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const [roles, circles] = await Promise.all([listOrgRoles(pool), villageCircles(pool)]);
     const live = new Map(circles.filter((c) => c.live).map((c) => [c.id, c.name]));
+    // Role journey PR-C: with the village setting on, a card that is not complete offers nothing to apply for.
+    const needsCard = deps.boolVar?.("org.apply_needs_complete_card") === true;
     return roles
       .filter((r) => r.active && !r.isExample && isListed(r) && r.circleId && live.has(r.circleId))
+      .filter((r) => !needsCard || gateOf(r).gate.complete)
       .map((r) => ({
         id: r.id,
         name: r.name,

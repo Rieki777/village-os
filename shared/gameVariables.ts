@@ -2477,6 +2477,15 @@ export const VARIABLES: VariableDef[] = [
     default: "false",
   },
   {
+    key: "org.apply_needs_complete_card",
+    category: "The village's people",
+    label: "A role needs a complete card before anyone can apply",
+    description:
+      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
     key: "org.first_conversation_role",
     category: "The village's people",
     label: "The role that holds first conversations",

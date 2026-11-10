@@ -103,6 +103,7 @@ import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
 import { planListOnly } from "../../shared/roleListing";
+import { carriesRoleParams, parseRoleParams } from "../../shared/roleParams";
 import { applyListOnly, readListingRecords, undoListOnly } from "../repos/roleListingRecords";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
@@ -905,10 +906,35 @@ export function register(app: Express, deps: Deps): void {
   };
 
   // ── Admin: the org chart is edited here, and the edits are live ──────────
+  /**
+   * The card's parameters in a write (role journey PR-C): refused with a sentence when a value
+   * cannot be read, and a role named in the interviews must be a role in this village.
+   * Returns false after answering.
+   */
+  async function paramsAreFine(body: any, res: any): Promise<boolean> {
+    if (!carriesRoleParams(body)) return true;
+    const parsed = parseRoleParams(body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.problem });
+      return false;
+    }
+    const steps = parsed.value.conversations ?? [];
+    if (steps.length) {
+      const known = new Set((await listOrgRoles(getPool())).map((r) => r.id));
+      const unknown = steps.filter((x) => !known.has(x.roleId));
+      if (unknown.length) {
+        res.status(400).json({ error: "These interviewing roles are not here: " + unknown.map((x) => x.roleId).slice(0, 5).join(", ") });
+        return false;
+      }
+    }
+    return true;
+  }
+
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
@@ -976,6 +1002,7 @@ export function register(app: Express, deps: Deps): void {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);

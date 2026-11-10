@@ -99,6 +99,7 @@ export async function buildCircleCardFor(
   // The holders' names are never read: nameOf answers nothing a reader sees.
   const seats = projectSeats(inCircle, held, ctx.tier, {
     route: "org",
+    roleNames: new Map(roles.map((r) => [r.id, r.name])),
     // Role journey PR-A: an unlisted role shows to an admin and to its own holders only.
     listing: { seesUnlisted: ctx.viewer?.admin === true, ownRoleIds: ownRoleIdsOf(assignments, ctx.viewer?.userId) },
     now: ctx.now,

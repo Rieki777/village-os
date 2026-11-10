@@ -425,6 +425,11 @@ msgstr ""
 msgid "Apply for these {pickCount} roles"
 msgstr ""
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card: the pay range heading"
+msgid "What it pays"
+msgstr ""
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "What the village's settings and records show"
 msgstr ""
@@ -1173,6 +1178,11 @@ msgctxt "age band option"
 msgid "16 or 17"
 msgstr "16 o 17"
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card parameters block"
+msgid "About this role"
+msgstr ""
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook section heading"
 msgid "Key moments"
@@ -1433,6 +1443,10 @@ msgstr ""
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "What would it change?"
 msgstr ""
+
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "About this role"
+#~ msgstr ""
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -3394,9 +3408,9 @@ msgid "Loading this village's conflict agreement…"
 msgstr ""
 
 #: client/src/pages/RoleDraft.tsx
-msgctxt "role draft stat"
-msgid "Roughly: {hours}"
-msgstr ""
+#~ msgctxt "role draft stat"
+#~ msgid "Roughly: {hours}"
+#~ msgstr ""
 
 #. placeholder {0}: row.updatedBy.name || aFounder
 #. placeholder {1}: readingDate(row.updatedAt)
@@ -3751,6 +3765,10 @@ msgstr ""
 msgctxt "economics view heading"
 msgid "Cycle settlement report"
 msgstr ""
+
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "What it pays"
+#~ msgstr ""
 
 #: client/src/pages/ExitPolicy.tsx
 msgid "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
