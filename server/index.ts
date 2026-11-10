@@ -7127,7 +7127,7 @@ async function startServer() {
     // Moved to server/routes/companion.ts whole and registered HERE, the spot
     // it left: after the JSON parser and the agent-token resolver, before every
     // router and before /api/admin's audit row and default-deny.
-    registerAgentCompanionRoutes(app, { authedUser, isAdmin, hasMembership, capabilityCtx, getPool, members, clientIp, villageName: () => mergedConfig().project.name, assistantName: () => guidePromptName(getWorkWithUs().assistantName), noteAssistantUsage });
+    registerAgentCompanionRoutes(app, { authedUser, isAdmin, hasMembership, capabilityCtx, getPool, members, clientIp, villageName: () => mergedConfig().project.name, assistantName: () => guidePromptName(getWorkWithUs().assistantName), villageGuideName: () => getWorkWithUs().assistantName, noteAssistantUsage });
 
     // ── Jobs (registered here, inside the block: coordinator amendment 1) ──
     const agentDrainDeps = () => {

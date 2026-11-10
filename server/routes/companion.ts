@@ -53,6 +53,8 @@
  * live in `callAssistant` (server/lib/assistant.ts), and an answer from the
  * record spends neither, because it buys nothing upstream.
  */
+import { seraGuideAsk, type SeraAsk } from "../lib/seraGuideCall";
+import { guideStateFor } from "./guideChoice";
 import type { Express, Request } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { hasCapability } from "../../shared/capabilities";
@@ -79,7 +81,7 @@ import {
   type CanvasLibraryRead,
   type RecordReason,
 } from "../lib/companionCanvas";
-import { companionDisclosure, consentFor, withConsent, withoutConsents, type CompanionDisclosure } from "../lib/companionConsent";
+import { companionDisclosure, consentFor, saberraDisclosure, withConsent, withoutConsents, type CompanionDisclosure } from "../lib/companionConsent";
 import { instanceIdentity } from "../lib/identity";
 import { resolveMemberKey } from "../lib/memberSecrets";
 import {
@@ -101,6 +103,8 @@ export interface CompanionDeps
   villageName(): string;
   /** What the assistant is called here. */
   assistantName(): string;
+  /** The village guide's stored name (`workWithUs.assistantName`), for whom a member chose. Absent reads as unnamed. */
+  villageGuideName?(): unknown;
   /** The usage row for a call that went upstream (server/index.ts, one writer for every mode). */
   noteAssistantUsage(mode: string, model: string, call: AssistantResult, userId: string | null, path?: AssistantPath): Promise<void>;
 }
@@ -144,7 +148,18 @@ export function register(app: Express, deps: CompanionDeps): void {
    */
   const lineFor = async (
     user: any,
-  ): Promise<{ disclosure: CompanionDisclosure; memberKey: Awaited<ReturnType<typeof resolveMemberKey>>; note: string | null; lines: string | null } | null> => {
+  ): Promise<{ disclosure: CompanionDisclosure; memberKey: Awaited<ReturnType<typeof resolveMemberKey>>; note: string | null; lines: string | null; sera?: SeraAsk; seraName?: string } | null> => {
+    // SERA, BY THE MEMBER'S OWN CHOICE (Rye, 2026-11-09: "Yes, wire it"). A
+    // member whose guide is Sera, in a village whose connection answers, is
+    // shown Sera's own line and answered through her
+    // (server/lib/seraGuideCall.ts). Their note and Gene Keys lines stay with
+    // the village guide: neither rides to the outside service.
+    const state = guideStateFor(user, user?.prefs?.guide, deps.villageGuideName?.() ?? "");
+    const sera = state.answering === "saberra" ? seraGuideAsk() : null;
+    if (sera) {
+      const seraName = state.options.find((o) => o.id === "saberra")?.name ?? "Sera";
+      return { disclosure: saberraDisclosure(""), memberKey: null, note: null, lines: null, sera, seraName };
+    }
     const memberKey = await resolveMemberKey(getPool(), String(user.id));
     const resolved = resolveKey(process.env, memberKey);
     if (!resolved) return null;
@@ -254,7 +269,7 @@ export function register(app: Express, deps: CompanionDeps): void {
     // The note the line just named, read once: the prompt carries exactly what the member agreed to.
     const note = line.note;
     const lines = line.lines;
-    const assistantName = deps.assistantName();
+    const assistantName = line.seraName ?? deps.assistantName();
     const villageName = deps.villageName();
     // The canvas is named in the prompt only while it is open to members (review of 2026-11-05).
     const canvasLive = canvasOn();
@@ -281,6 +296,7 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
       runTool: (name) => callReader(toolNameToKey(name), ctx),
       prefetch,
       memberKey: line.memberKey,
+      sera: line.sera ?? null,
     });
     // The usage row: keySource is `member` when the member's key answered,
     // and the writer sets user_id from the first row (harm metric 4).
@@ -303,7 +319,9 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>", "abou
         if (proposed.ok) draft = proposed.draft;
       }
     }
-    const aboutYou = typeof parsed?.aboutYou === "string" ? parsed.aboutYou.trim().slice(0, 1000) : "";
+    // A statement about the member is drawn word for word from a reader the
+    // village ran. Sera's road runs none in a loop, so it records none.
+    const aboutYou = !line.sera && typeof parsed?.aboutYou === "string" ? parsed.aboutYou.trim().slice(0, 1000) : "";
     const statement = aboutYou
       ? await recordStatement(pool, { subjectUserId: String(user.id), mode: "member", text: aboutYou, sources: call.toolsUsed })
       : null;

@@ -26,7 +26,24 @@ import http from "node:http";
 import express from "express";
 import type { Pool } from "mysql2/promise";
 import { loadModuleSettings } from "../lib/modules";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// SERA, by the member's choice (2026-11-09). Off unless a test turns it on, so
+// every case above it runs exactly as it did.
+const seraWire = vi.hoisted(() => ({ on: false, questions: [] as string[] }));
+vi.mock("../lib/saberraGuide", async (orig) => ({
+  ...(await orig<typeof import("../lib/saberraGuide")>()),
+  saberraGuideReach: () => ({ available: seraWire.on, gap: seraWire.on ? null : "module-off", name: "Sera" }),
+}));
+vi.mock("../lib/seraGuideCall", async (orig) => ({
+  ...(await orig<typeof import("../lib/seraGuideCall")>()),
+  seraGuideAsk: () => (seraWire.on
+    ? async (q: string) => {
+        seraWire.questions.push(q);
+        return { ok: true as const, text: JSON.stringify({ reply: "SERA-REPLY", aboutYou: "Fern is a person Sera made up.", draft: null }) };
+      }
+    : null),
+}));
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "../db/testDb";
 import type { CapabilityCtx } from "../../shared/capabilities";
 import { saveAgentProfile } from "../lib/agentProfile";
@@ -153,6 +170,7 @@ describe.skipIf(!configured)("the member companion", () => {
       clientIp: () => "127.0.0.1",
       villageName: () => "Riverbend",
       assistantName: () => "the guide",
+      villageGuideName: () => "",
       noteAssistantUsage: async (mode, _model, callResult, _userId, path) => {
         usage.push({ mode, keySource: callResult.ok ? callResult.keySource : "refused", path });
       },
@@ -353,5 +371,41 @@ describe.skipIf(!configured)("the member companion", () => {
       expect(r.body.fromRecord).toBe("no-consent");
       expect(upstream).toHaveLength(0);
     });
+    describe("through Sera, for a member who chose her (Rye, 2026-11-09)", () => {
+    beforeEach(() => {
+      seraWire.on = true;
+      seraWire.questions = [];
+      upstream = [];
+      villageKey = "vk-test-village-key";
+    });
+
+    it("shows Sera's own line, answers from the record until the member agrees to it, then answers through Sera alone", async () => {
+      await pool.query("UPDATE users SET prefs = ? WHERE id = ?", [JSON.stringify({ guide: "saberra" }), PEOPLE.noted.id]); // module-review-ok: the member's own saved guide choice, in the scratch schema
+      const line = (await call("GET", "/api/agent/companion", "noted")).body;
+      expect(line.disclosure).toMatchObject({ provider: "Sera", operator: "Saberra", source: "saberra" });
+      const before = await ask("noted", "how should we decide spending?", "power");
+      expect(before.body.fromRecord).toBe("no-consent");
+      expect(before.body.consent).toMatchObject({ required: true, provider: "Sera" });
+      expect(seraWire.questions).toHaveLength(0);
+      // A yes to the village's line is not a yes to Sera's.
+      expect((await call("POST", "/api/agent/companion/consent", "noted", { provider: "Anthropic", operator: "Riverbend", source: "village" })).status).toBe(409);
+      expect((await call("POST", "/api/agent/companion/consent", "noted", { provider: "Sera", operator: "Saberra", source: "saberra" })).status).toBe(200);
+      const r = await ask("noted", "how should we decide spending?", "power");
+      expect(r.status).toBe(200);
+      expect(r.body.reply).toBe("SERA-REPLY");
+      expect(r.body.keySource).toBe("sera");
+      expect(r.body.aboutYou, "Sera's road records no statement about the member").toBe("");
+      expect(seraWire.questions).toHaveLength(1);
+      expect(seraWire.questions[0]).toContain("You are Sera");
+      expect(upstream, "the village's Anthropic key is never spent").toHaveLength(0);
+    });
+
+    it("never sends the member's own note to Sera", async () => {
+      expect((await saveAgentProfile(pool, PEOPLE.noted.id, { aboutMe: "SECRET-NOTE-FOR-MY-AGENT", aboutTier: "assistant" })).ok).toBe(true);
+      await ask("noted", "what is on this week?");
+      expect(seraWire.questions.join(" ")).not.toContain("SECRET-NOTE-FOR-MY-AGENT");
+      seraWire.on = false;
+    });
+  });
   });
 });
