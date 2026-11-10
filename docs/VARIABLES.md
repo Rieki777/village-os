@@ -309,7 +309,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Share bug reports and ideas with the platform team | `platform.feedback_relay` | Platform | boolean | `true` | the founder or an admin |
 | Cooling-off before a key lands with nobody to co-sign | `platform.cosign_cooling_hours` | Platform | integer | `48` | the founder or an admin |
 | How long a key waits for its co-sign | `platform.cosign_expiry_hours` | Platform | integer | `72` | the founder or an admin |
-| The guide's helper in Admin | `platform.admin_helper` | Platform | boolean | `false` | the founder or an admin |
+| The guide's helper in Admin | `platform.admin_helper` | Platform | boolean | `true` | the founder or an admin |
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
@@ -4063,13 +4063,13 @@ After launch, a key that needs a second admin's co-sign waits this many hours. U
 
 ### The guide's helper in Admin
 
-Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It also needs the village's own Anthropic key on the server. Off until the village decides to use it.
+Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It turns on by itself once the village connects an AI key: its own Anthropic key, or Sera when the org memory connection is set up. Turn this off to keep it off.
 
 | Fact | Value |
 | --- | --- |
 | Key | `platform.admin_helper` |
 | Type | boolean, on or off |
-| Default | `false` |
+| Default | `true` |
 | Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |

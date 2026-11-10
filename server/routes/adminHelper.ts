@@ -24,13 +24,18 @@
  * those by name in the tool layer, whatever the model asks for, and the
  * system prompt says it cannot help with selection.
  *
- * ── THE SWITCH AND THE KEY ─────────────────────────────────────────────────
+ * ── THE SWITCH AND WHO ANSWERS ─────────────────────────────────────────────
  *
- * Two things must both be true: the village's dial `platform.admin_helper`,
- * which ships OFF, and the village's own key. The switch is the village's
- * decision and the helper can never propose it.
+ * The village's dial `platform.admin_helper` ships ON (Rye, 2026-11-09), so
+ * connecting an AI key is all it takes; a village that does not want the
+ * helper turns the dial off, and the helper can never propose it.
  *
- * Only the village's OWN key counts (`assistantKeyOwner() === "own"`):
+ * Who answers (`HelperProvider`): the village's own Anthropic key when it is
+ * set; otherwise Sera, when the village's org memory connection works
+ * (server/lib/adminHelperSera.ts, a narrower prose road with no tool loop);
+ * otherwise nobody, and the panel and the Admin banner ask for a key.
+ *
+ * Only the village's OWN Anthropic key counts (`assistantKeyOwner() === "own"`):
  * the Railway variable ANTHROPIC_API_KEY, or the same slot typed under
  * Integrations. A borrowed platform key does not, because this panel exists
  * for one village's admins doing that village's work. The status route says
@@ -53,6 +58,8 @@
  */
 import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
+import { ASSISTANT_MODES } from "../lib/assistant";
+import { asksAboutOrg, seraHelperQuestion, type SeraAsk } from "../lib/adminHelperSera";
 import {
   ADMIN_HELPER_MODEL,
   assistantKeyOwner,
@@ -69,6 +76,7 @@ import {
   cleanTabs,
   searchAdmin,
   type HelperAnswer,
+  type HelperProvider,
   type HelperDial,
   type HelperStatus,
   type HelperTab,
@@ -87,6 +95,10 @@ export interface AdminHelperDeps extends Pick<AppDeps, "isAdmin" | "authedUser" 
   noteAssistantUsage(mode: string, model: string, call: AssistantResult, userId: string | null, path?: AssistantPath): Promise<void>;
   /** Injected for tests. Defaults to the engine's own answer. */
   keyOwner?(): "own" | "platform" | "none";
+  /** A Sera ask when the village's org memory connection can answer, or null. Absent: never Sera. */
+  seraAsk?(): SeraAsk | null;
+  /** The name Sera answers under (the saberra module's `agentName`, or "Sera"). */
+  seraName?(): string;
 }
 
 /** The two readers, by wire name. No arguments: each ranks by the question. */
@@ -191,13 +203,20 @@ export function register(app: Express, deps: AdminHelperDeps): void {
   const { isAdmin, authedUser, clientIp, overLimit } = deps;
   const keyOwner = deps.keyOwner ?? (() => assistantKeyOwner());
 
+  /** Who would answer right now: the village's own Anthropic key first, then Sera. */
+  const provider = (): HelperProvider | null => (keyOwner() === "own" ? "anthropic" : deps.seraAsk?.() ? "sera" : null);
+  const guideFor = (p: HelperProvider | null) =>
+    p === "sera" && deps.seraName ? deps.seraName() : guideName(deps.guideSource(), "admin").name;
+
   app.get("/api/admin/helper", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const off = !deps.switchOn() ? "switch" : keyOwner() !== "own" ? "key" : null;
+    const p = provider();
+    const off = !deps.switchOn() ? "switch" : p === null ? "key" : null;
     const status: HelperStatus = {
       on: off === null,
-      guide: guideName(deps.guideSource(), "admin").name,
+      guide: guideFor(p),
       off,
+      provider: p,
     };
     res.json(status);
   });
@@ -211,7 +230,8 @@ export function register(app: Express, deps: AdminHelperDeps): void {
       return res.status(429).json({ error: "Slow down a moment, then keep going." });
     }
     if (!deps.switchOn()) return res.status(503).json({ error: "helper-off", off: "switch" });
-    if (keyOwner() !== "own") return res.status(503).json({ error: "helper-off", off: "key" });
+    const p = provider();
+    if (p === null) return res.status(503).json({ error: "helper-off", off: "key" });
 
     const clean = sanitizeMessages(req.body?.messages);
     if (!clean.ok) return res.status(400).json({ error: clean.error });
@@ -224,6 +244,49 @@ export function register(app: Express, deps: AdminHelperDeps): void {
     const dials = deps.dials();
 
     const runTool = helperToolRunner({ query, tabs, dials, readOrgStructure: deps.readOrgStructure });
+    const values = new Map(dials.map((d) => [d.key, d.value]));
+    const answerFrom = (text: string, consulted: string[]): HelperAnswer => {
+      const parsed = parseJsonReply<any>(text, { reply: text || "Ask me that another way and I will try again." });
+      const openKey = typeof parsed.open === "string" ? parsed.open : "";
+      const openHit = tabs.find((t) => t.key === openKey) ?? null;
+      const built = buildProposal(parsed.propose, (key) => values.get(key));
+      return {
+        reply: typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply : "Go on, I'm listening.",
+        open: openHit ? { key: openHit.key, label: openHit.label } : null,
+        proposal: built?.ok ? built.proposal : null,
+        refused: built && !built.ok ? built.error : null,
+        consulted,
+      };
+    };
+
+    if (p === "sera") {
+      // The Sera road: no tool loop, so the two reads happen first, through the
+      // same tool layer, and ride inside the one question.
+      const ask = deps.seraAsk?.();
+      if (!ask) return res.status(503).json({ error: "helper-off", off: "key" });
+      const today = new Date().toISOString().slice(0, 10);
+      if (await overLimit(`admin-helper-sera-day:${today}`, ASSISTANT_MODES.adminHelper.dailyBudget, 24 * 60 * 60 * 1000)) {
+        return res.status(503).json({ error: "The helper has answered all it can today. It starts again tomorrow." });
+      }
+      if (await overLimit(`admin-helper:${actor}`, PER_HOUR, 60 * 60 * 1000)) {
+        return res.status(429).json({ error: "Slow down a moment, then keep going." });
+      }
+      const readings: { key: string; data: unknown }[] = [];
+      for (const name of asksAboutOrg(query) ? ["admin_find", "org_chart"] : ["admin_find"]) {
+        const got = await runTool(name);
+        if (got.ok) readings.push({ key: got.key, data: got.data });
+      }
+      const question = seraHelperQuestion({
+        guide: guideFor("sera"),
+        village: deps.villageName(),
+        openTab: openTab ? tabs.find((t) => t.key === openTab) ?? null : null,
+        readings,
+        conversation: messages,
+      });
+      const said = await ask(question);
+      if (!said.ok) return res.status(502).json({ error: "Sera could not answer just now. Try again in a moment." });
+      return res.json(answerFrom(said.text, readings.map((r) => r.key)));
+    }
 
     const system = helperSystemPrompt({
       guide: guidePromptName(deps.guideSource()),
@@ -246,18 +309,6 @@ export function register(app: Express, deps: AdminHelperDeps): void {
     await deps.noteAssistantUsage("adminHelper", ADMIN_HELPER_MODEL, call, actor);
     if (!call.ok) return res.status(call.status).json({ error: call.error });
 
-    const parsed = parseJsonReply<any>(call.text, { reply: call.text || "Ask me that another way and I will try again." });
-    const openKey = typeof parsed.open === "string" ? parsed.open : "";
-    const openHit = tabs.find((t) => t.key === openKey) ?? null;
-    const values = new Map(dials.map((d) => [d.key, d.value]));
-    const built = buildProposal(parsed.propose, (key) => values.get(key));
-    const answer: HelperAnswer = {
-      reply: typeof parsed.reply === "string" && parsed.reply.trim() ? parsed.reply : "Go on, I'm listening.",
-      open: openHit ? { key: openHit.key, label: openHit.label } : null,
-      proposal: built?.ok ? built.proposal : null,
-      refused: built && !built.ok ? built.error : null,
-      consulted: call.toolsUsed,
-    };
-    res.json(answer);
+    res.json(answerFrom(call.text, call.toolsUsed));
   });
 }

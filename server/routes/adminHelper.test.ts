@@ -73,7 +73,7 @@ function wire(replies: any[], opts: { limited?: (b: string) => boolean } = {}) {
 const text = (obj: unknown) => ({ content: [{ type: "text", text: JSON.stringify(obj) }], stop_reason: "end_turn", usage: { input_tokens: 10, output_tokens: 5 } });
 const toolUse = (name: string) => ({ content: [{ type: "tool_use", id: `tu_${name}`, name, input: {} }], stop_reason: "tool_use", usage: { input_tokens: 10, output_tokens: 5 } });
 
-function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLimit?: boolean; switchOn?: boolean } = {}) {
+function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLimit?: boolean; switchOn?: boolean; sera?: ((q: string) => Promise<{ ok: true; text: string } | { ok: false }>) | null } = {}) {
   const { app, handlers } = collect();
   const usage: any[] = [];
   register(app, {
@@ -88,6 +88,8 @@ function setup(o: { admin?: boolean; owner?: "own" | "platform" | "none"; overLi
     switchOn: () => o.switchOn ?? true,
     noteAssistantUsage: async (mode: string, model: string, call: { ok: boolean }) => void usage.push({ mode, model, ok: call.ok }),
     keyOwner: () => o.owner ?? "own",
+    seraAsk: () => o.sera ?? null,
+    seraName: () => "Sera",
   } as any);
   const call = async (method: string, path: string, body?: any) => {
     const { res, out } = makeRes();
@@ -112,11 +114,11 @@ describe("GET /api/admin/helper", () => {
   });
 
   it("is off by the village's switch first, whatever the key", async () => {
-    expect((await setup({ switchOn: false, owner: "own" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "switch" });
+    expect((await setup({ switchOn: false, owner: "own" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "switch", provider: "anthropic" });
   });
 
   it("says off until the village's own key is set, and names the guide", async () => {
-    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "key" });
+    expect((await setup({ owner: "none" }).call("GET", "/api/admin/helper")).body).toEqual({ on: false, guide: "Sol", off: "key", provider: null });
     // A borrowed platform key does not turn the admin helper on.
     expect((await setup({ owner: "platform" }).call("GET", "/api/admin/helper")).body.on).toBe(false);
     expect((await setup({ owner: "own" }).call("GET", "/api/admin/helper")).body.on).toBe(true);
@@ -126,7 +128,7 @@ describe("GET /api/admin/helper", () => {
     wire([]);
     const out = await setup().call("GET", "/api/admin/helper");
     const raw = JSON.stringify(out.body);
-    expect(Object.keys(out.body).sort()).toEqual(["guide", "off", "on"]);
+    expect(Object.keys(out.body).sort()).toEqual(["guide", "off", "on", "provider"]);
     expect(raw).not.toContain(SECRET);
     expect(raw).not.toContain(SECRET.slice(-4));
   });
@@ -305,10 +307,74 @@ describe("no AI in selection: the tool layer", () => {
 });
 
 describe("the village's switch", () => {
-  it("exists, ships off, and the helper may never propose it", () => {
+  it("exists, ships ON (Rye, 9 Nov), and the helper may never propose it", () => {
     const def = VARIABLES.find((v) => v.key === HELPER_SWITCH);
     expect(def?.type).toBe("boolean");
-    expect(def?.default).toBe("false");
+    expect(def?.default).toBe("true");
     expect(mayPropose(def)).toBe(false);
+  });
+});
+
+describe("who answers: the village's own Anthropic key first, then Sera", () => {
+  const seraSays = (text: string, asked: string[] = []) => async (q: string) => {
+    asked.push(q);
+    return { ok: true as const, text };
+  };
+
+  it("uses Sera, named Sera, when there is no Anthropic key and the connection works", async () => {
+    const out = await setup({ owner: "none", sera: seraSays("x") }).call("GET", "/api/admin/helper");
+    expect(out.body).toEqual({ on: true, guide: "Sera", off: null, provider: "sera" });
+  });
+
+  it("prefers the village's Anthropic key when both are set, and never asks Sera", async () => {
+    const asked: string[] = [];
+    const w = wire([text({ reply: "From Claude." })]);
+    const { call } = setup({ owner: "own", sera: seraSays("From Sera.", asked) });
+    expect((await call("GET", "/api/admin/helper")).body.provider).toBe("anthropic");
+    expect((await call("POST", "/api/admin/helper/ask", ask("hi"))).body.reply).toBe("From Claude.");
+    expect(w.sent.length).toBe(1);
+    expect(asked).toEqual([]);
+  });
+
+  it("answers through Sera with the reads done first, fenced, and the same proposal card", async () => {
+    const asked: string[] = [];
+    const w = wire([]);
+    const to = SAFE.default === "true" ? "false" : "true";
+    const out = await setup({ owner: "none", sera: seraSays(JSON.stringify({ reply: "Here it is.", open: "variables", propose: { key: SAFE.key, value: to, why: "Asked." } }), asked) })
+      .call("POST", "/api/admin/helper/ask", ask(`change ${SAFE.label}`));
+    expect(out.status).toBe(200);
+    expect(w.sent).toEqual([]);
+    expect(asked.length).toBe(1);
+    expect(asked[0]).toContain("<village-data");
+    expect(asked[0]).toContain("you cannot help with selection");
+    expect(out.body.consulted).toEqual(["admin.find"]);
+    expect(out.body.open).toEqual({ key: "variables", label: "Game Mechanics" });
+    expect(out.body.proposal).toMatchObject({ key: SAFE.key, to });
+  });
+
+  it("adds the org chart's shape only for a question about the org", async () => {
+    const asked: string[] = [];
+    const out = await setup({ owner: "none", sera: seraSays("Two roles are open.", asked) }).call("POST", "/api/admin/helper/ask", ask("which roles are open?"));
+    expect(out.body.consulted).toEqual(["admin.find", "org.chart"]);
+    expect(out.body.reply).toBe("Two roles are open.");
+    expect(out.body.proposal).toBeNull();
+  });
+
+  it("still refuses a money change Sera proposes", async () => {
+    const out = await setup({ owner: "none", sera: seraSays(JSON.stringify({ reply: "ok", propose: { key: MONEY.key, value: MONEY.default } })) })
+      .call("POST", "/api/admin/helper/ask", ask("change the ledger"));
+    expect(out.body.proposal).toBeNull();
+    expect(out.body.refused).toContain("money settings stay in your own hands");
+  });
+
+  it("says so plainly when Sera cannot answer", async () => {
+    const out = await setup({ owner: "none", sera: async () => ({ ok: false as const }) }).call("POST", "/api/admin/helper/ask", ask("hi"));
+    expect(out.status).toBe(502);
+    expect(out.body.error).toContain("Sera could not answer");
+  });
+
+  it("is off, asking for a key, with neither", async () => {
+    const out = await setup({ owner: "none", sera: null }).call("POST", "/api/admin/helper/ask", ask("hi"));
+    expect(out).toEqual({ status: 503, body: { error: "helper-off", off: "key" } });
   });
 });

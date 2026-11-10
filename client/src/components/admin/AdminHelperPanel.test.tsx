@@ -44,18 +44,19 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("the Admin helper panel", () => {
   it("OFF: asks the server, then shows plain steps to connect Claude and no question box", async () => {
-    const calls = mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "key" } }) });
+    const calls = mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "key", provider: null } }) });
     panel();
     expect(await screen.findByText("Connect Claude to turn on your helper")).toBeTruthy();
     expect(screen.getByText(/ANTHROPIC_API_KEY/)).toBeTruthy();
-    expect(screen.getByText(/^Open your hosting \(Railway\)/)).toBeTruthy();
+    expect(screen.getByText(/^Open Integrations, find "Anthropic, the AI guide"/)).toBeTruthy();
+    expect(screen.getByText(/turns the helper on/)).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.getByRole("heading", { name: "Maia" })).toBeTruthy();
     expect(calls[0].init.headers.Authorization).toBe("Bearer pw");
   });
 
   it("OFF BY THE VILLAGE'S SWITCH: says it is switched off and where the village turns it on", async () => {
-    mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "switch" } }) });
+    mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "switch", provider: null } }) });
     panel();
     expect(await screen.findByText("Your helper is switched off")).toBeTruthy();
     expect(screen.getByText(/The guide's helper in Admin/)).toBeTruthy();
@@ -63,8 +64,19 @@ describe("the Admin helper panel", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  it("OFF: Open Integrations goes to the page where the key is pasted", async () => {
+    const { onOpenTab } = panel({ initialStatus: { on: false, guide: "Maia", off: "key", provider: null } });
+    await userEvent.click(screen.getByRole("button", { name: "Open Integrations" }));
+    expect(onOpenTab).toHaveBeenCalledWith("integrations");
+  });
+
+  it("READY: says who answers, Claude or Sera", () => {
+    panel({ initialStatus: { on: true, guide: "Sera", off: null, provider: "sera" } });
+    expect(screen.getByText(/Answers come from Sera/)).toBeTruthy();
+  });
+
   it("READY: says what it never reads before the first question", () => {
-    panel({ initialStatus: { on: true, guide: "Maia", off: null } });
+    panel({ initialStatus: { on: true, guide: "Maia", off: null, provider: "anthropic" } });
     expect(screen.getByText(/never read applications, proposals, interviews, terms or pay/)).toBeTruthy();
     expect(screen.getByText(/can't help with choosing people for roles/)).toBeTruthy();
   });
@@ -72,7 +84,7 @@ describe("the Admin helper panel", () => {
   it("READY: sends the question with the Admin map, shows the answer, and opens the page it names", async () => {
     const answer: HelperAnswer = { reply: "Game Mechanics holds every rule.", open: { key: "variables", label: "Game Mechanics" }, proposal: null, refused: null, consulted: ["admin.find"] };
     const calls = mockFetch({ "POST /api/admin/helper/ask": () => ({ body: answer }) });
-    const { onOpenTab } = panel({ initialStatus: { on: true, guide: "Sera", off: null } });
+    const { onOpenTab } = panel({ initialStatus: { on: true, guide: "Sera", off: null, provider: "anthropic" } });
     expect(screen.getByRole("heading", { name: "Sera" })).toBeTruthy();
     await userEvent.type(screen.getByRole("textbox", { name: "Your question" }), "where are the rules?{Enter}");
     expect(await screen.findByText("Game Mechanics holds every rule.")).toBeTruthy();
@@ -96,7 +108,7 @@ describe("the Admin helper panel", () => {
       "POST /api/admin/helper/ask": () => ({ body: answer }),
       "PUT /api/admin/variables/feed.show_birthdays": () => ({ body: { success: true, message: "Saved. The rule is live" } }),
     });
-    panel({ initialStatus: { on: true, guide: "Maia", off: null } });
+    panel({ initialStatus: { on: true, guide: "Maia", off: null, provider: "anthropic" } });
     await userEvent.type(screen.getByRole("textbox", { name: "Your question" }), "show birthdays{Enter}");
     const card = await screen.findByTestId("helper-proposal");
     expect(card.textContent).toContain("Show birthdays");
@@ -124,7 +136,7 @@ describe("the Admin helper panel", () => {
       "POST /api/admin/helper/ask": () => ({ body: answer }),
       "PUT /api/admin/variables/feed.x": () => ({ status: 403, body: { error: "This needs a village vote" } }),
     });
-    panel({ initialStatus: { on: true, guide: "Maia", off: null } });
+    panel({ initialStatus: { on: true, guide: "Maia", off: null, provider: "anthropic" } });
     await userEvent.type(screen.getByRole("textbox", { name: "Your question" }), "x{Enter}");
     await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
     expect(await screen.findByText("This needs a village vote")).toBeTruthy();
@@ -133,14 +145,14 @@ describe("the Admin helper panel", () => {
   });
 
   it("turns itself off when the server says the key went away", async () => {
-    mockFetch({ "POST /api/admin/helper/ask": () => ({ status: 503, body: { error: "helper-off", off: "key" } }) });
-    panel({ initialStatus: { on: true, guide: "Maia", off: null } });
+    mockFetch({ "POST /api/admin/helper/ask": () => ({ status: 503, body: { error: "helper-off", off: "key", provider: null } }) });
+    panel({ initialStatus: { on: true, guide: "Maia", off: null, provider: "anthropic" } });
     await userEvent.type(screen.getByRole("textbox", { name: "Your question" }), "hi{Enter}");
     expect(await screen.findByText("Connect Claude to turn on your helper")).toBeTruthy();
   });
 
   it("docks below the header it was handed", () => {
-    panel({ initialStatus: { on: false, guide: "", off: "key" } });
+    panel({ initialStatus: { on: false, guide: "", off: "key", provider: null } });
     expect((screen.getByTestId("admin-helper") as HTMLElement).style.top).toBe("88px");
     // An unnamed guide is never hidden.
     expect(screen.getByRole("heading", { name: "Your village guide" })).toBeTruthy();
@@ -156,7 +168,7 @@ describe("opening the helper", () => {
   });
 
   it("opens from the header's corner menu and from the shortcut, lazily", async () => {
-    mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "key" } }) });
+    mockFetch({ "GET /api/admin/helper": () => ({ body: { on: false, guide: "Maia", off: "key", provider: null } }) });
     function Page() {
       const [open, setOpen] = useState(false);
       return (

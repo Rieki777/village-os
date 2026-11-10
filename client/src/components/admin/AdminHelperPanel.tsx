@@ -109,7 +109,7 @@ export default function AdminHelperPanel({
       });
       setBusy(false);
       if (!out.ok) {
-        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off }));
+        if (out.off) setStatus((s) => ({ guide: s?.guide ?? "", on: false, off: out.off, provider: null }));
         else setError(out.error);
         return;
       }
@@ -146,6 +146,7 @@ export default function AdminHelperPanel({
         <div className="min-w-0">
           <h2 className="truncate font-display text-lg font-semibold text-foreground">{guide}</h2>
           <p className="text-xs text-muted-foreground"><Trans context="admin helper panel">Helps you find things and proposes changes for you to approve.</Trans></p>
+          {status?.provider && <ProviderLine provider={status.provider} />}
         </div>
         <button
           type="button"
@@ -165,7 +166,7 @@ export default function AdminHelperPanel({
       )}
       {statusError && <p role="alert" className="p-4 text-sm text-destructive">{statusError}</p>}
 
-      {status && !status.on && (status.off === "switch" ? <SwitchedOff /> : <ConnectSteps />)}
+      {status && !status.on && (status.off === "switch" ? <SwitchedOff /> : <ConnectSteps onOpenIntegrations={() => onOpenTab("integrations")} />)}
 
       {status?.on && (
         <>
@@ -272,19 +273,43 @@ function SwitchedOff() {
 }
 
 /** The off state: what Rye (or any admin with the hosting) does to turn it on. */
-function ConnectSteps() {
+/** Who answers, said once under the heading, so an admin knows where their words go. */
+function ProviderLine({ provider }: { provider: "anthropic" | "sera" }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      {provider === "sera"
+        ? <Trans context="admin helper panel, who answers">Answers come from Sera, through your village's org memory connection.</Trans>
+        : <Trans context="admin helper panel, who answers">Answers come from Claude, on your village's own Anthropic key.</Trans>}
+    </p>
+  );
+}
+
+/** No AI connected yet: the simplest way in first, then the others. It turns on by itself once one is set. */
+export function ConnectSteps({ onOpenIntegrations }: { onOpenIntegrations: () => void }) {
   return (
     <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 text-sm text-foreground">
       <h3 className="font-semibold"><Trans context="admin helper panel">Connect Claude to turn on your helper</Trans></h3>
       <p className="text-muted-foreground">
-        <Trans context="admin helper panel">The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser.</Trans>
+        <Trans context="admin helper panel">The helper runs on Claude, using an Anthropic key that belongs to your village. It turns on by itself as soon as the key is saved, and the key never comes back to your browser.</Trans>
       </p>
       <ol className="list-decimal space-y-2 pl-5">
         <li><Trans context="admin helper, connect step">Sign in at console.anthropic.com and create an API key for the village.</Trans></li>
-        <li><Trans context="admin helper, connect step">Open your hosting (Railway), choose the village's service, and open Variables.</Trans></li>
-        <li><Trans context="admin helper, connect step">Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes.</Trans></li>
+        <li><Trans context="admin helper, connect step">Open Integrations, find "Anthropic, the AI guide", paste the key and save.</Trans></li>
         <li><Trans context="admin helper, connect step">Come back here and open the helper again.</Trans></li>
       </ol>
+      <button
+        type="button"
+        onClick={onOpenIntegrations}
+        className="inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Trans context="admin helper, opens the Integrations page">Open Integrations</Trans>
+      </button>
+      <p className="text-muted-foreground">
+        <Trans context="admin helper panel">Prefer your hosting? Add a variable named ANTHROPIC_API_KEY to the village's service in Railway instead. Railway restarts the service, which takes roughly two minutes.</Trans>
+      </p>
+      <p className="text-muted-foreground">
+        <Trans context="admin helper panel">If your village uses Sera for its org memory, connecting Sera also turns the helper on. A village Anthropic key is used first when both are set.</Trans>
+      </p>
     </div>
   );
 }

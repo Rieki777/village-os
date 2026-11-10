@@ -81,17 +81,27 @@ export interface HelperAnswer {
 }
 
 /**
- * The status route's answer. `on` needs BOTH the village's switch (the dial
- * `platform.admin_helper`, off by default) and the village's own key; `off`
- * says which is missing, switch first, so the panel names the right step.
+ * Who answers. `anthropic` is the village's own Anthropic key, and wins when
+ * it is set. `sera` is the org memory service's agent, reached through the
+ * village's Saberra connection, used when there is no Anthropic key.
+ */
+export type HelperProvider = "anthropic" | "sera";
+
+/**
+ * The status route's answer. `on` needs the village's switch (the dial
+ * `platform.admin_helper`, ON by default) and an AI to answer: the village's
+ * own Anthropic key, or a working Sera connection. `off` says which is
+ * missing, switch first, so the panel names the right step; the Admin
+ * banner asks for the key.
  */
 export interface HelperStatus {
   on: boolean;
   guide: string;
   off: "switch" | "key" | null;
+  provider: HelperProvider | null;
 }
 
-/** The village's own switch for the helper. Ships off. */
+/** The village's own switch for the helper. Ships on; a village may turn it off. */
 export const HELPER_SWITCH = "platform.admin_helper";
 
 // ── The map the panel sends ─────────────────────────────────────────────────

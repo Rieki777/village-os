@@ -22,7 +22,8 @@ export async function fetchHelperStatus(password: string, signal?: AbortSignal):
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(refusal(d, "The helper could not be reached."));
   const off = d?.off === "switch" || d?.off === "key" ? d.off : null;
-  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "", off: d?.on === true ? null : off ?? "key" };
+  const provider = d?.provider === "anthropic" || d?.provider === "sera" ? d.provider : null;
+  return { on: d?.on === true, guide: typeof d?.guide === "string" ? d.guide : "", off: d?.on === true ? null : off ?? "key", provider };
 }
 
 /** The pages this admin can open, as the nav shows them, for the guide's map of Admin. */
