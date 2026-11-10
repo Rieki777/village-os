@@ -2874,6 +2874,10 @@ msgstr "Yours"
 msgid "{agent} suggests {nChanges} for the chart"
 msgstr "{agent} suggests {nChanges} for the chart"
 
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators."
+msgstr "This page is for administrators."
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "label of the appeal box on the consequences ladder"
 msgid "How someone appeals"
@@ -7637,6 +7641,10 @@ msgstr "The earliest you could start (optional)"
 msgctxt "consent queue empty"
 msgid "Nothing waiting."
 msgstr "Nothing waiting."
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators. Sign in with an administrator account to see it."
+msgstr "This page is for administrators. Sign in with an administrator account to see it."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "a setting with no value"
