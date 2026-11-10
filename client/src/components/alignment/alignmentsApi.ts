@@ -97,6 +97,43 @@ export async function call<T>(path: string, method: "GET" | "POST" = "GET", body
 /** True when an answer is the money re-confirm asking first, rather than a refusal. */
 export const asksReconfirm = (a: Answer<unknown>): boolean => !a.ok && a.status === 403 && a.code === "reconfirm_required";
 
+/** The village's confidentiality agreement now, and whether this member holds it (L7). */
+export const fetchConfidentiality = () =>
+  call<{
+    agreement: { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null } | null;
+    you: { holds: boolean } | null;
+    message: string | null;
+  }>("/api/confidentiality");
+
+/**
+ * Open the agreement's document for a signed-in member: fetched with their
+ * token (the server reads no cookie), opened in a new tab from memory. True
+ * when it opened.
+ */
+export async function openAgreementDocument(href: string): Promise<boolean> {
+  try {
+    const res = await fetch(href, { headers: headers() });
+    if (!res.ok) return false;
+    const url = URL.createObjectURL(await res.blob());
+    const opened = window.open(url, "_blank", "noopener");
+    if (!opened) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+/** Align with it: one click, identity re-confirmed. The version is the one the page drew. */
+export const alignConfidentiality = (version: string) =>
+  call<{ success: true; textId: string; already: boolean; alignedAt: string }>("/api/profile/confidentiality", "POST", { version });
 export const fetchMyAlignments = () => call<{ alignments: ServedAlignment[] }>("/api/profile/alignments");
 export const fetchTheirAlignments = (handle: string) =>
   call<{ alignments: ServedAlignment[] }>(`/api/alignments?party=${encodeURIComponent(handle)}`);

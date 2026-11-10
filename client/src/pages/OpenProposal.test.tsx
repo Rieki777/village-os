@@ -220,6 +220,24 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
     expect(gaps.textContent).toContain("No season goal served");
   });
 
+  it("the membership gap reads the alignment made at application, never the old Love Letter tick (Rye's answer 8)", async () => {
+    const card = { roles: [{ roleId: "role-gate", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } };
+    const roles = [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: [] }];
+    // The old tick says yes, and nothing was aligned: the gap shows.
+    answer = () => json({ proposal: served({ roles, card, membership: { aligned: false } }) });
+    render(<OpenProposal />);
+    await screen.findByRole("heading", { name: "Their card beside the open card" });
+    expect((document.querySelector("[data-card-gaps]") as HTMLElement).textContent).toContain("Not aligned with the membership letter");
+    expect(screen.getByText(/have not aligned with the membership letter yet/)).toBeTruthy();
+    cleanup();
+    // CONTROL: aligned at application, the gap is gone.
+    answer = () => json({ proposal: served({ roles, card, membership: { aligned: true } }) });
+    render(<OpenProposal />);
+    await screen.findByRole("heading", { name: "Their card beside the open card" });
+    expect(document.querySelector("[data-card-gaps]")?.textContent ?? "").not.toContain("membership letter");
+    expect(screen.getByText(/aligned with the membership letter when they applied/)).toBeTruthy();
+  });
+
   it("says when a proposal predates the applicant's card", async () => {
     render(<OpenProposal />);
     expect(await screen.findByText(/sent before applicants wrote their own role card/)).toBeTruthy();
