@@ -69,15 +69,15 @@ afterEach(() => {
 });
 
 describe("with every optional step skipped", () => {
-  it("shows both doors and still drafts a role and links to apply", async () => {
+  it("shows both doors and still selects a role and links to propose", async () => {
     serve();
     render(<RoleDraft />);
     expect(await screen.findByRole("heading", { level: 2, name: "Your R-Ikigai" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Who do you play? Pick one or more." })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add your Human Design or Gene Keys" })).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Select Gardener" }));
-    const apply = await screen.findAllByRole("link", { name: /apply/i });
-    expect(apply.length).toBeGreaterThan(0);
+    const propose = await screen.findAllByRole("link", { name: /propose/i });
+    expect(propose.length).toBeGreaterThan(0);
     // Nothing optional was opened, so nothing but the board's own reads happened.
     expect(calls.some((c) => c.url.includes("role-discover"))).toBe(false);
   });

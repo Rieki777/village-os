@@ -29,7 +29,7 @@ const searchOf = (...args: Parameters<typeof applySeatsHref>) => {
   const href = applySeatsHref(...args);
   return href.slice(href.indexOf("?"));
 };
-const cardFor = () => screen.getByRole("button", { name: /Apply for a role/ });
+const cardFor = () => screen.getByRole("button", { name: /Propose for a role/ });
 
 describe("role_application publishes", () => {
   it("is conductable on the server", () => {
@@ -148,7 +148,7 @@ describe("a wizard opened from a seat", () => {
     const four = ["s1", "s2", "s3", "s4"];
     const start = roleApplicationStart(searchOf(four));
     expect(start?.answers.seatIds).toEqual(four);
-    expect(seatsProblem(start?.answers.seatIds)).toBe("One application holds at most 3 roles.");
+    expect(seatsProblem(start?.answers.seatIds)).toBe("One proposal holds at most 3 roles.");
     expect(seatsProblem(roleApplicationStart(searchOf(four.slice(0, 3)))?.answers.seatIds)).toBeNull();
   });
 

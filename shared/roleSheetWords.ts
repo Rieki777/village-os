@@ -42,7 +42,7 @@ export const SHEET_WORDS = {
   unreachable: "Held, and not reachable through the map yet.",
   raise: "Raise your hand",
   raiseConsequence: "A raised hand reaches the founding team, who will be in touch.",
-  applyConsequence: "Opens your application for this role and its terms. A role holder or the village adopts it.",
+  applyConsequence: "Opens your proposal for this role and its terms. A role holder or the village adopts it.",
   raisePlaceholder: "Why this role calls to you (optional)",
   raiseTermLabel: "End date for your role (optional)",
   raiseSubmit: "Raise my hand",

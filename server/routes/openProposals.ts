@@ -383,7 +383,7 @@ export function register(app: Express, deps: Deps): void {
     if (confirmed.review?.statusToken) {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
-        const text = `Your application is with the village. Follow where it is, who acts next and by when:
+        const text = `Your proposal is with the village. Follow where it is, who acts next and by when:
 
 ${site()}${statusPath}
 
@@ -394,7 +394,7 @@ Keep this link to yourself: it is how we know it is you.`;
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: "Where your application is",
+            subject: "Where your proposal is",
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)

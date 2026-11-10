@@ -223,7 +223,7 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     const card = r.body.card;
     expect(card.roles.map((x: any) => x.id)).toEqual(roleIds);
     expect(card.header.name).toBe("Ana Quillfeather");
-    expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
+    expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(true);
     expect(card.across.tasks).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     expect(card.across.signs).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     for (const role of card.roles) expect(role.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });

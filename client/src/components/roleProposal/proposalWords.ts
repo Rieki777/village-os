@@ -189,7 +189,7 @@ export const RP_WORDS = {
 
   // After submit.
   stateHeading: "Where it stands",
-  seeApplication: "See the application",
+  seeApplication: "See the proposal",
   submittedOn: (day: string) => `Submitted on ${day}.`,
   myProposals: "My role proposals",
   proposalFor: (season: string) => `Role proposal for ${season.trim() || "next season"}`,

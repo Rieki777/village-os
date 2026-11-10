@@ -69,7 +69,7 @@ describe("the circle card, drawn", () => {
     const card = screen.getByRole("link", { name: "See the card of the holder of Water Keeper" });
     expect(card.getAttribute("href")).toBe("/profile/cai#role-r-water");
     expect(card.textContent).toBe("See their card");
-    expect(screen.getByRole("link", { name: "Apply for this role" }).getAttribute("href")).toBe("/propose?type=role_application&seat=r-seed&from=%2Fcircles%2Fc-garden");
+    expect(screen.getByRole("link", { name: "Propose for this role" }).getAttribute("href")).toBe("/propose?type=role_application&seat=r-seed&from=%2Fcircles%2Fc-garden");
     expect(screen.getByRole("link", { name: "Water Keeper" }).getAttribute("href")).toBe("/roles?seat=r-water");
   });
 

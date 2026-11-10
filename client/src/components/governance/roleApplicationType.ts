@@ -98,8 +98,8 @@ export const settingsProblem = (v: unknown): string | null => {
 /** The seats field's verdict: one to five. */
 export const seatsProblem = (v: unknown): string | null => {
   const n = pickedSeats(v).length;
-  if (n === 0) return "Pick the role you are applying for.";
-  if (n > MAX_SEATS) return `One application holds at most ${MAX_SEATS} roles.`;
+  if (n === 0) return "Pick the role you are proposing for.";
+  if (n > MAX_SEATS) return `One proposal holds at most ${MAX_SEATS} roles.`;
   return null;
 };
 
@@ -107,11 +107,11 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   id: "role_application",
   group: "Recurring",
   icon: UserPlus,
-  title: "Apply for a role",
+  title: "Propose for a role",
   description:
-    "Apply to hold one role or up to three, with what you will have done by the end of the season and the terms you hold them on.",
+    "Propose to hold one role or up to three, with what you will have done by the end of the season and the terms you hold them on.",
   consequence:
-    "Publishing puts your application and its terms in front of whoever adopts roles: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the roles and never you or the money.",
+    "Sending puts your proposal and its terms in front of whoever adopts roles: a live holder of that power, or the whole village by vote. Every member can read the terms. A vote names the roles and never you or the money.",
   opensVote: true,
   // Its route asks terms.read, the member rung, never proposal.open, so the
   // card stays live for a member who may not open the other votes (TypeCards).
@@ -140,7 +140,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
   steps: {
     subject: {
       label: "The roles",
-      intro: "Which roles you are applying to hold. Pick every role you would hold this season, up to three, and your terms cover them all.",
+      intro: "Which roles you propose to hold. Pick every role you would hold this season, up to three, and your terms cover them all.",
       fields: [
         {
           key: "seatIds",
@@ -149,7 +149,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           max: MAX_SEATS,
           required: true,
           problem: seatsProblem,
-          tip: "Roles come from the village's org chart. One application for several roles records your terms once.",
+          tip: "Roles come from the village's org chart. One proposal for several roles records your terms once.",
         },
       ],
     },
@@ -229,7 +229,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           key: "startsNoEarlierThan",
           kind: "date",
           label: "First day",
-          help: "Leave it empty to start as soon as the application is adopted. Pick the first day of next season to apply for next season's roles now.",
+          help: "Leave it empty to start as soon as the proposal is adopted. Pick the first day of next season to propose for next season's roles now.",
         },
       ],
     },

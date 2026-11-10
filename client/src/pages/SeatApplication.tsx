@@ -73,9 +73,9 @@ import CircleConsent from "@/components/roleProposal/CircleConsent";
 import { CONSENT_WORDS } from "@shared/roleProposalConsent";
 
 export const APPLICATION_WORDS = {
-  membersOnly: "Members read role applications.",
-  membersOnlyLine: "An application carries its terms, money included, so it opens at the member rung.",
-  signIn: "Sign in to read this application",
+  membersOnly: "Members read role proposals.",
+  membersOnlyLine: "A proposal carries its terms, money included, so it opens at the member rung.",
+  signIn: "Sign in to read this proposal",
   wordsHeading: "In their words",
   deliverables: "By the end of the season",
   why: "Why them",
@@ -87,11 +87,11 @@ export const APPLICATION_WORDS = {
   ownTerms: "Your own terms go to the village to adopt.",
   align: "Align for the village",
   putToVillage: "Put it to the village",
-  withdraw: "Withdraw my application",
+  withdraw: "Withdraw my proposal",
   withdrawAsk: "Withdraw it? Votes already cast are set aside, and the village is told nothing more about it.",
   withdrawYes: "Yes, withdraw it",
   withdrawNo: "Keep it",
-  votingLine: "The village is voting on this application.",
+  votingLine: "The village is voting on this proposal.",
   amends: "These terms amend earlier ones. The earlier terms stay in force until these are.",
   readEarlier: "Read the earlier terms",
   readTheVote: "Read the vote",
@@ -304,7 +304,7 @@ export default function SeatApplication() {
         {back}
         {state === "loading" && (
           <div className="flex justify-center py-16">
-            <BreathingLoader label="Reading the application" />
+            <BreathingLoader label="Reading the proposal" />
           </div>
         )}
         {state === "missing" && <p className="mt-6 text-stone-700">There is no application at this address.</p>}
@@ -318,7 +318,7 @@ export default function SeatApplication() {
             <header>
               <p className="text-sm font-semibold text-teal-deep">{app.statusWords}</p>
               <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
-                {app.candidate.name ?? "A former member"} applies for {seatList(app.seats.map((s) => s.name))}
+                {app.candidate.name ?? "A former member"} proposes to hold {seatList(app.seats.map((s) => s.name))}
               </h1>
               <p className="mt-2 text-stone-600 leading-relaxed">
                 {app.term.followsSeason

@@ -318,7 +318,7 @@ export default function RoleDraft() {
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-notice">{t({ message: "Open roles · select yours", context: "role draft eyebrow" })}</p>
           <h1 className="mt-2 font-display text-4xl font-bold text-foreground text-balance">{t`Select your roles at ${villageName}`}</h1>
           <p className="mt-3 max-w-[66ch] text-muted-foreground">
-            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you apply, and nothing is sent before then.`}
+            {t`Pick the characters you play, scout every open role by what it asks, open any card in full, and select up to three. Your selection stays in this browser until you propose, and nothing is sent before then.`}
           </p>
 
           <div className="sm:sticky sm:top-24 z-20 -mx-4 bg-background/95 px-4 pb-3 pt-1 backdrop-blur">
@@ -328,7 +328,7 @@ export default function RoleDraft() {
                 t({ message: "Your R-Ikigai and your characters", context: "role draft step" }),
                 t({ message: "Scout the open roles", context: "role draft step" }),
                 t({ message: "Select up to three", context: "role draft step" }),
-                t({ message: "Apply", context: "role draft step" }),
+                t({ message: "Propose", context: "role draft step" }),
               ]}
               step={step}
               reached={4}
@@ -591,18 +591,18 @@ export default function RoleDraft() {
               {full && <p role="status" className="mt-2 text-sm text-foreground">{t`Your selection holds three. Take one off to select another.`}</p>}
               {visitorClosed && pickCount > 0 && (
                 <p role="status" className="mt-3 rounded-xl bg-muted p-3 text-sm text-foreground">
-                  {form?.message ?? t`Applications are closed right now. Your selection stays here, and you can apply when they open.`}
+                  {form?.message ?? t`Proposals are closed right now. Your selection stays here, and you can propose when they open.`}
                 </p>
               )}
               {applyHref && (
                 <Link href={applyHref} onClick={(e) => applyWithBurst(e, applyHref)} className="relative mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-teal-deep-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {member
                     ? pickCount === 1
-                      ? t`Apply for this role`
-                      : t`Apply for these ${pickCount} roles`
+                      ? t`Propose for this role`
+                      : t`Propose for these ${pickCount} roles`
                     : pickCount === 1
-                      ? t`Apply with my pick`
-                      : t`Apply with my ${pickCount} picks`}
+                      ? t`Propose with my pick`
+                      : t`Propose with my ${pickCount} picks`}
                   <ArrowRight className="size-4" aria-hidden="true" />
                   <Burst play={applyBurst} />
                 </Link>
@@ -610,17 +610,17 @@ export default function RoleDraft() {
               <p className="mt-2 text-xs text-muted-foreground">
                 {saveBlocked
                   ? t`This browser won't keep your selection (private mode or site data blocked). It stays until you leave the page.`
-                  : t`Kept in this browser only. Nothing is sent until you apply.`}
+                  : t`Kept in this browser only. Nothing is sent until you send your proposal.`}
               </p>
             </aside>
           </div>
 
           <section id="sel-apply" className="mt-12 grid scroll-mt-52 gap-6 lg:grid-cols-2" aria-labelledby="draft-next">
             <div>
-              <h2 id="draft-next" className="font-display text-2xl font-bold text-foreground">{t`What happens after you apply`}</h2>
+              <h2 id="draft-next" className="font-display text-2xl font-bold text-foreground">{t`What happens after you propose`}</h2>
               {member ? (
-                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
-                  <li>{t`One role application carries all your picks, with the terms each role offers.`}</li>
+                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                  <li>{t`One proposal carries all your picks, with the terms each role offers.`}</li>
                   <li>{t`Each role's circle is asked to consent, and a holder of the power to place people in roles adopts it, never their own.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
@@ -633,11 +633,11 @@ export default function RoleDraft() {
                   </li>
                 </ol>
               ) : (
-                <ol aria-label={t({ message: "After you apply", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
-                  <li>{t`You align with the Love Letter, the village's membership agreement, when you apply. Aligning is the village's way of signing.`}</li>
+                <ol aria-label={t({ message: "After you propose", context: "role draft steps" })} className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-foreground">
+                  <li>{t`You align with the Love Letter, the village's membership agreement, when you propose. Aligning is the village's way of signing.`}</li>
                   <li>{t`You confirm your email within 48 hours. Nothing reaches the village before you do.`}</li>
                   <li>{t`You meet the people the role works with, in the order the role sets, when it sets one.`}</li>
-                  <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your application, and never their own.`}</li>
+                  <li>{t`Each role's circle is asked to consent. A holder of the power to place people in roles adopts or declines your proposal, and never their own.`}</li>
                   <li>{t`If it is adopted, an invitation to make your account comes to your email.`}</li>
                   <li>{t`Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records.`}</li>
                   <li>
@@ -656,7 +656,7 @@ export default function RoleDraft() {
                 <li>
                   <Link href="/quests" className="inline-flex min-h-11 items-center gap-2 font-semibold text-foreground underline underline-offset-2">
                     <Compass className="size-4" aria-hidden="true" />
-                    {t`Start with a quest. Quests walk a path, and a path leads to a role.`}
+                    {t`Not ready for a role? Take a quest, alone or with others.`}
                   </Link>
                 </li>
                 {places.length > 0 ? (
