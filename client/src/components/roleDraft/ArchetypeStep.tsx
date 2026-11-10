@@ -66,6 +66,7 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cast.map((c, i) => {
             const picks = c.examples.slice(0, 2).map(lower);
+            const drawnTo = picks.join(` ${t({ message: "or", context: "roles page archetypes, between two examples" })} `);
             return (
               <li key={c.key} className="sel-rise flex" style={{ animationDelay: `${i * 70}ms` }}>
                 <Link
@@ -84,7 +85,7 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
                     {picks.length > 0 && (
                       <span className="leading-relaxed text-muted-foreground">
                         <span className="font-semibold text-foreground">{t({ message: "You might pick this if", context: "roles page archetypes" })}</span>{" "}
-                        {t({ message: `you are drawn to ${picks.join(" or ")}.`, context: "roles page archetypes" })}
+                        {t({ message: `you are drawn to ${drawnTo}.`, context: "roles page archetypes" })}
                       </span>
                     )}
                     <span className="mt-auto inline-flex min-h-11 items-center gap-2 pt-1 font-bold text-notice">
