@@ -30,6 +30,7 @@ import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
 import { readOpenProposal } from "../repos/openProposals";
+import { rewriteTermsOffer } from "../repos/seatApplications";
 import { usersRepo } from "../repos/users";
 import { register, tidyOpenProposals } from "./openProposals";
 
@@ -485,8 +486,8 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
     });
 
     it("the eight settings: a role's written settings reach the form, each needs an answer, and the commitment is required", async () => {
-      const offer = JSON.stringify({ v: 1, clocks: { commitmentPct: 100 }, words: { term: "We renew together each moon.", ending: "One moon's notice." } });
-      await pool.query("UPDATE org_roles SET terms_offer = ? WHERE id = ?", [offer, gate]);
+      const offer = ({ v: 1, clocks: { commitmentPct: 100 }, words: { term: "We renew together each moon.", ending: "One moon's notice." } });
+      await rewriteTermsOffer(pool, gate, offer);
       try {
         const form = await call("GET", "/api/open-proposals/form");
         expect(form.body.roles.find((x: any) => x.id === gate).terms).toEqual({ words: { term: "We renew together each moon.", ending: "One moon's notice." }, commitmentPct: 100 });
@@ -509,7 +510,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
         expect(stored).toMatchObject({ commitmentPct: 0, hours: "", terms: { choice: "talk", note: "Clocks: Four days overlap" } });
         expect(stored?.terms?.answers).toMatchObject({ clocks: { choice: "talk", note: "Four days overlap" } });
       } finally {
-        await pool.query("UPDATE org_roles SET terms_offer = NULL WHERE id = ?", [gate]);
+        await rewriteTermsOffer(pool, gate, null);
       }
     });
 
