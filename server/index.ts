@@ -67,6 +67,8 @@ import { emailAccent } from "./lib/emailAccent";
 import { gpsChangeCloser } from "./lib/gpsChangeCloser";
 import { CONFLICT_AGREEMENT, CONFLICT_AGREEMENT_KEY } from "../shared/conflictAgreement";
 import { conflictAgreementCloser } from "./lib/conflictAgreementCloser";
+import { closingPolicyCloser } from "./lib/closingPolicyCloser";
+import { CLOSING_POLICY } from "../shared/closingPolicies";
 import { raiseCanvasRevisitForLifecycle, raiseCanvasRevisitForSubmission } from "./lib/canvasRevisit";
 import { agreementCloser } from "./lib/agreementCloser";
 import { withConflictAgreement } from "./lib/conflictAgreement";
@@ -156,7 +158,7 @@ import { register as registerDecisionMatrixRoutes } from "./routes/decisionMatri
 import { register as registerCanvasFrameRoutes } from "./routes/canvasFrames";
 import { register as registerConflictAgreementRoutes } from "./routes/conflictAgreement";
 import { register as registerCanvasRevisitRoutes } from "./routes/canvasRevisit";
-import { register as registerGovernanceAgreementRoutes } from "./routes/governanceAgreements";
+import { register as registerGovernanceAgreementRoutes, agreementReviewSweep } from "./routes/governanceAgreements";
 import { CANVAS_PUBLIC_SECTION, CANVAS_SECTION_DOOR, register as registerCanvasPublicRoutes } from "./routes/canvasPublic";
 import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
@@ -269,6 +271,7 @@ import { register as registerSeasonSummaryRoutes } from "./routes/seasonSummary"
 import { register as registerModuleLibraryRoutes, moduleChangeReaders, founderAdoptable, founderHeldVoteProblem, plantingDoor } from "./routes/moduleLibrary";
 import { tellSwitchHolders } from "./lib/moduleSwitchNotice";
 import { register as registerClosingPolicyRoutes } from "./routes/closingPolicy";
+import { register as registerVillageBrainAdminRoutes } from "./routes/villageBrainAdmin";
 import { REDEMPTION_SUBJECT, openRedemptionBallot, redemptionCloser } from "./lib/redemptionBallot";
 import { badgeCapabilityRows } from "./repos/badgeCapabilities";
 import { expireRedemptions, retiredSupply } from "./lib/redemptionStore";
@@ -286,7 +289,7 @@ import { register as registerWalletRoutes } from "./routes/wallet";
 import { register as registerTokenJobRoutes } from "./routes/tokenJobs";
 import { deferredSeatVote, register as registerPowerHandRoutes, registerSeatVote } from "./routes/powerHands";
 import { register as registerRestorativeIntakeRoutes } from "./routes/restorativeIntake";
-import { register as registerExitRoutes } from "./routes/exits";
+import { register as registerExitRoutes, exitVoteDoor } from "./routes/exits";
 import { register as registerCommsWebhook } from "./routes/commsWebhook";
 import { register as registerCommsRoutes } from "./routes/comms";
 import { register as registerCommsPublicRoutes } from "./routes/commsPublic";
@@ -5360,6 +5363,12 @@ async function startServer() {
   registerJob("season-reminders", 12 * 60 * 60 * 1000, async () => {
     const r = await runSeasonReminders({ season: seasonState(), members: await members.all(), isPresent: notifyDeps.isPresent, isAdmin: (u) => adminReaches(u?.role), notify });
     return r.due ? `${r.told} of ${r.recipients} told, ${r.due.daysLeft} day(s) before ${r.due.seasonId} turns` : undefined;
+  });
+
+  // An adopted agreement's review date: every present member reminded once (server/lib/agreements.ts, D10b).
+  registerJob("agreement-review", 24 * 60 * 60 * 1000, async () => {
+    if (effectiveLifecycle("governance") === "off") return;
+    return agreementReviewSweep({ pool: getPool(), timeZone: getSeasonConfig().timezone || "UTC", members: await members.all(), isPresent: notifyDeps.isPresent, notify });
   });
 
   /**
@@ -13058,78 +13067,10 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
   // always: nothing here is published, relayed, federated, or crawled, and
   // `server/lib/villageBrain.ts` carries the reasoning.
 
-  /** The whole brief plus the record's shape, for the admin editor. */
-  app.get("/api/admin/brain", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const [filled, records] = await Promise.all([briefAll(getPool(), "admin"), recordSummaries(getPool())]);
-    const byId = new Map(filled.map((r) => [r.section, r]));
-    res.json({
-      // Every section, written or not. The blanks are the point: they are what
-      // lets the assistant raise a subject nobody has covered yet.
-      sections: BRIEF_SECTIONS.map((spec) => {
-        const row = byId.get(spec.id);
-        return {
-          id: spec.id,
-          title: spec.title,
-          audience: row?.audience ?? spec.audience,
-          feeds: spec.feeds,
-          ask: spec.ask,
-          minimum: !!spec.minimum,
-          status: row ? row.status : "blank",
-          source: row?.source ?? null,
-          body: row?.body ?? "",
-          confirmedBy: row?.confirmedBy ?? null,
-          revision: row?.revision ?? 0,
-          updatedAt: row?.updatedAt ?? null,
-        };
-      }),
-      record: records,
-      blanks: BRIEF_SECTIONS.filter((s) => !byId.has(s.id)).map((s) => s.id),
-    });
-  });
-
-  /** Write one section. Confirming is a separate, named act. */
-  app.put("/api/admin/brain/:section", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const section = String(req.params.section);
-    if (!BRIEF_BY_ID[section]) return res.status(400).json({ error: `no brief section called ${section}` });
-    const body = String(req.body?.body ?? "").trim();
-    if (body.length < 2) return res.status(400).json({ error: "A section needs something in it" });
-    if (body.length > 40000) return res.status(400).json({ error: "That section is too long to keep" });
-    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-    if (!actor) return res.status(401).json({ error: "auth_required", message: "Writing the brief needs a named admin" });
-    const row = await briefWrite(getPool(), {
-      section,
-      body,
-      audience: briefAudienceFromBody(req.body?.audience),
-      source: "admin",
-      confirmedBy: req.body?.confirm === false ? null : actor,
-    });
-    void recordEvent(getPool(), {
-      kind: "audit", text: `brain:write:${section}:r${row.revision}:${row.audience}`, actorUserId: actor,
-      entityType: "brain", entityRef: section, audience: "admin",
-    });
-    res.json({ success: true, section: row });
-  });
-
-  /** Confirm a section the assistant or the intake proposed. */
-  app.post("/api/admin/brain/:section/confirm", async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
-    const section = String(req.params.section);
-    const existing = await briefGet(getPool(), section, "admin");
-    if (!existing) return res.status(404).json({ error: "There is nothing written there yet" });
-    const actor = (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
-    if (!actor) return res.status(401).json({ error: "auth_required", message: "Confirming the brief needs a named admin" });
-    const row = await briefWrite(getPool(), {
-      section, body: existing.body, audience: existing.audience,
-      source: existing.source as any, confirmedBy: actor,
-    });
-    void recordEvent(getPool(), {
-      kind: "audit", text: `brain:confirm:${section}`, actorUserId: actor,
-      entityType: "brain", entityRef: section, audience: "admin",
-    });
-    res.json({ success: true, section: row });
-  });
+  // The editor's three doors (GET /api/admin/brain, PUT .../:section, POST .../:section/confirm)
+  // live in server/routes/villageBrainAdmin.ts: story.tell through the one gate for the
+  // shared sections (D2), the canvas admin pen for the four private ones (G.4).
+  registerVillageBrainAdminRoutes(app, { authedUser, isAdmin, getPool, capabilityCtx, guardCapability, liveHoldersOf });
 
   /**
    * The brain as markdown, for a human, for the assistant, and for any other
@@ -17744,7 +17685,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRewardMomentRoutes(app, { authedUser, getPool, overLimit });
   registerSeasonSummaryRoutes(app, { authedUser, getPool, seasonState }); // idea 4: a member's season summed up (server/routes/seasonSummary.ts)
   registerRedemptionRoutes(app, { authedUser, getPool, guardCapability, members, notify, openRedemptionBallot: (id: string) => openRedemptionVote(id), overLimit, projectCurrency: () => mergedConfig().project.fiatCurrency, redemptionKeyHolders: () => liveHoldersOf("redemption.confirm") });
-  registerClosingPolicyRoutes(app, { isAdmin, adminActor, getPool, exitPolicy: exitPolicyRepo });
+  registerClosingPolicyRoutes(app, { isAdmin, adminActor, getPool, exitPolicy: exitPolicyRepo, ballot: { authedUser, capabilityCtx, notify, weightModeNow, buildElectorate, addActivity } });
 
   // â”€â”€ Project Settings (village dues + other editable numbers) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -20075,9 +20016,11 @@ Send an empty drafts array when you are still listening. A role payload is {name
 
   // The body moved to server/lib/mechanicsPropose.ts, so the canvas adopt door
   // files a dial change through the same checks after the Birthing.
-  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders: { ...moduleChangeReaders, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) }, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
+  const anySwitchHolder = async () => (await liveHoldersOf("module.switch")).length > 0; // canvas follow-up G.3: governance below members waits for a holder
+  const exitVote = exitVoteDoor({ isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }); // the consequence pen's vote on the exit policy (canvas follow-up G.1)
+  const mechanicsProposeDeps: MechanicsProposeDeps = { getPool, standingFor: mechanicsStandingFor, readMintRules: readMintRulesForChangeSet, addActivity, firstName, moduleChangeReaders: { ...moduleChangeReaders, exitVote, anySwitchHolder, brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) }, tellSwitchHolders: (p) => tellSwitchHolders({ liveHoldersOf, notify }, p) };
   /** One validator for a proposal's change set, wherever it is built: the create route and change requests (server/routes/changeRequests.ts). */
-  const validateProposalChanges = (changes: unknown) => validateChangeSet(getPool(), Array.isArray(changes) ? changes : [], rawValue, Math.max(0, numberVar("governance.change_cooldown_days")), readMintRulesForChangeSet, { ...moduleChangeReaders, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) });
+  const validateProposalChanges = (changes: unknown) => validateChangeSet(getPool(), Array.isArray(changes) ? changes : [], rawValue, Math.max(0, numberVar("governance.change_cooldown_days")), readMintRulesForChangeSet, { ...moduleChangeReaders, exitVote, anySwitchHolder, changeSetCap: numberVar(CHANGE_SET_CAP_KEY), brandOf: () => getBrand(), newMintRuleProblem: (draft) => newMintRuleProblem(getPool(), draft) });
   app.post("/api/game/mechanics/proposals", async (req, res) => {
     const user = await authedUser(req);
     if (!user) return res.status(401).json({ error: "auth_required", message: "Sign in to propose a change to the game" });
@@ -20305,6 +20248,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
     sharedPasswordPosture: () => false,
     // A `brand_field` vote writes through the same document the admin brand route writes (Rye, 2026-11-06).
     brand: { read: () => getBrand(), write: async (next) => { await brandRepo.put(next as any); } },
+    exitVote, // canvas follow-up G.1: the exit policy's own save, minus the admin check
+    anySwitchHolder,
   });
 
   async function applyMechanicsProposal(
@@ -21190,6 +21135,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
      * the pen. The whole executor, and why it is a file, is in
      * server/lib/gpsChangeCloser.ts.
      */
+    // A carried change to what closing means (D6): server/lib/closingPolicyCloser.ts.
+    [CLOSING_POLICY]: twoPhase(closingPolicyCloser({ getPool, exitPolicy: exitPolicyRepo, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "exit_policy", entityRef: "closing", audience: "admin" }) })),
     // A carried change to the conflict agreement: server/lib/conflictAgreementCloser.ts.
     [CONFLICT_AGREEMENT]: twoPhase(conflictAgreementCloser({ getPool, moduleOn: conflictEvolutionOn, agreement: conflictAgreementRepo, loadRoles, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "conflict-agreement", audience: "admin" }) })),
     [GPS_CHANGE]: twoPhase(gpsChangeCloser({ getPool, notify, notifyAdmins, addActivity, ballotLink, recordAudit: (text: string, actorId: string) => void recordEvent(getPool(), { kind: "audit", text, actorUserId: actorId, entityType: "app_config", entityRef: "gps", audience: "admin" }) })),
@@ -24046,7 +23993,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRoleProposalRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, firstName, overLimit, notify, members, isPresent: notifyDeps.isPresent, seasonState, lapse: lapseContext, mapLifecycle: () => effectiveLifecycle("map"), boolVar, villageName: () => mergedConfig().project.name || null });
   registerOpenProposalRoutes(app, { getPool, overLimit, clientIp, guardCapability, authedUser, commsPostOffice, deploymentOrigin, projectName: notifyDeps.projectName, escapeHtml, seasonState, notify, notifyAdmins, members, stageOf, recordStageEvent, liveHoldersOf, rolesCarrying, loadRoleHolders, seatCalendar, lapse: lapseContext, boolVar }); // a role proposal from somebody with no account (0305), and its decision
   registerStewardHandoverRoutes(app, { getPool, overLimit, authedUser, liveHoldersOf }); // the launch selection, then every hand-over to the village (Rye, 2026-11-01)
-  registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
+  registerRoleGuideRoutes(app, { authedUser, mayAct, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
 
@@ -24198,7 +24145,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerCanvasRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerCanvasSeasonRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName });
   registerDecisionMatrixRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying });
-  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
+  registerCanvasFrameRoutes(app, { authedUser, isAdmin, hasMembership, guardCapability, capabilityCtx, getPool, firstName, loadRoles, notify, liveHoldersOf, roleHolders: loadRoleHolders, exitPolicy: { isAdmin, getPool, loadRoles, circlesRepo, exitPolicyRepo, readExitPolicy, agreementStored: agreementHeld, conflictEvolutionOn }, dialWrite: dialWriteDeps, mechanicsPropose: mechanicsProposeDeps, sharedPasswordPosture: sharedPasswordPostureNow, addActivity, tools: () => toolsRepo.all() as any[], submissions: () => submissionsRepo.all() as any[], legalEntityLabel: () => String((contentRepo.get() as any)?.legal?.membership?.entityLabel ?? ""), seasonNow: () => { const c: any = seasonState().current; return c ? { name: String(c.name ?? ""), endsOn: c.endsOn ?? null } : null; } });
   registerConflictAgreementRoutes(app, { authedUser, isAdmin, adminActor, hasMembership, getPool, capabilityCtx, firstName, members, loadRoles, notify, overLimit, weightModeNow, agreement: conflictAgreementRepo, readExitPolicy, roleHolders: loadRoleHolders, buildElectorate, addActivity });
   registerCanvasPublicRoutes(app, { authedUser, isAdmin, hasMembership, getPool, liveHoldersOf, rolesCarrying, guardCapability, members, contentRepo, capabilityCtx });
   registerCanvasRevisitRoutes(app, { authedUser, isAdmin, hasMembership, getPool, guardCapability, capabilityCtx, members, isPresent: notifyDeps.isPresent, notify, liveHoldersOf, readExitPolicy, roleHolders: loadRoleHolders, villageTimezone });

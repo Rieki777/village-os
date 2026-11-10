@@ -18,6 +18,11 @@
  * Once the handover is complete the box goes read-only and the panel says
  * where the pen went. Nothing here can reach past that, and nothing should.
  *
+ * SUPERSEDED ON ONE POINT (Rye, 2026-11-06): Article 0 wins over "founder
+ * keeps the pen". The village's change vote is open before the handover too,
+ * at its highest tier, so while the founder holds the pen this panel says
+ * both doors are open: the founder's Save, and any member's vote.
+ *
  * ── ITS OWN FILE, MOUNTED INSIDE AN EXISTING STEP ────────────────────────
  *
  * Admin.tsx is on the monolith ratchet with a few dozen lines of allowance,
@@ -28,6 +33,7 @@
  * wizard's progress readout are untouched by it.
  */
 import { useCallback, useEffect, useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { countWords, PURPOSE_MIN_WORDS } from "@shared/governingPurpose";
 import { usePrefill } from "@/lib/profilePrefill";
@@ -137,8 +143,11 @@ export default function PurposeStatementPanel({ password }: { password: string }
             suggestion that anything here is unfinished. */}
         {founderHoldsPen && (
           <p className="text-xs text-gray-500 mt-1">
-            You write this. It becomes the village's to change by a vote on the day the
-            village holds every one of its powers.
+            <Trans>
+              You write this. Any member who can open a proposal can also put a new statement to
+              a vote of the whole village, at its highest bar. Once the village holds every one of
+              its powers, that vote is the only way to change it.
+            </Trans>
           </p>
         )}
         {founderHoldsPen ? (
