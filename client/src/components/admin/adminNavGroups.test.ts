@@ -109,7 +109,7 @@ describe("navGroups", () => {
   const ORDER: Array<[string, string[]]> = [
     ["Today", ["home"]],
     ["Start here", ["setup"]],
-    ["Who runs this village", ["players", "game-roles", "org-chart", "handover", "governance-weights"]],
+    ["Who runs this village", ["players", "game-roles", "org-chart", "role-discover", "handover", "governance-weights"]],
     // `money` is a CONTENT_SECTIONS entry the economics branch adds (Money &
     // Value Claims, the editor behind `client/src/lib/moneyClaims.ts`), so it
     // rides in with the other three rather than being placed here.
@@ -157,7 +157,7 @@ describe("navGroups", () => {
       "setup", "submissions", "feedback", "forum-moderation", "message-reports", "products",
       "team", "legal", "covenant", "email-settings", "integrations", "brain", "drafts",
       "investor-vault", "uploaded-files", "training-modules", "modules", "quests-admin",
-      "quest-claims", "players", "game-roles", "handover", "org-chart", "governance-weights",
+      "quest-claims", "players", "game-roles", "handover", "org-chart", "governance-weights", "role-discover",
       "seasons-patterns", "circles-map", "land", "housing", "events-admin", "tools-admin",
       "crowdpool-admin", "stays-admin", "exchange-admin", "badges-admin", "library-admin",
       "health-admin", "resources-admin", "exits-admin", "calls-admin", "intents-admin",
