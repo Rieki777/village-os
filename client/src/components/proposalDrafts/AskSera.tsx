@@ -105,9 +105,9 @@ export function DraftMark({ onKeep }: { onKeep: () => void }) {
   return (
     <div className="grid gap-1.5 rounded-lg border border-border bg-muted/60 p-2 text-sm" data-sera-draft="">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-foreground">{name && name !== "Sera" ? t`Draft from ${name}` : t`Draft from Sera`}</span>
+        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-foreground">{name && name !== "Sera" ? t({ message: `Draft from ${name}`, context: "sera draft mark" }) : t({ message: "Draft from Sera", context: "sera draft mark" })}</span>
         <button type="button" className={`${BTN} min-h-11`} onClick={onKeep}>
-          {t`Keep this`}
+          {t({ message: "Keep this", context: "sera draft mark" })}
         </button>
       </div>
       <p className="text-xs text-muted-foreground">{t`Edit it or keep it. We cannot send your proposal until you have done one or the other.`}</p>
