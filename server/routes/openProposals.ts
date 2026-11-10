@@ -74,6 +74,7 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
+import { clearAboutYouDecidedBefore } from "../repos/seatApplications";
 import { accountFor, arrivalFor, confirmAndAsk, describeFor, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInviteDescribed, whenInvitedArrives } from "../lib/inviteDoor";
 import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/applicationMembership";
@@ -594,10 +595,12 @@ export async function tidyOpenProposals(pool: Pool, at: Date, fileDir?: string):
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
+  // The member door's applications lose the same three sections at the same age (withdrawn or not adopted).
+  const doorCleared = await clearAboutYouDecidedBefore(pool, cutoff);
   // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
   const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
   if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
   // Files follow the row (Rye, 10 Nov 2026): a deleted or anonymised proposal keeps none.
   const files = fileDir ? await sweepProposalFiles(fileDir, (ids) => store.proposalsKeepingFiles(pool, ids)) : 0;
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${files ? `, ${files} file folders removed` : ""}`;
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${doorCleared ? `, ${doorCleared} member-door applications cleared of references` : ""}${files ? `, ${files} file folders removed` : ""}`;
 }
