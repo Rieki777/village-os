@@ -82,7 +82,7 @@ describe("a proposal's files are what their bytes say", () => {
   });
 
   it("shows a name with no path and no markup characters", () => {
-    expect(safeFileName("C:\\Users\\me\\My <CV>.pdf", "pdf")).toBe("My CV.pdf");
+    expect(safeFileName("D:\\cv\\drafts\\My <CV>.pdf", "pdf")).toBe("My CV.pdf");
     expect(safeFileName("../../etc/passwd.png", "png")).toBe("passwd.png");
     expect(safeFileName("", "jpg")).toBe("file.jpg");
   });
