@@ -8,6 +8,7 @@
  * draft, and re-read through `ikigaiFromStored` so a hand-edited value is
  * capped and cleaned. The Human Design step loads as its own chunk when opened.
  */
+import { ChevronDown } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePageContent } from "@/hooks/usePageContent";
@@ -71,9 +72,10 @@ export default function DiscoverStep({
           type="button"
           aria-expanded={opened}
           onClick={() => setOpened((o) => !o)}
-          className="min-h-11 font-display text-lg font-bold underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-primary bg-card px-5 font-display text-lg font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {DISCOVER_WORDS.optionalDoor}
+          <ChevronDown className={`size-4 transition-transform ${opened ? "rotate-180" : ""}`} aria-hidden="true" />
         </button>
         <p className="text-sm text-muted-foreground">{t`Optional. You can skip it.`}</p>
         {opened && (
