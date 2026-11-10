@@ -11,6 +11,7 @@
  *                       reason per skip, and only Import writes, with the
  *                       preview's hash.
  */
+import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import {
   MOON_WORDS,
@@ -136,6 +137,7 @@ export default function GatherPanel({ cycleId, editable, sera, reload }: GatherP
         <button type="button" className={SMALL_BTN} disabled={!editable || busy !== null || polling} onClick={ask}>{MOON_WORDS.askSera}</button>
         <button type="button" className={SMALL_BTN} disabled={!editable || busy !== null} aria-expanded={pasting} onClick={() => setPasting((v) => !v)}>{PACK_WORDS.button}</button>
       </div>
+      <AskSeraDataLine />
 
       {s && s.state !== "idle" ? (
         <p className={MUTED} aria-live="polite" data-testid="sera-progress">
@@ -184,5 +186,15 @@ export default function GatherPanel({ cycleId, editable, sera, reload }: GatherP
       {line ? <p className={MUTED} aria-live="polite">{line}</p> : null}
       {error ? <p role="alert" className={ERROR}>{error}</p> : null}
     </Section>
+  );
+}
+
+/** Where Ask Sera's words go, beside the button (the coordinator, 2026-11-09). */
+function AskSeraDataLine() {
+  const { t } = useLingui();
+  return (
+    <p className="mt-2 text-xs text-muted-foreground" data-testid="guide-data-line">
+      {t({ message: "Asking sends your name and this moon's dates to Sera, only to gather what you took part in. Nothing is used to choose people for roles. Your journal never goes with it.", context: "my moon: where Ask Sera's words go" })}
+    </p>
   );
 }

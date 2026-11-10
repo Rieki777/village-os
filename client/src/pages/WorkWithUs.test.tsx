@@ -22,7 +22,7 @@ vi.mock("@/lib/gameApi", () => ({
 }));
 // Who is looking: null is a signed-out visitor. Reset before every test.
 const viewer = vi.hoisted(() => ({ user: null as null | { name: string; email: string; role?: string } }));
-vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: viewer.user }) }));
+vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: viewer.user }), useOptionalAuth: () => ({ user: viewer.user }) }));
 vi.mock("@/components/GuideChat", () => ({ default: () => null }));
 vi.mock("@/components/comms/PathConsentBox", () => ({ default: () => null, FORM_CONSENT_FIELD: "commsConsent" }));
 const sent = vi.hoisted(() => ({ calls: [] as unknown[] }));

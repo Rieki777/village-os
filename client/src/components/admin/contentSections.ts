@@ -7,7 +7,7 @@
  * renders a picker from it. Leaving it in Admin.tsx would have forced the nav
  * to stay there too.
  */
-import { Coins, FileText, LayoutTemplate, Signpost, Users } from "lucide-react";
+import { Coins, FileText, LayoutTemplate, ShieldCheck, Signpost, Users } from "lucide-react";
 
 /*
  * ONE SECTION LEFT, and the six that went are why this comment exists.
@@ -62,6 +62,10 @@ export const CONTENT_SECTIONS = [
   // move into this section, blank publishes NOTHING, and this entry is the
   // founder's only door to them. Shape and readers: client/src/lib/moneyClaims.ts.
   { key: "money", label: "Money & Value Claims", icon: Coins },
+  // Role journey L7: the village's confidentiality agreement, its words and the
+  // PDF it is. Members align with it on /aligned before private records and
+  // before a role starts; the PDF is uploaded here and read by nobody else.
+  { key: "confidentiality", label: "Confidentiality Agreement", icon: ShieldCheck },
 ] as const;
 
 /**

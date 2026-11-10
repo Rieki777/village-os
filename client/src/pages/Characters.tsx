@@ -47,6 +47,7 @@ import OpenNowBadge from "@/components/characters/OpenNowBadge";
 import RolesThatFit from "@/components/characters/RolesThatFit";
 
 import GeneKeysPrompt from "@/components/geneKeys/GeneKeysPrompt";
+import RoleStartSteps from "@/components/profile/RoleStartSteps";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -325,6 +326,8 @@ export default function Characters() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-teal-deep/5 to-amber/5 pb-24 pt-6">
         <div className="container">
+          {/* A new holder lands here after sign-up: the steps before their role starts come first (role journey L7). */}
+          <RoleStartSteps className="mb-6" />
           {/* Small, because the picture is the headline. */}
           <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="text-sm font-semibold uppercase tracking-widest text-sage">
@@ -356,7 +359,7 @@ export default function Characters() {
             ) : null}
           </div>
 
-          {/* What they drafted on /roles/draft before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
+          {/* What they drafted on /roles/select before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
           {user && (
             <div className="mb-4">
               <DraftCarry

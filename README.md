@@ -9,8 +9,8 @@ a shared exchange, crowdfunding) and each village chooses which ones it runs.
 
 Amora is the first village to run on it. It is developed with ReGen Civics.
 
-- **Free and open source.** MIT licence (`LICENSE`). Use it, change it, run as
-  many villages as you like.
+- **Free and open source.** AGPL-3.0-or-later licence (`LICENSE`). Use it, change it, run as
+  many villages as you like. See [License](#license) below.
 - **You host it yourself.** On a laptop to try it, on a small server you rent,
   or on a hosting provider such as Railway. The software is free; you pay your
   own hosting provider, if you use one.
@@ -75,3 +75,23 @@ their coding assistants, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is
 the system map.
 
 `CODE_OF_CONDUCT.md` applies everywhere the project runs.
+
+## License
+
+Village OS is licensed under the GNU Affero General Public License, version 3 or any later
+version (AGPL-3.0-or-later). The full text is in `LICENSE`.
+
+In plain words:
+
+- Anyone may use, change and host Village OS, for any purpose.
+- Anyone who runs a changed version for other people must offer those people its source code. The
+  footer of every village links the public Village OS source. A village that changes the code sets
+  its own link in the village setting `village.source_url` (Admin), and the footer then shows a
+  second link to the village's own copy. It must be an https address.
+- Nobody may take it, close it and sell it. Anything built from it stays open under the same
+  license, and so does every future repository of the project.
+- Modules are under the same license as the rest.
+
+Versions released before 2026-11-09 were under the MIT License, and those copies stay MIT. See
+`NOTICE`. The names are covered separately: see `TRADEMARKS.md`. To contribute, read
+`CONTRIBUTING.md`.

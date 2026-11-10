@@ -38,6 +38,7 @@ import InvoicePanel from "./InvoicePanel";
 import { RoleCardsBlock, ScoreBlock } from "./CoverageAndScore";
 import { GoalsPanel, RoleAuditPanel, ThanksPanel } from "./RecapParts";
 import { ERROR, H2, INPUT, KICKER, LABEL, LINK, MemberOnly, MUTED, PANEL, RoomViewContext, Section, SMALL_BTN, SMALL_BTN_ON } from "./moonUi";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 export interface MyMoonViewProps {
   data: MyMoonData;
@@ -160,7 +161,9 @@ export function MyMoonView({ data, villageRoles, onCycle, reload, initialRoomVie
             <Section title={MOON_WORDS.ownWords}>
               <label className={LABEL}>
                 {MY_MOON_WORDS.ownWordsHint}
+                <VoiceArea value={ownWords} onValue={setOwnWords} disabled={!editable}>
                 <textarea value={ownWords} rows={4} maxLength={2000} readOnly={!editable} onChange={(e) => setOwnWords(e.target.value)} className={INPUT} />
+                </VoiceArea>
               </label>
               {editable ? (
                 <>

@@ -77,7 +77,7 @@ describe("the board, read live", () => {
     expect(screen.queryByRole("heading", { level: 3, name: "Water Keeper" })).toBeNull();
     const lfs = card("Lead Financial Steward");
     expect(within(lfs).getByText("Anchor Circle")).toBeTruthy();
-    expect(within(lfs).getByText("Roughly: 25 to 30 hours a week")).toBeTruthy();
+    expect(within(lfs).getByText("Roughly 25 to 30 hours a week")).toBeTruthy();
     // A role that wrote no hours shows the village's estimate, never a blank (Rye, 9 Nov).
     expect(within(card("Cook")).getByText("~20 h half time, ~30 to 40 h full time")).toBeTruthy();
   });
@@ -121,18 +121,18 @@ describe("the board, read live", () => {
 });
 
 describe("the draft", () => {
-  it("drafts up to three in order, keeps them in this browser, and applies with all of them", async () => {
+  it("selects up to three in order, keeps them in this browser, and applies with all of them", async () => {
     serve();
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    for (const n of ["Lead Financial Steward", "Gardener", "Welcome Host"]) fireEvent.click(within(card(n)).getByRole("button", { name: `Draft ${n}` }));
+    for (const n of ["Lead Financial Steward", "Gardener", "Welcome Host"]) fireEvent.click(within(card(n)).getByRole("button", { name: `Select ${n}` }));
     // A fourth is refused out loud, never by a silent disabled button.
-    const cook = within(card("Cook")).getByRole("button", { name: "Draft Cook" });
+    const cook = within(card("Cook")).getByRole("button", { name: "Select Cook" });
     expect(cook.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(cook);
-    expect(screen.getByText("Your draft holds three. Take one off to draft another.")).toBeTruthy();
+    expect(screen.getByText("Your selection holds three. Take one off to select another.")).toBeTruthy();
 
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       expect.stringContaining("Lead Financial Steward"),
       expect.stringContaining("Gardener"),
@@ -143,7 +143,7 @@ describe("the draft", () => {
     expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}")).toEqual({ chars: [], picks: ["lfs", "garden", "host"] });
 
     // Taking one off frees a place.
-    fireEvent.click(within(tray).getByRole("button", { name: "Remove Gardener from your draft" }));
+    fireEvent.click(within(tray).getByRole("button", { name: "Remove Gardener from your selection" }));
     expect(cook.getAttribute("aria-disabled")).toBe("false");
   });
 
@@ -151,7 +151,7 @@ describe("the draft", () => {
     localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing"], picks: ["held", "lfs"] }));
     serve();
     render(<RoleDraft />);
-    const tray = await screen.findByRole("complementary", { name: "Your draft" });
+    const tray = await screen.findByRole("complementary", { name: "Your selection" });
     await waitFor(() => expect(within(tray).getAllByRole("listitem")).toHaveLength(1));
     expect(within(tray).getByText("Lead Financial Steward")).toBeTruthy();
     expect(screen.getByRole("button", { name: /The Catalyst/ }).getAttribute("aria-pressed")).toBe("true");
@@ -161,18 +161,18 @@ describe("the draft", () => {
     serve({ org: { ...ORG, roles: ORG.roles.map((r) => ({ ...r, termsOffer: null })) } });
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
-    fireEvent.click(within(card("Cook")).getByRole("button", { name: "Draft Cook" }));
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
+    fireEvent.click(within(card("Cook")).getByRole("button", { name: "Select Cook" }));
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).getByRole("link", { name: /Apply for these 2 roles/ }).getAttribute("href")).toBe("/propose?type=role_application&seat=garden&seat=cook");
   });
 
-  it("offers no Apply to a visitor while applications are closed, and keeps the draft", async () => {
+  it("offers no Apply to a visitor while applications are closed, and keeps the selection", async () => {
     serve({ form: { open: false, message: "This page isn't taking proposals right now." } });
     render(<RoleDraft />);
     await screen.findByRole("heading", { level: 3, name: "Gardener" });
-    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Draft Gardener" }));
-    const tray = screen.getByRole("complementary", { name: "Your draft" });
+    fireEvent.click(within(card("Gardener")).getByRole("button", { name: "Select Gardener" }));
+    const tray = screen.getByRole("complementary", { name: "Your selection" });
     expect(within(tray).queryByRole("link", { name: /Apply/ })).toBeNull();
     expect(within(tray).getByText("This page isn't taking proposals right now.")).toBeTruthy();
   });
@@ -193,12 +193,14 @@ describe("the draft", () => {
 });
 
 describe("what happens next", () => {
-  it("walks a visitor through the steps after applying, ending with the Love Letter before seating", async () => {
+  it("walks a visitor through the steps in Rye's order: the Love Letter at application, then confirm, conversations, consent, invitation, NDA", async () => {
     serve();
     render(<RoleDraft />);
     const steps = await screen.findByRole("list", { name: "After you apply" });
     const items = within(steps).getAllByRole("listitem").map((li) => li.textContent ?? "");
-    expect(items[0]).toMatch(/confirm/i);
+    // Rye's answer 8 (9 Nov): membership is aligned with at application.
+    expect(items[0]).toMatch(/Love Letter.*when you apply/);
+    expect(items[1]).toMatch(/confirm/i);
     expect(items.some((t) => /Love Letter/.test(t))).toBe(true);
     // Rye, 9 Nov: the NDA comes after approval, before any confidential record.
     const nda = items.findIndex((t) => /NDA/.test(t));
@@ -218,14 +220,18 @@ describe("what happens next", () => {
   });
 });
 
-describe("the season's goals", () => {
-  it("shows the village's open goals for the season, and frames the application as what you would contribute", async () => {
-    seasonRef.value = { name: "Season of Foundations", goals: [{ id: "g1", text: "Investor ready", done: false }, { id: "g2", text: "Old goal", done: true }], current: null, upcoming: null, seasons: [] };
+describe("the season's goals, the first step", () => {
+  it("opens with the season's name, dates and every goal from Admin, the done ones marked", async () => {
+    seasonRef.value = { current: { name: "Season of Foundations", startsOn: "2026-09-22", endsOn: "2026-12-21", goals: [{ text: "Investor ready", done: false }, { text: "Old goal", done: true }] }, upcoming: null, seasons: [] };
     serve();
     render(<RoleDraft />);
-    expect(await screen.findByRole("heading", { name: "What the whole village is working toward in Season of Foundations" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "This season's goals: Season of Foundations" })).toBeTruthy();
+    expect(screen.getByText("22 September 2026 to 21 December 2026")).toBeTruthy();
     expect(screen.getByText("Investor ready")).toBeTruthy();
-    expect(screen.queryByText("Old goal")).toBeNull();
+    expect(screen.getByText("Old goal")).toBeTruthy();
+    expect(screen.getByText("Done")).toBeTruthy();
+    const steps = screen.getAllByRole("listitem").map((li) => li.textContent ?? "").filter((x) => /goals$|Apply$/.test(x));
+    expect(steps[0]).toMatch(/This season's goals/);
     expect(screen.getByText(/what you would like to contribute each moon and this season/)).toBeTruthy();
   });
 });

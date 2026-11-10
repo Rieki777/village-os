@@ -36,6 +36,8 @@
  * is lossy, and an archive may not be.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { raiseRevokeForEnded } from "./roleAccess";
+import { liveAssignmentIdsForHolder } from "../repos/roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { draftChangesChosenBy, draftChangesNamingPeople, draftStatus, lockCirclesCounter, lockDraftRow, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
@@ -58,6 +60,8 @@ import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse"
 import { carriesRolePay, DRAFT_PAY_KEYS, draftPayEdit, draftPayProblem } from "./draftRolePay";
 import { rolePayRules } from "./workPay";
 import type { MintRule } from "./economy";
+import { liveParameterKeys, parameterKeysIn, parameterProblem, parametersBefore, parameterStored, putParametersBack, PARAMETERS_NOT_HERE } from "./roleParameterColumns";
+import { PARAMETER_COLUMNS } from "../../shared/roleParameters";
 
 /** The refusal a publish gives when the draft no longer holds what the person was shown (review 12). */
 export const DRAFT_CHANGED_SINCE_SHOWN = "This draft changed since you opened it. Read it again before publishing.";
@@ -1242,6 +1246,8 @@ export function previewLoadedDraft(
         // with fewer keeps loading and can still be edited elsewhere.
         if (!blocked) blocked = roleCcosProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
+        // The listing details of the role card (shared/roleParameters.ts): shape only here, the column checked at publish.
+        if (!blocked) blocked = parameterProblem(c.payload);
         // The role's pay (0.4: the vote path the valuation engine names must be able to carry it).
         if (!blocked) blocked = draftPayProblem(c.payload, context.payRules, draft.sourceKind !== "human");
         if (carriesRolePay(c.payload)) reads = `Edit ${name} and its pay`;
@@ -1251,7 +1257,7 @@ export function previewLoadedDraft(
         // `accountabilities` is written by its own branch in `applyChange`
         // and is a real change: the card's "What you can count on me for"
         // proposal carries nothing else, and this used to block it.
-        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k));
+        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k) || parameterKeysIn({ [k]: 1 }).length > 0);
         if (!blocked && touched.length === 0) {
           blocked = "This names no field this village can change on a role";
         }
@@ -1516,7 +1522,8 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
-  return row ?? null;
+  // And the listing details of the role card, when this database has their columns (roleParameterColumns.ts).
+  return row ? { ...row, ...(c.op === "update_seat" ? await parametersBefore(conn, c.orgRoleId) : {}) } : null;
 }
 
 /** Column names are a fixed map, never interpolated from a payload key. */
@@ -1698,14 +1705,16 @@ async function applyChange(
     const ccos = new Map(ccosColumns(p));
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, listed) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
         words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null,
-        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null)],
+        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null),
+        // Role journey PR-A: a draft can only START a role unlisted (a sync accept with the village setting on). Nothing in a draft lists a role.
+        p.listed === false ? 0 : null],
     );
     return null;
   }
@@ -1775,6 +1784,7 @@ async function applyChange(
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
     seatingsChanged();
+    await raiseRevokeForEnded(conn, [String(p.assignmentId ?? "")]);
     return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
@@ -1799,6 +1809,16 @@ async function applyChange(
   for (const [col, v] of ccosColumns(p)) {
     sets.push("`" + col + "` = ?");
     args.push(v);
+  }
+  // The listing details of the role card: only where the database has the column, and said in words where it has not.
+  const named = parameterKeysIn(p);
+  if (named.length) {
+    const live = new Set(await liveParameterKeys(conn));
+    for (const k of named) {
+      if (!live.has(k)) throw new Error(PARAMETERS_NOT_HERE);
+      sets.push("`" + PARAMETER_COLUMNS[k] + "` = ?");
+      args.push(parameterStored(k, p[k]));
+    }
   }
   refuseAccountabilities(p, "update_seat");
   if (Array.isArray(p.accountabilities)) {
@@ -1911,6 +1931,8 @@ export async function revertDraft(
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
+        const revertKey = c.payload?.userId ? String(c.payload.userId) : documentedKey(String(c.payload?.displayName ?? "unnamed"));
+        const revertedIds = await liveAssignmentIdsForHolder(conn, c.orgRoleId, revertKey);
         await conn.query(
           "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = 'draft reverted' WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
           // The same key `applyChange` seated under, from the same function.
@@ -1921,6 +1943,7 @@ export async function revertDraft(
             : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
         seatingsChanged();
+        await raiseRevokeForEnded(conn, revertedIds);
       } else if (c.op === "end_holding" && c.beforeJson && !(c.beforeJson.user_id && (await isAgentAccount(conn, String(c.beforeJson.user_id))))) {
         // 0319: a holder marked as an agent account since the holding ended is not seated again; it holds no role.
         const b = c.beforeJson;
@@ -1992,6 +2015,7 @@ export async function revertDraft(
             hadPay, b.cash_minor ?? null, hadPay, b.cash_currency ?? null,
             c.orgRoleId],
         );
+        if (c.op === "update_seat") await putParametersBack(conn, c.orgRoleId, b);
       }
     }
     // Same count, same reason as publish: without it a second revert put

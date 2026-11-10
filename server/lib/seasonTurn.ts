@@ -31,7 +31,7 @@
 import type { Pool } from "mysql2/promise";
 import type { SubjectCloser } from "./applyDue";
 import { ballotById } from "./ballots";
-import { seatFromApplication, settleDepsOf, tellOutcome, type NoticeDeps } from "./seatApplicationCloser";
+import { seatFromApplication, settleDepsOf, tellOutcome, tellSteps, type NoticeDeps } from "./seatApplicationCloser";
 import type { LapseContext } from "./orgChart";
 import { settleText } from "./alignmentSubjects";
 import type { SeatCalendar } from "../../shared/seatTerms";
@@ -94,6 +94,9 @@ export async function runSeasonTurn(deps: SeasonTurnDeps): Promise<string> {
       await tellOutcome(deps, stored, outcome, "turn", null);
       if (stored.textId) await settleText(settleDepsOf(deps, () => now), stored.textId);
       if (outcome.kind === "seated") seated += 1;
+    } else if (outcome.kind === "later" && outcome.steps?.length) {
+      // Waiting on the agreements before the role starts (L7). Told once per set of steps; the next hour asks again.
+      await tellSteps(deps, stored, outcome.steps, null);
     } else if (outcome.kind === "held-full") {
       held += 1;
       // A newly held application (it was adopted for later, and its seat is

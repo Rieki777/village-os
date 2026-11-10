@@ -105,6 +105,12 @@ export const POWERS: readonly PowerEntry[] = [
     ],
   },
   {
+    capability: "brief.private",
+    title: "The brief's private sections",
+    surface: "The people, the legal setup, the land and the red lines in the village brief, on the canvas and in the Brain editor",
+    routes: ["/api/admin/brain", "/api/admin/brain/:section", "/api/admin/brain/:section/confirm"],
+  },
+  {
     capability: "org.seat",
     title: "The village's roles",
     surface: "Seating somebody in a role, and taking them out of it",

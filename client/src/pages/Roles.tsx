@@ -1,3 +1,5 @@
+import CastStrip from "@/components/roleDraft/CastStrip";
+import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 /** The link from a circle's group to its own card (`/circles/:id`). */
@@ -13,11 +15,12 @@ import { swatchFor } from "@/lib/swatch";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatAction from "@/components/power/SeatAction";
-import { applyHrefFor, termsSlotFor } from "@/components/power/SeatTermsSlot";
+import { applyHrefFor, guardedAction, termsSlotFor } from "@/components/power/SeatTermsSlot";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
+import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/EditRoleButton";
 import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
@@ -251,6 +254,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
                   {STATE_WORDS[role.status]}
                 </span>
+                <NotListedChip role={role.raw} />
               </div>
               <p className="text-xs text-muted-foreground">
                 {role.group}
@@ -290,7 +294,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 labelledBy={headerId}
                 input={fromOrgSeat(role.raw, sheet.circles, sheet.people, sheet.village, { raiseHand: sheet.raiseHand })}
                 ctx={sheet.ctx}
-                action={<SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />}
+                action={guardedAction(role.raw, <SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />)}
                 settings={termsSlotFor(role.raw)}
               />
               {/* The seat as a link, for sending to whoever might hold it.
@@ -299,6 +303,8 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                   link to it has nothing to ask anybody. */}
               {!role.isExample && <RoleHolderCards role={role.raw} />}
               {!role.isExample && <SeatLinkCopy seatId={role.id} seatName={role.name} />}
+              {/* For a holder of the power to decide the structure, and nobody else: the editor is its own chunk. */}
+              {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
                 <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
                   {RP_WORDS.proposeThisRole}
@@ -447,6 +453,10 @@ export default function Roles() {
   // clause in front of the reader.
   const coordinator = coordinatingCircle(circles);
   const orgPending = roles === null && !failed;
+  // A link to one role (?seat=) names that role in the page heading, not the whole page.
+  const seasonEntry = ((season as unknown as { current?: { name?: string } | null } | null)?.current ?? (season as unknown as { name?: string } | null)) as { name?: string } | null;
+  const seasonLine = typeof seasonEntry?.name === "string" && seasonEntry.name.trim() ? t({ message: `This season: ${seasonEntry.name.trim()}.`, context: "roles page season" }) : "";
+  const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
   const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
     coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
   }`;
@@ -481,7 +491,7 @@ export default function Roles() {
               <Briefcase className="w-8 h-8 text-sage" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Roles and Circles
+              {linkedName ?? "Roles and Circles"}
             </h1>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
@@ -493,14 +503,33 @@ export default function Roles() {
               is a way to hold some of it with your own hands, by{" "}
               <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
             </p>
+            <div className="mt-4 flex justify-center">
+              <NewRoleFromCardButton onMade={() => window.location.reload()} />
+            </div>
+            {user && (
+              <p className="mt-3 text-sm">
+                <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "How roles are going", context: "roles page measures door" })}
+                </Link>
+              </p>
+            )}
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
+            {seasonLine && (
+              <p className="mt-4 text-sm text-muted-foreground">
+                {seasonLine}{" "}
+                <a href="/roles/select#sel-season" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "See its goals", context: "roles page season" })}
+                </a>
+              </p>
+            )}
             <Link
-              href="/roles/draft"
+              href="/roles/select"
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              {t({ message: "Draft your roles", context: "roles page button" })}
+              {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
+            <CastStrip />
           </m.div>
 
           <div className="max-w-4xl mx-auto">

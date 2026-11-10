@@ -92,6 +92,7 @@ import {
 import { AIM_MAX } from "./seasonPlans";
 import { parseSeasonalGoals, parseServesGoals, type SeasonalGoal, type ServedGoal } from "./seasonPlanWords";
 import { LIMITS, looksLikePaymentDetails, parseSeatSettings, type ScoreMeasure, type SeatSettings } from "./seatSettings";
+import { PARAMETER_CARD_FIELDS } from "./roleParameters";
 
 export const ROLE_CARD_VERSION = 1;
 
@@ -123,7 +124,9 @@ export const ROLE_CARD_WORD_FIELDS = [
 ] as const;
 export type RoleCardWordField = (typeof ROLE_CARD_WORD_FIELDS)[number];
 
-type SectionKey = RoleCardWordField | "circle" | "roleId" | "measures" | "season" | "seasonAim" | "seasonalGoals" | "servesGoals";
+/** A role parameter's section is `param:<key>` (shared/roleParameters.ts): the listing details PR-B's editor reads. */
+export type ParameterSection = `param:${(typeof PARAMETER_CARD_FIELDS)[number]["key"]}`;
+type SectionKey = RoleCardWordField | ParameterSection | "circle" | "roleId" | "measures" | "season" | "seasonAim" | "seasonalGoals" | "servesGoals";
 
 export interface RoleCardFieldSpec {
   key: SectionKey;
@@ -179,6 +182,8 @@ export function foldHeading(s: string): string {
 
 const ALIASES = new Map<string, SectionKey>();
 for (const f of ROLE_CARD_FIELDS) for (const a of [f.heading, ...f.aliases]) ALIASES.set(foldHeading(a), f.key);
+// The role card's parameters (PR-B) are read, but kept out of ROLE_CARD_FIELDS: that list is what a member's own AI is taught.
+for (const f of PARAMETER_CARD_FIELDS) for (const a of [f.heading, ...f.aliases]) ALIASES.set(foldHeading(a), `param:${f.key}` as ParameterSection);
 /** "Role 1", "Role 2": a role's heading with no title on it. */
 const NUMBERED_ROLE = /^role\s*#?\s*\d{1,2}$/;
 const EXISTS_WHILE = foldHeading(CARD_WORDS.existsWhile);
@@ -271,6 +276,8 @@ export interface RoleCardSection {
   title: string | null;
   /** Where it landed in `proposalBody`: `roles.0` or `newRoles.1`. */
   path: string;
+  /** The role parameters the card gave (shared/roleParameters.ts), key to its lines as written. Present only when the card gave some. */
+  parameters?: Record<string, string[]>;
 }
 
 export interface RoleCardRead {
@@ -362,7 +369,7 @@ interface RawRole {
   title: string[];
   circle: string[];
   id: string[];
-  fields: Map<RoleCardWordField, string[]>;
+  fields: Map<RoleCardWordField | ParameterSection, string[]>;
   /** True once any heading other than the title was read into it. */
   started: boolean;
 }
@@ -376,7 +383,7 @@ interface RawCard {
   ignored: string[];
 }
 
-type Target = { kind: "role"; role: RawRole; key: RoleCardWordField | "circle" | "roleId" } | { kind: "measures"; lines: string[] } | { kind: "season"; part: "aim" | "seasonalGoals" | "servesGoals" } | { kind: "ignore" };
+type Target = { kind: "role"; role: RawRole; key: RoleCardWordField | ParameterSection | "circle" | "roleId" } | { kind: "measures"; lines: string[] } | { kind: "season"; part: "aim" | "seasonalGoals" | "servesGoals" } | { kind: "ignore" };
 
 function tokenise(text: string): RawCard {
   const lines = String(text ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -597,6 +604,19 @@ function judgeWord(st: ReadState, ctx: RoleCardContext, field: RoleCardWordField
   }
 }
 
+/** The parameter sections of one role, as lines with their list markers off. Empty when the card gave none. */
+function parametersOf(raw: RawRole): Record<string, string[]> | undefined {
+  const out: Record<string, string[]> = {};
+  for (const [section, lines] of Array.from(raw.fields)) {
+    if (!section.startsWith("param:")) continue;
+    const key = section.slice("param:".length);
+    const spec = PARAMETER_CARD_FIELDS.find((f) => f.key === key);
+    const items = trimLines(lines).map((l) => stripMarker(l).trim()).filter(Boolean);
+    out[key] = spec && !spec.list ? [items.join(" ")] : items;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Every role word a card section gives, read and named. */
 function roleWordsOf(st: ReadState, raw: RawRole, group: RoleGroup, i: number): Partial<Record<RoleCardWordField, WordValue>> {
   const out: Partial<Record<RoleCardWordField, WordValue>> = {};
@@ -617,6 +637,11 @@ function roleWordsOf(st: ReadState, raw: RawRole, group: RoleGroup, i: number): 
   }
   return out;
 }
+
+const withParameters = (raw: RawRole): { parameters?: Record<string, string[]> } => {
+  const parameters = parametersOf(raw);
+  return parameters ? { parameters } : {};
+};
 
 const circleNames = (ctx: RoleCardContext) => ctx.circles.filter((c) => !c.isExample).map((c) => String(c.name ?? c.id)).join(", ");
 
@@ -696,7 +721,7 @@ export function readRoleCard(text: string, ctx: RoleCardContext): RoleCardRead {
     if (existing) {
       const i = roles.length;
       const path = fieldPath.role("roles", i);
-      sections.push({ index: rr.index, title, path });
+      sections.push({ index: rr.index, title, path, ...withParameters(rr) });
       if (seen.has(`role:${existing.id}`)) problem(st, path, ROLE_CARD_WORDS.twice, "match", true);
       seen.add(`role:${existing.id}`);
       const read = roleWordsOf(st, rr, "roles", i);
@@ -723,7 +748,7 @@ export function readRoleCard(text: string, ctx: RoleCardContext): RoleCardRead {
 
     const i = newRoles.length;
     const path = fieldPath.role("newRoles", i);
-    sections.push({ index: rr.index, title, path });
+    sections.push({ index: rr.index, title, path, ...withParameters(rr) });
     const read = roleWordsOf(st, rr, "newRoles", i);
     if (!title) problem(st, fieldPath.word("newRoles", i, "name"), ROLE_CARD_WORDS.noTitle, "missing", true);
     const key = `new:${fold(read.name ?? title ?? `#${rr.index}`)}`;
@@ -859,6 +884,8 @@ export interface RoleCardRole {
   circle: string | null;
   /** By field name; a list one item per line. `name` is ignored here: the title is `title`. */
   words: Partial<Record<RoleCardWordField, WordValue>>;
+  /** The role parameters, key to the lines to write under its heading (shared/roleParameters.ts). */
+  parameters?: Record<string, readonly string[]>;
 }
 
 /** Everything a card holds, in the order it is written. */
@@ -890,6 +917,10 @@ export function writeRoleCard(doc: RoleCardDoc): string {
       if (spec.key === "name") continue;
       const lines = valueLines(r.words[spec.key], spec.list);
       if (lines.length) out.push("", `### ${spec.heading}`, ...lines);
+    }
+    for (const f of PARAMETER_CARD_FIELDS) {
+      const given = (r.parameters?.[f.key] ?? []).map((x) => x.trim()).filter(Boolean);
+      if (given.length) out.push("", `### ${f.heading}`, ...(f.list ? given.map((x) => `- ${x}`) : given));
     }
   }
   const measures = doc.measures.map((m) => m.trim()).filter(Boolean);

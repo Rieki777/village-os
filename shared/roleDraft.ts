@@ -80,6 +80,62 @@ export function draftFromStored(v: unknown): RoleDraft {
   return { chars: cleanIds(o.chars, DRAFT_MAX_CHARACTERS), picks: cleanIds(o.picks, OPEN_PROPOSAL_MAX_ROLES) };
 }
 
+/**
+ * An unlisted role as any layer may have carried it: the boolean the server sends,
+ * but also the 0 the column holds and the strings a hand-built payload or a
+ * cached copy can hold. Only an explicit "no" hides a role; null and absent read as listed.
+ */
+export function unlistedValue(v: unknown): boolean {
+  return v === false || v === 0 || v === "0" || v === "false";
+}
+
+/** What the open form says, as the page reads it. Null while it is still loading. */
+export interface BoardForm {
+  open: boolean;
+  /** Ids the form takes, or null when it names none. */
+  offered: ReadonlySet<string> | null;
+}
+
+/**
+ * The ONE set of roles the board, its character counts and its tray all draw
+ * from. A member sees every listed open role. A visitor sees what the open form
+ * would take, and nothing until the form has answered, so a count can never be
+ * made from roles the form would then refuse (Rye, 9 Nov: "46 open roles fit"
+ * while one role was listed).
+ */
+export function boardRoles(all: readonly DraftRole[], who: { member: boolean; form: BoardForm | null }): DraftRole[] {
+  const listed = all.filter((r) => !unlistedValue((r.raw as { listed?: unknown } | null)?.listed));
+  if (who.member) return listed;
+  if (who.form === null) return [];
+  if (who.form.open && who.form.offered) {
+    const offered = who.form.offered;
+    return listed.filter((r) => offered.has(r.id));
+  }
+  return listed;
+}
+
+/** How many of these roles name this character. */
+export function fitCountFor(roles: readonly DraftRole[], key: string): number {
+  return roles.filter((r) => r.archetypes.includes(key)).length;
+}
+
+/** A character's stock art. The files ship with the platform (server/assets/avatars); the page falls back to a drawn medallion when one is missing. */
+export function characterArt(key: string): string {
+  return `/images/avatars/${encodeURIComponent(key)}-f-olive.webp`;
+}
+
+/** The four steps, in order. The words live on the page, where the catalog can reach them. */
+export const SELECT_STEPS = ["you", "scout", "select", "apply"] as const;
+export type SelectStep = (typeof SELECT_STEPS)[number];
+
+/** Where a role's header art comes from: its own upload, else its first character's art, else nothing (the page draws a medallion). */
+export function roleArtFor(role: Pick<DraftRole, "archetypes" | "raw">): string | null {
+  const own = (role.raw as { imageUrl?: unknown } | null)?.imageUrl;
+  if (typeof own === "string" && own.startsWith("/") && !own.startsWith("//")) return own;
+  const first = role.archetypes[0];
+  return first ? characterArt(first) : null;
+}
+
 /** Every role a newcomer could apply for, from the village's live chart. */
 export function openRolesFrom(org: unknown): DraftRole[] {
   const o = org && typeof org === "object" ? (org as Record<string, unknown>) : null;
@@ -94,6 +150,8 @@ export function openRolesFrom(org: unknown): DraftRole[] {
   const out: DraftRole[] = [];
   for (const r of o.roles as any[]) {
     if (!r || typeof r !== "object" || typeof r.id !== "string" || r.isExample) continue;
+    // An unlisted role is never on the board, whoever is looking (role journey PR-A).
+    if (unlistedValue(r.listed)) continue;
     const circleId = typeof r.circleId === "string" ? r.circleId : "";
     if (!circles.has(circleId)) continue;
     const seats = Math.max(0, Number(r.seats) || 0);

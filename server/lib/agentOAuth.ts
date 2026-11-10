@@ -32,7 +32,7 @@ export const AUTHORIZE_PAGE = "/oauth/authorize";
  * connector tool (server/lib/agentMcp.ts), and no others, since a scope that
  * opens nothing here only widens what the token could reach elsewhere.
  */
-export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "moon.write", "tasks.write", "moon.review"];
+export const OAUTH_SCOPES: readonly AgentScope[] = ["moon.read", "moon.write", "tasks.write", "moon.review", "roles.read", "roles.propose", "letters.draft", "applicants.read", "onboarding.write", "settings.propose", "listing.propose", "pages.propose", "map.propose"];
 /**
  * Offered only to the members whose own rules allow them, the same rules the
  * Your agent panel applies (`cleanScopes`): `admin` to an admin, unticked;

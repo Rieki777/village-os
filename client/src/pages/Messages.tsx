@@ -43,6 +43,7 @@ import {
   type InboxConversation,
   type ThreadMessage,
 } from "@/lib/messaging";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -935,6 +936,7 @@ function ThreadView({ id }: { id: string }) {
           >
             <label className="flex-1">
               <span className="sr-only">Write a message</span>
+              <VoiceArea value={draft} onValue={setDraft}>
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -949,6 +951,7 @@ function ThreadView({ id }: { id: string }) {
                 placeholder="Write a message"
                 className="w-full min-h-[44px] max-h-32 px-3 py-2.5 rounded-2xl border border-border bg-background text-foreground resize-none"
               />
+              </VoiceArea>
             </label>
             <button
               type="submit"

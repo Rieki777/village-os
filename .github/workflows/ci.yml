@@ -105,7 +105,7 @@ jobs:
       # The harness provisions its own scratch schema and applies every
       # migration through the same engine production uses.
       mysql:
-        image: mirror.gcr.io/library/mysql:8
+        image: mirror.gcr.io/library/mysql:9.7.2
           # WHY A MIRROR AND NOT AUTHENTICATED PULLS. On 2026-10-09 Docker Hub
           # began refusing anonymous pulls from this runner pool and every tree
           # in the repository went red at step 2, main included. The first fix
@@ -190,6 +190,16 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Match production's sql_mode
+        # Production is MySQL 9.7.2 (read in Railway, 2026-11-10) with IGNORE_SPACE on top
+        # of the engine default. The service container cannot take mysqld arguments, so
+        # the mode is set globally before any suite connects. IGNORE_SPACE is what makes
+        # a missing function (the SHA1 of 2026-11-01) fail the same way here as there.
+        run: >-
+          node -e "const m=require('mysql2/promise');(async()=>{const c=await m.createConnection(process.env.TEST_DATABASE_URL);
+          await c.query(\"SET GLOBAL sql_mode='IGNORE_SPACE,ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'\");
+          const [r]=await c.query('SELECT VERSION() AS v, @@GLOBAL.sql_mode AS m');console.log(r[0]);await c.end()})().catch(e=>{console.error(e);process.exit(1)})"
 
       - name: Typecheck
         run: pnpm check
@@ -367,6 +377,15 @@ jobs:
         # the TypeScript compiler, so comments and classNames cannot trip it.
         # A genuine false positive takes an inline `voice-ok: <reason>`.
         run: node scripts/check-voice.mjs
+
+      - name: Server dates in the village's calendar
+        # A bare toLocaleDateString() on a server formats in the container's
+        # UTC and its M/D/Y, so a village a day ahead of UTC is told the wrong
+        # day (readiness R134). Two vote notices shipped that way after the fix
+        # existed, because nothing refused the form. Watched RED before wiring:
+        # at f75bc26 it names exactly those two lines and exits 1. Its
+        # self-test runs with the others.
+        run: node scripts/check-server-dates.mjs
 
       - name: Dash guard
         # A hyphen standing in for a dash. check-voice structurally cannot see
@@ -1210,7 +1229,7 @@ jobs:
       # some events lack) and the datadir on tmpfs. Read the comments on
       # verify's service before changing either.
       mysql:
-        image: mirror.gcr.io/library/mysql:8
+        image: mirror.gcr.io/library/mysql:9.7.2
         env:
           MYSQL_ROOT_PASSWORD: ci-test
         ports:
@@ -1238,6 +1257,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Match production's sql_mode
+        # Production is MySQL 9.7.2 (read in Railway, 2026-11-10) with IGNORE_SPACE on top
+        # of the engine default. The service container cannot take mysqld arguments, so
+        # the mode is set globally before any suite connects. IGNORE_SPACE is what makes
+        # a missing function (the SHA1 of 2026-11-01) fail the same way here as there.
+        run: >-
+          node -e "const m=require('mysql2/promise');(async()=>{const c=await m.createConnection(process.env.TEST_DATABASE_URL);
+          await c.query(\"SET GLOBAL sql_mode='IGNORE_SPACE,ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'\");
+          const [r]=await c.query('SELECT VERSION() AS v, @@GLOBAL.sql_mode AS m');console.log(r[0]);await c.end()})().catch(e=>{console.error(e);process.exit(1)})"
+
       - name: Build
         id: build
         # Each shard builds its own bundle: 13 seconds on b878eaf, cheaper
@@ -1255,9 +1284,13 @@ jobs:
         # default, so both are named again. `json` writes the report that
         # tests-ran-once reads back.
         if: ${{ steps.build.outcome == 'success' }}
+        # Shards are balanced by recorded file time (scripts/plan-shards.mjs), not by
+        # vitest's path hash. The plan lists every file once; tests-ran-once proves it.
+        env:
+          CI_SHARD_FILES: test-results/shard-${{ matrix.shard }}-files.txt
         run: >-
+          node scripts/plan-shards.mjs ${{ matrix.shard }} ${{ strategy.job-total }} &&
           pnpm test
-          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           --reporter=default
           --reporter=github-actions
           --reporter=json

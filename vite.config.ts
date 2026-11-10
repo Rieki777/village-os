@@ -392,6 +392,16 @@ export default defineConfig({
         manualChunks: (id: string, { getModuleInfo, getModuleIds }) => {
           if (id.includes("lucide-react")) return "icons";
           /*
+           * THE SHELL'S LIBRARIES, ONE NAMED CHUNK (role journey PR-B, 2026-11-09).
+           * Rollup split these off the entry only when the lazy-chunk graph
+           * happened to share them (a chunk it named "internalPath"), and folded
+           * them back in when it did not: adding the role editor as one more lazy
+           * chunk took the main chunk from 345 KB to 471 KB while first-page JS
+           * stayed at 641 KB, i.e. nothing new was loaded. Named, the split no
+           * longer depends on how many lazy chunks import them.
+           */
+          if (/node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?(?:motion-dom|tailwind-merge|sonner|wouter|@lingui\/core)\//.test(id)) return "shell-libs";
+          /*
            * The natural interface kit, one chunk instead of four.
            *
            * Its pieces are shared by the dashboard, the quest board, the

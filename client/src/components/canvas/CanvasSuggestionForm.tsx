@@ -30,8 +30,8 @@
  * lifecycle) is kept per aim.
  *
  * WHERE A SUGGESTION CANNOT BE CARRIED, the box says so before anybody writes
- * (`suggestionFate`): after the Birthing the exit terms and the matrix wait for
- * a vote not built yet, the care door changes only by the conflict agreement's
+ * (`suggestionFate`): after the Birthing the exit terms and the matrix are filed
+ * by their author as a structural vote, the care door changes only by the conflict agreement's
  * own vote, and after the handover the purpose statement's vote is opened from
  * Start a proposal. Suggesting stays free in every case.
  */
@@ -59,6 +59,7 @@ import {
 } from "@/lib/canvasFramesCopy";
 import { CANVAS_DOORS, parseCanvasProposal, servesPurposeProblem, servesPurposeScoped } from "@shared/canvasFrames";
 import { ALIGNMENT_MIN_WORDS } from "@shared/governingPurpose";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -269,19 +270,25 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
             <span className={labelText}>
               <Trans>How a departing member's contribution is valued</Trans>
             </span>
+            <VoiceArea value={f.valuationMethod} onValue={(v) => set({ valuationMethod: v })}>
             <textarea value={f.valuationMethod} onChange={(e) => set({ valuationMethod: e.target.value })} className={area} />
+            </VoiceArea>
           </label>
           <label className="block">
             <span className={labelText}>
               <Trans>The steps of leaving, one per line</Trans>
             </span>
+            <VoiceArea value={f.unwindSteps} onValue={(v) => set({ unwindSteps: v })}>
             <textarea value={f.unwindSteps} onChange={(e) => set({ unwindSteps: e.target.value })} className={area} />
+            </VoiceArea>
           </label>
           <label className="block">
             <span className={labelText}>
               <Trans>What happens when somebody is asked to leave</Trans>
             </span>
+            <VoiceArea value={f.involuntaryProcess} onValue={(v) => set({ involuntaryProcess: v })}>
             <textarea value={f.involuntaryProcess} onChange={(e) => set({ involuntaryProcess: e.target.value })} className={area} />
+            </VoiceArea>
           </label>
         </div>
       )}
@@ -295,7 +302,9 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
             <span className={labelText}>
               <Trans>The restorative steps, one per line</Trans>
             </span>
+            <VoiceArea value={f.steps} onValue={(v) => set({ steps: v })}>
             <textarea value={f.steps} onChange={(e) => set({ steps: e.target.value })} className={area} />
+            </VoiceArea>
           </label>
           <RolePicker label={t`The care role, which hears a conflict first`} value={f.intakeContactRole} roles={roles} onChange={(v) => set({ intakeContactRole: v })} />
           {/* The agreement's own meaning of the cover role. A conflict that involves
@@ -327,7 +336,9 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
 
       <label className="block">
         <span className={labelText}>{bodyLabel(option, titles)}</span>
+        <VoiceArea value={f.body} onValue={(v) => set({ body: v })}>
         <textarea value={f.body} onChange={(e) => set({ body: e.target.value })} className={area} rows={option.target === "purpose" ? 8 : 4} />
+        </VoiceArea>
       </label>
 
       {scoped && (
@@ -340,7 +351,9 @@ export function CanvasSuggestionForm({ payload, onSent }: { payload: BlockFrames
               ? `Needed here: this changes how the village works. One line of at least ${ALIGNMENT_MIN_WORDS} words, which everyone reads beside the suggestion.`
               : "Welcome, and not needed until the village writes its governing purpose statement."}
           </span>
+          <VoiceArea value={f.servesPurpose} onValue={(v) => set({ servesPurpose: v })}>
           <textarea value={f.servesPurpose} onChange={(e) => set({ servesPurpose: e.target.value })} className={area} rows={2} />
+          </VoiceArea>
         </label>
       )}
 

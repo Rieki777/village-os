@@ -38,7 +38,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/propose-quest": "Propose a quest",
   "/pricing": "Pricing desk",
   "/roles": "Roles",
-  "/roles/draft": "Draft your roles",
+  "/roles/select": "Select your roles",
+  "/roles/draft": "Select your roles",
   "/forum": "Forum",
   "/messages": "Messages",
   "/introductions": "Introductions",
@@ -52,6 +53,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/badges": "Badges & skills",
   "/powers": "What this village looks after",
   "/review": "Review",
+  "/approvals": "Approvals",
   "/cash-payouts": "Cash to pay out",
   "/role-proposals": "Propose my roles",
   // Keys here are matched by longest PREFIX against the live location, so a
@@ -122,6 +124,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/propose": "Start a proposal",
   "/role-applications": "Role application",
   "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
+  "/role-measures": "How roles are going", // members only, counts and medians from stamped times
+  "/application-status": "Where your application is", // the applicant's own page, by the emailed link (role journey L5)
   "/seat-applications": "Role application",
   "/season-plans": "The village's season",
   "/season-plans/mine": "Your season",

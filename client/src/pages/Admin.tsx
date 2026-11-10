@@ -39,6 +39,7 @@ import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminHelperHost from "@/components/admin/AdminHelperHost";
+import AiSetupBanner from "@/components/admin/AiSetupBanner";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
@@ -51,6 +52,7 @@ import { TourCard } from "@/components/admin/AdminFeel";
 
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
+const RoleDiscoverTab = lazy(() => import("@/components/admin/RoleDiscoverTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
 import { adminNavRailClass, filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
@@ -7945,6 +7947,10 @@ export default function Admin() {
             padding steps down on small screens, where 32px a side was a
             tenth of the width. */}
         <main className="admin-fit min-w-0 w-full max-w-5xl flex-1 p-4 sm:p-6 lg:p-8">
+          {/* No AI connected yet: asked first, at the very top of Home and Make This Yours (Rye, 2026-11-09). */}
+          {(activeTab === "home" || activeTab === "setup") && (
+            <AiSetupBanner password={password} onOpenTab={setActiveTab} onOpenHelper={() => setHelperOpen(true)} />
+          )}
           {/* The Go-live card (L1): mounts once, above whichever panel is
               open, keyed by the open tab's module. It also feeds the nav
               filter, so the rail and the card ride one fetch. */}
@@ -7984,6 +7990,7 @@ export default function Admin() {
           {activeTab === "needs-admin" && <NeedsPanel password={password} onOpenTab={setActiveTab} />}
           {activeTab === "housing" && <HousingAdminPanel password={password} />}
           {activeTab === "org-chart" && <OrgChartTab password={password} />}
+          {activeTab === "role-discover" && <Suspense fallback={null}><RoleDiscoverTab password={password} /></Suspense>}
           {activeTab === "pricing-desk" && <Suspense fallback={null}><PricingDeskTab password={password} /></Suspense>}
           {activeTab === "governance-weights" && <VotingWeightsPanel password={password} />}
           {activeTab === "brain" && <VillageBrainTab password={password} />}

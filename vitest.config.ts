@@ -109,7 +109,14 @@ export default defineConfig({
     // included in this glob from the start specifically so a forgotten test
     // file could never sit unrun beside real ones while `pnpm test` stayed
     // green.
-    include: ["server/**/*.test.ts", "shared/**/*.test.ts", "client/**/*.test.{ts,tsx}"],
+    // CI_SHARD_FILES names a file listing this shard's test files, one per line
+    // (scripts/plan-shards.mjs writes it). Unset, which is every local run and
+    // the tests-ran-once file listing, the whole suite is included as before.
+    // It narrows the include rather than adding a positional argument so the
+    // run still counts as a whole run to the hollow-run rule.
+    include: process.env.CI_SHARD_FILES
+      ? fs.readFileSync(process.env.CI_SHARD_FILES, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)
+      : ["server/**/*.test.ts", "shared/**/*.test.ts", "client/**/*.test.{ts,tsx}"],
     // The end-to-end loop test builds and boots the server, so it needs room.
     testTimeout: 120_000,
     /*

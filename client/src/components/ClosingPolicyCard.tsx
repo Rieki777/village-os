@@ -25,11 +25,14 @@
  * any holder of `proposal.open` may put it to the village, and the holder of
  * the document acts on the answer.
  *
- * WAVE 3a SLOT. The canvas proposals lane (`POST /api/canvas/proposals`, any
- * member, the pen adopts or declines) is where a proposal carrying the new
- * words and adoptable in one step belongs. When it lands, this door should
- * offer that instead: it reaches every member where this one reaches only
- * `proposal.open` holders, and adopting it would write the section directly.
+ * THE SUGGESTION BOX, WHEN THE CANVAS IS ON (sweep decision D3, Rye
+ * 2026-11-06). With the Governance Canvas on, every signed-in member gets
+ * "Suggest a change", which files a canvas suggestion on the `exit:closing`
+ * door (`POST /api/canvas/proposals`) carrying the new words. Adoption keeps
+ * its gate: before the Birthing the exit policy's writers adopt it from the
+ * Team block's Adopt frame, and after it the words change only by the
+ * closing policy vote (D6). With the canvas off, the advisory door below stays
+ * as the fallback (spec C2).
  *
  * The question is FIXED for the reason `askDoor.ts` gives: an advisory
  * ballot's subject ref is server-made, so the title is the only thing a second
@@ -43,7 +46,16 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useAuth } from "@/contexts/AuthContext";
 import { useModule, useModules } from "@/modules/ModuleProvider";
 import { fetchBallots, fetchWizardFacts } from "@/components/governance/governanceApi";
-import { closingNamed, closingPolicyDef, type ClosingSectionForReaders } from "@shared/closingPolicies";
+import {
+  CLOSING_POLICIES,
+  CLOSING_POLICY_IDS,
+  closingNamed,
+  closingPolicyDef,
+  type ClosingSectionForReaders,
+} from "@shared/closingPolicies";
+import { parseCanvasProposal } from "@shared/canvasFrames";
+import { authToken } from "@/lib/gameApi";
+import { refusalText } from "@/lib/canvasFramesCopy";
 
 const PracticeVote = lazy(() => import("@/components/governance/PracticeVote"));
 
@@ -81,20 +93,159 @@ export default function ClosingPolicyCard({ closing }: { closing: ClosingSection
           </Trans>
         </p>
       )}
-      <ClosingProposeDoor />
+      <ClosingProposeDoor closing={named ? closing : null} />
     </div>
   );
 }
 
 /**
- * Propose a change: the advisory ask, or the sentence that says why there is
- * none for this reader.
+ * The door under the words: the canvas suggestion box when the canvas is on,
+ * the advisory ask when it is off.
+ */
+export function ClosingProposeDoor({ closing = null }: { closing?: ClosingSectionForReaders | null }) {
+  const canvas = useModule("canvas");
+  return canvas ? <ClosingSuggestDoor closing={closing} /> : <ClosingAdvisoryDoor />;
+}
+
+const jsonHeaders = (): Record<string, string> => {
+  const token = authToken();
+  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+};
+
+/**
+ * Suggest new closing words, for any signed-in member. The suggestion is the
+ * canvas's own (`exit:closing` on the Team block), validated by the same
+ * `parseCanvasProposal` the route runs, so the box and the server refuse alike.
+ */
+export function ClosingSuggestDoor({ closing }: { closing: ClosingSectionForReaders | null }) {
+  const { user, loading } = useAuth();
+  const { t } = useLingui();
+  const [open, setOpen] = useState(false);
+  const [policyId, setPolicyId] = useState<string>(closing?.policyId ?? "own-words");
+  const [statement, setStatement] = useState<string>(closing?.statement ?? "");
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  if (loading || !user) return null;
+
+  if (sent) {
+    return (
+      <p className="mt-4 pt-3 border-t border-border text-sm text-muted-foreground" role="status">
+        <Trans>
+          Your suggestion is with the village. It waits on the canvas Team block, where whoever may adopt it decides.
+        </Trans>
+      </p>
+    );
+  }
+  if (!open) {
+    return (
+      <div className="mt-4 pt-3 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] rounded-lg border border-teal-deep px-4 text-sm font-medium text-teal-deep hover:bg-teal-deep/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+        >
+          <Trans context="button that suggests a change to what closing means">Suggest a change</Trans>
+        </button>
+      </div>
+    );
+  }
+
+  const body = {
+    blockId: "team",
+    target: "setting",
+    door: "exit:closing",
+    change: { policyId, statement },
+    body: why,
+  };
+  const submit = async () => {
+    const parsed = parseCanvasProposal(body);
+    if (!parsed.ok) return setError(parsed.error);
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/canvas/proposals", { method: "POST", headers: jsonHeaders(), body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return setError(refusalText(d, t`That suggestion was not kept.`));
+      setSent(true);
+    } catch {
+      setError(t`That suggestion did not reach the server, so nothing was kept.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const field = "mt-1 w-full min-h-[44px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground";
+  return (
+    <form
+      aria-label={t`Suggest a change to what closing means`}
+      className="mt-4 pt-3 border-t border-border space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <label className="block text-sm">
+        <span className="font-medium text-foreground">
+          <Trans context="label of the closing policy choice">Which policy</Trans>
+        </span>
+        <select className={field} value={policyId} onChange={(e) => setPolicyId(e.target.value)}>
+          {CLOSING_POLICY_IDS.map((id) => (
+            <option key={id} value={id}>
+              {CLOSING_POLICIES[id].name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm">
+        <span className="font-medium text-foreground">
+          <Trans>The words you suggest, whole, as members would read them</Trans>
+        </span>
+        <textarea className={`${field} min-h-[120px]`} value={statement} onChange={(e) => setStatement(e.target.value)} />
+      </label>
+      <label className="block text-sm">
+        <span className="font-medium text-foreground">
+          <Trans>Why this change, in a sentence or more</Trans>
+        </span>
+        <textarea className={`${field} min-h-[88px]`} value={why} onChange={(e) => setWhy(e.target.value)} />
+      </label>
+      <p className="text-xs text-muted-foreground">
+        <Trans>Everyone in the village can read what you write here.</Trans>
+      </p>
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="min-h-[44px] rounded-lg bg-teal-deep px-4 text-sm font-medium text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+        >
+          <Trans context="button that sends a closing policy suggestion">Send the suggestion</Trans>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] rounded-lg border border-border px-4 text-sm text-foreground"
+        >
+          <Trans context="button that closes the closing policy suggestion">Not now</Trans>
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Propose a change with the canvas off: the advisory ask, or the sentence that
+ * says why there is none for this reader.
  *
  * A read that did not answer leaves the door QUIET, never closed: telling a
  * member their account cannot open votes because a request was dropped would
  * be the page inventing a fact about them (ModuleAskDoor.tsx says the same).
  */
-export function ClosingProposeDoor() {
+export function ClosingAdvisoryDoor() {
   const { user, loading } = useAuth();
   const { t } = useLingui();
   const modules = useModules();

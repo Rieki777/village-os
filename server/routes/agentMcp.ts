@@ -43,6 +43,7 @@ import { recordAgentAction } from "../repos/agentAccounts";
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { AGENT_ADMIN_PATHS_DOC, effectiveAgentAdminPaths } from "../../shared/agentAdmin";
 import { PLATFORM_VERSION } from "../lib/identity";
+import { AI_APPROVAL_DOC, parseAiApproval } from "../../shared/agentProposals";
 import { runSeraTool, undoSeraAction } from "../lib/seraAgent";
 import { wwwAuthenticate } from "../lib/agentOAuth";
 
@@ -186,6 +187,7 @@ export function register(app: Express, deps: Deps): void {
           },
         },
         adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
+        applicantDataOpen: async () => parseAiApproval(await readConfigDocument(getPool(), AI_APPROVAL_DOC)).approved,
         recordAction: async (a) => {
           await recordAgentAction(getPool(), { ...a, tokenId: row.id, actorUserId: userId });
         },

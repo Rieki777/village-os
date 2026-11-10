@@ -2,7 +2,7 @@
   "name": "village-os",
   "version": "1.2.0",
   "type": "module",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build && node scripts/build-client-manifest.mjs && node scripts/build-server.mjs && node scripts/build-i18n-catalogs.mjs",

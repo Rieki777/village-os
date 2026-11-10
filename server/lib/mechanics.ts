@@ -68,7 +68,9 @@ import {
 } from "../../shared/mintRuleKeys";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
-import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { VOTE_RUNS_ON, isLifecycle, lifecycleWords, voteModuleSwitchProblem } from "../../shared/moduleSwitch";
+import { highestTierFrom, type ThresholdSettings as HighestTierSettings } from "../../shared/ballotSubjects";
+import { exitChangeKey, exitChangeOf, judgeMatrixItem, matrixChangeKey, type ExitVoteDoor } from "./consequenceVote";
 import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
 import {
   changeSetCapFrom,
@@ -163,7 +165,30 @@ export interface RoleItem {
   userId?: string;
 }
 
+/**
+ * THE CONSEQUENCE PEN'S VOTE (canvas follow-up G.1, G.2): a change to the
+ * exit terms, or to the care door while Conflict Evolution is off. `change`
+ * holds the fields as the canvas suggestion spells them
+ * (`exitChangeOf`, server/lib/consequenceVote.ts).
+ */
+export interface ExitItem {
+  kind: "exit_terms" | "exit_restorative";
+  change: Record<string, unknown>;
+}
+
+/** One human row of the Decision Matrix, added, changed or removed (G.1). */
+export interface MatrixRowItem {
+  kind: "matrix_row";
+  act: "insert" | "update" | "remove";
+  /** The row, for a change or a removal. */
+  rowId?: number;
+  /** What the row would say, for an addition or a change. */
+  row?: Record<string, unknown>;
+}
+
 export type ChangeItem =
+  | ExitItem
+  | MatrixRowItem
   | DialItem
   | MintRuleItem
   | MintRuleCreateItem
@@ -209,8 +234,17 @@ export function asChangeItem(input: ChangeInput): ChangeItem {
  * declared, and the kind's tier is the fallback for a kind whose subject sets
  * no floor of its own.
  */
-export function pricingOf(item: ChangeItem): { subject: string; criticality: Criticality } {
+export function pricingOf(item: ChangeItem, settings?: HighestTierSettings): { subject: string; criticality: Criticality } {
   const subject = SUBJECT_FOR_ITEM_KIND[item.kind];
+  /*
+   * THE MODULE THE VOTE RUNS ON MOVES ONLY AT THE HIGHEST TIER (canvas
+   * follow-up G.3, Article 0): the village's own `governance.highest_tier`
+   * when the settings are to hand, and the top of the ladder when they are
+   * not, which is `highestTierFrom`'s own answer for an unread setting.
+   */
+  if (item.kind === "module_lifecycle" && VOTE_RUNS_ON.has(String(item.moduleId))) {
+    return { subject, criticality: settings ? settings.highest : highestTierFrom() };
+  }
   if (item.kind === "dial") {
     const def = VARIABLES_BY_KEY[item.key];
     return { subject, criticality: def ? criticalityOf(def) : "routine" };
@@ -367,7 +401,7 @@ export function priceChangeSetItems(
   settings?: ThresholdSettings,
 ): ChangeSetItemsPrice {
   const items = changes.map(asChangeItem);
-  const priced = items.map(pricingOf);
+  const priced = items.map((item) => pricingOf(item, settings));
   const subjects = priced.map((p) => p.subject);
   const criticality = criticalityOfItems(priced.map((p) => p.criticality));
   const { method: fixed, conflict } = methodForSubjects(subjects);
@@ -446,7 +480,7 @@ export interface ProposedChange {
    * executor reads it back as a `module_lifecycle` item and never as a dial:
    * `asChangeItem` takes any change carrying a `kind` exactly as written.
    */
-  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create";
+  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create" | "exit_terms" | "exit_restorative" | "matrix_row";
   moduleId?: string;
   /** Present on a brand change only: the `section.field` it writes. */
   field?: string;
@@ -455,6 +489,12 @@ export interface ProposedChange {
   tokenSlug?: string;
   amount?: string;
   ceiling?: string;
+  /** Present on an exit change only: the fields it sets (server/lib/consequenceVote.ts). */
+  change?: Record<string, unknown>;
+  /** Present on a matrix change only. */
+  act?: "insert" | "update" | "remove";
+  rowId?: number;
+  row?: Record<string, unknown>;
 }
 
 /** The key a module switch is filed under on a proposal: `module:<id>`. */
@@ -560,6 +600,10 @@ export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<Change
   "mode_switch",
   "module_lifecycle",
   "brand_field",
+  // The consequence pen after the Birthing (canvas follow-up G.1, G.2).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ]);
 
 /**
@@ -606,12 +650,24 @@ export interface ValidateChangeSetOptions {
    */
   foundersHold?: () => Promise<boolean>;
   /**
+   * Somebody holds `module.switch` live right now. Asked only of a set that
+   * would take the module the vote runs on below members (G.3,
+   * `voteModuleSwitchProblem`). Absent reads as nobody, which refuses.
+   */
+  anySwitchHolder?: () => Promise<boolean>;
+  /**
    * Why this new minting rule could not be created, or null. The registry's
    * half lives in server/lib/mintRuleCreate.ts (`newMintRuleProblem`) and is
    * injected for the reason `readMintRules` is: this file stays testable
    * without a server. Absent, a new rule is refused.
    */
   newMintRuleProblem?: (draft: MintRuleDraft) => Promise<string | null>;
+  /**
+   * The exit policy's judge for an `exit_terms` or `exit_restorative` item:
+   * every refusal the policy's own save makes, writing nothing
+   * (`exitVoteDoor`, server/routes/exits.ts). Absent, the item is refused.
+   */
+  exitVote?: Pick<ExitVoteDoor, "judge">;
 }
 
 export async function validateChangeSet(
@@ -682,6 +738,53 @@ export async function validateChangeSet(
 
   const seen = new Set<string>();
   for (const item of items) {
+    if (item.kind === "exit_terms" || item.kind === "exit_restorative") {
+      const key = exitChangeKey(item.kind);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same part of the exit policy appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const parsed = exitChangeOf(item.kind, item.change);
+      if (!parsed.ok) {
+        problems.push({ key, problem: parsed.error.replace(/.$/, "") });
+        continue;
+      }
+      if (!options?.exitVote) {
+        problems.push({ key, problem: "This build cannot read the village's exit policy from here" });
+        continue;
+      }
+      const judged = await options.exitVote.judge(item.kind, parsed.change);
+      if (typeof judged === "string") {
+        problems.push({ key, problem: judged });
+        continue;
+      }
+      normalized.push({ key, from: judged.from, to: judged.to, kind: item.kind, change: parsed.change });
+      continue;
+    }
+    if (item.kind === "matrix_row") {
+      const key = matrixChangeKey(item);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same matrix row appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const judged = await judgeMatrixItem(pool, item);
+      if (!judged.ok) {
+        problems.push({ key, problem: judged.problem });
+        continue;
+      }
+      normalized.push({
+        key,
+        from: judged.from,
+        to: judged.to,
+        kind: "matrix_row",
+        act: judged.act,
+        ...(judged.rowId ? { rowId: judged.rowId } : {}),
+        ...(judged.row ? { row: judged.row as unknown as Record<string, unknown> } : {}),
+      });
+      continue;
+    }
     if (item.kind === "module_lifecycle") {
       const checked = await moduleSwitchProblem(item, seen, options);
       if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });
@@ -849,7 +952,6 @@ async function moduleSwitchProblem(
   const def = MODULES_BY_ID[moduleId];
   if (!def) return "There is no module by that name";
   if (def.core) return `${def.name} is always on`;
-  if (NEVER_BY_CHANGESET.has(moduleId)) return `${def.name} holds the vote itself, so a vote cannot switch it`;
   if (!isLifecycle(to)) return "A module can be off, in preview, on for members, or on for everyone";
   if (seen.has(key)) return "The same module appears twice in this proposal";
   seen.add(key);
@@ -857,6 +959,11 @@ async function moduleSwitchProblem(
   const from = options.moduleLifecycleOf(moduleId);
   if (from === to) return `${def.name} is already at ${lifecycleWords(to).toLowerCase()}`;
   if (def.withdrawn && from === "off") return `${def.name} is no longer offered, so it cannot be turned on`;
+  // The module the vote runs on: widening always, narrowing below members only while a holder could turn it back on.
+  if (VOTE_RUNS_ON.has(moduleId)) {
+    const stranded = voteModuleSwitchProblem(moduleId, from, to, options.anySwitchHolder ? await options.anySwitchHolder() : false);
+    if (stranded) return stranded.replace(/[.]$/, "");
+  }
   const open = options.openModuleProposal ? await options.openModuleProposal(moduleId) : null;
   if (open) return `A proposal to switch ${def.name} is already open. Back that one instead`;
   return { key, from, to, kind: "module_lifecycle", moduleId };

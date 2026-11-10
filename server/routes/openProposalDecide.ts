@@ -52,6 +52,7 @@
  * (server/lib/inviteDoor.ts).
  */
 import { listOrgRoles } from "../lib/orgChart";
+import { membershipAlignedFor } from "../lib/applicationMembership";
 import { identityKey } from "../../shared/openProposals";
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
@@ -82,6 +83,9 @@ import type { LapseContext } from "../lib/orgChart";
 import { answerAsk, askRolesFor, consentView, decisionFor, type AskStanding } from "../lib/roleProposals";
 import { whileSessionHolds } from "../lib/sessionHold";
 import { effectiveLifecycle } from "../lib/modules";
+import { hasRecused, interviewsAreIn, stampDecided } from "../lib/applicationReview";
+import { currentMoonTerm, moonEnded, REVIEW_WORDS } from "../../shared/applicationReview";
+import { activeClock } from "../lib/gratitude-cycles";
 import { createInviteOn, inviteById, reissueInviteOn, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor } from "../repos/roleProposals";
@@ -282,6 +286,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
         term: p.body.term ?? null,
         card: p.body.card ?? null,
+        // The membership letter, aligned with at application or from their account (Rye's answer 8): a yes or a no.
+        membership: { aligned: await membershipAlignedFor(pool, p.email, may.own ?? null) },
         roles,
         why: p.body.why,
         aim: p.body.aim,
@@ -329,29 +335,47 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (!viewer) return;
     const actorId = String(viewer.id);
     if (await limited(res, `open-proposal-decide:${actorId}`)) return;
-    const p = await found(req, res);
+    let p = await found(req, res);
     if (!p) return;
     if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
     const may = await deciding(p, actorId);
     if (!may.ok) return res.status(may.status).json(may.body);
+    // Role journey L5: nobody who stepped out adopts, and nothing is adopted while a conversation is still to be written up.
+    if (await hasRecused({ getPool }, p.id, actorId)) return res.status(403).json({ error: "recused", message: REVIEW_WORDS.recused });
+    if (!(await interviewsAreIn({ getPool }, p.id))) return res.status(409).json({ error: "interviews_not_done", message: REVIEW_WORDS.interviewsNotDone });
 
     const pool = getPool();
     const at = now();
+    // The moon this was proposed for has ended before the decision: the holder may adopt for the moon running now (Rye, role journey 4a).
+    let theMoonNow = false;
+    if (moonEnded(p.body.term, at, tz())) {
+      if (req.body?.forCurrentMoon !== true) {
+        return res.status(409).json({ error: "moon_ended", message: DECIDE_WORDS.moonEnded, canAdoptForThisMoon: true });
+      }
+      const moon = currentMoonTerm(at, activeClock(), tz());
+      if (!(await store.rewriteTerm(pool, p.id, moon))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      p = { ...p, body: { ...p.body, term: moon } };
+      theMoonNow = true;
+    }
     const carrying = deps.rolesCarrying(ADOPTING_POWER);
     const seatedIn = deps.loadRoleHolders().find((h) => h.userId === actorId && carrying.some((r) => r.id === h.roleId))?.roleId ?? "badge";
     const asks = (await asksFor(pool, [p.id])).get(p.id) ?? [];
     // The record names a role, never a person: "after the circle consented", or "by the founder's power".
-    const decided = decisionFor(consentState(asks, at), at, tz(), carrying.find((r) => r.id === seatedIn)?.name ?? null);
+    const decidedBase = decisionFor(consentState(asks, at), at, tz(), carrying.find((r) => r.id === seatedIn)?.name ?? null);
+    const decided = theMoonNow ? `${decidedBase}, for the moon running now` : decidedBase;
     const decision = { words: decided, authority: `${ADOPTING_POWER}@${seatedIn}`.slice(0, 64) };
     const roles = await rolesOf(pool, p);
     const firstName = greetingName(p.name);
     const village = projectName();
+    // The Love Letter line only for somebody not aligned yet: an applicant who aligned on the form is not asked again (Rye's answer 8).
+    const letterLine = await loveLetterLine(p, may.own ?? null);
 
     // An address with an account here: the place is made now, and no invitation is needed.
     if (may.own) {
       // Somebody who left the village: welcoming them back is its own act. Nothing is granted, seated or sent.
       if (await isFormerMemberAccount(work, may.own)) return res.status(409).json({ error: "former_member", message: DECIDE_WORDS.formerMember });
       if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      await stampDecided(work, p.id, "adopted");
       let placed: Awaited<ReturnType<typeof placeOnRoles>>;
       try {
         placed = await placeOnRoles(work, { account: may.own, proposal: p, adopterId: actorId, authority: decision.authority });
@@ -366,7 +390,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: `${site()}/love-letter` }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: letterLine }))
           : null,
       );
       return res.json({
@@ -401,12 +425,13 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       throw e;
     }
     if (!held.ok) return res.status(401).json({ error: "auth_required" });
+    await stampDecided(work, p.id, "adopted");
 
     const link = `${site()}${invitePath(token)}`;
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
     res.json({
@@ -437,6 +462,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const decided = declinedWords(shortDay(at, tz()));
     // decided_at is set here, so the tidy job takes the name and address off after 90 days.
     if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+    await stampDecided(work, p.id, "declined");
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
@@ -445,6 +471,16 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     );
     res.json({ success: true, status: "declined", decided, emailed: why === null, message: why === null ? DECIDE_WORDS.declinedEmailed : DECIDE_WORDS.declinedNotEmailed(why) });
   });
+
+  /**
+   * THE LETTER'S LOVE LETTER LINE: the link to the membership door, or nothing
+   * for somebody already aligned with the letter, on the form or from their
+   * account. The door is served to anybody signed in (shared/brochure.ts,
+   * MEMBER_DOORS), so the link never lands on not-found.
+   */
+  async function loveLetterLine(p: { email: string | null }, account: string | null): Promise<string | null> {
+    return (await membershipAlignedFor(getPool(), p.email, account)) ? null : `${site()}/love-letter`;
+  }
 
   // ── A new invitation ──────────────────────────────────────────────────────
   /*
@@ -460,6 +496,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (await limited(res, `open-proposal-decide:${actorId}`)) return;
     const p = await found(req, res);
     if (!p) return;
+    const letterLine = await loveLetterLine(p, null);
     const rule = await decideRule(work);
     if (rule.who !== "live-holders" || !rule.holders.includes(actorId)) {
       return res.status(403).json({ error: "not_a_holder", message: rule.who === "live-holders" ? DECIDE_WORDS.notAHolder : DECIDE_WORDS.door[rule.because] });
@@ -478,7 +515,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: letterLine }))
         : null,
     );
     res.json({

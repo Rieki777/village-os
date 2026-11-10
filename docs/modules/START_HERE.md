@@ -13,7 +13,7 @@ stale. Where you see a path, open it.
 ## What this platform is, in five lines
 
 It is a white-label village-coordination system, Village OS. A village runs the published image on its
-own infrastructure and owns the code (MIT) and the data; it forks the repository only to change the
+own infrastructure and owns the code (AGPL-3.0-or-later) and the data; it forks the repository only to change the
 code. Modules are units of capability: some tables, some routes, some screens, a few tunable numbers,
 and one entry in a registry that ties them together. Four core modules are
 always on, and every other one ships off until a village turns on what it wants (`docs/MODULES.md` lists them all). There is no

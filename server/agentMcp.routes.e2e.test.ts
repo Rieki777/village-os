@@ -396,7 +396,7 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     expect(r.json.clientName).toBe("Claude");
     expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
     // Only the scopes that open a connector tool are offered.
-    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review"]);
+    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review", "roles.read", "roles.propose", "letters.draft", "applicants.read", "onboarding.write", "settings.propose", "listing.propose", "pages.propose", "map.propose"]);
     // An admin is offered the admin scope too, never ticked.
     const asAdmin = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`);
     expect(asAdmin.json.scopes.find((s: any) => s.scope === "admin")).toMatchObject({ ticked: false, write: true });

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -230,6 +230,8 @@ const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
 const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
 const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
+const RoleMeasures = lazyPage(() => import("./pages/RoleMeasures"));
+const ApplicationStatus = lazyPage(() => import("./pages/ApplicationStatus"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
@@ -238,6 +240,7 @@ const Powers = lazyPage(() => import("./pages/Powers"));
 // The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
 const PricingDeskPage = lazyPage(() => import("./pages/PricingDesk"));
 const Review = lazyPage(() => import("./pages/Review"));
+const Approvals = lazyPage(() => import("./pages/Approvals"));
 const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
@@ -339,6 +342,7 @@ function Router() {
       <Route path="/powers" component={Powers} />
       <Route path="/pricing" component={PricingDeskPage} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
+      <Route path="/approvals" component={Approvals} />
       <Route path="/review" component={Review} />
       {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
       <Route path="/cash-payouts" component={CashPayouts} />
@@ -352,7 +356,9 @@ function Router() {
       <Route path="/messages/:id" component={Messages} />
       <Route path="/introductions" component={Introductions} />
       <Route path="/propose-quest" component={ProposeQuest} />
-      <Route path="/roles/draft" component={RoleDraft} />
+      <Route path="/roles/select" component={RoleDraft} />
+      {/* The old address, kept so every shared link and bookmark still lands (the board was called a draft until 9 Nov 2026). */}
+      <Route path="/roles/draft">{() => <Redirect to="/roles/select" replace />}</Route>
       <Route path="/roles" component={Roles} />
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />
@@ -409,6 +415,8 @@ function Router() {
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
       <Route path="/open-proposals/:id" component={OpenProposal} />
+      <Route path="/role-measures" component={RoleMeasures} />
+      <Route path="/application-status/:ref" component={ApplicationStatus} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />

@@ -10,12 +10,12 @@
  *   Commonland (Tijn Tjoelker, Ernestien Idenburg, Noa Lodeizen, Zlatina
  *   Tsvetkova), https://tijntjoelker.substack.com/p/governance-canvas
  *
- * ── LICENCE: THE TEXT IN THIS FILE IS NOT MIT ──────────────────────────────
+ * ── LICENCE: THE TEXT IN THIS FILE IS NOT AGPL ──────────────────────────────
  *
- * The quoted text in this file belongs to the authors named above. The MIT
+ * The quoted text in this file belongs to the authors named above. The AGPL
  * licence in the repository's LICENSE covers this platform's own code and
  * words. It does NOT cover this text, which is not ours to license, so nobody
- * who copies, forks or self-hosts this repository receives MIT rights over it.
+ * who copies, forks or self-hosts this repository receives AGPL rights over it.
  * It is quoted here with the credit above, shown beside it on every surface.
  * The authors' own licence terms for it are not yet recorded anywhere in this
  * repository. Until they are: a fork that keeps this text keeps the credit

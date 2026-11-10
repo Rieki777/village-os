@@ -199,6 +199,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "proposal.decide": "record the outcome of a governance decision and close it",
   "map.viewPeople": "see which named people hold which roles",
   "terms.read": "read what every role offers whoever holds it, money included",
+  "records.confidential": "read the village's private records, once aligned with its confidentiality agreement",
   "map.contact": "reach role holders through the contact relay",
   "map.edit": "reshape the land in build mode, as a draft nobody else sees yet",
   "map.publish": "put a drafted map in front of every visitor",
@@ -226,6 +227,7 @@ export const CAPABILITY_CONSEQUENCE: Record<Capability, string> = {
   "intake.moderate": "work the queues the village puts things into, and act on what gets reported",
   "library.keep": "keep the shared library: what comes in, what goes out on loan, what comes back",
   "story.tell": "say what this village is, in public, in its own words",
+  "brief.private": "read and write the brief's four private sections: the people, the legal setup, the land and the red lines",
   "dial.set": "turn the village's own dials, within the ring the village governs",
   "quest.approve": "put a proposed quest on the board, and set what finishing it pays",
   "redemption.confirm":

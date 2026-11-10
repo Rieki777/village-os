@@ -76,6 +76,8 @@ vi.mock("@/lib/gameApi", async (importOriginal) => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: null }),
+  // Quests asks who is signed in for the Love Letter, a member's door (shared/brochure.ts, MEMBER_DOORS).
+  useOptionalAuth: () => ({ user: null, loading: false }),
   // A visitor: the Hypha admin note (HyphaAdminNote) stays away.
   useIsAdmin: () => false,
 }));

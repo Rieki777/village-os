@@ -10,6 +10,8 @@ import GuideChat from "@/components/GuideChat";
 import { useGuideName } from "@/hooks/useGuideName";
 import { sendProposal, assistantAvailable } from "@/lib/proposals";
 import type { IdeaHold, IdeaReceipt } from "@shared/questIdeas";
+import VoiceArea from "@/components/voice/VoiceArea";
+import { useLingui } from "@lingui/react/macro";
 
 interface QuestProposal {
   title: string;
@@ -54,6 +56,7 @@ const HELD_WHY: Record<IdeaHold, (held: Held, team: string) => string> = {
 };
 
 export default function ProposeQuest() {
+  const { t } = useLingui();
   const { user } = useAuth();
   // The example compensation names the village's pay tokens, never the
   // recognition token: Gratitude never pays work (Rye, 2026-11-01: "Gratitude
@@ -370,6 +373,12 @@ export default function ProposeQuest() {
               <label htmlFor="quest-what" className="block text-sm font-medium text-foreground mb-2">
                 What do you want to do? <span className="text-destructive">*</span>
               </label>
+              <VoiceArea value={form.whatYouWantToDo} onValue={(v) => set("whatYouWantToDo", v)}
+                talk={{
+                  label: t({ message: "Your quest", context: "voice field label: propose quest description" }),
+                  purpose: t({ message: "The quest you want to do: what you would create, and what it brings to the village.", context: "voice field purpose: propose quest description" }),
+                }}
+              >
               <textarea
                 id="quest-what"
                 required
@@ -379,12 +388,14 @@ export default function ProposeQuest() {
                 placeholder="Describe the Quest: what you'd create, and what it brings to the village."
                 className={`${field} resize-y`}
               />
+              </VoiceArea>
             </div>
 
             <div>
               <label htmlFor="quest-bringing" className="block text-sm font-medium text-foreground mb-2">
                 What resources are you bringing?
               </label>
+              <VoiceArea value={form.resourcesBringing} onValue={(v) => set("resourcesBringing", v)}>
               <textarea
                 id="quest-bringing"
                 rows={3}
@@ -393,12 +404,14 @@ export default function ProposeQuest() {
                 placeholder="Your skills, time, tools, materials, funding, relationships…"
                 className={`${field} resize-y`}
               />
+              </VoiceArea>
             </div>
 
             <div>
               <label htmlFor="quest-needed" className="block text-sm font-medium text-foreground mb-2">
                 What do you need from {projectName}?
               </label>
+              <VoiceArea value={form.resourcesNeeded} onValue={(v) => set("resourcesNeeded", v)}>
               <textarea
                 id="quest-needed"
                 rows={3}
@@ -407,12 +420,14 @@ export default function ProposeQuest() {
                 placeholder="Land access, materials, budget, people, introductions, space…"
                 className={`${field} resize-y`}
               />
+              </VoiceArea>
             </div>
 
             <div>
               <label htmlFor="quest-compensation" className="block text-sm font-medium text-foreground mb-2">
                 What compensation, if any, do you want?
               </label>
+              <VoiceArea value={form.compensation} onValue={(v) => set("compensation", v)}>
               <textarea
                 id="quest-compensation"
                 rows={2}
@@ -421,12 +436,14 @@ export default function ProposeQuest() {
                 placeholder={`${creditsName}, ${equityName}, cash, revenue share, a joint venture, or nothing. It's a gift, totally up to you.`}
                 className={`${field} resize-y`}
               />
+              </VoiceArea>
             </div>
 
             <div>
               <label htmlFor="quest-timeline" className="block text-sm font-medium text-foreground mb-2">
                 Timeline &amp; payment milestones, if any
               </label>
+              <VoiceArea value={form.timelineMilestones} onValue={(v) => set("timelineMilestones", v)}>
               <textarea
                 id="quest-timeline"
                 rows={3}
@@ -435,6 +452,7 @@ export default function ProposeQuest() {
                 placeholder="Rough phases, dates, and any milestone-based payments you'd propose."
                 className={`${field} resize-y`}
               />
+              </VoiceArea>
             </div>
 
             {error && (

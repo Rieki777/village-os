@@ -141,6 +141,27 @@ export function brochurePathServed(state: BrochureState, path: string): boolean 
   return state.enabled && !state.hidden.includes(bare);
 }
 
+/**
+ * STORY PAGES THAT ARE ALSO A MEMBER'S DOOR (role journey L7, 9 Nov 2026).
+ *
+ * The Love Letter is a story page for a visitor and the ONLY place a member
+ * aligns with the membership letter. A role that waits on membership waits on
+ * this page, and a village with its story pages off (every fresh one) served
+ * the not-found page there, so an adopted holder could never start. So for
+ * somebody signed in it is always served; for a visitor it follows the story
+ * switches exactly as before.
+ */
+export const MEMBER_DOORS: readonly BrochurePath[] = ["/love-letter"];
+
+/** Whether `path` is one of the member's doors. */
+export const isMemberDoor = (path: string): boolean => (MEMBER_DOORS as readonly string[]).includes(barePath(path));
+
+/** Whether `path` is served to this viewer: a member's door always to a signed-in viewer, everything else as `brochurePathServed`. */
+export function servedTo(state: BrochureState, path: string, signedIn: boolean): boolean {
+  if (signedIn && isMemberDoor(path)) return true;
+  return brochurePathServed(state, path);
+}
+
 /** What `PUT /api/admin/brochure-pages` accepts: either switch, or both. */
 export interface BrochurePatch {
   enabled?: boolean;

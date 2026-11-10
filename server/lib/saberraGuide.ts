@@ -10,11 +10,11 @@
  *   module-off      the `saberra` module is not open to members
  *   not-connected   the service's key is not stored and usable here
  *   no-address      no https address for the service is saved
- *   no-guide-call   the village has not been given a call that answers as a
- *                   guide. The connection reads records for the sync and
- *                   nothing yet calls the agent on a member's behalf. What
- *                   that call is was asked of the Operations role on
- *                   2026-10-24, and this stays the answer until it is built.
+ *   no-guide-call   RETIRED 2026-11-09. The service's `ask_sera` answers as
+ *                   its agent (the moon recap's draft used it first), and
+ *                   server/lib/seraGuideCall.ts is the guide road built on it,
+ *                   so a connected village's Sera can answer. The name stays
+ *                   in the type so an older client reading it still compiles.
  *
  * The first three read exactly what the sync reads (server/lib/saberraSync.ts),
  * so this cannot say ready while the sync says not connected.
@@ -65,6 +65,6 @@ export function saberraGuideReach(): SaberraGuideReach {
         ? "not-connected"
         : httpsAddress(cfg.apiUrl) === null
           ? "no-address"
-          : "no-guide-call";
+          : null;
   return { available: gap === null, gap, name };
 }

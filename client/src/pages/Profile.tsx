@@ -11,12 +11,14 @@ import WalletCard from "@/components/WalletCard";
 import SendTokensCard from "@/components/SendTokensCard";
 import RedemptionPanel from "@/components/RedemptionPanel";
 import CashOwedPanel from "@/components/CashOwedPanel";
+import TimeZoneField from "@/components/TimeZoneField";
 import SeasonSummarySection from "@/components/seasonSummary/SeasonSummarySection";
 import MaturityLadder from "@/components/profile/MaturityLadder";
 import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import InvitePanel from "@/components/profile/InvitePanel";
 import StartHereCard from "@/components/profile/StartHereCard";
+import RoleStartSteps from "@/components/profile/RoleStartSteps";
 import type { MembershipSigning } from "@shared/membershipSigning";
 import PathFacts from "@/components/profile/PathFacts";
 import InventoryCard from "@/components/profile/InventoryCard";
@@ -41,13 +43,16 @@ import { TASK_BOARD_ANCHOR } from "@shared/sessionTasks";
 import MoonDock from "@/components/profile/MoonDock";
 import NightMotes from "@/components/profile/NightMotes";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLingui } from "@lingui/react/macro";
+import VoiceArea from "@/components/voice/VoiceArea";
 import { useModule, useModuleOn } from "@/modules/ModuleProvider";
 import { authToken, fetchGameMe, gameFetch, useGameConfig, type GameMe, type ProgressionCapability } from "@/lib/gameApi";
 import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+const OnboardingPath = lazy(() => import("@/components/profile/OnboardingPath"));
 import { Link, useLocation } from "wouter";
 import { onProfileRefresh } from "@/lib/profileRefresh";
 import { useStoryPageShown } from "@/lib/brochure";
@@ -58,6 +63,7 @@ import StagePanel from "@/components/profileDash/StagePanel";
 import TodayStrip from "@/components/profileDash/TodayStrip";
 import AsksPanel from "@/components/asks/AsksPanel";
 import YourCompanions from "@/components/profileDash/YourCompanions";
+import GuideChoiceCard from "@/components/guide/GuideChoiceCard";
 import TreasuryPanel from "@/components/profileDash/TreasuryPanel";
 import LevelUpMoment from "@/components/profileDash/LevelUpMoment";
 import ProfileTabs, { phoneTab, type ProfileTab } from "@/components/profileDash/ProfileTabs";
@@ -117,6 +123,7 @@ import { BTN_GOLD, BTN_LINE, H2, KICKER, LINK } from "@/components/profileDash/d
  */
 
 export default function Profile() {
+  const { t } = useLingui();
   const storyShown = useStoryPageShown();
   const [, navigate] = useLocation();
   const tokenName = useTokenName("Recognition");
@@ -387,6 +394,9 @@ export default function Profile() {
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+            {/* THE STEPS BEFORE A ROLE STARTS, on every tab: a new holder lands
+                here after sign-up, on any tab, and is asked here (role journey L7). */}
+            <RoleStartSteps />
             {/* The role proposal, first under the tabs. On a phone it is on
                 Today and on Roles, so it is the first thing on either tab.
                 A desktop shows it here, above the hero. */}
@@ -521,6 +531,11 @@ export default function Profile() {
               <TodayStrip data={dash} />
             </div>
 
+            {/* WHO HELPS YOU: the member's guide, chosen once (2026-11-09). On Today, so a phone finds it first. */}
+            <div className={tabOf("today")}>
+              <GuideChoiceCard />
+            </div>
+
             {/* ASKED OF YOU: what other members asked this member, and what they asked (shared/memberAsks.ts). */}
             <div id="waiting" className={`scroll-mt-28 ${tabOf("today")}`}>
               <AsksPanel />
@@ -572,6 +587,9 @@ export default function Profile() {
                 {/* The quest log: every task taken on in a live session, what
                     this member's roles hold, and what waits on a power they
                     hold. Emails and notices land on #my-tasks. */}
+                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
+                  <Suspense fallback={null}><OnboardingPath /></Suspense>
+                </div>
                 <div className={tabOf(["today", "quests"])}>
                   <TasksWaitingCard enabled={sessionsOn} />
                 </div>
@@ -668,6 +686,14 @@ export default function Profile() {
                     <label htmlFor="profile-bio" className="sr-only">
                       Your bio
                     </label>
+                    <VoiceArea
+                      value={bioText}
+                      onValue={setBioText}
+                      talk={{
+                        label: t({ message: "Your bio", context: "voice field label: profile bio" }),
+                        purpose: t({ message: "A few sentences about who you are and what you bring to the village.", context: "voice field purpose: profile bio" }),
+                      }}
+                    >
                     <textarea
                       id="profile-bio"
                       value={bioText}
@@ -676,6 +702,7 @@ export default function Profile() {
                       className="w-full rounded-lg border border-border bg-background p-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       rows={4}
                     />
+                    </VoiceArea>
                     {bioError && (
                       <p role="alert" className="mt-2 text-sm text-destructive">
                         {bioError}
@@ -864,6 +891,7 @@ export default function Profile() {
                   <RedemptionPanel />
                 </div>
               )}
+              {user && <TimeZoneField /> /* role journey L6 */}
               {user && <CashOwedPanel /> /* 0285: cash owed, and the books for whoever holds cash.pay */}
               {user && <SeasonSummarySection /> /* idea 4: your season summed up, shareable as a picture */}
               {/* S47: on-chain holdings, renders nothing until the village turns the economics section on */}

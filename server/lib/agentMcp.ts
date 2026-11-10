@@ -53,6 +53,7 @@
 import { adminRequestDecision, type AgentAdminPathsDoc } from "../../shared/agentAdmin";
 import { MOON_ROUTES, PACK_FORBIDDEN_KEY } from "../../shared/moonRecap";
 import { echoHash, type AgentScope } from "./agentTokens";
+import { INBOX_TOOLS, TIER_B_TOOLS } from "./agentMcpTierB";
 
 /** The protocol revisions this server speaks, newest first. */
 // 2025-03-26 is not offered: it predates the resource metadata a 401 points at, which is how a connector finds the sign-in.
@@ -111,6 +112,8 @@ export interface ToolContext {
   holderId?: string;
   /** The village's agent paths list (shared/agentAdmin.ts). Only `admin_request` reads it. */
   adminPaths?: () => Promise<AgentAdminPathsDoc>;
+  /** Whether the Anchor has recorded its approval of AI agents (shared/agentProposals.ts). Reads of applicant and member data wait on it. */
+  applicantDataOpen?: () => Promise<boolean>;
   /** Sera's undoable actions (server/lib/seraAgent.ts). Only the `sera.undoable` tools use it. */
   sera?: {
     run: (tool: "link_sera_person" | "suggest_task" | "set_board_access" | "draft_agenda_item" | "suggest_moon_item", args: Record<string, unknown>) => Promise<{ ok: true; result: Record<string, unknown> } | { ok: false; error: string }>;
@@ -527,7 +530,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       const record = (state: "done" | "refused" | "asked") =>
         ctx.recordAction!({ scope: "admin", tool: "admin_request", method: method.slice(0, 8) || null, path: path.slice(0, 500) || null, echoHash: hash, state });
 
-      const decision = adminRequestDecision(method, path, await ctx.adminPaths(), ctx.holderId ?? null);
+      const decision = adminRequestDecision(method, path, await ctx.adminPaths(), ctx.holderId ?? null, { applicantDataOpen: ctx.applicantDataOpen ? await ctx.applicantDataOpen() : false });
       if (!decision.ok) {
         await record("refused");
         return { ok: false, error: decision.words, detail: { code: decision.code } };
@@ -570,6 +573,8 @@ export const MCP_TOOLS: readonly ToolDef[] = [
       return { ok: true, result: { written: true, echo, answer: a.body } };
     },
   },
+  ...TIER_B_TOOLS,
+  ...INBOX_TOOLS,
   ...SERA_TOOL_DEFS.map((d): ToolDef => ({
     name: d.name,
     scope: "sera.undoable",
