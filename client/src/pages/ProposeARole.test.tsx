@@ -181,7 +181,7 @@ describe("the form", () => {
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
-    expect(posted[0].body.links).toEqual([]);
+    expect(posted[0].body).not.toHaveProperty("links");
   });
 
   it("a refusal says why and marks its field, and nothing is lost", async () => {

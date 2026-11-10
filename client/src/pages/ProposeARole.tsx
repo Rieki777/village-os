@@ -244,7 +244,8 @@ export default function ProposeARole() {
         },
         // The letter version the applicant aligned with here; recorded once the address confirms.
         ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
-        links: linksToSend(links),
+        // Links only when there are some: a proposal without them sends what it always sent.
+        ...(linksToSend(links).length ? { links: linksToSend(links) } : {}),
       };
       // With files, the proposal goes as one field of a multipart post (server/routes/openProposals.ts).
       let request: RequestInit;
