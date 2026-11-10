@@ -6,7 +6,7 @@ other, decide things together, and can see who holds which power. You host it
 yourself, choose your settings and modules, and you may change any part of the
 code.
 
-**What it costs.** The software is free (MIT licence). You pay your own
+**What it costs.** The software is free (AGPL-3.0-or-later licence). You pay your own
 hosting provider, if you use one. Setting it up needs a computer.
 
 **What you need.**

@@ -22,26 +22,26 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 213 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 214 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 236 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 237 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-263 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 42 text, 1 longtext.
+264 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 43 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
-| Village | 4 | 3 | 1 |
+| Village | 5 | 4 | 1 |
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
@@ -91,6 +91,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
 | Where the land's satellite picture comes from | `village.satellite_provider` | Village | choice | blank | the whole village |
 | The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
+| Where this village shares its own source code | `village.source_url` | Village | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -397,7 +398,7 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 
 ## Village
 
-4 dials. 3 for the whole village, 1 for the founder or an admin.
+5 dials. 4 for the whole village, 1 for the founder or an admin.
 
 ### The village's own circle, for budget lines about the whole village
 
@@ -463,6 +464,20 @@ Leave blank and Moon 1 is the moon your village launched under, which is what al
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where this village shares its own source code
+
+The footer shows a second source link, named for your village, when this is set. Leave it empty if you run the software as published, because the footer already links the public Village OS code. If this village runs a changed version, set it to the https address of your own copy of the code, because the licence says the people who use your village must be able to get it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.source_url` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 

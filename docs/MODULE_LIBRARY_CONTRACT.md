@@ -22,9 +22,10 @@ on all of them equally, and that is not the deal here.
 
 ## What the library is
 
-The platform is a white-label village-coordination system, Village OS, published under the MIT
-licence. Villages run its published image on their own infrastructure and own the code and the data;
-a village forks the repository only if it means to change the code. Modules are units of capability.
+The platform is a white-label village-coordination system, Village OS, published under the
+GNU AGPL-3.0-or-later licence. Villages run its published image on their own infrastructure and own the code and the data;
+a village forks the repository only if it means to change the code. Every module in the library is
+under the same AGPL-3.0-or-later licence as the platform; there is no closed module. Modules are units of capability.
 `docs/MODULES.md` lists every one. The four core modules
 (quests, gratitude, progression, profiles) are always on and cannot be disabled. Every other module
 ships off, and a village turns on what it wants.

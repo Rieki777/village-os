@@ -198,7 +198,7 @@ describe("the credit", () => {
 });
 
 /**
- * The repository is MIT, and this text is not ours to license. The carve-out
+ * The repository is AGPL-3.0-or-later, and this text is not ours to license. The carve-out
  * lives in two places a reader might start from: the quoting file's own header
  * and THIRD_PARTY_NOTICES.md at the root. These read both and hold them to the
  * credit, so neither can be dropped, or drift from the credit the surfaces
@@ -209,17 +209,17 @@ describe("the licence notice", () => {
     fs.readFileSync(path.resolve(__dirname, "..", rel), "utf8").replace(/\r/g, "");
   const oneLine = (s: string) => s.replace(/\s*\n\s*(\*\s*)?/g, " ");
 
-  it("says in the quoting file's header that the text is not under the MIT licence, and points at the notice", () => {
+  it("says in the quoting file's header that the text is not under the AGPL licence, and points at the notice", () => {
     const src = read("shared/governanceCanvasText.ts");
     const header = oneLine(src.slice(0, src.indexOf("*/")));
-    expect(header).toContain("LICENCE: THE TEXT IN THIS FILE IS NOT MIT");
+    expect(header).toContain("LICENCE: THE TEXT IN THIS FILE IS NOT AGPL");
     expect(header).toContain("It does NOT cover this text, which is not ours to license");
     expect(header).toContain("THIRD_PARTY_NOTICES.md at the repository root points here");
   });
 
   it("is carried at the root by THIRD_PARTY_NOTICES.md, with the file, the exact credit and the source", () => {
     const notice = oneLine(read("THIRD_PARTY_NOTICES.md"));
-    expect(notice).toContain("The MIT licence in `LICENSE` covers this platform's own code and words. It does not cover the text listed here.");
+    expect(notice).toContain("The AGPL-3.0-or-later licence in `LICENSE` covers this platform's own code and words. It does not cover the text listed here.");
     expect(notice).toContain("`shared/governanceCanvasText.ts`");
     expect(notice).toContain(CANVAS_CREDIT.text);
     expect(notice).toContain(CANVAS_SOURCE_URL);

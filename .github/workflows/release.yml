@@ -511,7 +511,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
             org.opencontainers.image.version=${{ needs.plan.outputs.version }}
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
           platforms: linux/amd64
           # Attestations turn the image into a multi-platform index carrying an
           # unknown/unknown entry. GHCR is fine with it; older self-hosted

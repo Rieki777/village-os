@@ -1,9 +1,9 @@
 <!-- describes: shared/governanceCanvasText.ts -->
 # Third-party text in this repository
 
-The MIT licence in `LICENSE` covers this platform's own code and words. It does not cover the
+The AGPL-3.0-or-later licence in `LICENSE` covers this platform's own code and words. It does not cover the
 text listed here. That text belongs to its authors and is not ours to license, so nobody who
-copies, forks or self-hosts this repository receives MIT rights over it.
+copies, forks or self-hosts this repository receives AGPL rights over it.
 
 ## Governance Canvas
 
