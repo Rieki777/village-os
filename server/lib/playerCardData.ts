@@ -75,6 +75,7 @@
  * minute costs none. A table is read only when a sign that needs it is not in
  * the memo.
  */
+import type { RhythmDoc } from "../../shared/moonRhythm";
 import type { Pool } from "mysql2/promise";
 import { CAPABILITY_LABELS, type Capability } from "../../shared/capabilities";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
@@ -160,6 +161,11 @@ export interface CardContext {
    * the variable the circle card reads). Absent is off: plain headings.
    */
   frameworkTerms?: boolean;
+  /**
+   * The village's moon rhythm (guide v2), from its end-of-moon review, while
+   * that review is on. Absent, the card draws the moon cycle as before.
+   */
+  moonRhythm?: RhythmDoc;
   /**
    * The village the characters are read in, for the portrait in the card's
    * gold ring. Absent reads no portrait, and the card draws the initial.
@@ -650,6 +656,7 @@ export async function buildPlayerCards(
         signs(key, circleId)?.reading ?? { kind: "not-counted", key: key ?? null, words: "Not counted yet" },
       // 0274: the CCOS term on each heading, by the village's `org.ccos_terms`.
       frameworkTerms: ctx.frameworkTerms === true,
+      ...(ctx.moonRhythm ? { moonRhythm: { rhythm: ctx.moonRhythm } } : {}),
     };
     const card = buildPlayerCard(input);
 

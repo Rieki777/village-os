@@ -595,11 +595,11 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
     expect(card.across.growingEdge.text).toEqual({ kind: "empty", words: line });
     expect(card.across.whoCouldHoldNext.text).toEqual({ kind: "empty", words: line });
     expect(card.across.goals).toEqual({ kind: "empty", words: line });
-    expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with Operations Steward." });
+    expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with Operations Steward." });
     expect(card.roles[0].chips.join(" ")).toContain(line);
     expect(card.roles[0].chips.join(" ")).not.toContain("No review date set");
     const none = buildPlayerCard(input({ mode: "proposal", fillWith: null, loadRead: null, growingEdge: null, plan: null }));
-    expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll fill the hours together with the village's operations role." });
+    expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with the village's operations role." });
     expect(none.across.growingEdge.text).toEqual({ kind: "empty", words: "We'll fill this together with the village's operations role." });
     const live = buildPlayerCard(input({ loadRead: null, growingEdge: null, plan: { aim: null, goals: [] } }));
     expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });

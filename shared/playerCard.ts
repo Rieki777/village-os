@@ -39,6 +39,7 @@
  * is no row and no "Plays as" label, which is the reference design's case.
  */
 import { LUNAR_CLOCK } from "./cycleClock";
+import { walkthroughDay, type RhythmDoc } from "./moonRhythm";
 import { civilDaysBetween, fullMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W, ALLOWANCE_WORDS, APPLICATION_STATUS_WORDS, PAY_WORDS, PER_WORDS } from "./playerCardWords";
 import { formatDay, joinList, type Read } from "./roleSheet";
@@ -253,6 +254,13 @@ export interface ApplicationIn {
 }
 
 export interface PlayerCardInput {
+  /**
+   * The moon rhythm (guide v2, 7), from the village's end-of-moon review
+   * (shared/moonRhythm.ts: its End of Moon walkthrough, per-moon overrides
+   * included). Passed only while that review is on. Absent, the timeline draws
+   * the new and full moons as before.
+   */
+  moonRhythm?: { rhythm: RhythmDoc };
   now: Date;
   /** The village's IANA zone. */
   timeZone: string;
@@ -474,7 +482,7 @@ export interface TensionsOut {
   public: string[];
 }
 
-export type MarkerKind = "new-moon" | "full-moon" | "review" | "renewal" | "ends" | "invoice";
+export type MarkerKind = "new-moon" | "full-moon" | "review" | "renewal" | "ends" | "invoice" | "carry-on" | "end-of-moon";
 
 export interface MarkerOut {
   kind: MarkerKind;
@@ -567,6 +575,11 @@ export const APPLY_HREF = "/roles";
 export const PLAN_HREF = "/season-plans/mine";
 
 /** A civil date ("2026-12-31") or an instant, as the instant it names in the zone. */
+/**
+ * END OF MOON: the last `weekday` (0 Sunday to 6 Saturday) strictly before the
+ * civil day of the next new moon, in the village's zone, at the start of that
+ * day. Null when the village draws no End of Moon.
+ */
 function instantOf(iso: string | null | undefined, timeZone: string): Date | null {
   const s = clean(iso);
   if (!s) return null;
@@ -941,10 +954,17 @@ function timeline(input: PlayerCardInput, roles: PlayerRoleIn[]): TimelineOut {
   spans.forEach((s, i) => {
     if (s.starting) return;
     const firstMoon = i === 0 || spans[i - 1].starting;
-    const words = [W.newMoon, W.tasksAgreed, ...(anyEquity && !firstMoon ? [W.signedOff] : [])].join(". ");
+    // Guide v2: the new moon circle sets the moon's goals; the tasks go on the task board.
+    const words = [input.moonRhythm ? W.newMoonCircle : `${W.newMoon}. ${W.tasksAgreed}`, ...(anyEquity && !firstMoon ? [W.signedOff] : [])].join(". ");
     mark("new-moon", s.start, words);
+    if (input.moonRhythm) {
+      // The last week asks whether to carry on; End of Moon is the village's weekday before the new moon.
+      mark("carry-on", new Date(s.end.getTime() - 7 * 86_400_000), W.carryOn);
+      const bounds = LUNAR_CLOCK.boundsFor(new Date(s.start.getTime() + 1));
+      mark("end-of-moon", instantOf(walkthroughDay(bounds, tz, input.moonRhythm.rhythm), tz), W.endOfMoon);
+    }
   });
-  for (const f of fullMoonsBetween(from, to)) mark("full-moon", f, W.fullMoon);
+  for (const f of fullMoonsBetween(from, to)) mark("full-moon", f, input.moonRhythm ? W.fullMoonCheckIn : W.fullMoon);
   const rhythm: string[] = [];
   for (const r of roles) {
     const term = r.settings?.term;
