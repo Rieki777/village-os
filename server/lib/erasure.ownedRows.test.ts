@@ -916,7 +916,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       "guest-places-after-tombstone",
       "comms",
     ]);
-    expect(steps.slice(at, at + 12)).toEqual([
+    expect(steps.slice(at, at + 13)).toEqual([
       "role-tensions-after-tombstone",
       "event-places-after-tombstone",
       "housing-contacts-after-tombstone",
@@ -928,6 +928,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       "investor-fact-words-after-tombstone",
       "stay-notes-after-tombstone",
       "purchase-emails-after-tombstone",
+      "application-review-after-tombstone",
       "role-proposals-after-tombstone",
     ]);
     expect(steps.indexOf("sessions-after-tombstone")).toBeGreaterThan(steps.indexOf("purchase-emails-after-tombstone"));

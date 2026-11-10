@@ -102,6 +102,9 @@ import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
+import { planListOnly } from "../../shared/roleListing";
+import { carriesRoleParams, parseRoleParams } from "../../shared/roleParams";
+import { applyListOnly, readListingRecords, undoListOnly } from "../repos/roleListingRecords";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
 type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
@@ -903,10 +906,35 @@ export function register(app: Express, deps: Deps): void {
   };
 
   // ── Admin: the org chart is edited here, and the edits are live ──────────
+  /**
+   * The card's parameters in a write (role journey PR-C): refused with a sentence when a value
+   * cannot be read, and a role named in the interviews must be a role in this village.
+   * Returns false after answering.
+   */
+  async function paramsAreFine(body: any, res: any): Promise<boolean> {
+    if (!carriesRoleParams(body)) return true;
+    const parsed = parseRoleParams(body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.problem });
+      return false;
+    }
+    const steps = parsed.value.conversations ?? [];
+    if (steps.length) {
+      const known = new Set((await listOrgRoles(getPool())).map((r) => r.id));
+      const unknown = steps.filter((x) => !known.has(x.roleId));
+      if (unknown.length) {
+        res.status(400).json({ error: "These interviewing roles are not here: " + unknown.map((x) => x.roleId).slice(0, 5).join(", ") });
+        return false;
+      }
+    }
+    return true;
+  }
+
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
@@ -924,10 +952,57 @@ export function register(app: Express, deps: Deps): void {
     res.json({ success: true, id });
   });
 
+  /*
+   * ── LISTING (role journey PR-A) ───────────────────────────────────────
+   *
+   * A steward lists the roles a visitor may discover. "List only these" lists
+   * the roles named and unlists every other one, and keeps what each read as
+   * before so the run can be put back. The door is an admin or a holder of the
+   * power to decide the village's structure.
+   */
+  app.get("/api/admin/org/listing", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    res.json({ records: await readListingRecords(getPool()) });
+  });
+
+  app.post("/api/admin/org/listing/only", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const raw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = raw.filter((x: unknown): x is string => typeof x === "string" && x.trim() !== "").map((x: string) => x.trim());
+    if (!ids.length) return res.status(400).json({ error: "Name at least one role to list. Listing none would empty every list." });
+    const roles = (await listOrgRoles(getPool())).filter((r) => !r.isExample);
+    const known = new Set(roles.map((r) => r.id));
+    const unknown = ids.filter((id: string) => !known.has(id));
+    if (unknown.length) return res.status(400).json({ error: "Those roles are not here: " + unknown.slice(0, 5).join(", ") });
+    const plan = planListOnly(roles, ids);
+    const record = await applyListOnly(getPool(), plan, ids);
+    await recordEvent(getPool(), {
+      kind: "org", text: `listing: ${plan.list.length} listed, ${plan.unlist.length} unlisted`,
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: ids[0],
+      audience: "public",
+    });
+    res.json({ success: true, listed: plan.list.length, unlisted: plan.unlist.length, record });
+  });
+
+  app.post("/api/admin/org/listing/undo", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const record = await undoListOnly(getPool());
+    if (!record) return res.status(409).json({ error: "There is no earlier listing to put back." });
+    await recordEvent(getPool(), {
+      kind: "org", text: "listing: the earlier listing was put back",
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: record.kept[0] ?? "listing",
+      audience: "public",
+    });
+    res.json({ success: true, record });
+  });
+
   app.put("/api/admin/org/roles/:id", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);

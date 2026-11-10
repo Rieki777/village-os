@@ -17,6 +17,7 @@ import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { emptyContentFor, PAGES_TAB_KEY, PATHS_STAGES_TAB_KEY } from "./contentSections";
 import PagesEditor from "./pages/PagesEditor";
 import PathsStagesEditor from "./PathsStagesEditor";
+import AgreementDocumentUpload from "./AgreementDocumentUpload";
 import { takePrefill } from "@/lib/profilePrefill";
 import {
   SECTION_FIELDS,
@@ -329,6 +330,8 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
           </button>
         </div>
       </div>
+
+      {sectionKey === "confidentiality" && <AgreementDocumentUpload password={password} />}
 
       {handed && !saved && (
         <p className="mb-4 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">

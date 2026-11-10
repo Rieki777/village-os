@@ -37,9 +37,10 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import CircleConsent from "@/components/roleProposal/CircleConsent";
+import ReviewPanel from "@/components/review/ReviewPanel";
 import type { ConsentAnswerOut, ConsentOut } from "@/components/roleProposal/proposalApi";
 import { gameFetch } from "@/lib/gameApi";
-import { DECIDE_WORDS, type DoorReason } from "@shared/openProposalDecide";
+import { DECIDE_WORDS, DOOR, type DoorReason } from "@shared/openProposalDecide";
 import { CONSENT_WORDS, type ConsentAnswer } from "@shared/roleProposalConsent";
 import { civilDayWords } from "@shared/seasonPlans";
 
@@ -56,6 +57,8 @@ export interface ServedOpenProposal {
   roles: Array<{ id: string; name: string | null; circle: string | null; note: string; accountabilities?: string[]; timeCommitment?: string | null }>;
   /** The applicant's own role card (shared/openProposalCard.ts); null on a proposal sent before cards. */
   card?: Parameters<typeof CardSideBySide>[0]["card"];
+  /** The membership letter, aligned with at application or from their account (Rye's answer 8). */
+  membership?: { aligned: boolean };
   why: string;
   aim: string;
   confirmedOn: string | null;
@@ -237,7 +240,7 @@ export default function OpenProposal() {
               <h2 id="op-cards" className="text-lg font-bold text-foreground">
                 {t({ message: "Their card beside the open card", context: "open proposal side by side" })}
               </h2>
-              <CardSideBySide roles={p.roles} card={p.card ?? null} />
+              <CardSideBySide roles={p.roles} card={p.card ?? null} membershipAligned={!!p.membership?.aligned} />
             </section>
 
             <section aria-labelledby="op-words">
@@ -267,6 +270,16 @@ export default function OpenProposal() {
                 waiting={p.status === "confirmed"}
                 onAnswered={() => void load()}
                 answer={answerConsent}
+              />
+            )}
+
+            {p.status === "confirmed" && (
+              <ReviewPanel
+                applicationRef={p.id}
+                onChanged={() => void load()}
+                moonEnded={!!p.term && new Date().toISOString().slice(0, 10) > p.term.endsOn}
+                mayAdopt={p.you.mayAdopt}
+                nobodyAtTheDoor={p.door.because !== DOOR.aRoleHolds}
               />
             )}
 

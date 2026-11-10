@@ -61,6 +61,15 @@
  */
 import { countWords } from "./governingPurpose";
 
+/**
+ * THE BALLOT SUBJECT THAT CHANGES THE CLOSING WORDS ONCE THE GAME HAS STARTED
+ * (sweep decision D6, Rye 2026-11-06). Before the Birthing the exit policy's
+ * writers adopt the words; after it a change is a structural ballot, priced in
+ * shared/ballotSubjects.ts. Spelled here, the section's home, so the route, the
+ * closer and the price read one constant. 14 characters, inside subject_type.
+ */
+export const CLOSING_POLICY = "closing_policy";
+
 /** Every closing policy this platform names, in the order an editor lists them. */
 export const CLOSING_POLICY_IDS = ["proportional-closing-balance", "own-words"] as const;
 

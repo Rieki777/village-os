@@ -15,6 +15,7 @@ import { Link } from "wouter";
 import { useLingui } from "@lingui/react/macro";
 import { gameFetch } from "@/lib/gameApi";
 import { readStoredJson, removeStored } from "@/lib/safeStorage";
+import { IKIGAI_KEY, hasIkigai, ikigaiFromStored } from "@shared/roleDiscover";
 import { ROLE_DRAFT_KEY, applyHrefFor, draftFromStored } from "@shared/roleDraft";
 import { readsTerms } from "@/components/characters/RolesThatFit";
 
@@ -36,6 +37,11 @@ export default function DraftCarry({
   const [draft, setDraft] = useState(() => {
     const read = readStoredJson("local", ROLE_DRAFT_KEY);
     return draftFromStored(read.status === "value" ? read.value : null);
+  });
+  // R-Ikigai answers kept beside the draft. They are carried the same way: in this browser, until the person clears them.
+  const [ikigai, setIkigai] = useState(() => {
+    const r = readStoredJson("local", IKIGAI_KEY);
+    return ikigaiFromStored(r.status === "value" ? r.value : null);
   });
   const [read, setRead] = useState<Record<string, string>>({});
   /** Whether the chart was read at the terms tier: a member applies through a role application. */
@@ -88,7 +94,8 @@ export default function DraftCarry({
     };
   }, [draft.picks.length]);
   const names = roleNames ?? read;
-  if (!draft.chars.length && !draft.picks.length) return null;
+  const hasAnswers = hasIkigai(ikigai);
+  if (!draft.chars.length && !draft.picks.length && !hasAnswers) return null;
 
   // Only characters in the village's own cast; a stored key it does not know is dropped (red team, 9 Nov).
   const chars = draft.chars.flatMap((k) => {
@@ -125,6 +132,13 @@ export default function DraftCarry({
           </div>
         </div>
       )}
+      {hasAnswers && (
+        <p className="mt-3 text-sm">
+          {ikigai.carry
+            ? t`Your R-Ikigai answers are saved in this browser, and the open form copies them into Why you.`
+            : t`Your R-Ikigai answers are saved in this browser. Nothing has been sent.`}
+        </p>
+      )}
       {adoptedNames && <p className="mt-3 text-sm font-semibold">{t`Adopted, and yours from the start of next season: ${adoptedNames}.`}</p>}
       {appliedNames && <p className="mt-3 text-sm">{t`Already in your application: ${appliedNames}.`}</p>}
       {open.length > 0 && propose && (
@@ -141,7 +155,9 @@ export default function DraftCarry({
         type="button"
         onClick={() => {
           removeStored("local", ROLE_DRAFT_KEY);
+          removeStored("local", IKIGAI_KEY);
           setDraft({ chars: [], picks: [] });
+          setIkigai(ikigaiFromStored(null));
         }}
         className="mt-3 min-h-11 text-sm text-muted-foreground underline underline-offset-2"
       >

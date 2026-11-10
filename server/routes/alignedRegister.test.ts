@@ -292,6 +292,7 @@ describe.skipIf(!configured)("the register, on a real schema", () => {
       { id: "seat_terms", label: "Role terms" },
       // Seat settings PR9 turned the letter on.
       { id: "membership", label: "Membership letter" },
+      { id: "confidentiality", label: "Confidentiality agreement" },
     ]);
     const ids = r.body.rows.map((x: any) => x.textId);
     for (const t of [made.money.textId, made.honorary.textId, made.waiting.textId, "at-00000000000000e2"]) expect(ids).toContain(t);
