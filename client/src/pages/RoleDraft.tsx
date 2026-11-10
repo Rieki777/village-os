@@ -64,6 +64,8 @@ import {
   fitCountFor,
   roleArtFor,
   draftFromStored,
+  draftWithArchetype,
+  archetypeFromSearch,
   openRolesFrom,
   rankForCharacters,
   type DraftRole,
@@ -194,7 +196,9 @@ export default function RoleDraft() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const stored = useMemo(() => {
     const read = readStoredJson("local", ROLE_DRAFT_KEY);
-    return { draft: draftFromStored(read.status === "value" ? read.value : null), blocked: read.status === "unavailable" };
+    // An archetype picked on /roles arrives in the address (?archetype=); it joins what this browser already held.
+    const arrived = typeof window === "undefined" ? null : archetypeFromSearch(window.location.search);
+    return { draft: draftWithArchetype(draftFromStored(read.status === "value" ? read.value : null), arrived), blocked: read.status === "unavailable" };
   }, []);
   const [chars, setChars] = useState<string[]>(stored.draft.chars);
   const [picks, setPicks] = useState<string[]>(stored.draft.picks);

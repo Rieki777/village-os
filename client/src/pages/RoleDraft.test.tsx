@@ -123,6 +123,21 @@ describe("the board, read live", () => {
   });
 });
 
+describe("an archetype picked on /roles", () => {
+  it("arrives already picked, joins what the browser held, and is kept", async () => {
+    localStorage.setItem(ROLE_DRAFT_KEY, JSON.stringify({ chars: ["catalyzing"], picks: [] }));
+    window.history.replaceState(null, "", "/roles/select?archetype=building");
+    serve();
+    render(<RoleDraft />);
+    await screen.findByRole("heading", { level: 3, name: "Gardener" });
+    expect(screen.getByRole("button", { name: /The Builder/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /The Catalyst/ }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /The Spaceholder/ }).getAttribute("aria-pressed")).toBe("false");
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(ROLE_DRAFT_KEY) ?? "{}").chars).toEqual(["catalyzing", "building"]));
+    window.history.replaceState(null, "", "/");
+  });
+});
+
 describe("the draft", () => {
   it("selects up to three in order, keeps them in this browser, and applies with all of them", async () => {
     serve();

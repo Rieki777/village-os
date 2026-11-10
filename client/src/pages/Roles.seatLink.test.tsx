@@ -147,11 +147,15 @@ afterEach(() => {
 });
 
 function renderRoles() {
-  return render(
+  const view = render(
     <Router>
       <Roles />
     </Router>,
   );
+  // The roles sit behind step one (the archetype pick); a linked seat opens them already.
+  const seeAll = screen.queryByRole("button", { name: "See all roles" });
+  if (seeAll) fireEvent.click(seeAll);
+  return view;
 }
 
 const header = async (name: string) => (await screen.findByRole("heading", { level: 3, name })).closest("button")!;

@@ -166,3 +166,20 @@ describe("art", () => {
     expect(roleArtFor({ archetypes: [], raw: { imageUrl: "https://elsewhere.example/x.png" } })).toBeNull();
   });
 });
+
+describe("an archetype carried from /roles", () => {
+  it("reads only a plain key from the address", async () => {
+    const { archetypeFromSearch } = await import("./roleDraft");
+    expect(archetypeFromSearch("?archetype=building")).toBe("building");
+    expect(archetypeFromSearch("?archetype=<script>")).toBeNull();
+    expect(archetypeFromSearch("")).toBeNull();
+  });
+
+  it("adds it to the draft once, keeps the picks, and never doubles it", async () => {
+    const { draftWithArchetype } = await import("./roleDraft");
+    const d = { chars: ["catalyzing"], picks: ["garden"] };
+    expect(draftWithArchetype(d, "building")).toEqual({ chars: ["catalyzing", "building"], picks: ["garden"] });
+    expect(draftWithArchetype(d, "catalyzing")).toBe(d);
+    expect(draftWithArchetype(d, null)).toBe(d);
+  });
+});
