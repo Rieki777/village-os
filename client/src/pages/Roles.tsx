@@ -453,6 +453,8 @@ export default function Roles() {
   // clause in front of the reader.
   const coordinator = coordinatingCircle(circles);
   const orgPending = roles === null && !failed;
+  // A link to one role (?seat=) names that role in the page heading, not the whole page.
+  const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
   const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
     coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
   }`;
@@ -487,7 +489,7 @@ export default function Roles() {
               <Briefcase className="w-8 h-8 text-sage" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Roles and Circles
+              {linkedName ?? "Roles and Circles"}
             </h1>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
