@@ -2759,6 +2759,13 @@ msgstr ""
 msgid "Remove the row \"{subject}\" from the Decision Matrix? Everyone in the village stops seeing it."
 msgstr ""
 
+#. placeholder {0}: d.listed
+#. placeholder {1}: d.unlisted
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing result"
+msgid "{0} listed, {1} unlisted"
+msgstr ""
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reason for a change request"
 msgid "Why"
@@ -3954,6 +3961,11 @@ msgstr "Cuenta de {firstName}"
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Ask for a new key"
+msgstr ""
+
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing: how many roles are ticked"
+msgid "ticked"
 msgstr ""
 
 #: client/src/components/governance/VillageConflictSteps.tsx
@@ -5195,6 +5207,11 @@ msgctxt "sera answers"
 msgid "Edit: start from ours"
 msgstr ""
 
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing panel heading"
+msgid "Listed roles"
+msgstr ""
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook block page, lines for the group's answer"
 msgid "What we say"
@@ -6208,6 +6225,11 @@ msgstr ""
 msgid "A note for whoever decides (optional)"
 msgstr ""
 
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing: a role in a circle"
+msgid "in"
+msgstr ""
+
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
 msgid "Added {n} to the draft. They go live when the draft is published."
@@ -6644,6 +6666,10 @@ msgstr ""
 
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Ask to share it"
+msgstr ""
+
+#: client/src/components/admin/RoleListingPanel.tsx
+msgid "The earlier listing is back"
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx

@@ -98,7 +98,7 @@ export function rankForLines(
   const open: LineFit[] = [];
   const order = new Map<string, number>();
   roles.forEach((r, i) => {
-    if (!r || r.isExample) return;
+    if (!r || r.isExample || r.listed === false) return;
     const id = String(r.id ?? "");
     if (!id) return;
     order.set(id, (r.recruiting ? 0 : 1000) + i);
