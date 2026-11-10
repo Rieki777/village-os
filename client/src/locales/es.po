@@ -2878,6 +2878,10 @@ msgstr ""
 msgid "{agent} suggests {nChanges} for the chart"
 msgstr ""
 
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators."
+msgstr ""
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "label of the appeal box on the consequences ladder"
 msgid "How someone appeals"
@@ -7653,6 +7657,10 @@ msgstr ""
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "consent queue empty"
 msgid "Nothing waiting."
+msgstr ""
+
+#: client/src/pages/RoleMeasures.tsx
+msgid "This page is for administrators. Sign in with an administrator account to see it."
 msgstr ""
 
 #: client/src/pages/ChangeRequests.tsx
