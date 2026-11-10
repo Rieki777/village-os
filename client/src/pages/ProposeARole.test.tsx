@@ -31,6 +31,9 @@ const FORM = {
   ],
 };
 
+/** The membership letter the form shows and aligns with (Rye's answer 8). */
+const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend, welcome home.", intent: "I align with the Membership agreement.", parts: {} };
+
 let posted: any[] = [];
 
 function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: OPEN_WORDS.sent("rowan@example.test") } }) {
@@ -42,6 +45,8 @@ function serve(form: unknown, answer: { status: number; body: unknown } = { stat
         posted.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "content-type": "application/json" } });
       }
+      if (String(url).startsWith("/api/membership-letter")) return new Response(JSON.stringify(LETTER), { status: 200, headers: { "content-type": "application/json" } });
+      if (String(url).startsWith("/api/profile/alignments")) return new Response(JSON.stringify({ alignments: [] }), { status: 200, headers: { "content-type": "application/json" } });
       return new Response(JSON.stringify(form), { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -77,9 +82,10 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
-    // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    // The two agreements are required (Rye, 9 Nov). The membership letter is aligned with HERE, by
+    // the version the form drew (Rye's answer 8); the confidentiality agreement once approved.
+    fireEvent.click(await screen.findByLabelText(LETTER.intent));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
@@ -95,8 +101,45 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { nda: true } },
+      membership: { letterVersion: LETTER.version },
     });
+    // No payment anywhere on the path: nothing posted names money.
+    expect(JSON.stringify(posted[0].body)).not.toMatch(/contribution|amount|payment|dues/i);
+  });
+
+  it("membership at application: the letter is there to read, aligning sends its version, and a signed-in member already aligned is asked nothing", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    const ask = await waitFor(() => {
+      const el = document.querySelector('[data-membership="ask"]');
+      if (!el) throw new Error("no membership block yet");
+      return el as HTMLElement;
+    });
+    expect(within(ask).getByText(/Read the Membership agreement/)).toBeTruthy();
+    expect(within(ask).getByText(/Aligning is the village's way of signing\./)).toBeTruthy();
+    expect(within(ask).getByText(/No payment is asked/)).toBeTruthy();
+    // Control: there is no Love Letter tick on the form at all; the alignment is the agreement.
+    expect(screen.queryByLabelText(/Love Letter/)).toBeNull();
+    // The one checkbox about the letter is the alignment itself, bound to the letter's own sentence.
+    const aboutLetter = screen.getAllByRole("checkbox").filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
+    expect(aboutLetter.map((c) => c.closest("label")?.textContent)).toEqual([LETTER.intent]);
+    cleanup();
+
+    auth.user = { name: "Gil Moss", email: "gil@example.test" };
+    posted = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+        if (String(url).startsWith("/api/membership-letter")) return json(LETTER);
+        if (String(url).startsWith("/api/profile/alignments")) return json({ alignments: [{ kind: "membership", state: "in-force" }] });
+        return json(FORM);
+      }),
+    );
+    render(<ProposeARole />);
+    expect(await screen.findByText(/already aligned with the village's membership letter/)).toBeTruthy();
+    expect(screen.queryByLabelText(LETTER.intent)).toBeNull();
   });
 
   it("a refusal says why and marks its field, and nothing is lost", async () => {
@@ -246,15 +289,15 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    fireEvent.click(await screen.findByLabelText(LETTER.intent));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card).toEqual({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: "g-investor", how: "One set of numbers" }],
       hours: "",
-      agreed: { loveLetter: true, nda: true },
+      agreed: { nda: true },
     });
   });
 });

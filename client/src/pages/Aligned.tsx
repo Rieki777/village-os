@@ -25,6 +25,7 @@ import { SignInDoors } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import RegisterEntry from "@/components/alignment/RegisterEntry";
+import ConfidentialityCard from "@/components/alignment/ConfidentialityCard";
 import { fetchRegister } from "@/components/alignment/alignmentsApi";
 import { ALIGNED_WORDS, type RegisterRow } from "@shared/alignedRegister";
 
@@ -115,6 +116,8 @@ export default function Aligned() {
       </section>
 
       <div className="container max-w-5xl px-4 py-8">
+        {/* The confidentiality agreement, for anybody signed in: a newcomer aligns here before their role starts (L7). */}
+        {user && <ConfidentialityCard />}
         {!user || phase === "members" ? (
           <div className="rounded-xl border border-border bg-card p-8 text-center text-card-foreground">
             <h2 className="font-display text-2xl font-bold text-foreground">{ALIGNED_WORDS.membersOnly}</h2>

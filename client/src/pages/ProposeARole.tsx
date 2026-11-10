@@ -19,6 +19,7 @@
  * address after 90 days (docs/ARCHITECTURE.md, 3.9).
  */
 import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
+import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -125,7 +126,10 @@ export default function ProposeARole() {
   const [cards, setCards] = useState<Record<string, RoleCardState>>({});
   const [serves, setServes] = useState<Record<string, string>>({});
   const [hours, setHours] = useState("");
-  const [agreed, setAgreed] = useState({ loveLetter: false, nda: false });
+  const [agreed, setAgreed] = useState({ nda: false });
+  /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
+  const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
+  const [letterRead, setLetterRead] = useState(0);
   /** How many of the roles the link named the village no longer offers. */
   const [unoffered, setUnoffered] = useState(0);
   const me = useOptionalAuth()?.user ?? null;
@@ -207,11 +211,16 @@ export default function ProposeARole() {
             }),
             serves: Object.entries(serves).map(([goalId, how]) => ({ goalId, how })),
             hours,
+            // The NDA promise only: the membership letter is aligned with below, never ticked.
             agreed,
           },
+          // The letter version the applicant aligned with here; recorded once the address confirms.
+          ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
+      // The letter changed while they read it: show it again, untick, and say so.
+      if (!res.ok && data?.field === "membership") setLetterRead((n) => n + 1);
       if (!res.ok) return setError({ field: typeof data?.field === "string" ? data.field : null, message: typeof data?.error === "string" ? data.error : OPEN_WORDS.notSent });
       setSent(typeof data?.message === "string" ? data.message : OPEN_WORDS.sent(email.trim()));
     } catch {
@@ -355,7 +364,10 @@ export default function ProposeARole() {
             </label>
             <input id="propose-aim" maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
           </div>
-          <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed} onAgreed={setAgreed} />
+          <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed}
+            onAgreed={setAgreed}
+            membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
+          />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">
               {OPEN_WORDS.nameLabel}

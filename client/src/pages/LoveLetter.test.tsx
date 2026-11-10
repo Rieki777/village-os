@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { letterParts, letterSourceFrom, renderMembershipLetter } from "@shared/membershipLetter";
+import { ALIGN_WORDS } from "@shared/alignments";
 
 let signedIn: { id: string; name: string; email: string; handle?: string } | null = null;
 
@@ -112,7 +113,7 @@ describe("a member aligns from their account", () => {
     render(<LoveLetter />);
     expect(await screen.findByText(FIRST.parts.opening)).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Align with the Love Letter" })).toBeTruthy();
-    expect(screen.getByText("Aligning as Tamsin Reedwarbler, from your account. No typed name.")).toBeTruthy();
+    expect(screen.getByText("Aligning as Tamsin Reedwarbler, from your account. No typed name. Aligning is the village's way of signing.")).toBeTruthy();
     // The village's own word for a member (Admin, Make This Yours), with its article.
     expect(
       screen.getByText("Read the letter above, add a few words about yourself, and align from your account to join Fernhollow as an Elderling."),
@@ -150,12 +151,14 @@ describe("a member aligns from their account", () => {
     expect(posts[1].data.letterVersion).toBe(NEWER.version);
   });
 
-  it("the form's own words align; only the letter's own sentence says sign", async () => {
+  it("the form's own words align; only the letter's own sentence says sign, and the one line D11 asks for", async () => {
     render(<LoveLetter />);
     await screen.findByText(FIRST.parts.opening);
     const form = screen.getByRole("button", { name: "Align and join Fernhollow" }).closest("form")!;
     const words = (form.textContent ?? "").replace(/\s+/g, " ");
-    expect(words).not.toMatch(/\bsign/i);
+    // D11 (Rye, 9 Nov 2026): one line says what aligning is. It is the only "sign" the form's own words carry.
+    expect(words).toContain(ALIGN_WORDS.waysOfSigning);
+    expect(words.split(ALIGN_WORDS.waysOfSigning).join(" ")).not.toMatch(/\bsign/i);
   });
 });
 
