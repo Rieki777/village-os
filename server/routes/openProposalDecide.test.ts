@@ -27,6 +27,8 @@
  *   - DECLINING sets decided_at, so the tidy job finds it, and sends a kind no.
  *   - The task board: an asked holder's consent row, a decider's adopt row.
  */
+import { moonTermFor } from "../../shared/openProposalTerm";
+import { activeClock } from "../lib/gratitude-cycles";
 import http from "node:http";
 import express from "express";
 import type mysql from "mysql2/promise";
@@ -321,7 +323,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(r.status).toBe(200);
       const p = r.body.proposal;
       expect(p).toMatchObject({ id, status: "confirmed", proposer: "Rowan", why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
-      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living." }]);
+      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living.", accountabilities: [], timeCommitment: null }]);
       expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2037-01-01" });
       // Ana, Ben and u-has hold roles in the Land Circle; u-has is asked here, since this address is not its own.
       expect(p.consent).toMatchObject({ state: "open", asked: 3, consented: 0, objected: 0 });
@@ -363,6 +365,15 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(mine.status).toBe(403);
       expect(mine.body.message).toBe(DECIDE_WORDS.ownProposal);
       expect((await page(own.id, FOUNDER.id)).body.proposal.you).toMatchObject({ mayAdopt: false, own: true });
+
+      // The same person behind a +tag or a changed case is still the applicant: never their own approver.
+      for (const alias of ["founder+roles@example.test", "Founder+x@Example.TEST"]) {
+        const disguised = await confirmed(alias);
+        const tried = await call("POST", `/api/governance/open-proposals/${disguised.id}/adopt`, {}, FOUNDER.id);
+        expect(tried.status, alias).toBe(403);
+        expect(tried.body.message).toBe(DECIDE_WORDS.ownProposal);
+        expect((await readOpenProposal(pool, disguised.id))?.status).toBe("confirmed");
+      }
     });
 
     it("a former member's address is refused: nothing is granted, seated or invited, and declining it still works", async () => {
@@ -476,7 +487,10 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email: "arrives@example.test", passwordHash: "x", paths: [] } as any);
       await door.welcome(inviter as string, newcomer);
 
-      expect((await usersRepo(pool).byId(newcomer))?.stageGranted).toBe("member");
+      // Rye's ruling: Voice is only for people who signed the membership agreement. Adoption admits nobody;
+      // the signed Love Letter does (server/lib/admission.ts).
+      expect((await usersRepo(pool).byId(newcomer))?.stageGranted ?? null).not.toBe("member");
+      expect((await usersRepo(pool).byId(newcomer))?.membershipGranted ?? false).toBeFalsy();
       const apps = await q("SELECT id, status, seat_ids, term_season_id, adopted_via, adopted_ref, authority_ref, UNIX_TIMESTAMP(starts_at) AS starts_s FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
       expect(apps).toHaveLength(1);
       expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-next", adopted_via: "holder", adopted_ref: FOUNDER.id, authority_ref: `org.seat@${founderRole}` });
@@ -584,27 +598,85 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   });
 
   describe("adopting, for an address with an account", () => {
-    it("raises it to the Member stage and gives it the roles for the target season, with no invitation", async () => {
+    it("gives it the roles for the target season, with no invitation, and admits nobody before the Love Letter", async () => {
       const { id } = await confirmed(HAS.email, [well]);
       const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       expect(r.body).toMatchObject({ success: true, status: "adopted", account: true, invitation: null });
       expect(r.body.message).toBe(`${DECIDE_WORDS.adoptedAccount} ${DECIDE_WORDS.accountTold}`);
       expect(await q("SELECT id FROM member_invites WHERE id = ?", [openInviteId(id)])).toEqual([]);
-      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted).toBe("member");
-      expect(state.stageEvents).toEqual([expect.objectContaining({ userId: HAS.id, to: "member" })]);
+      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted ?? null).not.toBe("member");
+      expect(state.stageEvents).toEqual([]);
       const apps = await q("SELECT status, seat_ids, term_season_id, adopted_ref FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
       expect(apps).toEqual([expect.objectContaining({ status: "adopted", term_season_id: "s-next", adopted_ref: FOUNDER.id })]);
       expect(idsOf(apps[0].seat_ids)).toEqual([well]);
       const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
       expect(mail?.text).toContain(`${ORIGIN}/profile`);
       expect(mail?.text).not.toContain("invite");
+      // The letter says what comes before seating and voting.
+      expect(mail?.text).toContain(`${ORIGIN}/love-letter`);
     });
 
     it("never lowers a stage granted above Member", async () => {
       const { id } = await confirmed(HIGH.email, [gate]);
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
       expect((await usersRepo(pool).byId(HIGH.id))?.stageGranted).toBe("co-creator");
+    });
+  });
+
+  describe("a proposal for this moon (Rye, 9 Nov 2026)", () => {
+    it("is adopted into this season, starting now, with its term ending on the moon's last day", async () => {
+      state.viewer = FOUNDER.id;
+      expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" }, FOUNDER.id)).status).toBe(200);
+      try {
+        const moon = moonTermFor(new Date(), activeClock(), "UTC");
+        const MOONER = { id: "u-mooner", email: "mooner@example.test" };
+        await usersRepo(pool).add({ id: MOONER.id, name: "Mo Oner", email: MOONER.email, passwordHash: "x", paths: [] } as any);
+        const { id } = await confirmed(MOONER.email, [gate]);
+        const before = Date.now();
+        const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        const apps = await q("SELECT status, term_season_id, UNIX_TIMESTAMP(starts_at) AS starts_s, DATE_FORMAT(term_ends_at, '%Y-%m-%d') AS ends_on FROM seat_applications WHERE candidate_user_id = ? ORDER BY created_at DESC", [MOONER.id]);
+        expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-now" });
+        // Starts at adoption (never before the moon's first day), not on next season's first day.
+        expect(Number(apps[0].starts_s) * 1000).toBeGreaterThanOrEqual(Math.floor(before / 1000) * 1000 - 1000);
+        expect(Number(apps[0].starts_s) * 1000).toBeLessThan(Date.now() + 60_000);
+        expect(apps[0].ends_on).toBe(moon.endsOn);
+        const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
+        expect(mail?.text).toContain("this moon");
+        expect(mail?.text).not.toContain("next season");
+      } finally {
+        await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
+      }
+    });
+  });
+
+  describe("the applicant's own card (Rye, 9 Nov 2026)", () => {
+    it("is on the page for the decider, and becomes the role application's own words on adoption", async () => {
+      const CARDED = { id: "u-carded", email: "carded@example.test" };
+      await usersRepo(pool).add({ id: CARDED.id, name: "Cara Ded", email: CARDED.email, passwordHash: "x", paths: [] } as any);
+      const before = state.sent.length;
+      const r = await call("POST", "/api/open-proposals", {
+        name: "Cara Ded",
+        email: CARDED.email,
+        roles: [{ roleId: well, note: "" }],
+        why: "I know wells.",
+        aim: "Clean water all season.",
+        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true } },
+      }, null);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const mail = state.sent[before];
+      const ok = await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null);
+      expect(ok.status).toBe(200);
+      const id = mail.idempotencyKey.split(":")[1];
+      const seen = await page(id, FOUNDER.id);
+      expect(seen.body.proposal.card.roles[0].firstMoon[0]).toEqual({ quest: "Test the water", doneWhen: "the lab says it is clean" });
+      expect(Array.isArray(seen.body.proposal.roles[0].accountabilities)).toBe(true);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
+      expect(String(apps[0].deliverables)).toContain("Clean water all season.");
+      expect(String(apps[0].deliverables)).toContain("First moon: Test the water: done when the lab says it is clean");
+      expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
     });
   });
 

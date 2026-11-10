@@ -77,6 +77,9 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
+    // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
+    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
@@ -92,6 +95,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
     });
   });
 
@@ -173,5 +177,84 @@ describe("the confirmation link", () => {
     render(<ConfirmProposal />);
     expect(await screen.findByText(OPEN_WORDS.confirmGone)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Propose again" }).getAttribute("href")).toBe("/propose-a-role");
+  });
+});
+
+/*
+ * A DRAFT OF SEVERAL ROLES (role draft board, 9 Nov). The board sends every
+ * drafted role as its own `role` parameter. Each one the village still offers
+ * arrives ticked, up to the three a proposal may name; one it no longer
+ * offers is said out loud rather than dropped in silence.
+ */
+describe("arriving with several roles", () => {
+  const ticked = (id: string) => (within(document.querySelector(`[data-role="${id}"]`) as HTMLElement).getByRole("checkbox") as HTMLInputElement).checked;
+
+  it("ticks every drafted role the village offers", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-host");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-gate")).toBe(true));
+    expect(ticked("r-host")).toBe(true);
+    expect(ticked("r-well")).toBe(false);
+  });
+
+  it("says when a drafted role is no longer offered, and ticks the rest", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gone&role=r-cook");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-cook")).toBe(true));
+    expect(screen.getByText(/1 role you picked is not open any more/)).toBeTruthy();
+  });
+
+  it("ticks no more than three", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-gate&role=r-well&role=r-host&role=r-cook");
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByRole("heading", { name: OPEN_WORDS.heading("Test Village") });
+    await waitFor(() => expect(ticked("r-gate")).toBe(true));
+    expect([ticked("r-well"), ticked("r-host"), ticked("r-cook")]).toEqual([true, true, false]);
+  });
+});
+
+describe("a village whose proposals are for this moon (Rye, 9 Nov 2026)", () => {
+  it("names the moon's days instead of next season", async () => {
+    serve({ ...FORM, season: { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-08" } });
+    render(<ProposeARole />);
+    expect(await screen.findByText(OPEN_WORDS.ledeMoon("9 November 2026", "8 December 2026"))).toBeTruthy();
+  });
+});
+
+describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () => {
+  it("asks for the role's outcomes with targets, first-moon quests, the season's goals and the agreements, and sends them as the card", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
+    serve({
+      ...FORM,
+      goals: [{ id: "g-investor", text: "Investor ready" }],
+      roles: [{ id: "r-lfs", name: "Lead Financial Steward", circle: "Anchor Circle", aim: "Money kept true.", timeCommitment: "30 hours a week", accountabilities: ["One living model", "A cash view every Monday"] }],
+    });
+    render(<ProposeARole />);
+    await screen.findByText("What this role asks");
+    expect(screen.getByText("Time: roughly 30 hours a week")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("A cash view every Monday"));
+    fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
+    fireEvent.change(screen.getByLabelText("Quest 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
+    fireEvent.change(screen.getByLabelText("Done when, for quest 1 for Lead Financial Steward"), { target: { value: "every circle lead has it" } });
+    fireEvent.click(screen.getByLabelText("Investor ready"));
+    fireEvent.change(screen.getByLabelText("How your work serves: Investor ready"), { target: { value: "One set of numbers" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
+    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(posted[0].body.card).toEqual({
+      roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
+      serves: [{ goalId: "g-investor", how: "One set of numbers" }],
+      hours: "",
+      agreed: { loveLetter: true, nda: true },
+    });
   });
 });

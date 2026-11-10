@@ -42,6 +42,7 @@
  *
  * No `recordEvent` and no `addActivity`: the rows are the record.
  */
+import { cardSummary } from "../../shared/openProposalCard";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { civilDateKey } from "../../shared/lunar";
@@ -63,7 +64,6 @@ import { isTombstone } from "./oauthAccounts";
 import { listOrgRoles, type LapseContext } from "./orgChart";
 import { adoptApplication, settleDepsOf, tellOutcome } from "./seatApplicationCloser";
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
-import { grantStage } from "./stageGrant";
 import { inTransaction } from "../repos/liveSessions";
 import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
@@ -220,6 +220,20 @@ export type Placed =
  * the season's first day. An application already waiting for one of the roles
  * is answered `pending`, with its id, and nothing is written.
  */
+/**
+ * What the role application says the person will deliver: their aim, then
+ * their own role card (shared/openProposalCard.ts) in plain words, within the
+ * application's 2000 characters.
+ */
+function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ id: string; name?: string }>): string {
+  const aim = String(body.aim ?? "").trim();
+  if (!body.card) return aim;
+  const name = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
+  const goal = (id: string) => body.card?.serves.find((s) => s.goalId === id)?.goal || id;
+  const text = [aim, cardSummary(body.card, name, goal)].filter(Boolean).join("\n\n");
+  return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
+}
+
 export async function placeOnRoles(
   deps: DecideDeps,
   p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string },
@@ -229,12 +243,25 @@ export async function placeOnRoles(
   const tz = calendar.timezone || "UTC";
   const now = deps.now();
   const season = calendar.seasons.find((s) => s.id === p.proposal.targetSeasonId);
-  const startsAt = season ? civilDateInstant(season.startsOn, tz) : null;
+  const term = p.proposal.body.term;
+  // A season proposal starts on the season's first day. A moon proposal starts
+  // at adoption, never before the moon's first day, and ends on its last day
+  // (shared/openProposalTerm.ts, Rye 9 Nov 2026).
+  const moonStart = term ? civilDateInstant(term.startsOn, tz) : null;
+  const startsAt = term ? (moonStart && moonStart.getTime() > now.getTime() ? moonStart : now) : season ? civilDateInstant(season.startsOn, tz) : null;
   if (!season || !startsAt) return { ok: false, code: "cannot", error: "The season this proposal was for is no longer on the village's calendar, so nothing was changed." };
+  if (term && civilDateKey(now, tz) > term.endsOn) {
+    return { ok: false, code: "cannot", error: "The moon this proposal was for has ended, so nothing was changed. Ask them to propose again for this moon." };
+  }
   const seatIds = p.proposal.body.roles.map((r) => r.roleId);
-  const parsed = parseApplicationInput({ seatIds, note: p.proposal.body.why || null, deliverables: p.proposal.body.aim || null });
-  if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   const seats = await seatsForUpdate(pool, seatIds);
+  const parsed = parseApplicationInput({
+    seatIds,
+    note: p.proposal.body.why || null,
+    deliverables: deliverablesOf(p.proposal.body, seats) || null,
+    ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
+  });
+  if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   for (const id of seatIds) {
     const seat = seats.find((s) => s.id === id);
     if (!seat || !seat.active || seat.isExample) {
@@ -269,7 +296,11 @@ export async function placeOnRoles(
   );
   if (app) await tellOutcome(deps, app, outcome, "open", p.adopterId);
   if (textId) await settleText(settleDepsOf(deps, deps.now), textId);
-  await grantStage(deps, p.account, "member", "a role proposal was adopted", { raiseOnly: true });
+  // NO STAGE GRANT HERE (Rye's ruling: Voice is only for people who signed the
+  // membership agreement). A stage grant at Member is an admission
+  // (server/lib/admission.ts), and it opened ballots to somebody who had signed
+  // nothing. The seat is placed; Member comes when their signed Love Letter is
+  // accepted, which the adoption letter asks for.
   return { ok: true, applicationId: id, outcome: outcome.kind };
 }
 

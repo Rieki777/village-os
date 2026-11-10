@@ -55,7 +55,6 @@
   "client/src/components/YourAgentPanel.tsx": 56,
   "client/src/components/admin/AdminFeel.tsx": 9,
   "client/src/components/admin/AdminGate.tsx": 10,
-  "client/src/components/admin/AdminHeader.tsx": 6,
   "client/src/components/admin/AdminHelp.tsx": 3,
   "client/src/components/admin/AdminMobileNav.tsx": 5,
   "client/src/components/admin/AdminQueueState.tsx": 1,

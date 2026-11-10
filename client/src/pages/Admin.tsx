@@ -38,6 +38,7 @@ import { holdCancelled, swipeIntent } from "@/lib/gestures";
 import { Link, Redirect } from "wouter";
 import { legacyModulesTabTarget } from "@shared/moduleSetupLink";
 import AdminHeader from "@/components/admin/AdminHeader";
+import AdminHelperHost from "@/components/admin/AdminHelperHost";
 import { adminRootClass, readAdminNight, writeAdminNight } from "@/components/admin/adminNight";
 import { AdminSeraChip, SeraAdminHome } from "@/components/admin/AdminSeraLink";
 import { tabFromSearch } from "@/components/admin/adminAreas";
@@ -51,7 +52,7 @@ import { TourCard } from "@/components/admin/AdminFeel";
 const HomeBase = lazy(() => import("@/components/admin/HomeBase"));
 const PricingDeskTab = lazy(() => import("@/components/admin/PricingDeskTab"));
 import { TIER_PILL } from "@shared/moduleCatalog";
-import { filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
+import { adminNavRailClass, filterNavByModules, TAB_MODULE, type TabBadge } from "@/lib/adminNav";
 import { AdminGoLive } from "@/components/modules/GoLiveCard";
 import type { ModuleLifecycle } from "@shared/modules";
 import type { UploadsSweepReport } from "@shared/uploadsSweep";
@@ -619,8 +620,7 @@ function AdminNav({
       <nav
         onTouchStart={swipeStart}
         onTouchEnd={swipeEnd}
-        className={`${open ? "fixed z-40 top-0 bottom-0 left-0 w-64 shadow-2xl lg:static lg:shadow-none lg:w-56" : "w-14"} ` +
-          "max-lg:hidden min-h-[calc(100vh-60px)] bg-white border-r border-gray-200 py-3 flex-shrink-0 overflow-y-auto transition-[width] duration-150"}
+        className={adminNavRailClass(open)}
       >
         <button
           onClick={() => {
@@ -7865,6 +7865,8 @@ export default function Admin() {
   // collapsed — 224px of menu on a 390px screen left the settings themselves
   // in a column too narrow to read — and anything laptop-sized starts open,
   // where there is room for both. A stored choice beats both defaults.
+  // The Admin helper panel (AdminHelperHost): the header menu and Ctrl+/ open it.
+  const [helperOpen, setHelperOpen] = useState(false);
   const [navOpen, setNavOpen] = useState<boolean>(() => {
     const saved = storedText("local", "admin.navOpen");
     if (saved !== null) return saved === "1";
@@ -7904,11 +7906,22 @@ export default function Admin() {
       <AdminHeader
         villageName={villageName}
         siteUrl={siteUrl}
+        tab={activeTab}
+        userName={user?.name ?? ""}
         night={night}
         onNight={setNight}
         onSignOut={() => setPassword(null)}
         extra={<AdminSeraChip password={password} />}
         defaultLocale={cfg?.defaultLocale ?? null}
+        onHelper={() => setHelperOpen(true)}
+      />
+      <AdminHelperHost
+        open={helperOpen}
+        setOpen={setHelperOpen}
+        password={password}
+        groups={shownGroups}
+        tab={activeTab}
+        onOpenTab={setActiveTab}
       />
 
       <div className="flex w-full">

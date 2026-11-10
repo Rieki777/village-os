@@ -69,9 +69,12 @@ import {
   orgRoleHistory,
   seatHolder,
   statusOverrideProblem,
+  characterTagsFrom,
   unclaimedSeatingsFor,
   updateOrgRole,
 } from "../lib/orgChart";
+import { listArchetypeRows } from "../repos/archetypes";
+import { villageId } from "../lib/economy";
 import {
   addChange,
   createDraft,
@@ -93,6 +96,7 @@ import { submissionStatusNotice } from "../lib/submissionNotices";
 import { isTombstone } from "../lib/oauthAccounts";
 import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
+import { expectedChangesOf } from "./orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
@@ -388,7 +392,7 @@ export function register(app: Express, deps: Deps): void {
     if (await openDraftBallot(getPool(), req.params.id)) return res.status(409).json({ error: BALLOT_OPEN_REFUSAL });
     if ((await launchedByVote(getPool())) && !(await holderMayPublish(req, res, { authedUser, guardCapability, capabilityCtx, liveHoldersOf }))) return;
     const actor = await authedUser(req);
-    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null);
+    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null, expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });
@@ -932,6 +936,13 @@ export function register(app: Express, deps: Deps): void {
     // column lets a village declare.
     const badState = statusOverrideProblem(req.body?.statusOverride);
     if (badState) return res.status(400).json({ error: badState });
+    // Which characters the role suits: only the village's own cast (role draft board, 9 Nov).
+    if (req.body?.archetypes !== undefined) {
+      const cast = (await listArchetypeRows(getPool(), villageId())).map((a) => a.key);
+      const tags = characterTagsFrom(req.body.archetypes, cast);
+      if (!tags.ok) return res.status(400).json({ error: tags.error, field: "archetypes" });
+      req.body.archetypes = tags.tags;
+    }
     // Described BEFORE the write, while the old values still exist. The
     // generic admin audit records "PUT /api/admin/org/roles/x", which cannot
     // answer "what has already been tried with this seat".

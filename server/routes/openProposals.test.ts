@@ -25,7 +25,7 @@ import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
-import { OPEN_WORDS } from "../../shared/openProposals";
+import { OPEN_GLOBAL_HOURLY, OPEN_WORDS } from "../../shared/openProposals";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { escapeHtml } from "../lib/comms/mailer";
 import { createOrgRole } from "../lib/orgChart";
@@ -39,7 +39,7 @@ if (!configured) console.warn("[openProposals] TEST_DATABASE_URL not set - DB ca
 const ORIGIN = "https://village.example.test";
 const ADMIN = { id: "u-admin", name: "Ada Stone" };
 const MEMBER = { id: "u-member", name: "Ivo Lantern" };
-const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01", endsOn: "2099-03-20" };
+const NEXT = { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01", endsOn: "2099-03-20", goals: [{ id: "g-roots", text: "Roots in the ground", done: false }, { id: "g-done", text: "Already done", done: true }] };
 const NOW_SEASON = { id: "s-now", name: "Season of Seeds", startsOn: "2000-01-01", endsOn: "2098-12-31" };
 
 describe.skipIf(!configured)("open role proposals, the intake, on a real schema", () => {
@@ -193,7 +193,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const r = await call("GET", "/api/open-proposals/form");
       expect(r.body).toMatchObject({ open: true, village: "Test Village", season: { id: "s-next", name: "Season of Roots", startsOn: "2099-01-01" } });
       expect(r.body.roles.map((x: any) => x.id).sort()).toEqual([gate, well].sort());
-      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn." });
+      expect(r.body.roles.find((x: any) => x.id === gate)).toEqual({ id: gate, name: "Gate Keeper", circle: "Land Circle", aim: "Open the gate at dawn.", accountabilities: [], whyItMatters: null, timeCommitment: null });
       expect(JSON.stringify(r.body)).not.toContain(example);
       expect(JSON.stringify(r.body)).not.toContain(dormant);
     });
@@ -329,6 +329,44 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(state.sent.filter((m) => m.to.email.toLowerCase() === "target@example.test")).toHaveLength(3);
     });
 
+    it("ATTACK: plus-addressing does not reset the cap on an address (red team, 9 Nov)", async () => {
+      state.counting = true;
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: `victim+${i}@example.test` }), `192.0.2.${120 + i}`)).status);
+      expect(statuses).toEqual([200, 200, 200, 429, 429, 429]);
+    });
+
+    it("ATTACK: one IPv6 /64 is one connection for the cap", async () => {
+      state.counting = true;
+      const statuses: number[] = [];
+      for (let i = 0; i < 7; i += 1) statuses.push((await call("POST", "/api/open-proposals", proposal({ email: `six${i}@example.test` }), `2001:db8:abcd:12::${(i + 1).toString(16)}`)).status);
+      expect(statuses.filter((x) => x === 200)).toHaveLength(5);
+      // Another /64 is another connection.
+      expect((await call("POST", "/api/open-proposals", proposal({ email: "other64@example.test" }), "2001:db8:abcd:13::1")).status).toBe(200);
+    });
+
+    it("ATTACK: an overall hourly cap on confirmation email, whatever the connections and addresses", async () => {
+      state.counting = true;
+      let ok = 0;
+      let refused = 0;
+      for (let i = 0; i < OPEN_GLOBAL_HOURLY + 3; i += 1) {
+        const r = await call("POST", "/api/open-proposals", proposal({ email: `crowd${i}@example.test` }), `198.18.${Math.floor(i / 200)}.${(i % 200) + 1}`);
+        if (r.status === 200) ok += 1;
+        else if (r.status === 429) refused += 1;
+      }
+      expect(ok).toBe(OPEN_GLOBAL_HOURLY);
+      expect(refused).toBe(3);
+      expect(state.sent).toHaveLength(OPEN_GLOBAL_HOURLY);
+    });
+
+    it("ATTACK: the sender cannot choose the greeting's words, only a name", async () => {
+      const { mail } = await send({ name: "evil.example/login Smith" });
+      expect(mail.text.startsWith("Hi,\n")).toBe(true);
+      expect(mail.text).not.toContain("evil.example");
+      const { mail: plain } = await send({ name: "Rowan Field", email: "plain@example.test" });
+      expect(plain.text.startsWith("Hi Rowan,")).toBe(true);
+    });
+
     it.each([
       ["no name", { name: "  " }, "name", OPEN_WORDS.needName],
       ["no address", { email: "" }, "email", OPEN_WORDS.needEmail],
@@ -349,6 +387,15 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
   });
 
   describe("the tidy job (sheet 19i)", () => {
+    it("closes a confirmed proposal nobody decided within 90 days, and takes its name and address off (red team, 9 Nov)", async () => {
+      const { id, token } = await send({ email: "waiting@example.test" });
+      expect((await call("POST", "/api/open-proposals/confirm", { token })).status).toBe(200);
+      await q("UPDATE open_role_proposals SET confirmed_at = ? WHERE id = ?", [new Date(Date.now() - 91 * 24 * 60 * 60_000), id]);
+      await tidyOpenProposals(pool, new Date());
+      const row = await readOpenProposal(pool, id);
+      expect(row).toMatchObject({ status: "withdrawn", name: null, email: null });
+    });
+
     it("deletes what was never confirmed after 48 hours, and takes the name and address off what was declined or withdrawn after 90 days", async () => {
       const fresh = await send({ email: "fresh@example.test" });
       const old = await send({ email: "old@example.test" });
@@ -362,7 +409,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       await q("UPDATE open_role_proposals SET status = 'withdrawn', decided_at = ? WHERE id = ?", [new Date(Date.now() - 10 * 24 * 60 * 60_000), recent.id]);
 
       const said = await tidyOpenProposals(pool, new Date());
-      expect(said).toMatch(/^\d+ unconfirmed deleted, \d+ anonymised$/);
+      expect(said).toMatch(/^\d+ unconfirmed deleted, \d+ undecided closed, \d+ anonymised$/);
       expect(await readOpenProposal(pool, old.id)).toBeNull();
       expect((await readOpenProposal(pool, fresh.id))?.status).toBe("unconfirmed");
       // Confirmed is never deleted, however old.
@@ -372,6 +419,54 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       // A second run finds nothing more to do.
       await tidyOpenProposals(pool, new Date());
       expect(await readOpenProposal(pool, declined.id)).toMatchObject({ name: null, email: null });
+    });
+  });
+
+  describe("the applicant's own card (Rye, 9 Nov 2026)", () => {
+    it("the form offers the season's open goals; a card is kept with each goal's words, and checked", async () => {
+      const form = await call("GET", "/api/open-proposals/form");
+      expect(form.body.goals).toEqual([{ id: "g-roots", text: "Roots in the ground" }]);
+      const card = {
+        roles: [{ roleId: gate, moves: [], firstMoon: [{ quest: "Oil the hinges", doneWhen: "the gate opens without a sound" }] }],
+        serves: [{ goalId: "g-roots", how: "A gate that opens lets people in." }],
+        hours: "About 10 a week",
+        agreed: { loveLetter: true, nda: true },
+      };
+      const { id } = await send({ card, email: "carded@example.test" });
+      const row = await readOpenProposal(pool, id);
+      expect(row?.body.card).toEqual({ ...card, serves: [{ goalId: "g-roots", how: "A gate that opens lets people in.", goal: "Roots in the ground" }] });
+
+      const badGoal = await call("POST", "/api/open-proposals", proposal({ email: "badgoal@example.test", card: { ...card, serves: [{ goalId: "g-done", how: "x" }] } }));
+      expect(badGoal.status).toBe(400);
+      const noAgree = await call("POST", "/api/open-proposals", proposal({ email: "noagree@example.test", card: { ...card, agreed: { loveLetter: true, nda: false } } }));
+      expect(noAgree).toMatchObject({ status: 400, body: { field: "agreed" } });
+    });
+  });
+
+  describe("proposals for this moon (Rye, 9 Nov 2026)", () => {
+    it("an admin switches public proposals to the moon; the form offers it, and a proposal carries its days and this season", async () => {
+      state.viewer = ADMIN;
+      const switched = await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" });
+      expect(switched.status).toBe(200);
+      expect(switched.body).toMatchObject({ term: "moon", publicLink: true });
+      expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "decade" })).status).toBe(400);
+      state.viewer = null;
+      state.clock = new Date("2026-11-09T18:00:00Z");
+      try {
+        const form = await call("GET", "/api/open-proposals/form");
+        expect(form.body).toMatchObject({ open: true, season: { id: "s-now" }, term: { kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-09" } });
+        expect(form.body.roles.length).toBeGreaterThan(0);
+        const { id, mail } = await send();
+        expect(mail.text).toContain("in Test Village for this moon, from 9 November 2026 to 9 December 2026.");
+        const row = await readOpenProposal(pool, id);
+        expect(row?.targetSeasonId).toBe("s-now");
+        expect(row?.body.term).toEqual({ kind: "moon", startsOn: "2026-11-09", endsOn: "2026-12-09" });
+      } finally {
+        state.clock = null;
+        state.viewer = ADMIN;
+        await call("PUT", "/api/admin/open-proposals/settings", { term: "season" });
+        state.viewer = null;
+      }
     });
   });
 

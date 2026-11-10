@@ -37,7 +37,7 @@
  */
 import { isAgentAccount } from "../repos/agentAccounts";
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
+import { draftChangesChosenBy, draftChangesNamingPeople, draftStatus, lockCirclesCounter, lockDraftRow, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
@@ -58,6 +58,9 @@ import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse"
 import { carriesRolePay, DRAFT_PAY_KEYS, draftPayEdit, draftPayProblem } from "./draftRolePay";
 import { rolePayRules } from "./workPay";
 import type { MintRule } from "./economy";
+
+/** The refusal a publish gives when the draft no longer holds what the person was shown (review 12). */
+export const DRAFT_CHANGED_SINCE_SHOWN = "This draft changed since you opened it. Read it again before publishing.";
 
 export type DraftOp =
   | "create_seat"
@@ -222,6 +225,23 @@ export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: str
       payload === null ? null : JSON.stringify(payload),
       before === null ? null : JSON.stringify(before),
     );
+    touched += 1;
+  }
+  /*
+   * WHO CHOSE A RETIREMENT (review 15). A person's retirement carries their id
+   * as `chosenBy`, from the structure review or from the differences list's
+   * "Retire it here". It comes off with them. In a draft still open, a
+   * machine-sourced retirement with nobody's choice on it then blocks at
+   * publish, which is right: the person who chose it has gone, so somebody
+   * else chooses it again.
+   */
+  for (const r of (await draftChangesChosenBy(pool)) as any[]) {
+    const payload = parse(r.payload);
+    if (!payload || String(payload.chosenBy ?? "") !== userId) continue;
+    payload.chosenBy = null;
+    // Names nobody, and keeps the held-role check on this retirement.
+    payload.chosenByDeparted = true;
+    await rewriteDraftChangePeople(pool, String(r.id), JSON.stringify(payload), r.before_json === null || r.before_json === undefined ? null : typeof r.before_json === "string" ? r.before_json : JSON.stringify(r.before_json));
     touched += 1;
   }
   return touched;
@@ -582,7 +602,8 @@ export function openDraftCap(activeMembers: number): number {
 }
 
 export async function createDraft(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the draft is made inside (the differences list's answers). */
+  pool: Pool | PoolConnection,
   body: {
     title: string;
     rationale?: string | null;
@@ -629,11 +650,31 @@ const UNDER_A_VOTE =
   "The village is voting on this draft, so it cannot be changed until the vote closes. Withdraw the draft to stop the vote.";
 
 export async function addChange(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the change is added inside. */
+  pool: Pool | PoolConnection,
   draftId: string,
   body: { op: DraftOp; orgRoleId: string; payload?: any },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
+  // Handed a pool, the change is added inside a transaction of its own, so the
+  // draft row's lock below holds until the change is written (PR C residual: a
+  // change could land in a draft a publish was already applying).
+  if ("getConnection" in pool) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const r = await addChange(conn, draftId, body);
+      if (r.ok) await conn.commit();
+      else await conn.rollback();
+      return r;
+    } catch (e) {
+      await conn.rollback().catch(() => {});
+      throw e;
+    } finally {
+      conn.release();
+    }
+  }
+  // The draft row first, the same order `publishDraft` and the answer path lock in.
+  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]); // module-review-ok: the lock step of this function's own transaction, the order publishDraft locks in; server/repos/orgDrafts.ts explains why a transaction step stays here
   if (!d) return { ok: false, error: "No such draft" };
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
@@ -1228,7 +1269,10 @@ export function previewLoadedDraft(
         // A steward retiring the old chart never unseats anybody (0243). Read
         // at preview, and so again inside the publish transaction, so a seating
         // made after the accept still holds the seat.
-        if (!blocked && stewardChose(c) && context.heldSeatIds?.has(c.orgRoleId)) {
+        // A chooser erasure took off (chosenByDeparted) still counts as a
+        // person's choice here, so the held-role check keeps running (PR C
+        // review, security re-check).
+        if (!blocked && (stewardChose(c) || c.payload?.chosenByDeparted === true) && context.heldSeatIds?.has(c.orgRoleId)) {
           blocked = "Somebody holds this role. Give them a role in the new chart before it is retired";
         }
       }
@@ -1347,6 +1391,13 @@ export async function publishDraft(
    * term (0199). A draft with no seating in it publishes without one.
    */
   calendar?: SeatCalendar | null,
+  /**
+   * The ids of the changes the person publishing was shown (review 12). When
+   * given, the publish refuses unless the draft holds exactly those, so a
+   * change added or taken out after the page was read is never published
+   * unseen. Omitted: whatever the draft holds, as every door has always done.
+   */
+  expectedChanges?: readonly string[] | null,
 ): Promise<
   | { ok: true; applied: number; seated: DraftSeating[]; circleMoves: DraftCircleMove[] }
   | { ok: false; error: string }
@@ -1356,6 +1407,14 @@ export async function publishDraft(
     await conn.beginTransaction();
     // The circles counter first, in the order a circle form takes it (see lockCirclesCounter).
     await lockCirclesCounter(conn);
+    /*
+     * THE DRAFT ROW NEXT, BEFORE ANYTHING IS READ. The differences list adds
+     * changes to an open draft (server/lib/seraAnswer.ts) taking this same row
+     * first, so a change can never land between the preview below and the
+     * status flip at the end, where it would be marked published and never
+     * applied. Both take the draft before the roles they write.
+     */
+    await lockDraftRow(conn, draftId);
 
     // READ INSIDE THE TRANSACTION. These used to run on the pool before
     // `beginTransaction`, so the seats the preview approved and the draft
@@ -1372,6 +1431,14 @@ export async function publishDraft(
     const draft = await getDraft(conn, draftId);
     if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
     if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
+    if (expectedChanges) {
+      const has = draft.changes.map((c) => c.id).sort();
+      const shown = Array.from(new Set(expectedChanges)).sort();
+      if (has.length !== shown.length || has.some((id, i) => id !== shown[i])) {
+        await conn.rollback();
+        return { ok: false, error: DRAFT_CHANGED_SINCE_SHOWN };
+      }
+    }
 
     /*
      * SEATINGS ARE COLLECTED, NEVER NOTIFIED FROM IN HERE.

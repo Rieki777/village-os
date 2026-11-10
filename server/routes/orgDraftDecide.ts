@@ -94,6 +94,22 @@ type Deps = Pick<
 };
 
 const ASKS_PER_WINDOW = 10;
+
+/**
+ * A body's `expectedChanges`: a list of change ids, or null when the caller sent none (review 12).
+ * The publish-by-power route passes it on, so a publish refuses a draft that moved since the
+ * publisher saw it. No comment sits inside that handler: `visionNeverApplies.test.ts` reads the
+ * 900 characters before each call of the publisher for the route's path.
+ */
+export function expectedChangesOf(body: unknown): string[] | null {
+  const v = body && typeof body === "object" ? (body as Record<string, unknown>).expectedChanges : undefined;
+  if (v === undefined || v === null) return null;
+  // Sent but malformed is never read as none sent (PR C residual): it becomes an
+  // empty list, which matches no draft that has a change in it, so publish refuses.
+  if (!Array.isArray(v)) return [];
+  const ids = v.filter((x): x is string => typeof x === "string" && x !== "" && x.length <= 64);
+  return ids.length === v.length && ids.length <= 1000 ? ids : [];
+}
 const ASK_WINDOW_MS = 10 * 60 * 1000;
 
 /**
@@ -185,7 +201,7 @@ export function register(app: Express, deps: Deps): void {
     const draftId = String(req.params.id ?? "");
     const running = await openDraftBallot(getPool(), draftId);
     if (running) return res.status(409).json({ error: "ballot_open", message: BALLOT_OPEN_REFUSAL, ballotId: running.id });
-    const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id));
+    const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id), expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });

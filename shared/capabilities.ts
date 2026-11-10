@@ -140,7 +140,11 @@ export type Capability =
   // back to the mature handover, like `cash.pay`; the seeded Treasury role
   // grants it. With no live holder, a role's pay goes to the village through an
   // org draft put to the vote (constitution 0.3).
-  | "role.pay" // set what a role is worth and pays
+  //
+  // The cash budget is the same power (budgets spec R21, Rye's C1, 9 Nov): the
+  // budget sets how much of each moon's work is paid in cash, so one power gives
+  // one answer. Every budget write goes through its door (server/routes/budgets.ts).
+  | "role.pay" // keep the cash budget, and set what a role is worth and pays
   | "pot.steward" // hold a funding pot: open its rounds, set their dates, rule on whether an idea fits
   | "place.tend" // keep the place registry: import the seed, confirm a match, set readiness, adopt a stage change
   | "place.permit" // keep a place's permit checklist and its preserve and riparian answers
@@ -355,7 +359,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
-  "role.pay": "Set what a role is worth and pays, beside the valuation engine's suggestion",
+  "role.pay": "Keep the village's cash budget, and set what a role is worth and pays",
   "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
   "place.tend": "Keep the place registry: load it from the seed, confirm a place, set its readiness, and adopt a stage change",
   "place.permit": "Keep a place's permit checklist and its preserve and riparian answers",

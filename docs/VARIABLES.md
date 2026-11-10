@@ -22,30 +22,31 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 202 open and 49 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 204 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 224 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 227 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-251 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 29 boolean, 34 choice, 38 text, 1 longtext.
+254 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 31 boolean, 34 choice, 39 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
+| Village | 4 | 3 | 1 |
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
 | Progression | 31 | 31 | 0 |
-| Quests | 2 | 2 | 0 |
+| Quests | 3 | 3 | 0 |
 | Governance | 51 | 45 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
@@ -66,10 +67,9 @@ Each dial also says WHEN a change lands. 224 of them as soon as it is saved, and
 | Exchange | 5 | 5 | 0 |
 | Library | 9 | 9 | 0 |
 | Payments | 4 | 4 | 0 |
-| Village | 3 | 2 | 1 |
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
-| Platform | 3 | 0 | 3 |
+| Platform | 4 | 0 | 4 |
 | Calendar | 4 | 4 | 0 |
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
@@ -87,6 +87,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
 | Joining is by invitation | `membership.invite_only` | Membership | boolean | `true` | the whole village |
 | The role that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
+| The village's own circle, for budget lines about the whole village | `budgets.village_circle_id` | Village | text | blank | the whole village |
+| Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
+| Where the land's satellite picture comes from | `village.satellite_provider` | Village | choice | blank | the whole village |
+| The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -154,6 +158,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: session.template | `progression.unlock.session.template` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: companion.use | `progression.unlock.companion.use` | Progression | choice | `member` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
+| Let quests ask a minimum age | `quest.minimum_ages` | Quests | boolean | `false` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
 | The proposer bar: earned recognition to propose | `governance.hypha_threshold` | Governance | integer | `0` | the whole village |
@@ -299,14 +304,12 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | 30-day purchase limit per member (USD) | `payments.purchase_limit_30d_usd` | Payments | integer | `3000` | the whole village |
 | Annual purchase limit per member (USD) | `payments.purchase_limit_annual_usd` | Payments | integer | `10000` | the whole village |
 | Largest checkout donation | `payments.donation_max_usd` | Payments | integer | `50000` | the whole village |
-| Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
-| Where the land's satellite picture comes from | `village.satellite_provider` | Village | choice | blank | the whole village |
-| The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
 | Alert when a metric moves this much | `health.alert_change_pct` | Health | integer | `40` | the whole village |
 | Featured badges per member | `badges.max_featured` | Badges | integer | `3` | the whole village |
 | Share bug reports and ideas with the platform team | `platform.feedback_relay` | Platform | boolean | `true` | the founder or an admin |
 | Cooling-off before a key lands with nobody to co-sign | `platform.cosign_cooling_hours` | Platform | integer | `48` | the founder or an admin |
 | How long a key waits for its co-sign | `platform.cosign_expiry_hours` | Platform | integer | `72` | the founder or an admin |
+| The guide's helper in Admin | `platform.admin_helper` | Platform | boolean | `false` | the founder or an admin |
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
@@ -380,6 +383,77 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 | Default | blank |
 | Range | no bounds are set |
 | Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## Village
+
+4 dials. 3 for the whole village, 1 for the founder or an admin.
+
+### The village's own circle, for budget lines about the whole village
+
+Every cash budget line belongs to a circle. A line for the whole village, like a sheet row that names no circle, goes on this one. Leave it empty and the budget finds it on the org chart: the active circle set as the link circle, or else the lead circle, or else the one circle with no parent. With none of those, an upload row that names no circle is refused until this is set. Paste the circle id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `budgets.village_circle_id` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Village Pulse length
+
+How many recent happenings the public activity feed shows. Nothing is deleted; this is how far back the page reaches, not how much the village keeps.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.pulse_max_entries` |
+| Type | integer, a whole number |
+| Default | `30` |
+| Range | 10 to 200 |
+| Counted in | entries |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where the land's satellite picture comes from
+
+Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.satellite_provider` |
+| Type | choice, one of a fixed list |
+| Default | blank |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `` Left to the host. Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground.
+- `village-upload` The village's own aerial photograph. No provider and no key: an admin uploads the picture.
+- `esri-open` Esri World Imagery, no key. Kept on the village's own volume.
+- `sentinel2` Copernicus Sentinel-2. Needs the address of a Sentinel-2 WMS service.
+- `mapbox` Mapbox Static Images. Needs a Mapbox token.
+- `google` Google Maps Static. Needs a Google Maps Static API key.
+- `esri` Esri World Imagery. Needs an ArcGIS API key.
+
+### The date this village counts Moon 1 from
+
+Leave blank and Moon 1 is the moon your village launched under, which is what almost every village wants. Set a date here to count from a different moon: the moon containing the date you give becomes Moon 1, and every moon after it counts on from there. A date in the future is allowed, and until it arrives your moons are shown with their dates and no number. Moon numbers are a label the platform works out each time it draws a screen, so moving this date renames what people see and changes nothing that has been recorded, settled or paid.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.first_moon_at` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
@@ -1639,7 +1713,7 @@ What it may be set to:
 
 ## Quests
 
-2 dials. 2 for the whole village.
+3 dials. 3 for the whole village.
 
 ### Require submitted work before consent
 
@@ -1650,6 +1724,20 @@ When on, value can only be released for work that was actually filed. Turning th
 | Key | `quest.require_submission_before_consent` |
 | Type | boolean, on or off |
 | Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Let quests ask a minimum age
+
+Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.
+
+| Fact | Value |
+| --- | --- |
+| Key | `quest.minimum_ages` |
+| Type | boolean, on or off |
+| Default | `false` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
@@ -3887,63 +3975,6 @@ The ceiling on a single choose-your-amount donation checkout. Anything above it 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-## Village
-
-3 dials. 2 for the whole village, 1 for the founder or an admin.
-
-### Village Pulse length
-
-How many recent happenings the public activity feed shows. Nothing is deleted; this is how far back the page reaches, not how much the village keeps.
-
-| Fact | Value |
-| --- | --- |
-| Key | `village.pulse_max_entries` |
-| Type | integer, a whole number |
-| Default | `30` |
-| Range | 10 to 200 |
-| Counted in | entries |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-### Where the land's satellite picture comes from
-
-Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.
-
-| Fact | Value |
-| --- | --- |
-| Key | `village.satellite_provider` |
-| Type | choice, one of a fixed list |
-| Default | blank |
-| Range | one of the choices below |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-What it may be set to:
-
-- `` Left to the host. Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground.
-- `village-upload` The village's own aerial photograph. No provider and no key: an admin uploads the picture.
-- `esri-open` Esri World Imagery, no key. Kept on the village's own volume.
-- `sentinel2` Copernicus Sentinel-2. Needs the address of a Sentinel-2 WMS service.
-- `mapbox` Mapbox Static Images. Needs a Mapbox token.
-- `google` Google Maps Static. Needs a Google Maps Static API key.
-- `esri` Esri World Imagery. Needs an ArcGIS API key.
-
-### The date this village counts Moon 1 from
-
-Leave blank and Moon 1 is the moon your village launched under, which is what almost every village wants. Set a date here to count from a different moon: the moon containing the date you give becomes Moon 1, and every moon after it counts on from there. A date in the future is allowed, and until it arrives your moons are shown with their dates and no number. Moon numbers are a label the platform works out each time it draws a screen, so moving this date renames what people see and changes nothing that has been recorded, settled or paid.
-
-| Fact | Value |
-| --- | --- |
-| Key | `village.first_moon_at` |
-| Type | text, free text, one line |
-| Default | blank |
-| Range | no bounds are set |
-| Who may change it | the founder or an admin |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
 ## Health
 
 1 dial. 1 for the whole village.
@@ -3984,7 +4015,7 @@ How many badges a member may pin to their byline (forum posts, map chips). 0 tur
 
 ## Platform
 
-3 dials. 3 for the founder or an admin.
+4 dials. 4 for the founder or an admin.
 
 ### Share bug reports and ideas with the platform team
 
@@ -4026,6 +4057,20 @@ After launch, a key that needs a second admin's co-sign waits this many hours. U
 | Default | `72` |
 | Range | 1 to 720 |
 | Counted in | hours |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The guide's helper in Admin
+
+Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It also needs the village's own Anthropic key on the server. Off until the village decides to use it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `platform.admin_helper` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |

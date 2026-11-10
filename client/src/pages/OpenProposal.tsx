@@ -24,6 +24,8 @@
  *                         nobody has used it. Once the village holds the power,
  *                         or nobody holds it, the card says so and offers nothing.
  */
+import { useLingui } from "@lingui/react/macro";
+import { CardSideBySide } from "@/components/openProposal/RoleCardBridge";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { ArrowLeft, Check, Copy, Mail, X } from "lucide-react";
@@ -49,7 +51,11 @@ export interface ServedOpenProposal {
   statusWords: string;
   proposer: string | null;
   season: { id: string; name: string | null; startsOn: string } | null;
-  roles: Array<{ id: string; name: string | null; circle: string | null; note: string }>;
+  /** Set when the proposal is for a moon (shared/openProposalTerm.ts). */
+  term?: { kind: "moon"; startsOn: string; endsOn: string } | null;
+  roles: Array<{ id: string; name: string | null; circle: string | null; note: string; accountabilities?: string[]; timeCommitment?: string | null }>;
+  /** The applicant's own role card (shared/openProposalCard.ts); null on a proposal sent before cards. */
+  card?: Parameters<typeof CardSideBySide>[0]["card"];
   why: string;
   aim: string;
   confirmedOn: string | null;
@@ -90,6 +96,7 @@ interface Said {
 }
 
 export default function OpenProposal() {
+  const { t } = useLingui();
   const params = useParams<{ id: string }>();
   const id = String(params.id ?? "");
   const { user } = useAuth();
@@ -195,11 +202,17 @@ export default function OpenProposal() {
             <header>
               <p className="text-sm font-semibold text-teal-deep">{p.statusWords}</p>
               <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
-                {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone))}
+                {DECIDE_WORDS.heading(p.proposer, p.roles.map((r) => r.name ?? DECIDE_WORDS.roleGone), !!p.term)}
               </h1>
               <p className="mt-2 leading-relaxed text-stone-600">
-                {DECIDE_WORDS.fromOutside}
-                {p.season ? ` ${p.season.name ?? "The season"} starts on ${civilDayWords(p.season.startsOn)}.` : ""}
+                {p.term ? (
+                  DECIDE_WORDS.fromOutsideMoon(civilDayWords(p.term.startsOn), civilDayWords(p.term.endsOn))
+                ) : (
+                  <>
+                    {DECIDE_WORDS.fromOutside}
+                    {p.season ? ` ${p.season.name ?? "The season"} starts on ${civilDayWords(p.season.startsOn)}.` : ""}
+                  </>
+                )}
               </p>
             </header>
 
@@ -218,6 +231,13 @@ export default function OpenProposal() {
                   </li>
                 ))}
               </ul>
+            </section>
+            {/* The two cards side by side, gaps named (Rye, 9 Nov 2026; components/openProposal/RoleCardBridge.tsx). */}
+            <section aria-labelledby="op-cards" className="grid gap-3">
+              <h2 id="op-cards" className="text-lg font-bold text-foreground">
+                {t({ message: "Their card beside the open card", context: "open proposal side by side" })}
+              </h2>
+              <CardSideBySide roles={p.roles} card={p.card ?? null} />
             </section>
 
             <section aria-labelledby="op-words">

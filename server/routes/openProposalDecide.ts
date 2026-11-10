@@ -51,6 +51,8 @@
  * account it makes finishes the adoption at the welcome step
  * (server/lib/inviteDoor.ts).
  */
+import { listOrgRoles } from "../lib/orgChart";
+import { identityKey } from "../../shared/openProposals";
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
 import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
@@ -169,7 +171,19 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   /** The roles by name and circle, as they read now. A role retired since keeps its place in the list. */
   async function rolesOf(pool: Pool, p: store.StoredOpenProposal) {
     const named = new Map((await seatsWithCircles(pool, p.body.roles.map((r) => r.roleId))).map((r) => [r.id, r]));
-    return p.body.roles.map((r) => ({ id: r.roleId, name: named.get(r.roleId)?.name ?? null, circle: named.get(r.roleId)?.circle ?? null, note: r.note }));
+    // The open card's outcomes and time, read live, so the decider sees what the role asks beside what was offered.
+    const live = new Map((await listOrgRoles(pool)).map((r) => [r.id, r]));
+    return p.body.roles.map((r) => {
+      const role: any = live.get(r.roleId);
+      return {
+        id: r.roleId,
+        name: named.get(r.roleId)?.name ?? null,
+        circle: named.get(r.roleId)?.circle ?? null,
+        note: r.note,
+        accountabilities: Array.isArray(role?.accountabilities) ? role.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
+        timeCommitment: role?.timeCommitment ?? null,
+      };
+    });
   }
   const namesOf = (roles: Array<{ id: string; name: string | null }>) => roles.map((r) => r.name ?? r.id);
 
@@ -180,8 +194,14 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   async function deciding(p: store.StoredOpenProposal, actorId: string) {
     const rule = await decideRule(work);
     const own = await accountFor(members, p.email);
-    // Nobody adopts their own: a proposal from an address with no account is nobody's own here.
-    const refusal = adoptRefusal(rule, actorId, own ?? `open:${p.id}`);
+    // Nobody adopts their own, matched by account AND by the person behind the
+    // address: the actor's own address with a +tag, another case or Gmail's dots
+    // is still the applicant (coordinator, 9 Nov 2026). A proposal from an
+    // address nobody here holds, in any dress, is nobody's own.
+    const actor: any = await members.byId(actorId);
+    const actorIdentity = actor?.email ? identityKey(String(actor.email)) : null;
+    const sameperson = !!actorIdentity && !!p.email && identityKey(p.email) === actorIdentity;
+    const refusal = adoptRefusal(rule, actorId, sameperson ? actorId : (own ?? `open:${p.id}`));
     if (!refusal) return { ok: true as const, rule, own };
     const body =
       refusal.error === "own_terms"
@@ -219,7 +239,12 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   /** What the letters say about the season the roles start in. */
   const seasonWords = (p: store.StoredOpenProposal) => {
     const s = seasonOf(p);
-    return { season: s?.name ? String(s.name) : null, startsOn: s?.startsOn ? civilDayWords(String(s.startsOn)) : "the season's first day" };
+    const t = p.body.term;
+    return {
+      season: s?.name ? String(s.name) : null,
+      startsOn: t ? civilDayWords(t.startsOn) : s?.startsOn ? civilDayWords(String(s.startsOn)) : "the season's first day",
+      moon: t ? { from: civilDayWords(t.startsOn), to: civilDayWords(t.endsOn) } : null,
+    };
   };
 
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -255,6 +280,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         statusWords: p.decision.words ?? STATUS_WORDS[p.status as keyof typeof STATUS_WORDS] ?? "",
         proposer: greetingName(p.name),
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
+        term: p.body.term ?? null,
+        card: p.body.card ?? null,
         roles,
         why: p.body.why,
         aim: p.body.aim,
@@ -339,7 +366,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       }
       const why = await sent(
         p.email
-          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile` }))
+          ? letter(`open-proposal:${p.id}:adopted`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedAccountLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), signIn: `${site()}/profile`, loveLetter: `${site()}/love-letter` }))
           : null,
       );
       return res.json({
@@ -379,7 +406,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village, roleNames: namesOf(roles), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
         : null,
     );
     res.json({
@@ -451,7 +478,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email
-        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS }))
+        ? letter(`open-proposal:${p.id}:adopted:${input.tokenHash.slice(0, 16)}`, "open_proposal.adopted", { email: p.email, name: firstName }, adoptedInviteLetter({ firstName, village: projectName(), roleNames: namesOf(await rolesOf(pool, p)), ...seasonWords(p), link, days: INVITE_DAYS, loveLetter: `${site()}/love-letter` }))
         : null,
     );
     res.json({

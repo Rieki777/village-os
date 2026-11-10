@@ -8,7 +8,8 @@
 import { useEffect, useState } from "react";
 import { authHeaders } from "@/components/admin/adminApi";
 
-const CHIP = "inline-flex min-h-11 items-center rounded-lg border border-white px-2 text-sm font-medium text-white sm:px-3";
+// Sits in the header's right-hand cluster, on the light card.
+const CHIP = "inline-flex min-h-11 items-center rounded-full border border-border bg-card px-4 text-sm font-medium text-card-foreground hover:bg-muted";
 
 export function AdminSeraChip({ password }: { password: string }) {
   const [show, setShow] = useState(false);
