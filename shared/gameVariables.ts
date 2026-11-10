@@ -3194,19 +3194,21 @@ export const VARIABLES: VariableDef[] = [
   },
   /*
    * THE ADMIN HELPER'S SWITCH (server/routes/adminHelper.ts, 2026-11-09).
-   * Ships OFF: AI touching a village's settings is the village's call, made by
-   * whoever governs AI use there, so the helper waits for that yes even after
-   * the key is set. The helper may never propose this dial itself
-   * (shared/adminHelper.ts).
+   * Ships ON (Rye, 2026-11-09: "this should always ship on so that they don't
+   * have to turn it on once they put in their API key"): the moment a village
+   * connects an AI key, Anthropic or Sera, the helper starts helping. A village
+   * that does not want it turns this off. The helper may never propose this
+   * dial itself (shared/adminHelper.ts), and it stays read-only and out of
+   * selection whatever this says.
    */
   {
     key: "platform.admin_helper",
     category: "Platform",
     label: "The guide's helper in Admin",
     description:
-      "Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It also needs the village's own Anthropic key on the server. Off until the village decides to use it.",
+      "Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It turns on by itself once the village connects an AI key: its own Anthropic key, or Sera when the org memory connection is set up. Turn this off to keep it off.",
     type: "boolean",
-    default: "false",
+    default: "true",
   },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude

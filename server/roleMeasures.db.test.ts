@@ -41,7 +41,7 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
   });
 
   it("reads tables that are missing as no facts", async () => {
-    await pool.query("DROP TABLE IF EXISTS application_steps, onboarding_paths, onboarding_items, role_moon_renewals");
+    await pool.query("DROP TABLE IF EXISTS application_steps, onboarding_paths, onboarding_items, role_moon_renewals"); // module-review-ok: fixture DDL on the scratch schema
     expect(await applicationFacts(pool as any)).toEqual([]);
     expect(await holderFacts(pool as any)).toEqual([]);
   });
@@ -61,6 +61,6 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
     const keys = Object.keys(out.body.rows[0]).filter((k) => k !== "circleName").sort();
     expect(keys).toEqual([...MEASURE_KEYS.row].sort());
     expect(JSON.stringify(out.body)).not.toMatch(/op-aaa|m-1/);
-    await pool.query("DROP TABLE application_steps");
+    await pool.query("DROP TABLE application_steps"); // module-review-ok: fixture DDL on the scratch schema
   });
 });

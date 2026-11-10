@@ -48,6 +48,8 @@ export interface NextActionFacts {
   budget: { remaining: number; total: number };
   /** True only while the gene-keys module is on and this member has saved no lines. Absent means "not asked". */
   geneKeysMissing?: boolean;
+  /** True only while a path opened at adoption has a step of the holder's own still open (server/lib/onboarding.ts). */
+  onboardingOpen?: boolean;
 }
 
 /** True when this rule is the member's step, given their facts. */
@@ -56,6 +58,7 @@ function applies(when: NextActionRule["when"], f: NextActionFacts): boolean {
     case "no-training": return !f.trained;
     case "membership-waiting": return f.joining === "waiting";
     case "no-membership": return f.joining === "unsigned";
+    case "onboarding-open": return f.onboardingOpen === true;
     case "no-quest-claimed": return f.claims.length === 0;
     case "no-gene-keys": return f.geneKeysMissing === true;
     case "quest-in-progress": return f.claims.some((c) => c.status === "claimed" || c.status === "submitted");

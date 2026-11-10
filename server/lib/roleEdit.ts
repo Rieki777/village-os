@@ -53,12 +53,13 @@ import {
 } from "../../shared/roleParameters";
 import { newestPublishedDraftFor, draftTouchedRole, firstNames, roleDraftRows } from "../repos/roleEditHistory";
 import { readDifferences } from "./seraDifferencesRead";
+import { latestRolePay } from "./saberraRolePay";
+import { recentSnapshots } from "../repos/saberraSnapshots";
 import type { Difference } from "../../shared/seraDifferences";
 import { recordEvent } from "./events";
 import { listArchetypeRows } from "../repos/archetypes";
 import { characterTagsFrom } from "./orgChart";
 import { villageId } from "./economy";
-import { readSourcePay } from "../../shared/structurePlan";
 
 export const EDIT_WORDS = {
   noRole: "There is no role by that id.",
@@ -438,15 +439,11 @@ const TAKEABLE_FIELDS: ReadonlySet<string> = new Set(["name", "aim", "domain"]);
 export async function suggestionFor(pool: Pool, roleId: string): Promise<SeraSuggestion> {
   const read = await readDifferences(pool);
   const mine = read.list.filter((d: Difference) => d.subject.kind === "role" && d.subject.ourId === roleId);
-  const payDiff = mine.find((d) => d.kind === "pay");
-  let payFrom: SourcePayLike | null = null;
-  if (payDiff?.params) {
-    payFrom = readSourcePay({
-      model: payDiff.params.model,
-      status: payDiff.params.statusLabel,
-      monthlyUsd: payDiff.params.monthlyUsd,
-    });
-  }
+  // The latest range the service holds for this role (role journey L10, GET /api/saberra/role-pay reads the same).
+  // Information beside the role, never a term: the person's save is what puts a group on offer.
+  const reading = latestRolePay(await recentSnapshots(pool, 5));
+  const held = reading?.byRole[roleId] ?? null;
+  const payFrom: SourcePayLike | null = held ? { model: held.model, standing: held.standing, statusLabel: held.statusLabel, terms: held.terms, monthlyUsd: held.monthlyUsd, range: held.range ?? null } : null;
   return {
     differences: mine
       .filter((d) => d.kind !== "pay")
@@ -460,6 +457,6 @@ export async function suggestionFor(pool: Pool, roleId: string): Promise<SeraSug
       })),
     pay: suggestPayGroup(payFrom),
     payFrom,
-    readAt: read.latest?.takenAt ?? null,
+    readAt: reading?.readAt ?? read.latest?.takenAt ?? null,
   };
 }

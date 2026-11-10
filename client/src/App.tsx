@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -354,7 +354,9 @@ function Router() {
       <Route path="/messages/:id" component={Messages} />
       <Route path="/introductions" component={Introductions} />
       <Route path="/propose-quest" component={ProposeQuest} />
-      <Route path="/roles/draft" component={RoleDraft} />
+      <Route path="/roles/select" component={RoleDraft} />
+      {/* The old address, kept so every shared link and bookmark still lands (the board was called a draft until 9 Nov 2026). */}
+      <Route path="/roles/draft">{() => <Redirect to="/roles/select" replace />}</Route>
       <Route path="/roles" component={Roles} />
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />

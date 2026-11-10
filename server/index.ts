@@ -116,6 +116,8 @@ import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapsh
 import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
+import { register as registerRoleRenewalRoutes } from "./routes/roleRenewal";
+import { configureAccessNotices } from "./lib/roleAccess";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
@@ -165,6 +167,7 @@ import { register as registerAgentCompanionRoutes } from "./routes/companion";
 import { register as registerOrganizeRoutes } from "./routes/organize";
 import { register as registerAdminHelperRoutes } from "./routes/adminHelper";
 import { orgStructureForHelper } from "./lib/adminHelperReaders";
+import { seraHelperAsk, seraHelperName } from "./lib/adminHelperSera";
 import { notebookForExport, register as registerVillageDocumentRoutes } from "./routes/villageDocuments";
 import { register as registerCapabilityExplainerRoutes } from "./routes/capabilityExplainer";
 import { changeSetKinds, comingBackFrom, seasonEndInstant, setSeasonWindowReader } from "./lib/governanceWindows";
@@ -223,6 +226,9 @@ import { register as registerMapOrgRoutes } from "./routes/mapOrg";
 import { register as registerMapMasterplanRoutes } from "./routes/mapMasterplan";
 import { register as registerAgentMapRoutes } from "./routes/agentMap";
 import { register as registerAgentMcpRoutes } from "./routes/agentMcp";
+import { register as registerAgentProposalsRoutes } from "./routes/agentProposals";
+import { register as registerLetterDraftsRoutes } from "./routes/letterDrafts";
+import { post as postToOffice } from "./lib/comms/postOffice";
 import { register as registerAgentAccountRoutes } from "./routes/agentAccounts";
 import { register as registerAgentOAuthRoutes } from "./routes/agentOAuth";
 import { agentAccountIds, isAgentAccount } from "./repos/agentAccounts";
@@ -257,6 +263,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerMemberTimeZoneRoutes } from "./routes/memberTimeZone"; // role journey L6
 import { register as registerBudgetRoutes } from "./routes/budgets";
 import { register as registerValuationRoutes } from "./routes/valuation";
 import { earnedEquityMeaningWritten } from "./lib/valuationStore";
@@ -280,6 +287,7 @@ import { register as registerFeedbackRoutes } from "./routes/feedback";
 import { register as registerSubmissionHandlingRoutes } from "./routes/submissionHandling";
 import { register as registerCharacterPortraitRoutes } from "./routes/characterPortraits";
 import { register as registerCompanionRoutes } from "./routes/companions";
+import { onboardingOpenFor, register as registerOnboardingRoutes } from "./routes/onboarding";
 import { exportMemberTasks, register as registerMemberTaskRoutes } from "./routes/memberTasks";
 import { register as registerMemberTaskBridgeRoutes } from "./routes/memberTaskBridge";
 import { register as registerMemberAskRoutes } from "./routes/memberAsks";
@@ -4663,10 +4671,10 @@ async function runRetentionSweep(): Promise<string> {
  */
 
 async function nextActionFor(user: any): Promise<{ id: string; label: string; href: string }> {
-  // The letter is a guest's step only where the village serves it; a signing it has not answered is its own step (lib/nextAction.ts).
-  const joining = brochurePageServed("/love-letter") && !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
+  // The letter is a member's door (shared/brochure.ts, MEMBER_DOORS), served to anybody signed in; a signing it has not answered is its own step (lib/nextAction.ts).
+  const joining = !hasMembership(user) ? joiningOf(submissionsRepo.all(), user.id) : null;
   return pickNextAction(GAME_CONFIG.nextActions, {
-    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)),
+    trained: trainingDoneHere(await completionsFor(getPool(), user.id)), joining, claims: await claimsRepo.forUser(user.id), budget: await gratitudeBudget(user), geneKeysMissing: await geneKeysMissing(getPool(), String(user.id)), onboardingOpen: await onboardingOpenFor(getPool(), String(user.id)),
   });
 }
 
@@ -6874,6 +6882,7 @@ async function startServer() {
 
     registerAgentMapRoutes(app, { resolveAgent, capabilityCtx, getPool, confirmSecret: AUTH_TOKEN_SECRET });
     registerAgentMcpRoutes(app, { resolveAgent, getPool, confirmSecret: AUTH_TOKEN_SECRET, villageName: () => mergedConfig().project.name, port: () => parseInt(String(process.env.PORT || 3000), 10), listDefault: () => boolVar("memberTasks.listDefault"), today: () => villageDayKey(new Date(), getSeasonConfig().timezone), clientIp, isAdmin });
+    registerAgentProposalsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, liveHoldersOf }); // role journey L13: what the connector proposes waits for a person (server/routes/agentProposals.ts)
     registerAgentAccountRoutes(app, { authedUser, getPool, isAdmin });
     registerAgentOAuthRoutes(app, {
       authedUser, getPool, overLimit, clientIp,
@@ -10761,6 +10770,7 @@ async function startServer() {
 
   app.use("/api/events", requireModule("events"));
   app.use("/api/admin/events", requireModule("events"));
+  registerLetterDraftsRoutes(app, { authedUser, getPool, isAdmin, overLimit, members, escapeHtml, postEmail: (email) => postToOffice(commsPostOffice, email) }); // role journey L13: a person reads, edits and sends a drafted letter (server/routes/letterDrafts.ts)
   registerCommsEventRoutes(app, { authedUser, overLimit, clientIp, isAdmin, guardCapability, mayStillSee, capabilityCtx, getPool, commsPostOffice, members, deploymentOrigin, isPresent: (m: any) => isPresentMember(m, AUTH_TOKEN_SECRET), notify });
 
   /** The window the calendar looks through, from the two wired variables. */
@@ -12878,6 +12888,8 @@ ALWAYS respond with ONLY a single JSON object: {"reply": "<what you say>"}`;
     guideSource: () => getWorkWithUs().assistantName,
     dials: () => allVariables(),
     switchOn: () => boolVar("platform.admin_helper"),
+    seraAsk: seraHelperAsk,
+    seraName: seraHelperName,
     readOrgStructure: async () => {
       const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool())]);
       return orgStructureForHelper({ roles, assignments, circles: circleViews(circlesRepo.all()) });
@@ -17646,6 +17658,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerNeedsRoutes(app, { isAdmin, authedUser, getPool });
   registerJournalRoutes(app, { authedUser, getPool, clientIp, overLimit, seasonState, projectName: notifyDeps.projectName, members, isPresent: notifyDeps.isPresent, claimsRepo });
   registerGeneKeysRoutes(app, { authedUser, getPool, overLimit, notify });
+  registerOnboardingRoutes(app, { authedUser, getPool, overLimit, isAdmin, guardCapability, village: () => ({ timeZone: getSeasonConfig().timezone }) });
   registerFundingRoundsRoutes(app, { authedUser, getPool, guardCapability, mayAct, overLimit, members, questsRepo, electorate: buildElectorate });
   registerPlaceRegistryRoutes(app, { authedUser, isAdmin, capabilityCtx, guardCapability, getPool, overLimit, members, firstName, lapseContext, circlesRepo });
   registerMemberTaskRoutes(app, { authedUser, getPool, overLimit, isAdmin, adminActor, timeZone: () => getSeasonConfig().timezone });
@@ -17675,6 +17688,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
+  registerMemberTimeZoneRoutes(app, { authedUser, getPool, overLimit });
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerBudgetRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, seasonState, guardCapability, liveHoldersOf, projectCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""), rolesCarrying, roleHolders: loadRoleHolders, revisionSecret: AUTH_TOKEN_SECRET }); // the cash budget (0360): every write through one door, role.pay (server/routes/budgets.ts)
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
@@ -24965,6 +24979,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // exactly the point they used to sit. Express matches in registration
   // order.
   registerOrgSeatingRoutes(app, { isAdmin, authedUser, guardCapability, adminActor, getPool });
+  configureAccessNotices({ notify, notifyAdmins: (type, title, key, link) => notifyAdmins(type, title, key, link) });
+  registerRoleRenewalRoutes(app, { authedUser, guardCapability, getPool, notify, capabilityCtx });
 
   /**
    * F5 (Wave 1): appointment is a governance act, not an admin chore.

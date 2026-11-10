@@ -75,7 +75,7 @@ describe("with every optional step skipped", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "Your R-Ikigai" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: "Who do you play? Pick one or more." })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add your Human Design or Gene Keys" })).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Draft Gardener" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Select Gardener" }));
     const apply = await screen.findAllByRole("link", { name: /apply/i });
     expect(apply.length).toBeGreaterThan(0);
     // Nothing optional was opened, so nothing but the board's own reads happened.
@@ -119,7 +119,7 @@ describe("Ask the guide", () => {
     serve();
     render(<RoleDraft />);
     fireEvent.change(await screen.findByLabelText(/What I love/), { target: { value: "growing food" } });
-    await screen.findByRole("button", { name: "Draft Gardener" });
+    await screen.findByRole("button", { name: "Select Gardener" });
     // Typing, drafting and waiting sent nothing to the guide.
     await new Promise((r) => setTimeout(r, 50));
     expect(calls.filter((c) => c.url === GUIDE)).toHaveLength(0);

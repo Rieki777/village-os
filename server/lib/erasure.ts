@@ -173,6 +173,7 @@ import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
 import { forgetMemberFundingRounds } from "./fundingRounds";
 import { forgetMemberTasks } from "../repos/memberTasks";
+import { forgetTimeZone } from "../repos/memberTimeZone";
 import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
@@ -195,6 +196,7 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetOnboardingForMember } from "../repos/onboarding";
 import { forgetSeraActor } from "../repos/seraSettled";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
@@ -825,6 +827,17 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S FIRST MOONS (0365): their paths with every step and
+       * check-in, the check-ins they wrote as a buddy's or holder's hand, and
+       * the buddy link on other people's paths. Their own, so it goes whole.
+       */
+      name: "onboarding",
+      run: async () => {
+        await forgetOnboardingForMember(pool, target.id);
       },
     },
     {
@@ -1621,6 +1634,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "member-tasks-after-tombstone",
       run: async () => {
         await forgetMemberTasks(pool, target.id);
+        await forgetTimeZone(pool, target.id); // role journey L6
       },
     },
     {

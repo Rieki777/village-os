@@ -1,3 +1,4 @@
+import CastStrip from "@/components/roleDraft/CastStrip";
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -452,6 +453,10 @@ export default function Roles() {
   // clause in front of the reader.
   const coordinator = coordinatingCircle(circles);
   const orgPending = roles === null && !failed;
+  // A link to one role (?seat=) names that role in the page heading, not the whole page.
+  const seasonEntry = ((season as unknown as { current?: { name?: string } | null } | null)?.current ?? (season as unknown as { name?: string } | null)) as { name?: string } | null;
+  const seasonLine = typeof seasonEntry?.name === "string" && seasonEntry.name.trim() ? t({ message: `This season: ${seasonEntry.name.trim()}.`, context: "roles page season" }) : "";
+  const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
   const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
     coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
   }`;
@@ -486,7 +491,7 @@ export default function Roles() {
               <Briefcase className="w-8 h-8 text-sage" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Roles and Circles
+              {linkedName ?? "Roles and Circles"}
             </h1>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
@@ -501,14 +506,30 @@ export default function Roles() {
             <div className="mt-4 flex justify-center">
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
             </div>
+            {user && (
+              <p className="mt-3 text-sm">
+                <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "How roles are going", context: "roles page measures door" })}
+                </Link>
+              </p>
+            )}
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
+            {seasonLine && (
+              <p className="mt-4 text-sm text-muted-foreground">
+                {seasonLine}{" "}
+                <a href="/roles/select#sel-season" className="font-semibold text-foreground underline underline-offset-2">
+                  {t({ message: "See its goals", context: "roles page season" })}
+                </a>
+              </p>
+            )}
             <Link
-              href="/roles/draft"
+              href="/roles/select"
               className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
-              {t({ message: "Draft your roles", context: "roles page button" })}
+              {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
+            <CastStrip />
           </m.div>
 
           <div className="max-w-4xl mx-auto">

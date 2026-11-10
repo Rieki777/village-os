@@ -622,3 +622,26 @@ export function cyclesRemaining(now: Date, termEndsAt: Date, clock: CycleClock =
   if (now.getTime() >= termEndsAt.getTime()) return 0;
   return Math.max(0, clock.cycleNumberAt(termEndsAt) - clock.cycleNumberAt(now));
 }
+
+// ── The warning for a term of one moon ──────────────────────────────────────
+
+/** A term this short has no whole cycle to spare, so its warning is the last week. */
+export const SHORT_TERM_WARNING_DAYS = 7;
+
+/**
+ * When the warning opens for a term whose START is known.
+ *
+ * A term shorter than two cycles cannot be warned "one cycle ahead": for a
+ * one-moon term that instant is the day it starts (G11). It warns in its last
+ * SHORT_TERM_WARNING_DAYS instead, and never before it starts. A longer term,
+ * or one with no known start, keeps `termWarningOpensAt`. PURE.
+ */
+export function termWarningOpensFor(termStartsAt: Date | null | undefined, termEndsAt: Date, clock: CycleClock): Date {
+  const long = termWarningOpensAt(termEndsAt, clock);
+  if (!termStartsAt || Number.isNaN(termStartsAt.getTime())) return long;
+  const n = clock.cycleNumberAt(termEndsAt);
+  const twoCycles = clock.startOf(n).getTime() - clock.startOf(n - 2).getTime();
+  if (termEndsAt.getTime() - termStartsAt.getTime() >= twoCycles) return long;
+  const lastWeek = termEndsAt.getTime() - SHORT_TERM_WARNING_DAYS * 86_400_000;
+  return new Date(Math.max(termStartsAt.getTime(), lastWeek));
+}
