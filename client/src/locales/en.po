@@ -306,9 +306,9 @@ msgid "What harm could this do to the village, or what would it stop us doing?"
 msgstr "What harm could this do to the village, or what would it stop us doing?"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
-msgctxt "admin helper, connect step"
-msgid "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
-msgstr "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
+#~ msgctxt "admin helper, connect step"
+#~ msgid "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
+#~ msgstr "Add a variable named ANTHROPIC_API_KEY and paste the key as its value. Railway restarts the service, which takes roughly two minutes."
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "button that asks an outside contact to talk"
@@ -810,6 +810,11 @@ msgctxt "sera answers"
 msgid "Keep {n}"
 msgstr "Keep {n}"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, the Anthropic provider's name"
+msgid "Claude"
+msgstr "Claude"
+
 #: client/src/components/journey/TestRun.tsx
 msgid "Turn your village's moons over quickly and read what your settings would do: who the settlement thanks, what each rule pays, when Claims Week opens, and what a member can give. A good thing to do before the vote below."
 msgstr "Turn your village's moons over quickly and read what your settings would do: who the settlement thanks, what each rule pays, when Claims Week opens, and what a member can give. A good thing to do before the vote below."
@@ -985,6 +990,11 @@ msgstr "Funding-dependent, if so"
 #~ msgctxt "admin quest safety"
 #~ msgid "Physical work on site"
 #~ msgstr "Physical work on site"
+
+#: client/src/components/admin/AiSetupBanner.tsx
+msgctxt "admin, AI setup banner"
+msgid "Connect an Anthropic key (or Sera, if your village uses it for org memory) and {guide} helps you through the rest of setup: finding settings, explaining them and proposing changes for you to approve. It turns on by itself once the key is saved."
+msgstr "Connect an Anthropic key (or Sera, if your village uses it for org memory) and {guide} helps you through the rest of setup: finding settings, explaining them and proposing changes for you to approve. It turns on by itself once the key is saved."
 
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
@@ -1470,6 +1480,11 @@ msgstr "Bring in a card"
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "Who hears it first"
 msgstr "Who hears it first"
+
+#: client/src/components/admin/AiSetupBanner.tsx
+msgctxt "admin, AI setup banner"
+msgid "Set up your AI guide first"
+msgstr "Set up your AI guide first"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "delete a change request"
@@ -2995,6 +3010,11 @@ msgstr "This village's records: {here}."
 msgid "Your role starts on the first day of next season."
 msgstr "Your role starts on the first day of next season."
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel, who answers"
+msgid "Answers come from Sera, through your village's org memory connection."
+msgstr "Answers come from Sera, through your village's org memory connection."
+
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft stat"
 msgid "{openPlaces} of {seats} open"
@@ -3733,6 +3753,11 @@ msgctxt "role draft eyebrow"
 msgid "Open roles · the draft"
 msgstr "Open roles · the draft"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, connect step"
+msgid "Open Integrations, find \"Anthropic, the AI guide\", paste the key and save."
+msgstr "Open Integrations, find \"Anthropic, the AI guide\", paste the key and save."
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box, the next build day"
 msgid "Next build day: {at}"
@@ -4109,6 +4134,11 @@ msgstr "In the room: {0}"
 msgctxt "funding rounds"
 msgid "Open the round"
 msgstr "Open the round"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. It turns on by itself as soon as the key is saved, and the key never comes back to your browser."
+msgstr "The helper runs on Claude, using an Anthropic key that belongs to your village. It turns on by itself as soon as the key is saved, and the key never comes back to your browser."
 
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "If the village ever closes, its treasury and assets go somewhere. Name where before the village starts: the launch checklist waits for it, and every member reads it at /exit-policy. The platform works nothing out and moves nothing on closing. This is the village's written promise."
@@ -4754,6 +4784,11 @@ msgstr "Say your age band once. The village keeps the band, never your birth dat
 msgctxt "admin quest safety"
 msgid "Hours it takes"
 msgstr "Hours it takes"
+
+#: client/src/components/admin/AiSetupBanner.tsx
+msgctxt "admin, AI setup banner: opens Integrations to paste the key"
+msgid "Add your Anthropic key"
+msgstr "Add your Anthropic key"
 
 #: client/src/components/characters/RolesOpenNow.tsx
 msgctxt "character card, joins two links"
@@ -5404,6 +5439,11 @@ msgstr "For each kind of decision the canvas asks who approves it, who is asked 
 msgid "The Governance Canvas asks a group twelve questions about how it works together. Under each question is this village's answer in one public line. The lines name roles, never people."
 msgstr "The Governance Canvas asks a group twelve questions about how it works together. Under each question is this village's answer in one public line. The lines name roles, never people."
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "If your village uses Sera for its org memory, connecting Sera also turns the helper on. A village Anthropic key is used first when both are set."
+msgstr "If your village uses Sera for its org memory, connecting Sera also turns the helper on. A village Anthropic key is used first when both are set."
+
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgctxt "an outside contact you asked, and the day"
 msgid "{contact} on {when}"
@@ -5714,6 +5754,11 @@ msgctxt "sera answers"
 msgid "it comes with its circle"
 msgstr "it comes with its circle"
 
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel"
+msgid "Prefer your hosting? Add a variable named ANTHROPIC_API_KEY to the village's service in Railway instead. Railway restarts the service, which takes roughly two minutes."
+msgstr "Prefer your hosting? Add a variable named ANTHROPIC_API_KEY to the village's service in Railway instead. Railway restarts the service, which takes roughly two minutes."
+
 #: client/src/components/valuation/RolePayWithEngine.tsx
 msgid "Reading the village's pay settings…"
 msgstr "Reading the village's pay settings…"
@@ -5897,6 +5942,11 @@ msgstr "Remove"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "This proposal was sent before applicants wrote their own role card, so there is nothing to set beside the open card."
 msgstr "This proposal was sent before applicants wrote their own role card, so there is nothing to set beside the open card."
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper panel, who answers"
+msgid "Answers come from Claude, on your village's own Anthropic key."
+msgstr "Answers come from Claude, on your village's own Anthropic key."
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value a member suggests"
@@ -6217,6 +6267,11 @@ msgstr "Reading the invoice tracks."
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The line holds the name of someone in this village, so the public page hides it. The word that matched is \"{matched}\". Write it again with the role in place of the name."
 msgstr "The line holds the name of someone in this village, so the public page hides it. The word that matched is \"{matched}\". Write it again with the role in place of the name."
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, provider choice"
+msgid "Who answers"
+msgstr "Who answers"
 
 #: client/src/components/review/SeraDifferences.tsx
 msgctxt "sera changes"
@@ -6593,6 +6648,11 @@ msgctxt "a switch setting"
 msgid "On"
 msgstr "On"
 
+#: client/src/components/admin/AiSetupBanner.tsx
+msgctxt "admin, AI setup banner: opens the helper's setup steps"
+msgid "Show me how"
+msgstr "Show me how"
+
 #: client/src/components/admin/RoleCharacterTags.tsx
 msgid "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
 msgstr "Shown on the draft board, the character page and the map's party filter. Saving makes it the village's choice, so a later guess never replaces it."
@@ -6647,6 +6707,11 @@ msgstr "Remove"
 msgctxt "admin quest safety"
 msgid "Hands-on quest on site"
 msgstr "Hands-on quest on site"
+
+#: client/src/components/admin/AdminHelperPanel.tsx
+msgctxt "admin helper, opens the Integrations page"
+msgid "Open Integrations"
+msgstr "Open Integrations"
 
 #. placeholder {0}: counts.hours
 #: client/src/components/valuation/PricingDesk.tsx
@@ -7317,9 +7382,9 @@ msgid "none"
 msgstr "none"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
-msgctxt "admin helper panel"
-msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
-msgstr "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
+#~ msgctxt "admin helper panel"
+#~ msgid "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
+#~ msgstr "The helper runs on Claude, using an Anthropic key that belongs to your village. Nobody can set it from this page, and the key never comes to your browser."
 
 #: client/src/components/companion/CompanionPanel.tsx
 msgctxt "close the guide panel"
@@ -7531,9 +7596,9 @@ msgid "Choosing which quests to fund"
 msgstr "Choosing which quests to fund"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
-msgctxt "admin helper, connect step"
-msgid "Open your hosting (Railway), choose the village's service, and open Variables."
-msgstr "Open your hosting (Railway), choose the village's service, and open Variables."
+#~ msgctxt "admin helper, connect step"
+#~ msgid "Open your hosting (Railway), choose the village's service, and open Variables."
+#~ msgstr "Open your hosting (Railway), choose the village's service, and open Variables."
 
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
