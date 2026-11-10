@@ -83,6 +83,9 @@ import type { LapseContext } from "../lib/orgChart";
 import { answerAsk, askRolesFor, consentView, decisionFor, type AskStanding } from "../lib/roleProposals";
 import { whileSessionHolds } from "../lib/sessionHold";
 import { effectiveLifecycle } from "../lib/modules";
+import { hasRecused, interviewsAreIn, stampDecided } from "../lib/applicationReview";
+import { currentMoonTerm, moonEnded, REVIEW_WORDS } from "../../shared/applicationReview";
+import { activeClock } from "../lib/gratitude-cycles";
 import { createInviteOn, inviteById, reissueInviteOn, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor } from "../repos/roleProposals";
@@ -332,19 +335,34 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (!viewer) return;
     const actorId = String(viewer.id);
     if (await limited(res, `open-proposal-decide:${actorId}`)) return;
-    const p = await found(req, res);
+    let p = await found(req, res);
     if (!p) return;
     if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
     const may = await deciding(p, actorId);
     if (!may.ok) return res.status(may.status).json(may.body);
+    // Role journey L5: nobody who stepped out adopts, and nothing is adopted while a conversation is still to be written up.
+    if (await hasRecused({ getPool }, p.id, actorId)) return res.status(403).json({ error: "recused", message: REVIEW_WORDS.recused });
+    if (!(await interviewsAreIn({ getPool }, p.id))) return res.status(409).json({ error: "interviews_not_done", message: REVIEW_WORDS.interviewsNotDone });
 
     const pool = getPool();
     const at = now();
+    // The moon this was proposed for has ended before the decision: the holder may adopt for the moon running now (Rye, role journey 4a).
+    let theMoonNow = false;
+    if (moonEnded(p.body.term, at, tz())) {
+      if (req.body?.forCurrentMoon !== true) {
+        return res.status(409).json({ error: "moon_ended", message: DECIDE_WORDS.moonEnded, canAdoptForThisMoon: true });
+      }
+      const moon = currentMoonTerm(at, activeClock(), tz());
+      if (!(await store.rewriteTerm(pool, p.id, moon))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      p = { ...p, body: { ...p.body, term: moon } };
+      theMoonNow = true;
+    }
     const carrying = deps.rolesCarrying(ADOPTING_POWER);
     const seatedIn = deps.loadRoleHolders().find((h) => h.userId === actorId && carrying.some((r) => r.id === h.roleId))?.roleId ?? "badge";
     const asks = (await asksFor(pool, [p.id])).get(p.id) ?? [];
     // The record names a role, never a person: "after the circle consented", or "by the founder's power".
-    const decided = decisionFor(consentState(asks, at), at, tz(), carrying.find((r) => r.id === seatedIn)?.name ?? null);
+    const decidedBase = decisionFor(consentState(asks, at), at, tz(), carrying.find((r) => r.id === seatedIn)?.name ?? null);
+    const decided = theMoonNow ? `${decidedBase}, for the moon running now` : decidedBase;
     const decision = { words: decided, authority: `${ADOPTING_POWER}@${seatedIn}`.slice(0, 64) };
     const roles = await rolesOf(pool, p);
     const firstName = greetingName(p.name);
@@ -355,6 +373,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       // Somebody who left the village: welcoming them back is its own act. Nothing is granted, seated or sent.
       if (await isFormerMemberAccount(work, may.own)) return res.status(409).json({ error: "former_member", message: DECIDE_WORDS.formerMember });
       if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      await stampDecided(work, p.id, "adopted");
       let placed: Awaited<ReturnType<typeof placeOnRoles>>;
       try {
         placed = await placeOnRoles(work, { account: may.own, proposal: p, adopterId: actorId, authority: decision.authority });
@@ -404,6 +423,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
       throw e;
     }
     if (!held.ok) return res.status(401).json({ error: "auth_required" });
+    await stampDecided(work, p.id, "adopted");
 
     const link = `${site()}${invitePath(token)}`;
     // Keyed by the link, so a new invitation goes out again, and one link never goes twice.
@@ -440,6 +460,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const decided = declinedWords(shortDay(at, tz()));
     // decided_at is set here, so the tidy job takes the name and address off after 90 days.
     if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+    await stampDecided(work, p.id, "declined");
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email

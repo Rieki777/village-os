@@ -91,6 +91,7 @@ export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-
 export const DOOR = { villageHolds: "village-holds-it", nobodyHolds: "nobody-holds-it", aRoleHolds: "a-role-holds-it" } as const satisfies Record<string, DoorReason>;
 
 export const DECIDE_WORDS = {
+  moonEnded: "The moon this was proposed for has ended. You can adopt it for the moon running now; the letter will say so.",
   // The page.
   heading: (proposer: string | null, roles: readonly string[], moon = false) =>
     `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} ${moon ? "this moon" : "next season"}`,
@@ -189,7 +190,7 @@ export interface AdoptLetterIn {
 /** Signing comes before seating and before any vote (Rye's ruling; the role card's Agreements). */
 const signFirst = (i: AdoptLetterIn): string[] =>
   i.loveLetter
-    ? ["", "Before you are seated, sign the Love Letter, the village's membership agreement. Signing it is what makes you a member, with a voice in the village's decisions:", i.loveLetter]
+    ? ["", "Before you are seated, align with the Love Letter, the village's membership agreement (aligning is the village's way of signing). Aligning with it is what makes you a member, with a voice in the village's decisions:", i.loveLetter]
     : [];
 
 const hello = (firstName: string | null) => (firstName ? `Hi ${firstName},` : "Hi,");
