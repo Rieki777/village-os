@@ -1,8 +1,8 @@
 /**
  * The role-journey measures on a real schema (L11). Tolerant of lanes that have
  * not landed: the application, onboarding and renewal tables may not exist here,
- * and that reads as nothing, never as an error. A visitor is refused, and what a
- * member gets carries no person.
+ * and that reads as nothing, never as an error. Admin only: a visitor is 401, a member
+ * 403, and what an admin gets carries no person.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
@@ -18,6 +18,7 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
   let db: TestDb;
   let pool: mysql.Pool;
   let who: string | null = null;
+  let admin = false;
   let handler: (req: any, res: any) => Promise<unknown>;
   const call = async () => {
     const out: { status: number; body: any } = { status: 200, body: undefined };
@@ -32,6 +33,7 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
     register({ get: (_p: string, h: any) => (handler = h) } as any, {
       getPool: () => pool as any,
       authedUser: async () => (who ? ({ id: who } as any) : null),
+      isAdmin: async () => !!who && admin,
       overLimit: async () => false,
     });
   });
@@ -51,8 +53,17 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
     expect((await call()).status).toBe(401);
   });
 
-  it("gives a member rows with the declared keys and no person", async () => {
+  it("refuses a signed-in member who is not an admin", async () => {
     who = "m-1";
+    admin = false;
+    const out = await call();
+    expect(out.status).toBe(403);
+    expect(out.body.rows).toBeUndefined();
+  });
+
+  it("gives an admin rows with the declared keys and no person", async () => {
+    who = "a-1";
+    admin = true;
     await pool.query("CREATE TABLE IF NOT EXISTS application_steps (id bigint AUTO_INCREMENT PRIMARY KEY, application_ref varchar(64), kind varchar(16), subject varchar(32) DEFAULT '', stamped_at timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3))"); // module-review-ok: fixture table for the scratch schema
     await pool.query("INSERT INTO application_steps (application_ref, kind, stamped_at) VALUES ('op-aaa','confirmed','2026-01-01 00:00:00'),('op-aaa','first_reply','2026-01-01 05:00:00')"); // module-review-ok: fixture rows
     const out = await call();
@@ -60,7 +71,7 @@ describe.skipIf(!configured)("role measures, on a real schema", () => {
     expect(out.body.rows).toHaveLength(1);
     const keys = Object.keys(out.body.rows[0]).filter((k) => k !== "circleName").sort();
     expect(keys).toEqual([...MEASURE_KEYS.row].sort());
-    expect(JSON.stringify(out.body)).not.toMatch(/op-aaa|m-1/);
+    expect(JSON.stringify(out.body)).not.toMatch(/op-aaa|a-1/);
     await pool.query("DROP TABLE application_steps"); // module-review-ok: fixture DDL on the scratch schema
   });
 });
