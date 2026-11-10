@@ -138,7 +138,10 @@ describe("the open proposal page", () => {
     expect(file.getAttribute("href")).toBe(`/api/governance/open-proposals/${ID}/files/pf-0123456789abcdef`);
     expect(file.hasAttribute("download")).toBe(true);
     // The page never fetches a link or a file by itself: the decider opens them.
-    expect(asked.some((a) => a.includes("gates.example.org") || a.includes("/files/"))).toBe(false);
+    // Each entry is "METHOD url": the URL is parsed and its host and path compared, never searched as text.
+    const fetched = asked.map((a) => new URL(a.slice(a.indexOf(" ") + 1), "http://local"));
+    expect(fetched.some((u) => u.hostname === "gates.example.org")).toBe(false);
+    expect(fetched.some((u) => /\/files\/[^/]+$/.test(u.pathname))).toBe(false);
     cleanup();
     // Anybody else: the server sends no attachments, and the page shows no section.
     answer = () => json({ proposal: served({ attached: null }) });
