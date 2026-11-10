@@ -244,7 +244,7 @@ export default function RoleDraft() {
   }, [open]);
 
   // Each step is a section of this one page. A step button or Next glides to it; reading down the page moves the bar too.
-  const STEP_IDS = ["sel-season", "sel-you", "sel-scout", "sel-select", "sel-apply"] as const;
+  const STEP_IDS = ["sel-season", "sel-chars", "sel-scout", "sel-select", "sel-apply"] as const;
   const go = (i: number) => {
     setStep(i);
     const el = document.getElementById(STEP_IDS[i]);
@@ -363,7 +363,7 @@ export default function RoleDraft() {
               </button>
             </div>
           </section>
-          <div id="sel-you" className="scroll-mt-52"></div>
+          <div id="sel-chars" className="scroll-mt-52"></div>
           <DiscoverStep cast={cast} chars={chars} onToggleChar={toggleChar} roles={roles} onDraft={(id) => { if (!picks.includes(id)) togglePick(id); }}>
           <section aria-labelledby="draft-chars">
             <h2 id="draft-chars" className="font-display text-2xl font-bold text-foreground">{t`Who do you play? Pick one or more.`}</h2>
