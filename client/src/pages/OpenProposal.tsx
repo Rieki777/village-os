@@ -351,7 +351,7 @@ export default function OpenProposal() {
                 ) : (
                   <>
                     {p.invitation.sentAt && (
-                      <p className="mt-1 text-stone-700" data-invitation-sent="">
+                      <p className="mt-1 text-foreground" data-invitation-sent="">
                         {DECIDE_WORDS.invitationSent(new Date(p.invitation.sentAt).toLocaleString(), p.invitation.emailed !== false)}
                       </p>
                     )}

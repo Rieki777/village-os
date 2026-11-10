@@ -97,12 +97,22 @@ export function makeApplicantTeller(deps: TellDeps): TellApplicant {
   };
 }
 
+/** Drops the "Your status page link" line (the notice carries its own link) and the blank lines around it. Split, not a regex, so a long run of newlines costs one pass. */
+export function withoutStatusLink(text: string): string {
+  const kept: string[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("Your status page link")) { kept.push(line); continue; }
+    while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
+  }
+  return kept.join("\n").trim();
+}
+
 async function notifyAccount(deps: Pick<TellDeps, "notify">, userId: string, ref: string, kind: ApplicantUpdateKind, facts: UpdateFacts, words: { title: string; text: string }) {
   await deps.notify({
     userId,
     type: "applicant_update",
     title: words.title,
-    body: words.text.replace(/\n+Your status page link[^\n]*\n?/, "").trim().slice(0, 1000),
+    body: withoutStatusLink(words.text).slice(0, 1000),
     link: "/profile",
     actorUserId: null,
     dedupeKey: `op:${keyOf(ref, kind, facts.part)}:${userId}`,
