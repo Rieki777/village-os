@@ -7887,6 +7887,11 @@ msgstr ""
 msgid "Who holds it instead"
 msgstr ""
 
+#: client/src/components/WorkPayBlock.tsx
+msgctxt "work pay cash line"
+msgid "{cash} in cash, per the role agreement."
+msgstr "{cash} en efectivo, según el acuerdo del rol."
+
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
 msgid "Nothing was undone."

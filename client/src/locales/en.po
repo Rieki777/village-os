@@ -7866,6 +7866,11 @@ msgstr "You agreed on {0} that the guide may send your questions to {1}."
 msgid "Who holds it instead"
 msgstr "Who holds it instead"
 
+#: client/src/components/WorkPayBlock.tsx
+msgctxt "work pay cash line"
+msgid "{cash} in cash, per the role agreement."
+msgstr "{cash} in cash, per the role agreement."
+
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
 msgid "Nothing was undone."

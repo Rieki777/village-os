@@ -17,6 +17,7 @@
  * terms tier, where a reader may not know what a role pays.
  */
 import { Award, Coins, HandCoins } from "lucide-react";
+import { useLingui } from "@lingui/react/macro";
 import type { WorkPay } from "@shared/workValue";
 import {
   agreementCashWords,
@@ -38,6 +39,7 @@ export default function WorkPayBlock({
   /** `card` is the compact chip a board shows; `full` is the detail page's paragraph. */
   variant?: "card" | "full";
 }) {
+  const { t } = useLingui();
   const rates = useDisplayRates();
   if (!pay) return null;
   const headline = payHeadline(pay);
@@ -102,7 +104,7 @@ export default function WorkPayBlock({
           ) : cash ? (
             // The role states its cash, so the card leads with that and does not open on "no value": the cash line below is the pay.
             <p className="font-semibold text-foreground">
-              {cash} in cash, per the role agreement.
+              {t({ message: `${cash} in cash, per the role agreement.`, context: "work pay cash line" })}
             </p>
           ) : (
             <p className="text-muted-foreground">No value set yet. Inquire for the full payment details.</p>
