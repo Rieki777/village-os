@@ -24045,7 +24045,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
   registerRoleGuideRoutes(app, { authedUser, getPool, clientIp, overLimit, members, seasonState, lapse: lapseContext, villageGuideName: () => String(getWorkWithUs().assistantName ?? ""), villageName: () => mergedConfig().project.name || "the village" });
   registerAlignmentRoutes(app, { authedUser, guardCapability, getPool, notify, notifyAdmins, overLimit, members, confirmIdentity, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET, seatCalendar, capabilityCtx, liveHoldersOf });
   registerMembershipLetterRoutes(app, { letterSource: () => letterSourceFrom(mergedConfig(), contentRepo.get()) });
-  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET }); // the confidentiality agreement, and the agreements before a role starts (L7)
+  registerConfidentialityRoutes(app, { authedUser, getPool, overLimit, members, content: () => contentRepo.get(), boolVar, guardCapability, documentDir: path.join(DATA_DIR, "private-documents"), googleAvailable: () => googleSignInAvailability().available, authSecret: AUTH_TOKEN_SECRET }); // the confidentiality agreement, and the agreements before a role starts (L7)
 
   /**
    * ── TAKE A SEAT BACK ───────────────────────────────────────────────────────

@@ -1008,6 +1008,11 @@ msgctxt "nobody is asked or told, by design"
 msgid "Nobody, on purpose."
 msgstr "Nobody, on purpose."
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "Attached: {docTitle} ({kb} KB)."
+msgstr "Attached: {docTitle} ({kb} KB)."
+
 #: client/src/pages/RoleDraft.tsx
 msgctxt "role draft button"
 msgid "Full card"
@@ -1022,6 +1027,10 @@ msgstr "The four foundations"
 msgctxt "funding rounds"
 msgid "Not funded this round"
 msgstr "Not funded this round"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "Attaching a new document changes the agreement, so everybody who aligned is asked to align again."
+msgstr "Attaching a new document changes the agreement, so everybody who aligned is asked to align again."
 
 #: client/src/components/review/SeraCompare.tsx
 msgid "Struck words are only here. Underlined words are only in {theirsTitle}."
@@ -1093,6 +1102,11 @@ msgstr "Suggested."
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "Write the public line"
 msgstr "Write the public line"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "Document title"
+msgstr "Document title"
 
 #: client/src/components/myMoon/InvoicesDesk.tsx
 msgid "The invoice tracks and the disagreements did not load. Close and open again in a moment."
@@ -1371,6 +1385,10 @@ msgstr "Set"
 msgctxt "send the question to the guide"
 msgid "Ask"
 msgstr "Ask"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "Members read it only when they are signed in to align. It is never on a public page."
+msgstr "Members read it only when they are signed in to align. It is never on a public page."
 
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "How widely it should be switched on"
@@ -2253,6 +2271,10 @@ msgstr "Open {label}"
 msgid "Work out this role's pay with the valuation engine"
 msgstr "Work out this role's pay with the valuation engine"
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "No document attached yet."
+msgstr "No document attached yet."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reader started this change request"
 msgid "You started this"
@@ -2464,6 +2486,11 @@ msgstr "{liveName} is renamed {theirName}."
 msgctxt "change request step"
 msgid "Gathering"
 msgstr "Gathering"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "The PDF"
+msgstr "The PDF"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Choose a .json file"
@@ -2751,6 +2778,11 @@ msgstr "You hear back within {replyHours, plural, one {# hour} other {# hours}}.
 msgid "The five frames of {name}"
 msgstr "The five frames of {name}"
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "Attaching..."
+msgstr "Attaching..."
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"
 msgid "Answer"
@@ -3017,6 +3049,10 @@ msgstr "Read the list again"
 msgid "What happens when somebody is asked to leave"
 msgstr "What happens when somebody is asked to leave"
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "Attach a new document"
+msgstr "Attach a new document"
+
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
 msgid "Keep this key"
@@ -3086,6 +3122,10 @@ msgstr "Edit the agreement"
 #: client/src/components/canvas/CanvasPublicLines.tsx
 msgid "The public line for {name}"
 msgstr "The public line for {name}"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "Attached. Every holder is asked to align again with the agreement as it reads now."
+msgstr "Attached. Every holder is asked to align again with the agreement as it reads now."
 
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgid "{quoted} <0>{creditText}</0>. The canvas lives at <1>{url}</1>. {ours}"
@@ -3464,6 +3504,11 @@ msgstr "The count is being made. Open this page again in a moment."
 msgid "This file cannot be loaded as it is:"
 msgstr "This file cannot be loaded as it is:"
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "The agreement's document"
+msgstr "The agreement's document"
+
 #: client/src/components/fundingRounds/common.tsx
 msgctxt "funding round stage"
 msgid "Choosing which quests to fund until {day}"
@@ -3707,6 +3752,11 @@ msgstr "You hold the village's funding pots, so you can open a pot and a round."
 #: client/src/components/Layout.tsx
 #~ msgid "Skip to content"
 #~ msgstr "Skip to content"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgctxt "admin confidentiality section"
+msgid "Attach the document"
+msgstr "Attach the document"
 
 #: client/src/components/canvas/ConflictAgreementPublic.tsx
 msgid "That was not recorded."
@@ -4066,6 +4116,10 @@ msgstr "Replace the key"
 msgid "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 msgstr "Your suggestion is withdrawn. It is listed under Decided lately on this block."
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "The document was not attached ({status}). Nothing changed."
+msgstr "The document was not attached ({status}). Nothing changed."
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Give the hours"
@@ -4166,6 +4220,10 @@ msgstr "Save characters"
 msgctxt "sera answers"
 msgid "this role"
 msgstr "this role"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+#~ msgid "Attaching..."
+#~ msgstr "Attaching..."
 
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box heading"
@@ -5109,6 +5167,10 @@ msgctxt "sera answers"
 msgid "The line that follows has Undo, to bring them back."
 msgstr "The line that follows has Undo, to bring them back."
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "This upload did not reach the server. Nothing changed."
+msgstr "This upload did not reach the server. Nothing changed."
+
 #. placeholder {0}: answer.draft.noSection.map((b) => CANVAS_BLOCKS[b].name).join(", ")
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "{0} has no section of words to suggest into yet."
@@ -5410,6 +5472,10 @@ msgstr "Which changes"
 msgctxt "funding rounds"
 msgid "Opening the round"
 msgstr "Opening the round"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+msgid "Blank takes the file's name"
+msgstr "Blank takes the file's name"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -6241,6 +6307,10 @@ msgstr "This week"
 msgid "Which of the village's goals for the season will your work serve? Pick up to {0}, and say how."
 msgstr "Which of the village's goals for the season will your work serve? Pick up to {0}, and say how."
 
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+#~ msgid "Attached: {docTitle} ({kb} KB)."
+#~ msgstr "Attached: {docTitle} ({kb} KB)."
+
 #: client/src/i18n/LanguagePicker.tsx
 msgctxt "language picker"
 msgid "Use my browser's language"
@@ -6361,6 +6431,10 @@ msgstr "Nothing was undone."
 msgctxt "change request note outcome"
 msgid "Answered"
 msgstr "Answered"
+
+#: client/src/components/admin/AgreementDocumentUpload.tsx
+#~ msgid "Attach the document"
+#~ msgstr "Attach the document"
 
 #: client/src/components/admin/AdminHeader.tsx
 msgctxt "admin header, menu button"

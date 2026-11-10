@@ -22,8 +22,15 @@
  *      once aligned, and the gate's steps are the three agreements and nothing else.
  *   6. the confidentiality door refuses changed words and a stale identity
  *      confirmation, and writes nothing then.
+ *   7. the agreement's document (Rye, 9 Nov 2026): attached in Admin; served
+ *      ONLY to a signed-in member at the step where they align, never to a
+ *      visitor and never through a public door; a new upload asks everyone
+ *      again. CONTROL: the same file attached again asks nobody.
  */
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -66,6 +73,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
   let founderRole = "";
   let n = 0;
   let signings: ReturnType<typeof dbCollection>;
+  const documentDir = fs.mkdtempSync(path.join(os.tmpdir(), "village-agreement-doc-"));
 
   const state = {
     viewer: null as string | null,
@@ -160,6 +168,12 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       members: usersRepo(pool),
       content: () => state.content,
       boolVar: (k: string) => !!state.dials[k],
+      guardCapability: async (_req: any, res: any) => {
+        if (state.viewer === FOUNDER.id) return true;
+        res.status(state.viewer ? 403 : 401).json({ error: "forbidden" });
+        return false;
+      },
+      documentDir,
       googleAvailable: () => false,
       authSecret: "test-secret",
     } as any);
@@ -171,6 +185,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
   });
 
   afterAll(async () => {
+    fs.rmSync(documentDir, { recursive: true, force: true });
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await pool?.end();
     await db?.drop();
@@ -544,6 +559,106 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       expect(r.body.field).toBe("membership");
       expect(r.body.letter.version).toBe(currentLetter(LETTER_SOURCE).version);
       expect(state.sent.length).toBe(before);
+    });
+  });
+
+  describe("the agreement's document (Rye, 9 Nov 2026)", () => {
+    const DOC_TITLE = "Test Village and Example Holdings NDA";
+    const pdf = (marker: string) => Buffer.from(`%PDF-1.4\n% ${marker}\n1 0 obj << /Type /Catalog >> endobj\ntrailer << >>\n%%EOF\n`, "latin1");
+    const attach = async (bytes: Buffer, name: string, title: string, as: string | null = FOUNDER.id) => {
+      const before = state.viewer;
+      state.viewer = as;
+      try {
+        const form = new FormData();
+        form.append("title", title);
+        form.append("file", new Blob([bytes], { type: "application/pdf" }), name);
+        const res = await fetch(`${base}/api/admin/confidentiality/document`, { method: "POST", body: form }); // module-review-ok: a test calling its own local server
+        return { status: res.status, body: (await res.json()) as any };
+      } finally {
+        state.viewer = before;
+      }
+    };
+    const read = async (as: string | null) => {
+      const before = state.viewer;
+      state.viewer = as;
+      try {
+        const res = await fetch(`${base}/api/confidentiality/document`); // module-review-ok: a test calling its own local server
+        return { status: res.status, type: res.headers.get("content-type") ?? "", cache: res.headers.get("cache-control") ?? "", bytes: Buffer.from(await res.arrayBuffer()) };
+      } finally {
+        state.viewer = before;
+      }
+    };
+
+    afterAll(async () => {
+      await call("DELETE", "/api/admin/confidentiality/document", undefined, FOUNDER.id);
+    });
+
+    it("is served only to somebody signed in, never to a visitor, and its title never reaches a visitor", async () => {
+      const bytes = pdf("first");
+      const up = await attach(bytes, "Agreement.pdf", DOC_TITLE);
+      expect(up.status, JSON.stringify(up.body)).toBe(200);
+      expect(up.body.document).toMatchObject({ title: DOC_TITLE, size: bytes.length });
+
+      // A visitor: nothing about the document, not even its title, and the file is refused.
+      const visitorView = await call("GET", "/api/confidentiality", undefined, null);
+      expect(visitorView.body).toMatchObject({ agreement: null, exists: true, you: null });
+      expect(JSON.stringify(visitorView.body)).not.toContain(DOC_TITLE);
+      const refused = await read(null);
+      expect(refused.status).toBe(401);
+      expect(refused.bytes.includes(Buffer.from("%PDF"))).toBe(false);
+      // The admin record is for the hand that writes the words.
+      expect((await call("GET", "/api/admin/confidentiality/document", undefined, null)).status).toBe(401);
+      expect((await call("GET", "/api/admin/confidentiality/document", undefined, ANA.id)).status).toBe(403);
+      // The bytes are outside every public folder: only the document folder holds them.
+      expect(fs.readdirSync(documentDir).filter((f) => f.endsWith(".pdf"))).toHaveLength(1);
+
+      // A signed-in member, at the step where they align: the title, the link, and the file itself.
+      const memberView = await call("GET", "/api/confidentiality", undefined, ANA.id);
+      expect(memberView.body.agreement.document).toEqual({ title: DOC_TITLE, size: bytes.length, href: "/api/confidentiality/document" });
+      const served = await read(ANA.id);
+      expect(served.status).toBe(200);
+      expect(served.type).toContain("application/pdf");
+      expect(served.cache).toContain("no-store");
+      expect(served.bytes.equals(bytes)).toBe(true);
+    });
+
+    it("a new upload asks everyone again; CONTROL: the same file attached again asks nobody", async () => {
+      await attach(pdf("v1"), "Agreement.pdf", DOC_TITLE);
+      const who = await newAccount("doc-holder");
+      await alignAgreement(who.id);
+      const holds = async () => (await call("GET", "/api/confidentiality", undefined, who.id)).body.you;
+      expect(await holds()).toEqual({ holds: true });
+
+      // The same bytes and title again: the same words, so they still hold it.
+      expect((await attach(pdf("v1"), "Agreement.pdf", DOC_TITLE)).status).toBe(200);
+      expect(await holds()).toEqual({ holds: true });
+
+      // A new file: the fingerprint moved, and they are asked again.
+      expect((await attach(pdf("v2"), "Agreement.pdf", DOC_TITLE)).status).toBe(200);
+      expect(await holds()).toEqual({ holds: false });
+      // The stored words of their next alignment name the new file by its fingerprint.
+      await alignAgreement(who.id);
+      expect(await holds()).toEqual({ holds: true });
+      const newest = await q(
+        "SELECT t.body FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? AND t.subject_type = 'confidentiality' ORDER BY t.version DESC LIMIT 1",
+        [who.id],
+      );
+      const sha = (await call("GET", "/api/admin/confidentiality/document", undefined, FOUNDER.id)).body.document.sha256;
+      expect(newest[0].body).toContain(sha);
+    });
+
+    it("refuses a file that is not a PDF, and anybody without the pen, and changes nothing", async () => {
+      const before = (await call("GET", "/api/admin/confidentiality/document", undefined, FOUNDER.id)).body.document;
+      expect((await attach(Buffer.from("not a pdf"), "Agreement.pdf", DOC_TITLE)).status).toBe(400);
+      expect((await attach(pdf("x"), "Agreement.docx", DOC_TITLE)).status).toBe(400);
+      expect((await attach(pdf("x"), "Agreement.pdf", DOC_TITLE, ANA.id)).status).toBe(403);
+      expect((await attach(pdf("x"), "Agreement.pdf", DOC_TITLE, null)).status).toBe(401);
+      expect((await call("GET", "/api/admin/confidentiality/document", undefined, FOUNDER.id)).body.document).toEqual(before);
+    });
+
+    it("a title left blank takes the file's own name, so the village's words come from the village", async () => {
+      const up = await attach(pdf("named"), "Test Village Agreement.pdf", "");
+      expect(up.body.document.title).toBe("Test Village Agreement");
     });
   });
 

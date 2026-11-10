@@ -58,6 +58,7 @@ export const ADMIN_TABS: AdminTabEntry[] = [
   entry("legal", "village", "Legal notices", "The legal words this village publishes."),
   entry("covenant", "village", "Covenant", "The two covenant paragraphs that are this village's own."),
   entry("money", "village", "Money claims", "The money figures this village publishes."),
+  entry("confidentiality", "village", "Confidentiality agreement", "The words and the PDF members align with before private records and before a role starts."),
   entry("work-with-us", "village", "Work with us", "The roles the village is asking for help with."),
   entry("faqs", "village", "FAQs", "Answers people can read before they ask."),
   entry("milestones", "village", "Build progress", "What has been built, and what is still ahead."),
