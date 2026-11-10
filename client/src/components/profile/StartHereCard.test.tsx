@@ -102,10 +102,12 @@ describe("StartHereCard: a signed-in guest who has not asked yet", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("offers no letter in a village that does not serve one, and points at the vouches", async () => {
+  // Role journey L7 (coordinator, 9 Nov 2026): the Love Letter is a member's door, served to anybody signed in
+  // with the story pages on or off (shared/brochure.ts, MEMBER_DOORS). This case used to assert the opposite,
+  // which was the dead end: a village with its story pages off had no way for a guest to align and join.
+  it("offers the letter even in a village with its story pages off, because it is a member's door", async () => {
     render(<StartHereCard ownerId="u1" me={me()} signing={null} config={config({ brochurePages: false })} />);
-    expect(within(card()).queryByRole("link", { name: /Sign the/ })).toBeNull();
-    expect(await within(card()).findByRole("link", { name: "Open your page" })).toHaveAttribute("href", "/profile/wren");
+    expect(await within(card()).findByRole("link", { name: /Sign the/ })).toHaveAttribute("href", "/love-letter");
   });
 });
 

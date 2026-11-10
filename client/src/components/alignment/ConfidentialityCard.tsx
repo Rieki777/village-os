@@ -16,7 +16,7 @@ import { alignConfidentiality, fetchConfidentiality, openAgreementDocument } fro
 
 type Agreement = { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null };
 
-export default function ConfidentialityCard() {
+export default function ConfidentialityCard({ onAligned }: { onAligned?: () => void } = {}) {
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [holds, setHolds] = useState(false);
   const [alignedAt, setAlignedAt] = useState<string | null>(null);
@@ -85,6 +85,7 @@ export default function ConfidentialityCard() {
               onDone={(d) => {
                 setNotice("");
                 setAlignedAt(typeof d?.alignedAt === "string" ? d.alignedAt : new Date().toISOString());
+                onAligned?.();
               }}
             />
           </>

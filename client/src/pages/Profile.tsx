@@ -18,6 +18,7 @@ import PowersMap from "@/components/profile/PowersMap";
 import PathsPanel, { type PathTile } from "@/components/profile/PathsPanel";
 import InvitePanel from "@/components/profile/InvitePanel";
 import StartHereCard from "@/components/profile/StartHereCard";
+import RoleStartSteps from "@/components/profile/RoleStartSteps";
 import type { MembershipSigning } from "@shared/membershipSigning";
 import PathFacts from "@/components/profile/PathFacts";
 import InventoryCard from "@/components/profile/InventoryCard";
@@ -393,6 +394,9 @@ export default function Profile() {
         <div className="relative mx-auto max-w-[1300px] px-4 sm:px-10">
           <ProfileTabs tab={tab} onTab={setTab} />
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
+            {/* THE STEPS BEFORE A ROLE STARTS, on every tab: a new holder lands
+                here after sign-up, on any tab, and is asked here (role journey L7). */}
+            <RoleStartSteps />
             {/* The role proposal, first under the tabs. On a phone it is on
                 Today and on Roles, so it is the first thing on either tab.
                 A desktop shows it here, above the hero. */}

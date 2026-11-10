@@ -13,7 +13,8 @@ import { lazy, useCallback, type ComponentType } from "react";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/NotFound";
 import { useGameConfig, type PublicGameConfig } from "./gameApi";
-import { brochurePathServed, isBrochurePath } from "@shared/brochure";
+import { brochurePathServed, isBrochurePath, isMemberDoor, servedTo } from "@shared/brochure";
+import { useOptionalAuth } from "@/contexts/AuthContext";
 
 export { isBrochurePath };
 
@@ -40,6 +41,16 @@ export function storyPageShown(config: Switches | null | undefined, href: string
  * to several pages. A link to a page this village does not serve is left out,
  * the same way a link to a module that is off is left out.
  */
+/**
+ * A story page as THIS viewer can open it: a member's door (the Love Letter)
+ * is always open to somebody signed in (shared/brochure.ts, MEMBER_DOORS).
+ * The question a member's own surface asks before it links the letter.
+ */
+export function memberDoorShown(config: Switches | null | undefined, href: string, signedIn: boolean): boolean {
+  if (!config) return signedIn || !isBrochurePath(href);
+  return servedTo({ enabled: config.brochurePages === true, hidden: config.brochureHidden ?? [] }, href, signedIn);
+}
+
 export function useStoryPageShown(): (href: string) => boolean {
   const config = useGameConfig();
   return useCallback((href: string) => storyPageShown(config, href), [config]);
@@ -74,10 +85,15 @@ export function brochurePage(loader: () => Promise<{ default: ComponentType<any>
   return function BrochureRoute(props: any) {
     const config = useGameConfig();
     const [location] = useLocation();
+    const auth = useOptionalAuth();
     if (!config) return null;
+    const door = isMemberDoor(location);
+    // A member's door waits for the session, so a signed-in member is never shown not-found first.
+    if (door && auth?.loading) return null;
     // The master switch decides wherever this is mounted; the page's own
-    // switch is read off the address it answers.
-    const served = config.brochurePages === true && storyPageShown(config, location);
+    // switch is read off the address it answers. A member's door (the Love
+    // Letter) is open to anybody signed in, whatever the switches say.
+    const served = (config.brochurePages === true && storyPageShown(config, location)) || (door && !!auth?.user);
     return served ? <Page {...props} /> : <NotFound />;
   };
 }
