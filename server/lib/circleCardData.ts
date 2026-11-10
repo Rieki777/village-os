@@ -27,6 +27,7 @@ import { charterFromRow } from "../../shared/circleCharter";
 import { circleWordKeysOf, parseCircleWords } from "../../shared/circleCharterParse";
 import { listOrgAssignments, listOrgRoles, type LapseContext } from "./orgChart";
 import { projectSeats, type SeatTier } from "./seatProjection";
+import { ownRoleIdsOf } from "../../shared/roleListing";
 import { payBadgeBoosts, rolePayRules } from "./workPay";
 import { readCircleLive } from "./circleLive";
 import { circleSummary, type RhythmDeps } from "./sessionRhythm";
@@ -98,6 +99,9 @@ export async function buildCircleCardFor(
   // The holders' names are never read: nameOf answers nothing a reader sees.
   const seats = projectSeats(inCircle, held, ctx.tier, {
     route: "org",
+    roleNames: new Map(roles.map((r) => [r.id, r.name])),
+    // Role journey PR-A: an unlisted role shows to an admin and to its own holders only.
+    listing: { seesUnlisted: ctx.viewer?.admin === true, ownRoleIds: ownRoleIdsOf(assignments, ctx.viewer?.userId) },
     now: ctx.now,
     nameOf: () => "",
     firstName: (s) => s,

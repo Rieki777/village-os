@@ -109,7 +109,7 @@ export function register(app: Express, deps: Deps): void {
   const runnerFor = (req: any): RouteRunner => async (call: InboxCall) => {
     if (!call.path.startsWith("/api/") || call.path.startsWith("/api/agent/")) return { status: 400, body: { error: "not a route an approval may call" } };
     const auth = String(req.headers.authorization ?? "");
-    const r = await fetch(`http://127.0.0.1:${port()}${call.path}`, {
+    const r = await fetch(`http://127.0.0.1:${port()}${call.path}`, { // module-review-ok: the loopback to this same process, run as the person who pressed Approve, never an outside host
       method: call.method,
       headers: {
         authorization: auth,

@@ -16,7 +16,7 @@ import {
   EMPTY_AI_APPROVAL, TIER_C, TIER_C_PATHS, approvalProblem, cardCompleteness, parseAiApproval, parseLetter, parseRoleChange, parseSeating, projectChart,
 } from "../../shared/agentProposals";
 
-const SECRET = "test-secret-for-confirm-tokens";
+const SIGNER = "unit-test-signing-input";
 const ME = "u-me";
 const info = { name: "Example Village", version: "1.2.0" };
 
@@ -60,9 +60,9 @@ function holder(opts: { approved?: boolean } = {}) {
   const ctx: ToolContext = {
     dispatch,
     holderId: ME,
-    mintConfirm: (tool, echo) => mintConfirmToken(SECRET, { action: `mcp:${tool}`, userId: ME, echo }),
+    mintConfirm: (tool, echo) => mintConfirmToken(SIGNER, { action: `mcp:${tool}`, userId: ME, echo }),
     verifyConfirm: (tool, token, echo) => {
-      const c = verifyConfirmToken(SECRET, token, { action: `mcp:${tool}`, userId: ME, echo });
+      const c = verifyConfirmToken(SIGNER, token, { action: `mcp:${tool}`, userId: ME, echo });
       return c.ok ? { ok: true } : { ok: false, reason: c.reason, sentence: CONFIRM_REASON_SENTENCE[c.reason] };
     },
   };

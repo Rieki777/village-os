@@ -11,7 +11,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { OPEN_WORDS } from "@shared/openProposals";
+import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -31,6 +31,9 @@ const FORM = {
   ],
 };
 
+/** The membership letter the form shows and aligns with (Rye's answer 8). */
+const LETTER = { version: "lv-0123456789abcdef", title: "Membership agreement", body: "Dear friend, welcome home.", intent: "I align with the Membership agreement.", parts: {} };
+
 let posted: any[] = [];
 
 function serve(form: unknown, answer: { status: number; body: unknown } = { status: 200, body: { sent: true, message: OPEN_WORDS.sent("rowan@example.test") } }) {
@@ -42,6 +45,8 @@ function serve(form: unknown, answer: { status: number; body: unknown } = { stat
         posted.push({ url, body: JSON.parse(String(init.body)) });
         return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { "content-type": "application/json" } });
       }
+      if (String(url).startsWith("/api/membership-letter")) return new Response(JSON.stringify(LETTER), { status: 200, headers: { "content-type": "application/json" } });
+      if (String(url).startsWith("/api/profile/alignments")) return new Response(JSON.stringify({ alignments: [] }), { status: 200, headers: { "content-type": "application/json" } });
       return new Response(JSON.stringify(form), { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -75,17 +80,21 @@ describe("the form", () => {
     const gate = document.querySelector('[data-role="r-gate"]') as HTMLElement;
     fireEvent.change(within(gate).getByLabelText(/What you bring to this role/), { target: { value: "I open gates for a living." } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan Field" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
-    // The two agreements are required (Rye, 9 Nov): the Love Letter before seating, the NDA once approved.
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    // The two agreements are required (Rye, 9 Nov). The membership letter is aligned with HERE, by
+    // the version the form drew (Rye's answer 8); the confidentiality agreement once approved.
+    fireEvent.click(await screen.findByLabelText(LETTER.intent));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
     expect(screen.getByText(OPEN_WORDS.sent("rowan@example.test"))).toBeTruthy();
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("/api/open-proposals");
+    expect(posted[0].body.card.terms).toEqual({ choice: "accept", note: "" });
     expect(posted[0].body).toMatchObject({
       name: "Rowan Field",
       email: "rowan@example.test",
@@ -95,8 +104,45 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } },
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { nda: true } },
+      membership: { letterVersion: LETTER.version },
     });
+    // No payment anywhere on the path: nothing posted names money.
+    expect(JSON.stringify(posted[0].body)).not.toMatch(/contribution|amount|payment|dues/i);
+  });
+
+  it("membership at application: the letter is there to read, aligning sends its version, and a signed-in member already aligned is asked nothing", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    const ask = await waitFor(() => {
+      const el = document.querySelector('[data-membership="ask"]');
+      if (!el) throw new Error("no membership block yet");
+      return el as HTMLElement;
+    });
+    expect(within(ask).getByText(/Read the Membership agreement/)).toBeTruthy();
+    expect(within(ask).getByText(/Aligning is the village's way of signing\./)).toBeTruthy();
+    expect(within(ask).getByText(/No payment is asked/)).toBeTruthy();
+    // Control: there is no Love Letter tick on the form at all; the alignment is the agreement.
+    expect(screen.queryByLabelText(/Love Letter/)).toBeNull();
+    // The one checkbox about the letter is the alignment itself, bound to the letter's own sentence.
+    const aboutLetter = screen.getAllByRole("checkbox").filter((c) => /Love Letter|membership/i.test(c.closest("label")?.textContent ?? ""));
+    expect(aboutLetter.map((c) => c.closest("label")?.textContent)).toEqual([LETTER.intent]);
+    cleanup();
+
+    auth.user = { name: "Gil Moss", email: "gil@example.test" };
+    posted = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+        if (String(url).startsWith("/api/membership-letter")) return json(LETTER);
+        if (String(url).startsWith("/api/profile/alignments")) return json({ alignments: [{ kind: "membership", state: "in-force" }] });
+        return json(FORM);
+      }),
+    );
+    render(<ProposeARole />);
+    expect(await screen.findByText(/already aligned with the village's membership letter/)).toBeTruthy();
+    expect(screen.queryByLabelText(LETTER.intent)).toBeNull();
   });
 
   it("a refusal says why and marks its field, and nothing is lost", async () => {
@@ -108,6 +154,13 @@ describe("the form", () => {
     expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
+  });
+
+  it("the privacy note says an AI may draft replies, in the same words as the confirmation email", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    expect(document.querySelector("[data-ai-drafts]")?.textContent).toBe(OPEN_AI_DRAFTS);
   });
 
   it("the honeypot is there, hidden from people and from screen readers", async () => {
@@ -237,6 +290,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     render(<ProposeARole />);
     await screen.findByText("What this role asks");
     expect(screen.getByText("Time: roughly 30 hours a week")).toBeTruthy();
+    expect(document.querySelector("[data-no-season-goals]")).toBeNull();
     fireEvent.click(screen.getByLabelText("A cash view every Monday"));
     fireEvent.change(screen.getByLabelText("Your target for: A cash view every Monday"), { target: { value: "13 of 13 Mondays" } });
     fireEvent.change(screen.getByLabelText("Quest 1 for Lead Financial Steward"), { target: { value: "Publish the first cash view" } });
@@ -244,17 +298,62 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.click(screen.getByLabelText("Investor ready"));
     fireEvent.change(screen.getByLabelText("How your work serves: Investor ready"), { target: { value: "One set of numbers" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+    fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
-    fireEvent.click(screen.getByLabelText(/sign the Love Letter/));
-    fireEvent.click(screen.getByLabelText(/confidentiality agreement \(NDA\)/));
+    fireEvent.click(await screen.findByLabelText(LETTER.intent));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
-    expect(posted[0].body.card).toEqual({
+    expect(posted[0].body.card).toMatchObject({
       roles: [{ roleId: "r-lfs", moves: [{ text: "A cash view every Monday", target: "13 of 13 Mondays" }], firstMoon: [{ quest: "Publish the first cash view", doneWhen: "every circle lead has it" }] }],
       serves: [{ goalId: "g-investor", how: "One set of numbers" }],
       hours: "",
-      agreed: { loveLetter: true, nda: true },
+      agreed: { nda: true },
+      terms: { choice: "accept", note: "" },
     });
+  });
+});
+
+describe("form v2 (role journey brief v2, 5.4)", () => {
+  it("takes the time zone from the browser, and shows each picked role's conversations in order after sending", async () => {
+    window.history.pushState({}, "", "/propose-a-role?role=r-lfs");
+    serve({
+      ...FORM,
+      roles: [
+        {
+          id: "r-lfs",
+          name: "Lead Financial Steward",
+          circle: "Anchor Circle",
+          aim: null,
+          conversations: [
+            { role: "Visionary Channel", minutes: 60 },
+            { role: "Technical Operations Steward", minutes: 20 },
+            { role: "Anchor Circle Steward", minutes: 20, finalApproval: true },
+          ],
+        },
+      ],
+    });
+    render(<ProposeARole />);
+    const tz = (await screen.findByLabelText("Your time zone")) as HTMLInputElement;
+    expect(tz.value).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    // Brief v3: a season with no goals yet says so, and the application still goes (below).
+    expect(document.querySelector("[data-no-season-goals]")?.textContent).toMatch(/not set its goals for this season yet/);
+    fireEvent.click(screen.getByLabelText("I'd like to talk about the terms."));
+    fireEvent.change(screen.getByLabelText("What you would like to talk about in the terms"), { target: { value: "The hours" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "I keep books." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Money kept true." } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Juno Reed" } });
+    fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "juno@example.test" } });
+    fireEvent.click(await screen.findByLabelText(LETTER.intent));
+    fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    await screen.findByRole("heading", { name: "Check your email" });
+    expect(posted[0].body.card.terms).toEqual({ choice: "talk", note: "The hours" });
+    const steps = document.querySelector("[data-next-for-roles]") as HTMLElement;
+    const items = Array.from(steps.querySelectorAll("li")).map((li) => li.textContent);
+    expect(items).toEqual(["60 minutes with Visionary Channel", "20 minutes with Technical Operations Steward", "20 minutes with Anchor Circle Steward, the final approval"]);
+    expect(steps.textContent).toContain("We'll write to you to find a time.");
   });
 });

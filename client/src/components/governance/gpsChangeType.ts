@@ -23,14 +23,12 @@ import { purposeAlignmentProblem, purposeStatementProblem } from "@shared/govern
  * ── CHANGING WHAT THE VILLAGE IS FOR (0219) ──────────────────────────────
  *
  * Rye, 2026-09-23: "all upgrades going forward will be judged against it."
- * This card is how a village that has finished its handover moves the
- * sentence everything else answers to.
+ * This card is how a village moves the sentence everything else answers to.
  *
- * IT IS DORMANT TODAY AND THE CARD STILL SHOWS. The route refuses while the
- * founder holds the pen and says how many powers are still on the admin
- * panel, which is a door that names its own condition. A card that appeared
- * out of nowhere on the day a handover completed would be a feature nobody
- * had ever seen arriving at the least convenient moment.
+ * OPEN BEFORE THE HANDOVER TOO (Rye, 2026-11-06: Article 0 wins over "founder
+ * keeps the pen"). While the founder holds the pen the route prices this vote
+ * at the village's highest tier and counts it as custom; after the handover it
+ * is the ordinary price. The card shows in both, so nothing here hides it.
  *
  * THE WHOLE STATEMENT IS RETYPED, never edited in place. A wizard field
  * pre-filled with the standing sentence would produce diffs nobody wrote

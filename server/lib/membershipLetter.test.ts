@@ -614,6 +614,7 @@ describe.skipIf(!configured)("the membership letter, on a real schema", () => {
     expect(r.body.kinds).toEqual([
       { id: "seat_terms", label: "Role terms" },
       { id: "membership", label: "Membership letter" },
+      { id: "confidentiality", label: "Confidentiality agreement" },
     ]);
     const letters = await call("GET", "/api/aligned?kind=membership");
     expect(letters.body.rows.length).toBeGreaterThan(0);
