@@ -207,7 +207,7 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
       json({
         proposal: served({
           roles: [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: ["Open at dawn", "Close at dusk"], timeCommitment: "10 hours a week" }],
-          card: { roles: [{ roleId: "role-gate", moves: [{ text: "Open at dawn", target: "every day" }], firstMoon: [] }], serves: [], hours: "8 a week", agreed: { loveLetter: true, nda: true } },
+          card: { roles: [{ roleId: "role-gate", moves: [{ text: "Open at dawn", target: "every day" }], firstMoon: [] }], serves: [], hours: "8 a week", agreed: { loveLetter: true, nda: true }, terms: { choice: "talk", note: "The rate" }, timeZone: "America/Costa_Rica" },
         }),
       });
     render(<OpenProposal />);
@@ -218,6 +218,9 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
     const gaps = document.querySelector("[data-card-gaps]") as HTMLElement;
     expect(gaps.textContent).toContain("No first-moon quest for Gate Keeper");
     expect(gaps.textContent).toContain("No season goal served");
+    expect(gaps.textContent).toContain("They want to talk about the terms");
+    expect((document.querySelector("[data-terms-flag]") as HTMLElement).textContent).toBe("Wants to talk about the terms: The rate");
+    expect(screen.getByText("Time zone: America/Costa_Rica")).toBeTruthy();
   });
 
   it("the membership gap reads the alignment made at application, never the old Love Letter tick (Rye's answer 8)", async () => {
