@@ -2530,6 +2530,15 @@ export const VARIABLES: VariableDef[] = [
     default: "false",
   },
   {
+    key: "org.default_track",
+    category: "The village's people",
+    label: "The track a role without one reads as",
+    description:
+      "What a role whose card names no track reads as: contractor, volunteer, employee or ai. A village whose roles are all moon-to-moon contracts, paid for the tasks delivered and invoiced at the End of Moon, writes contractor. Leave it empty and a role with no track shows none, as before. A role's own track always wins.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.apply_needs_complete_card",
     category: "The village's people",
     label: "A role needs a complete card before anyone can apply",

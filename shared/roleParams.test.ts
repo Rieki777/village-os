@@ -38,7 +38,7 @@ describe("the parameters in a write", () => {
     expect(Object.keys(r.value).sort()).toEqual(["bookingUrl", "reviewAfterDays", "track", "villageGoals"]);
     expect(roleParamColumns(r.value)).toEqual([
       ["village_goals", '["Feed the village"]'],
-      ["track", "paid"],
+      ["track", "contractor"],
       ["review_after_days", 90],
       ["booking_url", "https://cal.example/first"],
     ]);
@@ -82,7 +82,7 @@ describe("the completeness gate", () => {
     domain: "The books",
     accountabilities: ["Close each moon"],
     timeCommitment: "40 hours a week",
-    track: "paid",
+    track: "contractor",
     payKind: "range",
     hasRange: true,
     hasTerm: true,

@@ -25,21 +25,13 @@ import {
 
 // The ordered conversations live in shared/interviewerRoles.ts, shared with the interview lane.
 export * from "./interviewerRoles";
+import { TRACKS as ROLE_TRACKS, PAID_TRACKS, readTrack, type Track as RoleTrack } from "./roleTracks";
 
 // ── Track ────────────────────────────────────────────────────────────────────
 
-export const ROLE_TRACKS = ["paid", "volunteer", "local", "ai"] as const;
-export type RoleTrack = (typeof ROLE_TRACKS)[number];
-
-export const TRACK_WORDS: Record<RoleTrack, string> = {
-  paid: "Paid contractor",
-  volunteer: "Volunteer",
-  local: "Local employee",
-  ai: "AI",
-};
-
-/** Tracks that are paid, so a range must be on offer before the card is complete. */
-export const PAID_TRACKS: readonly RoleTrack[] = ["paid", "local"];
+// One list for the editor and the card (shared/roleTracks.ts, guide v2). "paid" and "local" still read.
+export { TRACKS as ROLE_TRACKS, TRACK_WORDS, PAID_TRACKS, readTrack } from "./roleTracks";
+export type { Track as RoleTrack } from "./roleTracks";
 
 export const WHERE_WORKED = ["land", "remote", "both"] as const;
 export type WhereWorked = (typeof WHERE_WORKED)[number];
@@ -156,7 +148,8 @@ export function parseTextList(raw: unknown, field: string, max: number, len: num
 
 function parseTrack(raw: unknown): Parsed<RoleTrack | null> {
   if (raw === null || raw === undefined || raw === "") return ok(null);
-  return (ROLE_TRACKS as readonly unknown[]).includes(raw) ? ok(raw as RoleTrack) : bad(`The track is one of: ${ROLE_TRACKS.join(", ")}.`);
+  const read = readTrack(raw);
+  return read ? ok(read) : bad(`The track is one of: ${ROLE_TRACKS.join(", ")}.`);
 }
 
 function parseWhere(raw: unknown): Parsed<WhereWorked | null> {
