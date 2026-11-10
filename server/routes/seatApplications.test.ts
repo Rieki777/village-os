@@ -416,6 +416,32 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect(b.body.status).toBe("awaiting-holder");
   });
 
+  it("the counter-offer on the member door: the holder who may adopt edits, nobody else, one bell per revision, the history for deciders only (joining lane PR 4)", async () => {
+    h.state.holders = ["u-ana", "u-hal"];
+    const s = await seat("Terms keeper");
+    const a = await apply({ seatIds: [s], answers: { terms: { choice: "accept", note: "" } } });
+    const url = `/api/governance/role-applications/${a.body.id}/terms`;
+    const body = { words: { ending: "One moon's notice." }, expectedRevision: 0 };
+    // The candidate (who also holds the power) and a member who holds nothing are refused.
+    expect((await h.call("POST", url, body)).status).toBe(403);
+    h.state.viewer = { id: "u-ivo", stage: "member" };
+    expect((await h.call("POST", url, body)).status).toBe(403);
+    h.state.viewer = { id: "u-hal", stage: "member" };
+    h.notices.length = 0;
+    const ok = await h.call("POST", url, body);
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.offer.revision).toBe(1);
+    // A retried save is refused and rings nobody again.
+    expect((await h.call("POST", url, body)).status).toBe(409);
+    expect(h.notices.filter((n: any) => n.type === "applicant_update").map((n: any) => n.dedupeKey)).toEqual([`sa:${a.body.id}:update:terms:1:u-ana`]);
+    expect((await readApplication(pool, a.body.id))!.answers!.counterOffer!.revisions).toHaveLength(1);
+    const page = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
+    expect(page.body.application.offer.history).toHaveLength(1);
+    expect(page.body.application.you.mayEditTerms).toBe(true);
+    h.state.viewer = { id: "u-ana", stage: "member" };
+    expect((await h.call("GET", `/api/governance/role-applications/${a.body.id}`)).body.application.offer).toBeNull();
+  });
+
   it("a holder who is the candidate is refused at :id/adopt, and the other holder adopts", async () => {
     h.state.holders = ["u-ana", "u-hal"];
     const s = await seat("Self adopt");

@@ -376,7 +376,9 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
 
   describe("adoption", () => {
     it("warns while a setting is still being talked about, and adopts on the second yes", async () => {
-      const { id } = await proposalWithCard({ term: A, ending: { choice: "talk", note: "Two moons would suit me." } });
+      const { id } = await proposalWithCard({ term: A, ending: A });
+      await save(id, { words: { ending: "Two moons' notice." }, expectedRevision: 0 });
+      await call("POST", `/api/governance/applications/${id}/terms`, { replies: { ending: { choice: "talk", note: "Two moons would suit me." } } }, HAS.id);
       const warned = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(warned.status).toBe(409);
       expect(warned.body.error).toBe("terms_open");

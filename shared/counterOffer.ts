@@ -213,16 +213,15 @@ export function offerForCandidate(p: { base: TermsWords; answers: TermAnswers; t
   return { revision: co.revisions.length, rows, open: rows.filter((r) => r.state === "waiting").length };
 }
 
-/** The settings still open at adoption: a changed one the candidate has not accepted, or any they still want to talk about. */
+/**
+ * The settings still open at adoption: a CHANGED setting the applicant has not accepted (still "let's talk", or
+ * not yet answered). A setting nobody changed is as the applicant answered it at the start and is not in this list.
+ */
 export function openTalks(p: { answers: TermAnswers; co: CounterOffer | null }): OfferKey[] {
-  const at = changedIn(p.co);
-  const out: OfferKey[] = [];
-  for (const k of OFFER_KEYS) {
-    if (at[k]) {
-      if (p.co && stateOf(k, p.co) !== "accept") out.push(k);
-    } else if (k !== "commitment" && p.answers[k as TermKey]?.choice === "talk") out.push(k);
-  }
-  return out;
+  const co = p.co;
+  if (!co) return [];
+  const at = changedIn(co);
+  return OFFER_KEYS.filter((k) => !!at[k] && stateOf(k, co) !== "accept");
 }
 
 export type Replied = { ok: true; co: CounterOffer } | { ok: false; error: string; key?: OfferKey };
