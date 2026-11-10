@@ -50,6 +50,7 @@ import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/Edi
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
+import { RoleListingPanel } from "@/components/admin/RoleListingPanel";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 
 export function OrgChartTab({ password }: { password: string }) {
@@ -190,6 +191,8 @@ export function OrgChartTab({ password }: { password: string }) {
           </ul>
         </div>
       )}
+
+      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
 
       <UndrawnSeatAsks
         asks={seatAsks}

@@ -42,7 +42,7 @@ async function publishOneSeat(orgRoleId: string, payload: Record<string, unknown
   const r = await publishDraft(pool, made.id, "u-steward", 99);
   expect(r.ok, !r.ok ? r.error : "").toBe(true);
   const [[row]] = await pool.query<any[]>(
-    "SELECT name, recruiting, why_it_matters, criticality, seats FROM org_roles WHERE id = ?", [orgRoleId],
+    "SELECT name, recruiting, why_it_matters, criticality, seats, `listed` FROM org_roles WHERE id = ?", [orgRoleId],
   );
   return row;
 }
@@ -77,6 +77,13 @@ describe.skipIf(!configured)("a seat a draft creates keeps every proposable fiel
     });
     expect(row.why_it_matters).toBe("Nobody else watches the spring through the dry months.");
     expect(row.criticality).toBe("high");
+  });
+
+  it("starts a seat unlisted when the sync accept says so, and a plain seat reads as listed (role journey PR-A)", async () => {
+    const hidden = await publishOneSeat("keeps-unlisted", { name: "Accepted From A Sync", listed: false });
+    expect(Number(hidden.listed)).toBe(0);
+    const plain = await publishOneSeat("keeps-listed", { name: "Plain Listed" });
+    expect(plain.listed).toBeNull();
   });
 
   it("still creates a seat that names none of them, with the column defaults", async () => {
