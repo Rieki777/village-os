@@ -47,7 +47,7 @@ const LADDER = ["visitor", "guest", "member"];
 const DAY = 24 * 60 * 60 * 1000;
 
 const PEOPLE: Record<string, { id: string; name: string }> = {
-  "u-ana": { id: "u-ana", name: "Ana Quillfeather" },
+  "u-ana": { id: "u-ana", name: "Ana Quillfeather", email: "ana@example.test" } as any,
   "u-hal": { id: "u-hal", name: "Hal Keeper" },
   "u-ivo": { id: "u-ivo", name: "Ivo Lantern" },
   "u-guest": { id: "u-guest", name: "Gale Visitor" },
@@ -91,6 +91,7 @@ function harness() {
       throw new Error("the database was read before the gate answered");
     },
   };
+  const mails: any[] = [];
   const notices: Array<{ userId: string; type: string; title: string; body?: string | null; link?: string | null; dedupeKey: string }> = [];
   const closers: Record<string, SubjectCloser> = {};
   let server: http.Server;
@@ -145,6 +146,11 @@ function harness() {
         return { inserted: true } as any;
       },
       notifyAdmins: async () => {},
+      postEmail: async (email: any) => {
+        mails.push(email);
+        return { status: "sent", messageId: "m-1" } as any;
+      },
+      projectName: () => "Test Village",
       overLimit: async () => false,
       members: { byId: async (id: string) => PEOPLE[id] ?? null } as any,
       firstName: (n: string) => String(n ?? "").split(" ")[0] ?? "",
@@ -179,7 +185,7 @@ function harness() {
     });
     return { status: res.status, body: (await res.json().catch(() => ({}))) as any };
   };
-  return { state, notices, closers, start, stop, call };
+  return { state, notices, mails, closers, start, stop, call };
 }
 
 describe("the reads refuse everyone below the member rung", () => {
@@ -428,12 +434,14 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect((await h.call("POST", url, body)).status).toBe(403);
     h.state.viewer = { id: "u-hal", stage: "member" };
     h.notices.length = 0;
+    h.mails.length = 0;
     const ok = await h.call("POST", url, body);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     expect(ok.body.offer.revision).toBe(1);
     // A retried save is refused and rings nobody again.
     expect((await h.call("POST", url, body)).status).toBe(409);
     expect(h.notices.filter((n: any) => n.type === "applicant_update").map((n: any) => n.dedupeKey)).toEqual([`sa:${a.body.id}:update:terms:1:u-ana`]);
+    expect(h.mails.map((m: any) => [m.idempotencyKey, m.to.email, m.subject])).toEqual([[`role-application:${a.body.id}:update:terms:1`, "ana@example.test", "The terms for your proposal changed"]]);
     expect((await readApplication(pool, a.body.id))!.answers!.counterOffer!.revisions).toHaveLength(1);
     const page = await h.call("GET", `/api/governance/role-applications/${a.body.id}`);
     expect(page.body.application.offer.history).toHaveLength(1);

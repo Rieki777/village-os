@@ -64,6 +64,13 @@ import { publicTermsOf } from "../../shared/seatTermsOffer";
 import { judgeTermsStep, writtenKeys } from "../../shared/termsWords";
 import { OFFER_LABELS, OFFER_WORDS, openTalks } from "../../shared/counterOffer";
 import { baseOf, deciderOffer, loadSubject, saveOffer } from "../lib/counterOffer";
+import { applicantUpdate, greetingName } from "../../shared/openProposalDecide";
+import type { OutgoingEmail, PostResult } from "../../shared/comms/contracts";
+import { withoutStatusLink } from "../lib/applicantUpdates";
+import { roleNamesById } from "../repos/applicationReview";
+import { isTombstone } from "../lib/oauthAccounts";
+import { numberVar } from "../lib/variables";
+import { escapeHtml } from "../lib/comms/mailer";
 import type { Express } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
@@ -176,6 +183,9 @@ type Deps = Pick<
   AppDeps,
   "authedUser" | "capabilityCtx" | "guardCapability" | "getPool" | "notify" | "notifyAdmins" | "overLimit" | "members" | "firstName"
 > & {
+  /** The post office, for the email that goes with a notice. Absent in a deployment with no mail: the bell still rings. */
+  postEmail?(email: OutgoingEmail): Promise<PostResult>;
+  projectName?(): string;
   /** Who holds a power live, counted the way the gate counts. `liveHoldersOf` in server/index.ts. */
   liveHoldersOf(capability: string): Promise<string[]>;
   /** The permission roles carrying a power, for the authority a holder adopts under. */
@@ -972,6 +982,35 @@ export function register(app: Express, deps: Deps): void {
     return { user, a, rule: await adoptionRule(user), proposal };
   }
 
+  /** The same words as the bell, by email too, under a key that carries the revision so a retry sends nothing twice. A failure is logged, never the holder's problem. */
+  async function emailTermsChange(a: { id: string; candidateUserId: string }, revision: number, roleIds: readonly string[]): Promise<void> {
+    if (!deps.postEmail) return;
+    try {
+      const who: any = await members.byId(a.candidateUserId);
+      if (!who?.email || isTombstone({ email: String(who.email) })) return;
+      const names = await roleNamesById(getPool(), roleIds);
+      const words = applicantUpdate("terms", {
+        firstName: greetingName(String(who.name ?? "")),
+        village: deps.projectName?.() ?? "",
+        roleNames: roleIds.map((r) => names.get(r) ?? "").filter(Boolean),
+        replyDays: numberVar("org.applicant_reply_days"),
+      });
+      const text = withoutStatusLink(words.text);
+      const sent = await deps.postEmail({
+        idempotencyKey: `role-application:${a.id}:update:terms:${revision}`,
+        kind: "essential",
+        origin: "role_application.update",
+        to: { email: String(who.email), ...(greetingName(String(who.name ?? "")) ? { name: greetingName(String(who.name ?? "")) as string } : {}) },
+        subject: words.title,
+        html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text.split("\n\n").map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`).join("")}</body></html>`,
+        text,
+      });
+      if (sent.status !== "sending" && sent.status !== "sent" && sent.status !== "delivered" && sent.status !== "duplicate") console.warn(`[seat-applications] the terms email for ${a.id} did not go: ${sent.status}`);
+    } catch (e) {
+      console.error(`[seat-applications] the terms email for ${a.id} was not sent`, e);
+    }
+  }
+
   // ── The terms we offer: a counter-offer, one revision per save (joining lane PR 4) ──
   /* Whoever may adopt may edit (`adoptRefusal`, the same call), the candidate never their own. */
   app.post("/api/governance/role-applications/:id/terms", async (req, res) => {
@@ -998,6 +1037,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: null,
       dedupeKey: `sa:${a.id}:update:terms:${out.revision.n}:${a.candidateUserId}`,
     });
+    await emailTermsChange(a, out.revision.n, out.subject.roleIds);
     res.json({ success: true, offer: deciderOffer(out.subject, await baseOf(getPool(), out.subject.roleIds)) });
   });
 
