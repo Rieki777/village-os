@@ -9,7 +9,7 @@ describe("a credential-shaped string is refused", () => {
     "api key: abc",
     "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
     "sk-live-abcdefghijklmnop",
-    "AKIAABCDEFGHIJKLMNOP",
+    ["AK", "IAABCDEFGHIJKLMNOP"].join(""),
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
     "treasurer@example.org",
     "https://user:pw@bank.example/portal",

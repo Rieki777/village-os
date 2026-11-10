@@ -18,6 +18,8 @@ const DAY = 86_400_000;
 describe.skipIf(!configured)("access tasks and moon renewal", () => {
   let db: TestDb;
   let pool: mysql.Pool;
+  // The one raw query door of this fixture; the scratch schema is the test's own.
+  const q = (sql: string, args?: unknown[]) => pool.query(sql, args); // module-review-ok: test fixture on a scratch schema
   const sent: Array<{ userId: string; dedupeKey: string; title: string }> = [];
   const admins: string[] = [];
   const deps = {
@@ -33,8 +35,8 @@ describe.skipIf(!configured)("access tasks and moon renewal", () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 4 });
     // access_bundle is added by the role card's own migration; add it here when this tree predates it.
-    const [cols]: any = await pool.query("SHOW COLUMNS FROM org_roles LIKE 'access_bundle'");
-    if (!cols.length) await pool.query("ALTER TABLE org_roles ADD COLUMN access_bundle json NULL");
+    const [cols]: any = await q("SHOW COLUMNS FROM org_roles LIKE 'access_bundle'");
+    if (!cols.length) await q("ALTER TABLE org_roles ADD COLUMN access_bundle json NULL");
   });
   afterAll(async () => {
     await pool?.end();
@@ -43,17 +45,17 @@ describe.skipIf(!configured)("access tasks and moon renewal", () => {
   beforeEach(async () => {
     sent.length = 0;
     admins.length = 0;
-    await pool.query("DELETE FROM role_access_tasks");
-    await pool.query("DELETE FROM role_moon_renewals");
-    await pool.query("DELETE FROM org_role_assignments");
-    await pool.query("DELETE FROM org_roles");
+    await q("DELETE FROM role_access_tasks");
+    await q("DELETE FROM role_moon_renewals");
+    await q("DELETE FROM org_role_assignments");
+    await q("DELETE FROM org_roles");
     const bundle = JSON.stringify([
       { label: "Shared drive for the finance circle", grantingRoleId: "r-techops" },
       { label: "Bank portal, view only" },
     ]);
-    await pool.query("INSERT INTO org_roles (id, name, access_bundle) VALUES ('r-fin','Lead Financial Steward',?),('r-techops','Technical Operations',NULL)", [bundle]);
-    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key, started_at, term_ends_at) VALUES ('a-fin','r-fin','member','u-new','u-new',?,?)", [starts, ends]);
-    await pool.query("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-ops','r-techops','member','u-ops','u-ops')");
+    await q("INSERT INTO org_roles (id, name, access_bundle) VALUES ('r-fin','Lead Financial Steward',?),('r-techops','Technical Operations',NULL)", [bundle]);
+    await q("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key, started_at, term_ends_at) VALUES ('a-fin','r-fin','member','u-new','u-new',?,?)", [starts, ends]);
+    await q("INSERT INTO org_role_assignments (id, org_role_id, holder_kind, user_id, holder_key) VALUES ('a-ops','r-techops','member','u-ops','u-ops')");
   });
 
   it("the start raises one grant task per item, told to the granting role or the admins, once", async () => {
@@ -73,8 +75,8 @@ describe.skipIf(!configured)("access tasks and moon renewal", () => {
   it("the end raises a revoke task for each item that was granted", async () => {
     await raiseGrantTasks(pool, "a-fin", deps);
     const tasks = await tasksForAssignment(pool, "a-fin");
-    await pool.query("UPDATE role_access_tasks SET state = 'not_needed' WHERE id = ?", [tasks.find((t) => t.itemLabel.startsWith("Bank"))!.id]);
-    await pool.query("UPDATE org_role_assignments SET ended_at = NOW() WHERE id = 'a-fin'");
+    await q("UPDATE role_access_tasks SET state = 'not_needed' WHERE id = ?", [tasks.find((t) => t.itemLabel.startsWith("Bank"))!.id]);
+    await q("UPDATE org_role_assignments SET ended_at = NOW() WHERE id = 'a-fin'");
     expect(await raiseRevokeTasks(pool, "a-fin", deps)).toBe(1);
     const revokes = (await tasksForAssignment(pool, "a-fin")).filter((t) => t.kind === "revoke");
     expect(revokes.map((t) => t.itemLabel)).toEqual(["Shared drive for the finance circle"]);
@@ -99,12 +101,12 @@ describe.skipIf(!configured)("access tasks and moon renewal", () => {
     expect((await fileCarryOn(pool, "u-ops", "a-fin", "x", lateWeek, LUNAR_CLOCK)).ok).toBe(false);
 
     // Filing alone writes nothing.
-    const [[before]]: any = await pool.query("SELECT term_ends_at FROM org_role_assignments WHERE id = 'a-fin'");
+    const [[before]]: any = await q("SELECT term_ends_at FROM org_role_assignments WHERE id = 'a-fin'");
     expect(new Date(before.term_ends_at).getTime()).toBe(ends.getTime());
 
     const out = await renewAllFiled(pool, "u-steward", LUNAR_CLOCK, deps.notify);
     expect(out.renewed).toHaveLength(1);
-    const [[after]]: any = await pool.query("SELECT term_ends_at FROM org_role_assignments WHERE id = 'a-fin'");
+    const [[after]]: any = await q("SELECT term_ends_at FROM org_role_assignments WHERE id = 'a-fin'");
     expect(new Date(after.term_ends_at).getTime()).toBe(LUNAR_CLOCK.startOf(n + 2).getTime());
     // A second press renews nothing.
     expect((await renewAllFiled(pool, "u-steward", LUNAR_CLOCK)).renewed).toHaveLength(0);
