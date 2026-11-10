@@ -1,6 +1,6 @@
 # Capabilities
 
-Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 54 keys, 9 steps.
+Every capability key the platform knows about, what each one lets a member do, and the order the one gate resolves them in. 55 keys, 9 steps.
 
 There is ONE capability gate, `capabilityDecision()` in `shared/capabilities.ts`, and every permission answer in the product comes through it. The order it resolves in IS the policy: it decides whether a warning badge's deny survives an appointment, and whether an administrator still outranks a village on a power that village has taken over.
 
@@ -99,7 +99,7 @@ These rows are not a description of the order. They are answers: the generator c
 
 ## Every capability key
 
-54 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `records`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `dial`, `redemption`, `cash`, `role`, `pot`, `place`, `module`, `steward`, `comms`, `session`, `companion`, `moon`, `power`, `operator`.
+55 keys. `ALL_CAPABILITIES` is a flat list, so they are grouped here by the prefix each key carries in its own name, in the order the list gives them: `quest`, `forum`, `proposal`, `map`, `terms`, `records`, `feed`, `stay`, `exchange`, `health`, `message`, `mechanics`, `event`, `org`, `ballot`, `member`, `intake`, `library`, `story`, `brief`, `dial`, `redemption`, `cash`, `role`, `pot`, `place`, `module`, `steward`, `comms`, `session`, `companion`, `moon`, `power`, `operator`.
 
 Four columns need a word before the tables:
 
@@ -237,6 +237,12 @@ Four columns need a word before the tables:
 | --- | --- | --- | --- | --- | --- | --- |
 | `story.tell` | Say what the village is, in public, in its own words | yes | yes | yes | no rung | no module |
 
+### `brief`
+
+| Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
+| --- | --- | --- | --- | --- | --- | --- |
+| `brief.private` | Read and write the brief's private sections: people, legal, land and constraints | yes | no | yes | no rung | no module |
+
 ### `dial`
 
 | Key | What it lets a member do | A warning badge may deny it | A badge may grant it | The village may hold it | Stage that unlocks it | Declared by |
@@ -329,19 +335,19 @@ Four columns need a word before the tables:
 
 ## The voices
 
-5 of the 54 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
+5 of the 55 keys may never be taken away by a warning badge: `mechanics.propose`, `ballot.vote`, `member.vouch`, `member.superVouch` and `steward.veto`. Each is a member's own say in a decision the village makes. The gate ignores a deny naming one of them, the badge validator refuses to save one, and a migration cleared the ones already stored. Three locks on the same door, because a hand-written UPDATE is invisible to code review by definition and a stored row outlives the admin who wrote it.
 
 The rule underneath: waning is not removal. A rule under which unused voice decays over time is legitimate. An act by which one party strips another's earned voice is not, at any tier, held by anybody.
 
 ## The keys no badge may grant
 
-10 of the 54 keys cannot be handed out by a badge: `role.pay`, `steward.veto`, `moon.approve`, `moon.approve_alone`, `moon.approve_own`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
+11 of the 55 keys cannot be handed out by a badge: `brief.private`, `role.pay`, `steward.veto`, `moon.approve`, `moon.approve_alone`, `moon.approve_own`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`. Rye ruled on 2026-09-23 that the steward's veto comes from a seat the village votes somebody into and from nowhere else, so that an admin cannot mint a badge and give themselves a veto. Three locks again: the gate ignores a badge naming one of these, the badge validator refuses to save one and says where the seat is actually filled, and a migration cleared the rows already stored.
 
 The line this draws is narrow on purpose. A key stays grantable while an ordinary admin route can already put it on a role or a rung, because closing the badge door on those would be a new policy rather than a fix. The keys above are the ones with no admin route left to them at all.
 
 ## The keys a village can take off the admin panel
 
-30 of the 54 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `role.pay`, `pot.steward`, `module.switch`, `steward.veto`, `comms.manage`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`.
+31 of the 55 keys are marked transferable: `quest.consent`, `forum.moderate`, `proposal.decide`, `map.publish`, `map.curatePhotos`, `feed.announce`, `exchange.manage`, `health.record`, `event.manage`, `org.declare`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `brief.private`, `dial.set`, `quest.approve`, `redemption.confirm`, `cash.pay`, `role.pay`, `pot.steward`, `module.switch`, `steward.veto`, `comms.manage`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`.
 
 A key is only marked transferable once every route that REFUSES on it asks the gate in a shape that can carry the break-glass and write the public record. A ceiling an operator cannot climb over is not a ceiling, it is an outage. The keys left out are of two kinds: personal acts, where there is nobody for the key to move to, and keys nothing refuses on yet, where a promise that an admin must reach past the village in the open would have nothing under it.
 
@@ -369,7 +375,7 @@ A module's `capabilities` array in `shared/modules.ts` is what that module ADDS 
 | Governance | `governance` | `ballot.vote`, `member.vouch` |
 | Village Comms | `comms` | `comms.manage` |
 
-25 keys are declared by no module: `terms.read`, `records.confidential`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `dial.set`, `quest.approve`, `cash.pay`, `role.pay`, `module.switch`, `steward.veto`, `companion.use`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
+26 keys are declared by no module: `terms.read`, `records.confidential`, `map.edit`, `map.publish`, `mechanics.propose`, `org.declare`, `member.superVouch`, `org.seat`, `org.seatAgent`, `org.decide`, `intake.moderate`, `library.keep`, `story.tell`, `brief.private`, `dial.set`, `quest.approve`, `cash.pay`, `role.pay`, `module.switch`, `steward.veto`, `companion.use`, `power.assign`, `operator.accounts`, `operator.config`, `operator.secrets` and `operator.recover`. That is a fact about the registry and never a sign the key is dead. A key reaches the gate from any route that asks for it, and the admin surfaces the handover keys cover sit outside every module.
 
 ## Machine-readable
 
@@ -378,13 +384,13 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
 ```json
 {
   "counts": {
-    "keys": 54,
+    "keys": 55,
     "steps": 9,
     "voices": 5,
-    "villageHoldable": 30,
-    "badgeUngrantable": 10,
+    "villageHoldable": 31,
+    "badgeUngrantable": 11,
     "climbable": 16,
-    "undeclared": 25
+    "undeclared": 26
   },
   "breakGlassSeat": "steward.veto",
   "resolutionOrder": [
@@ -792,6 +798,15 @@ The same facts, in a shape a script can read. Regenerated with the rest of the f
     {
       "key": "story.tell",
       "label": "Say what the village is, in public, in its own words",
+      "deniable": true,
+      "transferable": true,
+      "stageUnlock": null,
+      "stageRung": null,
+      "modules": []
+    },
+    {
+      "key": "brief.private",
+      "label": "Read and write the brief's private sections: people, legal, land and constraints",
       "deniable": true,
       "transferable": true,
       "stageUnlock": null,

@@ -289,7 +289,8 @@ describe("hasCapability truth table", () => {
           // `moon.approve` is fenced too (0313): see the drift check below.
           // `power.assign` too (role powers): an admin mints badges.
           // `role.pay` too (2026-11-06): the Treasurer holds it through the Treasury role.
-          if (cap === SEAT || cap.startsWith("moon.approve") || cap === "power.assign" || cap === "role.pay" || cap.startsWith("operator.")) continue;
+          // `brief.private` too (canvas follow-up G.4): it moves onto a role by a power_grant vote.
+          if (cap === SEAT || cap.startsWith("moon.approve") || cap === "power.assign" || cap === "role.pay" || cap === "brief.private" || cap.startsWith("operator.")) continue;
           expect(isBadgeGrantable(cap), cap).toBe(true);
         }
       });
@@ -332,7 +333,10 @@ describe("hasCapability truth table", () => {
         expect(Object.keys(BADGE_GRANTABLE).sort()).toEqual([...ALL_CAPABILITIES].sort());
       });
 
-      it("fences exactly ten keys, so a widening is a deliberate edit and not a drift", () => {
+      it("fences exactly eleven keys, so a widening is a deliberate edit and not a drift", () => {
+        // `brief.private` (canvas follow-up G.4, Rye 2026-11-06): the four
+        // private brief sections move onto a role by a power_grant vote, so an
+        // admin may not mint a badge that hands them back.
         // `role.pay` (Rye, 2026-11-06): "the Treasurer" holds it through the
         // Treasury role (the coordinator's reading), so a badge is not a way in.
         // `moon.approve` (0313, the end-of-moon review): an approval of other
@@ -341,7 +345,7 @@ describe("hasCapability truth table", () => {
         // siblings (decisions 18 and 19) come from named power groups only.
         // `power.assign` (the role powers build): a badge that carried the power
         // to give every power would be an admin's way to hand themselves all of them.
-        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["role.pay", "steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own", "power.assign", "operator.accounts", "operator.config", "operator.secrets", "operator.recover"]);
+        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["brief.private", "role.pay", "steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own", "power.assign", "operator.accounts", "operator.config", "operator.secrets", "operator.recover"]);
       });
     });
 
@@ -386,7 +390,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is thirty keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch, cash.pay, power.assign, the four operator powers, role.pay and pot.steward", () => {
+    it("is thirty-one keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch, cash.pay, power.assign, the four operator powers, role.pay, pot.steward and brief.private", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -451,8 +455,14 @@ describe("hasCapability truth table", () => {
        * word on 2026-11-06, relayed by the master coordinator, adopting the plan's
        * Q1: "a new transferable power, held by the treasury role by default, with
        * each pot able to be handed to another role". A new key born transferable.
+       *
+       * THIRTY-ONE WITH `brief.private`, the canvas follow-up's G.4. The spec Rye
+       * accepted on 2026-11-06 ("accept all ten canvas sweep decisions as
+       * recommended; build them with G.1 to G.5") names it "a new transferable
+       * power" that moves by a power_grant vote. A new key born transferable.
        */
-      expect(HANDOVER_SET).toHaveLength(30);
+      expect(HANDOVER_SET).toHaveLength(31);
+      expect(HANDOVER_SET).toContain("brief.private");
       expect(HANDOVER_SET).toContain("pot.steward");
       for (const k of ["operator.accounts", "operator.config", "operator.secrets", "operator.recover"]) expect(HANDOVER_SET).toContain(k);
       expect(HANDOVER_SET).toContain("power.assign");

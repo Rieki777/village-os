@@ -213,10 +213,24 @@ describe("who adopts a canvas answer", () => {
   const after = { birthed: true, handoverComplete: false };
   const handedOver = { birthed: true, handoverComplete: true };
 
-  it("the purpose statement stays with the founders until the handover, the Birthing does not move it", () => {
+  it("the purpose statement's direct pen stays with the founders until the handover, the Birthing does not move it", () => {
     expect(whoAdoptsCanvasAnswer("purpose", before)).toMatchObject({ how: "act", who: "founders", because: "the-scaffolding-holds-it" });
     expect(whoAdoptsCanvasAnswer("purpose", after)).toMatchObject({ how: "act", who: "founders" });
     expect(whoAdoptsCanvasAnswer("purpose", handedOver)).toMatchObject({ how: "ballot", who: "any-member", because: "village-holds-it" });
+  });
+
+  it("the purpose vote is offered before the handover too, beside the founders' pen (Rye, 2026-11-06)", () => {
+    for (const facts of [before, after]) {
+      const rule = whoAdoptsCanvasAnswer("purpose", facts);
+      expect(rule.alsoByVote).toBe(true);
+      expect(canvasPenSentence(rule)).toContain("any member can put a new statement to a vote");
+    }
+    // After the handover the vote is the only door, so there is nothing "also" about it.
+    expect(whoAdoptsCanvasAnswer("purpose", handedOver).alsoByVote).toBeUndefined();
+    // No other pen carries it.
+    for (const pen of ["prose", "consequence", "dial", "module", "admin"] as const) {
+      expect(whoAdoptsCanvasAnswer(pen, before).alsoByVote, pen).toBeUndefined();
+    }
   });
 
   it("canvas prose is story.tell asked of the gate, before and after both moments", () => {
@@ -248,10 +262,37 @@ describe("who adopts a canvas answer", () => {
     expect(whoAdoptsCanvasAnswer("consequence", { ...after, votable: false })).toMatchObject({ how: "ballot" });
   });
 
-  it("the administrators' sections stay theirs whatever happens", () => {
+  it("after the Birthing a live holder of module.switch holds the module pen, and with none the village votes (D1)", () => {
+    const held = { ...after, holders: { module: ["u-holder"] } };
+    const rule = whoAdoptsCanvasAnswer("module", held);
+    expect(rule).toMatchObject({ how: "act", who: "live-holders", because: "a-role-holds-it", holders: ["u-holder"] });
+    expect(canvasPenSentence(rule)).toBe("Whoever holds the power to switch modules switches this part of the Game on or off.");
+    // Before the Birthing the administrators keep it, holder or not.
+    expect(whoAdoptsCanvasAnswer("module", { ...before, holders: { module: ["u-holder"] } })).toMatchObject({ how: "act", who: "admins" });
+    // Nobody seated: the village's vote, as before.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, holders: { module: [""] } })).toMatchObject({ how: "ballot", who: "any-member" });
+    // Another pen's holders are not the module pen's.
+    expect(whoAdoptsCanvasAnswer("module", { ...after, holders: { admin: ["u-holder"] } })).toMatchObject({ how: "ballot" });
+  });
+
+  // Canvas follow-up G.4 and D1 (AC1.5, AC2.1): the administrators keep the
+  // four private sections until a power_grant vote seats brief.private on a
+  // role; after the Birthing its live holders hold the pen.
+  it("the administrators' sections stay theirs while nobody holds brief.private, and its live holders take them after the Birthing", () => {
     for (const facts of [before, after, handedOver]) {
       expect(whoAdoptsCanvasAnswer("admin", facts)).toMatchObject({ how: "act", who: "admins" });
+      expect(whoAdoptsCanvasAnswer("admin", { ...facts, holders: { admin: [] } })).toMatchObject({ how: "act", who: "admins" });
     }
+    const seated = { holders: { admin: ["keeper-1"] } };
+    expect(whoAdoptsCanvasAnswer("admin", { ...after, ...seated })).toMatchObject({ how: "act", who: "live-holders", holders: ["keeper-1"] });
+    expect(whoAdoptsCanvasAnswer("admin", { ...handedOver, ...seated })).toMatchObject({ who: "live-holders", holders: ["keeper-1"] });
+    // Before the Birthing the administrators keep the pen even with a holder seated.
+    expect(whoAdoptsCanvasAnswer("admin", { ...before, ...seated })).toMatchObject({ who: "admins" });
+    // Only the admin pen reads it.
+    expect(whoAdoptsCanvasAnswer("prose", { ...after, ...seated })).toMatchObject({ who: "the-gate", capability: "story.tell" });
+    expect(canvasPenSentence(whoAdoptsCanvasAnswer("admin", { ...after, ...seated }))).toBe(
+      "This section is for whoever holds the brief's private sections, for reading and for writing.",
+    );
   });
 
   it("says each answer in one sentence, and a vote in a different one", () => {

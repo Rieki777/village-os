@@ -368,6 +368,15 @@ jobs:
         # A genuine false positive takes an inline `voice-ok: <reason>`.
         run: node scripts/check-voice.mjs
 
+      - name: Server dates in the village's calendar
+        # A bare toLocaleDateString() on a server formats in the container's
+        # UTC and its M/D/Y, so a village a day ahead of UTC is told the wrong
+        # day (readiness R134). Two vote notices shipped that way after the fix
+        # existed, because nothing refused the form. Watched RED before wiring:
+        # at f75bc26 it names exactly those two lines and exits 1. Its
+        # self-test runs with the others.
+        run: node scripts/check-server-dates.mjs
+
       - name: Dash guard
         # A hyphen standing in for a dash. check-voice structurally cannot see
         # this: it bans em-dashes and en-dashes, so the failure it creates is a

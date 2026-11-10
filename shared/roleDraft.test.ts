@@ -112,3 +112,12 @@ describe("applyHrefFor", () => {
     expect(applyHrefFor([], false)).toBeNull();
   });
 });
+
+describe("an unlisted role on the draft board (role journey PR-A)", () => {
+  it("is left off, with a listed role in the same chart kept as the control", () => {
+    const org = { circles: ORG.circles, roles: [...ORG.roles, { id: "hidden", name: "Hidden Role", circleId: "anchor", seats: 1, holderCount: 0, state: "open", listed: false }, { id: "shown", name: "Shown Role", circleId: "anchor", seats: 1, holderCount: 0, state: "open", listed: true }] };
+    const ids = openRolesFrom(org).map((r) => r.id);
+    expect(ids).toContain("shown");
+    expect(ids).not.toContain("hidden");
+  });
+});
