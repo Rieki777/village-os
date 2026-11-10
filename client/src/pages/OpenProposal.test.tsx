@@ -238,7 +238,7 @@ describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
     render(<OpenProposal />);
     await screen.findByRole("heading", { name: "Their card beside the open card" });
     expect(document.querySelector("[data-card-gaps]")?.textContent ?? "").not.toContain("membership letter");
-    expect(screen.getByText(/aligned with the membership letter when they applied/)).toBeTruthy();
+    expect(screen.getByText(/aligned with the membership letter when they proposed/)).toBeTruthy();
   });
 
   it("says when a proposal predates the applicant's card", async () => {

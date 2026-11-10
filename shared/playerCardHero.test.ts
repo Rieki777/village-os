@@ -141,7 +141,7 @@ describe("the hero", () => {
     expect(buildPlayerCard(input({ roles: [] })).header.tagline).toBe("Holds no roles yet");
     expect(buildPlayerCard(input({ roles: undefined })).header.tagline).toBe("");
     const proposal = buildPlayerCard(input({ mode: "proposal" })).header;
-    expect(proposal.tagline).toBe("Applying for three roles in the Community Anchor · Full-time");
+    expect(proposal.tagline).toBe("Proposing for three roles in the Community Anchor · Full-time");
   });
 
   it("reads the time from the roles' own time chips, and guesses nothing", () => {

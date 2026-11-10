@@ -113,7 +113,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const heading = () => screen.findByRole("heading", { name: "Ana Quillfeather applies for Kitchen keeper" });
+const heading = () => screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Kitchen keeper" });
 
 describe("the circle's answer on the application page", () => {
   it("every member reads where it stands, with the tally by role title", async () => {

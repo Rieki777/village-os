@@ -32,7 +32,7 @@ export const CARD_WORDS = {
   rolesLine: (n: number, names: string) => `${plural(n, "role", "roles")}: ${names}`,
   dayOfSeason: (day: number, of: number) => `Day ${day} of ${of}`,
   seasonNotRead: "No season set",
-  appliesFor: (names: string) => `Applies for ${names}`,
+  appliesFor: (names: string) => `Proposes to hold ${names}`,
 
   // The hero, in the approved design (Rye 2026-10-22): the moon pill, the
   // tagline and the span. Moons are named by the month their new moon falls in.
@@ -41,18 +41,18 @@ export const CARD_WORDS = {
   moonLine: (moon: string, from: string, to: string) => `${moon}, ${from} to ${to}`,
   heroSpan: (from: string, to: string) => `${from} to ${to}`,
   tagline: (count: string, n: number, circles: string | null, time: string | null, applying: boolean) =>
-    `${applying ? `Applying for ${count}` : count} ${n === 1 ? "role" : "roles"}${circles ? ` in ${circles}` : ""}${time ? ` · ${time}` : ""}`,
+    `${applying ? `Proposing for ${count}` : count} ${n === 1 ? "role" : "roles"}${circles ? ` in ${circles}` : ""}${time ? ` · ${time}` : ""}`,
   fullTime: "Full-time",
   aboutHours: (n: number) => `About ${n} hours a week`,
   portraitAlt: (name: string) => `${name}'s character portrait`,
 
   // Doors
-  applyDoor: "Apply for a role",
+  applyDoor: "Propose for a role",
   planDoor: "Plan my season",
 
   // Tiles
   myRoles: "My roles",
-  proposedRoles: "The roles I am applying for",
+  proposedRoles: "The roles I am proposing for",
 
   // Across
   acrossOne: "Across my role",
@@ -176,13 +176,13 @@ export const CARD_WORDS = {
   howIHold: "How I hold my roles",
 
   // Applications
-  applications: "My applications",
+  applications: "My proposals",
   historyEyebrow: "My role history",
   past: "Past seasons",
   thisSeason: "This season",
   nextSeason: "Next season",
   noPast: "No past seasons yet",
-  noThisSeason: "No applications this season",
+  noThisSeason: "No proposals this season",
   noNextSeason: "Nothing filed for next season yet",
   startsOnceAdopted: "Starts once adopted",
   filedOn: (day: string) => `Filed ${day}`,

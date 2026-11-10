@@ -84,10 +84,10 @@ export default function Propose() {
         {door ? (
           <>
             <h1 className="mt-3 font-display text-3xl font-bold text-foreground sm:text-4xl">
-              {roleCount > 1 ? t`Apply for these roles` : t`Apply for a role`}
+              {roleCount > 1 ? t`Propose for these roles` : t`Propose for a role`}
             </h1>
             <p className="mt-2 max-w-2xl text-muted-foreground leading-relaxed">
-              {t`Say what you would bring, which of the village's goals it serves, and whether the terms on offer suit you. Nothing is sent until you apply, and you can leave and come back to the same step.`}
+              {t`Say what you would bring, which of the village's goals it serves, and whether the terms on offer suit you. Nothing is sent until you send it, and you can leave and come back to the same step.`}
             </p>
           </>
         ) : (

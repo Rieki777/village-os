@@ -169,7 +169,7 @@ export function SeasonServes({
       {/* Brief v3: a season with no goals yet says so, and never blocks applying. */}
       {goals.length === 0 && (
         <p className="rounded-lg bg-muted p-3 text-sm text-foreground" data-no-season-goals="">
-          {t`The village has not set its goals for this season yet. You can still apply: say in your aim what you would bring.`}
+          {t`The village has not set its goals for this season yet. You can still propose: say in your aim what you would bring.`}
         </p>
       )}
       {goals.length > 0 && (
@@ -362,7 +362,7 @@ export function CardSideBySide({
           <p className="mt-1 text-foreground">{t`Accepts the terms on offer.`}</p>
         ) : null}
         <p className="mt-2 text-foreground">
-          {membershipAligned ? t`They aligned with the membership letter when they applied.` : t`They have not aligned with the membership letter yet.`}{" "}
+          {membershipAligned ? t`They aligned with the membership letter when they proposed.` : t`They have not aligned with the membership letter yet.`}{" "}
           {card.agreed.nda ? t`They will align with the confidentiality agreement once approved.` : t`They have not promised the confidentiality agreement.`}
         </p>
       </div>
@@ -479,7 +479,7 @@ export function Practicalities({ value, onChange }: { value: Practical; onChange
             className={FIELD}
           />
         )}
-        <p className="text-xs text-muted-foreground">{t`Everyone who reads your application sees a wish to talk about the terms.`}</p>
+        <p className="text-xs text-muted-foreground">{t`Everyone who reads your proposal sees a wish to talk about the terms.`}</p>
       </fieldset>
     </div>
   );
@@ -506,7 +506,7 @@ export function NextForRoles({
         const conversations = r.conversations ?? [];
         return (
           <div key={r.id} className="rounded-xl border border-border p-3">
-            <p className="text-sm font-semibold text-card-foreground">{t`For ${roleName}, if the village takes your application forward:`}</p>
+            <p className="text-sm font-semibold text-card-foreground">{t`For ${roleName}, if the village takes your proposal forward:`}</p>
             {conversations.length > 0 && (
               <ol className="mt-2 grid list-decimal gap-1 pl-5 text-sm text-foreground">
                 {conversations.map((i, n) => {

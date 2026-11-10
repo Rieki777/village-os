@@ -553,7 +553,7 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
   it("one person applying for five roles is one card naming all five", () => {
     const card = proposal();
     expect(card.roles).toHaveLength(5);
-    expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
+    expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(true);
     for (const r of roles5) expect(card.header.rolesLine).toContain(r.name);
     expect(card.tiles.heading).toBe(CARD_WORDS.proposedRoles);
   });

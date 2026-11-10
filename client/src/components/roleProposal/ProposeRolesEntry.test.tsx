@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 /**
  * The profile's "Propose my roles for next season" button, and the owner's
- * proposals under My applications (role proposals PR C).
+ * proposals under My proposals (role proposals PR C).
  *
  *   - with no draft it starts one at /role-proposals/new;
  *   - with a draft open it reads "Continue my proposal for next season" and
  *     opens that draft;
  *   - a guest (403) or a village with governance off (404) gets no button;
  *   - signed out, nothing is asked;
- *   - My applications on the owner's live card lists each proposal with where
+ *   - My proposals on the owner's live card lists each proposal with where
  *     it stands, linked to its page; nobody else's card asks.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,7 +124,7 @@ describe("the profile button", () => {
   });
 });
 
-describe("my proposals under My applications", () => {
+describe("my proposals under My proposals", () => {
   const submitted = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000b2", status: "submitted", consent: consentOf("open") });
   const draft = proposalWith({ roles: [{ roleId: "r1" }] }, { id: "rp-00000000000000a1", target: null });
 
