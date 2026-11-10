@@ -116,6 +116,8 @@ import { SeatGrantCache, bridgedHoldings, effectiveHoldings, readSeatGrantSnapsh
 import { isMemberReadable } from "./lib/memberReadable";
 import { accountsWithReach, adminGroupsOf, LAST_ADMIN_REFUSAL } from "./lib/groupAdmin";
 import { register as registerOrgSeatingRoutes } from "./routes/orgSeatings";
+import { register as registerRoleRenewalRoutes } from "./routes/roleRenewal";
+import { configureAccessNotices } from "./lib/roleAccess";
 import { register as registerOrgRoutes } from "./routes/org";
 import { register as registerOrgDraftDecideRoutes, arrangeViewer } from "./routes/orgDraftDecide";
 import { register as registerMintRequestVoteRoutes } from "./routes/mintRequestVotes"; // a grant put to the village (vote-path gap 8)
@@ -257,6 +259,7 @@ import { register as registerDryRunRoutes } from "./routes/dryRun";
 import { register as registerGroundsRoutes } from "./routes/grounds";
 import { register as registerRedemptionRoutes } from "./routes/redemption";
 import { register as registerCashOwedRoutes } from "./routes/cashOwed";
+import { register as registerMemberTimeZoneRoutes } from "./routes/memberTimeZone"; // role journey L6
 import { register as registerBudgetRoutes } from "./routes/budgets";
 import { register as registerValuationRoutes } from "./routes/valuation";
 import { earnedEquityMeaningWritten } from "./lib/valuationStore";
@@ -17679,6 +17682,7 @@ Send an empty drafts array when you are still listening. A role payload is {name
     const out = await openRedemptionBallot(getPool(), setup, redemptionId);
     return out.ok ? { ok: true } : { ok: false, error: out.error };
   };
+  registerMemberTimeZoneRoutes(app, { authedUser, getPool, overLimit });
   registerCashOwedRoutes(app, { authedUser, getPool, guardCapability, members, notify, overLimit, cashKeyHolders: () => liveHoldersOf("cash.pay"), rolesCarrying, roleHolders: loadRoleHolders });
   registerBudgetRoutes(app, { authedUser, capabilityCtx, getPool, overLimit, seasonState, guardCapability, liveHoldersOf, projectCurrency: () => String(mergedConfig().project.fiatCurrency ?? ""), rolesCarrying, roleHolders: loadRoleHolders, revisionSecret: AUTH_TOKEN_SECRET }); // the cash budget (0360): every write through one door, role.pay (server/routes/budgets.ts)
   registerValuationRoutes(app, { authedUser, getPool, guardCapability, capabilityCtx, overLimit, liveHoldersOf, projectCurrency: () => mergedConfig().project.fiatCurrency, eeMeaningWritten: earnedEquityMeaningWritten, tokenName: (s: string) => tokenDef(s)?.name ?? s, quests: questsRepo, claims: claimsRepo }); // 0336, 0342
@@ -24968,6 +24972,8 @@ Send an empty drafts array when you are still listening. A role payload is {name
   // exactly the point they used to sit. Express matches in registration
   // order.
   registerOrgSeatingRoutes(app, { isAdmin, authedUser, guardCapability, adminActor, getPool });
+  configureAccessNotices({ notify, notifyAdmins: (type, title, key, link) => notifyAdmins(type, title, key, link) });
+  registerRoleRenewalRoutes(app, { authedUser, guardCapability, getPool, notify, capabilityCtx });
 
   /**
    * F5 (Wave 1): appointment is a governance act, not an admin chore.
