@@ -145,3 +145,81 @@ describe("paths", () => {
     }
   });
 });
+
+describe("reads of what a person alone changes (part B)", () => {
+  const listed = (...entries: Array<[string, string]>): AgentAdminPathsDoc => ({
+    paths: entries.map(([method, path]) => ({ method: method as any, path, confirm: "agent", label: "x" })),
+  });
+
+  it("answers an allow-listed GET of an org draft, expiring roles and settings", () => {
+    const doc = listed(["GET", "/api/admin/org/drafts"], ["GET", "/api/admin/org/drafts/:id/preview"], ["GET", "/api/admin/org/expiring"], ["GET", "/api/admin/settings"], ["GET", "/api/admin/variables/:key"], ["GET", "/api/admin/modules/:id/config"]);
+    for (const p of ["/api/admin/org/drafts", "/api/admin/org/drafts/d-1/preview", "/api/admin/org/expiring", "/api/admin/settings", "/api/admin/variables/org.start_after_open", "/api/admin/modules/m-1/config"]) {
+      expect(adminRequestDecision("GET", p, doc, "agent-1"), p).toMatchObject({ ok: true, write: false });
+    }
+  });
+
+  it("keeps a GET closed until a person lists it", () => {
+    expect(adminRequestDecision("GET", "/api/admin/org/drafts", SHIPPED, "agent-1")).toMatchObject({ ok: false, code: "not_allowed" });
+  });
+
+  it("still refuses every write in the powers, members, settings and letters categories, listed or not", () => {
+    const WRITES: Array<[string, string]> = [
+      ["POST", "/api/admin/org/drafts"],
+      ["POST", "/api/admin/org/drafts/d-1/changes"],
+      ["PUT", "/api/admin/org/drafts/d-1/vision"],
+      ["POST", "/api/admin/org/drafts/d-1/publish"],
+      ["PUT", "/api/admin/settings"],
+      ["PUT", "/api/admin/variables/org.start_after_open"],
+      ["PUT", "/api/admin/modules/m-1/lifecycle"],
+      ["POST", "/api/admin/letters/send"],
+      ["POST", "/api/admin/letter-drafts/l-1/send"],
+      ["POST", "/api/admin/invites"],
+      ["POST", "/api/admin/exits/x-1/resolve"],
+      ["POST", "/api/admin/join-requests/j-1/approve"],
+      ["PUT", "/api/admin/roles/r-1/capabilities"],
+      ["POST", "/api/admin/org/roles/r-1/holders"],
+    ];
+    for (const [m, p] of WRITES) {
+      const doc: AgentAdminPathsDoc = { paths: [{ method: m as any, path: p.replace(/\/(d|m|l|x|j|r)-1/g, "/:id"), confirm: "agent", label: "x" }] };
+      expect(adminRequestDecision(m, p, doc, "agent-1", { applicantDataOpen: true }), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+    }
+  });
+
+  it("keeps reads closed for secrets, integration keys, agent accounts and tokens, listed or not", () => {
+    for (const p of ["/api/admin/integrations/stripe", "/api/admin/secrets", "/api/admin/api-keys", "/api/admin/agent-accounts", "/api/admin/agent-actions", "/api/admin/agent-admin-paths", "/api/admin/ai-agents-approval"]) {
+      const doc = listed(["GET", p]);
+      expect(adminRequestDecision("GET", p, doc, "agent-1", { applicantDataOpen: true }), p).toMatchObject({ ok: false, code: "always_a_person" });
+    }
+  });
+
+  it("keeps pay, terms and money reads closed", () => {
+    for (const p of ["/api/admin/role-pay/r-1", "/api/admin/org/roles/r-1/terms", "/api/moon-review/invoices"]) {
+      expect(adminRequestDecision("GET", p, listed(["GET", p.replace("r-1", ":id")]), "agent-1", { applicantDataOpen: true }), p).toMatchObject({ ok: false, code: "always_a_person" });
+    }
+  });
+
+  it("closes a GET of applicant and member data while the Anchor switch is off, and answers it after", () => {
+    const PERSONAL = ["/api/admin/open-proposals", "/api/admin/join-requests", "/api/governance/applications/a-1/scorecards", "/api/admin/players", "/api/admin/members/u-3"];
+    for (const p of PERSONAL) {
+      const doc = listed(["GET", p.replace(/\/(a|u)-\d/, "/:id")]);
+      expect(adminRequestDecision("GET", p, doc, "agent-1"), `${p} off`).toMatchObject({ ok: false, code: "always_a_person" });
+      expect(adminRequestDecision("GET", p, doc, "agent-1", { applicantDataOpen: false }), `${p} off`).toMatchObject({ ok: false, code: "always_a_person" });
+      expect(adminRequestDecision("GET", p, doc, "agent-1", { applicantDataOpen: true }), `${p} on`).toMatchObject({ ok: true, write: false });
+    }
+  });
+
+  it("still refuses every write on applicant and member data once the switch is on", () => {
+    for (const [m, p] of [["PUT", "/api/admin/open-proposals/settings"], ["POST", "/api/admin/open-proposals/links"], ["POST", "/api/admin/join-requests/j-1/approve"], ["POST", "/api/governance/applications/a-1/interviews/3/score"], ["PUT", "/api/admin/players/u-3"], ["DELETE", "/api/admin/members/u-3"]] as const) {
+      const doc: AgentAdminPathsDoc = { paths: [{ method: m, path: p.replace(/\/(a|j|u)-\d/g, "/:id").replace(/\/3\//, "/:n/"), confirm: "agent", label: "x" }] };
+      expect(adminRequestDecision(m, p, doc, "agent-1", { applicantDataOpen: true }), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+    }
+  });
+
+  it("saves a list that reads org drafts or applicant data, and refuses one that reads a secret or writes either", () => {
+    expect(parseAgentAdminPaths({ paths: [{ method: "GET", path: "/api/admin/org/drafts", label: "Drafts" }] }).ok).toBe(true);
+    expect(parseAgentAdminPaths({ paths: [{ method: "GET", path: "/api/admin/open-proposals", label: "Proposals" }] }).ok).toBe(true);
+    expect(parseAgentAdminPaths({ paths: [{ method: "GET", path: "/api/admin/integrations/stripe", label: "x" }] }).ok).toBe(false);
+    expect(parseAgentAdminPaths({ paths: [{ method: "POST", path: "/api/admin/open-proposals/links", label: "x" }] }).ok).toBe(false);
+    expect(parseAgentAdminPaths({ paths: [{ method: "POST", path: "/api/admin/org/drafts", label: "x" }] }).ok).toBe(false);
+  });
+});

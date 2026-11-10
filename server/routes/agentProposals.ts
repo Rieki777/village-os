@@ -150,7 +150,13 @@ export function register(app: Express, deps: Deps): void {
       subjectUserId: ask.memberId,
       effectiveFrom: ask.from,
       title: `Seat ${firstName((member as any).name)} in ${String(role.name)} from ${ask.from}`,
-      body: ask.why || null,
+      // The inbox approves this by calling the role's own holders route as the approver (shared/approvalInbox.ts).
+      body: JSON.stringify({
+        words: { what: `Who holds ${String(role.name)}`, before: "No change", after: `${firstName((member as any).name)} holds it from ${ask.from}${ask.why ? `. ${ask.why}` : ""}` },
+        call: { method: "POST", path: `/api/admin/org/roles/${encodeURIComponent(ask.roleId)}/holders`, body: { userId: ask.memberId, note: "Proposed through the connector" } },
+        revert: null,
+        facts: { roleId: ask.roleId, memberId: ask.memberId, from: ask.from, why: ask.why },
+      }),
     });
     res.json({ success: true, id, seated: false, message: "Nothing was seated. A holder of the power to fill roles reads this in Review and records the seating in Admin." });
   });
@@ -230,7 +236,7 @@ export function register(app: Express, deps: Deps): void {
       roleChanges: drafts
         .filter((d) => d.sourceKind === "agent")
         .map((d) => ({ draftId: d.id, title: d.title, why: d.rationale, changes: d.changes.length, changeIds: d.changes.map((c) => c.id) })),
-      seatings: seatings.map((s) => ({ id: s.id, title: s.title, roleId: s.roleId, memberId: s.subjectUserId, from: s.effectiveFrom, why: s.body, createdAt: s.createdAt })),
+      seatings: seatings.map((s) => ({ id: s.id, title: s.title, roleId: s.roleId, memberId: s.subjectUserId, from: s.effectiveFrom, why: null, createdAt: s.createdAt })),
     });
   });
 

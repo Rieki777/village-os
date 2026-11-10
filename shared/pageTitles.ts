@@ -53,6 +53,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/badges": "Badges & skills",
   "/powers": "What this village looks after",
   "/review": "Review",
+  "/approvals": "Approvals",
   "/cash-payouts": "Cash to pay out",
   "/role-proposals": "Propose my roles",
   // Keys here are matched by longest PREFIX against the live location, so a

@@ -199,9 +199,9 @@ export const LETTER_WORDS = {
 
 // ── Shared ───────────────────────────────────────────────────────────────────
 
-export const PROPOSAL_KINDS = ["seating", "letter"] as const;
+export const PROPOSAL_KINDS = ["seating", "letter", "setting", "listing", "page_copy", "map_publish", "role_change"] as const;
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
-export const PROPOSAL_STATES = ["waiting", "taken", "dismissed", "sent"] as const;
+export const PROPOSAL_STATES = ["waiting", "taken", "dismissed", "sent", "approved", "declined", "expired", "reverted"] as const;
 export type ProposalState = (typeof PROPOSAL_STATES)[number];
 
 // ── get_roles: the chart, public data only ───────────────────────────────────

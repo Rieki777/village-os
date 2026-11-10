@@ -661,6 +661,11 @@ msgctxt "sera answers"
 msgid "Take {owner} for 1 change?"
 msgstr "Take {owner} for 1 change?"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Now"
+msgstr "Now"
+
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper panel"
 msgid "The helper stays off until your village decides to use AI in Admin. Whoever governs that here says yes first."
@@ -1542,6 +1547,11 @@ msgctxt "delete a change request"
 msgid "Delete"
 msgstr "Delete"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Decline"
+msgstr "Decline"
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "No season goal served"
 msgstr "No season goal served"
@@ -1706,6 +1716,10 @@ msgstr "Gaps to talk through:"
 msgctxt "role draft character count"
 msgid "{n} open roles fit"
 msgstr "{n} open roles fit"
+
+#: client/src/components/admin/AgentsPanel.tsx
+msgid "Open it on its own page"
+msgstr "Open it on its own page"
 
 #: client/src/components/admin/AdminHelperPanel.tsx
 msgctxt "admin helper, proposal"
@@ -2708,6 +2722,10 @@ msgctxt "site header"
 msgid "Sign in"
 msgstr "Sign in"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "The approval inbox is for admins and for holders of the powers it covers."
+msgstr "The approval inbox is for admins and for holders of the powers it covers."
+
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"
 msgid "The season's goals they serve"
@@ -2970,6 +2988,12 @@ msgstr "{liveName} is renamed {theirName}."
 msgctxt "change request step"
 msgid "Gathering"
 msgstr "Gathering"
+
+#. placeholder {0}: c.by
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Proposed by {0}."
+msgstr "Proposed by {0}."
 
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgctxt "admin confidentiality section"
@@ -3497,6 +3521,11 @@ msgstr "Everyone in the village can read what you write here."
 msgid "The guide is reading"
 msgstr "The guide is reading"
 
+#: client/src/components/admin/AgentsPanel.tsx
+msgctxt "approval inbox"
+msgid "Approval inbox"
+msgstr "Approval inbox"
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
 msgid "Talk to {label}"
@@ -3594,6 +3623,11 @@ msgstr "Final approval"
 #: client/src/components/admin/ClosingPolicyEditor.tsx
 msgid "Adopted on {0}. Members read these words until new ones are adopted, so a change is saved by adopting it."
 msgstr "Adopted on {0}. Members read these words until new ones are adopted, so a change is saved by adopting it."
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Approve {count} selected"
+msgstr "Approve {count} selected"
 
 #: client/src/components/admin/AgeBandCorrection.tsx
 #: client/src/components/QuestSafety.tsx
@@ -4381,6 +4415,11 @@ msgctxt "sera answers"
 msgid "The village is voting on it until {closes}."
 msgstr "The village is voting on it until {closes}."
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "If you approve"
+msgstr "If you approve"
+
 #. placeholder {0}: x.label
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgctxt "role access task"
@@ -4917,6 +4956,11 @@ msgctxt "what the launch guide read"
 msgid "Your brief: {0}."
 msgstr "Your brief: {0}."
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Declined"
+msgstr "Declined"
+
 #: client/src/components/governance/DecisionOutcome.tsx
 msgid "This asks again after <0>a vote too few of us answered</0>."
 msgstr "This asks again after <0>a vote too few of us answered</0>."
@@ -5262,6 +5306,10 @@ msgctxt "sera answers"
 msgid "Tick: {sentence}"
 msgstr "Tick: {sentence}"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "Some could not be approved"
+msgstr "Some could not be approved"
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "Notice period: {noticeDays} days. Nothing about your departure is automatic. Each step is walked with a person."
 msgstr "Notice period: {noticeDays} days. Nothing about your departure is automatic. Each step is walked with a person."
@@ -5409,6 +5457,11 @@ msgstr "Adopted."
 msgid "Why, in one sentence"
 msgstr "Why, in one sentence"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Decided"
+msgstr "Decided"
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "{done} prices set."
@@ -5449,6 +5502,15 @@ msgstr "including {n} roles inside {name}"
 #: client/src/pages/FundingRounds.tsx
 msgid "This round could not be found."
 msgstr "This round could not be found."
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Approved"
+msgstr "Approved"
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "Decided in the last 30 days"
+msgstr "Decided in the last 30 days"
 
 #: client/src/components/roleEdit/HistoryPanel.tsx
 msgctxt "role editor history"
@@ -5851,6 +5913,11 @@ msgstr "Open {0}"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgid "This role lists no outcomes yet."
 msgstr "This role lists no outcomes yet."
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Nothing is waiting."
+msgstr "Nothing is waiting."
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "Loading the conflict agreement…"
@@ -6472,6 +6539,13 @@ msgctxt "a canvas block is loading"
 msgid "Opening {name}"
 msgstr "Opening {name}"
 
+#. placeholder {0}: c.by
+#. placeholder {1}: day(c.at)
+#. placeholder {2}: day(c.expiresAt)
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "Proposed by {0} on {1}. Lapses {2}."
+msgstr "Proposed by {0} on {1}. Lapses {2}."
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "What would you do?"
 msgstr "What would you do?"
@@ -6931,6 +7005,11 @@ msgctxt "site header"
 msgid "Main Site"
 msgstr "Main Site"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Put back"
+msgstr "Put back"
+
 #: client/src/components/seasonPlans/RoleCarryOn.tsx
 msgctxt "moon renewal action"
 msgid "Carry on"
@@ -7137,10 +7216,19 @@ msgctxt "funding rounds"
 msgid "Too few chose"
 msgstr "Too few chose"
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "That could not be done"
+msgstr "That could not be done"
+
 #: client/src/components/canvas/CanvasMoon.tsx
 msgctxt "a canvas moon gathering is being offered"
 msgid "Offering"
 msgstr "Offering"
+
+#: client/src/pages/Approvals.tsx
+msgctxt "approval inbox"
+msgid "Approvals"
+msgstr "Approvals"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "an outside contact's name"
@@ -7281,6 +7369,10 @@ msgstr "Characters saved"
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
 #~ msgstr "Once approved into a role, I will sign the village's confidentiality agreement (NDA) before I see any confidential records."
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "Nothing here is live. Approve runs the change through its own page as you, so it only works where you hold the power. A proposal lapses after seven days."
+msgstr "Nothing here is live. Approve runs the change through its own page as you, so it only works where you hold the power. A proposal lapses after seven days."
 
 #: client/src/components/roleEdit/EditRoleButton.tsx
 msgctxt "role card, opens the role editor"
@@ -7439,6 +7531,10 @@ msgstr "Dismiss"
 msgctxt "next step box, a role whose name could not be read"
 msgid "the circle's lead role"
 msgstr "the circle's lead role"
+
+#: client/src/pages/Review.tsx
+msgid "Open the approval inbox"
+msgstr "Open the approval inbox"
 
 #: client/src/pages/StructureReview.tsx
 msgid "Nobody holds it yet."
@@ -7709,6 +7805,11 @@ msgstr "Show {cn}"
 #: client/src/components/ClosingPolicyCard.tsx
 msgid "That suggestion was not kept."
 msgstr "That suggestion was not kept."
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Put it back"
+msgstr "Put it back"
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "These are still the platform's starting steps. Write them in the village's own words before adopting them."
@@ -8125,10 +8226,19 @@ msgstr "Paste text"
 #~ msgid "I will sign the Love Letter, the village's membership agreement, before I am seated."
 #~ msgstr "I will sign the Love Letter, the village's membership agreement, before I am seated."
 
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgid "The approval inbox could not be read. Reload to try again."
+msgstr "The approval inbox could not be read. Reload to try again."
+
 #: client/src/pages/CanvasWorkbook.tsx
 msgctxt "a button that downloads the workbook as a file"
 msgid "Save as Markdown"
 msgstr "Save as Markdown"
+
+#: client/src/components/approvals/ApprovalInbox.tsx
+msgctxt "approval inbox"
+msgid "Approve"
+msgstr "Approve"
 
 #: client/src/components/openProposal/RoleCardBridge.tsx
 msgctxt "open proposal side by side"

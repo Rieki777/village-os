@@ -64,6 +64,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { Link } from "wouter";
 import AgentProposalsCard from "@/components/review/AgentProposalsCard";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
@@ -593,6 +594,7 @@ export default function Review() {
         {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
         <div className="max-w-4xl space-y-6">
         <AgentProposalsCard headers={headers} />
+        <Link href="/approvals" className="inline-flex items-center min-h-[44px] text-sm text-teal-deep underline"><Trans>Open the approval inbox</Trans></Link>
 
         {/* Finished work, the summary line's other jump. Consent is the one step that
             releases value, and a claim sitting here is somebody's work going unpaid. */}
