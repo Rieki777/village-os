@@ -417,6 +417,16 @@ export function cleanTaskSuggestions(raw: unknown, openTitles: readonly string[]
   return out;
 }
 
+/**
+ * The open tasks the guide may say are finished: the member's own, never one
+ * the library sent. Marking a library task done reports back to it, and
+ * nothing from the journal reaches the library (the coordinator's ruling (b),
+ * 2026-11-09).
+ */
+export function markableFromJournal<T extends { source: string }>(open: readonly T[]): T[] {
+  return open.filter((t) => t.source !== "sera");
+}
+
 /** The ids the guide says are done, kept only when they are this member's own open tasks. */
 export function cleanDoneTasks(raw: unknown, open: readonly { id: string; title: string }[]): { id: string; title: string }[] {
   if (!Array.isArray(raw)) return [];

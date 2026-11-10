@@ -7,8 +7,10 @@
  * member's open tasks and, from what they wrote, may suggest a small next step
  * or say an open task is finished. Nothing changes until the member taps:
  * "Add to my list" writes a task with source `journal` through the list's own
- * route, and "Mark done" goes through the list's own done route, so a task the
- * library sent is reported back to Sera exactly as a tap on the list would be.
+ * route, and "Mark done" goes through the list's own done route. The guide is
+ * only ever offered the member's own tasks to mark done: a task the library
+ * sent stays with the list, since nothing from the journal reaches Saberra
+ * (the coordinator's ruling (b), 2026-11-09).
  */
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";

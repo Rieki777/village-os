@@ -32,7 +32,7 @@ import { fenceForPrompt, toolNameToKey } from "./villageReaders";
 import { providerFor, type ProviderId, type ToolResult, type WireMessage } from "./assistantProviders";
 import { guardedFetchJson } from "./toolcheck";
 import { PLATFORM_CALLS, notePlatformCall, type PlatformCallOutcome } from "./integrations";
-import { seraGuideQuestion, type SeraAsk } from "./seraGuideCall";
+import { seraGuideQuestion, type SeraAsk } from "./seraGuideQuestion";
 
 export type AssistantMode =
   | "proposal"

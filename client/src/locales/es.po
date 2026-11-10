@@ -266,6 +266,11 @@ msgstr ""
 msgid "The village's own rows"
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: where a member's words go"
+msgid "What you type here goes to {guide}, only to answer you."
+msgstr ""
+
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "Load a different season file"
 msgstr ""
@@ -2406,6 +2411,11 @@ msgctxt "copy settlement button, done"
 msgid "Copied ✓"
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: the journal, when it can go to the outside agent"
+msgid "Your journal goes to {outside} only once you choose {outside}."
+msgstr ""
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook block page, the quoted canvas question"
 msgid "The canvas asks"
@@ -2630,6 +2640,11 @@ msgstr ""
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
 msgid "Invoices, by source"
+msgstr ""
+
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: no AI in selection"
+msgid "Nothing you type to a guide is used to choose people for roles."
 msgstr ""
 
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
@@ -3605,6 +3620,11 @@ msgstr ""
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "This file cannot be loaded as it is:"
+msgstr ""
+
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: where a member's words go, guide unnamed"
+msgid "What you type goes to your guide, only to answer you."
 msgstr ""
 
 #: client/src/components/fundingRounds/common.tsx
@@ -6724,6 +6744,11 @@ msgctxt "sera answers"
 msgid "Put it to the village"
 msgstr ""
 
+#: client/src/components/guide/GuideDataSection.tsx
+msgctxt "data settings: heading for where guide conversations go"
+msgid "Your words and the guides"
+msgstr ""
+
 #: client/src/components/journey/EconomicsView.tsx
 msgid "Not completed and untouched for 14+ days. Update them in Admin → Build Progress."
 msgstr ""
@@ -6939,6 +6964,11 @@ msgctxt "pricing desk"
 msgid "The desk could not be read."
 msgstr ""
 
+#: client/src/components/guide/GuideDataLine.tsx
+msgctxt "guide data line: the journal stays in the village"
+msgid "Your journal never goes to {outside}."
+msgstr ""
+
 #: client/src/components/valuation/ValuationReceipt.tsx
 msgid "How this was worked out"
 msgstr ""
@@ -7043,6 +7073,11 @@ msgstr ""
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgctxt "when a practice happens"
 msgid "When"
+msgstr ""
+
+#: client/src/components/myMoon/GatherPanel.tsx
+msgctxt "my moon: where Ask Sera's words go"
+msgid "Asking sends your name and this moon's dates to Sera, only to gather what you took part in. Nothing is used to choose people for roles. Your journal never goes with it."
 msgstr ""
 
 #: client/src/components/ClosingPolicyCard.tsx

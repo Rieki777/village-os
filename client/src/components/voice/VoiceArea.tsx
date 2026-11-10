@@ -17,6 +17,7 @@
  *     short conversation with their own guide, Maia or Sera, that ends in a
  *     draft they can use or ignore. It loads only when opened.
  */
+import GuideDataLine from "@/components/guide/GuideDataLine";
 import { Children, cloneElement, isValidElement, lazy, Suspense, useState, type ReactElement, type ReactNode } from "react";
 import { MessageCircle } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
@@ -73,6 +74,7 @@ export default function VoiceArea({
         />
       </div>
       {talk && user && !open && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
           disabled={disabled}
@@ -82,6 +84,8 @@ export default function VoiceArea({
           <MessageCircle className="h-4 w-4 text-notice" aria-hidden="true" />
           {t({ message: "Talk it out", context: "voice field: opens a conversation with your guide about this box" })}
         </button>
+        <GuideDataLine className="min-w-0 flex-1" />
+        </div>
       )}
       {talk && user && open && (
         <Suspense fallback={null}>

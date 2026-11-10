@@ -23,7 +23,7 @@ import { askGuide, isAssistantUnavailable, problemText } from "@/lib/journalApi"
 import GrowingTextarea from "./GrowingTextarea";
 import GuideTasks from "./GuideTasks";
 import MyGuide, { useGuideState } from "@/components/guide/MyGuide";
-import { journalGuide, type GuideState } from "@shared/guideChoice";
+import { JOURNAL_ON_SERA, journalGuide, type GuideState } from "@shared/guideChoice";
 import { saveGuide } from "@/lib/guideApi";
 import { useLingui } from "@lingui/react/macro";
 import { BTN_PRIMARY, BTN_QUIET, BTN_SECONDARY, HINT } from "./ui";
@@ -152,6 +152,9 @@ export default function GuidePanel({
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
           <MyGuide state={guideState ? journalGuide(guideState) : null} onChange={setGuideState} />
           {guideState && !journalGuide(guideState).answering && journalGuide(guideState).note && (
+            <p role="status" className={HINT}>{journalGuide(guideState).note}</p>
+          )}
+          {JOURNAL_ON_SERA && guideState && !journalGuide(guideState).answering && journalGuide(guideState).note && (
             <JournalChooseSera
               note={journalGuide(guideState).note!}
               name={guideState.options.find((o) => o.id === "saberra")?.name ?? ""}

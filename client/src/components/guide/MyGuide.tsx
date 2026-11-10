@@ -5,6 +5,7 @@
  * "Ensuring she's on at every point where we have a conversational agent").
  * Before this it was mounted on the role-proposal panel only.
  */
+import GuideDataLine from "./GuideDataLine";
 import { useEffect, useState } from "react";
 import type { GuideState } from "@shared/guideChoice";
 import { fetchGuide } from "@/lib/guideApi";
@@ -30,5 +31,12 @@ export function useGuideState(): [GuideState | null, (next: GuideState) => void]
 /** Who answers here, with the one-tap switch when both guides can. Draws nothing until it knows. */
 export default function MyGuide({ state, onChange }: { state: GuideState | null; onChange: (next: GuideState) => void }) {
   if (!state) return null;
-  return <GuidePicker state={state} onChange={onChange} />;
+  const answering = state.options.find((o) => o.id === state.answering);
+  const outside = state.options.find((o) => o.id === "saberra");
+  return (
+    <div className="space-y-1">
+      <GuidePicker state={state} onChange={onChange} />
+      {answering && <GuideDataLine guide={answering.name} outside={outside?.name ?? null} />}
+    </div>
+  );
 }

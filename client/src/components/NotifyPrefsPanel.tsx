@@ -3,6 +3,7 @@
  * event family, the global email switch, and the two Law-8968 surfaces —
  * export everything, or leave and be anonymized.
  */
+import GuideDataSection from "@/components/guide/GuideDataSection";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Bell, Download, ShieldOff } from "lucide-react";
@@ -369,6 +370,8 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
           {contactNote && <p role="alert" className="text-xs text-destructive mt-1">{contactNote}</p>}
         </div>
       )}
+
+      <GuideDataSection />
 
       <div className="border-t border-border pt-4 space-y-3">
         <a

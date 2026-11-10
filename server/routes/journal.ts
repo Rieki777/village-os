@@ -142,6 +142,7 @@ import {
   type JournalPractice,
   cleanDoneTasks,
   cleanTaskSuggestions,
+  markableFromJournal,
 } from "../../shared/journal";
 
 /**
@@ -631,15 +632,20 @@ export function register(app: Express, deps: Deps): void {
     // one or say an open one is done; the member confirms either with a tap.
     const tasksOn = await listIsOn(pool, uid, boolVar("memberTasks.listDefault")).catch(() => false);
     const open = tasksOn
-      ? (await ownTasks(pool, uid)).filter((t) => t.status === "open").slice(0, 15).map((t) => ({ id: t.id, title: t.title, dueOn: t.dueOn }))
+      ? (await ownTasks(pool, uid)).filter((t) => t.status === "open").slice(0, 15).map((t) => ({ id: t.id, title: t.title, dueOn: t.dueOn, source: t.source }))
       : [];
+    // Nothing from the journal reaches Saberra (the coordinator's ruling (b)):
+    // marking a task the library sent as done reports back to it, so the guide
+    // may only say that about the member's own tasks.
+    const markable = markableFromJournal(open);
     if (tasksOn) prefetch.push({ key: "member.tasks", data: open });
 
     // WHO ANSWERS: the member's own choice. Sera answers when they chose her
     // and the village's connection can (server/lib/seraGuideCall.ts). On that
     // road this sitting, their tasks and the village's season travel; their
     // past entries and the gratitude other members sent them stay here.
-    // The journal asks first: Sera only once the member chose her (journalGuide, shared/guideChoice.ts).
+    // The journal stays village-only while JOURNAL_ON_SERA is off; when on, it asks
+    // first: Sera only once the member chose her (journalGuide, shared/guideChoice.ts).
     const state = journalGuide(guideStateFor(me, me.prefs?.guide, deps.villageGuideName?.() ?? ""));
     const sera = state.answering === "saberra" ? seraGuideAsk() : null;
     const answering = state.options.find((o) => o.id === (sera ? "saberra" : "village"));
@@ -682,7 +688,7 @@ export function register(app: Express, deps: Deps): void {
     if (tasksOn) {
       const raw = parseJsonReply<any>(call.text, {});
       reply.suggestedTasks = cleanTaskSuggestions(raw?.suggestedTasks, open.map((t) => t.title));
-      reply.doneTasks = cleanDoneTasks(raw?.doneTasks, open);
+      reply.doneTasks = cleanDoneTasks(raw?.doneTasks, markable);
     }
     // Never an empty reply: the page keeps it in the sitting's conversation
     // and sends it back on every later ask.
