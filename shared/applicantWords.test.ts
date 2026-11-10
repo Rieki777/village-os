@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APPLICANT_LANGUAGES, APPLICANT_NOTE_MAX, LANGUAGES, STATUS_LINK_LINES, cleanNote, type ApplicantLanguage } from "./applicantWords";
+import { APPLICANT_LANGUAGES, APPLICANT_NOTE_MAX, LANGUAGES, STATUS_LINK_STARTS, cleanNote, type ApplicantLanguage } from "./applicantWords";
 import { chooseApplicantLanguage } from "./applicantLanguage";
 import { offeredLocaleTags } from "./i18nLocales";
 import { adoptedAccountLetter, adoptedInviteLetter, applicantUpdate, declinedLetter, type ApplicantUpdateKind } from "./openProposalDecide";
@@ -63,7 +63,8 @@ describe("each template, built in each language", () => {
     expect(declinedLetter({ firstName: null, village: "V", roleNames: ["R"], site: "https://x.test" }).text).toContain("Thank you for proposing");
   });
   it("a notice can drop the status link line in any language", () => {
-    expect(STATUS_LINK_LINES.size).toBe(APPLICANT_LANGUAGES.length);
+    expect(new Set(STATUS_LINK_STARTS).size).toBe(APPLICANT_LANGUAGES.length);
+    for (const lang of APPLICANT_LANGUAGES) expect(STATUS_LINK_STARTS.some((s) => LANGUAGES[lang].keepStatusLink.startsWith(s))).toBe(true);
   });
 });
 
@@ -89,6 +90,15 @@ describe("the language rule, each fallback", () => {
   });
   it("a tag we cannot write in is skipped, not stopped at", () => {
     expect(chooseApplicantLanguage({ chosenOnSite: "fr", emailList: "es" }).source).toBe("email_list");
+  });
+});
+
+describe("the Spanish list word", () => {
+  it("uses e before an i sound and y otherwise", () => {
+    expect(LANGUAGES.es.list(["Guardia", "Isla"])).toBe("Guardia e Isla");
+    expect(LANGUAGES.es.list(["Guardia", "Hogar"])).toBe("Guardia y Hogar");
+    expect(LANGUAGES.es.list(["A", "B", "Hierba"])).toBe("A, B y Hierba");
+    expect(LANGUAGES.en.list(["A", "B", "C"])).toBe("A, B and C");
   });
 });
 

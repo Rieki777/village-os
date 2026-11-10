@@ -110,7 +110,7 @@ const esList = (items: readonly string[]): string => {
   if (clean.length <= 1) return clean[0] ?? "";
   const last = clean[clean.length - 1];
   // "e" before a word that starts with the sound i (Spanish spelling rule); role names are the village's own words.
-  const y = /^(hi?(?!ae|ie|ue)|i)/i.test(last) && !/^hi[aeo]/i.test(last) ? "e" : "y"; // check: role names starting with i or hi
+  const y = /^(i|hi)(?![aeou])/i.test(last) ? "e" : "y"; // check: role names starting with i or hi
   return `${clean.slice(0, -1).join(", ")} ${y} ${last}`;
 };
 
@@ -279,8 +279,8 @@ export const LANGUAGES: Record<ApplicantLanguage, ApplicantMessages> = { en, es 
 
 export const wordsIn = (lang: ApplicantLanguage | null | undefined): ApplicantMessages => LANGUAGES[lang && isApplicantLanguage(lang) ? lang : DEFAULT_APPLICANT_LANGUAGE];
 
-/** Every language's "your status page link" line, so a notice can drop it whichever language wrote it. */
-export const STATUS_LINK_LINES: ReadonlySet<string> = new Set(APPLICANT_LANGUAGES.map((l) => LANGUAGES[l].keepStatusLink));
+/** How every language's "your status page link" line begins, so a notice can drop it whichever language wrote it. */
+export const STATUS_LINK_STARTS: readonly string[] = APPLICANT_LANGUAGES.map((l) => LANGUAGES[l].keepStatusLink.slice(0, 21));
 
 /** A decider's note for an applicant: plain text, trimmed, one blank line at most, capped. Null when empty. */
 export const APPLICANT_NOTE_MAX = 600;

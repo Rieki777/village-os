@@ -31,7 +31,7 @@ import { isTombstone } from "./oauthAccounts";
 import { numberVar } from "./variables";
 import { escapeHtml } from "./comms/mailer";
 import { languageOf } from "./applicantLanguage";
-import { STATUS_LINK_LINES } from "../../shared/applicantWords";
+import { STATUS_LINK_STARTS } from "../../shared/applicantWords";
 
 const WENT: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["sending", "sent", "delivered", "duplicate"]);
 
@@ -107,7 +107,7 @@ export function makeApplicantTeller(deps: TellDeps): TellApplicant {
 export function withoutStatusLink(text: string): string {
   const kept: string[] = [];
   for (const line of text.split("\n")) {
-    if (!STATUS_LINK_LINES.has(line)) { kept.push(line); continue; }
+    if (!STATUS_LINK_STARTS.some((start) => line.startsWith(start))) { kept.push(line); continue; }
     while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
   }
   return kept.join("\n").trim();

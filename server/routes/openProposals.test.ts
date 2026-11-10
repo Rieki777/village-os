@@ -266,7 +266,7 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       expect(state.sent).toHaveLength(1);
       const row = await readOpenProposal(pool, id);
       expect(row).toMatchObject({ status: "unconfirmed", name: "Rowan Field", email: "rowan@example.test", targetSeasonId: "s-next", linkId: null });
-      expect(row?.body).toEqual({ roles: [{ roleId: gate, note: "I open gates for a living." }], why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
+      expect(row?.body).toEqual({ roles: [{ roleId: gate, note: "I open gates for a living." }], why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day.", locale: "en" });
       // The desk does not see it.
       state.viewer = ADMIN;
       expect((await call("GET", "/api/admin/open-proposals")).body.proposals.map((p: any) => p.id)).not.toContain(id);
