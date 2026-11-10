@@ -113,6 +113,8 @@ type Deps = Pick<
   now?: () => Date;
   /** A village variable read as a flag. Absent reads as off. */
   boolVar?: (key: string) => boolean;
+  /** A text setting: the village's default track (`org.default_track`) for the card gate. */
+  stringVar?: (key: string) => string;
 };
 
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
@@ -212,7 +214,7 @@ export function register(app: Express, deps: Deps): void {
     const nameOf = new Map(roles.map((r) => [r.id, r.name]));
     return roles
       .filter((r) => r.active && !r.isExample && isListed(r) && r.circleId && live.has(r.circleId))
-      .filter((r) => !needsCard || gateOf(r).gate.complete)
+      .filter((r) => !needsCard || gateOf(r, deps.stringVar?.("org.default_track") ?? null).gate.complete)
       .map((r) => ({
         id: r.id,
         name: r.name,
