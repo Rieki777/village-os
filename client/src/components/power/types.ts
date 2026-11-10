@@ -48,6 +48,8 @@ export interface PowerHolder {
 }
 
 export interface PowerSeat {
+  /** False on a role that is off every discovery surface; sent only to readers who may see it (shared/roleListing.ts). */
+  listed?: boolean | null;
   id: string;
   name: string;
   /** The seat's AIM: what it works toward. */

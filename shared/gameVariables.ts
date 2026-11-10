@@ -2468,6 +2468,42 @@ export const VARIABLES: VariableDef[] = [
     ring: "founder",
   },
   {
+    key: "org.sync_starts_unlisted",
+    category: "The village's people",
+    label: "Roles accepted from a sync start unlisted",
+    description:
+      "On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.apply_needs_complete_card",
+    category: "The village's people",
+    label: "A role needs a complete card before anyone can apply",
+    description:
+      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.first_conversation_role",
+    category: "The village's people",
+    label: "The role that holds first conversations",
+    description:
+      "The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.paid_consent_circle",
+    category: "The village's people",
+    label: "The circle that consents paid roles",
+    description:
+      "The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.ccos_terms",
     category: "The village's people",
     label: "Show the CCOS term on circle and role card headings",
