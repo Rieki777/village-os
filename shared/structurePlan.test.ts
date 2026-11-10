@@ -519,3 +519,17 @@ describe("archivedRefusal: what the source archived is never accepted outside th
     );
   });
 });
+
+describe("a sync accept and the listing setting (role journey PR-A)", () => {
+  const creates = (d: ReturnType<typeof decideStructure>) => d.changes.filter((c) => c.op === "create_seat");
+  it("writes every created role unlisted when the village setting is on", () => {
+    const on = creates(decideStructure(plan(), { startUnlisted: true }));
+    expect(on.length).toBeGreaterThan(0);
+    for (const c of on) expect(c.payload.listed).toBe(false);
+  });
+  it("leaves the payload without a listed key when the setting is off (control)", () => {
+    const off = creates(decideStructure(plan(), {}));
+    expect(off.length).toBeGreaterThan(0);
+    for (const c of off) expect("listed" in c.payload).toBe(false);
+  });
+});

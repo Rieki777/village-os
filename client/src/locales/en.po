@@ -440,6 +440,11 @@ msgstr "(done when {doneWhen})"
 msgid "Apply for these {pickCount} roles"
 msgstr "Apply for these {pickCount} roles"
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card: the pay range heading"
+msgid "What it pays"
+msgstr "What it pays"
+
 #: client/src/components/canvas/CanvasBlockFrames.tsx
 msgid "What the village's settings and records show"
 msgstr "What the village's settings and records show"
@@ -1226,6 +1231,11 @@ msgctxt "age band option"
 msgid "16 or 17"
 msgstr "16 or 17"
 
+#: client/src/components/power/RoleCardParams.tsx
+msgctxt "full role card parameters block"
+msgid "About this role"
+msgstr "About this role"
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook section heading"
 msgid "Key moments"
@@ -1491,6 +1501,10 @@ msgstr "Compare them"
 #: client/src/components/canvas/CanvasSuggestionForm.tsx
 msgid "What would it change?"
 msgstr "What would it change?"
+
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "About this role"
+#~ msgstr "About this role"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2842,6 +2856,13 @@ msgstr "Answer"
 msgid "Remove the row \"{subject}\" from the Decision Matrix? Everyone in the village stops seeing it."
 msgstr "Remove the row \"{subject}\" from the Decision Matrix? Everyone in the village stops seeing it."
 
+#. placeholder {0}: d.listed
+#. placeholder {1}: d.unlisted
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing result"
+msgid "{0} listed, {1} unlisted"
+msgstr "{0} listed, {1} unlisted"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the reason for a change request"
 msgid "Why"
@@ -3524,9 +3545,9 @@ msgid "Loading this village's conflict agreement…"
 msgstr "Loading this village's conflict agreement…"
 
 #: client/src/pages/RoleDraft.tsx
-msgctxt "role draft stat"
-msgid "Roughly: {hours}"
-msgstr "Roughly: {hours}"
+#~ msgctxt "role draft stat"
+#~ msgid "Roughly: {hours}"
+#~ msgstr "Roughly: {hours}"
 
 #. placeholder {0}: row.updatedBy.name || aFounder
 #. placeholder {1}: readingDate(row.updatedAt)
@@ -3890,6 +3911,10 @@ msgctxt "economics view heading"
 msgid "Cycle settlement report"
 msgstr "Cycle settlement report"
 
+#: client/src/components/power/RoleCardParams.tsx
+#~ msgid "What it pays"
+#~ msgstr "What it pays"
+
 #: client/src/pages/ExitPolicy.tsx
 msgid "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
 msgstr "A village that designs its exits before it needs them can afford to welcome people wholeheartedly. This is how departure works here."
@@ -4081,6 +4106,11 @@ msgstr "Your account, {firstName}"
 msgctxt "signing key"
 msgid "Ask for a new key"
 msgstr "Ask for a new key"
+
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing: how many roles are ticked"
+msgid "ticked"
+msgstr "ticked"
 
 #: client/src/components/governance/VillageConflictSteps.tsx
 msgid "Loading this village's conflict steps…"
@@ -5390,6 +5420,11 @@ msgctxt "sera answers"
 msgid "Edit: start from ours"
 msgstr "Edit: start from ours"
 
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing panel heading"
+msgid "Listed roles"
+msgstr "Listed roles"
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook block page, lines for the group's answer"
 msgid "What we say"
@@ -6433,6 +6468,11 @@ msgstr "The Decision Matrix"
 msgid "A note for whoever decides (optional)"
 msgstr "A note for whoever decides (optional)"
 
+#: client/src/components/admin/RoleListingPanel.tsx
+msgctxt "role listing: a role in a circle"
+msgid "in"
+msgstr "in"
+
 #: client/src/components/review/useSeraActs.ts
 msgctxt "sera answers"
 msgid "Added {n} to the draft. They go live when the draft is published."
@@ -6892,6 +6932,10 @@ msgstr "1 pay change is left out. Pay is set by a person."
 #: client/src/components/notebook/NotebookDocument.tsx
 msgid "Ask to share it"
 msgstr "Ask to share it"
+
+#: client/src/components/admin/RoleListingPanel.tsx
+msgid "The earlier listing is back"
+msgstr "The earlier listing is back"
 
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "change request note kind"

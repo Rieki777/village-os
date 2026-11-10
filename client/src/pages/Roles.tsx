@@ -1,3 +1,4 @@
+import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
 /** The link from a circle's group to its own card (`/circles/:id`). */
@@ -13,7 +14,7 @@ import { swatchFor } from "@/lib/swatch";
 import { gameFetch, useSeason } from "@/lib/gameApi";
 import { PeopleLockNote, type PeopleTier } from "@/components/PeopleLock";
 import SeatAction from "@/components/power/SeatAction";
-import { applyHrefFor, termsSlotFor } from "@/components/power/SeatTermsSlot";
+import { applyHrefFor, guardedAction, termsSlotFor } from "@/components/power/SeatTermsSlot";
 import SeatHistory from "@/components/power/SeatHistory";
 import SeatNeeds from "@/components/power/SeatNeeds";
 import VillageConflictSteps from "@/components/governance/VillageConflictSteps";
@@ -251,6 +252,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
                   {STATE_WORDS[role.status]}
                 </span>
+                <NotListedChip role={role.raw} />
               </div>
               <p className="text-xs text-muted-foreground">
                 {role.group}
@@ -290,7 +292,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
                 labelledBy={headerId}
                 input={fromOrgSeat(role.raw, sheet.circles, sheet.people, sheet.village, { raiseHand: sheet.raiseHand })}
                 ctx={sheet.ctx}
-                action={<SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />}
+                action={guardedAction(role.raw, <SeatAction circleId={role.circleId ?? null} applyHref={applyHrefFor(role.raw)} />)}
                 settings={termsSlotFor(role.raw)}
               />
               {/* The seat as a link, for sending to whoever might hold it.
