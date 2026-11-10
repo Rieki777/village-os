@@ -42,6 +42,7 @@
 import { aboutOf, backgroundCheckOf, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { goalsAsText, goalsOf, legacyGoals, parseGoals, type ProposalGoal } from "./proposalGoals";
 import { looksLikePaymentDetails, PAYMENT_DETAIL_MESSAGE, parseSeatSettings, type SeatSettings } from "./seatSettings";
+import { judgeTermsStep, type TermAnswers } from "./termsWords";
 import type { HandOpenerRule } from "./powerHands";
 import { roleWithHolders } from "./roleHolderLabel";
 
@@ -123,7 +124,11 @@ export interface ApplicationAnswers {
   timeZone: string | null;
   windows: string[];
   earliestStart: string | null;
-  terms: { choice: "accept" | "talk"; note: string } | null;
+  /**
+   * `answers` and `commitmentPct` are the eight settings' answers and the candidate's commitment
+   * (joining lane PR 3, `shared/termsWords.ts`). Absent on an application made before them.
+   */
+  terms: { choice: "accept" | "talk"; note: string; answers?: TermAnswers; commitmentPct?: number } | null;
   /**
    * The goals for the first moon, as the member door's list wrote them (joining
    * lane PR 1; shared/proposalGoals.ts). Empty on an application made before
@@ -140,6 +145,16 @@ export interface ApplicationAnswers {
 }
 
 const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
+
+/** The per-setting answers and the commitment, when well formed; whatever is not is left out, never thrown on. */
+function termsExtras(t: Record<string, unknown> | null | undefined): { answers?: TermAnswers; commitmentPct?: number } {
+  if (!t) return {};
+  const step = judgeTermsStep({ answers: t.answers, commitmentPct: t.commitmentPct }, []);
+  if (step.ok) return { ...(Object.keys(step.value.answers).length ? { answers: step.value.answers } : {}), commitmentPct: step.value.commitmentPct };
+  // Commitment missing or odd: keep what reads (an older application).
+  const only = judgeTermsStep({ answers: t.answers, commitmentPct: 0 }, []);
+  return only.ok && Object.keys(only.value.answers).length ? { answers: only.value.answers } : {};
+}
 
 /** The answers as stored, from anything. Null when there are none; never throws. */
 export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null {
@@ -162,7 +177,7 @@ export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null
     timeZone: text(r.timeZone, ANSWER_LIMITS.timeZone),
     windows: Array.isArray(r.windows) ? r.windows.map((w) => text(w, ANSWER_LIMITS.window)).filter((w): w is string => !!w).slice(0, ANSWER_LIMITS.windows) : [],
     earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
-    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
+    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "", ...termsExtras(t) } : null,
     goals: goalsOf(r.goals),
     ...(referencesOf(r.references).length ? { references: referencesOf(r.references) } : {}),
     ...(Object.keys(aboutOf(r.about)).length ? { about: aboutOf(r.about) } : {}),
@@ -200,6 +215,8 @@ export interface ApplicationInput {
 }
 
 export type ParsedApplication = { ok: true; input: ApplicationInput } | { ok: false; error: string; field: string };
+
+const isPlainTerms = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 const words = (v: unknown): string | null => {
   const s = String(v ?? "").trim();
@@ -252,6 +269,13 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (answers) {
     const { references: _r, about: _a, backgroundCheck: _b, ...rest } = answers;
     answers = rest;
+  }
+  // The terms step (PR 3): when the door sends the eight answers, the commitment is required and each answer is a choice.
+  const sentTerms = sentAnswers && isPlainTerms(sentAnswers.terms) ? sentAnswers.terms : null;
+  if (sentTerms && sentTerms.answers !== undefined) {
+    const step = judgeTermsStep({ answers: sentTerms.answers, commitmentPct: sentTerms.commitmentPct }, []);
+    if (!step.ok) return { ok: false, field: "terms", error: step.error };
+    if (answers?.terms) answers = { ...answers, terms: { ...answers.terms, answers: step.value.answers, commitmentPct: step.value.commitmentPct } };
   }
   let deliverablesOut = deliverables;
   const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;

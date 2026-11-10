@@ -13,7 +13,7 @@
  *   the first 90 days                       ->  my first moon's goals, each
  *                                               with a "Done when" test
  *   the season's goals for the village      ->  which my work serves, and how
- *   the hours                               ->  what I can give
+ *   the commitment                          ->  what I can give (energy and attention, never hours)
  *   the agreements                          ->  the NDA once approved. The
  *                                               Love Letter is no tick here: the
  *                                               applicant ALIGNS with it on the form
@@ -27,6 +27,7 @@
  */
 
 import { GOAL_LIMITS, goalsOf, parseGoals } from "./proposalGoals";
+import { judgeTermsStep, notesAsText, overallChoice, commitmentWords, type TermAnswers, type TermKey } from "./termsWords";
 
 export const CARD_LIMITS = {
   movesPerRole: 3,
@@ -54,6 +55,8 @@ export type CardWindow = (typeof CARD_WINDOWS)[number];
 export interface CardTerms {
   choice: "accept" | "talk";
   note: string;
+  /** Joining lane PR 3: the answer to each of the eight settings. Absent on a card sent before. `choice` is then the whole answer. */
+  answers?: TermAnswers;
 }
 
 const CIVIL_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -90,7 +93,10 @@ export interface OpenProposalCard {
    * `roleId`: the role card the pick was made on (guide v2). Absent on a card sent before that, which named goals once for all its roles.
    */
   serves: Array<{ goalId: string; how: string; goal?: string; roleId?: string }>;
+  /** Sent before commitment replaced hours: read, never shown (joining lane PR 3). New cards send none. */
   hours: string;
+  /** How much of their energy and attention the role gets in a week, 0 to 100 in tens. Absent on a card sent before it. A planning signal; no pay reads it. */
+  commitmentPct?: number;
   /**
    * `loveLetter` is kept as stored on a card sent before the alignment replaced
    * the tick, and read by nothing that decides: the proposal's `membership` is
@@ -113,6 +119,8 @@ export interface CardContext {
   goalIds: ReadonlySet<string>;
   /** Today's civil day, so a goal's date can be held to this moon. Absent: the date is only read as a day. */
   today?: string;
+  /** The settings the picked roles have written: each needs an answer (`writtenKeys`). Absent: only the shape is judged. */
+  writtenTerms?: readonly TermKey[];
 }
 
 export const CARD_WORDS = {
@@ -197,13 +205,16 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
   const earliestStart = str(o.earliestStart);
   if (earliestStart && !CIVIL_DAY.test(earliestStart)) return { ok: false, field: "earliestStart", error: CARD_WORDS.badDate };
   const t = o.terms && typeof o.terms === "object" ? (o.terms as Record<string, unknown>) : null;
-  const choice = t?.choice === "accept" || t?.choice === "talk" ? t.choice : null;
-  const note = str(t?.note);
-  if (!choice) return { ok: false, field: "terms", error: CARD_WORDS.needTerms };
-  if (choice === "talk" && !note) return { ok: false, field: "terms", error: CARD_WORDS.needTermsNote };
-  if (note.length > L.termsNote) return { ok: false, field: "terms", error: CARD_WORDS.tooLong("Your note on the terms", L.termsNote) };
-  const hours = str(o.hours);
-  if (hours.length > L.hours) return { ok: false, field: "card", error: CARD_WORDS.tooLong("Your hours", L.hours) };
+  // Joining lane PR 3: each of the eight settings is answered, and the commitment is chosen (no default).
+  const step = judgeTermsStep({ answers: t?.answers, commitmentPct: o.commitmentPct }, ctx.writtenTerms ?? []);
+  if (!step.ok) return { ok: false, field: "terms", error: step.error };
+  const answers = step.value.answers;
+  const hasAnswers = Object.keys(answers).length > 0;
+  // With answers the choice follows them. With none (no setting written yet) it is the one the form sent.
+  const sent = t?.choice === "accept" || t?.choice === "talk" ? t.choice : null;
+  const choice = hasAnswers ? overallChoice(answers) : sent ?? "accept";
+  const note = (hasAnswers ? notesAsText(answers) : str(t?.note)).slice(0, L.termsNote);
+  if (!hasAnswers && choice === "talk" && !note) return { ok: false, field: "terms", error: CARD_WORDS.needTermsNote };
   const agreed = o.agreed && typeof o.agreed === "object" ? (o.agreed as Record<string, unknown>) : {};
   // Only the NDA is ticked here. A Love Letter tick from a form sent before the alignment replaced it is kept, never asked.
   if (agreed.nda !== true) return { ok: false, field: "agreed", error: CARD_WORDS.agreed };
@@ -212,14 +223,21 @@ export function parseCard(raw: unknown, ctx: CardContext): Parsed {
     card: {
       roles,
       serves,
-      hours,
+      hours: "",
+      commitmentPct: step.value.commitmentPct,
       agreed: { loveLetter: agreed.loveLetter === true, nda: true },
       ...(timeZone ? { timeZone } : {}),
       ...(windows.length ? { windows } : {}),
       ...(earliestStart ? { earliestStart } : {}),
-      terms: { choice, note },
+      terms: { choice, note, ...(hasAnswers ? { answers } : {}) },
     },
   };
+}
+
+/** The per-setting answers as stored, or none. */
+function readAnswers(raw: unknown): TermAnswers | undefined {
+  const j = judgeTermsStep({ answers: raw, commitmentPct: 0 }, []);
+  return j.ok && Object.keys(j.value.answers).length ? j.value.answers : undefined;
 }
 
 /** A stored card, read back safely; anything that is not one is no card. Never throws. */
@@ -253,6 +271,7 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       }))
       .filter((s) => s.goalId),
     hours: cut(o.hours, L.hours),
+    ...(typeof o.commitmentPct === "number" && Number.isInteger(o.commitmentPct) && o.commitmentPct >= 0 && o.commitmentPct <= 100 ? { commitmentPct: o.commitmentPct } : {}),
     agreed: { loveLetter: (o.agreed as any)?.loveLetter === true, nda: (o.agreed as any)?.nda === true },
     ...(isTimeZone(str(o.timeZone)) ? { timeZone: str(o.timeZone) } : {}),
     ...(list(o.windows).some((w) => (CARD_WINDOWS as readonly unknown[]).includes(w))
@@ -260,7 +279,13 @@ export function cardOf(raw: unknown): OpenProposalCard | undefined {
       : {}),
     ...(CIVIL_DAY.test(str(o.earliestStart)) ? { earliestStart: str(o.earliestStart) } : {}),
     ...((o.terms as any)?.choice === "accept" || (o.terms as any)?.choice === "talk"
-      ? { terms: { choice: (o.terms as any).choice as CardTerms["choice"], note: cut((o.terms as any).note, L.termsNote) } }
+      ? {
+          terms: {
+            choice: (o.terms as any).choice as CardTerms["choice"],
+            note: cut((o.terms as any).note, L.termsNote),
+            ...(readAnswers((o.terms as any).answers) ? { answers: readAnswers((o.terms as any).answers) } : {}),
+          },
+        }
       : {}),
   };
 }
@@ -280,7 +305,7 @@ export function cardSummary(card: OpenProposalCard, roleName: (id: string) => st
     lines.push("Serves the season's goals:");
     for (const s of once) lines.push(`- ${goalText(s.goalId)}${s.how ? `: ${s.how}` : ""}`);
   }
-  if (card.hours) lines.push(`Time I can give: ${card.hours}`);
+  if (card.commitmentPct !== undefined) lines.push(commitmentWords(card.commitmentPct));
   if (card.timeZone) lines.push(`Time zone: ${card.timeZone}`);
   if (card.windows?.length) lines.push(`Usual times: ${card.windows.join(", ")}`);
   if (card.earliestStart) lines.push(`Earliest start: ${card.earliestStart}`);
