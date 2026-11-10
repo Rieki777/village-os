@@ -37,6 +37,8 @@
  * the suite skips (harness rule).
  */
 import { insertTask, setListOn } from "../repos/memberTasks";
+import { appendToConfigList, readConfigDocument } from "../repos/appConfigDocs";
+import { OMBUDS_ASKS_KEY } from "./conflictAgreement";
 import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -57,6 +59,15 @@ import { sessionIdsNaming } from "../repos/liveSessions";
 import * as portraits from "../repos/characterPortraits";
 import { charactersForMember } from "../repos/playerCharacters";
 import { landPublicSubmission } from "./publicForms";
+import {
+  addResourcePick,
+  insertStoredDocument,
+  insertTextDocument,
+  markDocumentShared,
+  notebookRowsRemaining,
+  resourcePicksFor,
+  VILLAGE_PICK,
+} from "../repos/villageDocuments";
 
 const configured = testDbConfigured();
 const VILLAGE = "local";
@@ -473,6 +484,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "org-drafts",
       "proposal-drafts",
       "skill-tags",
+      "age-band",
       "push-subscriptions",
       "forum-subscriptions",
       "wallet-challenges",
@@ -482,6 +494,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "module-records",
       "member-agent",
       "companions",
+      "onboarding",
       "member-asks",
       "character-sheet",
       "portraits",
@@ -517,6 +530,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "investor-fact-words-after-tombstone",
       "stay-notes-after-tombstone",
       "purchase-emails-after-tombstone",
+      "application-review-after-tombstone",
       "role-proposals-after-tombstone",
       "seat-journal-after-tombstone",
       "seat-claims-after-tombstone",
@@ -524,6 +538,7 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "role-holdings-after-tombstone",
       "sessions-after-tombstone",
       "gene-keys-after-tombstone",
+      "funding-rounds-after-tombstone",
       "member-tasks-after-tombstone",
       "quest-crews-after-tombstone",
       "quest-claims-after-tombstone",
@@ -532,7 +547,11 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
       "member-asks-after-tombstone",
       "moon-reviews-after-tombstone",
       "reward-moments-after-tombstone",
+      "budget-attribution-after-tombstone",
+      "notebook-after-tombstone",
+      "ombuds-asks-after-tombstone",
       "companions-after-tombstone",
+      "sera-answers-after-tombstone",
       "audit",
       "product-subscriptions-after-tombstone",
       "external-stores",
@@ -814,6 +833,46 @@ describe.skipIf(!configured)("an erasure that stops part way", () => {
     // Still outstanding, because it is. A resume that reported success here
     // would clear the one row that says somebody is owed something.
     expect((await unfinishedErasures(pool)).map((r) => r.userId)).toContain(id);
+  });
+
+  it("takes the member's private documents, their stored bytes and their own picks, and leaves what the village adopted (0359)", async () => {
+    const id = "er-notebook-1";
+    const target = await seedMember(id);
+    const kept = await insertTextDocument(pool, id, { title: "Shared notes", kind: "paste", body: "The village adopted these." });
+    await markDocumentShared(pool, kept, id);
+    await insertTextDocument(pool, id, { title: "My diary", kind: "paste", body: "Private words." });
+    await insertStoredDocument(pool, id, { title: "Deeds", kind: "pdf", fileName: "deeds.pdf", mime: "application/pdf", bytes: Buffer.from("%PDF-1.4 private") });
+    await addResourcePick(pool, id, "sociocracy-basics");
+    await addResourcePick(pool, VILLAGE_PICK, "governance-canvas");
+    // A fixture that put nothing there would let the assertion below pass over nothing.
+    expect(await notebookRowsRemaining(pool, id)).toEqual({ private: 2, shared: 1, files: 1, picks: 1 });
+
+    await anonymizeMember(pool, target, "admin-1", deps());
+
+    expect(await notebookRowsRemaining(pool, id)).toEqual({ private: 0, shared: 1, files: 0, picks: 0 });
+    expect((await q("SELECT COUNT(*) AS n FROM village_document_files f LEFT JOIN village_documents d ON d.id = f.document_id WHERE d.id IS NULL"))[0].n).toBe(0);
+    // The village's own pick is never a member's.
+    expect(await resourcePicksFor(pool, VILLAGE_PICK)).toContain("governance-canvas");
+    expect((await erasureRecord(pool, id))?.stepsDone).toContain("notebook-after-tombstone");
+  });
+
+  it("keeps every ombuds-door record and blanks only who asked, and a second run changes nothing (D10a)", async () => {
+    const id = "er-ombuds-1";
+    const target = await seedMember(id);
+    const mine = { id: "oa-mine", askedBy: id, askedAt: "2026-11-01T10:00:00.000Z", contactId: "oc-1", contactLabel: "Valley Mediation" };
+    const theirs = { id: "oa-theirs", askedBy: "er-ombuds-other", askedAt: "2026-11-02T10:00:00.000Z", contactId: "oc-2", contactLabel: "Ombuds" };
+    await appendToConfigList(pool, OMBUDS_ASKS_KEY, "asks", mine);
+    await appendToConfigList(pool, OMBUDS_ASKS_KEY, "asks", theirs);
+
+    await anonymizeMember(pool, target, "admin-1", deps());
+
+    const after = (await readConfigDocument<{ asks: any[] }>(pool, OMBUDS_ASKS_KEY))!.asks;
+    expect(after).toEqual([{ ...mine, askedBy: "" }, theirs]);
+    expect((await erasureRecord(pool, id))?.stepsDone).toContain("ombuds-asks-after-tombstone");
+
+    // Idempotent: a second sweep, or a resume, finds nobody left to blank.
+    await anonymizeMember(pool, target, "admin-1", deps());
+    expect((await readConfigDocument<{ asks: any[] }>(pool, OMBUDS_ASKS_KEY))!.asks).toEqual(after);
   });
 
   it("takes the member's own agent with them: inbox, queue, key, drafts, tokens, note and statements", async () => {

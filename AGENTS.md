@@ -85,7 +85,7 @@ Never, whatever you are asked:
 | Guide | `START_HERE.md`, part A | `START_HERE.md`, part B, then `docs/PROVISIONING.md` |
 
 Either way the founder pays their own provider, if anybody. The software is
-free (MIT licence).
+free (AGPL-3.0-or-later licence).
 
 ## The order of the work
 

@@ -84,10 +84,17 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
   "role_seat",
   // The route opens the change and the closer writes the statement (0219).
   "gps_change",
+  // The route opens the vote and the closer adopts the stored words at the
+  // landing (server/routes/governanceAgreements.ts, server/lib/agreementCloser.ts).
+  "agreement",
   // Seat settings PR4 (0257): a member applies for seats on terms. A live
   // org.seat holder adopts it, or the route opens the vote itself and the
   // closer (server/lib/seatApplicationCloser.ts) seats it when it lands.
   "role_application",
+  // Vote-path gap 6 (Rye, 2026-11-06): the village gives or takes back a badge
+  // (POST /api/governance/badge-grants), and the closer awards through the
+  // same function the admin route uses (server/lib/badgeGrantCloser.ts).
+  "badge_grant",
 ];
 
 /**
@@ -119,11 +126,9 @@ export const CONDUCTABLE_TYPES: readonly WizardType[] = [
  * A type absent from this map refuses nothing, which is today's behaviour for
  * every type that names no capability at all.
  *
- * WHAT THIS DOES NOT DO, said here rather than discovered later:
- * `POST /api/governance/badge-grants` has not been built (the wizard type is
- * advisory-only until it is, because `CONDUCTABLE_TYPES` does not name it).
- * This map is what that route reads on the day it lands, and the transfer
- * route reads it today. It is a contract with one live reader, not two.
+ * Two live readers: the transfer route, and since 2026-11-06
+ * `POST /api/governance/badge-grants` (server/routes/badgeGrants.ts), which
+ * refuses these keys at the opening and again at the landing.
  */
 export const TYPE_CAPABILITY_REFUSALS: Partial<
   Record<WizardType, { readonly keys: readonly string[]; readonly why: string }>
@@ -178,8 +183,16 @@ export const TYPE_CAPABILITY_REFUSALS: Partial<
    * to include it silently, in a commit about something else. This is the
    * line that does not move when that one does.
    */
+  /*
+   * `member.superVouch` left this list on 2026-11-06. Rye: the keys nothing
+   * could hand over become passable ONLY by a highest-tier village vote, and
+   * the grant route raises a grant of it to that tier
+   * (server/lib/capabilityRegistry.ts, HIGHEST_TIER_GRANTS). At that bar the
+   * whole village decides who may admit outright, which answers the capture
+   * this list exists for. The two keys that make the electorate itself stay.
+   */
   power_grant: {
-    keys: ["ballot.vote", "member.vouch", "member.superVouch"],
+    keys: ["ballot.vote", "member.vouch"],
     why:
       "A role is a set of people, so voting this one onto a role and then seating people in it " +
       "would be a few members choosing who else gets a say. Who votes here is a rule of the game, " +

@@ -5,7 +5,7 @@
  * choice the outside agent goes first; and nothing answers when neither can.
  */
 import { describe, expect, it } from "vitest";
-import { GUIDE_WORDS, parseGuideId, resolveGuide, type GuideOption } from "./guideChoice";
+import { companionGuideOf, GUIDE_WORDS, parseGuideId, resolveGuide, type GuideOption } from "./guideChoice";
 
 const both = (village: boolean, saberra: boolean): GuideOption[] => [
   { id: "village", name: "Maia", named: true, available: village },
@@ -60,5 +60,29 @@ describe("who answers", () => {
     expect(resolveGuide(null, both(true, false)).canChoose).toBe(false);
     expect(resolveGuide(null, both(false, true)).canChoose).toBe(false);
     expect(resolveGuide(null, both(true, true)).canChoose).toBe(true);
+  });
+});
+
+/*
+ * The personal companion follows the member's own guide (Rye, 2026-11-06). A
+ * choice is kept whether or not that guide can answer right now, because the
+ * companion's page says when the other one answers for it. With no choice it
+ * is the same rule as every guide surface: the outside agent when it can
+ * answer, the village guide otherwise.
+ */
+describe("the personal companion's guide", () => {
+  it("is the member's own choice, kept whether or not that guide can answer now", () => {
+    expect(companionGuideOf("saberra", false)).toBe("saberra");
+    expect(companionGuideOf("saberra", true)).toBe("saberra");
+    expect(companionGuideOf("village", true)).toBe("village");
+  });
+
+  it("with no choice, follows the rule every guide surface follows", () => {
+    expect(companionGuideOf(undefined, true)).toBe("saberra");
+    expect(companionGuideOf(undefined, false)).toBe("village");
+    expect(companionGuideOf("Maia", true), "a name is not a choice").toBe("saberra");
+    // The same answer resolveGuide gives a member who never chose.
+    expect(companionGuideOf(null, true)).toBe(resolveGuide(null, both(true, true)).answering);
+    expect(companionGuideOf(null, false)).toBe(resolveGuide(null, both(true, false)).answering);
   });
 });

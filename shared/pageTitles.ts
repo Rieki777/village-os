@@ -20,6 +20,7 @@
 export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/": "", // the home page is the village itself; no prefix
   "/journey-to-launch": "Journey to launch",
+  "/canvas/workbook": "Canvas workbook",
   "/setup-game": "The Setup Game",
   "/project-history": "Command Centre",
   "/feedback": "Feedback",
@@ -35,7 +36,10 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/circles": "Circles",
   "/quests": "Quests",
   "/propose-quest": "Propose a quest",
+  "/pricing": "Pricing desk",
   "/roles": "Roles",
+  "/roles/select": "Select your roles",
+  "/roles/draft": "Select your roles",
   "/forum": "Forum",
   "/messages": "Messages",
   "/introductions": "Introductions",
@@ -49,6 +53,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/badges": "Badges & skills",
   "/powers": "What this village looks after",
   "/review": "Review",
+  "/approvals": "Approvals",
   "/cash-payouts": "Cash to pay out",
   "/role-proposals": "Propose my roles",
   // Keys here are matched by longest PREFIX against the live location, so a
@@ -69,6 +74,8 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/verify-email": "Confirm your address",
   "/forgot-password": "Set a new password",
   "/game-mechanics": "Game Mechanics",
+  // Change requests: the list and, by longest prefix, each one.
+  "/changes": "Change requests",
   "/exit-policy": "Leaving well",
   "/tools": "Tools",
   // One line covers the shelf and every detail page: keys match by longest
@@ -87,6 +94,7 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/photographs": "Every photograph",
   "/admin": "Village settings",
   "/journal": "Journal",
+  "/funding-rounds": "Funding rounds",
   // One line covers the list and every room, by the longest-prefix rule.
   "/sessions": "Live sessions",
   // The shopfront pages (shared/brochure.ts). They had no entry, so their
@@ -114,9 +122,11 @@ export const PAGE_TITLES: Readonly<Record<string, string>> = {
   "/governance": "Governance",
   "/decisions": "Decisions",
   "/propose": "Start a proposal",
-  "/role-applications": "Role application",
+  "/role-applications": "Role proposal",
   "/open-proposals": "A proposed role", // somebody with no account proposed it (0305)
-  "/seat-applications": "Role application",
+  "/role-measures": "How roles are going", // members only, counts and medians from stamped times
+  "/application-status": "Where your proposal is", // the applicant's own page, by the emailed link (role journey L5)
+  "/seat-applications": "Role proposal",
   "/season-plans": "The village's season",
   "/season-plans/mine": "Your season",
   "/aligned": "Aligned",

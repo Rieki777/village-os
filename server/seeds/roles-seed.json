@@ -11,7 +11,8 @@
       "forum.post",
       "org.declare",
       "org.seat",
-      "org.decide"
+      "org.decide",
+      "power.assign"
     ],
     "minStage": null,
     "order": 1,
@@ -27,7 +28,10 @@
       "feed.announce",
       "health.record",
       "event.manage",
-      "member.superVouch"
+      "member.superVouch",
+      "org.seat",
+      "org.decide",
+      "proposal.decide"
     ],
     "minStage": "member",
     "order": 2,
@@ -36,12 +40,14 @@
   {
     "id": "treasury",
     "name": "Treasury",
-    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, marks the cash the village owes as paid, and carries the cycle report to Hypha where the equity and voice tokens are governed.",
+    "description": "Keeps the money legible: tracks budgets and allocations, lists tokens and posts their prices, marks the cash the village owes as paid, and carries each cycle's report to the village.",
     "capabilities": [
       "proposal.open",
       "forum.post",
       "exchange.manage",
-      "cash.pay"
+      "cash.pay",
+      "role.pay",
+      "pot.steward"
     ],
     "minStage": "member",
     "order": 3

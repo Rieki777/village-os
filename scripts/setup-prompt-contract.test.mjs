@@ -43,8 +43,8 @@ check("the copied half is the prompt, and it is not empty", () => {
 
 check("the copied half fetches everything at one release", () => {
   assert.match(prompt, /releases\/latest/);
-  assert.match(prompt, /raw\.githubusercontent\.com\/ReGen-Civics\/village-os\/VERSION\/AGENTS\.md/);
-  assert.match(prompt, /raw\.githubusercontent\.com\/ReGen-Civics\/village-os\/VERSION\/START_HERE\.md/);
+  assert.match(prompt, /raw\.githubusercontent\.com\/ReGen-Civics\/village-os\/VERSION\/AGENTS\.md/); // brand-ok: the upstream platform's own repository or image address, never a village's brand
+  assert.match(prompt, /raw\.githubusercontent\.com\/ReGen-Civics\/village-os\/VERSION\/START_HERE\.md/); // brand-ok: the upstream platform's own repository or image address, never a village's brand
   assert.match(prompt, /git clone --branch VERSION/);
   assert.doesNotMatch(prompt, /village-os\/main\//, "a link to main mixes releases");
   assert.doesNotMatch(prompt, /village-os:\d+\.\d+\.\d+/, "a pinned image tag mixes releases");

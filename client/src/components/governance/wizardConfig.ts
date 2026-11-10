@@ -108,11 +108,21 @@ export type FieldKind =
    */
   | "seatSettings"
   /*
-   * One to five seats from the org chart, as a list (seat settings PR4): one
-   * application carries every seat a member would hold, so their terms are
-   * recorded once. SeatPicksField draws it.
+   * One to three roles from the org chart, as a list (seat settings PR4; D3,
+   * three everywhere): one application carries every role a member would
+   * hold, so their terms are recorded once. SeatPicksField draws it.
    */
-  | "seatPicks";
+  | "seatPicks"
+  /*
+   * THE MEMBER DOOR'S OPEN-FORM FIELDS (Rye, 10 Nov 2026: the member door
+   * asks what the open form asks). `seasonGoal`: which of the season's goals
+   * for the village the work serves, or, when the season has none yet, says so
+   * and answers for them. `termsOnOffer`: the picked roles' terms on offer,
+   * read-only, accepted or flagged to talk about (SeasonGoalField,
+   * TermsOnOfferField).
+   */
+  | "seasonGoal"
+  | "termsOnOffer";
 
 /** Where a `pick` field's options come from, fetched by the renderer. */
 export type PickSource =
@@ -173,6 +183,11 @@ export interface FieldSpec {
   roleKey?: string;
   /** For a `seatSettings` field: the whole preset an empty field starts from. */
   prefillWhole?: string;
+  /**
+   * Whether this field is asked, from the answers so far. Absent is always.
+   * A field not asked is not drawn and never judged (wizardWalk's fieldsFor).
+   */
+  showWhen?: (answers: Record<string, unknown>) => boolean;
   /** A sentence naming what is wrong, or null. Runs on every keystroke. */
   problem?: (value: unknown, answers: Record<string, unknown>) => string | null;
 }
@@ -184,6 +199,9 @@ export interface TypeStepOverride {
   label?: string;
   /** One sentence at the top of the step, in the member's register. */
   intro?: string;
+  /** The label and intro a door start reads instead (wizardDoor.ts), where the step asks something else. */
+  doorLabel?: string;
+  doorIntro?: string;
   fields?: readonly FieldSpec[];
 }
 
@@ -202,6 +220,12 @@ export interface WizardTypeConfig {
    * the road a proposal travels before somebody takes it to a vote.
    */
   opensVote?: boolean;
+  /**
+   * For an `opensVote` type whose route asks less than `proposal.open` of the
+   * member publishing it, so its card stays live without `mayOpenBallot`
+   * (TypeCards). `role_application` asks `terms.read`, the member rung.
+   */
+  opensVoteForMembers?: boolean;
   /**
    * The publish records the proposer's alignment with words (seat settings
    * PR5): the Review step shows them (AlignmentReview) and the button reads
@@ -304,9 +328,11 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
     group: "Rules",
     icon: FileText,
     title: "Write an agreement",
-    description: "Put a shared understanding into words the village can adopt, review and amend.",
+    description: "Put a shared understanding into words the village can adopt.",
     consequence:
-      "Publishing enters this into sensing. Adopted by consent, it becomes an active agreement with its own review date.",
+      "Publishing puts this to the village's vote. If it carries, it becomes an active agreement, exactly as written, and its words keep the review date you set. On that date the village reminds every present member to look at it again.",
+    // The route opens the vote itself (server/routes/governanceAgreements.ts), so there is no sensing step to describe.
+    opensVote: true,
     publish: {
       path: "/api/governance/agreements",
       body: (a) => ({
@@ -369,7 +395,7 @@ export const WIZARD_TYPE_CONFIGS: readonly WizardTypeConfig[] = [
             key: "reviewAt",
             kind: "date",
             label: "Review on",
-            help: "Good enough for now, safe enough to try, until this date. Leaving it blank makes it open-ended.",
+            help: "Good enough for now, safe enough to try, until this date. The date is written into the agreement, and on that day every present member is reminded. Leaving it blank makes it open-ended.",
             tip: "A review date is how an agreement stays a living decision instead of becoming furniture.",
           },
         ],
@@ -833,6 +859,10 @@ export const SUBJECT_NOUN: Record<string, string> = {
    * what happened is that a village changed what it is for.
    */
   gps_change: "Change of purpose",
+  // Opened from the conflict agreement itself once the Game has started, never from the wizard.
+  conflict_agreement: "Change to the conflict agreement",
+  // Opened from the exit policy once the Game has started (D6), never from the wizard.
+  closing_policy: "Change to what closing means",
   /*
    * NOT a wizard type, and here because `ballots.subject_type` carries it.
    * Without this entry an advisory vote fell through to "Decision", which is
@@ -898,6 +928,21 @@ export const SUBJECT_NOUN: Record<string, string> = {
    * circles and seats, and it reads as a question while the vote is open.
    */
   org_draft: "A change to the structure",
+  /*
+   * ALSO NOT A WIZARD TYPE. A grant of new tokens that waited for a second
+   * steward, put to the village instead (server/routes/mintRequestVotes.ts).
+   */
+  mint_request: "A grant of new tokens",
+  /*
+   * ALSO NOT A WIZARD TYPE. A member's suggested edit to an admin control,
+   * put to the village (server/routes/adminSuggestions.ts).
+   */
+  admin_edit: "A suggested change to an admin control",
+  /*
+   * ALSO NOT A WIZARD TYPE. One copy of the village's database for a named
+   * steward, put to the village at its highest bar (server/routes/exportVotes.ts).
+   */
+  database_export: "One copy of the village's database",
   /*
    * The vote mode became something the village decides on 2026-09-02 (Q8),
    * with its own subject type so it can carry the constitutional bar. The

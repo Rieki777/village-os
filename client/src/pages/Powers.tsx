@@ -42,7 +42,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useCatalyst } from "@/lib/gameApi";
 import { KeyRound } from "lucide-react";
-import { holderSentence, type PowerRow } from "@/lib/powersCopy";
+import { holderSentence, inFamilies, suggestionSentence, type PowerRow } from "@/lib/powersCopy";
 import HandsForPower, { type HandRow } from "@/components/power/HandsForPower";
 
 export default function Powers() {
@@ -51,6 +51,10 @@ export default function Powers() {
   // act by the same people, and it still writes the same line on the feed.
   const catalyst = useCatalyst();
   const [powers, setPowers] = useState<PowerRow[] | null>(null);
+  // Families group by what a power does, never by who holds it (R55), and
+  // the guidance is a village's usual choice at launch (Rye, Q11).
+  const [families, setFamilies] = useState<Array<{ id: string; title: string }>>([]);
+  const [guidance, setGuidance] = useState<Record<string, string>>({});
   // Rye, 2026-09-23: the hands that are up, and what their authors wrote, are
   // read by any member. The server decides per hand who may put one to the
   // village, so nothing here is drawn from a stale opinion about who holds what.
@@ -70,7 +74,11 @@ export default function Powers() {
     if (!token) return;
     fetch("/api/village/powers", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setPowers(d?.powers ?? []))
+      .then((d) => {
+        setPowers(d?.powers ?? []);
+        setFamilies(d?.families ?? []);
+        setGuidance(d?.guidance ?? {});
+      })
       .catch(() => setPowers([]));
     readHands();
   }, [user?.id, readHands]);
@@ -104,7 +112,11 @@ export default function Powers() {
 
           {user && powers !== null && (
             <ul className="space-y-4" data-testid="powers-list">
-              {powers.map((p) => (
+              {inFamilies(powers, families).map((f) => [
+                <li key={`family-${f.id}`} className="pt-4">
+                  <h2 className="font-display text-xl font-semibold text-foreground">{f.title}</h2>
+                </li>,
+                ...f.powers.map((p) => (
                 <li
                   key={p.capability}
                   className="rounded-xl border border-border bg-card p-5"
@@ -113,8 +125,8 @@ export default function Powers() {
                   <div className="flex items-start gap-3">
                     <KeyRound className="h-5 w-5 mt-1 text-muted-foreground shrink-0" aria-hidden />
                     <div>
-                      <h2 className="font-display text-lg font-semibold text-foreground">{p.title}</h2>
-                      <p className="text-sm text-muted-foreground mt-1">{p.surface}.</p>
+                      <h3 className="font-display text-lg font-semibold text-foreground">{p.title}</h3>
+                      {p.surface && <p className="text-sm text-muted-foreground mt-1">{p.surface}.</p>}
                       <p className="text-sm text-foreground mt-2">
                         Whoever holds this can {p.consequence}.
                       </p>
@@ -122,11 +134,16 @@ export default function Powers() {
                       {p.heldBy?.byBallot && (
                         <p className="text-sm text-teal-deep mt-1">The village voted this one across.</p>
                       )}
+                      <p className="text-sm text-muted-foreground mt-1">{suggestionSentence(p)}</p>
+                      {p.guidance && guidance[p.guidance] && (
+                        <p className="text-xs text-muted-foreground mt-1">{guidance[p.guidance]}</p>
+                      )}
                       <HandsForPower capability={p.capability} hands={hands} onOpened={readHands} />
                     </div>
                   </div>
                 </li>
-              ))}
+                )),
+              ])}
             </ul>
           )}
 

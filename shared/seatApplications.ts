@@ -49,9 +49,9 @@ export const ROLE_APPLICATION = "role_application";
 /** The power that adopts seat applications. */
 export const ADOPTING_POWER = "org.seat";
 
-/** One application holds at least one seat and at most five. */
+/** One application holds at least one role and at most three (D3: three everywhere, the board's and the open form's limit too). */
 export const MIN_SEATS = 1;
-export const MAX_SEATS = 5;
+export const MAX_SEATS = 3;
 
 /** The longest the member's own words may run, each. */
 export const WORDS_MAX = 2000;
@@ -72,6 +72,33 @@ export const STATUS_WORDS: Record<ApplicationStatus, string> = {
   "held-full": "Held, the role is full",
 };
 
+/**
+ * WHOSE MOVE IT IS (guide v2, Rye 10 Nov 2026), in the reader's own terms:
+ * "Yours" only for the person proposing, or for a holder of the power to place
+ * people in roles when the proposal waits on them.
+ */
+/** The label the status page puts before it. */
+export const WHOSE_MOVE = "Whose move";
+
+export function whoseMove(status: ApplicationStatus, you: { isCandidate?: boolean; holdsThePower?: boolean } | null | undefined): string {
+  const mine = you?.isCandidate === true;
+  switch (status) {
+    case "awaiting-holder":
+      return you?.holdsThePower && !mine
+        ? "Yours: read it, then adopt it or put it to the village."
+        : "A holder of the power to place people in roles: they read it, then adopt it or put it to the village.";
+    case "voting":
+      return "The village's: it is voting.";
+    case "adopted":
+      return mine ? "Yours: align with anything still waiting below, and your role starts." : "Theirs: aligning with anything still waiting, then the role starts.";
+    case "held-full":
+      return "Nobody's yet: it waits for a place in the role to open.";
+    case "not-adopted":
+    case "withdrawn":
+      return "Nobody's: this proposal is closed.";
+  }
+}
+
 /** Where an application is read. Members only. */
 export function applicationHref(id: string): string {
   return `/role-applications/${encodeURIComponent(id)}`;
@@ -82,7 +109,53 @@ export const APPLICATION_ID = /^sa-[0-9a-f]{16}$/;
 
 // ── The input ────────────────────────────────────────────────────────────────
 
+/**
+ * THE MEMBER DOOR'S ANSWERS (guide v2, B1): the open form's field set, so the
+ * member door and the open form carry the same answers. Stored in
+ * `seat_applications.answers` (0369); read by the proposal's card.
+ */
+export interface ApplicationAnswers {
+  aim: string | null;
+  /** The season goal the work serves, in its words when sent; null when the season set none. */
+  servesGoal: string | null;
+  timeZone: string | null;
+  windows: string[];
+  earliestStart: string | null;
+  terms: { choice: "accept" | "talk"; note: string } | null;
+}
+
+const ANSWER_LIMITS = { aim: 300, goal: 300, timeZone: 64, window: 40, windows: 6, termsNote: 600 } as const;
+
+/** The answers as stored, from anything. Null when there are none; never throws. */
+export function parseApplicationAnswers(raw: unknown): ApplicationAnswers | null {
+  let o: unknown = raw;
+  if (typeof o === "string") {
+    try {
+      o = JSON.parse(o);
+    } catch {
+      return null;
+    }
+  }
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const r = o as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+  const t = r.terms as Record<string, unknown> | null | undefined;
+  const choice = t && (t.choice === "accept" || t.choice === "talk") ? t.choice : null;
+  const answers: ApplicationAnswers = {
+    aim: text(r.aim, ANSWER_LIMITS.aim),
+    servesGoal: text(r.servesGoal, ANSWER_LIMITS.goal),
+    timeZone: text(r.timeZone, ANSWER_LIMITS.timeZone),
+    windows: Array.isArray(r.windows) ? r.windows.map((w) => text(w, ANSWER_LIMITS.window)).filter((w): w is string => !!w).slice(0, ANSWER_LIMITS.windows) : [],
+    earliestStart: typeof r.earliestStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.earliestStart) ? r.earliestStart : null,
+    terms: choice ? { choice, note: text(t?.note, ANSWER_LIMITS.termsNote) ?? "" } : null,
+  };
+  const empty = !answers.aim && !answers.servesGoal && !answers.timeZone && !answers.windows.length && !answers.earliestStart && !answers.terms;
+  return empty ? null : answers;
+}
+
 export interface ApplicationInput {
+  /** The member door's answers (0369), or null. */
+  answers?: ApplicationAnswers | null;
   seatIds: string[];
   /** Why this member. Stored, read by members on the page, never on a ballot. */
   note: string | null;
@@ -152,7 +225,7 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
   if (seasonId && seasonId.length > 64) return { ok: false, field: "seasonId", error: "That season id is longer than any season this village has." };
   const supersedesId = words(b.supersedesId);
   if (supersedesId && !APPLICATION_ID.test(supersedesId)) return { ok: false, field: "supersedesId", error: "That is not the id of an application." };
-  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId } };
+  return { ok: true, input: { seatIds, note, deliverables, settings: parsed.settings, startsOn: startsRaw, seasonId, supersedesId, answers: parseApplicationAnswers(b.answers) } };
 }
 
 // ── Who adopts ───────────────────────────────────────────────────────────────
@@ -172,6 +245,21 @@ export function adoptionPath(rule: HandOpenerRule, candidateId: string): Adoptio
   return rule.holders.some((h) => h !== candidateId) ? "holder" : "ballot";
 }
 
+/**
+ * MAY A ROLE PROPOSAL THAT CHANGES ROLES GO TO A VOTE? (R164; coordinator
+ * ruling 2026-11-06, logged for Rye.) The 22 Oct rule holds that such a
+ * proposal is adopted by its circle or by the power, never by a vote. It
+ * leaves two cases where nobody can adopt it at all, and those two take a
+ * vote, opened by the candidate: (a) the village holds `org.seat`, which is
+ * Rye's 31 Oct "then the village decides by vote", and (b) nobody but the
+ * candidate holds it live, since a candidate never adopts their own. Those are
+ * exactly the cases `adoptionPath` already sends a plain application to a
+ * ballot, so the two roads read one rule.
+ */
+export function proposalMayGoToVote(rule: HandOpenerRule, candidateId: string): boolean {
+  return adoptionPath(rule, candidateId) === "ballot";
+}
+
 export interface DoorRefusal {
   status: number;
   error: string;
@@ -187,7 +275,7 @@ export function adoptRefusal(rule: HandOpenerRule, actorId: string, candidateId:
     return {
       status: 403,
       error: "not_a_holder",
-      message: "Adopting an application for the village is for a live holder of the power that seats people.",
+      message: "Adopting an application for the village is for a live holder of the power to place people in roles.",
     };
   }
   return null;
@@ -205,7 +293,7 @@ export function putToVillageRefusal(rule: HandOpenerRule, actorId: string): Door
   return {
     status: 403,
     error: "not_a_holder",
-    message: "Sending an application to the village is for a live holder of the power that seats people.",
+    message: "Sending an application to the village is for a live holder of the power to place people in roles.",
   };
 }
 
@@ -227,8 +315,10 @@ export interface AdopterFacts {
    * as adopting their own terms.
    */
   groups: ReadonlyArray<{ name: string; holders: readonly string[] }>;
-  /** It comes from a role proposal that changes roles, which is never put to a vote (Rye, 2026-10-22). */
+  /** It comes from a role proposal that changes roles, which goes to a vote only when nobody else can adopt it (R164). */
   changesRoles?: boolean;
+  /** Somebody other than the candidate holds it live, the way the gate counts. Read from the groups when absent. */
+  othersHoldLive?: boolean;
 }
 
 /** The power, said the way a member reads it. */
@@ -236,9 +326,13 @@ const PLACING_POWER = "the power to place people in roles";
 
 /** Once the village holds the power: what happens, as a whole sentence. */
 export const VOTE_DECIDES_WORDS = "The village holds the power to place people in roles, so the village decides it by vote.";
-/** The same, for a role proposal that changes roles, which never goes to a vote. */
-export const VOTE_CANNOT_WORDS =
-  "The village holds the power to place people in roles, and a proposal that changes roles never goes to a vote, so nobody can adopt it yet.";
+/** A role proposal that changes roles, in the two cases it goes to a vote (R164): the candidate opens it. */
+export const PROPOSAL_VOTE_WORDS = {
+  villageHolds:
+    "The village holds the power to place people in roles, so the village decides it by vote. The member who proposed it opens the vote from the application page.",
+  nobodyElse:
+    "Nobody but the member who proposed it holds the power to place people in roles, so the village decides it by vote. The member who proposed it opens the vote from the application page.",
+} as const;
 
 /** "A", "A or B", "A, B or C". */
 function orList(items: readonly string[]): string {
@@ -248,8 +342,13 @@ function orList(items: readonly string[]): string {
 
 /** The whole sentence once the village holds the power, or null while a role does. PURE. */
 export function voteWords(f: AdopterFacts): string | null {
+  if (f.changesRoles) {
+    if (f.villageHolds) return PROPOSAL_VOTE_WORDS.villageHolds;
+    const others = f.othersHoldLive ?? f.groups.some((g) => g.holders.some((h) => String(h ?? "").trim()));
+    return others ? null : PROPOSAL_VOTE_WORDS.nobodyElse;
+  }
   if (!f.villageHolds) return null;
-  return f.changesRoles ? VOTE_CANNOT_WORDS : VOTE_DECIDES_WORDS;
+  return VOTE_DECIDES_WORDS;
 }
 
 /**

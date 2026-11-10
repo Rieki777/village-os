@@ -63,6 +63,7 @@
  * because "who turned this on" is the question the strip exists to answer, and
  * nothing at all rides for a visitor, who is refused.
  */
+import { raiseCanvasRevisitForLifecycle } from "../lib/canvasRevisit";
 import type { Express, Request } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import {
@@ -139,9 +140,10 @@ export function register(app: Express, deps: Deps): void {
   const whoIs = async (req: Request) => {
     const admin = await isAdmin(req);
     const user = await authedUser(req);
-    const holder = user ? (await deps.liveHoldersOf(MODULE_SWITCH_KEY)).includes(String(user.id)) : false;
+    const holders = await deps.liveHoldersOf(MODULE_SWITCH_KEY);
+    const holder = user ? holders.includes(String(user.id)) : false;
     const launched = await launchBallotCarried(getPool());
-    return { admin, user, holder, launched };
+    return { admin, user, holder, launched, anyHolder: holders.length > 0 };
   };
 
   app.get("/api/modules/catalog", async (req, res) => {
@@ -219,7 +221,7 @@ export function register(app: Express, deps: Deps): void {
   });
 
   app.put("/api/admin/modules/:id/lifecycle", async (req, res) => {
-    const { admin, user, holder, launched } = await whoIs(req);
+    const { admin, user, holder, launched, anyHolder } = await whoIs(req);
     if (!admin && !holder) return res.status(401).json({ error: "auth_required" });
     const id = req.params.id;
     const def = MODULES_BY_ID[id];
@@ -229,7 +231,7 @@ export function register(app: Express, deps: Deps): void {
     const to = String(lifecycle);
     const from: ModuleLifecycle = def && !def.core ? storedLifecycle(id) : "public";
     if (def && !def.core && isLifecycle(to)) {
-      const verdict = switchVerdict({ launched, admin, holder, from, to });
+      const verdict = switchVerdict({ launched, admin, holder, from, to, moduleId: id, anyHolder });
       if (!verdict.ok) return res.status(verdict.status).json(verdict);
     }
     const actorId = user?.id ? String(user.id) : null;
@@ -244,6 +246,7 @@ export function register(app: Express, deps: Deps): void {
     // Turning a module on for the first time reveals its standing examples, so
     // the founder meets a worked module rather than "No items yet." A no-op if
     // it was ever seeded or retired, or already holds real content.
+    raiseCanvasRevisitForLifecycle(getPool(), id); // governance reaching members, or the crowdpool switched on, is a canvas moment
     if (result.lifecycle !== "off" && examples !== false) await deps.seedExamplesOnEnable(id);
     // After launch, a change members could see is said out loud on the pulse.
     // Before launch nothing is public yet, and a preview stays quiet always.

@@ -70,7 +70,22 @@ export const TOKEN_PREFIX = "vat_";
  * moon pack, change an item, set next moon's goals); `moon.review` reads the
  * review queue and the role signals for a holder who reviews. Both opt-in.
  */
-export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable", "moon.write", "moon.review"] as const;
+/*
+ * Role journey L13, tier B (propose only, the 24 Sept ruling). Each opens one
+ * kind of connector tool: `roles.read` the chart (public data), `roles.propose`
+ * a role change or a seating that waits for a person, `letters.draft` a letter
+ * queued for a person to send, `applicants.read` the applicants waiting on the
+ * holder (no contact details), `onboarding.write` the holder's own path items.
+ * The last two touch applicant data or the holder's own path, and the first
+ * two of those stay closed in a village until the Anchor records its approval
+ * of AI agents (shared/agentProposals.ts).
+ */
+/*
+ * `settings.propose`, `listing.propose`, `pages.propose` and `map.propose` file
+ * a proposal into the approval inbox (server/routes/approvalInbox.ts) and
+ * change nothing. A person approves it, through that thing's own route.
+ */
+export const AGENT_SCOPES = ["calendar.read", "directory.read", "me.read", "rsvp.write", "intents.write", "map.draft", "moon.read", "tasks.write", "admin", "sera.undoable", "moon.write", "moon.review", "roles.read", "roles.propose", "letters.draft", "applicants.read", "onboarding.write", "settings.propose", "listing.propose", "pages.propose", "map.propose"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 /** Read scopes are on by default in the panel; writes are opt-in. */

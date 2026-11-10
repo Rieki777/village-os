@@ -27,7 +27,8 @@
  *     (Admin, Variables, `hypha.org_url`) as well as switched on here.
  *
  * Every section after the top can be hidden. The decision band of live votes
- * is not a field: it is the village's real ballots.
+ * is not a field: it is the village's real ballots. The spread band's words
+ * are fields; its figures are the village's own (GET /api/governance/voice-spread).
  */
 import type { PageSpec } from "./types";
 
@@ -76,6 +77,23 @@ export const GOVERNANCE_PAGE: PageSpec = {
           max: 280,
           default:
             "Here is how a proposal becomes a decision in {village}, who can stop one, and how the village changes its own rules. Every member can take part.",
+        },
+      ],
+    },
+    {
+      id: "spread",
+      label: "Who holds the Voice",
+      shows: "The band under the open votes: how Voice is spread across everyone who can vote, and how this season's votes went. It draws only while governance is on, and names nobody.",
+      hideable: true,
+      fields: [
+        { key: "heading", label: "Heading", kind: "text", max: 48, default: "Who Holds the Voice" },
+        {
+          key: "intro",
+          label: "Sentence under the heading",
+          kind: "long",
+          max: 200,
+          optional: true,
+          default: "How the say in {village}'s votes is shared out across everyone who can vote. Groups only: nobody is named, and no one's amount is shown.",
         },
       ],
     },

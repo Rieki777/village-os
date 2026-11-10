@@ -128,7 +128,7 @@ export default function TodayStrip({ data }: { data: DashData }) {
       </div>
       {cards.length === 0 ? (
         <p className="m-0 rounded-[18px] border border-dash-edge bg-card p-[18px] text-[15px] text-muted-foreground">
-          Nothing waits on you today. Your quests and roles are below.
+          Nothing waits on you today. Your tasks and roles are below.
         </p>
       ) : (
         <ul className="m-0 grid list-none gap-2.5 p-0 sm:grid-cols-[repeat(auto-fit,minmax(250px,1fr))] sm:gap-4">

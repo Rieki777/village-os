@@ -9,7 +9,7 @@
  *   1. CONFIRMING ASKS THE CIRCLE. Every live holder of a role in the circles
  *      of the proposed roles is asked to consent or object within 2 business
  *      days (shared/roleProposalConsent.ts, the member proposals' window), and
- *      the live holders of the power that seats people hear it waits on them.
+ *      the live holders of the power to place people in roles hear it waits on them.
  *      Nothing is asked and nobody hears before the address confirms.
  *   2. A MEMBERS-ONLY PAGE, `/open-proposals/:id`, where a member reads it, an
  *      asked holder consents or objects, and a holder of the power adopts it or
@@ -21,9 +21,10 @@
  *      never on their own proposal (`adoptRefusal`). Once the village holds
  *      that power nobody adopts one at the door, and the page says so.
  *   4. ADOPTING makes the person's place: an address that already has an
- *      account here is given the Member stage and the roles; any other address
- *      is sent a one-use invitation, and the account it makes starts at the
- *      Member stage with the roles waiting for the target season's first day.
+ *      account here is given the roles; any other address is sent a one-use
+ *      invitation, and the account it makes has the roles waiting. Adoption
+ *      admits nobody: Member, and with it a vote, comes with the signed Love
+ *      Letter (Rye's ruling; server/lib/admission.ts), which the letters ask for.
  *   5. DECLINING sends a short, kind no.
  *
  * In the 2026-10-02 voice: say what happens next, never how.
@@ -80,7 +81,7 @@ const NOT_SENT: Record<NotSentWhy, string> = {
 };
 
 /** Who may decide at the door now, in the words the page shows a reader who may not. */
-export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-it";
+export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-it" | "the-scaffolding-holds-it";
 
 /**
  * The same three readings by name, for client code: the dash guard
@@ -90,9 +91,12 @@ export type DoorReason = "village-holds-it" | "a-role-holds-it" | "nobody-holds-
 export const DOOR = { villageHolds: "village-holds-it", nobodyHolds: "nobody-holds-it", aRoleHolds: "a-role-holds-it" } as const satisfies Record<string, DoorReason>;
 
 export const DECIDE_WORDS = {
+  moonEnded: "The moon this was proposed for has ended. You can adopt it for the moon running now; the letter will say so.",
   // The page.
-  heading: (proposer: string | null, roles: readonly string[]) => `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} next season`,
+  heading: (proposer: string | null, roles: readonly string[], moon = false) =>
+    `${proposer || "Somebody"} proposes to hold ${andList(roles) || "a role"} ${moon ? "this moon" : "next season"}`,
   fromOutside: "Proposed through the village's public page. Adopted, they hold these roles from the season's first day.",
+  fromOutsideMoon: (from: string, to: string) => `Proposed through the village's public page, for this moon. Adopted, they hold these roles from adoption (never before ${from}) to the next new moon, ${to}.`,
   rolesHeading: "The roles",
   wordsHeading: "In their words",
   why: "Why them, and why now",
@@ -114,20 +118,22 @@ export const DECIDE_WORDS = {
 
   // The decider's card.
   deciderHeading: "For the village",
-  deciderLine: "You hold the power that seats people. Adopt it for the village, or decline it.",
+  deciderLine: "You hold the power to place people in roles. Adopt it for the village, or decline it.",
   adopt: "Adopt for the village",
   decline: "Decline",
   declineAsk: "Decline it? They get a short, kind email saying no.",
   declineYes: "Yes, decline it",
   declineNo: "Keep it",
-  ownProposal: "This proposal came from your own address, so it is decided by another holder of the power that seats people.",
+  ownProposal: "This proposal came from your own address, so it is decided by another holder of the power to place people in roles.",
   /** A former member's address (coordinator, 2026-10-31, after Rye's ruling that former members never invite). */
   formerMember: "This address belongs to somebody who left the village. Welcoming a former member back is its own act, so this proposal is not adopted here. You can still decline it.",
   /** The door after a handover, and with nobody in the chair. Plain, and no path invented. */
   door: {
-    "village-holds-it": "The village holds the power that seats people now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
-    "nobody-holds-it": "Right now nobody holds the power that seats people, so this proposal waits here until somebody does.",
-    "a-role-holds-it": "It is adopted or declined by a holder of the power that seats people.",
+    "village-holds-it": "The village holds the power to place people in roles now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
+    "nobody-holds-it": "Right now nobody holds the power to place people in roles, so this proposal waits here until somebody does.",
+    "a-role-holds-it": "It is adopted or declined by a holder of the power to place people in roles.",
+    // Answered only when a caller names who carries the power until the village holds it (shared/powerHands.ts).
+    "the-scaffolding-holds-it": "Until the village holds the power to place people in roles, the founders and stewards adopt or decline it.",
   } satisfies Record<DoorReason, string>,
 
   // What a decision answers. Every one that sends nothing says what to do instead.
@@ -148,7 +154,7 @@ export const DECIDE_WORDS = {
   copied: "Copied",
 
   // Refusals, each with what to do.
-  notAHolder: "Adopting or declining a proposal is for a live holder of the power that seats people.",
+  notAHolder: "Adopting or declining a proposal is for a live holder of the power to place people in roles.",
   pending: "That address already has an application waiting for one of these roles. Decide that one on its page first.",
   decided: "This proposal has been decided, so there is nothing left to decide.",
   raced: "Somebody else decided this proposal a moment ago. Read it again.",
@@ -175,10 +181,22 @@ export interface AdoptLetterIn {
   season: string | null;
   /** The season's first day, in words ("1 January 2099"). */
   startsOn: string;
+  /** A moon proposal's days, in words; absent for a season one. */
+  moon?: { from: string; to: string } | null;
+  /** Where the membership agreement is signed (/love-letter), when the village serves it. */
+  loveLetter?: string | null;
 }
 
+/** Signing comes before seating and before any vote (Rye's ruling; the role card's Agreements). */
+const signFirst = (i: AdoptLetterIn): string[] =>
+  i.loveLetter
+    ? ["", "Before you are seated, align with the Love Letter, the village's membership agreement (aligning is the village's way of signing). Aligning with it is what makes you a member, with a voice in the village's decisions:", i.loveLetter]
+    : [];
+
 const hello = (firstName: string | null) => (firstName ? `Hi ${firstName},` : "Hi,");
-const whenRolesStart = (i: AdoptLetterIn) => `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
+const whenRolesStart = (i: AdoptLetterIn) =>
+  i.moon ? `Your roles run from ${i.moon.from} to the next new moon, ${i.moon.to}.` : `Your roles start when ${i.season || "next season"} begins, on ${i.startsOn}.`;
+const forWhen = (i: AdoptLetterIn) => (i.moon ? "this moon" : "next season");
 
 /** The yes, with the invitation, for an address with no account here. */
 export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: number }): { subject: string; text: string } {
@@ -187,12 +205,13 @@ export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: num
     text: [
       hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} next season.`,
+      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
       "",
       "Here is your invitation. Open it to make your account:",
       i.link,
       "",
       `It works once and lasts ${i.days} days. ${whenRolesStart(i)}`,
+      ...signFirst(i),
       "",
     ].join("\n"),
   };
@@ -205,10 +224,11 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
     text: [
       hello(i.firstName),
       "",
-      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} next season.`,
+      `${i.village} adopted your proposal to hold ${andList(i.roleNames) || "a role"} ${forWhen(i)}.`,
       "",
       `Sign in with this address to see your roles. ${whenRolesStart(i)}`,
       i.signIn,
+      ...signFirst(i),
       "",
     ].join("\n"),
   };
@@ -234,7 +254,7 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
 export const OPEN_NOTICE_WORDS = {
   waitingTitle: (roles: readonly string[]) => `A role proposal from outside the village waits on you: ${andList(roles) || "a role"}`,
   waitingBody: "Open it to adopt it for the village or decline it. It waits under Tasks on your profile too.",
-  /** To the admins, when nobody holds the power that seats people live, or the village holds it. No vote is opened. */
+  /** To the admins, when nobody holds the power to place people in roles live, or the village holds it. No vote is opened. */
   nobodyToDecideTitle: (roles: readonly string[]) => `A role proposal from outside the village is waiting, and nobody in a role can adopt it now: ${andList(roles) || "a role"}`,
   arrivalFailedTitle: (roles: readonly string[]) => `An adopted proposal's roles could not be set up: ${andList(roles) || "a role"}`,
 } as const;

@@ -34,6 +34,8 @@ import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { emptyBody, PROPOSAL_WORDS } from "../../shared/roleProposals";
 import { CONSENT_WORDS } from "../../shared/roleProposalConsent";
+import { PROPOSAL_VOTE_WORDS } from "../../shared/seatApplications";
+import { openBallotFor } from "../lib/ballots";
 import { WAITING_URL } from "../../shared/waitingOnYou";
 import { provisionTestDb, testDbConfigured, type TestDb, testPool } from "../db/testDb";
 import { createOrgRole } from "../lib/orgChart";
@@ -274,14 +276,14 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
     expect(waiting.text).not.toContain(water);
   });
 
-  it("holds at most five roles", async () => {
+  it("holds at most three roles (D3)", async () => {
     const ids = [];
-    for (const name of ["Path One", "Path Two", "Path Three", "Path Four", "Path Five", "Path Six"]) ids.push(await role(name));
-    const draft = await readyDraft(ids.slice(0, 5));
-    expect(draft.roles).toHaveLength(5);
-    const six = await h.call("PUT", `${P}/${draft.id}`, { roles: ids.map((roleId) => ({ roleId })) });
-    expect(six.status).toBe(400);
-    expect(six.body.error).toBe(PROPOSAL_WORDS.tooManyRoles);
+    for (const name of ["Path One", "Path Two", "Path Three", "Path Four"]) ids.push(await role(name));
+    const draft = await readyDraft(ids.slice(0, 3));
+    expect(draft.roles).toHaveLength(3);
+    const four = await h.call("PUT", `${P}/${draft.id}`, { roles: ids.map((roleId) => ({ roleId })) });
+    expect(four.status).toBe(400);
+    expect(four.body.error).toBe(PROPOSAL_WORDS.tooManyRoles);
     const plusNew = await h.call("PUT", `${P}/${draft.id}`, { newRoles: [{ circleId: "c-land", words: { name: "Orchard Keeper" } }] });
     expect(plusNew.status).toBe(400);
   });
@@ -498,6 +500,73 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
     // The candidate can still take it back.
     h.as(OWNER);
     expect((await h.call("POST", `/api/governance/role-applications/${r.body.id}/withdraw`)).status).toBe(200);
+  });
+
+  describe("a vote, in exactly the two cases nobody else can adopt it (R164, coordinator ruling 2026-11-06)", () => {
+    const submitNewRole = async (name: string) => {
+      const kept = await role(`${name} Keeper`);
+      const draft = await readyDraft([kept], { newRoles: [{ circleId: "c-land", seats: 1, words: { name, aim: `Look after the ${name.toLowerCase()}.` } }] });
+      const r = await h.call("POST", `${P}/${draft.id}/submit`);
+      expect(r.status, r.text).toBe(201);
+      return { applicationId: String(r.body.id), newId: String(draft.newRoles[0].id) };
+    };
+    const put = (id: string) => h.call("POST", `/api/governance/role-applications/${id}/put-to-village`);
+    const you = async (id: string) => (await h.call("GET", `/api/governance/role-applications/${id}`)).body.application;
+
+    it("(a) the village holds org.seat: the candidate opens the vote, nobody else does, and its landing makes the new role", async () => {
+      const { applicationId, newId } = await submitNewRole("Seed Library");
+      try {
+        // Control: a role still holds the power, so the 22 Oct rule stands for the candidate too.
+        h.as(OWNER);
+        expect((await you(applicationId)).you.mayPutToVillage).toBe(false);
+        expect((await put(applicationId)).body).toEqual({ error: "proposal_changes_roles", message: CONSENT_WORDS.noVote });
+        // The village takes the power.
+        h.state.villageHeld = ["org.seat"];
+        const page = await you(applicationId);
+        expect(page.you.mayPutToVillage, "the candidate is offered the vote").toBe(true);
+        expect(page.whoAdopts).toBe(PROPOSAL_VOTE_WORDS.villageHolds);
+        h.as(READER);
+        expect((await put(applicationId)).status, "only the candidate opens it").toBe(403);
+        h.as(OWNER);
+        const opened = await put(applicationId);
+        expect(opened.status, opened.text).toBe(200);
+        expect(opened.body.status).toBe("voting");
+        // The vote lands: the role the proposal adds is made, and the application adopted.
+        const ballot = await openBallotFor(pool, "role_application", applicationId);
+        const landed = await h.closers.role_application!.execute!(ballot!, "governance");
+        expect(landed.held, JSON.stringify(landed)).toBeNull();
+        const [rows] = await pool.query<any[]>("SELECT name FROM org_roles WHERE id = ?", [newId]); // module-review-ok: reading back what the landing wrote
+        expect(rows.map((r: any) => r.name), "the landing applied the proposal's new role").toEqual(["Seed Library"]);
+        expect((await readApplication(pool, applicationId))!.adoptedVia).toBe("ballot");
+      } finally {
+        h.state.villageHeld = [];
+      }
+    });
+
+    it("(b) nobody but the candidate holds org.seat: the candidate opens the vote", async () => {
+      const { applicationId } = await submitNewRole("Tool Shed");
+      // Control: another live holder can adopt it, so no vote.
+      h.as(OWNER);
+      expect((await put(applicationId)).status).toBe(409);
+      // Now the candidate is the only holder, and a candidate never adopts their own.
+      h.state.holders = [OWNER];
+      const page = await you(applicationId);
+      expect(page.you.mayPutToVillage).toBe(true);
+      expect(page.whoAdopts).toBe(PROPOSAL_VOTE_WORDS.nobodyElse);
+      const opened = await put(applicationId);
+      expect(opened.status, opened.text).toBe(200);
+      expect(opened.body.status).toBe("voting");
+    });
+
+    it("stays refused everywhere else: a holder other than the candidate adopts, and nobody votes", async () => {
+      const { applicationId } = await submitNewRole("Compost");
+      h.as(OWNER);
+      expect((await you(applicationId)).you.mayPutToVillage).toBe(false);
+      expect((await put(applicationId)).status).toBe(409);
+      h.as(HOLDER);
+      expect((await put(applicationId)).status, "the holder may not send it to a vote either").toBe(409);
+      expect((await h.call("POST", `/api/governance/role-applications/${applicationId}/adopt`)).status).toBe(200);
+    });
   });
 
   it("says next season's dates aren't set yet, and settles the target once they are", async () => {

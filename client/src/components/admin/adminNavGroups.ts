@@ -17,7 +17,7 @@
  * around them did.
  */
 import type { LucideIcon } from "lucide-react";
-import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MapPin, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Calendar, Circle, Coins, Compass, FileText, GraduationCap, Handshake, HardDrive, Heart, HelpCircle, Home, Inbox, KeyRound, LogOut, Mail, MapPin, MessageSquare, Moon, Scale, Sparkles, ToggleLeft, TrendingUp, Users, Users2 } from "lucide-react";
 import type { TabBadge } from "@/lib/adminNav";
 import { CONTENT_SECTIONS } from "./contentSections";
 
@@ -70,6 +70,7 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         { key: "players", label: "Players", icon: Users },
         { key: "game-roles", label: "Power groups", icon: Users2 },
         { key: "org-chart", label: "Org Chart", icon: Users2 },
+        { key: "role-discover", label: "Role discovery", icon: Compass },
         { key: "handover", label: "The Handover", icon: KeyRound },
         { key: "governance-weights", label: "Voting Weights", icon: Scale },
       ],
@@ -157,6 +158,8 @@ export function navGroups(setupComplete: boolean): NavGroup[] {
         // that paid it (0285, 2026-10-30). Beside the Ledger because it is the
         // other book a treasurer keeps, and it never touches the ledger.
         { key: "cash-payouts", label: "Cash To Pay Out", icon: Coins },
+        // The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
+        { key: "pricing-desk", label: "Pricing Desk", icon: Scale },
         { key: "cycles", label: "Cycle Close", icon: Moon },
         { key: "products", label: "Payments", icon: Handshake },
         { key: "resources-admin", label: "How Resources Flow", icon: Coins },

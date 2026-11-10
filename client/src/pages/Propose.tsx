@@ -26,9 +26,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import ProposalWizard from "@/components/governance/ProposalWizard";
 import { askedModuleId } from "@/components/modules/switchDoor";
 import { roleApplicationStart } from "@/components/governance/roleApplicationType";
+import { isDoor } from "@/components/governance/wizardDoor";
+import { doorBackOf } from "@shared/seatApplyLinks";
+import { useLingui } from "@lingui/react/macro";
+
+/**
+ * Where the door's back link goes: the `from` the role card or the board sent,
+ * else the same-site page the browser came from, else the roles board.
+ */
+export function doorBack(search: string, referrer: string = typeof document === "undefined" ? "" : document.referrer): { href: string; card: boolean; circle: boolean } {
+  return doorBackOf(search, referrer, typeof window === "undefined" ? "" : window.location.origin);
+}
 
 export default function Propose() {
   const { user } = useAuth();
+  const { t } = useLingui();
   const modules = useModules();
   const governance = useModule("governance");
   const [askModuleId] = useState(() => askedModuleId(window.location.search));
@@ -41,25 +53,55 @@ export default function Propose() {
   if (modules.loaded && !governance)
     return <ModuleGate moduleId="governance" name="Start a proposal" behind={PAGE_GATE_LINES.propose} />;
 
+  // THE MEMBER DOOR (Rye, 10 Nov 2026): opened from a role card or the roles
+  // board, it reads as applying for a role, and its back link returns there.
+  const door = isDoor(start?.answers);
+  const from = door ? doorBack(window.location.search) : null;
+  const roleCount = Array.isArray(start?.answers?.seatIds) ? (start!.answers.seatIds as unknown[]).length : 0;
+
   return (
     <Layout>
       <div className="container max-w-5xl px-4 py-8">
-        <Link
-          href="/decisions"
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          Every decision
-        </Link>
+        {door && from ? (
+          <Link
+            href={from.href}
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-door-back=""
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            {from.card ? t`Back to the role` : from.circle ? t`Back to the circle` : t`Back to the roles`}
+          </Link>
+        ) : (
+          <Link
+            href="/decisions"
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+          >
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+            Every decision
+          </Link>
+        )}
 
-        <h1 className="mt-3 font-display text-3xl font-bold text-stone-900 sm:text-4xl">Start a proposal</h1>
-        <p className="mt-2 max-w-2xl text-stone-600 leading-relaxed">
-          Nothing you write here is public until you publish it, and you can leave at any point and come back to the same step on any device.
-        </p>
+        {door ? (
+          <>
+            <h1 className="mt-3 font-display text-3xl font-bold text-foreground sm:text-4xl">
+              {roleCount > 1 ? t`Propose for these roles` : t`Propose for a role`}
+            </h1>
+            <p className="mt-2 max-w-2xl text-muted-foreground leading-relaxed">
+              {t`Say what you would bring, which of the village's goals it serves, and whether the terms on offer suit you. Nothing is sent until you send it, and you can leave and come back to the same step.`}
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="mt-3 font-display text-3xl font-bold text-stone-900 sm:text-4xl">Start a proposal</h1>
+            <p className="mt-2 max-w-2xl text-stone-600 leading-relaxed">
+              Nothing you write here is public until you publish it, and you can leave at any point and come back to the same step on any device.
+            </p>
+          </>
+        )}
 
         <div className="mt-8">
           {user ? (
-            <ProposalWizard start={start} />
+            <ProposalWizard start={start} leaveTo={from?.href ?? "/decisions"} />
           ) : (
             <div className="rounded-xl border border-stone-200 bg-white p-8 text-center">
               <h2 className="font-display text-2xl font-bold text-stone-900">Sign in to write a proposal</h2>

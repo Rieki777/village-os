@@ -16,7 +16,7 @@
  */
 import { ACCOUNT_WORDS } from "@shared/accountRules";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import type { ReactNode } from "react";
@@ -222,6 +222,23 @@ describe("Register, in a village that joins by invitation", () => {
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(registerMock).toHaveBeenCalledWith("Juno", "juno@example.com", "hunter2-long", ["resident"], "TOKEN-FROM-WREN");
+  });
+
+  it("an adopted application's link names the roles and carries the name and address forward (role audit, 10 Nov 2026)", async () => {
+    window.history.replaceState({}, "", "/register?invite=TOKEN-FROM-WREN");
+    linkChecksAs({ inviteOnly: true, valid: true, invitedBy: "Wren", daysLeft: 12, forRoles: ["Garden Steward", "Welcome Host"], name: "Juno Reed", email: "juno@example.com" });
+    renderRegister();
+
+    expect(await screen.findByText(/adopted your application for Garden Steward and Welcome Host/)).toBeInTheDocument();
+    await waitFor(() => expect((screen.getByLabelText(/^name$/i) as HTMLInputElement).value).toBe("Juno Reed"));
+    expect((screen.getByLabelText(/^email$/i) as HTMLInputElement).value).toBe("juno@example.com");
+    // Joining to hold roles: the steward's path is already picked, and can be changed.
+    registerMock.mockResolvedValueOnce(undefined);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/^password$/i), "hunter2-long");
+    await user.type(screen.getByLabelText(/confirm password/i), "hunter2-long");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+    expect(registerMock).toHaveBeenCalledWith("Juno Reed", "juno@example.com", "hunter2-long", ["steward"], "TOKEN-FROM-WREN");
   });
 
   it("counts the days down only when the invitation is about to end (R47)", async () => {

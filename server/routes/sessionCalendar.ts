@@ -58,7 +58,8 @@ function originOf(req: Request): string {
   const configured = String(process.env.FRONTEND_URL ?? "").trim().replace(/\/$/, "");
   if (configured) return configured;
   const proto = String(req.headers?.["x-forwarded-proto"] ?? req.protocol ?? "https").split(",")[0].trim();
-  const host = String(req.headers?.["x-forwarded-host"] ?? req.headers?.host ?? "").split(",")[0].trim();
+  // The Host header, never X-Forwarded-Host, which the caller writes (R108).
+  const host = String(req.headers?.host ?? "").split(",")[0].trim();
   return host ? `${proto}://${host}` : "";
 }
 

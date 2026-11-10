@@ -34,6 +34,7 @@ import { useModule, useModules } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import { ApplicationChip, QuestPips } from "@/components/seasonPlans/PlanCard";
+import RoleCarryOn from "@/components/seasonPlans/RoleCarryOn";
 import { fetchMine, fileMine, saveMine, type MinePayload, type PlanBody } from "@/components/seasonPlans/seasonPlansApi";
 import {
   SeasonalGoalsField,
@@ -46,6 +47,7 @@ import {
 } from "@/components/seasonPlans/SeasonGoalsFields";
 import { AIM_MAX, applyHref, civilDayWords, PLAN_MEASURES_MAX } from "@shared/seasonPlans";
 import { questHint, type MeasureSuggestion } from "@shared/seasonPartSuggestions";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 export const MY_SEASON_WORDS = {
   title: "Your season",
@@ -64,10 +66,10 @@ export const MY_SEASON_WORDS = {
   handingBackLine: "You hand this role back when the season turns.",
   carryingOn: "You asked to carry on",
   heldThrough: "You hold it through your application",
-  applyMembersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
-  applyHeading: "Apply for a role",
-  applyLine: "Ask the village for any role on the chart. You pick up to five in one application.",
-  apply: "Apply for a role",
+  applyMembersOnly: "Proposing for a role opens at the member rung. Once you reach it, you can propose here.",
+  applyHeading: "Propose for a role",
+  applyLine: "Ask the village for any role on the chart. You pick up to three in one application.",
+  apply: "Propose for a role",
   applicationsHeading: "Your applications this season",
   partHeading: "Your part",
   partLine: "What you will do this season. You file it. Nobody votes on it.",
@@ -93,7 +95,7 @@ export const MY_SEASON_WORDS = {
   fromAnswersFor: "What it answers for",
   termsTarget: (target: string) => `Aims for ${target}.`,
   noRoleMeasures: "Your roles do not list what they answer for yet.",
-  applyForMeasures: "Apply for a role to see measures from its role.",
+  applyForMeasures: "Propose for a role to see measures from its role.",
   save: "Save",
   file: "File my season",
   saved: "Saved.",
@@ -386,6 +388,8 @@ export default function MySeason() {
               </p>
             </header>
 
+            <RoleCarryOn />
+
             <section aria-labelledby="ms-seats">
               <h2 id="ms-seats" className="text-xl font-bold text-stone-900">
                 {MY_SEASON_WORDS.seatsHeading}
@@ -498,6 +502,7 @@ export default function MySeason() {
                   <p id="ms-aim-help" className="text-sm text-stone-600">
                     {MY_SEASON_WORDS.aimHelp}
                   </p>
+                  <VoiceArea value={aim} onValue={setAim} talk={{ label: MY_SEASON_WORDS.aim, purpose: MY_SEASON_WORDS.aimHelp }}>
                   <textarea
                     id="ms-aim"
                     aria-describedby="ms-aim-help"
@@ -507,6 +512,7 @@ export default function MySeason() {
                     onChange={(e) => setAim(e.target.value)}
                     className={`mt-1 ${inputClass}`}
                   />
+                  </VoiceArea>
                   <p className="text-right text-xs text-stone-600">
                     {aim.length} / {AIM_MAX}
                   </p>

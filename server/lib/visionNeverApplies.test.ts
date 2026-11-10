@@ -136,6 +136,8 @@ describe("publishDraft keeps exactly its doors", () => {
       "server/routes/org.ts",
       "server/routes/orgDraftDecide.ts",
       "server/routes/orgDraftDecide.ts",
+      // "New role from a card" (role journey PR-B): a person at the publish door makes one role and publishes it in one act.
+      "server/routes/roleEdit.ts",
     ]);
     const before = (s: { src: string; at: number }) => s.src.slice(Math.max(0, s.at - 900), s.at);
     const holderSites = sites.filter((s) => s.file === "server/routes/orgDraftDecide.ts").map(before);
@@ -145,6 +147,11 @@ describe("publishDraft keeps exactly its doors", () => {
     const wide = sites.filter((s) => s.file === "server/routes/orgDraftDecide.ts").map((s) => s.src.slice(Math.max(0, s.at - 2600), s.at));
     expect(wide.some((w) => w.includes('"/api/org/arrangements"') && w.includes("holderMayPublish"))).toBe(true);
     expect(before(sites.find((s) => s.file === "server/lib/orgDraftDecide.ts")!)).toContain("execute: async (b, actorId)");
+    // The role editor's route asks the publish door (`publishDoorFor`, through its one `gate`) before it makes or publishes anything.
+    const edit = sites.filter((s) => s.file === "server/routes/roleEdit.ts").pop()!;
+    expect(edit.src.slice(Math.max(0, edit.at - 6000), edit.at)).toContain("/new-from-card`");
+    expect(edit.src).toContain("publishDoorFor");
+    expect(edit.src.slice(Math.max(0, edit.at - 6000), edit.at)).toContain('gate(req, res, "new"');
   });
 
   it("the client vision layer links a human to Admin and fetches no publish URL", () => {

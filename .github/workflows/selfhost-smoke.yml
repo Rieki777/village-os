@@ -23,6 +23,7 @@ on:
       - .dockerignore
       - .env.example
       - scripts/fork-init.mjs
+      - START_HERE.md
       - drizzle/**
       - .github/workflows/selfhost-smoke.yml
   workflow_dispatch:
@@ -243,7 +244,7 @@ jobs:
           docker compose exec -T app sh -c 'mkdir -p /app/data/uploads && printf canary > /app/data/uploads/smoke-canary.txt'
           mkdir -p backups
           docker compose exec -T db sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --no-tablespaces village' | gzip > backups/village-$(date +%F).sql.gz
-          docker run --rm -v village-os_village-data:/data:ro -v "$PWD/backups":/backup alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
+          MSYS_NO_PATHCONV=1 docker run --rm -v village-os_village-data:/data:ro -v "$PWD/backups":/backup alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
           ls -la backups
           gunzip -c backups/village-*.sql.gz | grep -c '^INSERT INTO `users`'
           tar tzf backups/uploads-*.tar.gz | grep -q 'smoke-canary.txt'
@@ -258,14 +259,11 @@ jobs:
           # midnight still restores the files it just wrote.
           DATE=$(ls backups/village-*.sql.gz | head -1 | sed -E 's#.*village-(.*)\.sql\.gz#\1#')
           echo "restoring the backup of ${DATE}"
-          $compose up -d db
-          for _ in $(seq 1 60); do
-            [ "$($compose ps db --format '{{.Health}}')" = "healthy" ] && break
-            sleep 3
-          done
+          # The founder's command: --wait returns once the db healthcheck passes.
+          $compose up -d --wait db
           gunzip -c backups/village-$DATE.sql.gz | $compose exec -T db sh -c 'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" village'
           $compose create app
-          docker run --rm -v village-os_village-data:/data -v "$PWD/backups":/backup alpine tar xzf /backup/uploads-$DATE.tar.gz -C /data
+          MSYS_NO_PATHCONV=1 docker run --rm -v village-os_village-data:/data -v "$PWD/backups":/backup alpine tar xzf /backup/uploads-$DATE.tar.gz -C /data
           $compose up -d
           for _ in $(seq 1 120); do
             curl -fsS "$BASE/health" > /dev/null 2>&1 && break

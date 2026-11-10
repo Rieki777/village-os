@@ -36,13 +36,15 @@
  * is lossy, and an archive may not be.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { raiseRevokeForEnded } from "./roleAccess";
+import { liveAssignmentIdsForHolder } from "../repos/roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
-import { draftChangesNamingPeople, draftStatus, lockCirclesCounter, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
+import { draftChangesChosenBy, draftChangesNamingPeople, draftStatus, lockCirclesCounter, lockDraftRow, readCirclesForPreview, readDraftBodies, rewriteDraftChangePeople, withdrawDraftRow, type DraftBodyRows } from "../repos/orgDrafts";
 import { stageIndex } from "../../shared/gameConfig";
 import { numberVar } from "./variables";
 import { readHeldSeatIds, readRolesForPreview } from "../repos/orgDrafts";
 import { roleHoldersNow } from "../repos/pathLadders";
-import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatState, type LapseContext, type OrgAssignment } from "./orgChart";
+import { documentedKey, listOrgAssignments, listOrgRoles, peopleOnly, seatHolder, seatingsChanged, seatState, valueSets, type LapseContext, type OrgAssignment } from "./orgChart";
 import { resolveSeatTerm, type SeatCalendar } from "../../shared/seatTerms";
 import { parentingRefusal } from "../../shared/circleView";
 import { moveWords, placementOf } from "./circlePlacement";
@@ -55,6 +57,14 @@ import { parseRoleHandoverField, roleHandoverProblem } from "../../shared/roleHa
 import { applyCircleWords, captureCircleWords, previewCircleWords, revertCircleWords } from "./circleWordsDraft";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS, ROLE_CCOS_WORDS, accountabilitiesProblem, payloadAccountabilitiesProblem } from "../../shared/roleCcos";
 import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse";
+import { carriesRolePay, DRAFT_PAY_KEYS, draftPayEdit, draftPayProblem } from "./draftRolePay";
+import { rolePayRules } from "./workPay";
+import type { MintRule } from "./economy";
+import { liveParameterKeys, parameterKeysIn, parameterProblem, parametersBefore, parameterStored, putParametersBack, PARAMETERS_NOT_HERE } from "./roleParameterColumns";
+import { PARAMETER_COLUMNS } from "../../shared/roleParameters";
+
+/** The refusal a publish gives when the draft no longer holds what the person was shown (review 12). */
+export const DRAFT_CHANGED_SINCE_SHOWN = "This draft changed since you opened it. Read it again before publishing.";
 
 export type DraftOp =
   | "create_seat"
@@ -219,6 +229,23 @@ export async function forgetMemberInDrafts(pool: Pool, userId: string, anon: str
       payload === null ? null : JSON.stringify(payload),
       before === null ? null : JSON.stringify(before),
     );
+    touched += 1;
+  }
+  /*
+   * WHO CHOSE A RETIREMENT (review 15). A person's retirement carries their id
+   * as `chosenBy`, from the structure review or from the differences list's
+   * "Retire it here". It comes off with them. In a draft still open, a
+   * machine-sourced retirement with nobody's choice on it then blocks at
+   * publish, which is right: the person who chose it has gone, so somebody
+   * else chooses it again.
+   */
+  for (const r of (await draftChangesChosenBy(pool)) as any[]) {
+    const payload = parse(r.payload);
+    if (!payload || String(payload.chosenBy ?? "") !== userId) continue;
+    payload.chosenBy = null;
+    // Names nobody, and keeps the held-role check on this retirement.
+    payload.chosenByDeparted = true;
+    await rewriteDraftChangePeople(pool, String(r.id), JSON.stringify(payload), r.before_json === null || r.before_json === undefined ? null : typeof r.before_json === "string" ? r.before_json : JSON.stringify(r.before_json));
     touched += 1;
   }
   return touched;
@@ -579,7 +606,8 @@ export function openDraftCap(activeMembers: number): number {
 }
 
 export async function createDraft(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the draft is made inside (the differences list's answers). */
+  pool: Pool | PoolConnection,
   body: {
     title: string;
     rationale?: string | null;
@@ -626,11 +654,31 @@ const UNDER_A_VOTE =
   "The village is voting on this draft, so it cannot be changed until the vote closes. Withdraw the draft to stop the vote.";
 
 export async function addChange(
-  pool: Pool,
+  /** A pool, or the connection of a transaction the change is added inside. */
+  pool: Pool | PoolConnection,
   draftId: string,
   body: { op: DraftOp; orgRoleId: string; payload?: any },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ?", [draftId]);
+  // Handed a pool, the change is added inside a transaction of its own, so the
+  // draft row's lock below holds until the change is written (PR C residual: a
+  // change could land in a draft a publish was already applying).
+  if ("getConnection" in pool) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const r = await addChange(conn, draftId, body);
+      if (r.ok) await conn.commit();
+      else await conn.rollback();
+      return r;
+    } catch (e) {
+      await conn.rollback().catch(() => {});
+      throw e;
+    } finally {
+      conn.release();
+    }
+  }
+  // The draft row first, the same order `publishDraft` and the answer path lock in.
+  const [[d]] = await pool.query<any[]>("SELECT status FROM org_drafts WHERE id = ? FOR UPDATE", [draftId]); // module-review-ok: the lock step of this function's own transaction, the order publishDraft locks in; server/repos/orgDrafts.ts explains why a transaction step stays here
   if (!d) return { ok: false, error: "No such draft" };
   // A published draft is a record of what happened. Editing it would make the
   // revert data describe a change nobody made.
@@ -825,6 +873,8 @@ export async function previewDraft(
 /** The seats and circles a preview checks a draft against, read once. */
 export interface PreviewContext {
   roles: any[];
+  /** The village's role.cycle rules, so a draft's role pay is checked as the admin door checks it. Optional for a context built by hand. */
+  payRules?: MintRule[];
   circleIds: Set<string>;
   /** Every circle and where it sits, for a move_circle line (0208). */
   circles: Array<{ id: string; name: string; parentCircleId: string | null; isExample: boolean; status?: string }>;
@@ -865,6 +915,7 @@ export async function loadPreviewContext(pool: Pool | PoolConnection): Promise<P
     circleIds: new Set(all.filter((c) => !c.isExample).map((c) => c.id)),
     circles: all,
     heldSeatIds: await readHeldSeatIds(pool),
+    payRules: await rolePayRules(pool),
   };
 }
 
@@ -1195,13 +1246,18 @@ export function previewLoadedDraft(
         // with fewer keeps loading and can still be edited elsewhere.
         if (!blocked) blocked = roleCcosProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
+        // The listing details of the role card (shared/roleParameters.ts): shape only here, the column checked at publish.
+        if (!blocked) blocked = parameterProblem(c.payload);
+        // The role's pay (0.4: the vote path the valuation engine names must be able to carry it).
+        if (!blocked) blocked = draftPayProblem(c.payload, context.payRules, draft.sourceKind !== "human");
+        if (carriesRolePay(c.payload)) reads = `Edit ${name} and its pay`;
         // A change naming nothing this village can apply is not a change. It
         // previewed as "Edit <seat>", applied as an UPDATE with an empty SET
         // list, and left a reader believing something happened.
         // `accountabilities` is written by its own branch in `applyChange`
         // and is a real change: the card's "What you can count on me for"
         // proposal carries nothing else, and this used to block it.
-        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities");
+        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k) || parameterKeysIn({ [k]: 1 }).length > 0);
         if (!blocked && touched.length === 0) {
           blocked = "This names no field this village can change on a role";
         }
@@ -1219,7 +1275,10 @@ export function previewLoadedDraft(
         // A steward retiring the old chart never unseats anybody (0243). Read
         // at preview, and so again inside the publish transaction, so a seating
         // made after the accept still holds the seat.
-        if (!blocked && stewardChose(c) && context.heldSeatIds?.has(c.orgRoleId)) {
+        // A chooser erasure took off (chosenByDeparted) still counts as a
+        // person's choice here, so the held-role check keeps running (PR C
+        // review, security re-check).
+        if (!blocked && (stewardChose(c) || c.payload?.chosenByDeparted === true) && context.heldSeatIds?.has(c.orgRoleId)) {
           blocked = "Somebody holds this role. Give them a role in the new chart before it is retired";
         }
       }
@@ -1338,6 +1397,13 @@ export async function publishDraft(
    * term (0199). A draft with no seating in it publishes without one.
    */
   calendar?: SeatCalendar | null,
+  /**
+   * The ids of the changes the person publishing was shown (review 12). When
+   * given, the publish refuses unless the draft holds exactly those, so a
+   * change added or taken out after the page was read is never published
+   * unseen. Omitted: whatever the draft holds, as every door has always done.
+   */
+  expectedChanges?: readonly string[] | null,
 ): Promise<
   | { ok: true; applied: number; seated: DraftSeating[]; circleMoves: DraftCircleMove[] }
   | { ok: false; error: string }
@@ -1347,6 +1413,14 @@ export async function publishDraft(
     await conn.beginTransaction();
     // The circles counter first, in the order a circle form takes it (see lockCirclesCounter).
     await lockCirclesCounter(conn);
+    /*
+     * THE DRAFT ROW NEXT, BEFORE ANYTHING IS READ. The differences list adds
+     * changes to an open draft (server/lib/seraAnswer.ts) taking this same row
+     * first, so a change can never land between the preview below and the
+     * status flip at the end, where it would be marked published and never
+     * applied. Both take the draft before the roles they write.
+     */
+    await lockDraftRow(conn, draftId);
 
     // READ INSIDE THE TRANSACTION. These used to run on the pool before
     // `beginTransaction`, so the seats the preview approved and the draft
@@ -1363,6 +1437,14 @@ export async function publishDraft(
     const draft = await getDraft(conn, draftId);
     if (!draft) { await conn.rollback(); return { ok: false, error: "No such draft" }; }
     if (draft.status !== "open") { await conn.rollback(); return { ok: false, error: `This draft is already ${draft.status}` }; }
+    if (expectedChanges) {
+      const has = draft.changes.map((c) => c.id).sort();
+      const shown = Array.from(new Set(expectedChanges)).sort();
+      if (has.length !== shown.length || has.some((id, i) => id !== shown[i])) {
+        await conn.rollback();
+        return { ok: false, error: DRAFT_CHANGED_SINCE_SHOWN };
+      }
+    }
 
     /*
      * SEATINGS ARE COLLECTED, NEVER NOTIFIED FROM IN HERE.
@@ -1437,10 +1519,11 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     return row ?? null;
   }
   const [[row]] = await conn.query<any[]>(
-    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+    "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
-  return row ?? null;
+  // And the listing details of the role card, when this database has their columns (roleParameterColumns.ts).
+  return row ? { ...row, ...(c.op === "update_seat" ? await parametersBefore(conn, c.orgRoleId) : {}) } : null;
 }
 
 /** Column names are a fixed map, never interpolated from a payload key. */
@@ -1622,14 +1705,16 @@ async function applyChange(
     const ccos = new Map(ccosColumns(p));
     await conn.query(
       "INSERT INTO org_roles (id, name, circle_id, aim, domain, accountabilities, seats, why_it_matters, criticality, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, " + // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
-        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment) " +
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, listed) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [c.orgRoleId, String(p.name ?? c.orgRoleId), p.circleId ?? null, p.aim ?? null, p.domain ?? null,
         JSON.stringify(Array.isArray(p.accountabilities) ? p.accountabilities : []), Number(p.seats ?? 1),
         p.whyItMatters ?? null, p.criticality === "high" ? "high" : "normal",
         p.recruiting === true || Number(p.recruiting) === 1 ? 1 : 0, ...offer,
         words.get("bring_me") ?? null, words.get("not_mine") ?? null, words.get("runbook") ?? null,
-        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null)],
+        ...ROLE_CCOS_FIELDS.map((f) => ccos.get(ROLE_CCOS_COLUMNS[f]) ?? null),
+        // Role journey PR-A: a draft can only START a role unlisted (a sync accept with the village setting on). Nothing in a draft lists a role.
+        p.listed === false ? 0 : null],
     );
     return null;
   }
@@ -1698,6 +1783,8 @@ async function applyChange(
       "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = ? WHERE id = ? AND ended_at IS NULL",
       [String(p.reason ?? "reorganisation").slice(0, 200), String(p.assignmentId ?? "")],
     );
+    seatingsChanged();
+    await raiseRevokeForEnded(conn, [String(p.assignmentId ?? "")]);
     return null;
   }
   // update_seat: only the fields the draft names, mapped through a fixed
@@ -1723,11 +1810,23 @@ async function applyChange(
     sets.push("`" + col + "` = ?");
     args.push(v);
   }
+  // The listing details of the role card: only where the database has the column, and said in words where it has not.
+  const named = parameterKeysIn(p);
+  if (named.length) {
+    const live = new Set(await liveParameterKeys(conn));
+    for (const k of named) {
+      if (!live.has(k)) throw new Error(PARAMETERS_NOT_HERE);
+      sets.push("`" + PARAMETER_COLUMNS[k] + "` = ?");
+      args.push(parameterStored(k, p[k]));
+    }
+  }
   refuseAccountabilities(p, "update_seat");
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(p.accountabilities));
   }
+  // The role's pay, checked again against the village's rules and stamped in its currency.
+  valueSets(await draftPayEdit(conn, p, who.machine), sets, args);
   if (!sets.length) return null;
   args.push(c.orgRoleId);
   await conn.query(`UPDATE org_roles SET ${sets.join(", ")} WHERE id = ?`, args);
@@ -1832,6 +1931,8 @@ export async function revertDraft(
       } else if (c.op === "create_seat") {
         await conn.query("UPDATE org_roles SET active = 0 WHERE id = ?", [c.orgRoleId]);
       } else if (c.op === "seat_holder") {
+        const revertKey = c.payload?.userId ? String(c.payload.userId) : documentedKey(String(c.payload?.displayName ?? "unnamed"));
+        const revertedIds = await liveAssignmentIdsForHolder(conn, c.orgRoleId, revertKey);
         await conn.query(
           "UPDATE org_role_assignments SET ended_at = CURRENT_TIMESTAMP, ended_reason = 'draft reverted' WHERE org_role_id = ? AND ended_at IS NULL AND holder_key = ?",
           // The same key `applyChange` seated under, from the same function.
@@ -1841,6 +1942,8 @@ export async function revertDraft(
           [c.orgRoleId, c.payload?.userId ? String(c.payload.userId)
             : documentedKey(String(c.payload?.displayName ?? "unnamed"))],
         );
+        seatingsChanged();
+        await raiseRevokeForEnded(conn, revertedIds);
       } else if (c.op === "end_holding" && c.beforeJson && !(c.beforeJson.user_id && (await isAgentAccount(conn, String(c.beforeJson.user_id))))) {
         // 0319: a holder marked as an agent account since the holding ended is not seated again; it holds no role.
         const b = c.beforeJson;
@@ -1854,6 +1957,7 @@ export async function revertDraft(
           [newId("orgasg"), b.org_role_id, b.holder_kind, b.user_id, b.display_name, b.holder_key,
             b.focus, b.note ?? null, b.season_id, b.term_ends_at, Number(b.term_follows_season ?? 0) ? 1 : 0],
         );
+        seatingsChanged();
       } else if (c.beforeJson) {
         const b = c.beforeJson;
         /*
@@ -1869,6 +1973,8 @@ export async function revertDraft(
         // 0274: the CCOS words, on the same rule again. A draft published
         // before 0274 captured none of the seven, and leaves them alone.
         const hadCcos = "exists_while" in b ? 1 : 0;
+        // The role's pay, on the same rule: a draft published before pay rode drafts captured none, and leaves it alone.
+        const hadPay = "value_minor" in b ? 1 : 0;
         const asJson = (v: unknown) => (v === null || v === undefined ? null : typeof v === "string" ? v : JSON.stringify(v));
         const ccosBack = ROLE_CCOS_FIELDS.flatMap((f) => {
           const col = ROLE_CCOS_COLUMNS[f];
@@ -1892,15 +1998,24 @@ export async function revertDraft(
              signs_stretched = CASE WHEN ? = 1 THEN ? ELSE signs_stretched END,
              flows_back = CASE WHEN ? = 1 THEN ? ELSE flows_back END,
              step_back = CASE WHEN ? = 1 THEN ? ELSE step_back END,
-             time_commitment = CASE WHEN ? = 1 THEN ? ELSE time_commitment END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
+             time_commitment = CASE WHEN ? = 1 THEN ? ELSE time_commitment END,
+             value_minor = CASE WHEN ? = 1 THEN ? ELSE value_minor END,
+             value_currency = CASE WHEN ? = 1 THEN ? ELSE value_currency END,
+             value_tokens = CASE WHEN ? = 1 THEN ? ELSE value_tokens END,
+             cash_minor = CASE WHEN ? = 1 THEN ? ELSE cash_minor END,
+             cash_currency = CASE WHEN ? = 1 THEN ? ELSE cash_currency END WHERE id = ?`, // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
           [b.circle_id, b.name, b.aim, b.domain,
             typeof b.accountabilities === "string" ? b.accountabilities : JSON.stringify(b.accountabilities ?? []),
             b.why_it_matters, b.seats, b.criticality, b.active, b.recruiting,
             hadTerms, termsBack, hadTerms, b.terms_offer_at ? new Date(b.terms_offer_at) : null,
             hadTerms, b.terms_offer_by ?? null,
             hadWords, asJson(b.bring_me), hadWords, asJson(b.not_mine), hadWords, b.runbook ?? null,
-            ...ccosBack, c.orgRoleId],
+            ...ccosBack,
+            hadPay, b.value_minor ?? null, hadPay, b.value_currency ?? null, hadPay, asJson(b.value_tokens),
+            hadPay, b.cash_minor ?? null, hadPay, b.cash_currency ?? null,
+            c.orgRoleId],
         );
+        if (c.op === "update_seat") await putParametersBack(conn, c.orgRoleId, b);
       }
     }
     // Same count, same reason as publish: without it a second revert put

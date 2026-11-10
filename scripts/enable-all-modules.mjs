@@ -94,6 +94,19 @@ export const TARGETS = [
   // HELD on the same terms. A member-pii module holding pay routes and
   // invoices, which a village turns on for its own team deliberately.
   ["moon-review", "held", "security review pending (Module Library Contract clause 13)"],
+  // The canvas build's two optional modules (Rye, 2026-10-01). HELD on the
+  // session-card terms: both are member-pii (a reading names who recorded it,
+  // an ombuds ask names who sent it) and neither has had the human security
+  // review Module Library Contract clause 13 asks. Once it closes and Rye signs
+  // off, each line becomes ["<id>", "members"]. Neither requires the other.
+  ["canvas", "held", "security review pending (Module Library Contract clause 13)"],
+  ["conflict-evolution", "held", "security review pending (Module Library Contract clause 13)"],
+  // HELD on the same terms. A member-pii module (an idea's author is kept even
+  // when it is shown without a name), turned on for a village deliberately.
+  ["funding-rounds", "held", "security review pending (Module Library Contract clause 13)"],
+  // Public: a visitor reads the places' public tier, and only while the org
+  // chart is public (`map.public_structure`). Village content, no member data.
+  ["places", "public"],
 ];
 
 /** A public probe per module: what a signed-out visitor should be able to reach. */
@@ -113,6 +126,7 @@ export const PROBES = {
   governance: "/api/governance/ballots",
   resources: "/api/resources",
   crowdpool: "/api/crowdpool/campaigns",
+  places: "/api/place-registry",
 };
 
 const RANK = { off: 0, preview: 1, members: 2, public: 3 };

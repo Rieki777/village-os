@@ -73,7 +73,17 @@ describe("module images", () => {
   // `session-card` (0296) joined last on those same terms: hue 250 and Orbit,
   // which the emblem map already carries for `sessions`, and no file of its own.
   // `moon-review` (0313) joined on the same terms: hue 40 and NotebookPen, no file.
-  const DRAWN_FALLBACK = new Set(["redemption", "saberra", "comms", "journal", "sessions", "gene-keys", "session-card", "moon-review"]);
+  // On 2026-11-05 the seven base modules on this list (redemption, comms, journal,
+  // sessions, gene-keys, session-card, moon-review) got bundled art Rye approved,
+  // paid for by re-encoding all thirty images to share the unchanged ratchet.
+  // `saberra` stays: it is a partner's module (tier "connected"), not a base one.
+  // `canvas` (hue 90, LayoutGrid) and `conflict-evolution` (hue 345,
+  // HeartHandshake) joined with the canvas build on the same terms: no file, so
+  // the ratchet does not move, until Rye approves art for them.
+  // `funding-rounds` (0338) joins on the drawn-fallback terms until Rye approves
+  // its art: hue 45 and Sprout, no file, nothing against the image budget.
+  // `places` (0354) joins on the same terms: hue 120 and Landmark, no file.
+  const DRAWN_FALLBACK = new Set(["saberra", "canvas", "conflict-evolution", "funding-rounds", "places"]);
 
   it("keeps the fallback list pointed at real modules", () => {
     const stale = [...DRAWN_FALLBACK].filter((id) => !ids.includes(id));

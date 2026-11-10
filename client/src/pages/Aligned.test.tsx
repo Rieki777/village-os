@@ -216,7 +216,7 @@ describe("a member reads the record", () => {
     expect(article.textContent).toContain("Ana Quillfeather, individually: aligned 11 October 2026");
     expect(article.textContent).toContain("The village, for the village: wrote these words");
     expect(article.textContent).not.toContain("not yet");
-    expect(within(article).queryByRole("link", { name: "Read the application" })).toBeNull();
+    expect(within(article).queryByRole("link", { name: "Read the proposal" })).toBeNull();
   });
 
   it("an empty register says so", async () => {

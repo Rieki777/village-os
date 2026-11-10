@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type mysql from "mysql2/promise";
 import { provisionTestDb, testDbConfigured, testPool, type TestDb } from "./db/testDb";
 import { register } from "./routes/companions";
-import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, handOffPurchase, type CompanionsEnv } from "./lib/companions";
+import { landItem, planConfirm, claimForDoor, syncArmy, turnTheDay, armyView, handOffPurchase, mailtoFor, MEMBER_ADDRESS, type CompanionsEnv } from "./lib/companions";
 import { companionsOf, itemById, forgetCompanionsForMember } from "./repos/companions";
 import { recordToLandInput } from "./lib/companionSera";
 import { CONSENT_PREFS_KEY, readConsents } from "./lib/companionConsent";
@@ -64,7 +64,18 @@ describe.skipIf(!configured)("companions against a real schema", () => {
   const RIVERBEND = { name: "Riverbend", guideName: "The guide", timeZone: "UTC" };
   let villageNow = RIVERBEND;
   const prefs: Record<string, any> = {};
-  const env = (over: Partial<CompanionsEnv> = {}): CompanionsEnv => ({ pool, today: TODAY, ceiling: 3, roleScope: "all", guideName: "The guide", ...over });
+  // The outside agent's name is the module's, never a constant: a name no code holds proves it.
+  const OUTSIDE = "Wren of the Commons";
+  const env = (over: Partial<CompanionsEnv> = {}): CompanionsEnv => ({
+    pool,
+    today: TODAY,
+    ceiling: 3,
+    roleScope: "all",
+    guideName: "The guide",
+    outsideGuideName: OUTSIDE,
+    guideOf: async () => "village",
+    ...over,
+  });
 
   const as = async (who: string | null, key: string, req: any = {}) => {
     whoami = who;
@@ -95,6 +106,7 @@ describe.skipIf(!configured)("companions against a real schema", () => {
       },
       overLimit: async () => false,
       members: {
+        byId: async (id: string) => ({ id, prefs: prefs[id] ?? {} }),
         update: async (id: string, fn: (u: any) => void) => {
           const u = { id, prefs: prefs[id] ?? {} };
           fn(u);
@@ -119,6 +131,33 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     // Control: the same member, the village says all roles.
     const all = await syncArmy(env(), "u-rick");
     expect(all.map((c) => c.scope).sort()).toEqual(["personal", "role"]);
+  });
+
+  /*
+   * Rye, 2026-11-06: the personal companion follows the member's OWN chosen
+   * guide (the 2026-10-24 chooser), and no longer stays on the village guide.
+   * A role companion keeps the engine its holder set.
+   */
+  it("the personal companion follows the guide the member chose, both ways, and names it by the module's name", async () => {
+    const chose: Record<string, "village" | "saberra"> = { "u-rick": "saberra" };
+    const e = env({ guideOf: async (id) => chose[id] ?? "village" });
+    const personalOf = async () => (await syncArmy(e, "u-rick")).find((c) => c.scope === "personal")!;
+    expect((await personalOf()).provider, "made on the outside agent the member chose").toBe("saberra");
+    const shown = (await armyView(e, "u-rick", words)).find((c) => c.scope === "personal")!;
+    expect(shown.engine, "named by the module's name for its agent").toBe(OUTSIDE);
+    expect(shown.engineConnected, "the outside side has no chat yet").toBe(false);
+    expect(shown.chatEngine, "so the village guide answers the chat for now").toBe("The guide");
+    expect(shown.outsideEngine).toBe(OUTSIDE);
+    // The member switches back: the same companion follows, nothing new is made.
+    const before = (await personalOf()).id;
+    chose["u-rick"] = "village";
+    const back = await personalOf();
+    expect([back.id, back.provider]).toEqual([before, "village"]);
+    expect((await armyView(e, "u-rick", words)).find((c) => c.scope === "personal")!.engine).toBe("The guide");
+    // A role companion is not the personal one: the member's choice leaves it where its holder set it.
+    chose["u-rick"] = "saberra";
+    const roles = (await syncArmy(e, "u-rick")).filter((c) => c.scope === "role");
+    for (const r of roles) expect(r.provider, r.name).toBe("village");
   });
 
   it("caps questions at three a companion a day; the fourth is held, and opens the next morning", async () => {
@@ -226,12 +265,44 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(ok.ok).toBe(true);
   });
 
+  it("sends an email draft to a vendor's address, and never to a member's own (ruling 15)", async () => {
+    const ana = (await companionsOf(pool, "u-ana")).find((c) => c.scope === "personal")!;
+    const email = (to: string, key: string) =>
+      landItem(env(), ana, { type: "draft", kind: "email", title: "Ask the farm shop", payload: { subject: "Six trays", text: "Could you hold six?", toOutside: to }, quote: "get trays", sourceRef: "chat:40", origin: "chat", dedupeKey: key });
+    const vendor = await email("shop@farm.example", "vendor-mail-1");
+    expect(vendor.ok, JSON.stringify(vendor)).toBe(true);
+    if (!vendor.ok) return;
+    expect(mailtoFor(vendor.item.payload!)).toBe("mailto:shop%40farm.example?subject=Six%20trays&body=Could%20you%20hold%20six%3F");
+    // Control: Ben's own address, typed in another case, is refused and stores nothing.
+    expect(await email("BEN@example.test", "vendor-mail-2")).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // A purchase's vendor line is free text; a member's address inside it is refused the same way.
+    const purchase = await landItem(env(), ana, { type: "draft", kind: "purchase", title: "Trays", payload: { budgetId: "b-any", amountMinor: 100, toOutside: "Ben's stall, ben@example.test" }, quote: "trays", sourceRef: "chat:41", origin: "chat" });
+    expect(purchase).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // At the yes it is asked again: the vendor joined the village after the draft landed.
+    await pool.query("INSERT INTO users (id, name, email, handle, password_hash, is_example) VALUES ('u-shop', 'Farm Shop', 'Shop@Farm.example', 'farmshop', '', 0)"); // module-review-ok: a fixture member on the scratch schema, the vendor turned member
+    try {
+      expect(await planConfirm(pool, "u-ana", vendor.item.id, undefined)).toEqual({ ok: false, status: 409, error: MEMBER_ADDRESS });
+    } finally {
+      await pool.query("DELETE FROM users WHERE id = 'u-shop'"); // module-review-ok: removing the fixture member this test added
+    }
+    const yes = await planConfirm(pool, "u-ana", vendor.item.id, undefined);
+    expect(yes.ok && yes.plan).toEqual({ way: "mail", mailto: "mailto:shop%40farm.example?subject=Six%20trays&body=Could%20you%20hold%20six%3F" });
+  });
+
   it("refuses the outside service's records whole by the same rules, with no network anywhere", () => {
     const base = { id: "page-1", updated_at: "2026-10-30T10:00:00Z", status: "Open" as const, item_type: "Draft" as const, scope: "Role" as const, scope_ref: "role-page", title: "Pay the trays", source_quote: "Can someone get us six trays?", source_ref: "meeting-9" };
     const role = () => "r-treasurer";
     expect(recordToLandInput({ ...base, draft_kind: "cash_payment", amount: 10 }, role).ok).toBe(false);
     expect(recordToLandInput({ ...base, draft_kind: "token_payment", amount: 10.5, currency_or_token: "credits", to_role_ref: "x" }, role).ok).toBe(false);
-    expect(recordToLandInput({ ...base, draft_kind: "email", to_outside: "shop@example.test", subject: "Trays", draft_text: "Hold six" }, role).ok).toBe(false);
+    // A vendor's address in to_outside rides through on an email (Rye, 2026-10-31, ruling 15: "don't refuse vendor emails").
+    const vendor = recordToLandInput({ ...base, draft_kind: "email", to_outside: "shop@farm.example", subject: "Trays", draft_text: "Hold six" }, role);
+    expect(vendor.ok && vendor.input.payload).toEqual({ subject: "Trays", text: "Hold six", toOutside: "shop@farm.example" });
+    // A member's own address never crosses, whatever its case.
+    const members = new Set(["ana@example.test"]);
+    expect(recordToLandInput({ ...base, draft_kind: "email", to_outside: "Ana@Example.test", subject: "Trays", draft_text: "Hold six" }, role, members)).toEqual({ ok: false, error: MEMBER_ADDRESS });
+    // to_outside on a kind that writes to no outsider, and an address anywhere else, are still refused whole.
+    expect(recordToLandInput({ ...base, draft_kind: "message", to_outside: "shop@farm.example", draft_text: "hi", to_role_ref: "x" }, role).ok).toBe(false);
+    expect(recordToLandInput({ ...base, draft_kind: "email", subject: "Trays", draft_text: "write to shop@farm.example" }, role).ok).toBe(false);
     expect(recordToLandInput({ ...base, source_ref: null, draft_kind: "message", draft_text: "hi", to_role_ref: "x" }, role).ok).toBe(false);
     // Control: the same record, whole and sourced, maps.
     const ok = recordToLandInput({ ...base, draft_kind: "token_payment", amount: 10, currency_or_token: "credits", to_role_ref: "x" }, role);
@@ -320,6 +391,26 @@ describe.skipIf(!configured)("companions against a real schema", () => {
     expect(a.ok && b.ok).toBe(true);
     expect(await claimForDoor(pool, a as any)).toBe(true);
     expect(await claimForDoor(pool, b as any)).toBe(false);
+  });
+
+  it("reads the member's own saved guide for the personal companion, and leaves its engine to the chooser", async () => {
+    // What the guide chooser saves (PUT /api/guide, server/routes/guideChoice.ts).
+    prefs["u-ben"] = { ...(prefs["u-ben"] ?? {}), guide: "saberra" };
+    try {
+      const view = await as("u-ben", "GET /api/me/companions");
+      expect(view.status).toBe(200);
+      const personal = view.body.companions.find((c: any) => c.scope === "personal");
+      expect(personal.provider, "the member's own choice, read through the route").toBe("saberra");
+      // Set from the companion page, it would disagree with the chooser, so only the chooser moves it.
+      const set = await as("u-ben", "PATCH /api/me/companions/:id", { params: { id: personal.id }, body: { provider: "village" } });
+      expect(set.status).toBe(400);
+      expect(set.body.error).toMatch(/guide you chose/);
+      prefs["u-ben"] = { ...prefs["u-ben"], guide: "village" };
+      const back = (await as("u-ben", "GET /api/me/companions")).body.companions.find((c: any) => c.scope === "personal");
+      expect([back.id, back.provider]).toEqual([personal.id, "village"]);
+    } finally {
+      delete prefs["u-ben"]?.guide;
+    }
   });
 
   it("asks for the member's yes before a chat goes to a model, and keeps a yes per provider", async () => {

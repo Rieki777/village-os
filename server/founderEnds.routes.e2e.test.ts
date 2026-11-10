@@ -36,6 +36,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -182,6 +183,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "founderends-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
@@ -260,10 +263,18 @@ beforeAll(async () => {
           "The village agrees what would put it right",
           "Whoever asked for this says whether it did",
         ],
+        // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+        ...CONFLICT_DOOR_READY,
       },
     },
   });
   expect(policy.status, JSON.stringify(policy.json)).toBe(200);
+
+  // What closing means, named AND adopted: blocking since Rye's ruling of
+  // 2026-09-25. Its own "no" and "yes" are server/closingPolicy.routes.e2e.test.ts.
+  expect((await call("PUT", "/api/admin/exit-policy/closing", {
+    body: { policyId: "own-words", statement: "If Wealden closes, the workshop and the land pass to the parish trust and the cash is shared among the members still here.", adopt: true },
+  })).status).toBe(200);
 
   expect((await call("POST", "/api/admin/launch/confirm", {
     body: { id: "backups-drilled", done: true },
@@ -305,6 +316,11 @@ beforeAll(async () => {
   expect((await call("PUT", "/api/admin/purpose", {
     body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
+
+  // EVERY CANVAS BLOCK ON RECORD, which blocks the vote (2026-09-27). One reading
+  // each, at Absent with its sentence, through the real route. The refusal is
+  // driven row by row in server/lib/launchGovernance.db.test.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {
@@ -325,9 +341,24 @@ describe.skipIf(!DB_CONFIGURED)("before the vote, the founder holds everything t
   });
 
   it("is the only account that can change a role, and appoints an administrator", async () => {
-    const madeAdmin = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin" } });
+    // R104: Anna signed up with a password and never proved her address, so a
+    // stranger could have made this account at it. The first ask is refused
+    // with the reason; the founder's yes, having read it, goes through.
+    const asked = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin" } });
+    expect(asked.status, JSON.stringify(asked.json)).toBe(409);
+    expect(asked.json?.code).toBe("address_unproved");
+    expect(await roleOf(annaId)).toBe("member");
+    const madeAdmin = await call("PUT", `/api/admin/users/${annaId}/role`, { body: { role: "admin", addressUnprovedOk: true } });
     expect(madeAdmin.status, JSON.stringify(madeAdmin.json)).toBe(200);
     expect(await roleOf(annaId)).toBe("admin");
+    // The audit row says the founder was told. recordEvent is fire-and-forget, so wait for it.
+    let audited = "";
+    for (let i = 0; i < 30 && !audited; i++) {
+      const [rows] = await pool.query<any[]>("SELECT text FROM health_events WHERE kind = 'audit' AND entity_ref = ? AND text LIKE 'role:%'", [annaId]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+      audited = String(rows[0]?.text ?? "");
+      if (!audited) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(audited).toBe("role:member->admin (address unconfirmed)");
 
     // The administrator cannot: before launch, founders run the admins.
     const coup = await call("PUT", `/api/admin/users/${benId}/role`, {
@@ -426,7 +457,7 @@ describe.skipIf(!DB_CONFIGURED)("after the vote the founder holds nothing an adm
     // The administrator who was refused before launch is refused no longer.
     const byAdmin = await call("PUT", `/api/admin/users/${benId}/role`, {
       token: annaToken,
-      body: { role: "admin" },
+      body: { role: "admin", addressUnprovedOk: true },
     });
     expect(byAdmin.status, JSON.stringify(byAdmin.json)).toBe(200);
     expect(await roleOf(benId)).toBe("admin");

@@ -68,6 +68,9 @@ import {
 } from "./governanceEngine";
 import { CYCLE_SETTLEMENT } from "./moonSettlement";
 import { GPS_CHANGE } from "./governingPurpose";
+import { CONFLICT_AGREEMENT } from "./conflictAgreement";
+import { AGREEMENT } from "./agreements";
+import { CLOSING_POLICY } from "./closingPolicies";
 
 export interface SubjectThresholds {
   /**
@@ -260,6 +263,57 @@ export const GOVERNANCE_MODE = "governance_mode";
  */
 export const ORG_DRAFT = "org_draft";
 
+/**
+ * A manual mint that waits for a second steward, put to the village instead
+ * (vote-path gap 8, Rye 2026-11-06: "EVERYTHING can change with the highest
+ * village vote"). `subject_ref` is the `admin_mint_requests` id. Carried, the
+ * closer approves it through the same function the admin route calls
+ * (server/lib/mintRequests.ts); not carried, it is declined.
+ *
+ * PRICED AT THE STRUCTURAL TIER. A grant is new issuance into one member's
+ * hands and it cannot be un-issued, so it asks at least what a new minting
+ * rule asks, and it is conducted by `custom` so the tier's unity is counted.
+ * No electorate floor, for the reason MINT_RULE gives.
+ *
+ * Absent from `KIND_FOR_SUBJECT` in shared/governanceKinds.ts on purpose, so
+ * it is a Game change: it waits its window and a seated steward may stop it.
+ * That is the conservative reading of a token send nobody priced, and moving
+ * it to `token_send` is one line there.
+ */
+export const MINT_REQUEST = "mint_request";
+
+/**
+ * ONE EXPORT OF THE WHOLE VILLAGE'S DATABASE, AUTHORISED BY THE VILLAGE (Rye,
+ * 2026-11-06: "export by vote: YES").
+ *
+ * The other door is the deployment's ADMIN_PASSWORD (server/routes/
+ * villageExport.ts), and it stays. This one is for a village whose password
+ * holder is not the person it trusts with every member's data: a vote at the
+ * village's highest tier names ONE steward, and that steward may download ONE
+ * export, once, while their seat is live. Every member is told when it goes.
+ * The subject ref is the named steward's id, so a steward has one such vote
+ * open at a time. The rules and the closer are server/lib/exportVotes.ts.
+ *
+ * PRICED AT THE TOP. The file holds every member's data and cannot be called
+ * back once it leaves, so it asks the constitutional floors here and, when
+ * the ballot opens, the village's own highest tier if that is higher.
+ */
+export const DATABASE_EXPORT = "database_export";
+
+/**
+ * A MEMBER'S SUGGESTED EDIT TO AN ADMIN CONTROL, decided by the village
+ * (ROLE_POWERS_DESIGN.md §4.5). Opened when the village holds the power behind
+ * the control or nobody does, when a holder sends a suggestion to a vote, or
+ * when the suggester raises one that waited 14 days. `subject_ref` is the
+ * suggestion id in `assistant_drafts`. Carried, the closer applies the edit
+ * through the same function the direct route calls (server/lib/adminSuggestions.ts).
+ *
+ * Priced like ORG_DRAFT: a holder of the power could make the same edit with
+ * no vote at all, so the vote asks the village's own bar and no more. Absent
+ * from `KIND_FOR_SUBJECT`, so it is a Game change that waits its window.
+ */
+export const ADMIN_EDIT = "admin_edit";
+
 export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
   [VILLAGE_LAUNCH]: {
     minUnityPct: 100,
@@ -298,12 +352,12 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
      * numberVar. This field supplies its DEFAULT and nothing more. A village
      * that wants a thicker membrane raises the dial and never touches this.
      *
-     * This field itself is a hardcoded platform constant. `thresholdSettingsFrom`
-     * raises unity and quorum from village settings and never reads
-     * minElectorate, so no village can change how many founders it takes to
-     * launch. That may well be right, since launch happens once, and it is an
-     * open question with the founder rather than an oversight to fix in
-     * passing.
+     * This field is the DEFAULT of a village dial now,
+     * `governance.launch_min_electorate` (Rye, 2026-11-06: "EVERYTHING can
+     * change with the highest village vote"). The dial is constitutional, so
+     * after launch only the highest tier moves it, and it never goes below one.
+     * `rollProblem` takes the village's value; this number is what a village
+     * that never touched the dial gets.
      *
      * Until this comment existed the coupling was asserted in prose in three
      * files and enforced in none. It is now enforced in one and stated here,
@@ -446,6 +500,87 @@ export const SUBJECT_THRESHOLDS: Readonly<Record<string, SubjectThresholds>> = {
     minElectorate: 0,
     criticality: "routine",
     why: "A change to the village's circles and roles asks whatever this village asks of any decision. A holder of the power could publish it without a vote, so the vote is not priced above the village's own bar.",
+  },
+  /*
+   * THE CONFLICT AGREEMENT, ONCE THE GAME HAS STARTED (plan section 2.3, the
+   * consequence pen). Before the Birthing the founders write it; after it a
+   * change is a ballot, and the plan puts that ballot at the STRUCTURAL tier
+   * because no transferable power covers the exit policy the agreement
+   * answers. So this names the tier and no number of its own: the tier's
+   * floor is the village's own structural setting, raised to at least
+   * TIER_FLOORS.structural, and it moves with that setting.
+   */
+  [CONFLICT_AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    /*
+     * `custom` because the tier's ruling IS a pair of numbers, 80 and 50, and
+     * `majority` and `consent` never read a unity dial: a floor of 80 frozen
+     * onto either would be printed and never applied. Same reason as
+     * GOVERNANCE_MODE above.
+     */
+    method: "custom",
+    why: "This one changes how the village holds conflict and what a consequence can be, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * A VILLAGE AGREEMENT (shared/agreements.ts; D8 of the canvas follow-up,
+   * accepted 2026-11-09). An agreement binds the whole village, exactly as
+   * written, until its review date, so it is decided at the STRUCTURAL tier,
+   * the CONFLICT_AGREEMENT shape: the tier's floor is the village's own
+   * structural setting, raised to at least TIER_FLOORS.structural, and it
+   * moves with that setting. Each agreement is its own subject ref
+   * (`agreement:<id>` as the open key), so two can be weighed at once.
+   */
+  [AGREEMENT]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    // `custom` for CONFLICT_AGREEMENT's reason: only it reads the unity a ballot freezes.
+    method: "custom",
+    why: "An agreement binds the whole village exactly as written until its review date, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  /*
+   * WHAT CLOSING THIS VILLAGE MEANS, ONCE THE GAME HAS STARTED (sweep decision
+   * D6, Rye 2026-11-06). The same consequence pen as the conflict agreement:
+   * before the Birthing the exit policy's writers adopt the words, after it a
+   * change is this ballot, at the structural tier, `custom` for the same
+   * reason as above.
+   */
+  [CLOSING_POLICY]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    method: "custom",
+    why: "This one changes what every member is promised if the village closes, so it is decided at the structural tier: the village's own setting for changes to how it is organised.",
+  },
+  [ADMIN_EDIT]: {
+    minUnityPct: 0,
+    minQuorumPct: 0,
+    minElectorate: 0,
+    criticality: "routine",
+    why: "A suggested change to one admin control asks whatever this village asks of any decision. A holder of the power could make it without a vote, so the vote is not priced above the village's own bar.",
+  },
+  [MINT_REQUEST]: {
+    ...tierFloors("structural"),
+    minElectorate: 0,
+    criticality: "structural",
+    /*
+     * `custom` for GOVERNANCE_MODE's reason: the structural unity floor is
+     * above 50, and `custom` is the only method that reads the unity a ballot
+     * freezes. Under `majority` or `consent` the 80 would be printed and never
+     * counted, which is a bar in name only on a decision that mints.
+     */
+    method: "custom",
+    why: "This one mints new tokens into one member's hands, and tokens once issued cannot be taken back, so it asks the structural bar.",
+  },
+  [DATABASE_EXPORT]: {
+    ...tierFloors("constitutional"),
+    minElectorate: 0,
+    criticality: "constitutional",
+    // `custom` for MINT_REQUEST's reason: only it counts the unity a ballot freezes.
+    method: "custom",
+    why: "This one hands one steward a copy of every member's data, which cannot be called back once it leaves, so it asks the highest bar the village sets.",
   },
 };
 
@@ -766,11 +901,15 @@ export function evaluationRulesFor(
  *
  *   dial              a game variable moves within its bounds.
  *   mint_rule         a minting rule changes what the village pays for what.
+ *   mint_rule_create  a new minting rule starts paying, from the next moon.
  *   weight_allocation the custom allocation table gives somebody weight.
  *   mode_switch       how votes are counted changes.
  *   module_lifecycle  a part of the Game is turned on, opened or closed.
  *   brand_field       a name, a word or an image the village calls itself by.
  *   role              a role is declared, seated or handed back.
+ *   exit_terms        the exit policy's voluntary and involuntary terms.
+ *   exit_restorative  the care door, while Conflict Evolution is off.
+ *   matrix_row        a human row of the Decision Matrix is added, changed or removed.
  *
  * Each kind names the subject that prices it, so a bundle is priced at the
  * highest floor among its elements with no second table to keep in step.
@@ -780,11 +919,16 @@ export function evaluationRulesFor(
 export const CHANGE_ITEM_KINDS = [
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
   "brand_field",
   "role",
+  // The consequence pen after the Birthing (canvas follow-up G.1 and G.2, server/lib/consequenceVote.ts).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ] as const;
 export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 
@@ -797,11 +941,15 @@ export type ChangeItemKind = (typeof CHANGE_ITEM_KINDS)[number];
 export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
   dial: "mechanics",
   mint_rule: MINT_RULE,
+  mint_rule_create: MINT_RULE,
   weight_allocation: "mechanics",
   mode_switch: GOVERNANCE_MODE,
   module_lifecycle: "mechanics",
   brand_field: "mechanics",
   role: "mechanics",
+  exit_terms: "mechanics",
+  exit_restorative: "mechanics",
+  matrix_row: "mechanics",
 };
 
 /**
@@ -812,11 +960,19 @@ export const SUBJECT_FOR_ITEM_KIND: Readonly<Record<ChangeItemKind, string>> = {
  */
 export const CRITICALITY_FOR_ITEM_KIND: Readonly<Record<Exclude<ChangeItemKind, "dial">, Criticality>> = {
   mint_rule: "structural",
+  // A new rule is new issuance, so it is priced at structural EVEN THOUGH its
+  // subject declares a floor of its own (`pricingOf` in server/lib/mechanics.ts
+  // takes the higher of the two for this kind alone).
+  mint_rule_create: "structural",
   weight_allocation: "structural",
   mode_switch: "constitutional",
   module_lifecycle: "structural",
   brand_field: "routine",
   role: "structural",
+  // Plan 2.3: the consequence pen, after the Birthing, is a vote at the structural tier.
+  exit_terms: "structural",
+  exit_restorative: "structural",
+  matrix_row: "structural",
 };
 
 /** The tier of a bundle: its most critical element, `routine` when empty. */
@@ -831,11 +987,13 @@ export function criticalityOfItems(tiers: readonly Criticality[]): Criticality {
  * two is young. It is not behind, it is not failing, and nothing here tells it
  * what to want. `null` means the floor is met.
  */
-export function electorateFloorProblem(subjectType: string, onTheRoll: number): string | null {
+export function electorateFloorProblem(subjectType: string, onTheRoll: number, villageMin?: number): string | null {
   const floor = thresholdsForSubject(subjectType);
   if (!floor || floor.minElectorate <= 0) return null;
-  if (onTheRoll >= floor.minElectorate) return null;
-  const short = floor.minElectorate - onTheRoll;
+  // The launch's head count is the village's own dial (Rye, 2026-11-06), never below one.
+  const min = subjectType === VILLAGE_LAUNCH && villageMin !== undefined && Number.isFinite(villageMin) ? Math.max(1, Math.floor(villageMin)) : floor.minElectorate;
+  if (onTheRoll >= min) return null;
+  const short = min - onTheRoll;
   const people = onTheRoll === 1 ? "One member holds a voice" : `${onTheRoll} members hold a voice`;
   const more = short === 1 ? "One more member" : `${short} more members`;
   return `${people} in this village today. ${more} and the village can vote to start its Game.`;
@@ -915,8 +1073,8 @@ export function weightFloorProblem(subjectType: string, roll: readonly RollSeat[
  * be asked this?") and one place a route refuses. Two separate calls at each of
  * the two call sites is how the second check gets added to one of them.
  */
-export function rollProblem(subjectType: string, roll: readonly RollSeat[]): string | null {
-  return electorateFloorProblem(subjectType, roll.length) ?? weightFloorProblem(subjectType, roll);
+export function rollProblem(subjectType: string, roll: readonly RollSeat[], villageMin?: number): string | null {
+  return electorateFloorProblem(subjectType, roll.length, villageMin) ?? weightFloorProblem(subjectType, roll);
 }
 
 /**
@@ -1015,6 +1173,21 @@ export const META_SETTING_KEYS: readonly string[] = [
   // same power as moving the bar.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // When and how often a proposal may reach the vote (change requests C17;
+  // Rye, 2026-11-06: "great go with all suggestions"). A cheap trial of any
+  // of these could empty the review or the vote just before a big change.
+  "governance.proposal_support_threshold",
+  "governance.proposals_per_member_per_cycle",
+  "governance.change_cooldown_days",
+  "governance.vote_days",
+  // How many changes one proposal may carry (Rye, 2026-11-06). It shapes
+  // every other proposal, so a cheap trial of it would be a moon in which
+  // larger bundles go up at a bar nobody agreed to.
+  "governance.change_set_cap",
+  // How many change requests one member may gather (spec R20).
+  "governance.change_requests_gathering_per_member",
+  // How long a change request is reviewed (spec R20).
+  "governance.change_request_review_days",
 ];
 
 /** Any key under one of these is a META_SETTING, whichever lane adds it. */
@@ -1286,6 +1459,10 @@ export function consecutiveNoQuorum(closes: readonly { status: string }[]): numb
   for (const row of closes) {
     const status = String(row.status ?? "");
     if (status === "open") continue;
+    // A first ballot the quorum fallback asked again (0334). It and its re-run
+    // are ONE miss, so the first is skipped and the re-run alone counts, which
+    // means the fallback never makes a subject end sooner.
+    if (status === "no_quorum_rerun") continue;
     if (status !== "no_quorum") break;
     n += 1;
   }

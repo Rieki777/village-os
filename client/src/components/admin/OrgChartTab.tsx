@@ -42,11 +42,16 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import RelationsEditor from "@/components/admin/RelationsEditor";
 import SeatTermsOfferEditor from "@/components/admin/SeatTermsOfferEditor";
 import RoleValueEditor from "@/components/admin/RoleValueEditor";
+import RolePowerGroupsEditor from "@/components/admin/RolePowerGroupsEditor";
 import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
+import RoleCharacterTags from "@/components/admin/RoleCharacterTags";
+import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/EditRoleButton";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
+import OnboardingPathEditor from "./OnboardingPathEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
+import { RoleListingPanel } from "@/components/admin/RoleListingPanel";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 
 export function OrgChartTab({ password }: { password: string }) {
@@ -142,6 +147,7 @@ export function OrgChartTab({ password }: { password: string }) {
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
+        <div className="mt-2"><NewRoleFromCardButton onMade={() => void load()} /></div>
         <p className="text-sm text-gray-500 mt-1">
           Circles, the roles inside them, and who holds each role. This is what
           /roles, /circles and /team show, and edits are live immediately.
@@ -186,6 +192,8 @@ export function OrgChartTab({ password }: { password: string }) {
           </ul>
         </div>
       )}
+
+      <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
 
       <UndrawnSeatAsks
         asks={seatAsks}
@@ -469,10 +477,16 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <SeatTermsOfferEditor seat={r} call={call} onSaved={() => void load()} />}
                       {/* What the role is worth and pays each seat every cycle (0265). */}
                       {!r.isExample && <RoleValueEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* The Power groups whoever holds this role holds (0322). */}
+                      {!r.isExample && <RolePowerGroupsEditor role={r} call={call} />}
                       {/* Bring me, not mine to hold and the runbook, through a draft (0268). */}
                       {!r.isExample && <RoleHandoverEditor role={r} call={call} onSaved={() => void load()} />}
                       {/* When it exists, what it decides alone, its regular work, holding it well and its time, through a draft (0274). */}
                       {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
+                      {/* Which characters the role suits, the village's word over the boot-time guess (role draft board, 9 Nov). */}
+                      {!r.isExample && <RoleCharacterTags role={r} call={call} onSaved={() => void load()} />}
+                      {/* The one editor for the whole card, for a holder of the power to decide the structure or an admin (role journey, PR-B). */}
+                      {!r.isExample && <EditRoleButton roleId={r.id} className="mt-2" onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
@@ -546,6 +560,9 @@ export function OrgChartTab({ password }: { password: string }) {
 
         {/* The village's own starting points for a seat's terms (PR3). */}
         <VillagePresetsEditor password={password} />
+
+        {/* The village's own steps for "Your first moons in <role>". */}
+        <OnboardingPathEditor password={password} />
       </div>
     </div>
   );

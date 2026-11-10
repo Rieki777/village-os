@@ -38,6 +38,7 @@
  * TEST_DATABASE_URL.
  */
 import fs from "fs";
+import zlib from "zlib";
 import os from "os";
 import path from "path";
 import mysql from "mysql2/promise";
@@ -47,6 +48,7 @@ import { provisionTestDb, testDbConfigured, testPool, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { BREAK_GLASS_WAY_THROUGH } from "../shared/capabilities";
 import { readOverrideRefusal } from "../client/src/lib/breakGlass";
+import { DUMP_COMPLETE_MARK } from "./repos/villageDump";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -207,7 +209,7 @@ beforeAll(async () => {
   // launch the route refuses to make anybody a founder (R90), which is its
   // own rule and not this file's subject.
   for (const p of [people.eme, people.fin]) {
-    const r = await call("PUT", `/api/admin/users/${p.id}/role`, { role: "admin" });
+    const r = await call("PUT", `/api/admin/users/${p.id}/role`, { role: "admin", addressUnprovedOk: true });
     expect(r.status, `${p.id} becomes an admin: ${r.text}`).toBe(200);
   }
 
@@ -446,5 +448,103 @@ describe.skipIf(!DB_CONFIGURED)("badges, as the gate's order says", () => {
     const through = await setDial(OPEN_DIAL, "45", people.ada.token, {}, GLASS);
     expect(through.status, through.text).toBe(200);
     expect(await dialValue(OPEN_DIAL)).toBe("45");
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("the village's own reads of who holds a seat (R161)", () => {
+  // Cel's steward term ended yesterday. The gate and the admin roster already
+  // stop counting her; the pages every member reads named her as seated.
+  it("/api/roles counts and names only the seats still running", async () => {
+    const roles = await call("GET", "/api/roles");
+    expect(roles.status, roles.text).toBe(200);
+    const list: any[] = Array.isArray(roles.json) ? roles.json : roles.json?.roles ?? [];
+    const steward = list.find((r) => r.id === "steward");
+    expect(steward, "the Steward role is on the list").toBeTruthy();
+    expect(steward.holderCount).toBe(3);
+    const named = (steward.holders ?? []).map((h: any) => h.userId);
+    expect(named).not.toContain(people.cel.id);
+    expect(named).toContain(people.ada.id);
+  });
+
+  it("/api/village/powers names nobody whose seat has run out", async () => {
+    await pool.query( // module-review-ok: fixture SQL putting one power on the Steward role, against the scratch schema
+      "INSERT INTO capability_holding (capability, holder_role_id, note) VALUES ('library.keep', 'steward', 'R161 fixture')",
+    );
+    try {
+      const powers = await call("GET", "/api/village/powers");
+      expect(powers.status, powers.text).toBe(200);
+      const held = (powers.json?.powers ?? []).find((p: any) => p.capability === "library.keep");
+      expect(held?.heldBy, "the power reads as the Steward role's").toBeTruthy();
+      // First names since #903 (Rye, 2026-10-30: "Role (FirstName)"); the lapse
+      // filter now lives in villagePowerRows (server/lib/villagePowers.ts).
+      expect(held.heldBy.people).toContain("Ada");
+      expect(held.heldBy.people).not.toContain("Cel");
+    } finally {
+      await pool.query("DELETE FROM capability_holding WHERE capability = 'library.keep' AND note = 'R161 fixture'"); // module-review-ok: fixture cleanup on the scratch schema
+    }
+  });
+});
+
+describe.skipIf(!DB_CONFIGURED)("one copy of the database, by the village's vote (Rye, 2026-11-06)", () => {
+  // The closer that writes the grant runs in server/lib/exportVotes.test.ts.
+  // Here, against the built server: who may be named, and that the grant gives
+  // one download to one live steward, with every member told.
+  const BALLOT = "bal-export-e2e";
+  // The doors live under /api/governance, which answers 404 while the module is off.
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    const on = await call("PUT", "/api/admin/modules/governance/lifecycle", { lifecycle: "members", examples: false });
+    expect(on.status, on.text).toBe(200);
+    // Any signed-in member may open a vote here (the first rung), so the knock reaches the rules behind it.
+    // The dials are the village's here, so the founder-steward breaks the glass, as this file's other dial writes do.
+    const open = await call("PUT", "/api/admin/variables/progression.unlock.proposal.open", { value: "visitor", override: true });
+    expect(open.status, open.text).toBe(200);
+  });
+  const download = (token: string) =>
+    fetch(`${BASE}/api/governance/village-export/${BALLOT}/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }); // module-review-ok: the test client dialling the built server on localhost, as every e2e suite does
+
+  it("lists the live stewards a member may name, and not one whose seat ran out", async () => {
+    const r = await call("GET", "/api/governance/village-export/stewards", undefined, people.kira.token);
+    expect(r.status, r.text).toBe(200);
+    const ids = (r.json.stewards as any[]).map((x) => x.userId);
+    expect(ids).toContain(people.ada.id);
+    expect(ids).not.toContain(people.cel.id);
+    expect((r.json.stewards as any[]).find((x) => x.userId === people.ada.id).label).toBe("Steward (Ada)");
+  });
+
+  it("opens no vote for a stranger, or to a steward whose seat ran out", async () => {
+    const body = (stewardUserId: string) => ({ stewardUserId, reason: "We need a copy before the move, and the password holder has left." });
+    expect((await call("POST", "/api/governance/village-export/put-to-village", body(people.ada.id), "")).status).toBe(401);
+    const lapsed = await call("POST", "/api/governance/village-export/put-to-village", body(people.cel.id));
+    expect(lapsed.status, lapsed.text).toBe(409);
+    expect(lapsed.json.error).toContain("holds the steward role now");
+  });
+
+  it("the named steward downloads it once, nobody else can, and every member is told", async () => {
+    await pool.query( // module-review-ok: fixture SQL standing in for a carried database_export vote, against the scratch schema
+      "INSERT INTO app_config (config_key, value) VALUES (?, ?)",
+      [`village-export-grant:${BALLOT}`, JSON.stringify({ ballotId: BALLOT, stewardUserId: people.ada.id, grantedAt: new Date().toISOString() })],
+    );
+    const standing = await call("GET", `/api/governance/village-export/${BALLOT}/standing`, undefined, people.ada.token);
+    expect(standing.json).toMatchObject({ granted: true, forYou: true, stewardLive: true, deliveredAt: null });
+    expect((await download(people.dov.token)).status, "a steward the vote did not name").toBe(403);
+    expect((await download(people.kira.token)).status, "a member").toBe(403);
+    expect((await download("")).status, "a stranger").toBe(401);
+
+    const got = await download(people.ada.token);
+    expect(got.status).toBe(200);
+    const sql = zlib.gunzipSync(Buffer.from(await got.arrayBuffer())).toString("utf8");
+    expect(sql).toContain(DUMP_COMPLETE_MARK);
+    expect((await download(people.ada.token)).status, "once, as the vote allowed").toBe(410);
+    expect((await call("GET", `/api/governance/village-export/${BALLOT}/standing`, undefined, people.kira.token)).json.deliveredAt).toBeTruthy();
+
+    // Told after the file went, so wait for it, bounded.
+    let told = 0;
+    for (let i = 0; i < 40 && told < Object.keys(people).length; i++) {
+      const [rows] = await pool.query<any[]>("SELECT COUNT(DISTINCT user_id) AS n FROM notifications WHERE dedupe_key LIKE ?", [`village-export-vote:${BALLOT}:%`]); // module-review-ok: the e2e harness reading its own scratch schema
+      told = Number(rows[0]?.n ?? 0);
+      if (told < Object.keys(people).length) await new Promise((r) => setTimeout(r, 150));
+    }
+    expect(told, "every member is told the copy left").toBeGreaterThanOrEqual(Object.keys(people).length);
   });
 });

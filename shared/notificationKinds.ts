@@ -21,6 +21,9 @@
  *                burst of the same kind reads as ONE line;
  *  - `celebrate` whether this kind is rare enough to earn a moment. FOUR are.
  *
+ * And one kind declares a fifth, `wordsInAppOnly`: its body is a member's own
+ * words, which never leave by email, so the bell shows them whole.
+ *
  * THE CELEBRATION RATION IS THE POINT OF THIS FILE. A stage crossed, a ballot
  * carried, a cycle settled, a quest consented. Everything else gets a quiet
  * line. The natural kit's contract says the same in its own words
@@ -69,6 +72,15 @@ export interface NotificationKind {
   many: string;
   /** Rare enough to earn a celebration. Four kinds are; the rest are quiet. */
   celebrate: boolean;
+  /**
+   * The body is a member's own words, and they are read in the app alone.
+   * The email for such a kind carries the title and never the body
+   * (`emailCarriesBody` in server/lib/notify.ts), so the bell is the one place
+   * its recipient can read them: the bell never batches such a row, since a
+   * batched row shows titles only, and never cuts its body short. One kind
+   * is: a restorative intake.
+   */
+  wordsInAppOnly?: true;
 }
 
 export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
@@ -88,6 +100,24 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "decisions",
     blurb: "Pick the times you can make. The time with the most picks becomes the gathering's time.",
     many: "{n} gatherings are choosing a time.",
+    celebrate: false,
+  },
+  /*
+   * Change requests (Rye, 2026-11-06). `change_request_review` asks a holder
+   * of a power the changes touch to look, like a code owner;
+   * `change_request` tells a member about a note, an answer or an edit on a
+   * change request they wrote or wrote in.
+   */
+  change_request_review: {
+    group: "decisions",
+    blurb: "A change request touches what your role looks after. Ask, raise a concern or an objection, suggest an edit, or say you can live with it.",
+    many: "{n} change requests are asking for your review.",
+    celebrate: false,
+  },
+  change_request: {
+    group: "decisions",
+    blurb: "Something new on a change request you are part of. Open it to read and answer.",
+    many: "{n} updates on change requests you are part of.",
     celebrate: false,
   },
   ballot_closing: {
@@ -126,6 +156,15 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "decisions",
     blurb: "Too few of the roll answered for this to settle anything. The question stands, and it can be asked again.",
     many: "{n} votes closed with too few answering to settle them.",
+    celebrate: false,
+  },
+  // The quorum fallback (0334): too few answered, so the same question is open
+  // again on a linked ballot. Its own kind, because nothing was decided and the
+  // member is being asked to vote, which `ballot_no_quorum` does not ask.
+  ballot_rerun_opened: {
+    group: "decisions",
+    blurb: "Too few answered a vote you are on the roll for, so it is open again for as long as before, and half as many voices are enough this time.",
+    many: "{n} votes are open again with too few having answered.",
     celebrate: false,
   },
   ballot_withdrawn: {
@@ -292,8 +331,34 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   open_role_proposal_waiting: {
     group: "decisions",
-    blurb: "Somebody from outside the village proposes to hold roles. You hold the power that seats people, so it is yours to adopt or decline.",
+    blurb: "Somebody from outside the village proposes to hold roles. You hold the power to place people in roles, so it is yours to adopt or decline.",
     many: "{n} role proposals from outside the village wait on you.",
+    celebrate: false,
+  },
+  // Review, conversations and selection (role journey L5). Bell only. None of
+  // these carries a score, a name or an address; they say a role is waiting.
+  application_interview_turn: {
+    group: "decisions",
+    blurb: "An applicant is waiting to talk with a role you hold. Book the conversation, then write your scorecard alone.",
+    many: "{n} applicants wait to talk with you.",
+    celebrate: false,
+  },
+  application_arrived: {
+    group: "decisions",
+    blurb: "An application arrived for a role in a circle you hold a role in. You are asked to consent after the conversations.",
+    many: "{n} applications arrived in your circles.",
+    celebrate: false,
+  },
+  application_first_reply_due: {
+    group: "decisions",
+    blurb: "An applicant is owed a first reply within 3 business days.",
+    many: "{n} applicants are owed a first reply.",
+    celebrate: false,
+  },
+  application_stale: {
+    group: "decisions",
+    blurb: "An application has not moved for ten days. A person decides what happens next.",
+    many: "{n} applications have not moved for ten days.",
     celebrate: false,
   },
   // The three nudges to propose roles for next season. Bell only; the
@@ -314,6 +379,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     group: "decisions",
     blurb: "Your role proposal is still a draft, and the window closes in 2 business days.",
     many: "{n} reminders that the window closes soon.",
+    celebrate: false,
+  },
+  role_access: {
+    group: "decisions",
+    blurb: "Access to give or take back for a role: a shared drive, a portal, a list. Open the task and mark it done once you have done it in the tool itself.",
+    many: "{n} access tasks are waiting for you.",
     celebrate: false,
   },
   term_expiring: {
@@ -451,6 +522,12 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
 
   // ── Work ──────────────────────────────────────────────────────────────────
+  quest_claimed: {
+    group: "work",
+    blurb: "You took on a quest. The quest shows who to talk to, your first task, your crew link and the date.",
+    many: "You took on {n} quests.",
+    celebrate: false,
+  },
   quest_submitted: {
     group: "work",
     blurb: "Somebody finished work and it is waiting to be read. Value moves when a steward says so.",
@@ -780,6 +857,20 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     blurb: "Somebody reached out privately about a rupture. Same day matters for these.",
     many: "{n} private intakes are waiting.",
     celebrate: false,
+    wordsInAppOnly: true,
+  },
+  /*
+   * One of the canvas's four key moments came round (shared/canvasRevisit.ts):
+   * something new started, a partner arrived, the conflict pathway was used,
+   * or the village is about to raise money. The notice names a block and asks
+   * whether its answer still holds. It carries nobody's words, no name and no
+   * count, and it goes out in the daily digest and never at once.
+   */
+  canvas_revisit: {
+    group: "village",
+    blurb: "A key moment came round, and the canvas asks whether one of the village's answers still holds.",
+    many: "{n} canvas answers are worth another look.",
+    celebrate: false,
   },
   exit_opened: {
     group: "village",
@@ -817,6 +908,15 @@ export const UNKNOWN_KIND: NotificationKind = {
 
 export function kindOf(type: string): NotificationKind {
   return NOTIFICATION_KINDS[type] ?? UNKNOWN_KIND;
+}
+
+/**
+ * True for a kind whose body is read in the app alone: its email is the title
+ * and nothing more, and the bell shows each such row whole and on its own.
+ * Read through `kindOf`, so an unknown type emails its body as before.
+ */
+export function wordsInAppOnly(type: string): boolean {
+  return kindOf(type).wordsInAppOnly === true;
 }
 
 /** The batched line for `n` rows of one kind. `{n}` carries the count. */

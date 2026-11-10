@@ -41,16 +41,16 @@ real limit.
 Ask your own village. This works from any machine and needs no account:
 
 ```
-curl https://your-village.example/health
+curl https://your-village.example/api/platform/info
 ```
 
 ```json
-{ "status": "ok", "build": "2026-07-28-wave1-6de6629", "database": { "ok": true } }
+{ "name": "Your Village", "version": "1.2.0", "build": "2026-10-03-cfaa41f", "...": "..." }
 ```
 
-The last seven characters of `build` are the exact version of the software
-that is running right now. Write it down. You will want it if you have to go
-back.
+`version` is the release running right now. Write it down. You will want it if
+you have to go back. `build` is the date and the commit the image was built
+from, which is the detail to quote if you ask for help.
 
 ## Step 2. Find out what has been published
 
@@ -111,16 +111,23 @@ in the database. They are in the folder you mounted at `/app/data` when you
 started the container:
 
 ```sh
-docker run --rm -v village-data:/data -v "$PWD":/backup alpine \
+MSYS_NO_PATHCONV=1 docker run --rm -v village-data:/data -v "$PWD":/backup alpine \
   tar czf /backup/village-uploads-$(date +%Y%m%d-%H%M).tar.gz -C /data .
 ```
 
 Check that both files exist and are not empty before you go on. A backup you
-have not looked at is not a backup.
+have not looked at is not a backup. On Windows in Git Bash, keep the
+`MSYS_NO_PATHCONV=1` in front of `docker run`, or `/data` and `/backup` are
+rewritten into Windows paths. Keep a private copy of your `.env` as well: it
+holds the keys the database is sealed with, and a restore without them cannot
+open what it stored.
 
-> Villages that ReGen Civics hosts are backed up automatically every day, and
-> the backup is restored into a scratch database on every run to prove it
-> works. You still want your own copy before an upgrade you chose to take.
+> A village ReGen Civics hosts is backed up only if a backup was set up for
+> it. The encrypted nightly backup with its restore drill
+> (`docs/RUNBOOK.md`, "Where the backup runs") runs once per village, from a
+> private repository, and nothing creates one for you. Ask whoever hosts your
+> village whether yours runs and when its last drill passed, and take your own
+> copy before an upgrade either way.
 
 ## Step 5. Start the new version
 
@@ -212,8 +219,8 @@ When it is up:
 curl https://your-village.example/health
 ```
 
-`"status": "ok"` and a `build` value ending in the new version means the
-upgrade landed. Open the village in a browser and click into two or three
+`"status": "ok"`, and `version` at `/api/platform/info` reading the new number,
+means the upgrade landed. Open the village in a browser and click into two or three
 pages before you call it done.
 
 ---

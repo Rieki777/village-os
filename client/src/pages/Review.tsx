@@ -64,80 +64,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { toast } from "sonner";
 import { Inbox } from "lucide-react";
+import { Trans } from "@lingui/react/macro";
 import { Link } from "wouter";
+import AgentProposalsCard from "@/components/review/AgentProposalsCard";
 import QuestProposalCard, { type QuestCard, type QuestTyped } from "@/components/review/QuestProposalCard";
+import type { Batch, ProposalCard, Queue, StuckDraft } from "@/components/review/queueTypes";
 import { draftToBody, loadPayOptions } from "@/components/WorkValueEditor";
 import { CHANGE_LIMIT_HREF, countWithEdits, limitSentence, readWithdrawRefusal } from "@/lib/reviewBatchLimit";
 import { STRUCTURE_KINDS } from "@shared/structurePlan";
 import { PROPOSE_QUEST_MODULE } from "@shared/questIdeas";
+import { SeraFold, SeraMemberPage, SeraTop, useSeraOnReview } from "@/components/review/SeraOnReview";
 
 /** The kinds that change the chart, as the structure review reads them. */
 const CHART_KINDS: readonly string[] = STRUCTURE_KINDS;
-
-interface ProposalCard {
-  id: string;
-  batchId: string;
-  moduleId: string;
-  kind: string;
-  payload: Record<string, unknown>;
-  quote: string | null;
-  sourceRef: string | null;
-  sourceOccurredAt: string | null;
-  evidence: "quoted" | "anchored" | "absent";
-  audience: "steward" | "member";
-  trustTier: string;
-  confidence: number | null;
-  significance: number | null;
-  subjectRef: string | null;
-  receivedAt: string;
-  correlationId: string | null;
-}
-
-interface Batch {
-  batchId: string;
-  moduleId: string | null;
-  receivedAt: string | null;
-  /** Changes accepting the batch whole would propose. Null with no org proposals; absent from an older server. */
-  proposedChanges?: number | null;
-  /** Each org card's share of that count, by proposal id, so an edit is counted in its place. Absent from an older server. */
-  proposedChangesByItem?: Record<string, number>;
-  items: ProposalCard[];
-}
-
-interface Drop {
-  moduleId: string;
-  reason: string;
-  dropped: number;
-  lastAt: string | null;
-}
-
-interface Queue {
-  batches: Batch[];
-  quests: QuestCard[];
-  drops: Drop[];
-  /** Open drafts this queue made that cannot publish. Absent from an older server. */
-  stuckDrafts?: { draftId: string; blocked: number; blockedLines: unknown; unpreviewable?: boolean }[];
-  /** Every open draft this queue made, with the batch whose page shows it. Absent from an older server. */
-  openDrafts?: { draftId: string; title: string; changes: number; batchId: string | null }[];
-  counts: { proposals: number; quests: number };
-  /**
-   * The halves this reader was given. An older server sends no `scope`, and it
-   * only ever answered the key that reads both, so absent reads as both.
-   */
-  scope?: { proposals: boolean; quests: boolean };
-  /** `org.proposal_change_limit`, as the server reads it. Absent from an older server. */
-  proposalChangeLimit?: number;
-  /** Whether this reader can open the admin page where that limit is changed. */
-  mayChangeProposalLimit?: boolean;
-}
-
-/** A draft that cannot publish: how many seats are blocked, and why each one is. */
-interface StuckDraft {
-  blocked: number;
-  lines: string[];
-  /** The server could not preview it, so there is no count of blocked seats to give. */
-  unpreviewable?: boolean;
-}
 
 /**
  * A hand-kept map keyed by the server's own union, which is the shape
@@ -263,6 +202,8 @@ export default function Review() {
     return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
   }, []);
   const consent = useConsentClaims(headers);
+  // The outside service's differences, one list (components/review/SeraDifferences.tsx).
+  const sera = useSeraOnReview();
 
   /**
    * Ask every unconfirmed store again. This is the only thing that can finish
@@ -345,11 +286,11 @@ export default function Review() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([loadQueue(), consent.load()]);
+      await Promise.all([loadQueue(), consent.load(), sera.load()]);
     } finally {
       setLoading(false);
     }
-  }, [loadQueue, consent.load]);
+  }, [loadQueue, consent.load, sera.load]);
 
   useEffect(() => {
     void load();
@@ -608,18 +549,19 @@ export default function Review() {
   }
 
   // The whole page refuses only when both reads did. Somebody refused one key
-  // and given the other is shown the section they hold.
+  // and given the other is shown the section they hold. A member still sees
+  // how many of the service's changes wait and who decides them (spec R38).
   if (forbidden && consent.refused) {
     return (
       <Layout>
-        <div className="max-w-4xl mx-auto px-4 py-10">
-          <div className={card}>
+        <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+          {sera.read.phase === "member" ? <SeraMemberPage sera={sera} /> : <div className={card}>
             <h1 className="text-xl font-bold text-foreground">This queue is not open to you yet</h1>
             <p className="text-sm text-muted-foreground mt-2">
               Reviewing what an outside service proposes, and witnessing finished quests, are jobs this
               village hands to somebody. Ask whoever looks after the village queues, and they can pass one on.
             </p>
-          </div>
+          </div>}
         </div>
       </Layout>
     );
@@ -629,11 +571,11 @@ export default function Review() {
   const totalDropped = drops.reduce((n, d) => n + d.dropped, 0);
   const readsProposals = queue?.scope?.proposals ?? true;
   const nothingWaiting =
-    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0;
+    queue !== null && (queue.counts?.proposals ?? 0) === 0 && (queue.counts?.quests ?? 0) === 0 && sera.waits === 0;
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
+      <div className="max-w-4xl xl:max-w-[1200px] mx-auto px-4 py-10 space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <Inbox className="w-6 h-6" aria-hidden="true" />
@@ -643,21 +585,27 @@ export default function Review() {
             <p className="text-sm text-muted-foreground mt-2 max-w-2xl">
               What an outside service has proposed about this village. Nothing here is true yet. Read it,
               change anything you want, and accept what the village agrees with. What you accept goes into
-              a draft you can preview and undo.
+              a draft you preview before it goes live.
             </p>
           )}
         </div>
 
-        {/* Finished work first. Consent is the one step that releases value,
-            and a claim sitting here is somebody's work going unpaid. */}
-        <ConsentQueue
+        <SeraTop sera={sera} queue={queue} witness={(consent.claims ?? []).filter((c) => c.status === "submitted").length} onReload={load} />
+        {/* Everything below keeps the page's own measure; only the Sera list widens at 1280. */}
+        <div className="max-w-4xl space-y-6">
+        <AgentProposalsCard headers={headers} />
+        <Link href="/approvals" className="inline-flex items-center min-h-[44px] text-sm text-teal-deep underline"><Trans>Open the approval inbox</Trans></Link>
+
+        {/* Finished work, the summary line's other jump. Consent is the one step that
+            releases value, and a claim sitting here is somebody's work going unpaid. */}
+        <div id="witness" className="scroll-mt-24"><ConsentQueue
           claims={consent.claims}
           refused={consent.refused}
           error={consent.error}
           headers={headers}
           onChanged={consent.load}
           onRetry={() => void load()}
-        />
+        /></div>
         <OwedPostings headers={headers} />
 
         {/* The queue's own failure, in a card of its own. It used to be the
@@ -844,7 +792,8 @@ export default function Review() {
           </div>
         )}
 
-        {(queue?.batches ?? []).map((batch) => (
+        <SeraFold sera={sera} batches={queue?.batches ?? []} when={when} />
+        {(queue?.batches ?? []).filter((b) => !sera.folds(b)).map((batch) => (
           <div key={batch.batchId} className={card}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-semibold text-foreground">
@@ -965,6 +914,7 @@ export default function Review() {
             onReject={(reason) => void rejectQuest(q, reason)}
           />
         ))}
+        </div>
       </div>
     </Layout>
   );

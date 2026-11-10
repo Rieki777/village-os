@@ -28,12 +28,23 @@ import { MODULES } from "./modules";
 
 /** The provisioning runbook, for the steps no screen in a village can take. */
 export const FORK_RUNBOOK_URL = "https://github.com/ReGen-Civics/village-os/blob/main/docs/FORK_RUNBOOK.md"; // brand-ok: the upstream platform repository's own address, never a village's brand
+/**
+ * THE TWO OPTIONAL GOVERNANCE MODULES' IDS, as Rye's module ruling of
+ * 2026-10-01 names them: "Governance Canvas" (`canvas`) and "Conflict
+ * Evolution" (`conflict-evolution`), both off by default. The launch rows
+ * that belong to them name them here. Both are in the catalogue
+ * (shared/modules.ts) and ship off, so their rows apply to no village until a
+ * founder switches the module on in Modules.
+ */
+export const CANVAS_MODULE_ID = "canvas";
+export const CONFLICT_EVOLUTION_MODULE_ID = "conflict-evolution";
 
 export type LaunchGroup =
   | "identity" // who runs this village: admins, handles, the shared-password exit
   | "brand" // name, tagline, copy — the overlay that de-Amoras a fork
   | "integrations" // third-party keys: Stripe, Resend, Anthropic
   | "modules" // which parts of the platform this village runs
+  | "governance" // how the village decides, reads itself, and meets a conflict
   | "reach"; // domain, DNS, email deliverability — being findable
 
 export type LaunchSeverity =
@@ -90,6 +101,20 @@ export interface LaunchRequirement {
    * does not carry this, so the registry decides and nothing else can.
    */
   declinable?: boolean;
+  /**
+   * A precondition only the HOST can clear, which the launch vote may carry
+   * open (the coordinator, 2026-11-06, under Rye's rule that nothing is stuck
+   * without a vote path). A vote cannot set an environment variable, so a
+   * village whose host never sets it would otherwise never be asked. Such a
+   * row stays on the journey, open and counted, and stops holding the vote;
+   * the launch document names it. The launch vote is unanimous by its subject
+   * (`VILLAGE_LAUNCH`, 100/100), so it already sits at the highest tier.
+   *
+   * Only for a row whose absence the platform survives. `session-secret` is
+   * NOT one: no vote makes sessions survive a restart, so it stays a host-only
+   * precondition (the same ruling, option a).
+   */
+  carriedByVote?: boolean;
 }
 
 /**
@@ -567,6 +592,115 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     fixLabel: "Open the game variables",
   },
 
+  // ── Governance: how the village decides, reads itself and meets a conflict ─
+  //
+  // THREE ROWS BY RULING, 2026-09-25/27, all BLOCKING (Rye chose Option B of
+  // the canvas plan's Decision 1). They resolve in the `canvas:` and
+  // `governance:` branch of server/lib/launch.ts, through
+  // server/lib/launchGovernance.ts, and never through server/index.ts. The
+  // exit policy's terms moved in beside them, because what a departure means
+  // and where a conflict goes are the same question a member asks. The
+  // closing policy's row (Rye, 2026-09-25) sits after the exit terms: it is
+  // part of the same exit and closing policy.
+  {
+    id: "canvas-on-record",
+    group: "governance",
+    title: "Put every canvas block on record",
+    /*
+     * EVERY ONE OF THE TWELVE, and "not decided yet" counts. Rye ruled on
+     * 2026-09-24 that every block is on record before a village's Birthing,
+     * and a reading of Absent with its sentence IS a record: the village said
+     * where it stands. What the row refuses is a block nobody has looked at.
+     * It never scores the readings, never counts them against twelve on the
+     * page, and never asks for a level above one (R55).
+     */
+    why: "Before the village is asked to start, each of the twelve governance canvas blocks carries at least one reading, so the village starts as it actually is. A reading of \"not decided yet, because...\" is enough: Absent, with one sentence saying why.",
+    severity: "blocking",
+    /*
+     * ONLY WHILE THE GOVERNANCE CANVAS MODULE IS ON (Rye's module ruling,
+     * 2026-10-01: the canvas ships as an optional module, off by default, and
+     * this row applies only when it is on). A village that never chose the
+     * canvas is not told the canvas blocks its launch.
+     */
+    appliesWhenModule: CANVAS_MODULE_ID,
+    checkKey: "canvas:on-record",
+    fixAt: "/journey-to-launch?view=canvas",
+    fixLabel: "Open the Canvas",
+  },
+  {
+    id: "exit-policy-terms",
+    group: "governance",
+    title: "Write your exit policy's actual terms",
+    why:
+      "Every village ships with a placeholder that says the terms are still to be decided by the " +
+      "community. Honest on day one, a broken promise once people have contributed real value and " +
+      "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
+    severity: "blocking",
+    checkKey: "exit-policy-terms",
+    // The editor is on Departures. This row used to send a founder to Settings, which holds no term.
+    fixAt: "/admin?tab=exits-admin",
+    fixLabel: "Write the terms",
+    runbookAnchor: "exit-policy",
+  },
+  {
+    id: "closing-policy-named",
+    group: "governance",
+    title: "Name what closing this village means",
+    /*
+     * BLOCKING, BY RULING. Rye, 2026-09-25: "before you launch the village you
+     * have to articulate what it means to close a village ... one does need to
+     * be agreed to name upon before launching." Part of the exit and closing
+     * policy, so it sits beside the exit terms. Resolved in server/lib/launch.ts
+     * by server/lib/closingPolicy.ts: named means words the village ADOPTED,
+     * and the pre-filled default alone never counts.
+     */
+    why:
+      "If the village ever closes, its treasury and assets go somewhere. Say where now, while the question costs " +
+      "nothing, in words every member can read. Choose the platform's suggested default, shared in proportion to " +
+      "the contribution tokens people hold on closing day, or write your own.",
+    severity: "blocking",
+    checkKey: "closing-policy-named",
+    fixAt: "/admin?tab=exits-admin&setting=exit.closing",
+    fixLabel: "Name it",
+    runbookAnchor: "closing-policy",
+  },
+  {
+    id: "conflict-door",
+    group: "governance",
+    title: "Give a conflict somewhere to go",
+    /*
+     * A DOOR AND A PROMISE, and the platform supplies neither. The door is a
+     * live holder of the exit policy's intake role, or a named contact outside
+     * the village; below three members who are not founders, only the outside
+     * contact will do, because everybody inside is somebody a conflict could
+     * be about. The promise is a reply time in hours, and there is no default
+     * for it: a number the platform typed would be a promise nobody here made.
+     */
+    why: "A member with a conflict needs somebody to bring it to, and to know when they will hear back. That means a person who holds the intake role today, or a named contact outside the village, and a reply time in hours the village chose. With fewer than three members who are not founders, the outside contact is required, so nobody has to take a conflict to the people it may be about.",
+    severity: "blocking",
+    // Only while Conflict Evolution is on, by the same ruling as the canvas row.
+    appliesWhenModule: CONFLICT_EVOLUTION_MODULE_ID,
+    checkKey: "governance:conflict-door",
+    fixAt: "/admin?tab=exits-admin",
+    fixLabel: "Open Departures",
+  },
+  {
+    id: "governance-on-for-members",
+    group: "governance",
+    title: "Open governance to your members",
+    /*
+     * THE REFUSAL THAT USED TO BE SILENT. `POST /api/admin/launch/propose`
+     * refused a village whose governance module sat below members, and no row
+     * on this list said so: every item could read done and the button still
+     * answered no. This row is that refusal, where a founder can see it.
+     */
+    why: "Starting the Game is the village's first vote, and members answer votes through the governance module. While it is off, or open to admins only, the vote would open and no member could answer it.",
+    severity: "blocking",
+    checkKey: "governance:on-for-members",
+    fixAt: "/admin?tab=modules&module=governance",
+    fixLabel: "Open Modules",
+  },
+
   // ── Reach: the real-world acts only a human can do ───────────────────────
   {
     id: "custom-domain",
@@ -597,19 +731,32 @@ const PLATFORM_REQUIREMENTS: LaunchRequirement[] = [
     runbookAnchor: "env",
   },
   {
-    id: "exit-policy-terms",
+    id: "site-address",
     group: "reach",
-    title: "Write your exit policy's actual terms",
+    title: "Tell the server its own address",
+    /*
+     * BLOCKING, by the coordinator's ruling on readiness R108 (2026-11-05).
+     * Without FRONTEND_URL the server learns its address from the first
+     * request it answers, and every set-password link it emails sits on
+     * that. It no longer believes X-Forwarded-Host for this, but a village
+     * should not launch on a guess at all. Launched villages are unaffected:
+     * `launchedAt` is written by the launch ballot and never derived from
+     * this list, so the row only holds a village's launch vote until it says
+     * where it lives.
+     */
     why:
-      "Every village ships with a placeholder that says the terms are still to be decided by the " +
-      "community. Honest on day one, a broken promise once people have contributed real value and " +
-      "money. Someone leaving needs to know how their contribution is honoured BEFORE they need to know.",
+      "Every link this village emails is built on FRONTEND_URL: set-password links, invitations, sign-in letters. " +
+      "Without it the server guesses its address from the first request it answered, and a stranger can be first. " +
+      "Set FRONTEND_URL to the address members use, such as https://village.example.org, with no quotes, then redeploy.",
     severity: "blocking",
-    checkKey: "exit-policy-terms",
-    // The terms are edited on Departures. Settings holds dues and land figures.
-    fixAt: "/admin?tab=exits-admin",
-    fixLabel: "Write the terms",
-    runbookAnchor: "exit-policy",
+    checkKey: "site-address",
+    // Emailed links still work from the address the server learns, so the
+    // launch vote may carry this open (coordinator 2026-11-06, option b).
+    carriedByVote: true,
+    // An environment variable, so the host's own settings are the door.
+    fixAt: `${FORK_RUNBOOK_URL}#environment-variables`,
+    fixLabel: "How to set it on your host",
+    runbookAnchor: "env",
   },
   {
     id: "backups-drilled",

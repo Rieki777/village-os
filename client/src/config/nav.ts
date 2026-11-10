@@ -181,6 +181,9 @@ export const NAV: readonly NavEntry[] = [
       // how the village decides and is always there; /decisions shows what it
       // is deciding and exists only where the engine is switched on.
       { href: "/decisions", label: "Decisions", module: "governance" },
+      // Funding rounds (0338): the village chooses which quests the season funds,
+      // within a pot. Signed-in roles only: every door asks for a member.
+      { href: "/funding-rounds", label: "Funding Rounds", module: "funding-rounds", roles: ["member", "admin", "founder"] },
       // Season plans (RC1): everyone's plan for the season, by name. Members
       // read it (terms.read), so it is listed for the signed-in roles only.
       { href: "/season-plans", label: "Season Plans", module: "governance", roles: ["member", "admin", "founder"] },
@@ -189,6 +192,11 @@ export const NAV: readonly NavEntry[] = [
       { href: "/aligned", label: "Aligned", module: "governance", roles: ["member", "admin", "founder"] },
       // Signed out, the page itself asks the visitor to sign in to write one.
       { href: "/propose", label: "Make a Proposal", module: "governance" },
+      // Change requests (Rye, 2026-11-06): several connected changes to the
+      // village's settings gathered, reviewed and sent to one vote. The routes
+      // mount outside requireModule(), and the page meets a stranger with a
+      // sign-in line, so it is listed for the signed-in roles and no module.
+      { href: "/changes", label: "Change Requests", roles: ["member", "admin", "founder"] },
       /**
        * 0140. What an outside service has proposed, waiting for somebody to
        * read it. Capability-gated in the page so that a steward who is not an
@@ -283,7 +291,8 @@ export const NAV: readonly NavEntry[] = [
     label: "About",
     items: [
       { href: "/how-we-create", brochure: true, label: "How We Create" },
-      { href: "/governance", label: "Governance" },
+      // Renamed on 2026-09-28 with the page it opens; the route stays put.
+      { href: "/governance", label: "How we work together" },
       { href: "/master-plan", brochure: true, label: "Master Plan" },
       { href: "/team", brochure: true, label: "Our Team" },
       // The other villages this one is linked with: part of what it is.

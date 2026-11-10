@@ -14,10 +14,10 @@ import {
   Sprout,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, useOptionalAuth } from "@/contexts/AuthContext";
 import { fetchGameMe, QuestClaim, useGameConfig } from "@/lib/gameApi";
 import { pageVarsFrom } from "@shared/pageContent/vars";
-import { useTokenName, useValueTokenName } from "@/hooks/useTokenNames";
+import { useTokenName, useTokensWord, useValueTokenName } from "@/hooks/useTokenNames";
 import { useLadderTitle } from "@/hooks/useVillagePaths";
 import { useValueConversion } from "@/lib/moneyClaims";
 import { ExamplesBanner } from "@/components/ExamplesBanner";
@@ -34,7 +34,7 @@ import {
   type FieldSigns,
   type Ring,
 } from "@/lib/questBoard";
-import { useStoryPageShown } from "@/lib/brochure";
+import { memberDoorShown } from "@/lib/brochure";
 import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
 
 type Difficulty = "Beginner" | "Intermediate" | "Advanced";
@@ -76,12 +76,17 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
-  const letterOn = useStoryPageShown()("/love-letter");
+  // The letter is a member's door: open to anybody signed in, a story page for a visitor (shared/brochure.ts).
+  const letterConfig = useGameConfig();
+  const letterOn = memberDoorShown(letterConfig, "/love-letter", !!useOptionalAuth()?.user);
   // The recognition and value tokens' live names (Admin → Tokens) — a fork's
   // rename reaches every line below without a code change.
   const cfg = useGameConfig();
   const currencyName = useTokenName("Recognition");
   const valueName = useValueTokenName();
+  // The umbrella word heads the section that names every token (Rye,
+  // 2026-11-01: Gratitude is the recognition token's name and nothing else's).
+  const tokensWord = useTokensWord("Tokens");
   // Same rule for the village's own name and its events page: this page is
   // platform code, so it asks the config rather than naming anybody.
   const villageName = cfg?.project?.name ?? "the village";
@@ -210,7 +215,7 @@ export default function Quests() {
             className="text-center mb-6"
           >
             <div className="w-16 h-16 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-6">
-              <Compass className="w-8 h-8 text-teal-700" />
+              <Compass className="w-8 h-8 text-teal-deep" />
             </div>
             <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
               The Quest Board
@@ -385,7 +390,7 @@ export default function Quests() {
         <div className="container">
           <div className="max-w-2xl mx-auto bg-card border border-teal/20 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center gap-4 text-left mt-6">
             <div className="w-12 h-12 rounded-xl bg-amber/15 flex items-center justify-center shrink-0">
-              <Lightbulb className="w-6 h-6 text-amber-600" />
+              <Lightbulb className="w-6 h-6 text-amber-ink" />
             </div>
             <div className="flex-1">
               <h2 className="font-display text-lg font-bold text-foreground">
@@ -562,7 +567,7 @@ export default function Quests() {
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="font-display text-3xl font-bold text-foreground mb-4">
-              About {currencyName}
+              About {tokensWord}
             </h2>
             <p className="text-muted-foreground">
               {villageName} sets its own rules for {currencyName}, {valueName} and its other tokens.

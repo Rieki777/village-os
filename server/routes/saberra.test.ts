@@ -21,6 +21,7 @@
 import http from "node:http";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Snapshot } from "../../shared/seraDifferences";
 
 const state = vi.hoisted(() => ({
   secret: { configured: true, unreadable: false, atRest: "sealed" as string | null },
@@ -54,6 +55,8 @@ const state = vi.hoisted(() => ({
   logDoc: null as Record<string, unknown> | null,
   /** The module's stored `pollSchedule`. */
   pollSchedule: undefined as string | undefined,
+  /** Every snapshot a sync kept, newest first, as the repo would hold them. */
+  snapshots: [] as Record<string, unknown>[],
 }));
 
 vi.mock("../lib/secrets", () => ({
@@ -115,6 +118,8 @@ vi.mock("../repos/saberraSyncLog", () => ({
 // One live seat, so a fact can be attached to it by name.
 vi.mock("../lib/orgChart", () => ({
   listOrgRoles: async () => [{ id: "role-77", name: "Water Steward" }],
+  // Who holds each role, for the differences list: nobody, here.
+  listOrgAssignments: async () => [],
 }));
 
 vi.mock("../lib/externalProposals", async (importOriginal) => {
@@ -122,6 +127,8 @@ vi.mock("../lib/externalProposals", async (importOriginal) => {
   return {
     // Pure: the sync keys "what this read carried" by the same identity a landing stores.
     identityKeyFor: real.identityKeyFor,
+    // Pure: the differences reader proves a proposal untouched by the key it landed under.
+    dedupeKeyFor: real.dedupeKeyFor,
     landProposal: async (_p: unknown, input: Record<string, unknown>) => {
       state.landed += 1;
       state.landedPayloads.push(input);
@@ -136,6 +143,48 @@ vi.mock("../lib/externalProposals", async (importOriginal) => {
 vi.mock("../repos/externalProposals", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../repos/externalProposals")>()),
   withdrawGone: async () => [],
+}));
+
+// The snapshot every read keeps (server/lib/saberraSnapshot.ts) is held against
+// a real schema in server/lib/saberraSnapshot.test.ts; here it is kept in memory,
+// and the roster its name swap reads is empty. The real module stands behind it,
+// so nothing a sync or a read reaches for is missing; the five it does reach for
+// read and write the rows kept here, newest first.
+vi.mock("../repos/saberraSnapshots", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../repos/saberraSnapshots")>();
+  const rows = () => (state.snapshots as unknown as Snapshot[]).map((snapshot, i) => ({ seq: state.snapshots.length - i, snapshot }));
+  return {
+    ...real,
+    insertSnapshot: async (_p: unknown, at: Date, s: Record<string, unknown>) => {
+      state.snapshots.unshift({ takenAt: at.toISOString(), ...JSON.parse(JSON.stringify(s)) });
+      return state.snapshots.length;
+    },
+    recentSnapshots: async (_p: unknown, limit: number) => rows().slice(0, limit),
+    pruneSnapshots: async () => 0,
+    snapshotIndex: async () =>
+      rows().map((r) => ({ seq: r.seq, taken: Math.floor(Date.parse(r.snapshot.takenAt) / 1000), circlesRead: r.snapshot.circles.read, rolesRead: r.snapshot.roles.read })),
+    snapshotsBySeq: async (_p: unknown, seqs: readonly number[]) => rows().filter((r) => seqs.includes(r.seq)),
+  };
+});
+vi.mock("../repos/peopleRoster", () => ({ rosterRows: async () => [] }));
+// The reads the differences make beside the snapshots: no circle and no pay here, and nothing
+// published from the service, so whatever it holds is new. The gatherers over them run for real.
+vi.mock("../repos/seraDifferences", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../repos/seraDifferences")>()),
+  circlesForDifferences: async () => [],
+  rolesWithPaySet: async () => new Set<string>(),
+  publishedFromModule: async () => [],
+  acceptedProposalsFor: async () => [],
+  publishStamp: async () => "0:0",
+  // Nothing waits in the queue here, so a landing retires nothing (server/lib/saberraRetire.ts).
+  waitingFromModule: async () => [],
+}));
+// Nothing answered and nothing linked yet (`a_sera_difference_is_answered`): the answers are held against a real schema in
+// server/lib/seraAnswer.test.ts.
+vi.mock("../repos/seraSettled", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../repos/seraSettled")>()),
+  answersFor: async () => new Map(),
+  linksFor: async () => ({ circles: {}, roles: {} }),
 }));
 
 vi.mock("../repos/moduleFacts", () => ({
@@ -216,6 +265,7 @@ beforeEach(() => {
   state.lockHeld = false;
   state.logDoc = null;
   state.pollSchedule = undefined;
+  state.snapshots = [];
 });
 
 describe("who may cause a sync", () => {
@@ -668,5 +718,27 @@ describe("a press beside the schedule", () => {
     state.value = null;
     const r = await get("/api/saberra/runs");
     expect(r.body).toMatchObject({ schedule: "off", nextAt: null, blocked: "no-key", runs: [] });
+  });
+});
+
+describe("what a sync keeps is what the differences read next", () => {
+  it("A PRESSED READ, AND AN ATTEMPT THE SERVICE NEVER ANSWERED, ARE WHAT THE COUNT READS NEXT", async () => {
+    const land = "1a2b3c4d111122223333444455556666";
+    state.byKind = {
+      circle: [{ id: land, fields: { "Circle Name": "Land", Status: "Active" } }],
+      role: [{ id: "9f8e7d6c111122223333444455556666", fields: { "Role Name": "Seed Keeper", Circle: [land], Status: "Active" } }],
+    };
+    expect((await post("/api/saberra/sync")).status).toBe(200);
+    const first = await get("/api/saberra/differences/count");
+    expect(first.status).toBe(200);
+    // The new circle and the new role in it, from the read just kept.
+    expect(first.body).toMatchObject({ total: 2, lastReadWhole: true });
+
+    // The service does not answer: the attempt is the newest read, and nothing it carried is lost.
+    state.session = null;
+    expect((await post("/api/saberra/sync")).status).toBe(502);
+    const after = await get("/api/saberra/differences/count");
+    expect(after.status).toBe(200);
+    expect(after.body).toMatchObject({ total: 2, lastReadWhole: false });
   });
 });

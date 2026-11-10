@@ -29,7 +29,7 @@ const searchOf = (...args: Parameters<typeof applySeatsHref>) => {
   const href = applySeatsHref(...args);
   return href.slice(href.indexOf("?"));
 };
-const cardFor = () => screen.getByRole("button", { name: /Apply for a role/ });
+const cardFor = () => screen.getByRole("button", { name: /Propose for a role/ });
 
 describe("role_application publishes", () => {
   it("is conductable on the server", () => {
@@ -45,6 +45,8 @@ describe("role_application publishes", () => {
         conductable={[...CONDUCTABLE_TYPES]}
         advisory={["role_application"]}
         mayOpenAdvisory
+        // A member who may not open the other votes: applying asks terms.read, not proposal.open.
+        mayOpenBallot={false}
         onChoose={onChoose}
         onPractice={onPractice}
       />,
@@ -64,6 +66,7 @@ describe("role_application publishes", () => {
         conductable={CONDUCTABLE_TYPES.filter((t) => t !== "role_application")}
         advisory={[]}
         mayOpenAdvisory={false}
+        mayOpenBallot={false}
         onChoose={onChoose}
         onPractice={vi.fn()}
       />,
@@ -103,18 +106,24 @@ describe("role_application publishes", () => {
     expect(ROLE_APPLICATION_TYPE.publish.body({ seatIds: ["s-1"] })).not.toHaveProperty("startsNoEarlierThan");
   });
 
-  it("picks one to five seats", () => {
+  it("picks one to three roles (D3)", () => {
     expect(fieldsFor("role_application", "subject").map((f) => [f.key, f.kind])).toEqual([["seatIds", "seatPicks"]]);
     expect(seatsProblem([])).toMatch(/Pick the role/);
     expect(seatsProblem(["a"])).toBeNull();
-    expect(seatsProblem(["a", "b", "c", "d", "e"])).toBeNull();
-    expect(seatsProblem(["a", "b", "c", "d", "e", "f"])).toMatch(/at most 5/);
+    expect(seatsProblem(["a", "b", "c"])).toBeNull();
+    expect(seatsProblem(["a", "b", "c", "d"])).toMatch(/at most 3/);
   });
 });
 
 describe("a wizard opened from a seat", () => {
   it("starts on this type with the seat picked", () => {
+    // Picked on a card or the board: the member door (Rye, 10 Nov 2026).
     expect(roleApplicationStart("?type=role_application&seat=seat-lead")).toEqual({
+      type: "role_application",
+      answers: { seatIds: ["seat-lead"], door: true },
+    });
+    // "Propose terms" writes terms, so it is never the door.
+    expect(roleApplicationStart("?type=role_application&seat=seat-lead&terms=write")).toEqual({
       type: "role_application",
       answers: { seatIds: ["seat-lead"] },
     });
@@ -125,22 +134,22 @@ describe("a wizard opened from a seat", () => {
   it("opens with several seats from one address, repeated or listed, in order and without repeats", () => {
     expect(roleApplicationStart(searchOf(["seat-host", "seat-kitchen", "seat-orchard"]))).toEqual({
       type: "role_application",
-      answers: { seatIds: ["seat-host", "seat-kitchen", "seat-orchard"] },
+      answers: { seatIds: ["seat-host", "seat-kitchen", "seat-orchard"], door: true },
     });
     expect(roleApplicationStart("?type=role_application&seats=seat-alder,seat-birch,,seat-alder&seat=seat-cedar")).toEqual({
       type: "role_application",
-      answers: { seatIds: ["seat-alder", "seat-birch", "seat-cedar"] },
+      answers: { seatIds: ["seat-alder", "seat-birch", "seat-cedar"], door: true },
     });
     // A season rides along with the list, as it does with one seat.
     expect(roleApplicationStart(searchOf(["seat-alder", "seat-birch"], { seasonId: "s-next" }))?.answers).toEqual({ seatIds: ["seat-alder", "seat-birch"], seasonId: "s-next" });
   });
 
-  it("hands six seats to the seats step as they came, and the step refuses the sixth in its own words", () => {
-    const six = ["s1", "s2", "s3", "s4", "s5", "s6"];
-    const start = roleApplicationStart(searchOf(six));
-    expect(start?.answers.seatIds).toEqual(six);
-    expect(seatsProblem(start?.answers.seatIds)).toBe("One application holds at most 5 roles.");
-    expect(seatsProblem(roleApplicationStart(searchOf(six.slice(0, 5)))?.answers.seatIds)).toBeNull();
+  it("hands four roles to the roles step as they came, and the step refuses the fourth in its own words", () => {
+    const four = ["s1", "s2", "s3", "s4"];
+    const start = roleApplicationStart(searchOf(four));
+    expect(start?.answers.seatIds).toEqual(four);
+    expect(seatsProblem(start?.answers.seatIds)).toBe("One proposal holds at most 3 roles.");
+    expect(seatsProblem(roleApplicationStart(searchOf(four.slice(0, 3)))?.answers.seatIds)).toBeNull();
   });
 
   it("opens from a season plan: renew picks the held seat and the season rides to the route", () => {

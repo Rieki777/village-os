@@ -6,6 +6,7 @@
 import type { CalendarItem, LunarSummary } from "@shared/gatherings";
 import { civilDate, civilDateKey, lunarPositionFor, moonPhase, zonedTimeToUtc, type YearAnchor } from "@shared/lunar";
 import { moonCountLabel } from "@shared/villageMoon";
+import { twoZones, effectiveTimeZone, type TwoZones } from "@shared/memberTimeZone";
 
 /** What GET /api/events answers since 0085. */
 export interface EventsPayload {
@@ -86,6 +87,16 @@ export function localSecondLine(item: Pick<CalendarItem, "startsAt" | "allDay">,
   const local = `${civilDateKey(start, mine)} ${villageClock(start, mine)}`;
   if (village === local) return null;
   return `${villageDay(start, mine)}, ${villageClock(start, mine)} where you are (${zoneShortName(mine, start)})`;
+}
+
+/**
+ * Both zones beside a time where two people meet (role journey L6): the
+ * viewer's zone first (their saved choice, else the browser), and the other
+ * person's only when it reads differently. The interview and access screens
+ * call this with the applicant's and the holder's zones.
+ */
+export function bothZones(instant: Date | string, viewerSaved: string | null | undefined, otherZone: string | null | undefined, otherLabel?: string): TwoZones {
+  return twoZones(instant, effectiveTimeZone(viewerSaved), otherZone, otherLabel);
 }
 
 /** "Times are in America/Costa_Rica (CST)": the calendar's standing note. */

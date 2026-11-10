@@ -159,6 +159,9 @@
  * an account that does not exist with some traces outstanding. Neither is
  * silent any more.
  */
+import { forgetAgeBand } from "../repos/questSafety";
+import { blankConfigListField } from "../repos/appConfigDocs";
+import { OMBUDS_ASKS_KEY } from "./conflictAgreement";
 import type { Pool } from "mysql2/promise";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -168,7 +171,9 @@ import { eraseIntentsForMember } from "./intents";
 import { forgetMemberNeeds } from "./needs";
 import { forgetMemberJournal } from "./journal";
 import { forgetMemberGeneKeys } from "./geneKeys";
+import { forgetMemberFundingRounds } from "./fundingRounds";
 import { forgetMemberTasks } from "../repos/memberTasks";
+import { forgetTimeZone } from "../repos/memberTimeZone";
 import { forgetMoonReviews } from "../repos/moonRecaps";
 import { forgetMemberCards } from "./sessionCard";
 import { forgetMemberInOutbox } from "./saberraOutbox";
@@ -180,6 +185,7 @@ import { eraseSeasonPlanWords } from "../repos/seasonPlans";
 import { forgetMemberSessions } from "./liveSessions";
 import { forgetRoleTensionsFor } from "./roleTensions";
 import { forgetMemberProposals } from "../repos/roleProposals";
+import { forgetMemberReview } from "../repos/applicationReview";
 import { isExampleUser } from "./examples";
 import { forgetMemberInProposals } from "./externalProposals";
 import { forgetMemberEverywhere, type ErasureOutcome } from "./memberDrivers";
@@ -190,8 +196,11 @@ import { forgetPortraitsForMember, portraitFilesForMember } from "../repos/chara
 import { forgetCharactersForMember } from "../repos/playerCharacters";
 import { forgetAgentForMember } from "../repos/memberAgent";
 import { forgetCompanionsForMember } from "../repos/companions";
+import { forgetOnboardingForMember } from "../repos/onboarding";
+import { forgetSeraActor } from "../repos/seraSettled";
 import { forgetAsksForMember } from "../repos/memberAsks";
 import { forgetRewardMomentsOf } from "../repos/rewardMoment";
+import { forgetBudgetAttributionOf } from "../repos/budgets";
 import { forgetProposer } from "../repos/questProposals";
 import { contactsForPerson, enrollmentIdsOf, forgetCommsPerson, forgetHousingAlertsOf, housingAddressesOf } from "../repos/commsPeople";
 import { forgetNoticesByKey, forgetNoticesOf } from "../repos/noticesNaming";
@@ -213,7 +222,7 @@ import { forgetStayNotesOf } from "../repos/stays";
 import { forgetPayerEmailOf, liveSubscriptionsOf } from "../repos/productPurchases";
 import { recordSubscriptionCancels } from "../repos/subscriptionCancels";
 import { cancelSubscription, stripeConfigured } from "./payments";
-import { forgetSeatJournalNames } from "../repos/orgSeatErasure";
+import { forgetSeatJournalNames, SEAT_JOURNAL_ROWS_SQL } from "../repos/orgSeatErasure";
 import { leaveEveryCrewOf } from "../repos/questCrewErasure";
 import { releaseOpenClaimsOf } from "../repos/questClaimErasure";
 import { forgetReportReasonsOf } from "../repos/placePhotos";
@@ -223,6 +232,8 @@ import { forgetSubmissionWords } from "./submissionWords";
 import { emailKeyOf } from "../../shared/comms/address";
 import { guestPersonKey } from "../../shared/comms/kinds";
 import { isTombstone } from "./oauthAccounts";
+import { forgetNotebookForMember } from "../repos/villageDocuments";
+import { DEPARTED_MEMBER_NAME } from "../../shared/memberFirstName";
 import {
   abandonErasure,
   beginErasure,
@@ -293,7 +304,7 @@ export interface SweepResult {
   stayed?: boolean;
 }
 
-const ANON = "A departed member";
+const ANON = DEPARTED_MEMBER_NAME;
 
 /** What a scrubbed key of a submission reads as. */
 const REMOVED = "[removed at member's request]";
@@ -554,10 +565,10 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       // De-attribution is not enough: the TEXT restates the person. A
-      // restorative intake notification carries "A private intake from <their
-      // full name>" in the title and up to 2000 characters of their message in
-      // the body, and nulling the actor id leaves every word of that in the
-      // steward's inbox. Their own bell goes; every row naming them to
+      // restorative intake notification carries "<their full name> wrote:"
+      // and up to 2000 characters of their message in the body
+      // (server/lib/restorativeIntake.ts), and nulling the actor id leaves
+      // every word of that in the steward's inbox. Their own bell goes; every row naming them to
       // somebody else, found by its actor or, for rows the admin producers
       // wrote with no actor, by the record its key was built from, loses its
       // words, and its emailed copies go blank first (server/repos/noticesNaming.ts).
@@ -575,7 +586,8 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     {
       name: "public-health-events",
       run: async () => {
-        await pool.query("DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ?", [target.id]); // module-review-ok: a public health event naming a departed member is removed; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
+        // A seat journal's line is kept and rewritten by "seat-journal-after-tombstone" instead (R103).
+        await pool.query(`DELETE FROM health_events WHERE audience = 'public' AND actor_user_id = ? AND NOT ${SEAT_JOURNAL_ROWS_SQL}`, [target.id]); // module-review-ok: a public health event naming a departed member is removed; the erasure sweep reaches tables that have no repo, and one repo per table would still not give the single enumerable sweep the leaving-well promise depends on
       },
     },
     {
@@ -701,6 +713,15 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      // An age band is a fact about a body (0356, build days): kept only to
+      // check a physical quest's minimum age, and nothing a departed member
+      // could still be asked. It goes with them.
+      name: "age-band",
+      run: async () => {
+        await forgetAgeBand(pool, target.id);
+      },
+    },
+    {
       // A live push endpoint is a route to somebody's phone. Leaving it meant a
       // "deleted" member could still be buzzed by the village they left.
       name: "push-subscriptions",
@@ -806,6 +827,17 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S FIRST MOONS (0365): their paths with every step and
+       * check-in, the check-ins they wrote as a buddy's or holder's hand, and
+       * the buddy link on other people's paths. Their own, so it goes whole.
+       */
+      name: "onboarding",
+      run: async () => {
+        await forgetOnboardingForMember(pool, target.id);
       },
     },
     {
@@ -1436,6 +1468,19 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Scorecards, recusals and the review of an application the member made
+       * (role journey L5, migration 0364). They follow the application's
+       * retention, and a member's erasure ends it: the scores they wrote go, the
+       * review of their own application is cleared, and their name leaves every
+       * interview and step. What stays is which steps happened.
+       */
+      name: "application-review-after-tombstone",
+      run: async () => {
+        await forgetMemberReview(pool, target.id, new Date());
+      },
+    },
+    {
+      /*
        * Role proposals (0273): the member's drafts go, with the feedback on
        * them; a proposal they submitted loses its words and its link, since
        * the application keeps the record of what was decided; and feedback
@@ -1564,6 +1609,21 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
     },
     {
       /*
+       * Funding rounds (0338): the member's interaction rows on anonymous ideas
+       * are deleted and the rest de-attributed; their ticks go; ideas still in
+       * seed are deleted, and ideas already on a round's record stay, shown as
+       * "a member", so a decided round keeps what it decided.
+       *
+       * AFTER THE TOMBSTONE, like the steps above: the idea door writes for
+       * anybody signed in, and the tombstone is where their sessions die.
+       */
+      name: "funding-rounds-after-tombstone",
+      run: async () => {
+        await forgetMemberFundingRounds(pool, target.id);
+      },
+    },
+    {
+      /*
        * Your list (0310): the member's own tasks, their events and their
        * switch are deleted, tombstones and private detail included. Where they
        * acted on somebody else's list, the id that named them is cleared.
@@ -1574,6 +1634,7 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "member-tasks-after-tombstone",
       run: async () => {
         await forgetMemberTasks(pool, target.id);
+        await forgetTimeZone(pool, target.id); // role journey L6
       },
     },
     {
@@ -1681,6 +1742,62 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * The cash budget (0360, budgets spec R26): their account id comes off
+       * every budget line they changed (`changed_by`), every rate they locked
+       * (`fx_locked_by`), every import they ran (`budget_syncs.by`), every
+       * period note they wrote (`budget_period_notes.changed_by`), every
+       * source they switched (`budget_sources.set_by`) and every circle
+       * envelope they set (`budget_envelopes.changed_by`). The rows stay, as the
+       * village's record of its plan, and `changed_as` and `set_as` stay too,
+       * because they name the role the person acted through and never a person.
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: a budget
+       * write still lands for anybody signed in until the sessions die. Keyed
+       * on the member, so a resume or a second run finds nothing to change.
+       */
+      name: "budget-attribution-after-tombstone",
+      run: async () => {
+        await forgetBudgetAttributionOf(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE MEMBER'S OWN NOTEBOOK (0359, plan 5.5): every document they kept
+       * private, with its stored bytes, and their own list of picked
+       * resources. A document the village's pen ADOPTED stays, because it is
+       * the village's material now; its owner reads as "a departed member"
+       * through the tombstone. The village's own picks (user_id '') are never
+       * a member's and are never touched.
+       *
+       * AFTER THE TOMBSTONE, for the reason the step above gives: adding a
+       * document is a write any signed-in session can make, so the deletion
+       * comes after the last moment the member could make one.
+       */
+      name: "notebook-after-tombstone",
+      run: async () => {
+        await forgetNotebookForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * THE OMBUDS DOOR'S POINTERS (`ombuds-asks`, server/lib/conflictAgreement.ts;
+       * D10a, 2026-11-09). Each one keeps that somebody asked an outside
+       * contact, when, and which; none carries words. The record stays whole
+       * so the village can still count how often the door was used, and
+       * `askedBy` is blanked, because who asked for outside help in a conflict
+       * is about them (blankConfigListField in server/repos/appConfigDocs.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the door
+       * takes an ask from any signed-in session until the sessions die. Keyed
+       * on the member's id, so a resume or a second run finds nobody to blank.
+       */
+      name: "ombuds-asks-after-tombstone",
+      run: async () => {
+        await blankConfigListField(pool, OMBUDS_ASKS_KEY, "asks", "askedBy", String(target.id ?? ""));
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again, as the last step that deletes the
       // member's own data. Two steps follow it on purpose and touch none:
@@ -1692,6 +1809,18 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       name: "companions-after-tombstone",
       run: async () => {
         await forgetCompanionsForMember(pool, target.id);
+      },
+    },
+    {
+      /*
+       * How they answered the outside service's differences (`a_sera_difference_is_answered`): the
+       * answers and the page-id links stay as the village's record of what
+       * was decided, and no longer say who gave them. Hashes and ids only, so
+       * there are no words to clear (spec R27).
+       */
+      name: "sera-answers-after-tombstone",
+      run: async () => {
+        await forgetSeraActor(pool, target.id);
       },
     },
     {
@@ -2221,6 +2350,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "investor-fact-words-after-tombstone",
   "stay-notes-after-tombstone",
   "purchase-emails-after-tombstone",
+  "application-review-after-tombstone",
   "role-proposals-after-tombstone",
   "seat-journal-after-tombstone",
   "seat-claims-after-tombstone",
@@ -2228,15 +2358,19 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "role-holdings-after-tombstone",
   "sessions-after-tombstone",
   "gene-keys-after-tombstone",
+  "funding-rounds-after-tombstone",
   "member-tasks-after-tombstone",
   "quest-crews-after-tombstone",
   "quest-claims-after-tombstone",
   "photo-report-reasons-after-tombstone",
   "session-cards-after-tombstone",
   "reward-moments-after-tombstone",
+  "budget-attribution-after-tombstone",
   "companions-after-tombstone",
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
+  "notebook-after-tombstone",
+  "ombuds-asks-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 
@@ -2244,6 +2378,8 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
 export const BACKFILL_LEAVES_OUT: Readonly<Record<string, string>> = {
   "alignment-names-after-tombstone":
     "it finds the member in other people's words by the name and handle the tombstone took, and a finished record holds neither",
+  "sera-answers-after-tombstone":
+    "its two tables are new in the a_sera_difference_is_answered migration, so no member whose erasure finished before them can have answered there",
   audit: "the sweep wrote its line when it finished, and a second would say the erasure happened twice",
   [EXTERNAL_STEP]: "the outside stores were asked when the sweep finished, and asking them again is the /review button's job",
 };

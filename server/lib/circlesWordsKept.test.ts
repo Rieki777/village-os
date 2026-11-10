@@ -13,7 +13,7 @@ type Doc = Record<string, any>;
 const KEY = "page-circles";
 const BEFORE = CIRCLES_WORDS_BEFORE_NEUTRAL as Doc;
 /** What a fresh deployment's content document holds after its first boot (server/seeds/content-seed.json). */
-const NEW_VILLAGE = { investor: {}, steward: {}, resident: {}, prosperity: {} };
+const NEW_VILLAGE = {};
 
 function repoOf(content: Doc | null) {
   let doc = content;

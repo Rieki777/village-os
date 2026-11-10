@@ -13,6 +13,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVillageName, useVillageLocation } from "@/hooks/useVillageName";
+import LandPlanBackdrop, { useLandPlan } from "./LandPlanBackdrop";
+import { formatLatLon } from "./landPlan";
 
 /**
  * A hash that already points somewhere on the land — a place, module, journey,
@@ -161,30 +163,48 @@ export default function EnterTheLandGate({
 }: EnterTheLandGateProps) {
   const villageName = useVillageName();
   const villageLocation = useVillageLocation();
+  // The land as a plan behind both the dialog and the cover, so pressing
+  // Enter keeps the same picture while the map downloads.
+  const plan = useLandPlan(open || preparing);
 
   return (
     <>
+      {(open || preparing) && (
+        <div className="absolute inset-0 z-[5] bg-background">
+          <LandPlanBackdrop plan={plan} />
+        </div>
+      )}
+
       {open && (
         <div
-          className="absolute inset-0 z-[5] flex items-center justify-center px-6 bg-background/90 backdrop-blur-sm"
+          className="absolute inset-0 z-[5] flex items-center justify-center px-6"
           role="dialog"
           aria-label="Enter the Living Map"
         >
-          <div className="text-center text-foreground">
-            <h1 className="font-display text-3xl tracking-[0.5em] uppercase text-foreground">
+          <div className="relative text-center text-foreground">
+            <h1 className="font-display text-4xl sm:text-6xl tracking-[0.42em] pl-[0.42em] uppercase text-foreground">
               {villageName}
             </h1>
-            <p className="mt-3 text-xs tracking-[0.2em] uppercase text-muted-foreground">
+            <div className="mx-auto mt-4 mb-3 flex items-center justify-center gap-3 text-gold" aria-hidden="true">
+              <span className="block h-px w-14 bg-current opacity-60" />
+              <span className="text-xs">✦</span>
+              <span className="block h-px w-14 bg-current opacity-60" />
+            </div>
+            <p className="text-xs tracking-[0.24em] uppercase text-muted-foreground">
               {villageLocation
                 ? `a living village · ${villageLocation}`
                 : "a living village"}
             </p>
+            {plan?.pin && (
+              <p className="mt-2 text-[11px] tracking-[0.18em] text-muted-foreground opacity-80">{formatLatLon(plan.pin)}</p>
+            )}
             <button
               type="button"
               onClick={onEnter}
-              className="mt-7 min-h-[44px] px-8 py-2.5 text-sm rounded-lg border border-border bg-background/95 text-foreground shadow-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group mt-8 inline-flex min-h-[48px] items-center gap-2.5 px-8 py-2.5 text-[15px] font-medium tracking-wide rounded-full bg-teal-deep text-white shadow-lg hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2"
             >
               Enter the Land
+              <span aria-hidden="true" className="transition-transform group-hover:translate-x-1">→</span>
             </button>
           </div>
         </div>
@@ -196,11 +216,11 @@ export default function EnterTheLandGate({
           scene: a click there opened the seed's version of a building. */}
       {preparing && (
         <div
-          className="absolute inset-0 z-[5] flex items-center justify-center px-6 bg-background"
+          className="absolute inset-0 z-[5] flex items-center justify-center px-6"
           role="status"
           aria-live="polite"
         >
-          <p className="px-4 py-2 text-sm text-center rounded-lg border border-border bg-background text-foreground shadow-sm">
+          <p className="relative px-4 py-2 text-sm text-center rounded-full border border-border bg-background/90 text-foreground shadow-sm backdrop-blur-sm">
             {slow ? "Still bringing the land. A slow connection takes longer." : "Preparing the land…"}
           </p>
         </div>

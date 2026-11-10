@@ -69,9 +69,12 @@ import {
   orgRoleHistory,
   seatHolder,
   statusOverrideProblem,
+  characterTagsFrom,
   unclaimedSeatingsFor,
   updateOrgRole,
 } from "../lib/orgChart";
+import { listArchetypeRows } from "../repos/archetypes";
+import { villageId } from "../lib/economy";
 import {
   addChange,
   createDraft,
@@ -93,11 +96,15 @@ import { submissionStatusNotice } from "../lib/submissionNotices";
 import { isTombstone } from "../lib/oauthAccounts";
 import { SEAT_JOURNAL_LINE } from "../repos/orgSeatErasure";
 import { BALLOT_OPEN_REFUSAL, holderMayPublish, launchedByVote, openDraftBallot, publishOrgDraft } from "../lib/orgDraftDecide";
+import { expectedChangesOf } from "./orgDraftDecide";
 import { resolveSeatTerm } from "../../shared/seatTerms";
 import { payLineProblem, rolePayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput, type TokenAmount } from "../../shared/workValue";
 import { ROLE_CCOS_COLUMNS, ROLE_CCOS_FIELDS } from "../../shared/roleCcos";
+import { planListOnly } from "../../shared/roleListing";
+import { carriesRoleParams, parseRoleParams } from "../../shared/roleParams";
+import { applyListOnly, readListingRecords, undoListOnly } from "../repos/roleListingRecords";
 
 /** A role's checked value edit. `undefined` leaves a field alone. */
 type RoleValueEdit = { valueMinor?: number | null; valueCurrency?: string | null; valueTokens?: TokenAmount[] | null; cashMinor?: number | null; cashCurrency?: string | null };
@@ -388,7 +395,7 @@ export function register(app: Express, deps: Deps): void {
     if (await openDraftBallot(getPool(), req.params.id)) return res.status(409).json({ error: BALLOT_OPEN_REFUSAL });
     if ((await launchedByVote(getPool())) && !(await holderMayPublish(req, res, { authedUser, guardCapability, capabilityCtx, liveHoldersOf }))) return;
     const actor = await authedUser(req);
-    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null);
+    const r = await publishOrgDraft({ pool: getPool(), reloadCircles: async () => { await circlesRepo.load(); }, notify, seasonState }, req.params.id, actor?.id ?? null, actor?.id ?? null, expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });
@@ -440,7 +447,8 @@ export function register(app: Express, deps: Deps): void {
         kind: "org",
         text: `linked: ${String(req.body?.typeId)}`,
         actorUserId: (await authedUser(req))?.id ?? null,
-        entityType: end.kind, entityRef: end.id, audience: "admin",
+        entityType: end.kind, entityRef: end.id,
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
       });
     }
     res.json({ success: true, id: r.id });
@@ -490,26 +498,35 @@ export function register(app: Express, deps: Deps): void {
    * before you change a seat, you can see what has already been tried with it,
    * and by whom. Governance history stops living in people's memory.
    */
+  /*
+   * WHO READS WHAT (readiness R103, the coordinator's ruling of 2026-11-05).
+   * An admin reads every line, and who wrote it. Everybody else holding
+   * `map.viewPeople`, which opens at the guest rung, reads the PUBLIC lines
+   * and no names: the writers mark a line public only when its words name
+   * nobody, and `by` is a person's name, so it goes to admins alone. Lines
+   * written before the ruling were admin-audience whatever they said;
+   * `markNameFreeJournalLinesPublic` re-marks the name-free ones at boot, and
+   * the ones that named a person stay admin.
+   */
   app.get("/api/org/:kind/:id/journal", async (req, res) => {
     const viewer = await authedUser(req);
-    const maySee =
-      (await isAdmin(req)) ||
-      (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
+    const admin = await isAdmin(req);
+    const maySee = admin || (viewer ? hasCapability("map.viewPeople", await capabilityCtx(viewer)) : false);
     if (!maySee) return res.status(401).json({ error: "auth_required", message: "Sign in to read this history" });
     const kind = req.params.kind === "circles" ? "circle" : "org_role";
     const [rows]: any = await getPool().query(
       `SELECT id, kind, text, actor_user_id, at FROM health_events
-        WHERE entity_type = ? AND entity_ref = ?
+        WHERE entity_type = ? AND entity_ref = ?${admin ? "" : " AND audience = 'public'"}
         ORDER BY at DESC, id DESC LIMIT 200`,
       [kind, req.params.id],
     );
-    const allMembers = await members.all();
+    const allMembers = admin ? await members.all() : [];
     res.json(
       (rows as any[]).map((r) => ({
         id: r.id,
         text: r.text,
         at: r.at,
-        by: r.actor_user_id
+        by: admin && r.actor_user_id
           ? firstName((allMembers as any[]).find((u: any) => u.id === r.actor_user_id)?.name ?? "Someone")
           : null,
       })),
@@ -721,7 +738,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: user.id,
       entityType: "org_role",
       entityRef: wanted.orgRoleId,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     // A request nobody hears is the failure this repo has already paid for on
     // the raised-hand path and on both seating paths. Same shape as the
@@ -805,7 +822,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: before?.orgRoleId ?? req.params.id,
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     await closeSeatClaim((s) => s.data?.assignmentId === req.params.id && s.userId === userId, "accepted");
     await notify({
@@ -841,7 +858,7 @@ export function register(app: Express, deps: Deps): void {
       actorUserId: actor?.id ?? null,
       entityType: "org_role",
       entityRef: String(closed.data?.roleId ?? ""),
-      audience: "admin",
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     const words = submissionStatusNotice(SEAT_CLAIM_TYPE, "declined", closed.data ?? null);
     if (closed.userId && words) {
@@ -889,10 +906,35 @@ export function register(app: Express, deps: Deps): void {
   };
 
   // ── Admin: the org chart is edited here, and the edits are live ──────────
+  /**
+   * The card's parameters in a write (role journey PR-C): refused with a sentence when a value
+   * cannot be read, and a role named in the interviews must be a role in this village.
+   * Returns false after answering.
+   */
+  async function paramsAreFine(body: any, res: any): Promise<boolean> {
+    if (!carriesRoleParams(body)) return true;
+    const parsed = parseRoleParams(body);
+    if (!parsed.ok) {
+      res.status(400).json({ error: parsed.problem });
+      return false;
+    }
+    const steps = parsed.value.conversations ?? [];
+    if (steps.length) {
+      const known = new Set((await listOrgRoles(getPool())).map((r) => r.id));
+      const unknown = steps.filter((x) => !known.has(x.roleId));
+      if (unknown.length) {
+        res.status(400).json({ error: "These interviewing roles are not here: " + unknown.map((x) => x.roleId).slice(0, 5).join(", ") });
+        return false;
+      }
+    }
+    return true;
+  }
+
   app.post("/api/admin/org/roles", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const valued = await checkedRoleValue(req.body ?? {}, res);
     if (!valued) return;
     const id = await createOrgRole(getPool(), req.body ?? {});
@@ -904,15 +946,63 @@ export function register(app: Express, deps: Deps): void {
     await recordEvent(getPool(), {
       kind: "org", text: `role created: ${String(req.body?.name ?? id)}`,
       actorUserId: (await authedUser(req))?.id ?? null,
-      entityType: "org_role", entityRef: id, audience: "admin",
+      entityType: "org_role", entityRef: id,
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     res.json({ success: true, id });
+  });
+
+  /*
+   * ── LISTING (role journey PR-A) ───────────────────────────────────────
+   *
+   * A steward lists the roles a visitor may discover. "List only these" lists
+   * the roles named and unlists every other one, and keeps what each read as
+   * before so the run can be put back. The door is an admin or a holder of the
+   * power to decide the village's structure.
+   */
+  app.get("/api/admin/org/listing", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    res.json({ records: await readListingRecords(getPool()) });
+  });
+
+  app.post("/api/admin/org/listing/only", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const raw = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = raw.filter((x: unknown): x is string => typeof x === "string" && x.trim() !== "").map((x: string) => x.trim());
+    if (!ids.length) return res.status(400).json({ error: "Name at least one role to list. Listing none would empty every list." });
+    const roles = (await listOrgRoles(getPool())).filter((r) => !r.isExample);
+    const known = new Set(roles.map((r) => r.id));
+    const unknown = ids.filter((id: string) => !known.has(id));
+    if (unknown.length) return res.status(400).json({ error: "Those roles are not here: " + unknown.slice(0, 5).join(", ") });
+    const plan = planListOnly(roles, ids);
+    const record = await applyListOnly(getPool(), plan, ids);
+    await recordEvent(getPool(), {
+      kind: "org", text: `listing: ${plan.list.length} listed, ${plan.unlist.length} unlisted`,
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: ids[0],
+      audience: "public",
+    });
+    res.json({ success: true, listed: plan.list.length, unlisted: plan.unlist.length, record });
+  });
+
+  app.post("/api/admin/org/listing/undo", async (req, res) => {
+    if (!(await isAdmin(req)) && !(await guardCapability(req, res, "org.decide"))) return;
+    const record = await undoListOnly(getPool());
+    if (!record) return res.status(409).json({ error: "There is no earlier listing to put back." });
+    await recordEvent(getPool(), {
+      kind: "org", text: "listing: the earlier listing was put back",
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: record.kept[0] ?? "listing",
+      audience: "public",
+    });
+    res.json({ success: true, record });
   });
 
   app.put("/api/admin/org/roles/:id", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     if (carriesHandoverWords(req.body)) return res.status(400).json({ error: HANDOVER_WORDS_REFUSAL });
     if (carriesCcosWords(req.body)) return res.status(400).json({ error: CCOS_WORDS_REFUSAL });
+    if (!(await paramsAreFine(req.body, res))) return;
     const role = (await listOrgRoles(getPool())).find((r) => r.id === req.params.id);
     if (!role) return res.status(404).json({ error: "Role not found" });
     if (role.isExample) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
@@ -921,6 +1011,13 @@ export function register(app: Express, deps: Deps): void {
     // column lets a village declare.
     const badState = statusOverrideProblem(req.body?.statusOverride);
     if (badState) return res.status(400).json({ error: badState });
+    // Which characters the role suits: only the village's own cast (role draft board, 9 Nov).
+    if (req.body?.archetypes !== undefined) {
+      const cast = (await listArchetypeRows(getPool(), villageId())).map((a) => a.key);
+      const tags = characterTagsFrom(req.body.archetypes, cast);
+      if (!tags.ok) return res.status(400).json({ error: tags.error, field: "archetypes" });
+      req.body.archetypes = tags.tags;
+    }
     // Described BEFORE the write, while the old values still exist. The
     // generic admin audit records "PUT /api/admin/org/roles/x", which cannot
     // answer "what has already been tried with this seat".
@@ -933,11 +1030,16 @@ export function register(app: Express, deps: Deps): void {
       await recordEvent(getPool(), {
         kind: "org", text: `${role.name}: ${changes.join("; ")}`,
         actorUserId: (await authedUser(req))?.id ?? null,
-        entityType: "org_role", entityRef: req.params.id, audience: "admin",
+        entityType: "org_role", entityRef: req.params.id,
+        // The role's own facts (describeOrgChange in server/lib/orgChart.ts), never a holder's.
+        audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
       });
     }
     res.json({ success: ok });
   });
+
+  // The Treasurer's door to a role's pay, PUT /api/org/roles/:id/pay, lives in
+  // server/routes/valuation.ts (0336): it sets the figure beside the engine's suggestion.
 
   app.post("/api/admin/org/roles/:id/holders", async (req, res) => {
     // 0098: `org.seat`. Deciding who sits in the village's seats is the
@@ -1019,7 +1121,8 @@ export function register(app: Express, deps: Deps): void {
       kind: "org",
       text: req.body?.userId ? "seated a member" : SEAT_JOURNAL_LINE.seated,
       actorUserId: actor?.id ?? null,
-      entityType: "org_role", entityRef: req.params.id, audience: "admin",
+      entityType: "org_role", entityRef: req.params.id,
+      audience: "public", // names nobody, so a member reads it in the seat's journal (R103)
     });
     /*
      * SWEEP (the incomplete loop). Seating somebody is an appointment, and

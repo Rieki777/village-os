@@ -20,6 +20,9 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { isMoonTerm } from "../../shared/moonRenewal";
+import { raiseRevokeForEnded } from "./roleAccess";
+import { liveAssignmentIdsOfUser } from "../repos/roleAccess";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { applyCircleStatusChanges, type CircleStatusMove, type CircleStatusOutcome } from "./circleTreasury";
 import { listBudgets } from "./resources";
@@ -34,6 +37,7 @@ import { circlesOnCycles } from "../../shared/circleView";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 import { readStoredRoleList, readStoredRunbook } from "../../shared/roleHandover";
 import { ccosWordsFromRow } from "../../shared/roleCcos";
+import { carriesRoleParams, parseRoleParams, roleParamColumns, roleParamsFromRow, type RoleParams } from "../../shared/roleParams";
 
 export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
 
@@ -41,6 +45,25 @@ export type SeatState = "open" | "filled" | "partial" | "forming" | "expired";
  * What decides whether a holding has lapsed. Passed in rather than read here,
  * because this file must stay a pure function of its inputs.
  */
+/**
+ * WHO IS TOLD WHEN A SEATING CHANGES (0322).
+ *
+ * Holding a seat can grant its Power groups (server/lib/seatGrants.ts), and the
+ * gate reads those from an in-memory snapshot. Every writer of a member
+ * seating below calls `seatingsChanged()` after its statement, so the snapshot
+ * is re-read before the next request and a power ends on the very next one.
+ * A listener only MARKS the snapshot stale: a writer inside a transaction has
+ * not committed yet, so reading here would read the old rows.
+ */
+const seatingListeners = new Set<() => void>();
+export function onSeatingsChanged(listener: () => void): () => void {
+  seatingListeners.add(listener);
+  return () => seatingListeners.delete(listener);
+}
+export function seatingsChanged(): void {
+  for (const l of Array.from(seatingListeners)) l();
+}
+
 export interface LapseContext {
   /** The dated season running today, or null. */
   currentSeasonId: string | null;
@@ -49,7 +72,7 @@ export interface LapseContext {
   now?: Date;
 }
 
-export interface OrgRole {
+export interface OrgRole extends Partial<RoleParams> {
   id: string;
   circleId: string | null;
   name: string;
@@ -61,6 +84,8 @@ export interface OrgRole {
   criticality: "normal" | "high";
   active: boolean;
   recruiting: boolean;
+  /** Role journey PR-A: null and true read as listed, false hides the role from every discovery surface (shared/roleListing.ts). */
+  listed?: boolean | null;
   expiresEachSeason: boolean | null;
   statusOverride: SeatState | null;
   statusOverrideExpiresAt: Date | null;
@@ -135,6 +160,11 @@ export interface OrgRole {
   termsOfferAt: Date | null;
   /** The member who published the offer. */
   termsOfferBy: string | null;
+  /**
+   * The building on the land this seat lives in (0060), a map structure key.
+   * Null when nobody has placed it; the map then uses its circle's home.
+   */
+  structureKey?: string | null;
   /**
    * WHAT THE ROLE IS WORTH EACH CYCLE AND WHAT IT PAYS EACH SEAT (0265).
    * The value is minor units of `valueCurrency`, NULL when nobody has set one.
@@ -255,7 +285,15 @@ export const ROLE_COLS =
   // 0268: the handover words. Structure like aim and domain, in every tier's core.
   "bring_me, not_mine, runbook, " +
   // 0274: the CCOS words. Structure like the handover words, in every tier's core.
-  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment";
+  "exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, " +
+  // 0060: the building on the land this seat lives in. Written by the scene
+  // import and read by /api/admin/map/structures, and selected by nobody here,
+  // so the Living Map placed every seat by its circle's NAME (map lane R1).
+  "structure_key, " +
+  // 0362: whether a steward has confirmed the role for discovery. NULL reads as listed.
+  "listed, " +
+  // 0362: the parameters of the full card (shared/roleParams.ts).
+  "village_goals, track, selection_criteria, conversations, conversation_mode, where_worked, languages, budget_line, funded_from, review_after_days, access_bundle, booking_url";
 
 export const ASSIGN_COLS =
   // `is_example` rides along so the flag travels through every SELECT. It was
@@ -298,6 +336,7 @@ export function rowToRole(r: any): OrgRole {
     criticality: r.criticality === "high" ? "high" : "normal",
     active: !!r.active,
     recruiting: !!r.recruiting,
+    listed: r.listed === null || r.listed === undefined ? null : !!r.listed,
     expiresEachSeason: r.expires_each_season === null || r.expires_each_season === undefined ? null : !!r.expires_each_season,
     statusOverride: (r.status_override ?? null) as SeatState | null,
     statusOverrideExpiresAt: r.status_override_expires_at ?? null,
@@ -318,6 +357,7 @@ export function rowToRole(r: any): OrgRole {
     termsOffer: r.terms_offer ?? null,
     termsOfferAt: r.terms_offer_at ?? null,
     termsOfferBy: r.terms_offer_by ?? null,
+    structureKey: typeof r.structure_key === "string" && r.structure_key.trim() ? r.structure_key.trim() : null,
     valueMinor: readWorkValue(r.value_minor, r.value_currency)?.minor ?? null,
     valueCurrency: readWorkValue(r.value_minor, r.value_currency)?.currency ?? null,
     valueTokens: readValueTokens(r.value_tokens),
@@ -328,6 +368,8 @@ export function rowToRole(r: any): OrgRole {
     runbook: readStoredRunbook(r.runbook),
     // 0274: the CCOS words, each through its reader.
     ...ccosWordsFromRow(r),
+    // 0362: the full card's parameters, each through the one tolerant reader.
+    ...roleParamsFromRow(r),
   };
 }
 
@@ -446,6 +488,8 @@ export function isLapsed(
     return { lapsed: true, reason: "term" };
   }
   if (ctx.cadence === "never") return { lapsed: false, reason: null };
+  // D34: a moon term may cross the season's end. The season turn leaves a running moon term alone; its own date still ends it.
+  if (a.termEndsAt && isMoonTerm(a.startedAt, a.termEndsAt)) return { lapsed: false, reason: null };
   // A seat may opt out on its own card; null inherits the village setting.
   if (role.expiresEachSeason === false) return { lapsed: false, reason: null };
   /*
@@ -853,6 +897,12 @@ export function describeOrgChange(before: OrgRole | null, after: Partial<OrgRole
   }
   if (after.active !== undefined) say(after.active ? "reopened" : "rested", before.active, after.active);
   if (after.recruiting !== undefined) say("recruiting", before.recruiting, after.recruiting);
+  if (carriesRoleParams(after)) lines.push("card details updated");
+  if (after.listed !== undefined) {
+    const was = before.listed !== false;
+    const now = after.listed === null || after.listed === undefined ? true : !!after.listed;
+    if (was !== now) lines.push(now ? "listed" : "unlisted");
+  }
   if (after.criticality !== undefined) say("criticality", before.criticality, after.criticality);
   if (after.expiresEachSeason !== undefined) {
     say("expires each season", before.expiresEachSeason, after.expiresEachSeason);
@@ -877,6 +927,7 @@ const WRITABLE: Record<string, string> = {
   criticality: "criticality",
   active: "active",
   recruiting: "recruiting",
+  listed: "listed",
   expiresEachSeason: "expires_each_season",
   authority: "authority",
   firstYearOutcomes: "first_year_outcomes",
@@ -891,6 +942,18 @@ const WRITABLE: Record<string, string> = {
   color: "color",
   order: "sort_order",
 };
+
+/**
+ * The card's parameters a body names, as column and value pairs. The route has
+ * already refused a bad value with a sentence (`parseRoleParams`), so a refusal
+ * here is a caller that skipped the route, and it throws rather than store a guess.
+ */
+function paramColumnsOf(body: any): Array<[string, string | number | null]> {
+  if (!carriesRoleParams(body)) return [];
+  const parsed = parseRoleParams(body);
+  if (!parsed.ok) throw new Error(parsed.problem);
+  return roleParamColumns(parsed.value);
+}
 
 export async function createOrgRole(pool: Pool, body: any): Promise<string> {
   const id =
@@ -917,6 +980,10 @@ export async function createOrgRole(pool: Pool, body: any): Promise<string> {
     if (!w || cols.includes(w.col)) continue;
     cols.push(w.col);
     vals.push(w.value);
+  }
+  for (const [col, v] of paramColumnsOf(body)) {
+    cols.push(col);
+    vals.push(v);
   }
   await pool.query(
     `INSERT INTO org_roles (${cols.map((c) => `\`${c}\``).join(", ")})
@@ -972,7 +1039,7 @@ function writableColumn(js: string, body: any): { col: string; value: unknown } 
   if (js === "seats") return { col, value: Math.max(1, Number(body[js] ?? 1)) };
   if (js === "order") return { col, value: Number(body[js] ?? 0) };
   if (js === "active" || js === "recruiting" || js === "representsCircle") return { col, value: body[js] ? 1 : 0 };
-  if (js === "expiresEachSeason") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
+  if (js === "expiresEachSeason" || js === "listed") return { col, value: body[js] === null ? null : body[js] ? 1 : 0 };
   return { col, value: body[js] === "" ? null : body[js] };
 }
 
@@ -986,9 +1053,20 @@ export async function updateOrgRole(pool: Pool, id: string, body: any, value?: O
     sets.push(`\`${w.col}\` = ?`);
     args.push(w.value);
   }
+  for (const [col, v] of paramColumnsOf(body)) {
+    sets.push("`" + col + "` = ?");
+    args.push(v);
+  }
   if (body.accountabilities !== undefined) {
     sets.push("`accountabilities` = ?");
     args.push(JSON.stringify(Array.isArray(body.accountabilities) ? body.accountabilities : []));
+  }
+  // Which characters the role suits, set by a person: the boot-time guess flag
+  // clears with it, so no later boot overwrites the village's word (economySeed).
+  // The route checks the keys against the cast first (`characterTagsFrom`).
+  if (Array.isArray(body.archetypes)) {
+    sets.push("`archetypes` = ?", "`archetypes_suggested` = 0");
+    args.push(JSON.stringify(body.archetypes));
   }
   // An override with no expiry is a status column with extra steps, so a
   // caller that sets one must say how long it stands for.
@@ -1023,7 +1101,8 @@ export type OrgRoleValueEdit = {
   cashCurrency?: string | null;
 };
 
-function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
+/** The SET clauses and arguments for a role's value, list and cash: the one writer, also used by an org draft's publish. */
+export function valueSets(v: OrgRoleValueEdit | undefined, sets: string[], args: unknown[]): void {
   if (!v) return;
   if (v.valueMinor !== undefined) {
     const set = v.valueMinor !== null && !!v.valueCurrency;
@@ -1155,6 +1234,7 @@ export async function seatHolder(
         h.applicationId ?? null,
       ],
     );
+    seatingsChanged();
     return { ok: true, assignmentId };
   } catch (e: any) {
     // The unique key is on (seat, active holder key), so this is the one
@@ -1176,6 +1256,8 @@ export async function endSeating(pool: Pool | PoolConnection, assignmentId: stri
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE id = ? AND ended_at IS NULL",
     [reason ?? null, assignmentId],
   );
+  seatingsChanged();
+  if (r?.affectedRows) await raiseRevokeForEnded(pool, [assignmentId]);
   return !!r?.affectedRows;
 }
 
@@ -1203,10 +1285,13 @@ export async function releaseSeatingsForUser(
   userId: string,
   reason: string,
 ): Promise<number> {
+  const liveIds = await liveAssignmentIdsOfUser(pool, userId);
   const [ended]: any = await pool.query(
     "UPDATE org_role_assignments SET ended_at = NOW(), ended_reason = ? WHERE user_id = ? AND ended_at IS NULL",
     [reason, userId],
   );
+  seatingsChanged();
+  await raiseRevokeForEnded(pool, liveIds);
   await pool.query(
     "UPDATE org_role_assignments SET display_name = NULL, note = NULL WHERE user_id = ?",
     [userId],
@@ -1283,6 +1368,7 @@ export async function claimSeating(pool: Pool, assignmentId: string, userId: str
     // 0319: an agent account holds no role, by this door either (seatHolder's refusal, and why).
     [userId, userId, assignmentId, userId, userId],
   );
+  seatingsChanged();
   return !!r?.affectedRows;
 }
 
@@ -1751,4 +1837,22 @@ export function circleDecidesProblem(v: unknown): string | null {
     if (!known.has(key)) return `"${key}" is not part of a decides declaration`;
   }
   return null;
+}
+
+/**
+ * A role's character tags as a person sets them in the admin org chart (role
+ * draft board, Rye 9 Nov 2026). Only keys in the village's own cast pass: an
+ * unknown key silently matches nothing anywhere it is joined
+ * (shared/archetypes.ts), so it is refused by name instead. An empty list is a
+ * decision ("suits no character in particular"), not a reset to the guess.
+ */
+export function characterTagsFrom(v: unknown, cast: readonly string[]): { ok: true; tags: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) return { ok: false, error: "Characters arrive as a list of the village's character keys." };
+  const tags: string[] = [];
+  for (const raw of v as string[]) {
+    const k = raw.trim();
+    if (!cast.includes(k)) return { ok: false, error: `"${k.slice(0, 40)}" is not one of this village's characters.` };
+    if (!tags.includes(k)) tags.push(k);
+  }
+  return { ok: true, tags };
 }

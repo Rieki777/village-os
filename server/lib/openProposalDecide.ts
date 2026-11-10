@@ -42,6 +42,7 @@
  *
  * No `recordEvent` and no `addActivity`: the rows are the record.
  */
+import { cardSummary } from "../../shared/openProposalCard";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
 import { civilDateKey } from "../../shared/lunar";
@@ -61,14 +62,16 @@ import type { InvitedArrival } from "./inviteDoor";
 import type { NotifyInput } from "./notify";
 import { isTombstone } from "./oauthAccounts";
 import { listOrgRoles, type LapseContext } from "./orgChart";
-import { adoptApplication, settleDepsOf, tellOutcome } from "./seatApplicationCloser";
+import { adoptApplication, settleDepsOf, tellOutcome, wholeSecond } from "./seatApplicationCloser";
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
-import { grantStage } from "./stageGrant";
 import { inTransaction } from "../repos/liveSessions";
 import { inviteById, revokeInvite } from "../repos/memberInvites";
 import * as store from "../repos/openProposals";
 import { asksFor, holdersInCircles, insertAsks } from "../repos/roleProposals";
 import { inApplicationTransaction, seatsForUpdate, seatsWithCircles } from "../repos/seatApplications";
+import { announceReview, beginReview, type ReviewDeps, type ReviewStart } from "./applicationReview";
+import { agentRoleNamesInCircles, stampStep } from "../repos/applicationReview";
+import { REVIEW_WORDS } from "../../shared/applicationReview";
 
 type Db = Pool | PoolConnection;
 
@@ -121,6 +124,10 @@ export interface Confirmed {
   closesAt: Date;
   /** The proposer's own account here, if their address has one. Never asked, never told. */
   own: string | null;
+  /** The review begun at confirm: the role's interviewers, in order (role journey L5). */
+  review?: ReviewStart;
+  /** Roles in the circles held by an AI agent: never asked, and the round says so (D31). */
+  skippedAgents?: string[];
 }
 
 /**
@@ -131,7 +138,7 @@ export interface Confirmed {
  * from now. Null when the token confirms nothing: used, run out, or unknown.
  */
 export async function confirmAndAsk(
-  deps: Pick<DecideDeps, "getPool" | "members" | "calendar">,
+  deps: Pick<DecideDeps, "getPool" | "members" | "calendar"> & Pick<ReviewDeps, "consentAfterInterviews">,
   confirmHash: string,
   notBefore: Date,
   at: Date,
@@ -156,8 +163,15 @@ export async function confirmAndAsk(
         asked.push({ userId: h.userId, circleId });
       }
     }
-    await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
-    return { proposal, asked, closesAt, own };
+    // The review begins in this same transaction, so a proposal is never confirmed with half a review.
+    const review = await beginReview(conn, deps, { ref: proposal.id, roleIds: proposal.body.roles.map((r) => r.roleId), applicantUserId: own, at });
+    // Where the village asked for it, the circle is asked once the interviews are scored (shared/applicationReview.ts).
+    if (!review.holdConsent) {
+      await insertAsks(conn, asked.map((a) => ({ proposalId: proposal.id, userId: a.userId, circleId: a.circleId, askedAt: at, closesAt })));
+      await stampStep(conn, { ref: proposal.id, kind: "consent", at });
+    }
+    const skippedAgents = await agentRoleNamesInCircles(conn, circles);
+    return { proposal, asked, closesAt, own, review, skippedAgents };
   });
 }
 
@@ -169,16 +183,30 @@ export async function confirmAndAsk(
  * per proposal and person, so a retry writes nothing twice.
  */
 export async function tellTheCircle(deps: Pick<DecideDeps, "getPool" | "notify" | "notifyAdmins" | "liveHoldersOf" | "calendar">, c: Confirmed): Promise<void> {
+  if (c.review) await announceReview(deps, c.review, greetingName(c.proposal.name));
   const pool = deps.getPool();
   const names = await roleNames(pool, c.proposal);
   const link = openProposalHref(c.proposal.id);
   const closesOn = civilDateKey(new Date(c.closesAt.getTime() - 1), deps.calendar().timezone || "UTC");
   for (const a of c.asked) {
+    if (c.review?.holdConsent) {
+      // Told it arrived; the ask itself waits for the interviews.
+      await deps.notify({
+        userId: a.userId,
+        type: "application_arrived",
+        title: REVIEW_WORDS.arrived(names),
+        body: REVIEW_WORDS.consentWaitsForInterviews,
+        link,
+        actorUserId: null,
+        dedupeKey: `op:${c.proposal.id}:arrived:${a.userId}`,
+      });
+      continue;
+    }
     await deps.notify({
       userId: a.userId,
       type: "open_role_proposal_consent_ask",
       title: CONSENT_WORDS.askTitle(names),
-      body: CONSENT_WORDS.askBody(closesOn),
+      body: `${CONSENT_WORDS.askBody(closesOn)}${c.skippedAgents?.length ? ` ${REVIEW_WORDS.agentsSkipped(c.skippedAgents)}` : ""}`,
       link,
       actorUserId: null,
       dedupeKey: `op:${c.proposal.id}:ask:${a.userId}`,
@@ -220,21 +248,50 @@ export type Placed =
  * the season's first day. An application already waiting for one of the roles
  * is answered `pending`, with its id, and nothing is written.
  */
+/**
+ * What the role application says the person will deliver: their aim, then
+ * their own role card (shared/openProposalCard.ts) in plain words, within the
+ * application's 2000 characters.
+ */
+function deliverablesOf(body: store.StoredOpenProposal["body"], seats: Array<{ id: string; name?: string }>): string {
+  const aim = String(body.aim ?? "").trim();
+  if (!body.card) return aim;
+  const name = (id: string) => seats.find((s) => s.id === id)?.name ?? id;
+  const goal = (id: string) => body.card?.serves.find((s) => s.goalId === id)?.goal || id;
+  const text = [aim, cardSummary(body.card, name, goal)].filter(Boolean).join("\n\n");
+  return text.length > 2000 ? `${text.slice(0, 1997)}...` : text;
+}
+
 export async function placeOnRoles(
   deps: DecideDeps,
-  p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string },
+  p: { account: string; proposal: store.StoredOpenProposal; adopterId: string; authority: string; /** False writes the application and stops: it waits for a vote (role journey L5, the ballot fallback). */ adopt?: boolean },
 ): Promise<Placed> {
   const pool = deps.getPool();
   const calendar = deps.calendar();
   const tz = calendar.timezone || "UTC";
   const now = deps.now();
   const season = calendar.seasons.find((s) => s.id === p.proposal.targetSeasonId);
-  const startsAt = season ? civilDateInstant(season.startsOn, tz) : null;
+  const term = p.proposal.body.term;
+  // A season proposal starts on the season's first day. A moon proposal starts
+  // at adoption, never before the moon's first day, and ends on its last day
+  // (shared/openProposalTerm.ts, Rye 9 Nov 2026).
+  const moonStart = term ? civilDateInstant(term.startsOn, tz) : null;
+  // "Now" in whole seconds, the precision `starts_at` keeps (see startReached in seatApplicationCloser.ts).
+  const nowSecond = wholeSecond(now);
+  const startsAt = term ? (moonStart && moonStart.getTime() > now.getTime() ? moonStart : nowSecond) : season ? civilDateInstant(season.startsOn, tz) : null;
   if (!season || !startsAt) return { ok: false, code: "cannot", error: "The season this proposal was for is no longer on the village's calendar, so nothing was changed." };
+  if (term && civilDateKey(now, tz) > term.endsOn) {
+    return { ok: false, code: "cannot", error: "The moon this proposal was for has ended, so nothing was changed. Ask them to propose again for this moon." };
+  }
   const seatIds = p.proposal.body.roles.map((r) => r.roleId);
-  const parsed = parseApplicationInput({ seatIds, note: p.proposal.body.why || null, deliverables: p.proposal.body.aim || null });
-  if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   const seats = await seatsForUpdate(pool, seatIds);
+  const parsed = parseApplicationInput({
+    seatIds,
+    note: p.proposal.body.why || null,
+    deliverables: deliverablesOf(p.proposal.body, seats) || null,
+    ...(term ? { settings: { v: 1, term: { endsOn: term.endsOn } } } : {}),
+  });
+  if (!parsed.ok) return { ok: false, code: "cannot", error: parsed.error };
   for (const id of seatIds) {
     const seat = seats.find((s) => s.id === id);
     if (!seat || !seat.active || seat.isExample) {
@@ -260,6 +317,7 @@ export async function placeOnRoles(
     throw e;
   }
   const id = made.app.row.id;
+  if (p.adopt === false) return { ok: true, applicationId: id, outcome: "awaiting-holder" };
   const { outcome, app, textId } = await adoptApplication(
     pool,
     id,
@@ -269,7 +327,11 @@ export async function placeOnRoles(
   );
   if (app) await tellOutcome(deps, app, outcome, "open", p.adopterId);
   if (textId) await settleText(settleDepsOf(deps, deps.now), textId);
-  await grantStage(deps, p.account, "member", "a role proposal was adopted", { raiseOnly: true });
+  // NO STAGE GRANT HERE (Rye's ruling: Voice is only for people who signed the
+  // membership agreement). A stage grant at Member is an admission
+  // (server/lib/admission.ts), and it opened ballots to somebody who had signed
+  // nothing. The seat is placed; Member comes when their signed Love Letter is
+  // accepted, which the adoption letter asks for.
   return { ok: true, applicationId: id, outcome: outcome.kind };
 }
 
@@ -288,6 +350,23 @@ export async function placeOnRoles(
  * arrival made places it, so a second arrival places nothing twice. A proposal
  * adopted onto an account already here made no invitation and was placed then.
  */
+/**
+ * WHAT AN ADOPTED PROPOSAL'S LINK SAYS ON THE SIGN-UP PAGE (role audit, 10 Nov
+ * 2026): the roles it places the person on, and the name and address they sent,
+ * so the account step finishes the application instead of starting over. Only
+ * an adopted proposal answers; anything else reads as an ordinary invitation.
+ */
+export function describeFor(deps: Pick<DecideDeps, "getPool">): (inviteId: string) => Promise<{ roles: string[]; name: string | null; email: string | null } | null> {
+  return async (inviteId) => {
+    const id = proposalOfInvite(inviteId);
+    if (!id) return null;
+    const pool = deps.getPool();
+    const proposal = await store.readOpenProposal(pool, id);
+    if (!proposal || proposal.status !== "adopted") return null;
+    return { roles: await roleNames(pool, proposal), name: proposal.name ?? null, email: proposal.email ?? null };
+  };
+}
+
 export function arrivalFor(deps: DecideDeps): InvitedArrival {
   return async ({ inviteId, inviterUserId, userId }) => {
     const id = proposalOfInvite(inviteId);

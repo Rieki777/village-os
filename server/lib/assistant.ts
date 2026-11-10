@@ -32,6 +32,7 @@ import { fenceForPrompt, toolNameToKey } from "./villageReaders";
 import { providerFor, type ProviderId, type ToolResult, type WireMessage } from "./assistantProviders";
 import { guardedFetchJson } from "./toolcheck";
 import { PLATFORM_CALLS, notePlatformCall, type PlatformCallOutcome } from "./integrations";
+import { seraGuideQuestion, type SeraAsk } from "./seraGuideQuestion";
 
 export type AssistantMode =
   | "proposal"
@@ -43,7 +44,9 @@ export type AssistantMode =
   | "synthesize"
   | "journal"
   | "roleGuide"
-  | "card";
+  | "card"
+  | "adminHelper"
+  | "fieldHelp";
 
 export interface ModeSpec {
   audience: "public" | "member" | "admin";
@@ -83,6 +86,18 @@ export const ASSISTANT_MODES: Record<AssistantMode, ModeSpec> = {
   // card after card cannot spend the journal's day. No tools: the facts arrive
   // prefetched, and a card that cannot be woven is served plain.
   card: { audience: "member", dailyBudget: 120, maxTokens: 1400, toolCalls: 0 },
+  // The Admin helper (server/routes/adminHelper.ts): the village's guide in a
+  // panel beside Admin, answering "how do I" and proposing one dial change at
+  // a time for the admin to apply. Three reader calls a turn: find the page or
+  // setting, then the org chart or the open requests if the question needs
+  // them. It writes nothing; the admin's Apply goes through the dial's own
+  // route.
+  adminHelper: { audience: "admin", dailyBudget: 120, maxTokens: 1500, toolCalls: 3 },
+  // "Talk it out" beside a long text box (server/routes/fieldGuide.ts): a
+  // member talks a field through with their own guide and gets a draft in
+  // their voice. Its own bucket, so drafting a profile never spends the
+  // journal's day. No tools: it sees only the box and the conversation.
+  fieldHelp: { audience: "member", dailyBudget: 200, maxTokens: 1200, toolCalls: 0 },
 };
 
 /** Conversation limits, shared so no mode can quietly widen them. */
@@ -103,6 +118,13 @@ export const ASSIST_BURST_PER_HOUR = 30;
  * fields are different jobs and should not be forced onto one tier forever.
  */
 export const DEFAULT_ASSISTANT_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * The Admin helper's model (2026-11-09): it reads the whole Admin map and
+ * proposes changes an admin will apply, so it runs on the stronger tier. Kept
+ * here beside the default, the one place model ids live.
+ */
+export const ADMIN_HELPER_MODEL = "claude-sonnet-5-5";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -174,11 +196,13 @@ export function wireAssistant(d: AssistantDeps): void {
  * because it belongs to one member and a module-level dep would make one
  * member's key everybody's.
  */
-export type KeySource = "village" | "platform" | "member";
+/** `sera`: the org memory service's agent answered (server/lib/seraGuideCall.ts), no Anthropic key spent. */
+export type KeySource = "village" | "platform" | "member" | "sera";
 
 export interface ResolvedKey {
   key: string;
-  source: KeySource;
+  /** A key is never Sera's: she answers through the connection, not a key. */
+  source: Exclude<KeySource, "sera">;
 }
 
 /** A member's own key, already decrypted by memberSecrets on its way here. */
@@ -407,6 +431,16 @@ export interface AssistantRequest {
    * still runs first: it is about a caller, not about whose money is spent.
    */
   memberKey?: MemberKey | null;
+  /**
+   * SERA ANSWERS INSTEAD (2026-11-09). Present when the person asking chose
+   * Sera as their guide and the village's connection can answer
+   * (`seraGuideAsk`). The burst guard and the mode's day budget still run;
+   * then one `ask_sera` question carries `system`, the `prefetch` and the
+   * conversation, and its words come back as `text` for the caller's own
+   * parser. There is no tool loop on this road, so a caller that wants a
+   * reader read puts it in `prefetch`.
+   */
+  sera?: SeraAsk | null;
 }
 
 /**
@@ -516,6 +550,8 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
   if (await deps.rateLimited(burstKey, req.burstPerHour ?? ASSIST_BURST_PER_HOUR, 60 * 60 * 1000)) {
     return { ok: false, status: 429, error: "Slow down a moment, then keep going." };
   }
+
+  if (req.sera) return callSeraRoad(req, spec, req.sera);
 
   const resolved = resolveKey(process.env, req.memberKey);
   if (!resolved) return { ok: false, status: 503, error: "assistant-unavailable" };
@@ -670,6 +706,33 @@ export async function callAssistant(req: AssistantRequest): Promise<AssistantRes
     console.warn(`[assistant:${req.mode}] loop ended on tool_use after ${iterations} call(s), reply is empty`);
   }
   return { ok: true, text, keySource: resolved.source, usage, stopReason, iterations, toolsUsed };
+}
+
+/**
+ * The Sera road, after the burst guard: the mode's day budget, then ONE
+ * question. Usage reads zero tokens because none of the village's Anthropic
+ * money was spent; the row still says it happened, with `keySource: "sera"`.
+ */
+async function callSeraRoad(req: AssistantRequest, spec: ModeSpec, ask: SeraAsk): Promise<AssistantResult> {
+  const today = new Date().toISOString().slice(0, 10);
+  if (await deps.rateLimited(`assistant-day:${req.mode}:${today}`, spec.dailyBudget, 24 * 60 * 60 * 1000)) {
+    return { ok: false, status: 503, error: "assistant-unavailable" };
+  }
+  const prefetch = req.prefetch ?? [];
+  const said = await ask(seraGuideQuestion({ system: req.system, prefetch, conversation: req.messages }));
+  if (!said.ok) {
+    console.error(`[assistant:${req.mode}] sera could not answer`);
+    return { ok: false, status: 502, error: "assistant-error" };
+  }
+  return {
+    ok: true,
+    text: said.text,
+    keySource: "sera",
+    usage: { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 },
+    stopReason: "end_turn",
+    iterations: 1,
+    toolsUsed: prefetch.map((p) => p.key),
+  };
 }
 
 /** Whether this deployment is currently spending the platform's key. */

@@ -31,10 +31,13 @@
  * reported, and `ignored` says what was left behind, the same way the seat
  * reader reports keys it did not read.
  *
- * A second, cheaper net sits behind it: any value that looks like an email
- * address is dropped whatever field it arrived in, because the intake rule for
- * this whole platform is that a record carrying an address is refused rather
- * than partially cleaned, and a vendor record is not exempt from it.
+ * A second, cheaper net sits behind it: any field whose value looks like an
+ * email address is DROPPED, whatever field it arrived in, and named in
+ * `droppedForAnAddress`. The record itself still crosses with its other
+ * fields. Only the field goes: a vendor record is not refused whole the way
+ * the proposal intake refuses a payload carrying an address, and the net
+ * catches email-shaped strings only, so a phone number or a name in prose
+ * still crosses (the sync swaps members' names out of the prose it keeps).
  *
  * Pure: no pool, no clock, no network. The caller hands in what it fetched.
  */
@@ -69,10 +72,11 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
      * means this village systematically holds an outside service's mapping of
      * people to seats, for everybody, which is `member-pii` and carries the
      * three-part bar. `Body` is prose describing a seat. It may name somebody
-     * in passing, exactly as any proposal's free text may, and it meets the
-     * same three defences the rest of the intake already applies: an address
-     * makes the whole record refused, nothing here is ever auto-accepted, and
-     * a steward reads it before it becomes part of the chart.
+     * in passing, exactly as any proposal's free text may, and it meets three
+     * defences: a field holding an address is dropped (the field, never the
+     * whole record), nothing here is ever auto-accepted, and a steward reads
+     * it before it becomes part of the chart. The sync's snapshot also swaps
+     * members' names out of it before keeping it.
      */
     "Body",
     /**
@@ -88,6 +92,18 @@ const ALLOWED: Readonly<Record<string, readonly string[]>> = {
     "Compensation Status",
     "Compensation Terms",
     "Compensation Target (Monthly)",
+    /**
+     * The role's pay RANGE in structured fields, as the service's budget keeps
+     * it (D6, role journey L10). Numbers, selects and short labels; read into
+     * `sourcePay.range` by the translator and never written to a role's terms.
+     */
+    "Pay Min",
+    "Pay Max",
+    "Currency",
+    "Per",
+    "Budget Line",
+    "Funded From",
+    "Pay Status",
   ],
   /**
    * `Role Holder` is absent on purpose and so is `Active Holders` above. Who
@@ -205,4 +221,25 @@ export function readVendorRecord(kind: SaberraRecordKind, raw: unknown): ReadRec
 /** The fields this connector will show for a kind, for a card that wants to say so. */
 export function shownFields(kind: SaberraRecordKind): readonly string[] {
   return ALLOWED[kind] ?? [];
+}
+
+/**
+ * The one record-level key besides the id that may cross: WHEN the service
+ * last edited the record, never WHO (spec R11). A Notion-backed record carries
+ * `last_edited_by` beside `last_edited_time`, and the first names a person, so
+ * this is an allow list of its own: these two spellings, holding a date or a
+ * date and time and nothing else, read back as one instant.
+ */
+const EDITED_AT_KEYS = ["last_edited_time", "lastEditedTime"] as const;
+const DATE_SHAPED = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+export function editedAtOf(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  for (const k of EDITED_AT_KEYS) {
+    const v = (raw as Record<string, unknown>)[k];
+    if (typeof v !== "string" || !DATE_SHAPED.test(v.trim())) continue;
+    const ms = Date.parse(v.trim());
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return null;
 }

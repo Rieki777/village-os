@@ -28,6 +28,7 @@
  *   node scripts/check-modules-doc.mjs --list   print what the generator reads
  */
 import fs from "node:fs";
+import { driftIsFatal } from "./lib/generatedDocs.mjs";
 import path from "node:path";
 import { DOC_PATH, ROOT, SOURCES, generateDetailed } from "./generate-modules-doc.mjs";
 
@@ -88,7 +89,7 @@ if (!diff) {
       `${facts.modules.length} module(s), ${facts.core.length} core, ` +
       `${facts.modules.filter((m) => m.doc).length} with a contract doc.`,
   ]);
-} else {
+} else if (driftIsFatal({ label: REL, found, wanted, regenerate: REGENERATE })) {
   report([
     `${REL} and the registry have come apart. ${diff.differing} line(s) differ.`,
     "",

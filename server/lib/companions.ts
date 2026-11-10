@@ -52,6 +52,8 @@ import {
   MAX_BODY,
   MAX_QUOTE,
   MAX_TITLE,
+  MEMBER_ADDRESS,
+  outsideAddressesOf,
   parseLook,
   QUESTION_EXPIRY_DAYS,
   refusalFor,
@@ -76,6 +78,7 @@ import {
   itemByDedupeKey,
   itemById,
   itemsForCompanions,
+  anyMemberAddress,
   membersByIds,
   openHeld,
   questionsShownOn,
@@ -102,6 +105,14 @@ export interface CompanionsEnv {
   roleScope: string;
   /** The village guide's name, named above every chat it answers. */
   guideName: string;
+  /** The name the outside service's agent answers under: the saberra module's own, never a constant here. */
+  outsideGuideName: string;
+  /**
+   * The guide a member's personal companion speaks through: their own choice
+   * (shared/guideChoice.ts, `companionGuideOf`). Asked for any member, since
+   * a hand-over syncs the new holder's army too.
+   */
+  guideOf: (userId: string) => Promise<CompanionProvider>;
 }
 
 const PERSONAL_NAME = "Personal companion";
@@ -116,9 +127,9 @@ export function roleHasCompanion(roleScope: string, roleId: string): boolean {
   return s.split(",").map((x) => x.trim()).filter(Boolean).includes(roleId);
 }
 
-/** The engine's display name. The outside one is named by its own name. */
-export function engineName(provider: CompanionProvider, guideName: string): string {
-  return provider === "saberra" ? "Sera" : guideName.trim() || "The village guide";
+/** The engine's display name: the village's name for its own guide, the module's for the outside agent. */
+export function engineName(provider: CompanionProvider, env: Pick<CompanionsEnv, "guideName" | "outsideGuideName">): string {
+  return provider === "saberra" ? env.outsideGuideName : env.guideName.trim() || "The village guide";
 }
 
 // ── The army ─────────────────────────────────────────────────────────────
@@ -131,14 +142,19 @@ export function engineName(provider: CompanionProvider, guideName: string): stri
  */
 export async function syncArmy(env: CompanionsEnv, userId: string): Promise<CompanionRow[]> {
   const pool = env.pool;
+  // The personal companion follows the member's own chosen guide (Rye,
+  // 2026-11-06), so a switch on the guide chooser moves it on the next read.
+  const guide = await env.guideOf(userId);
   let mine = await companionsOf(pool, userId);
-  if (!mine.some((c) => c.scope === "personal")) {
+  const personal = mine.find((c) => c.scope === "personal");
+  if (personal && personal.provider !== guide) await updateCompanion(pool, personal.id, { provider: guide });
+  if (!personal) {
     await insertCompanionIfAbsent(pool, {
       id: `comp-${randomUUID().slice(0, 12)}`,
       ownerUserId: userId,
       scope: "personal",
       scopeId: "",
-      provider: "village",
+      provider: guide,
       name: DEFAULT_PERSONAL_NAME,
       look: JSON.stringify(defaultLook(0)),
       dailyQuestionCap: 3,
@@ -250,6 +266,7 @@ export async function landItem(env: CompanionsEnv, companion: CompanionRow, inpu
     return { ok: false, error: "A question carries no draft kind." };
   }
   if (carriesContact([title, body, quote])) return { ok: false, error: "An item may not carry an email address or a phone number." };
+  if (await anyMemberAddress(pool, outsideAddressesOf(payload))) return { ok: false, error: MEMBER_ADDRESS };
   if (input.dueOn != null && !/^\d{4}-\d{2}-\d{2}$/.test(String(input.dueOn))) return { ok: false, error: "due_on must be a date." };
 
   const dedupeKey =
@@ -439,15 +456,19 @@ export function draftDetail(kind: DraftKind, p: Record<string, unknown>, names: 
     case "quest":
       return [p.description ? String(p.description) : "", p.firstStep ? `First step: ${String(p.firstStep)}` : ""].filter(Boolean).join("\n");
     case "email":
-      return `Subject: ${String(p.subject)}\n"${String(p.text)}"`;
+      return `${p.toOutside ? `To ${String(p.toOutside)}\n` : ""}Subject: ${String(p.subject)}\n"${String(p.text)}"`;
     default:
       return "";
   }
 }
 
+/** The member's own mail, opened with the draft's words, and addressed to the vendor when the draft names one. */
 export function mailtoFor(p: Record<string, unknown>): string {
-  return `mailto:?subject=${encodeURIComponent(String(p.subject ?? ""))}&body=${encodeURIComponent(String(p.text ?? ""))}`;
+  const to = typeof p.toOutside === "string" ? encodeURIComponent(p.toOutside.trim()) : "";
+  return `mailto:${to}?subject=${encodeURIComponent(String(p.subject ?? ""))}&body=${encodeURIComponent(String(p.text ?? ""))}`;
 }
+
+export { MEMBER_ADDRESS };
 
 function scopeLine(c: CompanionRow, roleNames: Map<string, string>): string {
   if (c.scope === "personal") return PERSONAL_NAME;
@@ -520,9 +541,10 @@ export async function armyView(
       scope: c.scope,
       scopeId: c.scopeId,
       provider: c.provider,
-      engine: engineName(c.provider, env.guideName),
+      engine: engineName(c.provider, env),
       engineConnected: c.provider === "village",
-      chatEngine: engineName("village", env.guideName),
+      chatEngine: engineName("village", env),
+      outsideEngine: engineName("saberra", env),
       name: c.name,
       scopeLine: scopeLine(c, roleNames),
       look: parseLook(c.look) ?? defaultLook(i),
@@ -633,6 +655,8 @@ export async function planConfirm(pool: Pool, userId: string, itemId: string, ed
   const why = validateCompanionPayload(kind, merged.payload);
   if (why) return { ok: false, status: 400, error: why };
   const p = merged.payload;
+  // Asked again at the yes: a vendor may have joined the village since the draft landed.
+  if (await anyMemberAddress(pool, outsideAddressesOf(p))) return { ok: false, status: 409, error: MEMBER_ADDRESS };
   const names = await namesFor(pool, [{ payload: p }]);
   const nonce = `companion-${it.id}`;
 

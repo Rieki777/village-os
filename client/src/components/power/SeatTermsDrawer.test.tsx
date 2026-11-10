@@ -66,7 +66,7 @@ describe("SeatTermsDrawer", () => {
     const b = within(body);
     expect(b.getByText("Until the season ends")).toBeInTheDocument();
     expect(b.getByText("€800 a month")).toBeInTheDocument();
-    expect(b.getByText("3 to 5 quests a moon")).toBeInTheDocument();
+    expect(b.getByText("3 to 5 tasks a moon")).toBeInTheDocument();
     // Pay and bonus are both money rows; term and quests are not.
     expect(b.getAllByText(MONEY_LINE)).toHaveLength(2);
     expect(b.getByText(/We'll fill this together with the village's operations role: Clocks, Rhythm, Allowance, Scoreboard, Ending/)).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("SeatTermsDrawer", () => {
     const picked = applyPreset(null, presetById("platform:three-to-five-done-when-by-consent")!);
     const tweaked: SeatSettings = { ...picked, quests: { ...picked.quests!, perMoonMax: 6 } };
     render(<SeatTermsDrawer settings={tweaked} defaultOpen />);
-    const row = screen.getByRole("button", { name: /Quests/ });
+    const row = screen.getByRole("button", { name: /Tasks/ });
     expect(row).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(row);
     expect(row).toHaveAttribute("aria-expanded", "true");

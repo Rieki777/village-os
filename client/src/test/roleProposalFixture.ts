@@ -59,10 +59,10 @@ export const OFF_SHARE: ShareOut = { on: false, audience: "members", link: null,
 export function consentOf(state: ConsentState, extra: Partial<ConsentOut> = {}): ConsentOut {
   const words: Record<ConsentState, string> = {
     open: "The circle is asked to consent or object by 6 November 2026.",
-    objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. It can still be adopted by a holder of the power that seats people.",
+    objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. It can still be adopted by a holder of the power to place people in roles.",
     consented: "Consented by the circle",
-    lapsed: "The circle's 2 business days passed with no consent. It can still be adopted by a holder of the power that seats people.",
-    "no-other-holders": "Nobody else holds a role in this circle, so the circle cannot consent. It is adopted by a holder of the power that seats people.",
+    lapsed: "The circle's 2 business days passed with no consent. It can still be adopted by a holder of the power to place people in roles.",
+    "no-other-holders": "Nobody else holds a role in this circle, so the circle cannot consent. It is adopted by a holder of the power to place people in roles.",
   };
   return {
     state,

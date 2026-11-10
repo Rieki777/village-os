@@ -17,6 +17,7 @@
  * terms tier, where a reader may not know what a role pays.
  */
 import { Award, Coins, HandCoins } from "lucide-react";
+import { useLingui } from "@lingui/react/macro";
 import type { WorkPay } from "@shared/workValue";
 import {
   agreementCashWords,
@@ -38,11 +39,13 @@ export default function WorkPayBlock({
   /** `card` is the compact chip a board shows; `full` is the detail page's paragraph. */
   variant?: "card" | "full";
 }) {
+  const { t } = useLingui();
   const rates = useDisplayRates();
   if (!pay) return null;
   const headline = payHeadline(pay);
   const value = pay.value ? valueWords(pay.value, rates) : null;
   const cash = agreementCashWords(pay);
+  const cashNote = !pay.cashPay && pay.cash?.note ? pay.cash.note : null;
   // 0285: the cash the work itself pays, which the village owes and records.
   const ownCash = cashPayWords(pay, rates);
   const every = pay.cadence === "cycle" ? " each cycle" : "";
@@ -98,6 +101,11 @@ export default function WorkPayBlock({
               Worth {value.own}
               {value.converted && <span className="font-normal text-muted-foreground"> ({value.converted})</span>}
             </p>
+          ) : cash ? (
+            // The role states its cash, so the card leads with that and does not open on "no value": the cash line below is the pay.
+            <p className="font-semibold text-foreground">
+              {t({ message: `${cash} in cash, per the role agreement.`, context: "work pay cash line" })}
+            </p>
           ) : (
             <p className="text-muted-foreground">No value set yet. Inquire for the full payment details.</p>
           )}
@@ -127,7 +135,13 @@ export default function WorkPayBlock({
           {pay.source === "standard" && pay.lines.length > 0 && (
             <p className="text-xs text-muted-foreground">These are the village&apos;s standard amounts.</p>
           )}
-          {cash && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {cash && value && <p className="text-foreground">Plus {cash} in cash, per the role agreement.</p>}
+          {cashNote && <p data-work-pay-note="" className="text-sm text-muted-foreground">{cashNote}</p>}
+          {pay.lines.filter((l) => l.meaning).map((l) => (
+            <p key={`meaning:${l.token}`} data-work-pay-meaning="" className="text-xs text-muted-foreground">
+              {l.name}: {l.meaning}
+            </p>
+          ))}
           {voices.length > 0 && (
             <p data-work-pay-voice="" className="text-xs text-muted-foreground">
               {voices.join(" and ")} is your say in the village&apos;s decisions.

@@ -114,16 +114,16 @@ describe("who reads an application", () => {
   it("a visitor gets the sign-in doors, and nothing is fetched", () => {
     signedIn = null;
     render(<SeatApplication />);
-    expect(screen.getByText("Members read role applications.")).toBeTruthy();
+    expect(screen.getByText("Members read role proposals.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toContain(`/role-applications/${ID}`);
     expect(asked.filter((a) => a.includes("role-applications"))).toEqual([]);
   });
 
   it("a guest answered 401 reads the members line and no terms", async () => {
     signedIn = { id: "u-guest" };
-    answer = () => json({ error: "auth_required", message: "Members read role applications." }, 401);
+    answer = () => json({ error: "auth_required", message: "Members read role proposals." }, 401);
     render(<SeatApplication />);
-    expect(await screen.findByText("Members read role applications.")).toBeTruthy();
+    expect(await screen.findByText("Members read role proposals.")).toBeTruthy();
     expect(screen.queryByText(/Recorded here/)).toBeNull();
     expect(screen.queryByText(/orchard ledger/)).toBeNull();
   });
@@ -132,7 +132,7 @@ describe("who reads an application", () => {
 describe("a member reading one", () => {
   it("shows every seat, the terms with the money line, and the member's words", async () => {
     render(<SeatApplication />);
-    expect(await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Lead steward and Platform steward" })).toBeTruthy();
     expect(screen.getByText("Waiting for a role holder")).toBeTruthy();
     expect(await screen.findAllByText("Recorded here. Paid outside the platform.")).not.toHaveLength(0);
     expect(screen.getByText("I kept the orchard ledger last season.")).toBeTruthy();
@@ -142,7 +142,7 @@ describe("a member reading one", () => {
 
   it("A PACKAGE OF SEATS DRAWS ONE DRAWER, and live seats read as they stand, never Proposed (red team U11)", async () => {
     render(<SeatApplication />);
-    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" });
+    await screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Lead steward and Platform steward" });
     // Both live cards drawn (the village's seats have loaded), then the drawers counted.
     await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(2));
     expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
@@ -154,7 +154,7 @@ describe("a member reading one", () => {
   it("CONTROL: one seat keeps its drawer in the card's tray, with no package line", async () => {
     answer = () => json({ application: { ...SERVED, seats: [SERVED.seats[0]] } });
     render(<SeatApplication />);
-    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward" });
+    await screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Lead steward" });
     await waitFor(() => expect(document.querySelectorAll("[data-power-card]").length).toBe(1));
     expect(document.querySelectorAll("[data-seat-terms]").length).toBe(1);
     expect(document.querySelector("[data-package-terms]")).toBeNull();
@@ -175,18 +175,18 @@ describe("a member reading one", () => {
     render(<SeatApplication />);
     expect(await screen.findByText("Your own terms go to the village to adopt.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Align for the village" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Withdraw my application" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Withdraw my proposal" })).toBeTruthy();
   });
 
   it("asks once before withdrawing, and withdraws only on the yes (red team U1)", async () => {
     answer = () =>
       json({ application: { ...SERVED, you: { isCandidate: true, mayAdopt: false, mayPutToVillage: false, mayWithdraw: true, holdsThePower: false } } });
     render(<SeatApplication />);
-    fireEvent.click(await screen.findByRole("button", { name: "Withdraw my application" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Withdraw my proposal" }));
     expect(asked.some((a) => a.endsWith("/withdraw"))).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     expect(asked.some((a) => a.endsWith("/withdraw"))).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Withdraw my application" }));
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw my proposal" }));
     fireEvent.click(screen.getByRole("button", { name: "Yes, withdraw it" }));
     await waitFor(() => expect(asked).toContain(`POST /api/governance/role-applications/${ID}/withdraw`));
   });
@@ -197,7 +197,7 @@ describe("a member reading one", () => {
     render(<SeatApplication />);
     expect(await screen.findByText("Carried, lands on 12 November 2029.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Read the vote" }).getAttribute("href")).toBe("/decisions/bal-1");
-    expect(screen.queryByRole("button", { name: "Withdraw my application" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Withdraw my proposal" })).toBeNull();
   });
 
   it("CONTROL: a member who holds no power gets neither door", async () => {

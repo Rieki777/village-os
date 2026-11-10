@@ -82,6 +82,8 @@ export function register(app: Express, deps: Deps): void {
             settings: a.settings,
             termEndsAt: a.termEndsAt ? a.termEndsAt.toISOString() : null,
             season,
+            // B1: what the member door asked, on the card that answers for it.
+            answers: a.answers ? { aim: a.answers.aim, servesGoal: a.answers.servesGoal } : null,
           },
         },
       ],

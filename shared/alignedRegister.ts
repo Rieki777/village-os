@@ -47,6 +47,7 @@ export interface RegisterKind {
 export const REGISTER_KINDS: readonly RegisterKind[] = [
   { id: "seat_terms", label: "Role terms", capability: "terms.read" },
   { id: "membership", label: "Membership letter", capability: "terms.read" },
+  { id: "confidentiality", label: "Confidentiality agreement", capability: "terms.read" },
   // After the agreements lane lands: { id: "agreement", label: "Village agreement", capability: "terms.read" },
 ];
 
@@ -131,7 +132,7 @@ export const ALIGNED_WORDS = {
   clear: "Show the whole register",
   results: (q: string) => `Terms that match "${q}"`,
   noResults: "Nothing in the register matches that.",
-  empty: "Nothing has been aligned with yet. When a member aligns with the village's letter or applies for a role on terms, the words land here.",
+  empty: "Nothing has been aligned with yet. When a member aligns with the village's letter or proposes for a role on terms, the words land here.",
   loading: "Reading the register",
   more: "Show earlier terms",
   readingMore: "Reading earlier terms…",
@@ -143,7 +144,7 @@ export const ALIGNED_WORDS = {
   byBallot: "Adopted by the village's vote",
   readVote: "Read the vote",
   byHolder: (name: string) => `Aligned for the village by ${name}`,
-  readApplication: "Read the application",
+  readApplication: "Read the proposal",
   parties: "Parties",
   aligned: "aligned",
   waiting: "not yet",

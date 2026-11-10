@@ -27,7 +27,12 @@
  *   - DECLINING sets decided_at, so the tidy job finds it, and sends a kind no.
  *   - The task board: an asked holder's consent row, a decider's adopt row.
  */
+import { moonTermFor } from "../../shared/openProposalTerm";
+import { activeClock } from "../lib/gratitude-cycles";
+import fs from "node:fs";
 import http from "node:http";
+import os from "node:os";
+import path from "node:path";
 import express from "express";
 import type mysql from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -72,6 +77,8 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   let gate = "";
   let well = "";
   let founderRole = "";
+  /** The private folder a proposal's files are kept in (Rye, 10 Nov 2026). */
+  let fileDir = "";
 
   const state = {
     viewer: null as string | null,
@@ -90,6 +97,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   beforeAll(async () => {
     db = await provisionTestDb();
     pool = testPool(db, { connectionLimit: 6 });
+    fileDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "proposal-decide-files-"));
     const users = usersRepo(pool);
     for (const p of [FOUNDER, ANA, BEN, MO, HAS, HIGH]) await users.add({ id: p.id, name: p.name, email: p.email, passwordHash: "x", paths: [] } as any);
     await users.update(HIGH.id, (u: any) => {
@@ -151,6 +159,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
         state.stageEvents.push({ userId: String(u.id), from, to, reason });
       },
       sessionsOn: () => false,
+      proposalFileDir: fileDir,
     } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -163,6 +172,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await pool?.end();
     await db?.drop();
+    if (fileDir) await fs.promises.rm(fileDir, { recursive: true, force: true });
   });
 
   beforeEach(async () => {
@@ -321,7 +331,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(r.status).toBe(200);
       const p = r.body.proposal;
       expect(p).toMatchObject({ id, status: "confirmed", proposer: "Rowan", why: "I live up the road and the gate is always shut.", aim: "The gate opens at dawn every day." });
-      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living." }]);
+      expect(p.roles).toEqual([{ id: gate, name: "Gate Keeper", circle: "Land Circle", note: "I open gates for a living.", accountabilities: [], timeCommitment: null }]);
       expect(p.season).toMatchObject({ id: "s-next", name: "Season of Roots", startsOn: "2037-01-01" });
       // Ana, Ben and u-has hold roles in the Land Circle; u-has is asked here, since this address is not its own.
       expect(p.consent).toMatchObject({ state: "open", asked: 3, consented: 0, objected: 0 });
@@ -350,6 +360,93 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     });
   });
 
+  describe("links and files, for the deciders only (Rye, 10 Nov 2026)", () => {
+    const PDF = Buffer.from(["%PDF-1.7", "1 0 obj", "<<>>", "endobj", ""].join(String.fromCharCode(10)));
+
+    /** Send with a link and a PDF, as somebody with no account, and confirm. */
+    const withFiles = async (email: string) => {
+      const before = state.sent.length;
+      const fd = new FormData();
+      fd.append("proposal", JSON.stringify({
+        name: "Rowan Field",
+        email,
+        roles: [{ roleId: gate, note: "I open gates for a living." }],
+        why: "I live up the road and the gate is always shut.",
+        aim: "The gate opens at dawn every day.",
+        links: [{ label: "Gates I built", url: "https://gates.example.org/rowan" }],
+      }));
+      fd.append("files", new Blob([PDF], { type: "application/pdf" }), "Gates portfolio.pdf");
+      const res = await fetch(`${base}/api/open-proposals`, { method: "POST", body: fd }); // module-review-ok: a test calling its own local server
+      expect(res.status, await res.clone().text()).toBe(200);
+      const mail = state.sent[before];
+      const id = mail.idempotencyKey.split(":")[1];
+      expect((await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null)).status).toBe(200);
+      return id;
+    };
+
+    const download = async (href: string, as: string | null) => {
+      const before = state.viewer;
+      state.viewer = as;
+      try {
+        return await fetch(`${base}${href}`); // module-review-ok: a test calling its own local server
+      } finally {
+        state.viewer = before;
+      }
+    };
+
+    it("the holder of the power and the circle's asked holders read them; another member reads neither", async () => {
+      const id = await withFiles("files1@example.test");
+      const founder = (await page(id, FOUNDER.id)).body.proposal.attached;
+      expect(founder.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
+      expect(founder.files).toHaveLength(1);
+      expect(founder.files[0]).toMatchObject({ kind: "pdf", name: "Gates portfolio.pdf", size: PDF.length });
+      // Ana holds a role in the Land Circle and is asked to consent: she decides it too.
+      expect((await page(id, ANA.id)).body.proposal.attached.files).toHaveLength(1);
+      // Mo is a member who can read the page, and decides nothing.
+      const mo = await page(id, MO.id);
+      expect(mo.status).toBe(200);
+      expect(mo.body.proposal.attached).toBeNull();
+      expect(JSON.stringify(mo.body)).not.toContain("gates.example.org");
+      expect(JSON.stringify(mo.body)).not.toContain("Gates portfolio");
+    });
+
+    it("the file door serves the bytes kept, as a download nobody caches or indexes, to a decider and nobody else", async () => {
+      const id = await withFiles("files2@example.test");
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      const ok = await download(href, FOUNDER.id);
+      expect(ok.status).toBe(200);
+      expect(Buffer.from(await ok.arrayBuffer()).equals(PDF)).toBe(true);
+      expect(ok.headers.get("content-type")).toBe("application/pdf");
+      expect(ok.headers.get("content-disposition")).toMatch(/^attachment; /);
+      expect(ok.headers.get("cache-control")).toBe("private, no-store");
+      expect(ok.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(ok.headers.get("x-content-type-options")).toBe("nosniff");
+      expect((await download(href, ANA.id)).status).toBe(200);
+      // Not a decider, not signed in, a made-up file: nothing, and nothing said about it.
+      expect((await download(href, MO.id)).status).toBe(404);
+      expect((await download(href, null)).status).toBe(401);
+      expect((await download(href.replace(/pf-[0-9a-f]+$/, "pf-0000000000000000"), FOUNDER.id)).status).toBe(404);
+      expect((await download(href.replace(/pf-[0-9a-f]+$/, "..%2F..%2Fsecret"), FOUNDER.id)).status).toBe(404);
+    });
+
+    it("a holder of the power reads none of their own proposal's links or files", async () => {
+      state.powerHolders = [FOUNDER.id, HAS.id];
+      const id = await withFiles(HAS.email);
+      const own = await page(id, HAS.id);
+      expect(own.body.proposal.attached).toBeNull();
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      expect((await download(href, HAS.id)).status).toBe(404);
+    });
+
+    it("a file changed on disk since it was sent is not served", async () => {
+      const id = await withFiles("files3@example.test");
+      const f = (await readOpenProposal(pool, id))!.body.files![0];
+      await fs.promises.writeFile(path.join(fileDir, id, `${f.id}.${f.kind}`), Buffer.from("%PDF-1.7 something else"));
+      const href = (await page(id, FOUNDER.id)).body.proposal.attached.files[0].href as string;
+      expect((await download(href, FOUNDER.id)).status).toBe(404);
+    });
+  });
+
   describe("who decides", () => {
     it("a member without the power is refused, and so is a holder on their own address", async () => {
       const { id } = await confirmed("who@example.test");
@@ -363,6 +460,15 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect(mine.status).toBe(403);
       expect(mine.body.message).toBe(DECIDE_WORDS.ownProposal);
       expect((await page(own.id, FOUNDER.id)).body.proposal.you).toMatchObject({ mayAdopt: false, own: true });
+
+      // The same person behind a +tag or a changed case is still the applicant: never their own approver.
+      for (const alias of ["founder+roles@example.test", "Founder+x@Example.TEST"]) {
+        const disguised = await confirmed(alias);
+        const tried = await call("POST", `/api/governance/open-proposals/${disguised.id}/adopt`, {}, FOUNDER.id);
+        expect(tried.status, alias).toBe(403);
+        expect(tried.body.message).toBe(DECIDE_WORDS.ownProposal);
+        expect((await readOpenProposal(pool, disguised.id))?.status).toBe("confirmed");
+      }
     });
 
     it("a former member's address is refused: nothing is granted, seated or invited, and declining it still works", async () => {
@@ -476,7 +582,10 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       await usersRepo(pool).add({ id: newcomer, name: "Rowan Field", email: "arrives@example.test", passwordHash: "x", paths: [] } as any);
       await door.welcome(inviter as string, newcomer);
 
-      expect((await usersRepo(pool).byId(newcomer))?.stageGranted).toBe("member");
+      // Rye's ruling: Voice is only for people who signed the membership agreement. Adoption admits nobody;
+      // the signed Love Letter does (server/lib/admission.ts).
+      expect((await usersRepo(pool).byId(newcomer))?.stageGranted ?? null).not.toBe("member");
+      expect((await usersRepo(pool).byId(newcomer))?.membershipGranted ?? false).toBeFalsy();
       const apps = await q("SELECT id, status, seat_ids, term_season_id, adopted_via, adopted_ref, authority_ref, UNIX_TIMESTAMP(starts_at) AS starts_s FROM seat_applications WHERE candidate_user_id = ?", [newcomer]);
       expect(apps).toHaveLength(1);
       expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-next", adopted_via: "holder", adopted_ref: FOUNDER.id, authority_ref: `org.seat@${founderRole}` });
@@ -584,27 +693,86 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
   });
 
   describe("adopting, for an address with an account", () => {
-    it("raises it to the Member stage and gives it the roles for the target season, with no invitation", async () => {
+    it("gives it the roles for the target season, with no invitation, and admits nobody before the Love Letter", async () => {
       const { id } = await confirmed(HAS.email, [well]);
       const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       expect(r.body).toMatchObject({ success: true, status: "adopted", account: true, invitation: null });
       expect(r.body.message).toBe(`${DECIDE_WORDS.adoptedAccount} ${DECIDE_WORDS.accountTold}`);
       expect(await q("SELECT id FROM member_invites WHERE id = ?", [openInviteId(id)])).toEqual([]);
-      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted).toBe("member");
-      expect(state.stageEvents).toEqual([expect.objectContaining({ userId: HAS.id, to: "member" })]);
+      expect((await usersRepo(pool).byId(HAS.id))?.stageGranted ?? null).not.toBe("member");
+      expect(state.stageEvents).toEqual([]);
       const apps = await q("SELECT status, seat_ids, term_season_id, adopted_ref FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
       expect(apps).toEqual([expect.objectContaining({ status: "adopted", term_season_id: "s-next", adopted_ref: FOUNDER.id })]);
       expect(idsOf(apps[0].seat_ids)).toEqual([well]);
       const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
       expect(mail?.text).toContain(`${ORIGIN}/profile`);
       expect(mail?.text).not.toContain("invite");
+      // The letter says what comes before seating and voting.
+      expect(mail?.text).toContain(`${ORIGIN}/love-letter`);
     });
 
     it("never lowers a stage granted above Member", async () => {
       const { id } = await confirmed(HIGH.email, [gate]);
       expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
       expect((await usersRepo(pool).byId(HIGH.id))?.stageGranted).toBe("co-creator");
+    });
+  });
+
+  describe("a proposal for this moon (Rye, 9 Nov 2026)", () => {
+    it("is adopted into this season, starting now, with its term ending on the moon's last day", async () => {
+      state.viewer = FOUNDER.id;
+      expect((await call("PUT", "/api/admin/open-proposals/settings", { term: "moon" }, FOUNDER.id)).status).toBe(200);
+      try {
+        const moon = moonTermFor(new Date(), activeClock(), "UTC");
+        const MOONER = { id: "u-mooner", email: "mooner@example.test" };
+        await usersRepo(pool).add({ id: MOONER.id, name: "Mo Oner", email: MOONER.email, passwordHash: "x", paths: [] } as any);
+        const { id } = await confirmed(MOONER.email, [gate]);
+        const before = Date.now();
+        const r = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        const apps = await q("SELECT status, term_season_id, UNIX_TIMESTAMP(starts_at) AS starts_s, DATE_FORMAT(term_ends_at, '%Y-%m-%d') AS ends_on FROM seat_applications WHERE candidate_user_id = ? ORDER BY created_at DESC", [MOONER.id]);
+        expect(apps[0]).toMatchObject({ status: "adopted", term_season_id: "s-now" });
+        // Starts at adoption (never before the moon's first day), not on next season's first day.
+        expect(Number(apps[0].starts_s) * 1000).toBeGreaterThanOrEqual(Math.floor(before / 1000) * 1000 - 1000);
+        expect(Number(apps[0].starts_s) * 1000).toBeLessThan(Date.now() + 60_000);
+        expect(apps[0].ends_on).toBe(moon.endsOn);
+        const mail = state.sent.find((m) => m.origin === "open_proposal.adopted");
+        expect(mail?.text).toContain("this moon");
+        expect(mail?.text).not.toContain("next season");
+      } finally {
+        await call("PUT", "/api/admin/open-proposals/settings", { term: "season" }, FOUNDER.id);
+      }
+    });
+  });
+
+  describe("the applicant's own card (Rye, 9 Nov 2026)", () => {
+    it("is on the page for the decider, and becomes the role application's own words on adoption", async () => {
+      const CARDED = { id: "u-carded", email: "carded@example.test" };
+      await usersRepo(pool).add({ id: CARDED.id, name: "Cara Ded", email: CARDED.email, passwordHash: "x", paths: [] } as any);
+      const before = state.sent.length;
+      const r = await call("POST", "/api/open-proposals", {
+        name: "Cara Ded",
+        email: CARDED.email,
+        roles: [{ roleId: well, note: "" }],
+        why: "I know wells.",
+        aim: "Clean water all season.",
+        card: { roles: [{ roleId: well, moves: [], firstMoon: [{ quest: "Test the water", doneWhen: "the lab says it is clean" }] }], serves: [], hours: "10 a week", agreed: { loveLetter: true, nda: true }, terms: { choice: "talk", note: "Could the rate be per moon?" } },
+      }, null);
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const mail = state.sent[before];
+      const ok = await call("POST", "/api/open-proposals/confirm", { token: tokenOf(mail) }, null);
+      expect(ok.status).toBe(200);
+      const id = mail.idempotencyKey.split(":")[1];
+      const seen = await page(id, FOUNDER.id);
+      expect(seen.body.proposal.card.roles[0].firstMoon[0]).toEqual({ quest: "Test the water", doneWhen: "the lab says it is clean" });
+      expect(Array.isArray(seen.body.proposal.roles[0].accountabilities)).toBe(true);
+      expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+      const apps = await q("SELECT deliverables FROM seat_applications WHERE candidate_user_id = ?", [CARDED.id]);
+      expect(String(apps[0].deliverables)).toContain("Clean water all season.");
+      expect(String(apps[0].deliverables)).toContain("First task: Test the water: done when the lab says it is clean");
+      expect(String(apps[0].deliverables)).toContain("Time I can give: 10 a week");
+      expect(String(apps[0].deliverables)).toContain("Wants to talk about the terms: Could the rate be per moon?");
     });
   });
 

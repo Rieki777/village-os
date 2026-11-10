@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
+import { linguiMacros } from "./client/src/i18n/linguiMacros";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -50,7 +51,7 @@ export default defineConfig({
   // anywhere in this codebase's own .tsx files - vite's plugin is the only
   // reason that has ever worked). Costs server tests nothing: esbuild only
   // reaches for it on a `.tsx`/`.jsx` file.
-  plugins: [react()],
+  plugins: [linguiMacros(), react()],
   /*
    * The same aliases vite.config.ts builds with. Without them a client module
    * that imports `@shared/...` typechecks (tsconfig paths) and builds (vite)
@@ -108,7 +109,14 @@ export default defineConfig({
     // included in this glob from the start specifically so a forgotten test
     // file could never sit unrun beside real ones while `pnpm test` stayed
     // green.
-    include: ["server/**/*.test.ts", "shared/**/*.test.ts", "client/**/*.test.{ts,tsx}"],
+    // CI_SHARD_FILES names a file listing this shard's test files, one per line
+    // (scripts/plan-shards.mjs writes it). Unset, which is every local run and
+    // the tests-ran-once file listing, the whole suite is included as before.
+    // It narrows the include rather than adding a positional argument so the
+    // run still counts as a whole run to the hollow-run rule.
+    include: process.env.CI_SHARD_FILES
+      ? fs.readFileSync(process.env.CI_SHARD_FILES, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)
+      : ["server/**/*.test.ts", "shared/**/*.test.ts", "client/**/*.test.{ts,tsx}"],
     // The end-to-end loop test builds and boots the server, so it needs room.
     testTimeout: 120_000,
     /*

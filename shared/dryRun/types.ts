@@ -77,11 +77,15 @@ import type { ClockMode, ProposalTiming } from "../cycleClock";
 export const CHANGE_ITEM_KINDS = [
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
   "brand_field",
   "role",
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ] as const;
 
 /** Which vocabulary one element of a change set is written in. */

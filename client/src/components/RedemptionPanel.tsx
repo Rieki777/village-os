@@ -72,6 +72,8 @@ interface Payload {
   votePathBuilt: boolean;
   perCycle: number;
   openedThisCycle: number;
+  /** What redeeming gives up under the village's closing policy, when it applies. */
+  closingNotice?: string | null;
   tokens: Array<{
     slug: string;
     name: string;
@@ -89,9 +91,10 @@ interface Payload {
     feePct: number;
     feeFixedMinor: number;
     minMinor: number;
-    maxPerRequestMinor: number;
-    memberCapMinor: number;
-    villageCapMinor: number;
+    /** Null is no ceiling; 0 is a ceiling of zero. */
+    maxPerRequestMinor: number | null;
+    memberCapMinor: number | null;
+    villageCapMinor: number | null;
     processText: string;
   };
 }
@@ -511,6 +514,12 @@ export default function RedemptionPanel() {
               while this is open. They stay yours and they stop being spendable. If your
               redemption is confirmed, they are destroyed. If it is refused, or if it
               expires, they come straight back.
+            </p>
+          )}
+          {/* Before the button, so nobody learns it after (closing policy, 2026-09-25). */}
+          {data.closingNotice && (
+            <p role="note" className="text-sm text-foreground border border-border rounded-lg px-4 py-2.5">
+              {data.closingNotice}
             </p>
           )}
           <button

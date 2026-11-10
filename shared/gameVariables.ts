@@ -18,6 +18,7 @@
  * express "equal voice or mirror Hypha" or an ERC-20 address; this shape can.
  */
 
+import { MINT_CAP_SCOPE } from "./mintCapWords";
 import { GAME_CONFIG } from "./gameConfig";
 import { STAGE_UNLOCKS } from "./capabilities";
 import { NEED_DEPTHS, NEED_DEPTH_LABELS } from "./needs";
@@ -25,6 +26,8 @@ import { TIER_FLOORS, type Criticality } from "./governanceEngine";
 import { MINT_RULE, SUBJECT_THRESHOLDS, VILLAGE_LAUNCH } from "./ballotSubjects";
 import { isAnchorDateAcceptable } from "./villageMoon";
 import { villageSeasonsProblem } from "./villageSeasons";
+import { CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN } from "./changeSetCap";
+import { GATHERING_LIMIT_DEFAULT, GATHERING_LIMIT_KEY, REVIEW_DAYS_DEFAULT, REVIEW_DAYS_KEY } from "./changeRequestLimits";
 
 export type VariableType = "integer" | "decimal" | "percentage" | "boolean" | "choice" | "text" | "longtext";
 
@@ -120,6 +123,16 @@ export interface VariableDef {
   /** For `choice`: the allowed values and how to label them. */
   choices?: Array<{ value: string; label: string; hint?: string }>;
   unit?: string;
+  /**
+   * WHAT A BLANK NUMBER MEANS, for a number dial that may be left blank, in a
+   * few words ("no ceiling"). Absent, blank is not an answer of its own and
+   * reads as 0. Present, blank and 0 are different answers, and the dial is
+   * read with `optionalNumberVar` (server/lib/variables.ts), which returns
+   * null for blank. Redemption's money ceilings are why (Rye, 2026-11-05):
+   * caps fail closed, so 0 must mean zero, and "no ceiling" needs its own
+   * spelling.
+   */
+  blank?: string;
   /** Ring override. Absent = derived by ringOf() from category/key rules. */
   ring?: VariableRing;
   /** Apply-timing override. Absent = derived by applyTimingOf(). */
@@ -320,6 +333,17 @@ export const VARIABLES: VariableDef[] = [
     default: "",
   },
   {
+    // Budgets spec R34: every budget line that counts names a circle, so a line
+    // for the whole village sits on the village's own circle.
+    key: "budgets.village_circle_id",
+    category: "Village",
+    label: "The village's own circle, for budget lines about the whole village",
+    description:
+      "Every cash budget line belongs to a circle. A line for the whole village, like a sheet row that names no circle, goes on this one. Leave it empty and the budget finds it on the org chart: the active circle set as the link circle, or else the lead circle, or else the one circle with no parent. With none of those, an upload row that names no circle is refused until this is set. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "gratitude.base_budget",
     category: "Gratitude",
     label: "Base sending allowance per cycle",
@@ -340,7 +364,19 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1000",
     min: 0,
-    max: 1000000,
+    /*
+     * SIZED FOR A COLON VILLAGE. The pool pays a credit, and credits are priced
+     * in the village's own currency, so a village counting in colones (about
+     * 500 to the dollar) holds about 500 times the numbers a dollar village
+     * does. The old 1,000,000 let it reach twice its scaled default.
+     *
+     * 1,000,000,000 IS THE CEILING THE STORAGE ALLOWS. One member can be
+     * credited the whole pool, and `gratitude_distributions.credited` is a
+     * signed INT (0010), so the next power of ten would overflow it and fail
+     * the close. In minor units it is 1e11 at two decimals, a safe integer.
+     * shared/currencyScaleBounds.test.ts holds both limits.
+     */
+    max: 1000000000,
     unit: "tokens",
   },
   {
@@ -362,7 +398,9 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Issuance cap per lunar cycle",
     description:
-      "The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.",
+      "The most this village can bring into existence of one token in one lunar cycle. " +
+      `${MINT_CAP_SCOPE} ` +
+      "COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door of the mint faucet for this token, because a cap of zero means zero.",
     type: "integer",
     default: "10000",
     min: 0,
@@ -594,9 +632,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most in one redemption, in money",
     description:
-      "The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.",
+      "The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -605,9 +644,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most one member may redeem per cycle, in money",
     description:
-      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.",
+      "Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -626,9 +666,10 @@ export const VARIABLES: VariableDef[] = [
     category: "Ledger",
     label: "Most the village will redeem per cycle, in money",
     description:
-      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.",
+      "Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.",
     type: "decimal",
-    default: "0",
+    default: "",
+    blank: "no ceiling",
     min: 0,
     max: 1000000000,
   },
@@ -674,7 +715,15 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "100",
     min: 1,
-    max: 100000,
+    /*
+     * SIZED FOR A COLON VILLAGE (Rye, 2026-10-31: Voice is paid at one per
+     * unit of the village's currency). A village counting in colones gathers
+     * about 500 times the Voice a dollar village does, and the old 100,000 let
+     * it reach twice its scaled default. 100,000,000 is 1e10 minor units at
+     * two decimals, a safe integer, and fits `voice_claims.amount`
+     * (decimal(18,4)). shared/currencyScaleBounds.test.ts holds both.
+     */
+    max: 100000000,
     unit: "voice",
   },
   {
@@ -689,7 +738,9 @@ export const VARIABLES: VariableDef[] = [
     type: "integer",
     default: "1",
     min: 1,
-    max: 100000,
+    // Sized for a colon village for the reason on the voice threshold above:
+    // Earned Equity matches the base pay 1:1, in the village's own currency.
+    max: 100000000,
     unit: "equity",
   },
   {
@@ -956,6 +1007,41 @@ export const VARIABLES: VariableDef[] = [
     max: 10000,
     unit: "changes",
   },
+  /*
+   * A ROLE STARTS ONLY AFTER (role journey L7). Each agreement a person aligns
+   * with before an adopted role starts, as its own switch, every one off by
+   * default so a village that sets nothing keeps today's behaviour. Read
+   * together by `roleStartDials` (server/lib/roleStartAgreements.ts): the role
+   * waits, adopted, until each one that is on exists, and the hourly
+   * `season-plan-turn` starts it within the hour after.
+   */
+  {
+    key: "org.start_after_confidentiality",
+    category: "Progression",
+    label: "A role starts only after: confidentiality",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's confidentiality agreement as it reads now. Write the agreement's words first (Admin, content, the confidentiality section): with no words written, nobody can align, and roles wait.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_membership",
+    category: "Progression",
+    label: "A role starts only after: membership",
+    description:
+      "When on, an adopted role does not start until its holder has aligned with the village's membership letter. Somebody who aligned when they applied is not asked again. No payment is ever part of it.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.start_after_paid_terms",
+    category: "Progression",
+    label: "A paid role starts only after its terms",
+    description:
+      "When on, a role whose terms carry pay, an allowance or a bonus does not start until its holder has aligned with those terms, the agreed rate included. Roles with no money in their terms are not asked.",
+    type: "boolean",
+    default: "false",
+  },
 
   // ── Quests: how finished work is witnessed ────────────────────────────────
   // The three dials that bounded a Gratitude grant at consent left with the
@@ -969,6 +1055,16 @@ export const VARIABLES: VariableDef[] = [
       "When on, value can only be released for work that was actually filed. Turning this off lets an admin credit a quest nobody submitted, which breaks the promise that credit follows shown work.",
     type: "boolean",
     default: "true",
+  },
+  {
+    // Rye, 2026-11-09: quests are fun, and families are encouraged.
+    key: "quest.minimum_ages",
+    category: "Quests",
+    label: "Let quests ask a minimum age",
+    description:
+      "Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.",
+    type: "boolean",
+    default: "false",
   },
   {
     key: "quest.self_consent_until_members",
@@ -1023,6 +1119,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.proposals_per_member_per_cycle",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Mechanics proposals per member per cycle",
     description:
@@ -1039,6 +1138,9 @@ export const VARIABLES: VariableDef[] = [
     // governance.hypha_threshold's did. This gate stands in front of the
     // binding vote wherever the binding vote happens, so it says that.
     key: "governance.proposal_support_threshold",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Supporters before a proposal can go to the vote",
     description:
@@ -1215,6 +1317,9 @@ export const VARIABLES: VariableDef[] = [
   },
   {
     key: "governance.change_cooldown_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "Cooldown after a governed rule change",
     description:
@@ -1223,6 +1328,54 @@ export const VARIABLES: VariableDef[] = [
     default: "0",
     min: 0,
     max: 365,
+    unit: "days",
+  },
+  {
+    // Rye, 2026-11-06: the cap rises from 12 to 22 and each village may move
+    // it by vote. The floor and the ceiling live in shared/changeSetCap.ts,
+    // which the validator reads too, so the two can never disagree.
+    key: CHANGE_SET_CAP_KEY,
+    category: "Governance",
+    label: "Changes one proposal may carry",
+    criticality: "structural",
+    description:
+      `The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. ${CHANGE_SET_CAP_MIN} to ${CHANGE_SET_CAP_MAX}.`,
+    type: "integer",
+    default: String(CHANGE_SET_CAP_DEFAULT),
+    min: CHANGE_SET_CAP_MIN,
+    max: CHANGE_SET_CAP_MAX,
+    unit: "changes",
+  },
+  {
+    // Change requests (Rye, 2026-11-06; spec C7, R20). A ceiling on
+    // flooding: commenting on and supporting other change requests is never
+    // limited. Meta, so a trial can never lift it for a moon.
+    key: GATHERING_LIMIT_KEY,
+    category: "Governance",
+    label: "Change requests one member may gather at once",
+    criticality: "structural",
+    description:
+      "How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.",
+    type: "integer",
+    default: String(GATHERING_LIMIT_DEFAULT),
+    min: 1,
+    max: 50,
+    unit: "change requests",
+  },
+  {
+    // Change requests (Rye, 2026-11-06, 3c; spec C3, R20). The review
+    // round before a vote. Meta, so a trial can never set it to nothing for
+    // a moon, and a lowered value never shortens a review already running.
+    key: REVIEW_DAYS_KEY,
+    category: "Governance",
+    label: "Days a change request is reviewed before its vote",
+    criticality: "structural",
+    description:
+      "How long the village has to ask questions, raise concerns and objections, and suggest edits before a change request may go to the vote. The clock starts again whenever a change or the why is edited. 0 lets a change request go to the vote as soon as its objections are answered.",
+    type: "integer",
+    default: String(REVIEW_DAYS_DEFAULT),
+    min: 0,
+    max: 30,
     unit: "days",
   },
 
@@ -1397,6 +1550,37 @@ export const VARIABLES: VariableDef[] = [
     type: "text",
     default: "gratitude",
   },
+  // THE CAP ON ONE MEMBER'S SHARE OF THE VOTE (Rye, 2026-11-05: "built as an
+  // option, OFF by default"). A switch and a number, and never a 0 that means
+  // "no cap": caps fail closed here, so 0 would mean zero, and OFF is what the
+  // switch is for. Same ring and bar as the mode, because both move what one
+  // vote weighs. The water-fill, and why a small roll weighs everyone the
+  // same: `capWeights`, shared/governanceShare.ts.
+  {
+    key: "governance.weight_cap_on",
+    category: "Governance",
+    label: "Cap one member's voting weight",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "governance.weight_cap_pct",
+    category: "Governance",
+    label: "The most voting weight one member can carry",
+    ring: "founder",
+    criticality: "constitutional",
+    description:
+      "While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.",
+    type: "percentage",
+    default: "20",
+    min: 1,
+    max: 100,
+    unit: "%",
+  },
   {
     key: "governance.unity_pct",
     category: "Governance",
@@ -1423,8 +1607,29 @@ export const VARIABLES: VariableDef[] = [
     max: 100,
     unit: "%",
   },
+  // THE QUORUM FALLBACK (Rye, 2026-11-06; shared/quorumFallback.ts). Ring 2,
+  // one setting for every decision type. A steward or an admin may also switch
+  // it ON as a failsafe (POST /api/governance/quorum-fallback/failsafe); OFF is
+  // the village's ordinary vote on this dial and nothing else.
+  {
+    key: "governance.quorum_fallback",
+    category: "Governance",
+    label: "Ask again when too few vote",
+    criticality: "structural",
+    description:
+      "Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.",
+    type: "choice",
+    default: "off",
+    choices: [
+      { value: "off", label: "Off", hint: "A ballot that misses quorum ends as it closes." },
+      { value: "on", label: "On", hint: "A ballot that misses quorum is asked again once, at half the quorum." },
+    ],
+  },
   {
     key: "governance.vote_days",
+    // Rye, 2026-11-06: "great go with all suggestions" (change requests C17).
+    // It steers when proposals reach the vote, so it is structural and meta.
+    criticality: "structural",
     category: "Governance",
     label: "How long a ballot stays open",
     description:
@@ -1587,6 +1792,28 @@ export const VARIABLES: VariableDef[] = [
     criticality: "constitutional",
   },
   {
+    /*
+     * THE LAUNCH'S HEAD COUNT, as the village's own dial (Rye, 2026-11-06:
+     * "EVERYTHING can change with the highest village vote"). The default is
+     * the registry's floor, so a village that never touches it launches with
+     * the three founders it always did, and `membership.vouches_required`
+     * still reads that same registry number for its default. Constitutional,
+     * so after launch only the highest tier moves it. Never below one: a
+     * launch nobody votes on is not a launch.
+     */
+    key: "governance.launch_min_electorate",
+    category: "Governance",
+    label: "Members it takes to launch",
+    description:
+      "How many members must hold a voice before the village can vote to start its Game. Every one of them has to say yes. The default is three: a founder and two more. Moving it costs the highest tier your village works at.",
+    type: "integer",
+    unit: "members",
+    default: String(SUBJECT_THRESHOLDS[VILLAGE_LAUNCH].minElectorate),
+    min: 1,
+    max: 50,
+    criticality: "constitutional",
+  },
+  {
     key: "governance.subject_mint_rule_quorum_pct",
     category: "Governance",
     label: "Minting rule changes: quorum floor",
@@ -1709,7 +1936,7 @@ export const VARIABLES: VariableDef[] = [
     category: "Hypha",
     label: "Hypha space id (on-chain)",
     description:
-      "The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is still accepted and an operator is told, so an idle check is never read as a passing one. Blank checks nothing.",
+      "The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is recorded and an operator is told, and a passed one waits for a person to apply it, so an idle check is never read as a passing one. Left blank, nothing can be checked, so every passed vote waits for a person to apply it (after launch, any member can ask the village to decide it).",
     type: "text",
     default: "",
     ring: "founder",
@@ -2276,6 +2503,69 @@ export const VARIABLES: VariableDef[] = [
     ring: "founder",
   },
   {
+    key: "org.consent_after_interviews",
+    category: "The village's people",
+    label: "Ask the circle to consent after the conversations",
+    description:
+      "Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every conversation a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.onboarding_role",
+    category: "The village's people",
+    label: "The role that sends first replies to applicants",
+    description:
+      "The role whose holders are reminded to send each applicant a first reply within 3 business days, and are told when an application has not moved for ten days. Paste the role id from the org chart. Leave it empty and the admins are told instead. Reminders only: nothing here adopts or declines anybody.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.sync_starts_unlisted",
+    category: "The village's people",
+    label: "Roles accepted from a sync start unlisted",
+    description:
+      "On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.default_track",
+    category: "The village's people",
+    label: "The track a role without one reads as",
+    description:
+      "What a role whose card names no track reads as: contractor, volunteer, employee or ai. A village whose roles are all moon-to-moon contracts, paid for the tasks delivered and invoiced at the End of Moon, writes contractor. Leave it empty and a role with no track shows none, as before. A role's own track always wins.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.apply_needs_complete_card",
+    category: "The village's people",
+    label: "A role needs a complete card before anyone can apply",
+    description:
+      "On, a role whose card is not complete shows \"Being written\" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.",
+    type: "boolean",
+    default: "false",
+  },
+  {
+    key: "org.first_conversation_role",
+    category: "The village's people",
+    label: "The role that holds first conversations",
+    description:
+      "The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
+    key: "org.paid_consent_circle",
+    category: "The village's people",
+    label: "The circle that consents paid roles",
+    description:
+      "The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.",
+    type: "text",
+    default: "",
+  },
+  {
     key: "org.ccos_terms",
     category: "The village's people",
     label: "Show the CCOS term on circle and role card headings",
@@ -2760,6 +3050,33 @@ export const VARIABLES: VariableDef[] = [
     max: 200,
     unit: "entries",
   },
+  /*
+   * WHERE THE LAND'S SATELLITE PICTURE COMES FROM (readiness R171). This was
+   * the host variable SATELLITE_PROVIDER alone, so a founder on a hosted
+   * village could not choose one. Blank defers to that variable, so a village
+   * that set it there keeps it. Each keyed provider's key has its own slot in
+   * Admin, Integrations (server/lib/satellite.ts, `keySlot`), and the licence
+   * reading for each lives beside it there. The choices are the providers that
+   * file knows, in its order; satellite.test.ts holds the two lists together.
+   */
+  {
+    key: "village.satellite_provider",
+    category: "Village",
+    label: "Where the land's satellite picture comes from",
+    description:
+      "Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.",
+    type: "choice",
+    default: "",
+    choices: [
+      { value: "", label: "Left to the host", hint: "Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground." },
+      { value: "village-upload", label: "The village's own aerial photograph", hint: "No provider and no key: an admin uploads the picture." },
+      { value: "esri-open", label: "Esri World Imagery, no key", hint: "Kept on the village's own volume." },
+      { value: "sentinel2", label: "Copernicus Sentinel-2", hint: "Needs the address of a Sentinel-2 WMS service." },
+      { value: "mapbox", label: "Mapbox Static Images", hint: "Needs a Mapbox token." },
+      { value: "google", label: "Google Maps Static", hint: "Needs a Google Maps Static API key." },
+      { value: "esri", label: "Esri World Imagery", hint: "Needs an ArcGIS API key." },
+    ],
+  },
   {
     // WHERE THIS VILLAGE STARTS COUNTING ITS OWN MOONS.
     //
@@ -2883,6 +3200,41 @@ export const VARIABLES: VariableDef[] = [
     min: 1,
     max: 720,
     unit: "hours",
+  },
+  /*
+   * THE ADMIN HELPER'S SWITCH (server/routes/adminHelper.ts, 2026-11-09).
+   * Ships ON (Rye, 2026-11-09: "this should always ship on so that they don't
+   * have to turn it on once they put in their API key"): the moment a village
+   * connects an AI key, Anthropic or Sera, the helper starts helping. A village
+   * that does not want it turns this off. The helper may never propose this
+   * dial itself (shared/adminHelper.ts), and it stays read-only and out of
+   * selection whatever this says.
+   */
+  {
+    key: "platform.admin_helper",
+    category: "Platform",
+    label: "The guide's helper in Admin",
+    description:
+      "Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It turns on by itself once the village connects an AI key: its own Anthropic key, or Sera when the org memory connection is set up. Turn this off to keep it off.",
+    type: "boolean",
+    default: "true",
+  },
+
+  /*
+   * THE VILLAGE'S OWN SOURCE-CODE LINK (AGPL-3.0-or-later, section 13,
+   * shared/sourceUrl.ts). The footer always links the upstream Village OS
+   * repository, a platform constant. A village that runs changed code must also
+   * offer its people that code, so this is where it says where. Blank, or
+   * anything that is not an https address, shows no second link.
+   */
+  {
+    key: "village.source_url",
+    category: "Village",
+    label: "Where this village shares its own source code",
+    description:
+      "The footer shows a second source link, named for your village, when this is set. Leave it empty if you run the software as published, because the footer already links the public Village OS code. If this village runs a changed version, set it to the https address of your own copy of the code, because the licence says the people who use your village must be able to get it.",
+    type: "text",
+    default: "",
   },
 
   // `gratitude.proposal_accept_award` STOOD HERE UNTIL 2026-10-23: the Gratitude
@@ -3315,9 +3667,9 @@ export const VARIABLES: VariableDef[] = [
   {
     key: "needs.launch_requirement",
     category: "Needs",
-    label: "Whether saying what the village is for is asked before launch",
+    label: "Whether naming the village's needs target is asked before launch",
     description:
-      "Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not said what it is for may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village is for. Nothing reads this until the launch check names it.",
+      "Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not named a needs target may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village needs. What the village is for is a separate question, and it does block: the governing purpose statement is its own row on the launch checklist, and the vote waits for it. Nothing reads this dial until the launch check names it.",
     type: "choice",
     default: "recommended",
     choices: [
@@ -3448,6 +3800,29 @@ const UNLOCK_DEFS: VariableDef[] = (Object.entries(STAGE_UNLOCKS) as Array<[stri
 );
 
 VARIABLES.push(...STAGE_MULTIPLIER_DEFS, ...STAGE_QUEST_DEFS, ...UNLOCK_DEFS);
+
+/**
+ * The village's default language (internal spec i18n, US3; C8). Used only when
+ * a visitor's browser names no language Village OS offers: a member's own
+ * choice and the browser's languages both come first. Open ring, so every
+ * member sees it and may propose a change, and a vote can move it (I.3, 0.1).
+ * Each choice is labelled in its own language.
+ */
+VARIABLES.push({
+  key: "village.default_locale",
+  category: "Language",
+  label: "Default language",
+  description:
+    "The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.",
+  type: "choice",
+  default: "en",
+  // Literal so the generated docs can read them; shared/i18nDefaultLocale.test.ts
+  // holds them equal to the offered languages, each named in its own language.
+  choices: [
+    { value: "en", label: "English" },
+    { value: "es", label: "Español" },
+  ],
+});
 
 /** Lookup by key, for validation and defaults. */
 export const VARIABLES_BY_KEY: Record<string, VariableDef> = Object.fromEntries(

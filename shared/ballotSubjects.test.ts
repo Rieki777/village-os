@@ -218,6 +218,17 @@ describe("per-subject thresholds", () => {
     expect(electorateFloorProblem(VILLAGE_LAUNCH, 40)).toBeNull();
   });
 
+  it("reads the village's own head count for the launch, never below one, and only for the launch (Rye, 2026-11-06)", () => {
+    expect(electorateFloorProblem(VILLAGE_LAUNCH, 2, 2)).toBeNull();
+    expect(electorateFloorProblem(VILLAGE_LAUNCH, 2, 5)).toContain("3 more members");
+    expect(electorateFloorProblem(VILLAGE_LAUNCH, 0, 0), "a zero is read as one").toContain("One more member");
+    expect(rollProblem(VILLAGE_LAUNCH, [{ weight: 1 }, { weight: 1 }], 2)).toBeNull();
+    // Control: with no village value the registry's three still holds.
+    expect(rollProblem(VILLAGE_LAUNCH, [{ weight: 1 }, { weight: 1 }])).toContain("One more member");
+    // Another subject never reads the launch's dial.
+    expect(electorateFloorProblem("mechanics", 0, 9)).toBeNull();
+  });
+
   it("keeps every registry entry sane, whatever a later lane adds", () => {
     for (const [subject, t] of Object.entries(SUBJECT_THRESHOLDS)) {
       expect(subject.length, subject).toBeLessThanOrEqual(24); // ballots.subject_type is varchar(24)
@@ -797,7 +808,7 @@ describe("meta settings", () => {
   });
 
   it("leaves an ordinary dial alone", () => {
-    expect(isMetaSetting("governance.vote_days")).toBe(false);
+    expect(isMetaSetting("governance.sensing_days")).toBe(false);
     expect(isMetaSetting("gratitude.pool")).toBe(false);
   });
 
@@ -812,12 +823,12 @@ describe("meta settings", () => {
 
   it("refuses a bundle that hides one pricing dial among ordinary ones", () => {
     expect(
-      metaSettingTrialRefusal(["governance.vote_days", "governance.unity_pct", "governance.sensing_days"]),
+      metaSettingTrialRefusal(["governance.sensing_days", "governance.unity_pct"]),
     ).toContain("governance.unity_pct");
   });
 
   it("allows a trial of a dial that prices nothing", () => {
-    expect(metaSettingTrialRefusal(["governance.vote_days"])).toBeNull();
+    expect(metaSettingTrialRefusal(["governance.sensing_days"])).toBeNull();
     expect(metaSettingTrialRefusal([])).toBeNull();
   });
 });

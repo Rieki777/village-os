@@ -90,6 +90,8 @@ export const MIGRATION_DIR = "drizzle";
 export const SOURCES = [
   "shared/governanceEngine.ts",
   "shared/ballotSubjects.ts",
+  // The change-set cap: a village dial since 2026-11-06, bounded here.
+  "shared/changeSetCap.ts",
   "shared/governanceKinds.ts",
   "shared/cycleClock.ts",
   "shared/gameVariables.ts",
@@ -127,6 +129,12 @@ export const SOURCES = [
   "shared/governingPurpose.ts",
   "shared/needs.ts",
   "server/lib/redemptionBallot.ts",
+  // The conflict agreement's subject name (`[CONFLICT_AGREEMENT]` in
+  // SUBJECT_CLOSERS) is read out of here, one import away, like the three above.
+  "shared/conflictAgreement.ts",
+  "shared/closingPolicies.ts",
+  // The village agreement subject (`agreement`), priced structural since D8.
+  "shared/agreements.ts",
   // Every route module, walked as a directory rather than named one by one.
   // The three-file list this replaced made `server/routes/delegation.ts`,
   // `governanceVetoes.ts` and `governanceLanding.ts` invisible, and the
@@ -838,26 +846,21 @@ export function weightFacts(root = ROOT) {
   return { modes: unionOf(root, "server/lib/governanceWeights.ts", "WeightMode") };
 }
 
-/** What a change set may carry, from the one validator that prices it. */
+/** What a change set may carry, from the one file that bounds it. */
 export function changeSetFacts(root = ROOT) {
-  const rel = "server/lib/mechanics.ts";
+  // Since 2026-11-06 the cap is a village dial (governance.change_set_cap).
+  // Its default, floor and ceiling are named constants in one shared file,
+  // which both the dial's registry entry and the validator import.
+  const rel = "shared/changeSetCap.ts";
   const abs = absOf(root, rel);
-  // The cap is read from the exported constant when there is one, because a
-  // named export survives a refactor that a literal in a comparison does not.
-  // The old inline shape is still accepted so this keeps answering for a tree
-  // that has not named it yet, and the refusal fires only when both are gone.
-  const named = constAnywhere(abs, "CHANGE_SET_CAP");
-  if (named) {
-    const cap = literalOf(named, abs);
-    if (typeof cap !== "number") fail(`${rel} declares CHANGE_SET_CAP as something other than a number`);
-    return { maxChanges: cap };
-  }
-  const text = readText(abs);
-  const m = /changes\.length\s*>\s*(\d+)/.exec(text);
-  if (!m) {
-    fail(`${rel} caps a change set neither with CHANGE_SET_CAP nor with "changes.length > N"; the dial ceiling is read from one of them`);
-  }
-  return { maxChanges: Number(m[1]) };
+  const read = (name) => {
+    const node = constAnywhere(abs, name);
+    if (!node) fail(`${rel} no longer declares ${name}; the change-set cap is read from it`);
+    const value = literalOf(node, abs);
+    if (typeof value !== "number") fail(`${rel} declares ${name} as something other than a number`);
+    return value;
+  };
+  return { maxChanges: read("CHANGE_SET_CAP_DEFAULT"), capMin: read("CHANGE_SET_CAP_MIN"), capMax: read("CHANGE_SET_CAP_MAX") };
 }
 
 /** Starting the Game: the one row that says a village has, and what it refuses until then. */
@@ -1906,6 +1909,13 @@ const SUBJECT_WORDS = {
   // the village holds every transferable power: until then the founder writes
   // it directly and this subject cannot be opened at all.
   gps_change: "Rewrites the governing purpose statement, the sentence every proposal opened after it answers to. Nothing already decided is reopened.",
+  // Opened only once the Game has started: before the Birthing the founders
+  // write the conflict agreement directly (server/routes/conflictAgreement.ts).
+  conflict_agreement: "Adopts a new version of the conflict agreement, which the exit policy's restorative path then reads through. Nothing already under way is reopened.",
+  closing_policy: "Adopts new words for what closing the village means, the exit policy's closing section, stamped as adopted by the vote. The rest of the exit policy is untouched.",
+  // A village agreement, written in the proposal wizard (defect 9, Wave 4):
+  // server/routes/governanceAgreements.ts opens it, server/lib/agreementCloser.ts lands it.
+  agreement: "Makes a written agreement the village's own, exactly as worded, with the review date it names. Nothing else changes on its own.",
 };
 
 /**
@@ -1988,6 +1998,11 @@ const KNOWN_DIALS = [
   "governance.window_grace_days",
   "governance.weight_mode",
   "governance.weight_token",
+  // Rye, 2026-11-05: the cap on one member's weight is "built as an option, OFF
+  // by default". It builds no staged ruling here: ruling 8 allows concentration
+  // and asks for it to be visible, and the cap ships off, so that stands as is.
+  "governance.weight_cap_on",
+  "governance.weight_cap_pct",
   "governance.unity_pct",
   "governance.quorum_pct",
   "governance.vote_days",
@@ -2002,9 +2017,15 @@ const KNOWN_DIALS = [
   "governance.subject_mint_rule_quorum_pct",
   "governance.subject_mint_rule_unity_pct",
   "governance.highest_tier",
+  // The launch's head count, a dial since Rye's 2026-11-06 "everything can change with the highest village vote".
+  "governance.launch_min_electorate",
   // The two that arrived with 19G: whose weight the quorum counts.
   "governance.nonhuman_in_quorum",
   "governance.absent_cycles",
+  // Rye, 2026-11-06: a missed quorum asked again once, at half the bar, off by
+  // default (0334, shared/quorumFallback.ts). It builds no staged ruling here:
+  // the stalemate re-run above is a different door, on an OPEN ballot.
+  "governance.quorum_fallback",
 ];
 
 export function dialCoverageProblem(keys, known = KNOWN_DIALS) {
@@ -2318,7 +2339,7 @@ const RULINGS = [
     ],
     status: () => "**Half built.**",
     note: (f) =>
-      `Built: a change set carries up to ${f.changeSet.maxChanges} entries and passes or fails as one. Staged: the set must be all ` +
+      `Built: a change set carries up to ${f.changeSet.maxChanges} entries by default (a village dial, ${f.changeSet.capMin} to ${f.changeSet.capMax}) and passes or fails as one. Staged: the set must be all ` +
       "dials or all minting rules and never both, community-governable keys only, and a Voice distribution is not a change " +
       "set entry at all. So the founder's own example, switch the mode and distribute Voice, is refused twice today and " +
       "half of it cannot be balloted. His answers to the two questions inside this one: a bundle takes the HIGHEST floor " +
@@ -3235,8 +3256,10 @@ export function render(f) {
   );
   p();
   p(
-    `A change set carries at most ${f.changeSet.maxChanges} entries, all game dials or all minting rules and never both, ` +
-      "because a ballot carries one threshold priced by its subject and a set that is two subjects has no honest price.",
+    `A change set carries at most ${f.changeSet.maxChanges} entries by default. Each village moves that number by vote ` +
+      `(\`governance.change_set_cap\`), anywhere from ${f.changeSet.capMin} to ${f.changeSet.capMax}. A set is priced at its ` +
+      "hardest element and applies whole or not at all. A game dial and a minting rule still go up as two proposals, " +
+      "because a dial moves when the vote carries and a minting rule moves at the next moon.",
   );
   p();
 

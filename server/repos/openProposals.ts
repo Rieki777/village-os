@@ -125,6 +125,19 @@ export async function decideOpenProposal(
 }
 
 /**
+ * Rewrite a confirmed proposal's term to the moon running now (role journey L5,
+ * "adopt for the moon running now"). Guarded on `confirmed`, so a decided
+ * proposal is never changed under its decision. True when this call did.
+ */
+export async function rewriteTerm(db: Db, id: string, term: { startsOn: string; endsOn: string }): Promise<boolean> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET body_json = JSON_SET(COALESCE(body_json, JSON_OBJECT()), '$.term', JSON_OBJECT('kind', 'moon', 'startsOn', ?, 'endsOn', ?)) WHERE id = ? AND status = 'confirmed'",
+    [term.startsOn, term.endsOn, id],
+  );
+  return Number(result.affectedRows ?? 0) === 1;
+}
+
+/**
  * Confirm the proposal a token's hash names: only an unconfirmed one made after
  * `notBefore`, and only once, because the hash is cleared as it is used. The
  * proposal it confirmed, or null.
@@ -189,7 +202,7 @@ export async function adoptedDecidedBefore(db: Db, before: Date): Promise<Stored
 /** Take the name and address off one proposal, once. True when this call did. */
 export async function anonymiseOpenProposal(db: Db, id: string, now: Date): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? WHERE id = ? AND anonymised_at IS NULL",
     [now, id],
   );
   return Number(result.affectedRows ?? 0) === 1;
@@ -209,9 +222,24 @@ export async function deleteUnconfirmedBefore(db: Db, before: Date): Promise<num
 /** Take the name and address off every declined or withdrawn proposal decided before `before`. How many. */
 export async function anonymiseDecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
   const [result] = await db.query<ResultSetHeader>(
-    "UPDATE open_role_proposals SET name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
       "WHERE status IN ('declined', 'withdrawn') AND decided_at < ? AND anonymised_at IS NULL",
     [now, before],
+  );
+  return Number(result.affectedRows ?? 0);
+}
+
+/**
+ * Close every confirmed proposal nobody decided before `before`, as withdrawn,
+ * and take its name and address off in the same write. The form promises the
+ * name and address go 90 days on; a proposal left waiting that long is as
+ * good as a no. How many.
+ */
+export async function expireUndecidedBefore(db: Db, before: Date, now: Date): Promise<number> {
+  const [result] = await db.query<ResultSetHeader>(
+    "UPDATE open_role_proposals SET body_json = JSON_REMOVE(COALESCE(body_json, JSON_OBJECT()), '$.card.timeZone', '$.card.windows', '$.card.earliestStart', '$.links', '$.files'), status = 'withdrawn', decided_at = ?, name = NULL, email = NULL, email_key = NULL, anonymised_at = ? " +
+      "WHERE status = 'confirmed' AND confirmed_at < ? AND anonymised_at IS NULL",
+    [now, now, before],
   );
   return Number(result.affectedRows ?? 0);
 }
@@ -255,4 +283,11 @@ export async function listOpenLinks(db: Db, limit = 200): Promise<StoredOpenLink
 export async function revokeOpenLink(db: Db, id: string, now: Date): Promise<boolean> {
   const [result] = await db.query<ResultSetHeader>("UPDATE open_proposal_links SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", [now, id]);
   return Number(result.affectedRows ?? 0) === 1;
+}
+
+/** Which of these proposals still keep their links and files: rows that exist and are not anonymised (Rye, 10 Nov 2026). */
+export async function proposalsKeepingFiles(db: Db, ids: readonly string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const [rows] = await db.query<RowDataPacket[]>("SELECT id FROM open_role_proposals WHERE id IN (?) AND anonymised_at IS NULL", [ids]);
+  return new Set(rows.map((r) => String(r.id)));
 }

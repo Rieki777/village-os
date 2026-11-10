@@ -34,11 +34,17 @@ import {
   capabilityLabel,
   isBadgeGrantable,
   isDeniable,
+  isVillageHeld,
   type Capability,
 } from "../../shared/capabilities";
 import { liveConsequence } from "./capabilityConsequence";
+import { capabilityHoldings } from "./capabilityHolding";
+import { recordEvent } from "./events";
+import type { NotifyInput } from "./notify";
 import { shownGeneKeysUserIds } from "../repos/geneKeys";
 import { recordBadgeTier } from "../repos/badgeEvents";
+import { deleteBadgeAward } from "../repos/badgeAwards";
+import { homesHandedOverByMember, parcelsBoughtByMember } from "../repos/investorMilestones";
 // The sentence that names where the seat is actually filled, borrowed rather
 // than re-spelled: the roles routes and the badge panel are two doors onto
 // one rule, and a second wording of it is a twin that drifts.
@@ -52,7 +58,19 @@ export type BadgeKind = (typeof BADGE_KINDS)[number];
 export const MAX_BADGE_MULTIPLIER = 3;
 
 /** `gene_keys_shown`: 1 for a member whose Gene Keys lines are saved and shown (0287's "Lines found"). */
-export const EARNED_METRICS = ["quests_consented", "ledger_earned_total", "gratitude_breadth", "gene_keys_shown"] as const;
+/**
+ * `homes_handed_over` and `parcels_bought`: the investor path's two milestones
+ * (0349, server/lib/investorMilestones.ts), counted from their own tables and
+ * never from any amount.
+ */
+export const EARNED_METRICS = [
+  "quests_consented",
+  "ledger_earned_total",
+  "gratitude_breadth",
+  "gene_keys_shown",
+  "homes_handed_over",
+  "parcels_bought",
+] as const;
 /** Metrics that measure recognition: capability-bearing earned badges may not use them. */
 export const RECOGNITION_METRICS: ReadonlySet<string> = new Set(["gratitude_breadth"]);
 
@@ -429,6 +447,116 @@ export async function upsertAward(
   return { reissued: true, reissueCount: Number(row?.reissue_count ?? 0) };
 }
 
+// ── A POWER THE VILLAGE HOLDS MOVES ONLY BY ITS VOTE (Rye, 2026-11-06) ─────
+//
+// "EVERYTHING can change with the highest village vote." A badge is one more
+// door onto a power: whoever wears it passes the gate on what it carries
+// (`capabilityDecision`, the badge step). So once the village holds a power, an
+// administrator may not make, change, award or take back a badge carrying it
+// (R157), and a `badge_grant` ballot is the way it moves (gap 6), at the
+// village's highest set tier. The two doors share the award and the revoke
+// below, so neither one can grow a lenient copy.
+
+/** Where a member opens a badge vote. One string, so every refusal names the same door. */
+export const BADGE_GRANT_ROUTE = "/api/governance/badge-grants";
+
+/**
+ * The capabilities on this list the village holds right now, read live from the
+ * holding table the gate reads. A failed read throws, so a refusal that depends
+ * on it fails closed: the admin act does not happen.
+ */
+export async function villageHeldKeysOf(pool: Pool, capabilities: readonly string[]): Promise<string[]> {
+  const held = (await capabilityHoldings(pool)).map((r) => r.capability);
+  return capabilities.filter((c) => ALL_CAPABILITIES.includes(c as Capability) && isVillageHeld(c as Capability, held));
+}
+
+/** The 409 an administrator meets on a badge carrying a power the village holds. */
+export function badgeVillageRefusal(keys: readonly string[]) {
+  const named = keys.map((k) => capabilityLabel(k as Capability)).join(", ");
+  return {
+    error:
+      `The village holds ${named}. A badge carrying it hands that power to whoever wears it, and moving a power the village holds is the village's decision, never one person's. ` +
+      `So this badge cannot be made, changed, awarded or taken back from the admin panel. ` +
+      `Open a badge_grant ballot (POST ${BADGE_GRANT_ROUTE}) naming the badge and the member, and the whole roll decides it at the village's highest tier.`,
+    villageHolds: [...keys],
+    requiresVote: true,
+    ballotRoute: BADGE_GRANT_ROUTE,
+  };
+}
+
+/** The 403 an administrator meets awarding themselves a badge that carries any power. */
+export const SELF_AWARD_REFUSAL =
+  "A badge that carries a power is never yours to give yourself. " +
+  `Another administrator can award it, or open a badge_grant ballot (POST ${BADGE_GRANT_ROUTE}) and let the village decide.`;
+
+/** What the award tells the member: the notify spine's input, as `awardBadge` needs it. */
+export type BadgeNotify = (input: NotifyInput) => Promise<unknown>;
+
+/**
+ * Award a badge: write it, tell the member, leave the audit line. The ONE award,
+ * for the admin route and for a carried `badge_grant` ballot. Every check about
+ * WHO may award stays at each door; this is only what an award does.
+ */
+export async function awardBadge(
+  pool: Pool,
+  notify: BadgeNotify,
+  input: {
+    badge: Pick<BadgeDef, "id" | "name" | "kind">;
+    userId: string;
+    awardedBy: string | null;
+    note: string | null;
+    expiresAt: Date | null;
+    /** The ballot that carried it, when the village decided. It goes on the audit line. */
+    ballotId?: string | null;
+    /** Who the audit line names. Defaults to `awardedBy`; a carried vote names whoever landed it. */
+    actorUserId?: string | null;
+  },
+): Promise<{ reissued: boolean; reissueCount: number }> {
+  const { badge, userId } = input;
+  const award = await upsertAward(pool, {
+    badgeId: badge.id, userId, awardedBy: input.awardedBy, note: input.note, expiresAt: input.expiresAt,
+  });
+  await notify({
+    userId,
+    type: "badge",
+    title: badge.kind === "warning" ? `A warning was placed: ${badge.name}` : `Badge received: ${badge.name}`,
+    body: input.note ? String(input.note).slice(0, 500) : null,
+    link: "/badges",
+    // Stable, like every other producer. With Date.now() in it the key was
+    // unique per call, so the notify spine's whole dedupe guarantee was off
+    // for this one path: a re-run of an award (a double-click, a retried
+    // request) told the member twice that they had been given a badge, or
+    // twice that a warning had been placed on them.
+    dedupeKey: `award:${badge.id}:${userId}`,
+  });
+  // B5: a re-issued WARNING is its own audit fact, with the running count
+  // in the text, the trail an indefinitely-renewed silencing would leave.
+  void recordEvent(pool, {
+    kind: "audit",
+    text: badge.kind === "warning" && award.reissued
+      ? `badge:warning-reissue:${badge.id}:x${award.reissueCount + 1}`
+      : `badge:${badge.kind}:${badge.id}${input.ballotId ? `:${input.ballotId}` : ""}`,
+    actorUserId: input.actorUserId === undefined ? input.awardedBy : input.actorUserId,
+    entityType: "user", entityRef: userId, audience: "admin",
+  });
+  return award;
+}
+
+/** Take a badge back: the one revoke, for both doors. False when there was no award. */
+export async function revokeBadge(
+  pool: Pool,
+  input: { badgeId: string; userId: string; actorUserId: string | null; ballotId?: string | null },
+): Promise<boolean> {
+  if (!(await deleteBadgeAward(pool, input.badgeId, input.userId))) return false;
+  void recordEvent(pool, {
+    kind: "audit",
+    text: `badge:revoke:${input.badgeId}${input.ballotId ? `:${input.ballotId}` : ""}`,
+    actorUserId: input.actorUserId,
+    entityType: "user", entityRef: input.userId, audience: "admin",
+  });
+  return true;
+}
+
 export interface ExpiredWarning {
   awardId: string;
   userId: string;
@@ -506,6 +634,8 @@ async function metricValues(pool: Pool, metric: string): Promise<Map<string, num
     // Shown rows only: a public badge must never say a member did Gene Keys they keep hidden.
     return new Map((await shownGeneKeysUserIds(pool)).map((id) => [id, 1]));
   }
+  if (metric === "homes_handed_over") return homesHandedOverByMember(pool);
+  if (metric === "parcels_bought") return parcelsBoughtByMember(pool);
   return new Map();
 }
 

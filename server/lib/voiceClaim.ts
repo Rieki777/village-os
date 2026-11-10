@@ -36,6 +36,7 @@
  */
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { numberVar, stringVar } from "./variables";
+import { secretStatus, secretValue } from "./secrets";
 import { zonedTimeToUtc } from "../../shared/lunar";
 import { villageTimezone } from "./villageReaders";
 import { memberAccount, postTransfer, tokenDef } from "./ledger";
@@ -785,7 +786,7 @@ export async function claimHistory(pool: Pool, userId: string, limit = 20, lane:
 export function checkVoiceSecret(
   env: NodeJS.ProcessEnv = process.env,
 ): { ok: true } | { ok: false; fatal: boolean; error: string } {
-  const secret = String(env.HYPHA_VOICE_WEBHOOK_SECRET ?? "").trim();
+  const { value: secret, typed } = readVoiceSecret(env);
   if (!secret) {
     // NOT fatal. The receiver answers 503 with no secret, so an unsecured
     // village is unreachable rather than exposed, and killing the process here
@@ -795,30 +796,103 @@ export function checkVoiceSecret(
       ok: false,
       fatal: false,
       error:
-        "HYPHA_VOICE_WEBHOOK_SECRET is empty while economy.hypha_space is set. The claim receiver " +
-        "will refuse every delivery until it is set.",
+        "The Hypha voice secret is empty while economy.hypha_space is set. Set it under Admin, Integrations, " +
+        "or as HYPHA_VOICE_WEBHOOK_SECRET on the host. The claim receiver will refuse every delivery until it is set.",
     };
   }
-  if (secret.length < 32) {
-    return {
-      ok: false,
-      fatal: true,
-      error: "HYPHA_VOICE_WEBHOOK_SECRET is too short to be a real secret. Generate 32 bytes of hex.",
-    };
+  const refusal = candidateRefusal(secret, env, typed ? "The Hypha voice secret typed into Admin, Integrations" : "HYPHA_VOICE_WEBHOOK_SECRET");
+  return refusal ? { ok: false, fatal: true, error: refusal } : { ok: true };
+}
+
+/** The voice secret's slot in the store, which falls back to HYPHA_VOICE_WEBHOOK_SECRET. */
+const VOICE_SLOT = "hypha_voice_webhook_secret";
+
+/**
+ * The voice secret as the receiver reads it: typed into Admin first, the host
+ * variable second (readiness R171). `typed` says which, because a stored value
+ * may never stop the boot (see `assertVoiceSecret`). Before boot has loaded
+ * the store, `secretValue` throws, and the host variable is all there is.
+ */
+function readVoiceSecret(env: NodeJS.ProcessEnv): { value: string; typed: boolean } {
+  try {
+    return { value: secretValue(VOICE_SLOT, env).trim(), typed: secretStatus(VOICE_SLOT, env).source === "admin" };
+  } catch {
+    return { value: String(env.HYPHA_VOICE_WEBHOOK_SECRET ?? "").trim(), typed: false };
   }
-  const borrowed = [env.GOVERNANCE_HUB_SECRET, env.STRIPE_WEBHOOK_SECRET, env.JWT_SECRET, env.SESSION_SECRET]
-    .map((v) => String(v ?? "").trim())
-    .filter(Boolean);
-  if (borrowed.includes(secret)) {
-    return {
-      ok: false,
-      fatal: true,
-      error:
-        "HYPHA_VOICE_WEBHOOK_SECRET matches another secret in this environment. One secret, one job: " +
-        "anything able to sign that other callback could otherwise confirm a claim on value.",
-    };
+}
+
+/** Why a value may not be the voice secret, naming it as `subject`, or null when it may. */
+function candidateRefusal(secret: string, env: NodeJS.ProcessEnv, subject: string): string | null {
+  if (secret.length < 32) return `${subject} is too short to be a real secret. Generate 32 bytes of hex.`;
+  if (otherSecrets(env).includes(secret)) {
+    return (
+      `${subject} matches another secret this village holds. One secret, one job: ` +
+      "anything able to sign that other callback could otherwise confirm a claim on value."
+    );
   }
-  return { ok: true };
+  return null;
+}
+
+/**
+ * The secret the claim receiver verifies against, or "" when it has none it
+ * may use. A value that fails the check verifies nothing, so the receiver
+ * answers 503: for a host variable boot already refused it, and a stored one
+ * is refused at the write, which leaves a copy made afterwards from the other
+ * side, at the host, as the case this catches.
+ */
+export function usableVoiceSecret(env: NodeJS.ProcessEnv = process.env): string {
+  return checkVoiceSecret(env).ok ? readVoiceSecret(env).value : "";
+}
+
+/**
+ * Why Admin, Integrations may not store `value` in `key`, or null (readiness
+ * R171). The boot check that kept the voice secret env-only, held at the write:
+ *
+ *   - the voice slot itself takes no short value and no copy of another
+ *     callback secret;
+ *   - a callback secret takes no copy of the voice secret, from either home,
+ *     since one able to sign that callback could then confirm a claim on value.
+ *
+ * Clearing is always allowed. A value the store already holds is checked the
+ * same way, so nothing that reaches the store this way can stop a restart.
+ */
+export function voiceSecretWriteRefusal(key: string, value: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const candidate = value.trim();
+  if (!candidate) return null;
+  if (key === VOICE_SLOT) return candidateRefusal(candidate, env, "That Hypha voice secret");
+  if ((STORE_CALLBACK_SECRETS as readonly string[]).includes(key) && candidate === readVoiceSecret(env).value) {
+    return "That value is the Hypha voice secret. One secret, one job: a callback able to sign with it could confirm a claim on value.";
+  }
+  return null;
+}
+
+/** The callback secrets the store holds, which a borrowed voice secret could also sign. */
+const STORE_CALLBACK_SECRETS = ["governance_hub_secret", "stripe_webhook_secret", "resend_webhook_secret", "riverside_webhook_secret"] as const;
+
+/**
+ * Every other secret this village holds, read the way the server reads it
+ * (readiness R171).
+ *
+ * The check used to compare against environment copies only, while
+ * server/lib/secrets.ts makes the admin-typed store value the primary home for
+ * four of them: a hub secret typed into Admin, Integrations was invisible here.
+ * It also left out AUTH_TOKEN_SECRET, the key member sessions are actually
+ * signed with, and listed two names (JWT_SECRET, SESSION_SECRET) nothing here
+ * reads; those stay, because a fork may still carry them.
+ *
+ * Before boot has loaded the store, `secretValue` throws, and the environment
+ * copies still count.
+ */
+function otherSecrets(env: NodeJS.ProcessEnv): string[] {
+  const found: unknown[] = [env.GOVERNANCE_HUB_SECRET, env.STRIPE_WEBHOOK_SECRET, env.AUTH_TOKEN_SECRET, env.JWT_SECRET, env.SESSION_SECRET];
+  for (const key of STORE_CALLBACK_SECRETS) {
+    try {
+      found.push(secretValue(key, env));
+    } catch {
+      // The store is not loaded yet; the environment copies above still count.
+    }
+  }
+  return found.map((v) => String(v ?? "").trim()).filter(Boolean);
 }
 
 export function assertVoiceSecret(env: NodeJS.ProcessEnv = process.env): void {
@@ -827,7 +901,9 @@ export function assertVoiceSecret(env: NodeJS.ProcessEnv = process.env): void {
 
   const verdict = checkVoiceSecret(env);
   if (verdict.ok) return;
-  if (verdict.fatal) throw new Error(verdict.error);
+  // A value typed into Admin never stops the boot: the panel that fixes it is
+  // served by this process. The receiver refuses it (`usableVoiceSecret`).
+  if (verdict.fatal && !readVoiceSecret(env).typed) throw new Error(verdict.error);
   // Loud, and survivable. The admin who caused this is refused at the WRITE
   // (see the economy.hypha_space branch in PUT /api/admin/variables), so the
   // only way to reach it is an env change after the fact, which is repaired by

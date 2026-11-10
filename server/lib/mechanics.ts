@@ -54,16 +54,31 @@ import {
   AMOUNT_FROM_SOURCE,
   MINT_RULE_FIELD_LABEL,
   displayMintRuleValue,
+  isMintRuleCreateKey,
   isMintRuleKey,
+  MINT_RULE_CREATE_KEY_PREFIX,
+  mintRuleCreateKey,
+  mintRuleCreateLabel,
   mintRuleValueNumber,
   mintRuleValueProblem,
   normalizeMintRuleValue,
   parseMintRuleKey,
+  type MintRuleDraft,
   type MintRuleField,
 } from "../../shared/mintRuleKeys";
 import { MODULES_BY_ID, type ModuleLifecycle } from "../../shared/modules";
 import { ceilingBinds } from "../../shared/workValue";
-import { NEVER_BY_CHANGESET, isLifecycle, lifecycleWords } from "../../shared/moduleSwitch";
+import { VOTE_RUNS_ON, isLifecycle, lifecycleWords, voteModuleSwitchProblem } from "../../shared/moduleSwitch";
+import { highestTierFrom, type ThresholdSettings as HighestTierSettings } from "../../shared/ballotSubjects";
+import { exitChangeKey, exitChangeOf, judgeMatrixItem, matrixChangeKey, type ExitVoteDoor } from "./consequenceVote";
+import { BRAND_CURRENCY_FIELD, brandChangeKey, brandFieldTier, brandFieldValue, brandVoteProblem, currencyChangeSentence } from "../../shared/brandVote";
+import {
+  changeSetCapFrom,
+  CHANGE_SET_CAP_DEFAULT,
+  CHANGE_SET_CAP_KEY,
+  CHANGE_SET_CAP_MAX,
+  CHANGE_SET_CAP_MIN,
+} from "../../shared/changeSetCap";
 
 /**
  * -- WHAT A CHANGE SET IS MADE OF, AFTER Q9 ----------------------------------
@@ -90,6 +105,21 @@ export interface MintRuleItem {
   /** A `mint:<ruleId>:<field>` key from `shared/mintRuleKeys.ts`. */
   key: string;
   to: string;
+}
+
+/**
+ * A NEW minting rule (vote-path gap 8). Every field is a string, like every
+ * other value a change set holds, and the recipient is not one of them: each
+ * trigger has the one recipient the engine pays (`recipientForTrigger`).
+ */
+export interface MintRuleCreateItem {
+  kind: "mint_rule_create";
+  /** One of `MINT_RULE_CREATE_TRIGGERS`. */
+  trigger: string;
+  tokenSlug: string;
+  /** A number, or `from-source`. */
+  amount: string;
+  ceiling: string;
 }
 
 export interface WeightAllocationItem {
@@ -135,9 +165,33 @@ export interface RoleItem {
   userId?: string;
 }
 
+/**
+ * THE CONSEQUENCE PEN'S VOTE (canvas follow-up G.1, G.2): a change to the
+ * exit terms, or to the care door while Conflict Evolution is off. `change`
+ * holds the fields as the canvas suggestion spells them
+ * (`exitChangeOf`, server/lib/consequenceVote.ts).
+ */
+export interface ExitItem {
+  kind: "exit_terms" | "exit_restorative";
+  change: Record<string, unknown>;
+}
+
+/** One human row of the Decision Matrix, added, changed or removed (G.1). */
+export interface MatrixRowItem {
+  kind: "matrix_row";
+  act: "insert" | "update" | "remove";
+  /** The row, for a change or a removal. */
+  rowId?: number;
+  /** What the row would say, for an addition or a change. */
+  row?: Record<string, unknown>;
+}
+
 export type ChangeItem =
+  | ExitItem
+  | MatrixRowItem
   | DialItem
   | MintRuleItem
+  | MintRuleCreateItem
   | WeightAllocationItem
   | ModeSwitchItem
   | ModuleLifecycleItem
@@ -180,13 +234,39 @@ export function asChangeItem(input: ChangeInput): ChangeItem {
  * declared, and the kind's tier is the fallback for a kind whose subject sets
  * no floor of its own.
  */
-export function pricingOf(item: ChangeItem): { subject: string; criticality: Criticality } {
+export function pricingOf(item: ChangeItem, settings?: HighestTierSettings): { subject: string; criticality: Criticality } {
   const subject = SUBJECT_FOR_ITEM_KIND[item.kind];
+  /*
+   * THE MODULE THE VOTE RUNS ON MOVES ONLY AT THE HIGHEST TIER (canvas
+   * follow-up G.3, Article 0): the village's own `governance.highest_tier`
+   * when the settings are to hand, and the top of the ladder when they are
+   * not, which is `highestTierFrom`'s own answer for an unread setting.
+   */
+  if (item.kind === "module_lifecycle" && VOTE_RUNS_ON.has(String(item.moduleId))) {
+    return { subject, criticality: settings ? settings.highest : highestTierFrom() };
+  }
   if (item.kind === "dial") {
     const def = VARIABLES_BY_KEY[item.key];
     return { subject, criticality: def ? criticalityOf(def) : "routine" };
   }
+  /*
+   * A BRAND FIELD IS PRICED BY THE FIELD, like a dial. A name or a colour is
+   * routine; the currency code every amount is counted in moves only at the
+   * highest tier (Rye, 2026-11-06, `brandFieldTier` in shared/brandVote.ts).
+   */
+  if (item.kind === "brand_field") {
+    return { subject, criticality: criticalityOfItems([CRITICALITY_FOR_ITEM_KIND.brand_field, brandFieldTier(item.field)]) };
+  }
   const named = thresholdsForSubject(subject);
+  /*
+   * A NEW RULE IS NEW ISSUANCE, so it never costs less than structural, even
+   * under a subject whose own floor says routine. It keeps the subject's floor
+   * (MINT_RULE asks 50 of quorum) and adds the tier on top; an edit to a rule
+   * that already exists keeps the reasoning above unchanged.
+   */
+  if (named && item.kind === "mint_rule_create") {
+    return { subject, criticality: criticalityOfItems([named.criticality ?? "routine", CRITICALITY_FOR_ITEM_KIND[item.kind]]) };
+  }
   if (named) return { subject, criticality: named.criticality ?? "routine" };
   return { subject, criticality: CRITICALITY_FOR_ITEM_KIND[item.kind] };
 }
@@ -281,39 +361,81 @@ export function priceChangeSet(
   village: MethodDials,
   settings?: ThresholdSettings,
 ): ChangeSetPrice {
+  return priceChangeSetItems(changes, method, village, settings).set;
+}
+
+/** One change's share of a set's price (change requests, 3b). */
+export interface PricedChangeItem {
+  /** The change's position in the set, matching the dry run's element index. */
+  index: number;
+  subject: string;
+  criticality: Criticality;
+  /** What this change alone asks, conducted the way the whole set is. */
+  dials: MethodDials;
+  /** True when this change asks the set's unity or the set's quorum. */
+  setsTheBar: boolean;
+}
+
+export interface ChangeSetItemsPrice {
+  /** The set's price: exactly what `priceChangeSet` returns. */
+  set: ChangeSetPrice;
+  items: PricedChangeItem[];
+  /** The indexes of the changes that set the bar, in order. */
+  setBy: number[];
+}
+
+/**
+ * WHAT EACH CHANGE COSTS, AND WHICH ONE SETS THE BAR.
+ *
+ * Rye, 2026-11-06: a change request says which item set the tier and offers
+ * "split this into its own proposal". The set's price is the hardest of its
+ * changes', half by half (unity and quorum separately), so it is computed
+ * here from the per-change prices and `priceChangeSet` returns this function's
+ * `set`. One computation, so the explanation a member reads and the price the
+ * ballot freezes cannot disagree (I.21).
+ */
+export function priceChangeSetItems(
+  changes: readonly ChangeInput[],
+  method: BallotMethod,
+  village: MethodDials,
+  settings?: ThresholdSettings,
+): ChangeSetItemsPrice {
   const items = changes.map(asChangeItem);
-  const priced = items.map(pricingOf);
+  const priced = items.map((item) => pricingOf(item, settings));
   const subjects = priced.map((p) => p.subject);
   const criticality = criticalityOfItems(priced.map((p) => p.criticality));
   const { method: fixed, conflict } = methodForSubjects(subjects);
   const conducts = fixed ?? method;
   /*
-   * The criticality tier is asked for as a subject-less target, because a
-   * dial's tier belongs to the dial and not to the word "mechanics". Every
-   * other floor arrives through the subjects.
-   */
-  let dials = raiseToTier(
-    dialsForSubject(subjects, conducts, village, settings),
-    criticality,
-    settings,
-  );
-  /*
+   * EACH CHANGE ALONE, conducted the way the whole set will be. The
+   * criticality tier is asked for as a subject-less target, because a dial's
+   * tier belongs to the dial and not to the word "mechanics". Every other
+   * floor arrives through the subject.
+   *
    * THRESHOLDS FOR THRESHOLDS (19B). A dial that IS a bar is priced at the
    * bar it currently holds: a setting at 97 and 97 costs 97 and 97 to move,
-   * up or down. The tier above is the floor under this, so this call can only
-   * ever raise, and a set that moves two bars pays the harder of the two.
-   *
+   * up or down. The tier is the floor under this, so it can only ever raise.
    * It lives here and never in `pricingOf` because a tier is a word and a
    * bar is a pair of numbers: 97 and 97 has no name on the ladder once a
    * village has raised its constitutional tier above the platform's, and
    * rounding it to the nearest tier would price the change below the bar it
    * is moving.
    */
-  for (const item of items) {
-    if (item.kind !== "dial") continue;
-    const own = thresholdChangePrice(item.key, settings);
-    if (own) dials = raiseDials(dials, own);
-  }
+  const perItem = items.map((item, index) => {
+    let own = raiseToTier(dialsForSubject(subjects[index], conducts, village, settings), priced[index].criticality, settings);
+    if (item.kind === "dial") {
+      const bar = thresholdChangePrice(item.key, settings);
+      if (bar) own = raiseDials(own, bar);
+    }
+    return own;
+  });
+  /*
+   * THE SET: the method's own answer and the set's tier, raised by every
+   * change. Raising is a maximum half by half, so this is the hardest change's
+   * unity and the hardest change's quorum, which may be two different changes.
+   */
+  let dials = raiseToTier(dialsForSubject([], conducts, village, settings), criticality, settings);
+  for (const own of perItem) dials = raiseDials(dials, own);
   /*
    * WHICH SUBJECT GETS STAMPED. The one whose own floor is the set's floor,
    * preferring the first named, so a set of one behaves exactly as it did.
@@ -329,7 +451,15 @@ export function priceChangeSet(
       subjectType = subject;
     }
   }
-  return { subjectType, subjects, criticality, method: fixed, conflict, dials };
+  const set: ChangeSetPrice = { subjectType, subjects, criticality, method: fixed, conflict, dials };
+  const out: PricedChangeItem[] = perItem.map((own, index) => ({
+    index,
+    subject: subjects[index],
+    criticality: priced[index].criticality,
+    dials: own,
+    setsTheBar: own.unityPct === dials.unityPct || own.quorumPct === dials.quorumPct,
+  }));
+  return { set, items: out, setBy: out.filter((i) => i.setsTheBar).map((i) => i.index) };
 }
 
 function raiseToTier(base: MethodDials, criticality: Criticality, settings?: ThresholdSettings): MethodDials {
@@ -350,8 +480,21 @@ export interface ProposedChange {
    * executor reads it back as a `module_lifecycle` item and never as a dial:
    * `asChangeItem` takes any change carrying a `kind` exactly as written.
    */
-  kind?: "module_lifecycle";
+  kind?: "module_lifecycle" | "brand_field" | "mint_rule_create" | "exit_terms" | "exit_restorative" | "matrix_row";
   moduleId?: string;
+  /** Present on a brand change only: the `section.field` it writes. */
+  field?: string;
+  /** Present on a new minting rule only, so the executor reads the rule back whole. */
+  trigger?: string;
+  tokenSlug?: string;
+  amount?: string;
+  ceiling?: string;
+  /** Present on an exit change only: the fields it sets (server/lib/consequenceVote.ts). */
+  change?: Record<string, unknown>;
+  /** Present on a matrix change only. */
+  act?: "insert" | "update" | "remove";
+  rowId?: number;
+  row?: Record<string, unknown>;
 }
 
 /** The key a module switch is filed under on a proposal: `module:<id>`. */
@@ -444,25 +587,44 @@ export function mintRuleLabel(rule: MintRuleValues, field: MintRuleField): strin
  * refused at validation rather than voted on and silently dropped.
  */
 // Widened by the dispatcher lane as each executor landed in
-// `server/lib/changeset.ts`. `brand_field` and `role` are deliberately still
-// outside it: a role act has its own subject types and its own closers, and the
-// brand writer has no change-set executor yet. Absence refuses at validation,
-// which is the fail-safe direction.
+// `server/lib/changeset.ts`. `role` is deliberately still outside it: a role
+// act has its own subject types and its own closers. `brand_field` came in with
+// Rye's 2026-11-06 rule ("EVERYTHING can change with the highest village
+// vote"), within the limits shared/brandVote.ts sets. Absence refuses at
+// validation, which is the fail-safe direction.
 export const EXECUTABLE_ITEM_KINDS: ReadonlySet<ChangeItemKind> = new Set<ChangeItemKind>([
   "dial",
   "mint_rule",
+  "mint_rule_create",
   "weight_allocation",
   "mode_switch",
   "module_lifecycle",
+  "brand_field",
+  // The consequence pen after the Birthing (canvas follow-up G.1, G.2).
+  "exit_terms",
+  "exit_restorative",
+  "matrix_row",
 ]);
 
-/** The cap a change set may not pass. A proposal is read before it is voted on. */
-export const CHANGE_SET_CAP = 12;
+/**
+ * The cap a change set may not pass when the caller names none. A proposal is
+ * read before it is voted on. It is the village's dial now
+ * (`governance.change_set_cap`, Rye 2026-11-06), so each route passes the
+ * village's value as `changeSetCap`; the floor and the ceiling are in
+ * shared/changeSetCap.ts and hold whatever is passed.
+ */
+export const CHANGE_SET_CAP = CHANGE_SET_CAP_DEFAULT;
+export { changeSetCapFrom, CHANGE_SET_CAP_DEFAULT, CHANGE_SET_CAP_KEY, CHANGE_SET_CAP_MAX, CHANGE_SET_CAP_MIN };
 
 /** How votes are weighed. These land only as a mode switch, never as a plain dial. */
 export const WEIGHING_KEYS: ReadonlySet<string> = new Set(["governance.weight_mode", "governance.weight_token"]);
 
 export interface ValidateChangeSetOptions {
+  /**
+   * The village's `governance.change_set_cap`. Absent means the default (22).
+   * Held inside the code's floor and ceiling whatever is passed.
+   */
+  changeSetCap?: number;
   /** Override what this build can execute. Defaults to `EXECUTABLE_ITEM_KINDS`. */
   executableKinds?: ReadonlySet<ChangeItemKind>;
   /**
@@ -478,6 +640,8 @@ export interface ValidateChangeSetOptions {
    * kept now the vote is binding).
    */
   openModuleProposal?: (moduleId: string) => Promise<string | null>;
+  /** The brand document as it stands, for a `brand_field` item. Refused without it. */
+  brandOf?: () => unknown;
   /**
    * True before the start, when the founders hold founder-held dials and a
    * founder adopts a proposal on them by hand (./founderDials.ts). A set may
@@ -485,6 +649,25 @@ export interface ValidateChangeSetOptions {
    * two ways.
    */
   foundersHold?: () => Promise<boolean>;
+  /**
+   * Somebody holds `module.switch` live right now. Asked only of a set that
+   * would take the module the vote runs on below members (G.3,
+   * `voteModuleSwitchProblem`). Absent reads as nobody, which refuses.
+   */
+  anySwitchHolder?: () => Promise<boolean>;
+  /**
+   * Why this new minting rule could not be created, or null. The registry's
+   * half lives in server/lib/mintRuleCreate.ts (`newMintRuleProblem`) and is
+   * injected for the reason `readMintRules` is: this file stays testable
+   * without a server. Absent, a new rule is refused.
+   */
+  newMintRuleProblem?: (draft: MintRuleDraft) => Promise<string | null>;
+  /**
+   * The exit policy's judge for an `exit_terms` or `exit_restorative` item:
+   * every refusal the policy's own save makes, writing nothing
+   * (`exitVoteDoor`, server/routes/exits.ts). Absent, the item is refused.
+   */
+  exitVote?: Pick<ExitVoteDoor, "judge">;
 }
 
 export async function validateChangeSet(
@@ -500,9 +683,10 @@ export async function validateChangeSet(
   if (!Array.isArray(changes) || changes.length === 0) {
     return { problems: [{ key: "*", problem: "A proposal must change at least one dial" }], normalized, items: [] };
   }
-  if (changes.length > CHANGE_SET_CAP) {
+  const cap = changeSetCapFrom(options?.changeSetCap ?? CHANGE_SET_CAP_DEFAULT);
+  if (changes.length > cap) {
     return {
-      problems: [{ key: "*", problem: `A proposal may move at most ${CHANGE_SET_CAP} dials. Split a larger rebalance into readable steps` }],
+      problems: [{ key: "*", problem: `A proposal may carry at most ${cap} changes in this village. Split a larger rebalance into readable steps` }],
       normalized,
       items: [],
     };
@@ -521,7 +705,7 @@ export async function validateChangeSet(
     };
   }
   const kinds = new Set(items.map((i) => i.kind));
-  if (kinds.has("dial") && kinds.has("mint_rule")) {
+  if (kinds.has("dial") && (kinds.has("mint_rule") || kinds.has("mint_rule_create"))) {
     return {
       problems: [{
         key: "*",
@@ -554,10 +738,91 @@ export async function validateChangeSet(
 
   const seen = new Set<string>();
   for (const item of items) {
+    if (item.kind === "exit_terms" || item.kind === "exit_restorative") {
+      const key = exitChangeKey(item.kind);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same part of the exit policy appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const parsed = exitChangeOf(item.kind, item.change);
+      if (!parsed.ok) {
+        problems.push({ key, problem: parsed.error.replace(/.$/, "") });
+        continue;
+      }
+      if (!options?.exitVote) {
+        problems.push({ key, problem: "This build cannot read the village's exit policy from here" });
+        continue;
+      }
+      const judged = await options.exitVote.judge(item.kind, parsed.change);
+      if (typeof judged === "string") {
+        problems.push({ key, problem: judged });
+        continue;
+      }
+      normalized.push({ key, from: judged.from, to: judged.to, kind: item.kind, change: parsed.change });
+      continue;
+    }
+    if (item.kind === "matrix_row") {
+      const key = matrixChangeKey(item);
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same matrix row appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const judged = await judgeMatrixItem(pool, item);
+      if (!judged.ok) {
+        problems.push({ key, problem: judged.problem });
+        continue;
+      }
+      normalized.push({
+        key,
+        from: judged.from,
+        to: judged.to,
+        kind: "matrix_row",
+        act: judged.act,
+        ...(judged.rowId ? { rowId: judged.rowId } : {}),
+        ...(judged.row ? { row: judged.row as unknown as Record<string, unknown> } : {}),
+      });
+      continue;
+    }
     if (item.kind === "module_lifecycle") {
       const checked = await moduleSwitchProblem(item, seen, options);
       if (typeof checked === "string") problems.push({ key: moduleChangeKey(String(item.moduleId ?? "")), problem: checked });
       else normalized.push(checked);
+      continue;
+    }
+    if (item.kind === "brand_field") {
+      const field = String(item.field ?? "").trim();
+      const key = brandChangeKey(field);
+      if (!options?.brandOf) {
+        problems.push({ key, problem: "This build cannot read the village's brand from here" });
+        continue;
+      }
+      if (seen.has(key)) {
+        problems.push({ key, problem: "The same brand field appears twice in this proposal" });
+        continue;
+      }
+      seen.add(key);
+      const brand = options.brandOf();
+      const to = String(item.to ?? "");
+      const problem = brandVoteProblem(brand, field, to);
+      if (problem) {
+        problems.push({ key, problem });
+        continue;
+      }
+      const from = brandFieldValue(brand, field) ?? "";
+      if (from === to) {
+        problems.push({ key, problem: "That field already says this" });
+        continue;
+      }
+      normalized.push({ key, from, to, kind: "brand_field", field });
+      continue;
+    }
+    if (item.kind === "mint_rule_create") {
+      const checked = await mintRuleCreateProblem(pool, item, seen, cooldownDays, options);
+      if (typeof checked === "string") {
+        problems.push({ key: mintRuleCreateKey(String(item.trigger ?? "").trim(), String(item.tokenSlug ?? "").trim()), problem: checked });
+      } else normalized.push(checked);
       continue;
     }
     const key = String((item as DialItem | MintRuleItem).key ?? "");
@@ -687,7 +952,6 @@ async function moduleSwitchProblem(
   const def = MODULES_BY_ID[moduleId];
   if (!def) return "There is no module by that name";
   if (def.core) return `${def.name} is always on`;
-  if (NEVER_BY_CHANGESET.has(moduleId)) return `${def.name} holds the vote itself, so a vote cannot switch it`;
   if (!isLifecycle(to)) return "A module can be off, in preview, on for members, or on for everyone";
   if (seen.has(key)) return "The same module appears twice in this proposal";
   seen.add(key);
@@ -695,9 +959,55 @@ async function moduleSwitchProblem(
   const from = options.moduleLifecycleOf(moduleId);
   if (from === to) return `${def.name} is already at ${lifecycleWords(to).toLowerCase()}`;
   if (def.withdrawn && from === "off") return `${def.name} is no longer offered, so it cannot be turned on`;
+  // The module the vote runs on: widening always, narrowing below members only while a holder could turn it back on.
+  if (VOTE_RUNS_ON.has(moduleId)) {
+    const stranded = voteModuleSwitchProblem(moduleId, from, to, options.anySwitchHolder ? await options.anySwitchHolder() : false);
+    if (stranded) return stranded.replace(/[.]$/, "");
+  }
   const open = options.openModuleProposal ? await options.openModuleProposal(moduleId) : null;
   if (open) return `A proposal to switch ${def.name} is already open. Back that one instead`;
   return { key, from, to, kind: "module_lifecycle", moduleId };
+}
+
+/**
+ * A new minting rule, checked the way an edit is: once in the set, against the
+ * registry and the table through the injected check, and cooling like any
+ * other change. The landing runs the same registry check again
+ * (`createMintRule`), because a token can be retired or a rule seeded between
+ * the raise and the close.
+ */
+async function mintRuleCreateProblem(
+  pool: Pool,
+  item: MintRuleCreateItem,
+  seen: Set<string>,
+  cooldownDays: number,
+  options: ValidateChangeSetOptions | undefined,
+): Promise<string | ProposedChange> {
+  const draft: MintRuleDraft = {
+    trigger: String(item.trigger ?? "").trim(),
+    tokenSlug: String(item.tokenSlug ?? "").trim(),
+    amount: String(item.amount ?? "").trim(),
+    ceiling: String(item.ceiling ?? "").trim(),
+  };
+  const key = mintRuleCreateKey(draft.trigger, draft.tokenSlug);
+  if (seen.has(key)) return "The same new minting rule appears twice in this proposal";
+  seen.add(key);
+  if (!options?.newMintRuleProblem) return "This build cannot take a new minting rule to a vote from here";
+  const problem = await options.newMintRuleProblem(draft);
+  if (problem) return problem;
+  const cooling = await cooldownProblem(pool, key, cooldownDays, "A rule like this one");
+  if (cooling) return cooling;
+  const amount = normalizeMintRuleValue("amount", draft.amount);
+  return {
+    key,
+    from: "",
+    to: amount,
+    kind: "mint_rule_create",
+    trigger: draft.trigger,
+    tokenSlug: draft.tokenSlug,
+    amount,
+    ceiling: normalizeMintRuleValue("ceiling", draft.ceiling),
+  };
 }
 
 /** The one cooldown read, shared by both vocabularies so they cool alike. */
@@ -806,6 +1116,7 @@ export function proposerStanding(
 /** A stored value shown the way a voter should read it. */
 export function displayChangeValue(key: string, raw: string): string {
   if (moduleOfChangeKey(key) !== null) return lifecycleWords(raw);
+  if (isMintRuleCreateKey(key)) return String(raw ?? "") === "" ? "no rule yet" : displayMintRuleValue("amount", raw);
   const parsed = parseMintRuleKey(key);
   if (parsed) return displayMintRuleValue(parsed.field, raw);
   const def = VARIABLES_BY_KEY[key];
@@ -826,6 +1137,11 @@ export function displayChangeValue(key: string, raw: string): string {
  */
 function changeLabel(key: string, mintRules: Map<string, MintRuleValues>): string {
   if (moduleOfChangeKey(key) !== null) return moduleChangeLabel(key);
+  if (isMintRuleCreateKey(key)) {
+    const rest = key.slice(MINT_RULE_CREATE_KEY_PREFIX.length);
+    const cut = rest.lastIndexOf(":");
+    return cut > 0 ? mintRuleCreateLabel(rest.slice(0, cut), rest.slice(cut + 1)) : key;
+  }
   const parsed = parseMintRuleKey(key);
   if (parsed) {
     const rule = mintRules.get(parsed.ruleId);
@@ -862,7 +1178,7 @@ export function proposalMarkdown(p: {
   mintRules?: Map<string, MintRuleValues>;
 }): string {
   const mintRules = p.mintRules ?? new Map<string, MintRuleValues>();
-  const mints = p.changeSet.some((c) => isMintRuleKey(c.key));
+  const mints = p.changeSet.some((c) => isMintRuleKey(c.key) || isMintRuleCreateKey(c.key));
   const switches = p.changeSet.length > 0 && p.changeSet.every((c) => moduleOfChangeKey(c.key) !== null);
   const lines: string[] = [
     `# [gm:${p.id}] ${p.title}`,
@@ -887,6 +1203,11 @@ export function proposalMarkdown(p: {
     const def = VARIABLES_BY_KEY[c.key];
     if (def && applyTimingOf(def) === "cycle-close") {
       lines.push(`| ↳ takes effect at the next cycle close, never mid-cycle | | |`);
+    }
+    // What the village is agreeing to when it moves its currency, read before
+    // anyone votes (Rye, 2026-11-06). The ledger carries the same sentence.
+    if (c.key === brandChangeKey(BRAND_CURRENCY_FIELD)) {
+      lines.push(`| ↳ ${currencyChangeSentence(c.from, c.to)} | | |`);
     }
   }
   lines.push(

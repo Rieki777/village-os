@@ -577,7 +577,7 @@ describe.skipIf(!configured)("aligning, on a real schema", () => {
     expect(shown.retrofit).toBe(true);
     expect(shown.textId).toBeNull();
     expect(shown.you.mayAlign).toBe(true);
-    expect(shown.body).toContain("Quests");
+    expect(shown.body).toContain("Tasks");
     // Words that are not the stored terms' words are refused.
     expect((await h.call("POST", "/api/profile/alignments", { applicationId: legacy.id, words: "other words" })).status).toBe(409);
     // Hal is not the candidate.

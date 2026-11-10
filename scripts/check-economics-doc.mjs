@@ -52,6 +52,7 @@
  * real fixture documents in a temp directory and reads the real exit codes.
  */
 import fs from "node:fs";
+import { driftIsFatal } from "./lib/generatedDocs.mjs";
 import path from "node:path";
 import {
   DOC_PATH,
@@ -189,6 +190,16 @@ function main() {
   const drifted = regions
     .map((r) => ({ ...r, diff: lineDiff(normalise(rendered[r.name]), r.found) }))
     .filter((r) => r.diff.length > 0);
+
+  if (drifted.length) {
+    // PR mode: the regions are main's to regenerate. The generator ran and the
+    // markers are intact (both checked above); the would-be change goes to the
+    // job summary so a reviewer sees every economics change.
+    const asText = (pick) => drifted.map((r) => ["<!-- generated:" + r.name + " -->", pick(r)].join("\n")).join("\n");
+    const wanted = asText((r) => normalise(rendered[r.name]));
+    const found = asText((r) => r.found);
+    if (!driftIsFatal({ label: docLabel, found, wanted, seen: true, regenerate: REGENERATE })) return EXIT_OK;
+  }
 
   if (!drifted.length) {
     say(

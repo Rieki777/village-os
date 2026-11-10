@@ -110,7 +110,7 @@ import { payLineProblem, questPayRules } from "../lib/workPay";
 import { defaultDisplayCurrency } from "../../shared/money";
 import { readWorkValueInput } from "../../shared/workValue";
 import { register as registerStructureReview } from "./structureReview";
-import { circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
+import { archivedRefusal, circleIdFor, proposedCircleName, seatIdFor } from "../../shared/structurePlan";
 
 type Deps = Pick<
   AppDeps,
@@ -131,6 +131,8 @@ type Deps = Pick<
 > & {
   /** Who holds a power live, for the carry list's "who can do it". `liveHoldersOf` in server/index.ts. */
   liveHoldersOf(capability: string): Promise<string[]>;
+  /** A village variable read as a flag. `boolVar` in server/index.ts. */
+  boolVar?(key: string): boolean;
 };
 
 /** The kinds whose accept builds an org draft. Everything else is a record. */
@@ -219,7 +221,7 @@ export function register(app: Express, deps: Deps): void {
   // The structure change review reads and accepts a batch whole, with a
   // steward's decisions. Same key as this queue, so it registers from here.
   registerStructureReview(app, deps);
-  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify, projectCurrency } = deps;
+  const { authedUser, guardCapability, mayStillSee, getPool, members, questsRepo, adminActor, circlesRepo, isAdmin, mayAct, notify, projectCurrency, boolVar } = deps;
 
   const actorId = async (req: any): Promise<string | null> =>
     (await authedUser(req))?.id ?? adminActor(req)?.id ?? null;
@@ -429,6 +431,11 @@ export function register(app: Express, deps: Deps): void {
     if (!org.length) {
       return { ok: true, draftId: null, seats: 0, blocked: 0, blockedLines: [], noted: notes.length, ignored: [] };
     }
+    // What the source archived is never created from here (D1, 2026-11-06):
+    // this path reads no status, so it goes to the structure review, which
+    // lists archived records apart. Checked before anything is written.
+    const archived = archivedRefusal(org.map((p) => ({ id: p.id, kind: p.kind, payload: (edits[p.id] ?? p.payload) as Record<string, unknown> })));
+    if (archived) return { ok: false, error: archived };
 
     const first = org[0];
     const firstPayload = edits[first.id] ?? first.payload;
@@ -540,7 +547,8 @@ export function register(app: Express, deps: Deps): void {
         const r = await addChange(getPool(), made.id, {
           op: "create_seat",
           orgRoleId: seatId,
-          payload: seat.payload,
+          // Role journey PR-A: with the village setting on, an accepted role starts unlisted.
+          payload: boolVar?.("org.sync_starts_unlisted") ? { ...seat.payload, listed: false } : seat.payload,
         });
         if (!r.ok) return { ok: false, error: r.error };
       }

@@ -41,17 +41,24 @@ import {
   BADGE_KINDS,
   addSkill,
   allBadges,
+  awardBadge,
   awardsFor,
+  BADGE_GRANT_ROUTE,
   badgeById,
   badgeChangeSentence,
   badgeProblem,
+  badgeVillageRefusal,
   badgesOpenState,
   evaluateEarnedBadges,
   readBadgeMultipliers,
   removeSkill,
+  revokeBadge,
+  SELF_AWARD_REFUSAL,
   skillsFor,
   upsertAward,
+  villageHeldKeysOf,
 } from "../lib/badges";
+import { openBadgeBallotIds } from "../repos/badgeAwards";
 import { tokenDef } from "../lib/ledger";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow, isExampleUser, onRealItemPublished } from "../lib/examples";
@@ -386,6 +393,9 @@ export function register(app: Express, deps: Deps): void {
     };
     const problem = badgeProblem(candidate as any) ?? unknownMultiplierToken(candidate.multipliers);
     if (problem) return res.status(400).json({ error: problem });
+    // R157: a badge carrying a power the village holds is the village's to give.
+    const villageHeld = await villageHeldKeysOf(getPool(), candidate.capabilities);
+    if (villageHeld.length) return res.status(409).json(badgeVillageRefusal(villageHeld));
     const id = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || `badge-${Date.now()}`;
     if (await badgeById(getPool(), id)) return res.status(409).json({ error: `A badge with id "${id}" already exists` });
     await getPool().query(
@@ -432,6 +442,21 @@ export function register(app: Express, deps: Deps): void {
     };
     const problem = badgeProblem(merged as any) ?? (req.body?.multipliers !== undefined ? unknownMultiplierToken(merged.multipliers) : null);
     if (problem) return res.status(400).json({ error: problem });
+    /*
+     * R157: an edit that would make a badge carry a power the village holds,
+     * or touch one that already carries one, moves that power for every
+     * holder. Both directions refuse, and so does any edit while the village
+     * is voting on this badge, because the roll is reading this definition.
+     */
+    const villageHeld = await villageHeldKeysOf(getPool(), Array.from(new Set([...existing.capabilities, ...merged.capabilities])));
+    if (villageHeld.length) return res.status(409).json(badgeVillageRefusal(villageHeld));
+    const deciding = await openBadgeBallotIds(getPool(), req.params.id);
+    if (deciding.length) {
+      return res.status(409).json({
+        error: "The village is voting on this badge, so it stays as the roll read it until that vote is over.",
+        ballotIds: deciding,
+      });
+    }
     // KIND IS THE AUTHORITY EACH AWARD WAS MADE UNDER. Flipping it
     // retroactively re-interprets every existing award: a self-claimed badge
     // reclassified to "granted" hands its holders whatever capabilities the
@@ -592,33 +617,18 @@ export function register(app: Express, deps: Deps): void {
     if (badge.kind === "warning" && !String(note ?? "").trim()) {
       return res.status(400).json({ error: "A warning needs a note. The member deserves to know why" });
     }
+    // R157: a power the village holds moves only by its vote, and no badge
+    // carrying a power is an administrator's to give themselves.
+    const villageHeld = await villageHeldKeysOf(getPool(), badge.capabilities);
+    if (villageHeld.length) return res.status(409).json(badgeVillageRefusal(villageHeld));
+    const actorId = adminActor(req)?.id ?? (await authedUser(req))?.id ?? null;
+    if (badge.capabilities.length > 0 && actorId !== null && actorId === target.id) {
+      return res.status(403).json({ error: SELF_AWARD_REFUSAL, ballotRoute: BADGE_GRANT_ROUTE });
+    }
     const expiry = expiresAt ? new Date(String(expiresAt)) : null;
-    const award = await upsertAward(getPool(), {
-      badgeId: badge.id, userId: target.id, awardedBy: adminActor(req)?.id ?? null,
+    const award = await awardBadge(getPool(), notify, {
+      badge, userId: target.id, awardedBy: adminActor(req)?.id ?? null,
       note: note ?? null, expiresAt: expiry && !Number.isNaN(expiry.getTime()) ? expiry : null,
-    });
-    await notify({
-      userId: target.id,
-      type: "badge",
-      title: badge.kind === "warning" ? `A warning was placed: ${badge.name}` : `Badge received: ${badge.name}`,
-      body: note ? String(note).slice(0, 500) : null,
-      link: "/badges",
-      // Stable, like every other producer. With Date.now() in it the key was
-      // unique per call, so the notify spine's whole dedupe guarantee was off
-      // for this one path: a re-run of an award — a double-click, a retried
-      // request — told the member twice that they had been given a badge, or
-      // twice that a warning had been placed on them.
-      dedupeKey: `award:${badge.id}:${target.id}`,
-    });
-    // B5: a re-issued WARNING is its own audit fact, with the running count
-    // in the text — the trail an indefinitely-renewed silencing would leave.
-    void recordEvent(getPool(), {
-      kind: "audit",
-      text: badge.kind === "warning" && award.reissued
-        ? `badge:warning-reissue:${badge.id}:x${award.reissueCount + 1}`
-        : `badge:${badge.kind}:${badge.id}`,
-      actorUserId: adminActor(req)?.id ?? null,
-      entityType: "user", entityRef: target.id, audience: "admin",
     });
     res.json({ success: true, reissued: award.reissued, reissueCount: award.reissueCount });
   });
@@ -635,15 +645,14 @@ export function register(app: Express, deps: Deps): void {
     ) {
       return res.status(409).json(EXAMPLE_REFUSAL_BODY);
     }
-    const [r] = await getPool().query<any>(
-      "DELETE FROM badge_awards WHERE badge_id = ? AND user_id = ?",
-      [req.params.id, req.params.userId],
-    );
-    if (!(r as any).affectedRows) return res.status(404).json({ error: "No such award" });
-    void recordEvent(getPool(), {
-      kind: "audit", text: `badge:revoke:${req.params.id}`, actorUserId: adminActor(req)?.id ?? null,
-      entityType: "user", entityRef: String(req.params.userId), audience: "admin",
+    // R157: taking back a badge that carries a power the village holds moves that power too.
+    const badge = await badgeById(getPool(), req.params.id);
+    const villageHeld = badge ? await villageHeldKeysOf(getPool(), badge.capabilities) : [];
+    if (villageHeld.length) return res.status(409).json(badgeVillageRefusal(villageHeld));
+    const revoked = await revokeBadge(getPool(), {
+      badgeId: req.params.id, userId: String(req.params.userId), actorUserId: adminActor(req)?.id ?? null,
     });
+    if (!revoked) return res.status(404).json({ error: "No such award" });
     res.json({ success: true });
   });
 

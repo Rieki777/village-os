@@ -31,7 +31,7 @@ what, where, what breaks without it.
 | Var | Purpose | Without it |
 |---|---|---|
 | `AUTH_TOKEN_SECRET` | Signs member tokens | **Silently degrades to per-process sessions** — logins die on every restart |
-| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, 2026-07-26), and the break-glass account needs it. | No founder can be created |
+| `ADMIN_PASSWORD` | Bootstrap-only (S1): each village sets its own value (`scripts/fork-init.mjs` generates it and never prints it) and uses it once to create its founder at `/claim`, which calls `POST /api/admin/bootstrap` (the curl form is only for somebody without a browser). **The page and the response carry `claimUrl`, and on a fresh install also `emailed: false` and an `emailNote` saying why: a new deployment has no mail provider, so open the claim link yourself rather than waiting for an email. It used to answer `emailed: true` in exactly that case.** Inert at `/claim` after bootstrap for everybody except `BREAK_GLASS_ADMIN_EMAIL` — keeping it set is fine (foundation policy, 2026-07-26), and the break-glass account needs it. **It also opens the whole-village export (`GET /api/admin/export/database`, `docs/RUNBOOK.md` section 6a, R071) for as long as it is set: one file holding every member's data, audited and announced to every admin and steward. Keep it like the database password and rotate it when anyone who has seen it leaves.** | No founder can be created |
 | `JOURNEY_PASSWORD` | Legacy Command Centre gate — retired at v3 S2 | — |
 | `BREAK_GLASS_ADMIN_EMAIL` | (from S1) may re-elevate exactly that account at `/claim`, after a founder exists; it still needs `ADMIN_PASSWORD`. `fork-init` defaults it to `--admin-email` | No recovery if all admins are demoted |
 | `ANTHROPIC_API_KEY` | Maia guided proposals (`/api/assistant/*`), the launch guide, the map concierge tie-break, and call synthesis (S54). **S63: settable from Admin → Integrations instead** — an admin-typed key beats this env var; reads are masked (last4 only). | Assistant hides; forms still work; call synthesis refuses with an honest 503 while ingestion, transcripts and publishing keep working |
@@ -45,7 +45,7 @@ what, where, what breaks without it.
 | `RESEND_API_BASE` | (dev/CI only, Village Comms) Points the post office at a stand-in provider instead of `https://api.resend.com`. The test suites set it to the fake in `server/testkit/fakeResend.ts`, so no test ever sends a real email. Honoured only when it is an https address or a loopback one, so a mistyped value cannot carry the village's key across a network in the clear. | The real provider is used, which is correct in production |
 | ↳ *sender domain* | **Every fork must verify its sender domain in Resend (SPF + DKIM records in the domain's DNS).** Comms Settings adds the domain through Resend's API, shows the records to copy, and checks verification; a key that can only send gets the same steps to do by hand at resend.com/domains. Resend returns 200 on unverified domains and delivers NOTHING, so email death is silent. | Claim links & notifications never arrive |
 | `EMAIL_FROM` | The `From:` address every village email leaves under: `name@example.org` or `Village Name <name@example.org>`. **Settable from Admin, Comms, Settings instead** (the sender name and address; admin-typed beats this env var, a malformed value is refused at the door, and so is an address that is not on the village's sending domain). Must be on the domain verified in Resend, or the send 200s and delivers nothing. There is no fallback sender: with neither this nor an admin-typed sender, nothing is sent, the post office records each email as not configured, and the caller is told why. | Nothing is sent; each email is recorded as not configured |
-| `FRONTEND_URL` | This village's own public address, e.g. `https://village.example.org`. Two things read it: the CORS allow-origin header, and every absolute link this server writes into an outgoing email (claim links, digests, the weekly brief). **Set it during any fork's provisioning.** It used to fall back to one specific project's domain, so a fork that left it unset mailed its own members a link to somebody else's login page and nobody found out until a member clicked one. That fallback is gone. | No CORS grant is sent at all, which refuses cross-origin readers rather than trusting a stranger. Email links fall back to the address this server has actually been reached at, taken from the first inbound request's proxy headers. If nothing has reached it yet, links have no absolute address and one log line names this variable |
+| `FRONTEND_URL` | This village's own public address, e.g. `https://village.example.org`. Two things read it: the CORS allow-origin header, and every absolute link this server writes into an outgoing email (claim links, digests, the weekly brief). **Set it during any fork's provisioning.** It used to fall back to one specific project's domain, so a fork that left it unset mailed its own members a link to somebody else's login page and nobody found out until a member clicked one. That fallback is gone. | No CORS grant is sent at all, which refuses cross-origin readers rather than trusting a stranger. Email links fall back to the address this server has actually been reached at, taken from the first inbound request's `Host` header (never `X-Forwarded-Host`, which the caller writes: readiness R108). If nothing has reached it yet, links have no absolute address and one log line names this variable. **The launch journey's `site-address` row stays open without it.** A vote cannot set an environment variable, so the launch vote may carry that one row open, and the frozen launch document names it (the coordinator, 2026-11-06). Set it anyway: until then emailed links sit on whatever address the first request carried |
 | `STRIPE_SECRET_KEY` | (S32) Stripe API key (`sk_live_…`) — powers card checkout for every fiat module (stays, exchange). **S63: settable from Admin → Integrations instead — no Railway access needed.** Until a village connects its own Stripe account, card checkout answers an honest 503 and manual payments carry stays. | Card checkout disabled (503); manual payment path still works |
 | `STRIPE_WEBHOOK_SECRET` | (S32) Signing secret (`whsec_…`) for the ONE webhook endpoint `POST /api/webhooks/stripe`. **S63: settable from Admin → Integrations, which also displays the exact URL to paste into Stripe.** Create the endpoint in the Stripe dashboard (Developers → Webhooks) pointing at `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created`, then copy its signing secret here. **All five matter**: `invoice.paid` is how every recurring product renews (without it a subscription charges the member forever and delivers only the first period), and `checkout.session.async_payment_succeeded` is how delayed-notification methods — SEPA debit, ACH, Boleto — confirm days later (without it those purchases never settle at all, because `completed` arrives `unpaid` and is correctly ignored). **Create the endpoint and set this secret together with `STRIPE_SECRET_KEY`: a missing secret means unsigned events are processed only in dev shapes; a wrong one rejects every settlement with `sig_fail` alerts to admins.** Test with `stripe listen --forward-to` before go-live. | Settlements unverified or rejected; orders never credit |
 | `RIVERSIDE_WEBHOOK_SECRET` | Shared secret for `POST /api/webhooks/riverside` (automation module). **Settable from Admin → Integrations instead** — admin-typed beats env, masked on read. The webhook **fails closed**: without a configured secret, or without a matching `x-riverside-secret` header on the delivery, every payload is discarded with an inert 200 (the automation admin card shows a warning while unset). Configure Riverside to send the same value as the `x-riverside-secret` header. | Riverside deliveries are silently discarded until the secret is set |
@@ -55,17 +55,19 @@ what, where, what breaks without it.
 | `FEEDBACK_HUB_URL` | (S66, optional) **must be `https://` and publicly resolvable** — the relay now dials through the pinned-IP guard, which refuses plain http and any private/loopback/CGNAT address. A self-hosted hub on a VPC-internal or `http://` address will simply never receive anything (rows stay queued locally, no data is lost, one log line per attempt). Where the feedback relay POSTs. **There is no default, and that is deliberate**: the relay is ON by default (`platform.feedback_relay` game variable) and it ships up to 8000 characters of member-written detail per item, so a hardcoded destination meant every fork posted its members' words to one specific organisation without ever choosing to. **A deployment that wants the relay must name its hub here, including the hosted one.** It sends CONTENT only (never who submitted), queues locally and retries while the hub is unreachable; turning the dial off keeps everything in Admin → Feedback, local-only. | The relay does not run. Feedback stays local, admins still see every item in Admin → Feedback, and the submission form correctly says it is not shared |
 | `CSP_MODE` | (optional) `report-only` sends the page CSP as Content-Security-Policy-Report-Only, so nothing new is blocked while a village finds out what its own edge or proxy injects; `frame-ancestors 'self'` stays enforced. Any other value enforces. See `server/lib/securityHeaders.ts`. | Enforced: only scripts from this origin, the shell's inline script by hash, and Cloudflare's Web Analytics beacon run |
 | `CSP_REPORT_URI` | (optional) An https address of a CSP report collector. Browsers POST violation reports there (`report-uri` plus `Reporting-Endpoints`); this server adds no report route of its own. | No report directives; violations show only in each visitor's console |
-| `ERROR_WEBHOOK_URL` | (optional, PY6) an HTTPS endpoint that receives a JSON POST when something crashes — a Slack or Discord incoming webhook, a Sentry store URL, or your own collector. Admins are ALWAYS notified in-app regardless; this puts the same alert where your team actually looks. Deduped to one alert per distinct failure per hour, and dialled through the pinned-IP guard like every other outbound call. | Crashes are still logged and still alert admins in-app, but nothing reaches an external channel |
+| `ERROR_WEBHOOK_URL` | (optional, PY6) an HTTPS endpoint that receives a JSON POST when something crashes — a Slack or Discord incoming webhook, a Sentry store URL, or your own collector. Admins are ALWAYS notified in-app regardless; this puts the same alert where your team actually looks. Deduped to one alert per distinct failure per hour, and dialled through the pinned-IP guard like every other outbound call. The fallback for the **Crash alerts, outside the app** slot under Admin, Integrations (readiness R171), which a founder without the host can set and which beats this variable; the address carries its own key, so it is sealed there. | Crashes are still logged and still alert admins in-app, but nothing reaches an external channel |
 | `TRUSTED_PROXY_HOPS` | (optional, default `1`) how many proxies sit in front of this process. `X-Forwarded-For` grows left to right, so the client's real address is the Nth entry from the RIGHT, where N is this number — and everything to its left is caller-supplied and forgeable. Every rate limit (checkout attempts, sign-in throttling, the assistant's cost cap, the abuse guard) keys on the result. `1` is correct on Railway, Fly and Render; raise it if the fork puts its own CDN or load balancer in front; `0` means no proxy and the socket address is used directly. | A value too LOW trusts a forged header and lets one caller bypass every rate limit; too HIGH buckets unrelated visitors together and throttles innocents |
 | `PLATFORM_SUPPORT_URL` | (module library, optional) Where a village is sent when the PLATFORM is the supporting party: every Included module, and every Managed listing. Whoever operates this deployment is its own support desk, so platform code carries no address and this is where the fork puts one. It appears in the 503 body a lapsed Managed listing answers with. | The lapse body still says "this one is on us" and still says what keeps working; it just gives nowhere to write |
 | `PLATFORM_SUPPORT_EMAIL` | (module library, optional) The same, as an address. Used when `PLATFORM_SUPPORT_URL` is unset. | As above |
 | *a Managed listing's key* | (module library, per listing) Each Managed listing names its own env var in `vendor.managedEnvKey` in `shared/modules.ts`. The key is the PLATFORM's, is read from env at call time, is never added to `SECRET_KEYS`, and is never returned to a village by any route, not even masked (hub ADR-49). Set it at provisioning by whoever has deploy access; there is deliberately no admin screen for it, exactly as with `PLATFORM_ASSISTANT_KEY`. | That listing answers 503 with "this one is on us" and its Integrations card reads "Not on your plan". Everything else keeps working |
 | *a Connected listing's key* | (module library, per listing) Each Connected listing names its slots in `vendor.secretKeys`. They join `SECRET_KEYS` automatically, so they are settable from **Admin → Integrations** with source and last4 shown, and this env var (the slot name uppercased, e.g. `example_api_key` → `EXAMPLE_API_KEY`) is the fallback. The village holds its own account and can rotate the key unaided. | That listing answers 503 naming the vendor and their support link. Everything else keeps working |
-| `SATELLITE_PROVIDER` | (2026-09-02) Which aerial-imagery source the Living Map's land pages fetch from. One of `village-upload`, `esri-open`, `sentinel2`, `mapbox`, `google`, `esri`, each of which then needs its own key below. `esri-open` (2026-09-19) is the keyless one: it fetches the public Esri World Imagery export endpoint and KEEPS the file on this deployment's own volume, which the keyed `esri` entry refuses. It exists because this project decided its own use of that endpoint is acceptable for itself; it is not a licence grant and a fork that has not made the same decision should not name it. `village-upload` needs no key, no account and no third-party licence: the founder's own photograph goes through the ordinary upload path. There is deliberately NO default and no keyless fallback, because a map quietly showing a different picture from the one the founder configured is a worse failure than a map saying nothing is configured. | The land page shows an honest empty state naming this variable |
-| `SENTINEL_WMS_URL` / `MAPBOX_TOKEN` / `GOOGLE_MAPS_STATIC_KEY` / `ESRI_API_KEY` | (2026-09-02) The key for whichever provider `SATELLITE_PROVIDER` names (`keyEnv` in `server/lib/satellite.ts`). Sentinel takes a WMS base URL rather than a key, because every keyless route to Sentinel-2 is a WMS somebody operates and naming one here would point every village at a host this project does not run. Mapbox and Google forbid serving their imagery from a cache; Esri's standard layer is not licensed for holding tiles offline. | That provider reports not ready and names the exact missing variable |
+| `SATELLITE_PROVIDER` | (2026-09-02) Which aerial-imagery source the Living Map's land pages fetch from. One of `village-upload`, `esri-open`, `sentinel2`, `mapbox`, `google`, `esri`, each of which then needs its own key below. `esri-open` (2026-09-19) is the keyless one: it fetches the public Esri World Imagery export endpoint and KEEPS the file on this deployment's own volume, which the keyed `esri` entry refuses. It exists because this project decided its own use of that endpoint is acceptable for itself; it is not a licence grant and a fork that has not made the same decision should not name it. `village-upload` needs no key, no account and no third-party licence: the founder's own photograph goes through the ordinary upload path. There is deliberately NO default and no keyless fallback, because a map quietly showing a different picture from the one the founder configured is a worse failure than a map saying nothing is configured. The fallback for the **Where the land's satellite picture comes from** dial (`village.satellite_provider`, Game Mechanics, under Village; readiness R171), which a founder without the host can set and which beats this variable when it names a provider. | The land page shows an honest empty state naming this variable |
+| `SENTINEL_WMS_URL` / `MAPBOX_TOKEN` / `GOOGLE_MAPS_STATIC_KEY` / `ESRI_API_KEY` | (2026-09-02) The key for whichever provider `SATELLITE_PROVIDER` names (`keyEnv` in `server/lib/satellite.ts`). Sentinel takes a WMS base URL rather than a key, because every keyless route to Sentinel-2 is a WMS somebody operates and naming one here would point every village at a host this project does not run. Mapbox and Google forbid serving their imagery from a cache; Esri's standard layer is not licensed for holding tiles offline. Each is the fallback for its own slot under Admin, Integrations (`keySlot` in `server/lib/satellite.ts`; readiness R171), whose card appears once that provider is chosen and which beats the variable. `SATELLITE_CACHE_OVERRIDE` stays a host variable on purpose: it states a written agreement with a provider, which is the deployment's to hold. | That provider reports not ready and names the exact missing variable |
 | `BACKUP_EXPORT_TOKEN` | (2026-09-02) Authenticates `GET /api/admin/backup/uploads-archive`, which is how the scheduled backup pulls the uploads volume. This route is gated by the token and NOT by an admin session. 32 bytes of hex; mirror it as the backup workflow's secret. | The route answers 503, member uploads are in no backup, and the database dump keeps succeeding so the backup still looks green |
 | `SCHEDULER_ENABLED` | (2026-09-02) Turns the background scheduler off when set to `0`/`off`/`false`/`no`. **Unset means ON**, which is correct. | Set by accident: loans never settle, cycles never close, digests never send, and the only signal is one boot-log line saying NOT STARTED and naming this variable |
+| `HYPHA_VOICE_WEBHOOK_SECRET` | Shared secret for the Hypha voice-claim receiver, the callback that confirms a member's claim on value once their Hypha vote lands (`server/lib/voiceClaim.ts`). The fallback for the **Hypha voice claims** slot under Admin, Integrations (readiness R171), which a founder without the host can set and which beats this variable. 32 bytes of hex (`openssl rand -hex 32`), its own value: the check refuses one that matches `AUTH_TOKEN_SECRET`, an env copy of the hub or Stripe secrets, or any callback secret typed into Admin, Integrations, and Admin refuses a callback secret that copies it. Needed only once `economy.hypha_space` names a space. | The receiver answers 503 and every delivery is refused. A short or borrowed value set here refuses the boot; one typed into Admin is refused at the save, and never stops the boot |
 | `HYPHA_LISTENER_*` | (2026-09-02) Fifteen variables for a village running its OWN Base listener process (`server/lib/hypha/selfHostedListener.ts`) instead of the shared ReGen hub. **The web process imports none of them**, so setting them changes nothing until that second process is started. Required: `CONTRACT_ADDRESS`, `RPC_URL`, `WEBHOOK_URL`, `WEBHOOK_SECRET`, `START_BLOCK` on a first run, and at least one of `PASSED_TOPIC0`/`FAILED_TOPIC0`. Optional: `AGREEMENT_ID_TOPIC_INDEX` (0-3), `SPACE_ID`, `CONFIRMATIONS`, `POLL_INTERVAL_MS`, `MAX_ATTEMPTS`, `DATA_DIR`, `CHECKPOINT_PATH`, `DEADLETTER_PATH`. | The listener refuses to start and names the first missing one. The shared hub path (`GOVERNANCE_HUB_SECRET`) is unaffected |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | The two halves of the Google sign-in OAuth client (`server/lib/oauthGoogle.ts`). The fallback for the two **Google sign-in** slots under Admin, Integrations (readiness R171), which a founder without the host can set and which beat these variables, with no restart. The callback address is still the host's: `FRONTEND_URL` plus `/api/auth/google/callback`, or `GOOGLE_REDIRECT_URI`. Steps: `docs/GOOGLE_SIGN_IN.md`. | No Google button; `/api/auth/methods` names the half that is missing. Email and password keep working |
 | `GOOGLE_TOKEN_ENDPOINT` | (dev/CI only) Points the Google token exchange at a local stand-in. Enforced: a value that is not an http loopback address is logged and ignored, and the real Google endpoint is used. | Google is used, which is correct in production |
 | `TEST_DATABASE_URL` | (dev/CI only, local .env) scratch-schema MySQL for DB-backed tests. The harness creates a uniquely-named `village_test_*` schema per provision and drops it after; never point it at the app schema. It also keeps a `village_tpl_*` TEMPLATE schema, migrated once and cloned per suite, swept after 24 hours — so the account needs CREATE/DROP DATABASE rights and will show two families of scratch schema. `pnpm measure:provisioning` prints what that costs. | DB suites skip AND an unfiltered run fails; `ALLOW_NO_TEST_DB=1` accepts the smaller suite |
 
@@ -150,7 +152,10 @@ above the size of a gathering, not to the size of one person's usage.
 
 ## Seeds & per-deployment data
 
-- `server/seeds/content-seed.json` — page copy (self-heals via `seedIfMissingOrEmpty`).
+- `server/seeds/content-seed.json` — the content document, written once, on a boot that finds no
+  content document (the old `seedIfMissingOrEmpty` self-heal is retired). It ships EMPTY (`{}`,
+  fresh-boot seed audit 2026-09-26): it used to hand every fork one village's four journey
+  ladders, its stages and rites, as dead data no page renders.
 - Starter quests (2026-10-31): the `quests` section of `server/seeds/examples-seed.json`. A fresh
   village opens on them as standing examples a founder keeps (Admin, Quests, Keep, which asks for a
   value) or clears; the Journey to Launch row `starter-quests` waits on that. Edit THAT section to
@@ -382,6 +387,7 @@ two from the admin panel and almost never touches the first.
   volume is content-addressed, cached correctly and swappable;
   `client/public` is served one-year-immutable and cannot be replaced for a
   year once a browser has it.
+- **The confidentiality agreement's PDF lives in `DATA_DIR/private-documents/`** (2026-11-09, role journey L7): attached in Admin, Content, Confidentiality Agreement, and read only by signed-in members through `GET /api/confidentiality/document`. It is deliberately outside the uploads volume, which `/api/uploads/:filename` serves to anybody, so the uploads-archive backup does NOT carry it. Keep your own copy of the signed PDF and attach it again after a volume is lost. No env var and no seed.
 - **The stock character art ships in the image, not in `client/public`** (2026-10-13): the thirty class drawings live in `server/assets/avatars/` and the server answers them at their old `/images/avatars/` URLs, with or without a volume. No env var and no seed; a fork with its own Dockerfile or deploy script must ship `server/assets/` beside `dist/`, as the stock `Dockerfile` does, or the class art falls back to sigils.
 - **Member uploads are shrunk in the browser** by
   `client/src/lib/imagePrep.ts`: it draws to a canvas, encodes WebP and
@@ -1278,6 +1284,7 @@ the seeded roles whose descriptions already claimed the work
 | `event.manage` | Steward Circle |
 | `exchange.manage` | Treasury |
 | `cash.pay` | Treasury (founder ruling, 2026-10-30; also in the founding stewards' handover set) |
+| `role.pay` | Treasury (founder ruling, 2026-11-06: role pay is set by the Treasurer and the valuation engine; mature-only in the handover) |
 | `org.declare` | Founders Circle |
 | `org.seat`, `org.decide` | Founders Circle (founder ruling, 2026-10-20) |
 | `map.edit`, `map.publish` | the Cartographer badge (0063) |
@@ -1297,6 +1304,10 @@ else on that role. The power is new, so no village can have taken it off on
 purpose. Nothing to provision. Look for `the Treasury role now grants cash.pay`
 in the boot log. A village with no Treasury role gets no line, and its admins
 and founding stewards still hold the power.
+
+`role.pay` reaches a running village the same way: the `role-pay-to-treasury-2026-11-06` runOnce
+(`ROLE_PAY_GRANTS` through `grantMoonReviewKeys`, `server/lib/starterRoles.ts`) adds it to the `treasury`
+role once. Nothing to provision. Look for `role.pay on the Treasury role` in the boot log.
 
 - Seeds: the frozen `server/seeds/quests-seed.json` carries the story layer per quest (0068: `subtitle`, `story`, `firstStep`, `steps`, `deliverable`, `tips`, optional `imageUrl`). On an already-running village the `quest-story-2026-08-10` runOnce fills those fields from the seed ONLY where the live row is empty, so admin-written copy is never overwritten, and `quest-posters-2026-08-10` replays the same fill to pick up `imageUrl` on villages that ran the first one. Both throw when the seed file is missing or unreadable, so a broken deploy retries on the next boot instead of recording itself as applied. Look for `filled N quest(s)` or `found nothing to fill` in the boot log: those are different facts.
 - Quest poster art: a quest's `imageUrl` must be a path under `/api/uploads/` (the API refuses anything else, the same rule the forum's image field follows), so posters are uploaded into the `data/uploads/` volume, never committed to `client/public`. That directory is served one-year-immutable and is not content-hashed, and CI caps `dist/public` at 6 MB total and 400 KB per image. A village with no poster files needs no action: each card paints a gradient scene from its circle, and a quest whose `imageUrl` points at a missing file falls back to the same scene rather than showing a broken image.
@@ -1677,8 +1688,21 @@ code. Where a step needs a technical helper, that is called out.
    Peering, above). Rotating it is not a simple swap: every peer will pause
    with "signing key changed" until an admin on their side presses "accept
    and resume". Do this one deliberately, and tell peer villages it is
-   coming, rather than as a reflexive part of this checklist. Ask a technical
-   helper; it needs a database write, not an admin screen.
+   coming, rather than as a reflexive part of this checklist. An admin does
+   it under Admin, Integrations, in the "Village signing key" card, by typing
+   the confirmation it asks for (readiness R069): it re-mints the key sealed
+   under `VILLAGE_SECRETS_KEY`, records both key ids in the audit log, and
+   tells the admins and stewards the same hour. It refuses while that
+   variable is missing or malformed, since a new private half is never stored
+   in the clear. The same card offers it when the key reads unreadable, which
+   is what a restore under a different `VILLAGE_SECRETS_KEY` leaves.
+   After launch it takes two people whenever two can sign, as keystone keys
+   do: the first admin's press asks, every other admin with their own login
+   is told, and a different admin co-signs from the same card (or declines).
+   An unsigned request lapses after `platform.cosign_expiry_hours`. With only
+   one admin able to sign, they replace it at once and the audit line says
+   they were alone. In an incident, have the second admin ready before you
+   press.
 5. **Passwords.** Ask a technical helper to check how many accounts are
    still on the legacy hash (`passwordHash` not starting with `$2`, a plain
    64-character hex string). Any account in that state has a password that
@@ -1972,6 +1996,68 @@ Both new tables carry `is_example`, the same standing-example flag
 `org_role_assignments` uses. An example row is display only and is never
 counted when a real member's position is worked out.
 
+## Loading a season file onto the governance canvas (no migration, 2026-09-26)
+
+A season file is a week map a village lays over its governance canvas: each
+week's date and title, the canvas blocks it works on, and its foundations,
+tools, showcase ask and actions, plus any canvas moons. The Canvas view on
+Journey to Launch (`/journey-to-launch`, the Canvas tab) puts the current
+week's blocks first. It only orders: every block stays on the page and open
+every week, and the Birthing gate never reads the file. A village with no
+season sees the blocks in canvas order and loses nothing.
+
+- **Nothing here needs a ReGen service, or any outside service.** The file is
+  loaded by hand and stored in your own database, as the `canvas-season`
+  document in `app_config`. A self-hosted village with no network access to
+  anyone uses it exactly the same way.
+- **Who can load one:** whoever holds the canvas pen, `story.tell` (before
+  the handover, any admin or founder). Open the Canvas tab, open "Load a
+  season file", paste the JSON or choose the `.json` file, press "Check the
+  file", read the preview, then "Save this season". "Take the season off"
+  goes back to canvas order; "Download this season file" hands the pen a
+  copy first, since taking a season off deletes it.
+- **Who can read it, and the canvas:** a member the village has ADMITTED
+  (`membershipGranted`), and any admin. Being signed in is not enough: an
+  invited account the village has not admitted yet, and anybody who registers
+  on a fork with `membership.invite_only` off, get 403 and one sentence from
+  both `GET /api/canvas` and `GET /api/canvas/season`, and the Canvas tab is
+  not offered to them. The readings name who recorded them, so the canvas is
+  members-only, never public.
+- **A template ships with the platform:** `docs/seasons/season-two-2026.json`
+  (thirteen Saturdays from 26 September to 19 December 2026, 11:00
+  America/Los_Angeles). Copy it and change the dates, titles and blocks to
+  write your own season.
+- **The format** is `shared/canvasSeason.ts`, and its validator is the one the
+  page and the server both run: `id`, `name`, `timezone` (an IANA zone such
+  as `Europe/Amsterdam`), optional `sessionTime` (`HH:MM`) and `description`,
+  `weeks[]` of `{ number, date (YYYY-MM-DD, in the season's timezone), title,
+  blocks[], foundations[], tools[], showcaseAsk, actions[] }` and `moons[]` of
+  `{ date, blocks[], note }`. Block ids are the twelve in
+  `shared/governanceCanvas.ts`; foundation ids are `legal-framework`,
+  `internal-rules`, `culture` and `personal-leadership`. At most 60 weeks, and
+  the whole file under 128,000 characters. A field the format does not know
+  is left out and named in the preview, so a file written for a newer release
+  still loads on an older one.
+- **Over HTTP**, for a script: `PUT /api/canvas/season` with the file as the
+  JSON body and a pen holder's bearer token; `DELETE /api/canvas/season`
+  takes it off; `GET /api/canvas/season` reads it back for an admitted member
+  or an admin (403 to any other signed-in account).
+
+## Naming what closing your village means (no migration, 2026-09-27) <a id="closing-policy"></a>
+
+- **Before the launch vote can open, the village names what happens to its treasury and assets if it
+  ever closes** (the blocking row "Name what closing this village means"). In Admin, Departures, under
+  the published policy: choose "Shared by closing-day balances" (the platform's suggested default: in
+  proportion to the contribution tokens each person holds on closing day, and a member who already
+  redeemed receives nothing more) or "In the village's own words", edit the statement, tick "The
+  village adopts these words" and save. The pre-filled words saved without the tick are a draft and do
+  not count. It is stored as the `closing` section of the `exit-policy` app_config document, written by
+  `PUT /api/admin/exit-policy/closing` (`{ policyId, statement, adopt }`, admin session). Every reader
+  sees it at `/exit-policy`; the platform computes and moves nothing on closing. An exit policy saved
+  before this existed reads as "not named yet" until you do this, so a running village sees one new
+  blocking row and nothing else changes. With the default adopted and the redemption module on, the
+  redemption form tells a member what redeeming gives up before they ask.
+
 ## Setting VILLAGE_SECRETS_KEY on Railway, and when it is set but still refused
 
 Admin, Integrations seals every key it saves with `VILLAGE_SECRETS_KEY` (the
@@ -2088,3 +2174,14 @@ Admin, Integrations has two new cards, `railway_project_token` (one Railway proj
 ## The End of moon meeting template (module `moon-review`, 2026-11-03, no migration)
 
 - A fourth meeting template, End of moon (category Moon rhythm, `seed_key` `end-of-moon`, flow in `MOON_TEMPLATE` in `shared/sessionTemplates.ts`), is written into `live_session_templates` the first time anyone opens the templates (`GET /api/session-templates`) while the `moon-review` module is on (any lifecycle but off). While the module is off nothing is written, and its three section kinds (Our moons, Moon goals, Sending together) are hidden in the template editor. Once written it is an ordinary row: turning the module off later leaves it, and an edited or archived copy is never written again. No env var and no manual step.
+
+## The invoice rails and the treasury sync (0335, 2026-11-06)
+
+- To have a sent invoice emailed to Sera, an admin or the `cash.pay` holder sets **Sera's inbox** in Admin, End-of-moon review settings, Village settings (moon-review setting `seraInbox`, blank on the platform, so nothing is emailed until a village names one). The daily `treasury-sync` job needs no setup: it retries emails the provider refused, reads Sera's `list_invoices` once Saberra offers it (until then the Sera source reads "Sera does not report invoices yet"), and re-syncs every member with an invoice.
+## Funding rounds (module `funding-rounds`, migration 0338)
+
+- No env var. The Treasury role gains `pot.steward` two ways: `server/seeds/roles-seed.json` for a new village, and the `runOnce` step `pot-steward-to-treasury-2026-11-06` (`POT_STEWARD_GRANTS`, `server/lib/starterRoles.ts`) for a village that booted earlier and still has the seeded `treasury` role. The module ships off; a pot and its rounds are opened from `/funding-rounds` by a `pot.steward` holder.
+
+## Living places (module `places`, migration 0354)
+
+- No env var and nothing at boot. A village's places start as a seed file beside its other records (Amora's is `server/seeds/amora/places-seed.json`); a holder of `place.tend` imports it by posting `{ seed }` to `POST /api/place-registry/import`, which refuses the whole seed, naming every problem, when it drops a key on the published map or claims a standing stage for an unconfirmed place. A second import adds only what is new. The module ships off.

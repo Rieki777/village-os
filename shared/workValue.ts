@@ -50,6 +50,12 @@ export interface PayLine {
    * every other token, and on an older server.
    */
   voice?: boolean;
+  /**
+   * What this token means in this village, in the village's own words (Admin,
+   * Tokens; 0283). Carried on an Earned Equity line, whose meaning is set per
+   * village (Rye, 2026-11-05) and shown wherever it is paid.
+   */
+  meaning?: string;
 }
 
 /**
@@ -83,6 +89,8 @@ export interface StatedCash {
   minMinor: number | null;
   maxMinor: number | null;
   per: "month" | "moon" | null;
+  /** What the steward wrote beside the range, as saved. Absent on an older server. */
+  note?: string | null;
 }
 
 /** Everything a card needs to say what a piece of work pays. */

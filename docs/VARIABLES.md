@@ -22,31 +22,32 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 195 open and 47 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 215 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 215 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 238 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-242 dials in 36 categories. 143 carry a minimum and a maximum. By type: 107 integer, 19 decimal, 18 percentage, 28 boolean, 31 choice, 38 text, 1 longtext.
+265 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 44 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
 | Membership | 3 | 3 | 0 |
+| Village | 5 | 4 | 1 |
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
-| Progression | 31 | 31 | 0 |
-| Quests | 2 | 2 | 0 |
-| Governance | 44 | 40 | 4 |
+| Progression | 34 | 34 | 0 |
+| Quests | 3 | 3 | 0 |
+| Governance | 51 | 45 | 6 |
 | Tokens | 4 | 1 | 3 |
 | Hypha | 8 | 0 | 8 |
 | Tools | 2 | 2 | 0 |
@@ -56,7 +57,7 @@ Each dial also says WHEN a change lands. 215 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 2 | 1 | 1 |
+| The village's people | 9 | 8 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -66,16 +67,16 @@ Each dial also says WHEN a change lands. 215 of them as soon as it is saved, and
 | Exchange | 5 | 5 | 0 |
 | Library | 9 | 9 | 0 |
 | Payments | 4 | 4 | 0 |
-| Village | 2 | 1 | 1 |
 | Health | 1 | 1 | 0 |
 | Badges | 1 | 1 | 0 |
-| Platform | 3 | 0 | 3 |
+| Platform | 4 | 0 | 4 |
 | Calendar | 4 | 4 | 0 |
 | Introductions | 4 | 4 | 0 |
 | Exit | 10 | 10 | 0 |
 | Needs | 5 | 5 | 0 |
 | Journal | 2 | 2 | 0 |
 | Live Sessions | 2 | 2 | 0 |
+| Language | 1 | 1 | 0 |
 
 ## Every dial by name
 
@@ -86,6 +87,11 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Vouches that admit a member | `membership.vouches_required` | Membership | integer | `3` | the whole village |
 | Joining is by invitation | `membership.invite_only` | Membership | boolean | `true` | the whole village |
 | The role that greets a new arrival | `arrival.greeter_role` | Membership | text | blank | the whole village |
+| The village's own circle, for budget lines about the whole village | `budgets.village_circle_id` | Village | text | blank | the whole village |
+| Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
+| Where the land's satellite picture comes from | `village.satellite_provider` | Village | choice | blank | the whole village |
+| The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
+| Where this village shares its own source code | `village.source_url` | Village | text | blank | the whole village |
 | Base sending allowance per cycle | `gratitude.base_budget` | Gratitude | integer | `105` | the whole village |
 | Value pool distributed at each cycle close | `gratitude.pool_per_cycle` | Gratitude | integer | `1000` | the whole village |
 | Which token the pool pays | `gratitude.pool_token` | Gratitude | text | `credits` | the whole village |
@@ -110,10 +116,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Fee taken from the payment | `redemption.fee_pct` | Ledger | percentage | `0` | the founder or an admin |
 | Fixed fee taken from the payment | `redemption.fee_fixed` | Ledger | decimal | `0` | the founder or an admin |
 | Smallest redemption, in money | `redemption.min_amount` | Ledger | decimal | `0` | the whole village |
-| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | `0` | the whole village |
-| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most in one redemption, in money | `redemption.max_per_request` | Ledger | decimal | blank, which is no ceiling | the whole village |
+| Most one member may redeem per cycle, in money | `redemption.max_per_member_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | How redemption works here | `redemption.process_text` | Ledger | longtext | blank | the founder or an admin |
-| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | `0` | the whole village |
+| Most the village will redeem per cycle, in money | `redemption.max_village_per_cycle` | Ledger | decimal | blank, which is no ceiling | the whole village |
 | Voice needed before a member can claim | `economy.voice_claim_threshold` | The Mint | integer | `100` | the whole village |
 | Earned equity needed before a member can claim | `economy.equity_claim_threshold` | The Mint | integer | `1` | the whole village |
 | How many days Claims Week stays open | `economy.claims_week_days` | The Mint | integer | `7` | the whole village |
@@ -123,6 +129,9 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Which Voice wanes | `economy.voice_decay_basis` | The Mint | choice | `all` | the whole village |
 | How often every role reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
 | Most changes one outside batch can propose | `org.proposal_change_limit` | Progression | integer | `500` | the whole village |
+| A role starts only after: confidentiality | `org.start_after_confidentiality` | Progression | boolean | `false` | the whole village |
+| A role starts only after: membership | `org.start_after_membership` | Progression | boolean | `false` | the whole village |
+| A paid role starts only after its terms | `org.start_after_paid_terms` | Progression | boolean | `false` | the whole village |
 | Sending-budget multiplier: Visitor | `progression.multiplier.visitor` | Progression | decimal | `0` | the whole village |
 | Sending-budget multiplier: Guest | `progression.multiplier.guest` | Progression | decimal | `1` | the whole village |
 | Sending-budget multiplier: Immersant | `progression.multiplier.immersant` | Progression | decimal | `1` | the whole village |
@@ -153,6 +162,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Stage that unlocks: session.template | `progression.unlock.session.template` | Progression | choice | `member` | the whole village |
 | Stage that unlocks: companion.use | `progression.unlock.companion.use` | Progression | choice | `member` | the whole village |
 | Require submitted work before consent | `quest.require_submission_before_consent` | Quests | boolean | `true` | the whole village |
+| Let quests ask a minimum age | `quest.minimum_ages` | Quests | boolean | `false` | the whole village |
 | Founder may self-consent below this many members | `quest.self_consent_until_members` | Quests | integer | `6` | the whole village |
 | How sensing is weighted | `governance.voice_weighting` | Governance | choice | `equal` | the whole village |
 | The proposer bar: earned recognition to propose | `governance.hypha_threshold` | Governance | integer | `0` | the whole village |
@@ -169,6 +179,9 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a change waits when every steward already said yes | `governance.consent_notice_hours` | Governance | integer | `24` | the whole village |
 | Cycles a passed decision waits before it is written off | `governance.landing_expiry_cycles` | Governance | integer | `3` | the whole village |
 | Cooldown after a governed rule change | `governance.change_cooldown_days` | Governance | integer | `0` | the whole village |
+| Changes one proposal may carry | `governance.change_set_cap` | Governance | integer | `22` | the whole village |
+| Change requests one member may gather at once | `governance.change_requests_gathering_per_member` | Governance | integer | `5` | the whole village |
+| Days a change request is reviewed before its vote | `governance.change_request_review_days` | Governance | integer | `3` | the whole village |
 | When a change to the Game Mechanics can go to the vote | `governance.window_changeset` | Governance | text | `always_open` | the whole village |
 | When a change to what the village mints can go to the vote | `governance.window_mint_rule` | Governance | text | `always_open` | the whole village |
 | When a change to how votes are counted can go to the vote | `governance.window_governance_mode` | Governance | text | `always_open` | the whole village |
@@ -182,8 +195,11 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | How long a proposal coming back may open outside its window | `governance.window_grace_days` | Governance | integer | `7` | the whole village |
 | How voting weight is assigned | `governance.weight_mode` | Governance | choice | `equal` | the founder or an admin |
 | The weight token | `governance.weight_token` | Governance | text | `gratitude` | the founder or an admin |
+| Cap one member's voting weight | `governance.weight_cap_on` | Governance | boolean | `false` | the founder or an admin |
+| The most voting weight one member can carry | `governance.weight_cap_pct` | Governance | percentage | `20` | the founder or an admin |
 | Unity needed to pass | `governance.unity_pct` | Governance | percentage | `80` | the whole village |
 | Quorum needed to count | `governance.quorum_pct` | Governance | percentage | `20` | the whole village |
+| Ask again when too few vote | `governance.quorum_fallback` | Governance | choice | `off` | the whole village |
 | How long a ballot stays open | `governance.vote_days` | Governance | integer | `7` | the whole village |
 | How long a consent window stays open | `governance.consent_window_days` | Governance | integer | `7` | the whole village |
 | How village-wide ballots decide | `governance.default_method` | Governance | choice | `custom` | the whole village |
@@ -194,6 +210,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Constitutional changes: quorum floor | `governance.tier_constitutional_quorum_pct` | Governance | percentage | `97` | the whole village |
 | Constitutional changes: unity floor | `governance.tier_constitutional_unity_pct` | Governance | percentage | `97` | the whole village |
 | The tier a veto override is passed at | `governance.highest_tier` | Governance | choice | `constitutional` | the whole village |
+| Members it takes to launch | `governance.launch_min_electorate` | Governance | integer | `3` | the whole village |
 | Minting rule changes: quorum floor | `governance.subject_mint_rule_quorum_pct` | Governance | percentage | `50` | the whole village |
 | Minting rule changes: unity floor | `governance.subject_mint_rule_unity_pct` | Governance | percentage | `0` | the whole village |
 | Roles speaking for other beings count toward quorum | `governance.nonhuman_in_quorum` | Governance | boolean | `false` | the whole village |
@@ -251,6 +268,13 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Reports that hide a photograph on their own | `map.photo_report_hide_threshold` | Village map | integer | `3` | the whole village |
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
+| Ask the circle to consent after the conversations | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
+| The role that sends first replies to applicants | `org.onboarding_role` | The village's people | text | blank | the whole village |
+| Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
+| The track a role without one reads as | `org.default_track` | The village's people | text | blank | the whole village |
+| A role needs a complete card before anyone can apply | `org.apply_needs_complete_card` | The village's people | boolean | `false` | the whole village |
+| The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
+| The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
@@ -291,13 +315,12 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | 30-day purchase limit per member (USD) | `payments.purchase_limit_30d_usd` | Payments | integer | `3000` | the whole village |
 | Annual purchase limit per member (USD) | `payments.purchase_limit_annual_usd` | Payments | integer | `10000` | the whole village |
 | Largest checkout donation | `payments.donation_max_usd` | Payments | integer | `50000` | the whole village |
-| Village Pulse length | `village.pulse_max_entries` | Village | integer | `30` | the whole village |
-| The date this village counts Moon 1 from | `village.first_moon_at` | Village | text | blank | the founder or an admin |
 | Alert when a metric moves this much | `health.alert_change_pct` | Health | integer | `40` | the whole village |
 | Featured badges per member | `badges.max_featured` | Badges | integer | `3` | the whole village |
 | Share bug reports and ideas with the platform team | `platform.feedback_relay` | Platform | boolean | `true` | the founder or an admin |
 | Cooling-off before a key lands with nobody to co-sign | `platform.cosign_cooling_hours` | Platform | integer | `48` | the founder or an admin |
 | How long a key waits for its co-sign | `platform.cosign_expiry_hours` | Platform | integer | `72` | the founder or an admin |
+| The guide's helper in Admin | `platform.admin_helper` | Platform | boolean | `true` | the founder or an admin |
 | The solar event that opens the village year | `calendar.year_anchor` | Calendar | choice | `december_solstice` | the whole village |
 | Hemisphere | `calendar.hemisphere` | Calendar | choice | `north` | the whole village |
 | Mark the cross-quarter days | `calendar.cross_quarters` | Calendar | boolean | `false` | the whole village |
@@ -320,11 +343,12 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Rung a need aims for when nobody said otherwise | `needs.default_depth_target` | Needs | choice | `satisfied` | the whole village |
 | Share of members a need aims to reach when nobody said otherwise | `needs.default_breadth_pct` | Needs | integer | `100` | the whole village |
 | Smallest count of members that may be shown | `needs.aggregate_floor` | Needs | integer | `3` | the whole village |
-| Whether saying what the village is for is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
+| Whether naming the village's needs target is asked before launch | `needs.launch_requirement` | Needs | choice | `recommended` | the whole village |
 | Members who must answer before a pulse average shows | `journal.pulse_floor` | Journal | integer | `1` | the whole village |
 | Every member has a task board unless a steward turns one off | `memberTasks.listDefault` | Journal | boolean | `true` | the whole village |
 | The place line read at drop in | `sessions.place_line` | Live Sessions | text | blank | the whole village |
 | How long a live session runs unless its opener says otherwise | `sessions.default_minutes` | Live Sessions | integer | `60` | the whole village |
+| Default language | `village.default_locale` | Language | choice | `en` | the whole village |
 
 ## Membership
 
@@ -373,6 +397,91 @@ The role whose holders are told the moment somebody joins. Greeting belongs to a
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+## Village
+
+5 dials. 4 for the whole village, 1 for the founder or an admin.
+
+### The village's own circle, for budget lines about the whole village
+
+Every cash budget line belongs to a circle. A line for the whole village, like a sheet row that names no circle, goes on this one. Leave it empty and the budget finds it on the org chart: the active circle set as the link circle, or else the lead circle, or else the one circle with no parent. With none of those, an upload row that names no circle is refused until this is set. Paste the circle id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `budgets.village_circle_id` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Village Pulse length
+
+How many recent happenings the public activity feed shows. Nothing is deleted; this is how far back the page reaches, not how much the village keeps.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.pulse_max_entries` |
+| Type | integer, a whole number |
+| Default | `30` |
+| Range | 10 to 200 |
+| Counted in | entries |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where the land's satellite picture comes from
+
+Which imagery provider Where the Land Is fetches the village's picture from. A provider that needs a key reads it from Admin, Integrations, where its card appears once it is chosen here. Blank leaves the choice to the host, which may have set one for this deployment. Some providers forbid keeping their pictures, and Where the Land Is says which before anything is fetched.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.satellite_provider` |
+| Type | choice, one of a fixed list |
+| Default | blank |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `` Left to the host. Reads SATELLITE_PROVIDER on the host. With nothing there either, no picture is fetched and the map draws its own ground.
+- `village-upload` The village's own aerial photograph. No provider and no key: an admin uploads the picture.
+- `esri-open` Esri World Imagery, no key. Kept on the village's own volume.
+- `sentinel2` Copernicus Sentinel-2. Needs the address of a Sentinel-2 WMS service.
+- `mapbox` Mapbox Static Images. Needs a Mapbox token.
+- `google` Google Maps Static. Needs a Google Maps Static API key.
+- `esri` Esri World Imagery. Needs an ArcGIS API key.
+
+### The date this village counts Moon 1 from
+
+Leave blank and Moon 1 is the moon your village launched under, which is what almost every village wants. Set a date here to count from a different moon: the moon containing the date you give becomes Moon 1, and every moon after it counts on from there. A date in the future is allowed, and until it arrives your moons are shown with their dates and no number. Moon numbers are a label the platform works out each time it draws a screen, so moving this date renames what people see and changes nothing that has been recorded, settled or paid.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.first_moon_at` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where this village shares its own source code
+
+The footer shows a second source link, named for your village, when this is set. Leave it empty if you run the software as published, because the footer already links the public Village OS code. If this village runs a changed version, set it to the https address of your own copy of the code, because the licence says the people who use your village must be able to get it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.source_url` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
 ## Gratitude
 
 11 dials. 11 for the whole village.
@@ -401,7 +510,7 @@ How many tokens the village shares out when a lunar cycle closes. The pool is sp
 | Key | `gratitude.pool_per_cycle` |
 | Type | integer, a whole number |
 | Default | `1000` |
-| Range | 0 to 1000000 |
+| Range | 0 to 1000000000 |
 | Counted in | tokens |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -553,7 +662,7 @@ How many separate taps of appreciation one member can leave for another in a cyc
 
 ### Issuance cap per lunar cycle
 
-The most this village can bring into existence of one token in one lunar cycle, counted across every door and not by hand alone: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door that issues this token, because a cap of zero means zero.
+The most this village can bring into existence of one token in one lunar cycle. It counts what the mint faucet issues: hand-mints, co-signed grants, treasury stocking, stay-credit comps, purchases and adjustments, and the credits a work-exchange quest releases all spend the same number. Pay for quests, roles and accepted proposals, and the gratitude pool, issue from faucets of their own and are not counted. COUNTED IN WHOLE TOKENS, so 100 means a hundred of the token and not a hundred of whatever the ledger stores underneath. It is counted NET, so a credit a member spends back into the faucet inside the same cycle stops counting and can be issued again. Two consequences worth knowing before you set it. A busy month of stays or quests can use the cap up before a steward has minted anything by hand, and the refusal a steward then meets says how much of the lunation's issuance came from those doors. And 0 disables every door of the mint faucet for this token, because a cap of zero means zero.
 
 | Fact | Value |
 | --- | --- |
@@ -745,28 +854,30 @@ The least a member may ask to redeem at once, counted in the redemption's own cu
 
 ### Most in one redemption, in money
 
-The most a member may ask for at once, counted in the redemption's own currency. 0 means there is no ceiling. Same rule as the floor: while this is above 0, a token with no rate is refused instead of passing unmeasured.
+The most a member may ask for at once, counted in the redemption's own currency. Leave it blank for no ceiling. 0 means zero: no redemption may be worth anything. Same rule as the floor: while this holds a number, 0 included, a token with no rate is refused instead of passing unmeasured.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_request` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
 ### Most one member may redeem per cycle, in money
 
-Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. 0 means there is no ceiling.
+Counted across every request one member opens in a lunar cycle, the ones still waiting included, in the redemption's own currency. This is the money twin of 'Redemptions one member may open per cycle', which counts requests and not value: a village that cares how much it pays wants this one, and a village that cares how often it is asked wants that one. Leave it blank for no ceiling. 0 means zero: no member may redeem anything.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_per_member_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -787,14 +898,15 @@ The village's own words for what happens after a member asks: who to speak to, w
 
 ### Most the village will redeem per cycle, in money
 
-Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. 0 means there is no ceiling.
+Counted across every member's requests in a lunar cycle, the ones still waiting included. This is the village's own ability to pay, said as a number, and it is the one cap that two members asking at the same moment could otherwise walk through together. Leave it blank for no ceiling. 0 means zero: the village redeems nothing.
 
 | Fact | Value |
 | --- | --- |
 | Key | `redemption.max_village_per_cycle` |
 | Type | decimal, a number, fractions allowed |
-| Default | `0` |
+| Default | blank, which is no ceiling |
 | Range | 0 to 1000000000 |
+| Left blank | no ceiling, and 0 is the number zero |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -812,7 +924,7 @@ How much voice someone gathers before their chip turns claimable. What this real
 | Key | `economy.voice_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `100` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | voice |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -827,7 +939,7 @@ How much earned equity someone gathers before they can carry it across to Hypha.
 | Key | `economy.equity_claim_threshold` |
 | Type | integer, a whole number |
 | Default | `1` |
-| Range | 1 to 100000 |
+| Range | 1 to 100000000 |
 | Counted in | equity |
 | Who may change it | the whole village |
 | A change takes effect | at the next cycle close |
@@ -911,7 +1023,7 @@ What it may be set to:
 
 ## Progression
 
-31 dials. 31 for the whole village.
+34 dials. 34 for the whole village.
 
 ### How often every role reopens
 
@@ -945,6 +1057,48 @@ How many roles one batch from an outside service can put into a single draft. A 
 | Default | `500` |
 | Range | 1 to 10000 |
 | Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role starts only after: confidentiality
+
+When on, an adopted role does not start until its holder has aligned with the village's confidentiality agreement as it reads now. Write the agreement's words first (Admin, content, the confidentiality section): with no words written, nobody can align, and roles wait.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_confidentiality` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role starts only after: membership
+
+When on, an adopted role does not start until its holder has aligned with the village's membership letter. Somebody who aligned when they applied is not asked again. No payment is ever part of it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_membership` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A paid role starts only after its terms
+
+When on, a role whose terms carry pay, an allowance or a bonus does not start until its holder has aligned with those terms, the agreed rate included. Roles with no money in their terms are not asked.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_paid_terms` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -1626,7 +1780,7 @@ What it may be set to:
 
 ## Quests
 
-2 dials. 2 for the whole village.
+3 dials. 3 for the whole village.
 
 ### Require submitted work before consent
 
@@ -1637,6 +1791,20 @@ When on, value can only be released for work that was actually filed. Turning th
 | Key | `quest.require_submission_before_consent` |
 | Type | boolean, on or off |
 | Default | `true` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Let quests ask a minimum age
+
+Off, no quest asks anybody's age, and families are welcome on every one. On, a quest's editor can ask 16 or 18 of everyone who joins it, and a member says their age band once, never a birth date. Turning it off again lifts every minimum at once and keeps each quest's choice for the next time it is on.
+
+| Fact | Value |
+| --- | --- |
+| Key | `quest.minimum_ages` |
+| Type | boolean, on or off |
+| Default | `false` |
 | Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
@@ -1659,7 +1827,7 @@ Consent normally needs a second person to witness the work: nobody may consent t
 
 ## Governance
 
-44 dials. 40 for the whole village, 4 for the founder or an admin.
+51 dials. 45 for the whole village, 6 for the founder or an admin.
 
 ### How sensing is weighted
 
@@ -1723,7 +1891,7 @@ How many game-rule change proposals one member may open per cycle. A ceiling on 
 | Counted in | per cycle |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Supporters before a proposal can go to the vote
 
@@ -1738,7 +1906,7 @@ How many members must support a mechanics proposal in-game before it can be take
 | Counted in | supporters |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### Governance hub URL
 
@@ -1882,7 +2050,52 @@ After a dial is changed by a passed proposal, this many days must pass before a 
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Changes one proposal may carry
+
+The most changes a single proposal may gather and put to one vote. Connected changes travel together and pass or fail as one, at the bar of the hardest change among them. A smaller number keeps every proposal short enough to read in one sitting. 1 to 50.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_set_cap` |
+| Type | integer, a whole number |
+| Default | `22` |
+| Range | 1 to 50 |
+| Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Change requests one member may gather at once
+
+How many change requests one member may be gathering at the same time, before they open them for review. Reviewing, commenting on and supporting other members' change requests is never limited.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_requests_gathering_per_member` |
+| Type | integer, a whole number |
+| Default | `5` |
+| Range | 1 to 50 |
+| Counted in | change requests |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+### Days a change request is reviewed before its vote
+
+How long the village has to ask questions, raise concerns and objections, and suggest edits before a change request may go to the vote. The clock starts again whenever a change or the why is edited. 0 lets a change request go to the vote as soon as its objections are answered.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.change_request_review_days` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 0 to 30 |
+| Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### When a change to the Game Mechanics can go to the vote
 
@@ -2073,6 +2286,35 @@ Which token weighs votes when the weight mode is token. Only tokens this platfor
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a constitutional vote, at the highest bar the village has set |
 
+### Cap one member's voting weight
+
+Turns on a ceiling on how much of the vote any one member carries. It only matters when the weight mode is token, where a member weighs their balance, so one large holder could meet quorum alone or carry a vote. With this on, when a ballot opens no member carries more than the share below of that ballot's vote, and the rest of the vote is shared among everyone else in proportion to what they hold. What it costs: a large holder's balance past the cap stops counting, and on a small roll balances stop counting at all: with fewer than 5 members holding weight at the default 20 (100 divided by the cap), everyone weighs the same. It is off unless you turn it on.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.weight_cap_on` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
+### The most voting weight one member can carry
+
+While the cap above is on, the largest share of a ballot's vote that one member can carry. It only matters in token mode, and only with the cap switched on. At 20, a member holding 90 beside four members holding 2.5 each carries a fifth of the vote, the same as each of them, and members under the cap keep their balance in full. With fewer than 5 members holding weight at 20, everyone weighs the same, because five shares of 20 is the least that makes a whole vote. Lower spreads power wider and needs more holders before balances count at all. To have no cap, turn the switch off. This number never does that.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.weight_cap_pct` |
+| Type | percentage, a percentage |
+| Default | `20` |
+| Range | 1 to 100 |
+| Counted in | % |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
 ### Unity needed to pass
 
 Of the votes cast for or against, the share that must be in favor for a ballot run on the village's own dials to pass. Abstentions help a ballot reach quorum and take no side here. 100 asks for consensus in effect; the Hypha surface this inherits from runs at 80.
@@ -2103,6 +2345,25 @@ The share of the electorate's total voting weight that must show up, counting ab
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a structural vote, at a higher bar |
 
+### Ask again when too few vote
+
+Off by default, and off means a ballot that misses quorum ends there. Turn it on and a ballot that misses quorum opens once more on the same question, for as many days as the first, needing half the quorum. If that one misses too, a simple majority of the votes cast decides it: more yes than no carries it and a tie does not. Only ballots opened after it is switched on are asked again. A steward or an admin may switch it on at any time as a failsafe, and every switch is recorded and announced on the village feed. Switching it off is the village's to decide.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.quorum_fallback` |
+| Type | choice, one of a fixed list |
+| Default | `off` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a structural vote, at a higher bar |
+
+What it may be set to:
+
+- `off` Off. A ballot that misses quorum ends as it closes.
+- `on` On. A ballot that misses quorum is asked again once, at half the quorum.
+
 ### How long a ballot stays open
 
 Days between a ballot opening and its votes locking. Votes can be changed freely until then. The clock closes the ballot when the window ends and the village's own engine reads the result, so nobody chooses the moment. A change to the Game then waits again, for the window a steward can stop it in.
@@ -2116,7 +2377,7 @@ Days between a ballot opening and its votes locking. Votes can be changed freely
 | Counted in | days |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
+| What it costs to change | a structural vote, at a higher bar |
 
 ### How long a consent window stays open
 
@@ -2265,6 +2526,21 @@ What it may be set to:
 - `structural` Structural. An override asks the structural bar: how the village decides.
 - `constitutional` Constitutional. An override asks the highest bar this platform ships.
 
+### Members it takes to launch
+
+How many members must hold a voice before the village can vote to start its Game. Every one of them has to say yes. The default is three: a founder and two more. Moving it costs the highest tier your village works at.
+
+| Fact | Value |
+| --- | --- |
+| Key | `governance.launch_min_electorate` |
+| Type | integer, a whole number |
+| Default | `3` |
+| Range | 1 to 50 |
+| Counted in | members |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a constitutional vote, at the highest bar the village has set |
+
 ### Minting rule changes: quorum floor
 
 The least share of the village's voting weight that must turn up before a change to what the village mints can be decided. This one sits on top of the structural tier, so raising it asks for more attention on minting alone without moving every other structural change with it. Cannot be set below the platform floor.
@@ -2406,7 +2682,7 @@ The one place this platform sends people for governance, proposals, treasury and
 
 ### Hypha space id (on-chain)
 
-The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is still accepted and an operator is told, so an idle check is never read as a passing one. Blank checks nothing.
+The numeric id of your DAO's space on Hypha's Base contracts. Every on-chain proposal your DAO creates is stamped with it. Found in your Hypha space's URL or from any of its proposals on Basescan. Fill this in and the governance webhook checks it: a delivery that names a different space is refused, even when its signature is good, because one hub watches Base for many villages off one listener and a routing mistake there arrives correctly signed. A delivery that names no space at all is recorded and an operator is told, and a passed one waits for a person to apply it, so an idle check is never read as a passing one. Left blank, nothing can be checked, so every passed vote waits for a person to apply it (after launch, any member can ask the village to decide it).
 
 | Fact | Value |
 | --- | --- |
@@ -3123,7 +3399,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-2 dials. 1 for the whole village, 1 for the founder or an admin.
+9 dials. 8 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3136,6 +3412,104 @@ On, anyone can read the first names of the people holding each role on the Team,
 | Default | `true` |
 | Range | on or off |
 | Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Ask the circle to consent after the conversations
+
+Off, the circle is asked to consent the moment an applicant confirms their address. On, the circle is only told an application arrived, and the consent round opens once every conversation a role names has been scored, so the circle weighs the whole picture. Roles that name no interviewers are asked at once either way. Nobody's score is shown to the circle's ask or to the applicant.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.consent_after_interviews` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The role that sends first replies to applicants
+
+The role whose holders are reminded to send each applicant a first reply within 3 business days, and are told when an application has not moved for ten days. Paste the role id from the org chart. Leave it empty and the admins are told instead. Reminders only: nothing here adopts or declines anybody.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.onboarding_role` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Roles accepted from a sync start unlisted
+
+On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.sync_starts_unlisted` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The track a role without one reads as
+
+What a role whose card names no track reads as: contractor, volunteer, employee or ai. A village whose roles are all moon-to-moon contracts, paid for the tasks delivered and invoiced at the End of Moon, writes contractor. Leave it empty and a role with no track shows none, as before. A role's own track always wins.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.default_track` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role needs a complete card before anyone can apply
+
+On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.apply_needs_complete_card` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The role that holds first conversations
+
+The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.first_conversation_role` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The circle that consents paid roles
+
+The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.paid_consent_circle` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
@@ -3766,39 +4140,6 @@ The ceiling on a single choose-your-amount donation checkout. Anything above it 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-## Village
-
-2 dials. 1 for the whole village, 1 for the founder or an admin.
-
-### Village Pulse length
-
-How many recent happenings the public activity feed shows. Nothing is deleted; this is how far back the page reaches, not how much the village keeps.
-
-| Fact | Value |
-| --- | --- |
-| Key | `village.pulse_max_entries` |
-| Type | integer, a whole number |
-| Default | `30` |
-| Range | 10 to 200 |
-| Counted in | entries |
-| Who may change it | the whole village |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
-### The date this village counts Moon 1 from
-
-Leave blank and Moon 1 is the moon your village launched under, which is what almost every village wants. Set a date here to count from a different moon: the moon containing the date you give becomes Moon 1, and every moon after it counts on from there. A date in the future is allowed, and until it arrives your moons are shown with their dates and no number. Moon numbers are a label the platform works out each time it draws a screen, so moving this date renames what people see and changes nothing that has been recorded, settled or paid.
-
-| Fact | Value |
-| --- | --- |
-| Key | `village.first_moon_at` |
-| Type | text, free text, one line |
-| Default | blank |
-| Range | no bounds are set |
-| Who may change it | the founder or an admin |
-| A change takes effect | as soon as it is saved |
-| What it costs to change | a routine vote |
-
 ## Health
 
 1 dial. 1 for the whole village.
@@ -3839,7 +4180,7 @@ How many badges a member may pin to their byline (forum posts, map chips). 0 tur
 
 ## Platform
 
-3 dials. 3 for the founder or an admin.
+4 dials. 4 for the founder or an admin.
 
 ### Share bug reports and ideas with the platform team
 
@@ -3881,6 +4222,20 @@ After launch, a key that needs a second admin's co-sign waits this many hours. U
 | Default | `72` |
 | Range | 1 to 720 |
 | Counted in | hours |
+| Who may change it | the founder or an admin |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The guide's helper in Admin
+
+Lets admins ask the village guide for help inside Admin: finding a page or setting, explaining a control, and proposing a settings change that an admin applies with a click. It reads settings, help text and the shape of the org chart only, never applications, proposals, people's details, terms or pay, and it does not help choose people for roles. It turns on by itself once the village connects an AI key: its own Anthropic key, or Sera when the org memory connection is set up. Turn this off to keep it off.
+
+| Fact | Value |
+| --- | --- |
+| Key | `platform.admin_helper` |
+| Type | boolean, on or off |
+| Default | `true` |
+| Range | on or off |
 | Who may change it | the founder or an admin |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -4258,9 +4613,9 @@ The smallest number of answers on one need that may appear as a count anywhere i
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
-### Whether saying what the village is for is asked before launch
+### Whether naming the village's needs target is asked before launch
 
-Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not said what it is for may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village is for. Nothing reads this until the launch check names it.
+Whether the launch checklist asks a village to name its needs and its target before the launch vote opens. Recommended puts it on the list beside the items a member will feel the absence of, and the vote still opens. There is deliberately no blocking choice: a village that has not named a needs target may still start its Game, and a platform that held the launch over an unanswered target would be the platform deciding what the village needs. What the village is for is a separate question, and it does block: the governing purpose statement is its own row on the launch checklist, and the vote waits for it. Nothing reads this dial until the launch check names it.
 
 | Fact | Value |
 | --- | --- |
@@ -4344,16 +4699,45 @@ The length a new live session starts with when whoever opens it names none. The 
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
 
+## Language
+
+1 dial. 1 for the whole village.
+
+### Default language
+
+The language a visitor sees when their browser asks for none this village offers. A member who picks a language keeps it, and a browser set to a language on offer gets that one first.
+
+| Fact | Value |
+| --- | --- |
+| Key | `village.default_locale` |
+| Type | choice, one of a fixed list |
+| Default | `en` |
+| Range | one of the choices below |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+What it may be set to:
+
+- `en` English.
+- `es` Español.
+
 ## What this file is made from
 
 The generator reads these and fails loudly if any of them moves:
 
+- `shared/agreements.ts`
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
+- `shared/changeRequestLimits.ts`
+- `shared/changeSetCap.ts`
+- `shared/closingPolicies.ts`
+- `shared/conflictAgreement.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`
 - `shared/governanceEngine.ts`
 - `shared/governingPurpose.ts`
+- `shared/mintCapWords.ts`
 - `shared/moonSettlement.ts`
 - `shared/needs.ts`
 - `shared/villageMoon.ts`

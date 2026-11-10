@@ -280,9 +280,14 @@ that account out everywhere before it makes it the founder, and the response
 carries a `claimUrl` to set your own. Anybody can sign up with any address,
 so a password nobody confirmed may not be yours (readiness finding R104).
 
-Either way, `ADMIN_PASSWORD` now stops working. Once your village has a
-founder it refuses everyone except the account named in
+Either way, `ADMIN_PASSWORD` now stops working at `/claim`. Once your village
+has a founder it refuses everyone there except the account named in
 `BREAK_GLASS_ADMIN_EMAIL`, and that account still has to give it.
+
+It keeps one other door, for as long as it is set: the whole-village export
+(`docs/RUNBOOK.md`, "Taking the whole village with you"), which hands every
+member's data to whoever gives it. So keep it as you keep the database
+password, and change it when anyone who has seen it stops running the village.
 
 ### Keep a way back in
 
@@ -301,13 +306,16 @@ the exact hole both lockouts fell into. Two variables close it:
 
 ## 6a. Google sign-in, which ReGen Civics can host for you
 
-Two ways to switch this on. Both set the same three variables, and the code
-does not know or care which you used.
+Two ways to switch this on. Both give you the same two values, the client ID
+and its secret, and the code does not know or care which you used. Paste them
+under Admin, Integrations (the two Google sign-in cards), or set them on the host
+as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; Admin wins when both are set.
+The callback address comes from `FRONTEND_URL` on the host.
 
 **Ask ReGen Civics for the shared credentials (start here).** We hold one
 Google client with every incubator village's callback address registered on it.
 Send us your village's domain, and we send back a `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET` to paste into Railway. Your Google Cloud Console work is
+`GOOGLE_CLIENT_SECRET` to paste under Admin, Integrations. Your Google Cloud Console work is
 zero. Two things to know while you use them: the Google consent screen will say
 **ReGen Civics** rather than your village's name, and the secret is shared with
 the other incubator villages, so it is right for a village being designed and
@@ -442,6 +450,26 @@ It fails when the server reads a variable the template does not name. That had
 happened to 25 variables by 2026-09-02, seven of them founder-facing, and eight
 of the 25 were unreachable by grep as well, because the code reads them through
 a string (`keyEnv: "MAPBOX_TOKEN"`) rather than as `process.env.MAPBOX_TOKEN`.
+
+## 9a. Take a backup, and restore it once
+
+Nothing in this walkthrough has made a backup yet, and nothing makes one for
+you. Until a copy of the village exists somewhere other than the service it
+runs on, one bad deploy or one lost volume ends it. The Launch Plan lists this
+as a blocking item for the same reason.
+
+1. **Turn on the host's own copies.** On Railway: the MySQL service's
+   backups, and a snapshot of the app's volume.
+2. **Keep your own.** `docs/RUNBOOK.md`, "Where the backup runs", sets up the
+   encrypted nightly backup with a restore drill. It runs from a **private**
+   GitHub repository, once per village, and needs `BACKUP_EXPORT_TOKEN` (step
+   9) for the uploads half.
+3. **Keep the generated values.** Copy every value step 3 generated into a
+   password manager. A restored database cannot open the keys it sealed
+   without `VILLAGE_SECRETS_KEY` and `MEMBER_SECRETS_KEY`, and a different
+   `AUTH_TOKEN_SECRET` signs every member out.
+4. **Restore it once** into a scratch database, following `docs/RUNBOOK.md`,
+   "Restoring the database from a backup", before you rely on it.
 
 ## 10. Confirm it actually works
 

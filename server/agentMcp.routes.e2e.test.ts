@@ -217,7 +217,7 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
 
   it("is an admin account marked as an agent's, which a person marks", async () => {
     agent = await register("Claude (Operations agent)", "ops-agent");
-    expect((await call("PUT", `/api/admin/users/${agent.id}/role`, { role: "admin" })).status).toBe(200);
+    expect((await call("PUT", `/api/admin/users/${agent.id}/role`, { role: "admin", addressUnprovedOk: true })).status).toBe(200);
     const marked = await call("PUT", `/api/admin/players/${agent.id}/agent`, { isAgent: true });
     expect(marked.status, marked.text).toBe(200);
     const login = await call("POST", "/api/auth/login", { email: `ops-agent-${PORT}@example.test`, password: "AgentTest123!" }, "");
@@ -396,7 +396,7 @@ describe.skipIf(!DB_CONFIGURED)("signing a connector in with OAuth (B4, check 33
     expect(r.json.clientName).toBe("Claude");
     expect(r.json.scopes.map((s: any) => s.scope)).not.toContain("admin");
     // Only the scopes that open a connector tool are offered.
-    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review"]);
+    expect(r.json.scopes.map((s: any) => s.scope)).toEqual(["moon.read", "moon.write", "tasks.write", "moon.review", "roles.read", "roles.propose", "letters.draft", "applicants.read", "onboarding.write", "settings.propose", "listing.propose", "pages.propose", "map.propose"]);
     // An admin is offered the admin scope too, never ticked.
     const asAdmin = await call("GET", `/api/agent/oauth/request?client_id=${clientId}&redirect_uri=${encodeURIComponent(REDIRECT)}`);
     expect(asAdmin.json.scopes.find((s: any) => s.scope === "admin")).toMatchObject({ ticked: false, write: true });

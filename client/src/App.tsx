@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import BreakGlass from "@/components/BreakGlass";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { LazyMotion, MotionConfig } from "framer-motion";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -14,6 +14,7 @@ import { ModuleProvider } from "./modules/ModuleProvider";
 import { chooseLanding, getPreference, recordVisit, wasMapAvailable } from "./lib/landing";
 import { brochurePage, storyPageShown, useBrochurePages } from "./lib/brochure";
 import { useGameConfig } from "./lib/gameApi";
+import { LocaleRoot } from "@/i18n/LocaleRoot";
 
 /**
  * "/" means the welcome page, for everyone, every time. The map was going to
@@ -164,6 +165,7 @@ const Quests = lazyPage(() => import("./pages/Quests"));
 const QuestDetail = lazyPage(() => import("./pages/QuestDetail"));
 const ProposeQuest = lazyPage(() => import("./pages/ProposeQuest"));
 const Roles = lazyPage(() => import("./pages/Roles"));
+const RoleDraft = lazyPage(() => import("./pages/RoleDraft"));
 const HowWeCreate = brochurePage(() => import("./pages/HowWeCreate"));
 const CoCreatorsGuide = brochurePage(() => import("./pages/CoCreatorsGuide"));
 const Housing = brochurePage(() => import("./pages/Housing"));
@@ -186,10 +188,12 @@ const EmailUnsubscribe = lazyPage(() => import("./pages/EmailPages").then((m) =>
 const EmailAction = lazyPage(() => import("./pages/EmailPages").then((m) => ({ default: m.EmailAction })));
 const ForgotPassword = lazyPage(() => import("./pages/ForgotPassword"));
 const GameMechanics = lazyPage(() => import("./pages/GameMechanics"));
+const ChangeRequests = lazyPage(() => import("./pages/ChangeRequests"));
 const VillageEmail = lazyPage(() => import("./pages/VillageEmail"));
 const GoodNeighbor = brochurePage(() => import("./pages/GoodNeighbor"));
 const JourneyToLaunch = lazyPage(() => import("./pages/JourneyToLaunch"));
 const SetupGame = lazyPage(() => import("./pages/SetupGame"));
+const CanvasWorkbook = lazyPage(() => import("./pages/CanvasWorkbook"));
 const ProjectHistory = brochurePage(() => import("./pages/ProjectHistory"));
 const Bootstrap = lazyPage(() => import("./pages/Bootstrap"));
 const Feedback = lazyPage(() => import("./pages/Feedback"));
@@ -226,12 +230,17 @@ const RequestMembership = lazyPage(() => import("./pages/RequestMembership"));
 const ProposeARole = lazyPage(() => import("./pages/ProposeARole"));
 const ConfirmProposal = lazyPage(() => import("./pages/ProposeARole").then((m) => ({ default: m.ConfirmProposal })));
 const OpenProposal = lazyPage(() => import("./pages/OpenProposal"));
+const RoleMeasures = lazyPage(() => import("./pages/RoleMeasures"));
+const ApplicationStatus = lazyPage(() => import("./pages/ApplicationStatus"));
 const Feed = lazyPage(() => import("./pages/Feed"));
 const Stay = lazyPage(() => import("./pages/Stay"));
 const Wallet = lazyPage(() => import("./pages/Wallet"));
 const Badges = lazyPage(() => import("./pages/Badges"));
 const Powers = lazyPage(() => import("./pages/Powers"));
+// The Treasurer's pricing desk (quest re-price Q3, 2026-11-09).
+const PricingDeskPage = lazyPage(() => import("./pages/PricingDesk"));
 const Review = lazyPage(() => import("./pages/Review"));
+const Approvals = lazyPage(() => import("./pages/Approvals"));
 const CashPayouts = lazyPage(() => import("./pages/CashPayouts"));
 const StructureReview = lazyPage(() => import("./pages/StructureReview"));
 const Library = lazyPage(() => import("./pages/Library"));
@@ -242,6 +251,7 @@ const ModuleDetail = lazyPage(() => import("./pages/ModuleDetail"));
 const Crowdpool = lazyPage(() => import("./pages/Crowdpool"));
 const CrowdpoolCampaign = lazyPage(() => import("./pages/CrowdpoolCampaign"));
 const Journal = lazyPage(() => import("./pages/Journal"));
+const FundingRounds = lazyPage(() => import("./pages/FundingRounds"));
 const Sessions = lazyPage(() => import("./pages/Sessions"));
 const SessionRoom = lazyPage(() => import("./pages/SessionRoom"));
 const SessionSeason = lazyPage(() => import("./pages/SessionSeason"));
@@ -276,6 +286,9 @@ function Router() {
       <Route path="/" component={LandingRoute} />
       <Route path="/journey-to-launch" component={JourneyToLaunch} />
       <Route path="/setup-game" component={SetupGame} />
+      {/* The Governance Canvas on paper. Public and read-only: it shows the
+          village's name and nothing else the village holds. */}
+      <Route path="/canvas/workbook" component={CanvasWorkbook} />
       <Route path="/project-history" component={ProjectHistory} />
       <Route path="/claim" component={Bootstrap} />
       <Route path="/feedback" component={Feedback} />
@@ -327,7 +340,9 @@ function Router() {
       <Route path="/wallet" component={Wallet} />
       <Route path="/badges" component={Badges} />
       <Route path="/powers" component={Powers} />
+      <Route path="/pricing" component={PricingDeskPage} />
       <Route path="/review/structure/:batchId" component={StructureReview} />
+      <Route path="/approvals" component={Approvals} />
       <Route path="/review" component={Review} />
       {/* The treasurer's payout list, for a finance role holding cash.pay without admin */}
       <Route path="/cash-payouts" component={CashPayouts} />
@@ -341,6 +356,9 @@ function Router() {
       <Route path="/messages/:id" component={Messages} />
       <Route path="/introductions" component={Introductions} />
       <Route path="/propose-quest" component={ProposeQuest} />
+      <Route path="/roles/select" component={RoleDraft} />
+      {/* The old address, kept so every shared link and bookmark still lands (the board was called a draft until 9 Nov 2026). */}
+      <Route path="/roles/draft">{() => <Redirect to="/roles/select" replace />}</Route>
       <Route path="/roles" component={Roles} />
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />
@@ -378,6 +396,8 @@ function Router() {
       <Route path="/email/a" component={EmailAction} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/game-mechanics" component={GameMechanics} />
+      <Route path="/changes" component={ChangeRequests} />
+      <Route path="/changes/:id" component={ChangeRequests} />
       <Route path="/village-email" component={VillageEmail} />
       <Route path="/good-neighbor" component={GoodNeighbor} />
       <Route path="/steward-rights" component={StewardRights} />
@@ -395,6 +415,8 @@ function Router() {
       {/* One application to hold roles, on terms. Members only, behind terms.read. */}
       <Route path="/role-applications/:id" component={SeatApplication} />
       <Route path="/open-proposals/:id" component={OpenProposal} />
+      <Route path="/role-measures" component={RoleMeasures} />
+      <Route path="/application-status/:ref" component={ApplicationStatus} />
       <Route path="/seat-applications/:id" component={SeatApplicationsAlias} />
       {/* Propose my roles for next season. /new and /shared/:token before /:id, which would take them. */}
       <Route path="/role-proposals/new" component={NewRoleProposal} />
@@ -408,6 +430,10 @@ function Router() {
       <Route path="/gratitude" component={GratitudeWall} />
       {/* A member's own practice, behind ModuleGate("journal") and sign-in. */}
       <Route path="/journal" component={Journal} />
+      {/* The village chooses which quests to fund, within a pot. Behind
+          ModuleGate("funding-rounds") and sign-in. */}
+      <Route path="/funding-rounds" component={FundingRounds} />
+      <Route path="/funding-rounds/:id" component={FundingRounds} />
       {/* A circle's live calls: the list, then one room. Both behind
           ModuleGate("sessions") and sign-in; members only, no guests. The
           list is declared before the room for the reason /decisions gives. */}
@@ -447,6 +473,8 @@ function App() {
       <MotionConfig reducedMotion="user">
       <LazyMotion features={loadMotionFeatures}>
         <AuthProvider>
+        {/* The visitor's language, before any page renders (internal spec i18n, US1). */}
+        <LocaleRoot fallback={<PageLoading />}>
         <ModuleProvider>
           <TooltipProvider>
             <Toaster />
@@ -460,6 +488,7 @@ function App() {
           </TooltipProvider>
 
         </ModuleProvider>
+        </LocaleRoot>
         </AuthProvider>
       </LazyMotion>
       </MotionConfig>

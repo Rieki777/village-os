@@ -28,6 +28,7 @@
  * The item is claimed before the door opens, so two yeses open it once, and
  * given back if the door refuses, so a refusal leaves the draft as it was.
  */
+import { seraGuideAsk } from "../lib/seraGuideCall";
 import http from "node:http";
 import type { Express, Request, Response } from "express";
 import type { AppDeps } from "../lib/appDeps";
@@ -46,6 +47,8 @@ import { numberVar, stringVar } from "../lib/variables";
 import { weekAhead } from "../lib/villageReaders";
 import { listBudgets } from "../lib/resources";
 import { treasuryTokenFor } from "../lib/circleTreasury";
+import { saberraAgentName, saberraGuideReach } from "../lib/saberraGuide";
+import { companionGuideOf } from "../../shared/guideChoice";
 import {
   answerQuestion,
   armyView,
@@ -164,6 +167,9 @@ export function register(app: Express, deps: Deps): void {
       ceiling: Math.max(0, Math.min(MAX_QUESTIONS_PER_DAY, Math.trunc(numberVar("companions.max_questions_per_day")))),
       roleScope: stringVar("companions.role_ids"),
       guideName: v.guideName,
+      outsideGuideName: saberraAgentName(),
+      // The member's own guide (prefs.guide, saved by the chooser at /api/guide), read fresh each time.
+      guideOf: async (userId) => companionGuideOf((await members.byId(userId))?.prefs?.guide, saberraGuideReach().available),
       timeZone: v.timeZone,
       villageName: v.name,
     };
@@ -302,10 +308,10 @@ export function register(app: Express, deps: Deps): void {
     }
     if (b.provider !== undefined) {
       if (!(COMPANION_PROVIDERS as readonly string[]).includes(String(b.provider))) return res.status(400).json({ error: "That engine is not one this village knows." });
-      // The contract's question 1: a personal companion stays with the village guide, so no
-      // member's identity crosses to the outside service on purpose.
-      if (c.scope === "personal" && b.provider !== "village") {
-        return res.status(400).json({ error: "Your personal companion speaks through the village guide." });
+      // A personal companion follows the member's own chosen guide (Rye, 2026-11-06), so it
+      // moves with the guide chooser and never on its own: two places to set one thing would disagree.
+      if (c.scope === "personal" && b.provider !== c.provider) {
+        return res.status(400).json({ error: "Your personal companion speaks through the guide you chose. Change who you talk to, and it follows." });
       }
       patch.provider = b.provider;
     }
@@ -360,15 +366,20 @@ export function register(app: Express, deps: Deps): void {
       return res.status(429).json({ error: "That is a lot of chat for one hour. Pick it up in a little while." });
     }
     const e = env();
-    // The outside engine has no chat yet (its `companion_chat` is a seam), so every chat runs on the village guide.
-    const engine = engineName("village", e.guideName);
-    const line = await villageLine(user);
-    if (!line) return res.status(409).json({ error: `${engine} has no key in this village yet, so companions cannot talk in their own words.`, engine });
-    if (!consentFor(user.prefs, line.disclosure)) {
-      return res.status(409).json({ error: "consent_required", consent: { required: true, ...line.disclosure }, engine });
+    // WHO TALKS (2026-11-09): the member's own guide. Sera now has a guide road
+    // (server/lib/seraGuideCall.ts), so a member who chose her, in a village
+    // whose connection answers, talks through her, under her own consent line.
+    const sera = (await e.guideOf(uid)) === "saberra" ? seraGuideAsk() : null;
+    const provider = sera ? ("saberra" as const) : ("village" as const);
+    const engine = engineName(provider, e);
+    const line = sera ? null : await villageLine(user);
+    if (!sera && !line) return res.status(409).json({ error: `${engine} has no key in this village yet, so companions cannot talk in their own words.`, engine });
+    const disclosure = sera ? saberraDisclosure(c.name) : line!.disclosure;
+    if (!consentFor(user.prefs, disclosure)) {
+      return res.status(409).json({ error: "consent_required", consent: { required: true, ...disclosure }, engine });
     }
 
-    const messageId = await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "member", engine: "village", body: text });
+    const messageId = await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "member", engine: provider, body: text });
     const history = await repo.recentMessages(getPool(), c.id, uid, CHAT_HISTORY);
     const roleName = c.scope === "role" ? ((await repo.rosterFor(getPool(), [c.scopeId])).get(c.scopeId)?.name ?? null) : null;
     const system = companionSystemPrompt({
@@ -386,7 +397,8 @@ export function register(app: Express, deps: Deps): void {
       clientIp: String(req.ip ?? ""),
       burstKey: `companion:${uid}`,
       userId: uid,
-      memberKey: line.memberKey,
+      memberKey: line?.memberKey ?? null,
+      sera,
     });
     const paid = call.ok ? { keySource: call.keySource, usage: call.usage, iterations: call.iterations, stopReason: call.stopReason } : call.spent;
     if (paid) {
@@ -405,7 +417,7 @@ export function register(app: Express, deps: Deps): void {
     if (!call.ok) return res.status(call.status).json({ error: call.error, engine });
     const parsed = parseJsonReply<any>(call.text, { reply: call.text || "I don't see that anywhere." });
     const reply = typeof parsed?.reply === "string" && parsed.reply.trim() ? parsed.reply.trim().slice(0, 2000) : "I don't see that anywhere.";
-    await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "companion", engine: "village", body: reply });
+    await repo.addMessage(getPool(), { companionId: c.id, ownerUserId: uid, speaker: "companion", engine: provider, body: reply });
 
     let refusal: string | null = null;
     let drafted: string | null = null;

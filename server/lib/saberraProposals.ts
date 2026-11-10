@@ -51,6 +51,7 @@
  * Pure: no pool, no clock, no network.
  */
 import { readVendorRecord, type SaberraRecordKind } from "./saberraRecords";
+import { rangeFromFields, rangeFromText } from "../../shared/sourcePayRange";
 import { labelOf, normaliseId, plainText, resolveRelation, shapeOf } from "./saberraRelations";
 
 /**
@@ -67,6 +68,8 @@ export interface VendorRecord {
   fields: Record<string, unknown>;
   /** A link back to the record in their product, for the steward reviewing it. */
   url?: string;
+  /** When the service last edited it, read through `editedAtOf`. Never who edited it. */
+  editedAt?: string;
 }
 
 /** A record that could not become a seat, named with the reason. */
@@ -113,7 +116,8 @@ export interface StructureProposal {
  * that crosses the boundary and is not one of these is reported as unmapped.
  * `Notes` is deliberately not read as an aim: it is the vendor's working
  * notes ("superseded by...") and not what a seat is for. The four
- * `Compensation` fields are read into `sourcePay`, information beside the
+ * `Compensation` fields, and the seven structured pay-range fields (Pay Min, Pay Max,
+ * Currency, Per, Budget Line, Funded From, Pay Status), are read into `sourcePay`, information beside the
  * seat for the structure review, and never into the seat itself.
  */
 const ROLE_READS = new Set([
@@ -125,6 +129,13 @@ const ROLE_READS = new Set([
   "Compensation Status",
   "Compensation Terms",
   "Compensation Target (Monthly)",
+  "Pay Min",
+  "Pay Max",
+  "Currency",
+  "Per",
+  "Budget Line",
+  "Funded From",
+  "Pay Status",
 ]);
 /** The circle fields read here: its name, to resolve relations, and its status. */
 const CIRCLE_READS = new Set(["Circle Name", "Status"]);
@@ -148,7 +159,7 @@ function numberOf(v: unknown): number | string | null {
 }
 
 /** The four `Compensation` fields of a read role, or null when it carries none. */
-function sourcePayOf(fields: Record<string, unknown>): Record<string, unknown> | null {
+export function sourcePayOf(fields: Record<string, unknown>): Record<string, unknown> | null {
   const out: Record<string, unknown> = {};
   const model = labelOf(fields["Compensation Model"]);
   if (model) out.model = model;
@@ -158,6 +169,19 @@ function sourcePayOf(fields: Record<string, unknown>): Record<string, unknown> |
   if (terms) out.terms = terms;
   const target = numberOf(fields["Compensation Target (Monthly)"]);
   if (target !== null) out.monthlyUsd = target;
+  // The RANGE: the structured fields when the service sends them, otherwise the
+  // terms text, and then only when it is unambiguous. Anything else stays text.
+  const range =
+    rangeFromFields({
+      min: numberOf(fields["Pay Min"]),
+      max: numberOf(fields["Pay Max"]),
+      currency: labelOf(fields["Currency"]),
+      per: labelOf(fields["Per"]),
+      budgetLine: plainText(fields["Budget Line"]) ?? labelOf(fields["Budget Line"]),
+      fundedFrom: plainText(fields["Funded From"]) ?? labelOf(fields["Funded From"]),
+      status: labelOf(fields["Pay Status"]),
+    }) ?? rangeFromText(terms);
+  if (range) out.range = range;
   return Object.keys(out).length ? out : null;
 }
 

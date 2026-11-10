@@ -321,6 +321,22 @@ export async function textsForParty(db: Db, userId: string): Promise<StoredText[
 }
 
 /**
+ * The texts a party key holds, newest first, for a party with no account yet:
+ * an applicant's address (`address:<fingerprint>`, server/lib/applicationMembership.ts).
+ * The parties table is keyed (text_id, party_key), so this reads by the second
+ * half of the key; it is one row per party per text, and an address holds one
+ * or two.
+ */
+export async function textsForPartyKey(db: Db, partyKey: string): Promise<StoredText[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${TEXT_COLUMNS.split(", ").map((c) => `t.${c}`).join(", ")} FROM alignment_texts t ` +
+      "JOIN alignment_parties p ON p.text_id = t.id WHERE p.party_key = ? AND p.user_id IS NULL ORDER BY t.created_at DESC, t.id DESC LIMIT 50",
+    [partyKey],
+  );
+  return rows.map(rowToText);
+}
+
+/**
  * The register's read (PR6): every text of the given kinds, every version,
  * newest first, one page at a time. The route asks only for the kinds the
  * viewer holds the capability for. No kinds, no rows, and no query.

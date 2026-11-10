@@ -14,7 +14,7 @@
  */
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CONSENT_WORDS, type ConsentState } from "@shared/roleProposalConsent";
 import { DECIDE_WORDS, DOOR } from "@shared/openProposalDecide";
 import { consentOf } from "@/test/roleProposalFixture";
@@ -117,6 +117,39 @@ describe("the open proposal page", () => {
     expect(screen.getByText(DECIDE_WORDS.door[DOOR.aRoleHolds])).toBeTruthy();
   });
 
+  it("a decider reads the links as text to open off-site and the files as downloads; anybody else reads neither (Rye, 10 Nov 2026)", async () => {
+    answer = () =>
+      json({
+        proposal: served({
+          attached: {
+            links: [{ label: "Gates I built", url: "https://gates.example.org/rowan" }],
+            files: [{ id: "pf-0123456789abcdef", kind: "pdf", name: "Gates portfolio.pdf", size: 2048, href: `/api/governance/open-proposals/${ID}/files/pf-0123456789abcdef` }],
+          },
+        }),
+      });
+    render(<OpenProposal />);
+    await heading();
+    expect(screen.getByRole("heading", { name: "Links and files" })).toBeTruthy();
+    const link = screen.getByRole("link", { name: "Gates I built" });
+    expect(link.getAttribute("href")).toBe("https://gates.example.org/rowan");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer nofollow");
+    expect(link.getAttribute("target")).toBe("_blank");
+    const file = screen.getByRole("link", { name: "Gates portfolio.pdf" });
+    expect(file.getAttribute("href")).toBe(`/api/governance/open-proposals/${ID}/files/pf-0123456789abcdef`);
+    expect(file.hasAttribute("download")).toBe(true);
+    // The page never fetches a link or a file by itself: the decider opens them.
+    // Each entry is "METHOD url": the URL is parsed and its host and path compared, never searched as text.
+    const fetched = asked.map((a) => new URL(a.slice(a.indexOf(" ") + 1), "http://local"));
+    expect(fetched.some((u) => u.hostname === "gates.example.org")).toBe(false);
+    expect(fetched.some((u) => /\/files\/[^/]+$/.test(u.pathname))).toBe(false);
+    cleanup();
+    // Anybody else: the server sends no attachments, and the page shows no section.
+    answer = () => json({ proposal: served({ attached: null }) });
+    render(<OpenProposal />);
+    await heading();
+    expect(screen.queryByRole("heading", { name: "Links and files" })).toBeNull();
+  });
+
   it("an asked holder consents on the proposal's own route", async () => {
     answer = () => json({ proposal: served({}, "open", { asked: true, answer: null, mayAnswer: true }) });
     render(<OpenProposal />);
@@ -198,5 +231,51 @@ describe("the open proposal page", () => {
     expect(await screen.findByRole("heading", { name: DECIDE_WORDS.membersOnly })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(`/login?next=/open-proposals/${ID}`);
     await waitFor(() => expect(asked).toEqual([]));
+  });
+});
+
+describe("the two cards side by side (Rye, 9 Nov 2026)", () => {
+  it("sets what the role asks beside what they offer, and names the gaps", async () => {
+    answer = () =>
+      json({
+        proposal: served({
+          roles: [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: ["Open at dawn", "Close at dusk"], timeCommitment: "10 hours a week" }],
+          card: { roles: [{ roleId: "role-gate", moves: [{ text: "Open at dawn", target: "every day" }], firstMoon: [] }], serves: [], hours: "8 a week", agreed: { loveLetter: true, nda: true }, terms: { choice: "talk", note: "The rate" }, timeZone: "America/Costa_Rica" },
+        }),
+      });
+    render(<OpenProposal />);
+    expect(await screen.findByRole("heading", { name: "Their card beside the open card" })).toBeTruthy();
+    const row = document.querySelector('[data-side-by-side="role-gate"]') as HTMLElement;
+    expect(within(row).getByText(/I'll move: Open at dawn/)).toBeTruthy();
+    expect(within(row).getByText("(not picked)")).toBeTruthy();
+    const gaps = document.querySelector("[data-card-gaps]") as HTMLElement;
+    expect(gaps.textContent).toContain("No first task for Gate Keeper");
+    expect(gaps.textContent).toContain("No season goal served");
+    expect(gaps.textContent).toContain("They want to talk about the terms");
+    expect((document.querySelector("[data-terms-flag]") as HTMLElement).textContent).toBe("Wants to talk about the terms: The rate");
+    expect(screen.getByText("Time zone: America/Costa_Rica")).toBeTruthy();
+  });
+
+  it("the membership gap reads the alignment made at application, never the old Love Letter tick (Rye's answer 8)", async () => {
+    const card = { roles: [{ roleId: "role-gate", moves: [], firstMoon: [] }], serves: [], hours: "", agreed: { loveLetter: true, nda: true } };
+    const roles = [{ id: "role-gate", name: "Gate Keeper", circle: "Land Circle", note: "", accountabilities: [] }];
+    // The old tick says yes, and nothing was aligned: the gap shows.
+    answer = () => json({ proposal: served({ roles, card, membership: { aligned: false } }) });
+    render(<OpenProposal />);
+    await screen.findByRole("heading", { name: "Their card beside the open card" });
+    expect((document.querySelector("[data-card-gaps]") as HTMLElement).textContent).toContain("Not aligned with the membership letter");
+    expect(screen.getByText(/have not aligned with the membership letter yet/)).toBeTruthy();
+    cleanup();
+    // CONTROL: aligned at application, the gap is gone.
+    answer = () => json({ proposal: served({ roles, card, membership: { aligned: true } }) });
+    render(<OpenProposal />);
+    await screen.findByRole("heading", { name: "Their card beside the open card" });
+    expect(document.querySelector("[data-card-gaps]")?.textContent ?? "").not.toContain("membership letter");
+    expect(screen.getByText(/aligned with the membership letter when they proposed/)).toBeTruthy();
+  });
+
+  it("says when a proposal predates the applicant's card", async () => {
+    render(<OpenProposal />);
+    expect(await screen.findByText(/sent before applicants wrote their own role card/)).toBeTruthy();
   });
 });

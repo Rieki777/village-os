@@ -287,7 +287,10 @@ describe("hasCapability truth table", () => {
         expect(isBadgeGrantable(SEAT)).toBe(false);
         for (const cap of ALL_CAPABILITIES) {
           // `moon.approve` is fenced too (0313): see the drift check below.
-          if (cap === SEAT || cap.startsWith("moon.approve")) continue;
+          // `power.assign` too (role powers): an admin mints badges.
+          // `role.pay` too (2026-11-06): the Treasurer holds it through the Treasury role.
+          // `brief.private` too (canvas follow-up G.4): it moves onto a role by a power_grant vote.
+          if (cap === SEAT || cap.startsWith("moon.approve") || cap === "power.assign" || cap === "role.pay" || cap === "brief.private" || cap.startsWith("operator.")) continue;
           expect(isBadgeGrantable(cap), cap).toBe(true);
         }
       });
@@ -330,12 +333,19 @@ describe("hasCapability truth table", () => {
         expect(Object.keys(BADGE_GRANTABLE).sort()).toEqual([...ALL_CAPABILITIES].sort());
       });
 
-      it("fences exactly four keys, so a widening is a deliberate edit and not a drift", () => {
+      it("fences exactly eleven keys, so a widening is a deliberate edit and not a drift", () => {
+        // `brief.private` (canvas follow-up G.4, Rye 2026-11-06): the four
+        // private brief sections move onto a role by a power_grant vote, so an
+        // admin may not mint a badge that hands them back.
+        // `role.pay` (Rye, 2026-11-06): "the Treasurer" holds it through the
+        // Treasury role (the coordinator's reading), so a badge is not a way in.
         // `moon.approve` (0313, the end-of-moon review): an approval of other
         // people's work toward their pay sits on a power group the village
         // seats, so an admin cannot mint a badge and approve it alone. Its two
         // siblings (decisions 18 and 19) come from named power groups only.
-        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own"]);
+        // `power.assign` (the role powers build): a badge that carried the power
+        // to give every power would be an admin's way to hand themselves all of them.
+        expect(ALL_CAPABILITIES.filter((c) => !BADGE_GRANTABLE[c])).toEqual(["brief.private", "role.pay", "steward.veto", "moon.approve", "moon.approve_alone", "moon.approve_own", "power.assign", "operator.accounts", "operator.config", "operator.secrets", "operator.recover"]);
       });
     });
 
@@ -380,7 +390,7 @@ describe("hasCapability truth table", () => {
       expect([...HANDOVER_SET].sort()).toEqual(ALL_CAPABILITIES.filter((c) => TRANSFERABLE[c]).sort());
     });
 
-    it("is twenty-three keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch and cash.pay", () => {
+    it("is thirty-one keys: the nineteen the ruling was given in, the comms power, the decide power, module.switch, cash.pay, power.assign, the four operator powers, role.pay, pot.steward and brief.private", () => {
       /*
        * A NUMBER AND NOT ONLY A DERIVATION, deliberately.
        *
@@ -430,12 +440,37 @@ describe("hasCapability truth table", () => {
        * "yes and this one is then given to a finance role as well". The seeded
        * Treasury role grants it too (server/lib/starterRoles.ts). A key
        * RECLASSIFIED from held back, so the complement fell from 17 to 16.
+       *
+       * TWENTY-FOUR WITH `power.assign`, and he gave the word before it existed.
+       * His answers to the role powers design on 2026-11-01 made it a key the
+       * founding holders hold first (Q2), and the same day he ruled "All powers
+       * should be able to be passed to a village". A new key born transferable,
+       * so the complement stays where it was.
+       *
+       * TWENTY-EIGHT WITH THE FOUR OPERATOR POWERS, by the same ruling: "a
+       * village should be able to run without admins or stewards", which needs
+       * the panel's own powers to be ones a village can hold.
+       *
+       * THIRTY WITH `pot.steward`, the Funding rounds pot power, after `role.pay` made it twenty-nine. Rye gave the
+       * word on 2026-11-06, relayed by the master coordinator, adopting the plan's
+       * Q1: "a new transferable power, held by the treasury role by default, with
+       * each pot able to be handed to another role". A new key born transferable.
+       *
+       * THIRTY-ONE WITH `brief.private`, the canvas follow-up's G.4. The spec Rye
+       * accepted on 2026-11-06 ("accept all ten canvas sweep decisions as
+       * recommended; build them with G.1 to G.5") names it "a new transferable
+       * power" that moves by a power_grant vote. A new key born transferable.
        */
-      expect(HANDOVER_SET).toHaveLength(23);
+      expect(HANDOVER_SET).toHaveLength(31);
+      expect(HANDOVER_SET).toContain("brief.private");
+      expect(HANDOVER_SET).toContain("pot.steward");
+      for (const k of ["operator.accounts", "operator.config", "operator.secrets", "operator.recover"]) expect(HANDOVER_SET).toContain(k);
+      expect(HANDOVER_SET).toContain("power.assign");
       expect(HANDOVER_SET).toContain("comms.manage");
       expect(HANDOVER_SET).toContain("org.decide");
       expect(HANDOVER_SET).toContain("module.switch");
       expect(HANDOVER_SET).toContain("cash.pay");
+      expect(HANDOVER_SET).toContain("role.pay");
     });
 
     it("keeps the comment above HANDOVER_SET honest about its own two numbers", async () => {

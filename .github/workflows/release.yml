@@ -511,7 +511,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
             org.opencontainers.image.version=${{ needs.plan.outputs.version }}
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
           platforms: linux/amd64
           # Attestations turn the image into a multi-platform index carrying an
           # unknown/unknown entry. GHCR is fine with it; older self-hosted
@@ -578,6 +578,18 @@ jobs:
             scripts/fork-init.mjs
             docs/FOUNDER_SETUP_PROMPT.md
             docs/UPGRADING.md
+            # R185: every document these guides send a founder to. The list is held
+            # to the guides by scripts/starter-kit-contract.test.mjs.
+            CHANGELOG.md
+            SECURITY.md
+            docs/PROVISIONING.md
+            docs/RUNBOOK.md
+            docs/MODULES.md
+            docs/FOUNDER_AGENT_GUIDE.md
+            docs/SECURITY_ADVISORIES.md
+            docs/GOOGLE_SIGN_IN.md
+            docs/FORK_RUNBOOK.md
+            ops/RELEASES.md
           )
           git archive --format=zip --prefix="${kit}/" -o "${kit}.zip" "refs/tags/${TAG}" -- "${files[@]}"
           # Every listed file must be in the kit. git archive refuses a path the
@@ -640,3 +652,24 @@ jobs:
             echo "VILLAGE_OS_RELEASE_COMMIT = \"${commit}\""
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # The published image, pulled and started the way a founder starts it.
+  #
+  # The image job above boots the image it BUILT, inside the runner's daemon.
+  # This pulls the image the registry now SERVES and walks the self-host path
+  # with it (selfhost-smoke.yml: fork-init, compose up, migrations, claim,
+  # restart). It used to be run by hand after a tag; with a release every day
+  # (daily-release.yml) a step done by hand is a step skipped.
+  #
+  # It runs after publishing, so it cannot stop this release reaching the
+  # registry. What it stops is the release reaching a village: a deployment
+  # that upgrades automatically (the first village's pin bump) waits for this
+  # whole run to conclude success before it moves its pin.
+  # ---------------------------------------------------------------------------
+  selfhost:
+    needs: [plan, image]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.image.result == 'success' }}
+    uses: ./.github/workflows/selfhost-smoke.yml
+    with:
+      image: ghcr.io/regen-civics/village-os:${{ needs.plan.outputs.version }}

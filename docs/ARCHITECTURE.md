@@ -699,6 +699,16 @@ The retention sweep never deletes an unstamped row, at any age.
   hourly `open-proposals-tidy` job does both, and the form says so in one
   line. Nothing unconfirmed reaches a person: until its address answers,
   a proposal notifies nobody and no queue lists it.
+  **Links and files** (Rye, 10 Nov 2026; `shared/proposalAttachments.ts`):
+  up to five labelled https links, never fetched, and up to three files
+  (PDF, DOCX, PNG, JPG; 10 MB each; typed by their own first bytes) in
+  `DATA_DIR/private-proposal-files/<proposal id>/`, outside the uploads
+  volume. Only the deciders read them (the live holders of `org.seat` and
+  the circle's asked holders, never the applicant), through the proposal's
+  page and its no-store, noindex file door. No AI reads them. They follow
+  the proposal: deleted with it at 48 hours, and removed with the name and
+  address at 90 days; the tidy job also sweeps any folder whose row is
+  gone or anonymised.
 - **Export** (`GET /api/profile/export`): everything the village
   holds on the member — profile minus secrets, stage, claims, gratitude
   both directions, full signed ledger, balances, stage events, submissions,

@@ -55,8 +55,15 @@ import { applicationHref, applicationNoticeTitle, type ApplicationStatus } from 
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import type { BallotRow } from "./ballots";
 import { isLapsed, seatHolder, type LapseContext } from "./orgChart";
+import { openPathFor } from "./onboarding";
 import { ensureApplicationText, recordVillageAlignment, settleText } from "./alignmentSubjects";
 import { civilDateKey } from "../../shared/lunar";
+import { APPLICATION_BALLOT_ACTOR } from "../../shared/seatApplications";
+import { applyProposalChanges } from "./roleProposals";
+import { raiseGrantTasks } from "./roleAccess";
+import { agreementWritten, stepHref, stepsBeforeStart, stepsBody, START_WORDS, type StartStep } from "./roleStartAgreements";
+import { revertDraft } from "./orgDrafts";
+import { proposalsForApplications } from "../repos/roleProposals";
 import {
   endSeatingForRenewal,
   inApplicationTransaction,
@@ -85,8 +92,11 @@ export interface Adoption {
 export type SeatingOutcome =
   /** Seated now. `seated` are the new seatings; `linked` names the seats where an existing seating was renewed. */
   | { kind: "seated"; seated: Array<{ assignmentId: string; seatId: string; renewed: boolean }>; linked: string[] }
-  /** Adopted, and the seats wait for `starts_at`. */
-  | { kind: "later" }
+  /**
+   * Adopted, and the seats wait: for `starts_at`, or for the agreements the
+   * village asks before a role starts (`steps`, server/lib/roleStartAgreements.ts).
+   */
+  | { kind: "later"; steps?: StartStep[] }
   /** A seat had no free place. Nobody was seated. */
   | { kind: "held-full"; full: string[] }
   /** A seat is gone, retired or an example, or the term ended before it could start. */
@@ -107,9 +117,27 @@ export function firstDayOf(app: Pick<StoredApplication, "startsAt" | "termSeason
   return app.startsAt ?? begins ?? null;
 }
 
+/**
+ * WHETHER A START HAS COME, AT THE COLUMN'S PRECISION. `starts_at` is a
+ * whole-second `datetime`. A start of "now" written with its milliseconds
+ * comes back ROUNDED on MySQL 8 (11.7 s reads as 12 s, in the future) and
+ * truncated on MariaDB. So on MySQL an arrival placed in the second half of a
+ * second was adopted, not seated, and waited for the hourly turn; the role
+ * journey e2e caught it on CI's mysql:8 and never locally. A start less than
+ * one second ahead has come.
+ */
+export function startReached(first: Date, now: Date): boolean {
+  return first.getTime() - now.getTime() < 1000;
+}
+
+/** An instant at the precision `starts_at` keeps, so what is written is what is read back, on either engine. */
+export function wholeSecond(d: Date): Date {
+  return new Date(Math.floor(d.getTime() / 1000) * 1000);
+}
+
 const notYet = (app: Pick<StoredApplication, "startsAt" | "termSeasonId">, ctx: SeatingContext) => {
   const first = firstDayOf(app, ctx.calendar);
-  return !!first && first.getTime() > ctx.now.getTime();
+  return !!first && !startReached(first, ctx.now);
 };
 
 /** The term a seating takes, following the season's end when the application said it would. */
@@ -179,6 +207,12 @@ async function seatInTransaction(conn: PoolConnection, app: StoredApplication, c
     // write this transaction cannot explain. Throwing rolls back every seat.
     if (!r.ok || !r.assignmentId) throw new Error(`seating ${seatId} for ${app.id} was refused: ${r.reason ?? "no reason"}`);
     seated.push({ assignmentId: r.assignmentId, seatId, renewed: !!renewed });
+    // A holder new to the role gets their first moons (server/lib/onboarding.ts). Best effort: a path that cannot be written never undoes an adoption.
+    if (!renewed) {
+      await openPathFor(conn, { assignmentId: r.assignmentId, userId: app.candidateUserId, orgRoleId: seatId, now: ctx.now, timeZone: ctx.calendar.timezone }).catch((e) => {
+        console.error("[onboarding] could not open a path", e instanceof Error ? e.message : e);
+      });
+    }
   };
   for (const r of toRenew) await seatOne(r.seatId, r);
   for (const seatId of toSeat) await seatOne(seatId, null);
@@ -228,10 +262,17 @@ export async function adoptApplication(
         tz,
       );
 
-    if (notYet(app, ctx)) {
+    /*
+     * THE AGREEMENTS BEFORE A ROLE STARTS (L7). Asked whether or not the day
+     * has come, so the holder hears the steps at adoption. A step left holds
+     * the application adopted with nobody seated, as an application for later
+     * waits; the hourly season turn seats it once the steps are done.
+     */
+    const steps = await stepsBeforeStart(conn, { ...app, textId: text.id, textHash: text.contentHash }, ctx.now);
+    if (notYet(app, ctx) || steps.length > 0) {
       await setStatus(conn, id, from, "adopted", adopted);
       await villageAligns();
-      return { outcome: { kind: "later" }, app, textId: text.id };
+      return { outcome: { kind: "later", ...(steps.length ? { steps } : {}) }, app, textId: text.id };
     }
     const outcome = await seatInTransaction(conn, app, ctx, how.ref);
     if (outcome.kind === "seated") await setStatus(conn, id, from, "adopted", adopted);
@@ -260,6 +301,9 @@ export async function seatFromApplication(pool: Pool, id: string, ctx: SeatingCo
     // Seated once is seated: a seating that has since ENDED (an unseat, an
     // erasure) is not re-made by the turn. Only a seating ever made counts.
     if ((await seatingsEverHolding(conn, id)) > 0) return { outcome: { kind: "lost", status: app.status }, app };
+    // The agreements before a role starts (L7): still waiting, nothing is seated, and the turn asks again next hour.
+    const steps = await stepsBeforeStart(conn, app, ctx.now);
+    if (steps.length > 0) return { outcome: { kind: "later", steps }, app };
     const outcome = await seatInTransaction(conn, app, ctx, app.adoptedRef ?? app.id);
     if (outcome.kind === "seated" && app.status === "held-full") await setStatus(conn, id, ["held-full"], "adopted");
     if (outcome.kind === "held-full" && app.status === "adopted") await setStatus(conn, id, ["adopted"], "held-full");
@@ -303,12 +347,16 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
   if (outcome.kind === "seated" || outcome.kind === "later") {
     await deps.notify({ userId: app.candidateUserId, type: "governance", title: applicationNoticeTitle("adopted", names), body: null, link, actorUserId: actorId, dedupeKey: `sa:${app.id}:adopted:${key}` });
   }
+  if (outcome.kind === "later" && outcome.steps?.length) await tellSteps(deps, app, outcome.steps, actorId);
   if (outcome.kind === "seated") {
     for (const s of outcome.seated) {
       const name = names[app.seatIds.indexOf(s.seatId)] ?? s.seatId;
       // The same type and key grammar every seating door uses, keyed on this seating.
       const title = s.renewed ? `Your role as ${name} was renewed on your new terms` : `You were seated as ${name}`;
       await deps.notify({ userId: app.candidateUserId, type: "role_appointed", title, body: null, link, actorUserId: actorId, dedupeKey: `org-seat:${s.assignmentId}` });
+      // The role has started: one grant task per item on its card (L8). Best effort; the seating stands.
+      // A renewal on new terms is the same person in the same role: the access they hold stays.
+      if (!s.renewed) await raiseGrantTasks(pool, s.assignmentId, { notify: deps.notify, notifyAdmins: deps.notifyAdmins }).catch(() => 0);
     }
   }
   if (outcome.kind === "held-full") {
@@ -319,6 +367,26 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
     await deps.notify({ userId: app.candidateUserId, type: "governance", title: applicationNoticeTitle("not-adopted", names), body: null, link, actorUserId: actorId, dedupeKey: `sa:${app.id}:cannot:${key}` });
     await deps.notifyAdmins("governance", applicationNoticeTitle("not-adopted", names), `sa:${app.id}:cannot:admins:${key}`, link);
   }
+}
+
+/**
+ * "Two steps before your role starts": the holder hears the steps once per set
+ * of steps, so an hourly retry says nothing new and a step done since says the
+ * shorter list. When the confidentiality step waits on words the village has
+ * not written, the admins hear that once.
+ */
+export async function tellSteps(deps: NoticeDeps, app: StoredApplication, steps: readonly StartStep[], actorId: string | null): Promise<void> {
+  const key = `sa:${app.id}:steps:${steps.join("+")}`;
+  await deps.notify({
+    userId: app.candidateUserId,
+    type: "governance",
+    title: START_WORDS.title(steps.length),
+    body: stepsBody(steps),
+    link: stepHref(steps[0], app),
+    actorUserId: actorId,
+    dedupeKey: key,
+  });
+  if (steps.includes("confidentiality") && !agreementWritten()) await deps.notifyAdmins("governance", START_WORDS.noAgreement, `sa:${app.id}:no-agreement`, "/admin?tab=content");
 }
 
 // ── The closer ──────────────────────────────────────────────────────────────
@@ -370,6 +438,27 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
     },
 
     execute: async (b: BallotRow, actorId) => {
+      /*
+       * A ROLE PROPOSAL'S CHANGES LAND WITH ITS VOTE (R164). In the two cases
+       * a proposal that changes roles goes to a vote, the carried vote does
+       * what a holder's adopt click does: the new and changed roles are made
+       * as one published org draft first, and put back if the adoption then
+       * does not go through, so the chart never changes for a proposal
+       * nobody adopted.
+       */
+      const pool = deps.getPool();
+      const proposal = (await proposalsForApplications(pool, [b.subjectRef])).get(b.subjectRef) ?? null;
+      let draftId: string | null = null;
+      if (proposal) {
+        const waiting = await readApplication(pool, b.subjectRef);
+        if (waiting && waiting.status === "voting") {
+          const proposed = new Map(proposal.body.newRoles.map((r) => [r.id, typeof r.words.name === "string" ? r.words.name : r.id]));
+          const names = (await seatNamesOf(pool, waiting)).map((n, i) => proposed.get(waiting.seatIds[i]) ?? n);
+          const applied = await applyProposalChanges(pool, proposal, APPLICATION_BALLOT_ACTOR, deps.calendar(), names);
+          if (!applied.ok) return { applied: [], held: applied.error, proposerTold: waiting.candidateUserId };
+          draftId = applied.draftId;
+        }
+      }
       const { outcome, app, textId } = await adoptApplication(
         deps.getPool(),
         b.subjectRef,
@@ -377,6 +466,7 @@ export function seatApplicationCloser(deps: SeatApplicationCloserDeps): SubjectC
         { via: "ballot", ref: b.id, authority: b.id },
         { now: now(), lapse: deps.lapse(), calendar: deps.calendar() },
       );
+      if (draftId && (outcome.kind === "lost" || outcome.kind === "cannot" || !app)) await revertDraft(pool, draftId);
       if (outcome.kind === "lost" || !app) {
         return {
           applied: [],

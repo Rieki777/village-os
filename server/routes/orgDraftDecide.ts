@@ -67,6 +67,9 @@ import {
   type PublishDoor,
 } from "../lib/orgDraftDecide";
 import type { Pool } from "mysql2/promise";
+import { deadlineInVillage } from "../lib/villageReaders"; // R134: a deadline in the village's own zone
+import { registerRoleEditRoutes } from "./roleEdit";
+import { capabilityDecision } from "../../shared/capabilities";
 
 type Deps = Pick<
   AppDeps,
@@ -93,6 +96,22 @@ type Deps = Pick<
 };
 
 const ASKS_PER_WINDOW = 10;
+
+/**
+ * A body's `expectedChanges`: a list of change ids, or null when the caller sent none (review 12).
+ * The publish-by-power route passes it on, so a publish refuses a draft that moved since the
+ * publisher saw it. No comment sits inside that handler: `visionNeverApplies.test.ts` reads the
+ * 900 characters before each call of the publisher for the route's path.
+ */
+export function expectedChangesOf(body: unknown): string[] | null {
+  const v = body && typeof body === "object" ? (body as Record<string, unknown>).expectedChanges : undefined;
+  if (v === undefined || v === null) return null;
+  // Sent but malformed is never read as none sent (PR C residual): it becomes an
+  // empty list, which matches no draft that has a change in it, so publish refuses.
+  if (!Array.isArray(v)) return [];
+  const ids = v.filter((x): x is string => typeof x === "string" && x !== "" && x.length <= 64);
+  return ids.length === v.length && ids.length <= 1000 ? ids : [];
+}
 const ASK_WINDOW_MS = 10 * 60 * 1000;
 
 /**
@@ -133,6 +152,24 @@ export function register(app: Express, deps: Deps): void {
     seasonState,
   };
   closers[ORG_DRAFT] = orgDraftCloser(publishDeps);
+
+  // "Edit this role" (role journey, PR-B): the role card's editor saves through the same publish door.
+  registerRoleEditRoutes(app, {
+    authedUser,
+    isAdmin: (req) => isAdmin(req),
+    getPool,
+    overLimit,
+    liveHoldersOf,
+    publishDeps,
+    canReadTerms: async (req) => {
+      const user = await authedUser(req);
+      return !!user && capabilityDecision("terms.read", await capabilityCtx(user)).allowed;
+    },
+    circleName: (id) => {
+      const row = (circlesRepo.all() as Array<Record<string, unknown>>).find((c) => String(c.id) === id);
+      return row && typeof row.name === "string" ? row.name : null;
+    },
+  });
 
   app.get("/api/org/drafts/:id/decide", async (req, res) => {
     const user = await authedUser(req);
@@ -184,7 +221,7 @@ export function register(app: Express, deps: Deps): void {
     const draftId = String(req.params.id ?? "");
     const running = await openDraftBallot(getPool(), draftId);
     if (running) return res.status(409).json({ error: "ballot_open", message: BALLOT_OPEN_REFUSAL, ballotId: running.id });
-    const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id));
+    const r = await publishOrgDraft(publishDeps, draftId, String(user.id), String(user.id), expectedChangesOf(req.body));
     if (!r.ok) return res.status(409).json({ error: r.error });
     res.json({ success: true, applied: r.applied, reloaded: r.reloaded, treasury: r.treasury });
   });
@@ -266,7 +303,7 @@ export function register(app: Express, deps: Deps): void {
     void notifyRoll(opened.ballot, {
       type: "ballot_opened",
       title: "The village is asked to decide a change to its structure",
-      body: `Voting is open until ${new Date(opened.ballot.closesAt).toLocaleDateString()}.`,
+      body: `Voting is open until ${deadlineInVillage(opened.ballot.closesAt)}.`,
       keySuffix: "open",
       except: [String(user.id)],
       roll: opened.electorate,

@@ -103,6 +103,7 @@ export const SOURCES = [
   "server/lib/exit.ts",
   "server/lib/voiceClaim.ts",
   "shared/gameVariables.ts",
+  "shared/workValue.ts",
 ];
 
 class ReadError extends Error {}
@@ -812,6 +813,37 @@ export function seededRules(root = ROOT) {
   return init.elements.map((e) => objectOf(e, abs));
 }
 
+/**
+ * The triggers whose pay no ceiling binds (Rye, 2026-10-22: no caps on work
+ * pay), read from `WORK_PAY_TRIGGERS` in shared/workValue.ts. It also checks
+ * that `ceilingBinds` still answers from that list, because the document
+ * states a cap exactly where `ceilingBinds` is true, and a rewrite of the
+ * function that stopped reading the list would leave this reader confidently
+ * wrong.
+ */
+export function workPayTriggers(root = ROOT) {
+  const abs = path.join(root, "shared", "workValue.ts");
+  const init = constInit(abs, "WORK_PAY_TRIGGERS");
+  if (!init || !ts.isArrayLiteralExpression(init)) fail("token-doc: shared/workValue.ts no longer declares const WORK_PAY_TRIGGERS = [...]");
+  const triggers = init.elements.map((e) => literalOf(e, abs));
+  if (!triggers.length || triggers.some((t) => typeof t !== "string")) fail("token-doc: WORK_PAY_TRIGGERS is not a list of trigger names");
+  const fn = functionNamed(abs, "ceilingBinds");
+  if (!/!\s*WORK_PAY_TRIGGERS\.includes\(\s*trigger\s*\)/.test(fn.getText())) {
+    fail("token-doc: ceilingBinds in shared/workValue.ts no longer answers !WORK_PAY_TRIGGERS.includes(trigger); teach this reader the new rule");
+  }
+  return triggers;
+}
+
+/** One paid rule, in the prose: a cap only where one binds. */
+export function ruleLine(r) {
+  return `${amountWords(r)} on \`${r.trigger}\` to the ${r.recipient}${r.ceilingBinds ? `, up to ${r.ceiling} a moon` : ""}`;
+}
+
+/** The ceiling column of a seeded-rules table: the number only where it binds. */
+export function ceilingCell(r) {
+  return r.ceilingBinds ? String(r.ceiling) : "none, work is paid in full";
+}
+
 /** One dial from shared/gameVariables.ts, by key. */
 export function gameVariable(key, root = ROOT) {
   const abs = path.join(root, "shared", "gameVariables.ts");
@@ -956,7 +988,8 @@ export function collectFacts(root = ROOT) {
   const priceable = priceableKinds(root);
   const moduleVouchers = setConst(root, "server/lib/spending.ts", "MODULE_VOUCHERS");
   const allowNegative = setConst(root, "server/lib/ledger.ts", "ALLOW_NEGATIVE_SOURCES");
-  const rules = seededRules(root);
+  const workTriggers = workPayTriggers(root);
+  const rules = seededRules(root).map((r) => ({ ...r, ceilingBinds: !workTriggers.includes(r.trigger) }));
   const poolToken = gameVariable("gratitude.pool_token", root);
   const poolSize = gameVariable("gratitude.pool_per_cycle", root);
   const weightMode = gameVariable("governance.weight_mode", root);
@@ -1054,7 +1087,7 @@ export function collectFacts(root = ROOT) {
       // than deleted so a village can vote it back on. Dropping the flag
       // here, which this projection used to do, made the document announce a
       // payout that never happens.
-      .map((r) => ({ trigger: r.trigger, amount: r.amount, ceiling: r.ceiling, recipient: r.recipient, enabled: r.enabled !== false }));
+      .map((r) => ({ trigger: r.trigger, amount: r.amount, ceiling: r.ceiling, ceilingBinds: r.ceilingBinds, recipient: r.recipient, enabled: r.enabled !== false }));
   }
 
   const order = { migration: 0, boot: 1 };
@@ -1150,7 +1183,7 @@ function tokenSection(t, f) {
   const off = t.seededRules.filter((r) => !r.enabled);
   const paid = live.length
     ? live
-        .map((r) => `${r.amount} on \`${r.trigger}\` to the ${r.recipient}, up to ${r.ceiling} a moon`)
+        .map(ruleLine)
         .join("; ")
     : null;
   lines.push(`**Who can issue it, and how.** ${issuance(t, f, paid, off)}`);
@@ -1170,6 +1203,17 @@ function tokenSection(t, f) {
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * A seeded rule's amount in words. A blank amount pays what the piece of work
+ * names (since #776 a seat is paid only its role's own list), and printing the
+ * raw value told a founder a seat was paid "null" of a token.
+ */
+function amountWords(r) {
+  if (r.amount != null) return String(r.amount);
+  const byTrigger = { "role.cycle": "what the role names", "quest.completed": "what the quest names", "proposal.accepted": "what the proposal names" };
+  return byTrigger[r.trigger] ?? "what the work names";
 }
 
 function issuance(t, f, paid, off = []) {
@@ -1205,7 +1249,7 @@ function issuance(t, f, paid, off = []) {
           ? "One rule ships switched OFF and pays nobody until the village turns it on: "
           : `${["Two", "Three", "Four", "Five"][off.length - 2] ?? off.length} rules ship switched OFF and pay nobody until the village turns them on: `) +
           off
-            .map((r) => `${r.amount} on \`${r.trigger}\` to the ${r.recipient}`)
+            .map((r) => `${amountWords(r)} on \`${r.trigger}\` to the ${r.recipient}`)
             .join("; ") +
           (one
             ? ". It is seeded off rather than left out because no route creates a mint rule, so a village that " +
@@ -1245,7 +1289,7 @@ function cycleClose(t, f) {
   const cycleRules = t.seededRules.filter((r) => r.trigger === "role.cycle" && r.enabled);
   if (cycleRules.length) {
     bits.push(
-      `Settlement pays everyone holding a seat ${cycleRules.map((r) => `${r.amount} of it`).join(" and ")}. A re-run pays ` +
+      `Settlement pays ${cycleRules.map((r) => (r.amount == null ? "each seat what its role names of it" : `everyone holding a seat ${r.amount} of it`)).join(" and ")}. A re-run pays ` +
         "nothing twice: each mint is keyed on the moon, the seat and the holder.",
     );
   }
@@ -1630,8 +1674,8 @@ export function render(f) {
       f.seededRules.map((r) => [
         `\`${r.trigger}\``,
         `\`${r.token}\``,
-        String(r.amount),
-        String(r.ceiling),
+        r.amount == null ? "read from the work" : String(r.amount),
+        ceilingCell(r),
         String(r.recipient),
         r.enabled === false ? "no, seeded off" : "yes",
       ]),
@@ -1639,8 +1683,11 @@ export function render(f) {
   );
   p();
   p(
-    "A confirmed quest also mints recognition from the consent route itself, with its own range and cap, which is not " +
-      "a mint rule and does not appear in that table. A contribution pays nothing at all: " +
+    // Written by a person, and true since 2026-10-21: a consent posts no
+    // Gratitude, and the word belongs to the recognition token alone (Rye,
+    // 2026-11-01). It said a confirmed quest minted recognition until then.
+    "A confirmed quest mints no recognition: a steward's consent is a yes and moves no Gratitude (Rye, 2026-10-21), " +
+      "and Gratitude is only ever sent from one member to another. A contribution pays nothing at all: " +
       "`POST /api/profile/contribution` is a journal entry, and it is one deliberately, after a version of it that " +
       "added a caller-supplied amount straight onto a member's balance was removed.",
   );

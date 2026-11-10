@@ -10,10 +10,16 @@
  *
  * Light-only, like the rest of the admin tabs.
  */
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import type { Player } from "./PlayerCard";
+import AiAgentsApprovalPanel from "./AiAgentsApprovalPanel";
+import LetterDraftsPanel from "./LetterDraftsPanel";
+import { Trans } from "@lingui/react/macro";
+
+/** The inbox is its own chunk: the tab's first page carries none of it. */
+const ApprovalInbox = lazy(() => import("@/components/approvals/ApprovalInbox"));
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 interface PathEntry { method: Method; path: string; confirm: "agent" | "person"; label: string }
@@ -154,6 +160,15 @@ export default function AgentsPanel({ password, players }: { password: string; p
             {paths.alwaysAPerson.map((r) => <li key={r.key}>{r.words}</li>)}
           </ul>
         </div>
+      </div>
+      <AiAgentsApprovalPanel password={password} />
+      <LetterDraftsPanel password={password} />
+      <div className="space-y-3 rounded-xl border border-border bg-white p-4">
+        <p className="text-sm font-semibold text-foreground"><Trans context="approval inbox">Approval inbox</Trans></p>
+        <a href="/approvals" className="inline-flex min-h-9 items-center text-sm text-teal-deep underline"><Trans>Open it on its own page</Trans></a>
+        <Suspense fallback={null}>
+          <ApprovalInbox headers={() => authHeaders(password, { "Content-Type": "application/json" })} />
+        </Suspense>
       </div>
     </section>
   );

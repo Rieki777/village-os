@@ -29,6 +29,8 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { Capability } from "../../shared/capabilities";
 import { listCalendarItems } from "./calendar";
+import { canvasAnswersForMembers, canvasLibrary, matrixRowsForMembers } from "./companionCanvas";
+import { civilDateKey } from "../../shared/lunar";
 
 export type ReaderAudience = "public" | "member" | "admin";
 
@@ -37,11 +39,27 @@ export interface ReaderViewer {
   isAdmin: boolean;
   /** Resolved through hasCapability by the caller, never re-derived here. */
   holds(cap: Capability): boolean;
+  /**
+   * The village admitted this account (Wave 4, the companion): the canvas's
+   * own reading rule, `mayReadCanvas` in server/routes/canvas.ts, asked by the
+   * caller. Being signed in is `id`, and it is NOT this: an invited account
+   * the village has not admitted is signed in, and so is anybody who registers
+   * on a fork with invite-only off. Absent reads as not admitted, so a caller
+   * that never asks opens no reader that needs it.
+   */
+  admitted?: boolean;
 }
 
 export interface ReaderCtx {
   pool: Pool;
   viewer: ReaderViewer;
+  /**
+   * The question being answered, for the readers that rank by it (Wave 4:
+   * `canvas.library`) or narrow by it (`canvas.answers` reads the blocks a
+   * question names). Optional, so every caller that passes none still works:
+   * a reader then answers as if nothing was asked.
+   */
+  query?: string;
 }
 
 export interface VillageReader {
@@ -54,6 +72,14 @@ export interface VillageReader {
   requiresVar?: string;
   capability?: Capability;
   audience: ReaderAudience;
+  /**
+   * Only for an account the village admitted, or an admin (Wave 4). The
+   * canvas and its Decision Matrix are the village's own account of how it
+   * governs itself, and their routes refuse a signed-in account the village
+   * has not admitted; a reader over the same rows must refuse the same person,
+   * or the assistant becomes the way around the door.
+   */
+  admittedOnly?: boolean;
   /** Hard cap on the serialized result, so one reader cannot eat the prompt. */
   maxTokens: number;
   read(ctx: ReaderCtx): Promise<unknown>;
@@ -62,6 +88,14 @@ export interface VillageReader {
 /** Injected at boot so this file stays free of the server's globals. */
 export interface ReaderDeps {
   moduleIsOn(id: string): boolean;
+  /**
+   * The module's lifecycle, for the one case `moduleIsOn` cannot answer: a
+   * module in PREVIEW serves its routes to admins only (`requireModule`), so
+   * its readers must refuse everybody else too, or the assistant becomes the
+   * way into a module the village has not opened. Optional so every existing
+   * caller and test is unchanged; absent, preview reads as on.
+   */
+  moduleLifecycle?(id: string): string;
   boolVar(key: string): boolean;
   /**
    * The village's IANA timezone (round 4, lane L6), for the one reader that
@@ -85,6 +119,31 @@ export function villageTimezone(): string {
   }
 }
 
+/**
+ * A ballot's deadline as the village reads it (R134): the day in the village's
+ * own calendar, the month as a word, the way the seat-application notice already
+ * writes it (`civilDayWords(civilDateKey(...))`, the same words written here
+ * without importing shared/seasonPlans.ts, which would carry every module that
+ * moves value into the seat settings model: shared/seatSettings.boundary.test.ts).
+ * The notices said
+ * `toLocaleDateString()`, which on a server is the container's UTC and its
+ * M/D/Y, so a village a day ahead of UTC was told the wrong day. A zone the
+ * runtime does not know reads as UTC.
+ */
+export function deadlineInVillage(at: Date | string, zone: string = villageTimezone()): string {
+  const d = at instanceof Date ? at : new Date(String(at));
+  if (!Number.isFinite(d.getTime())) return "the date on the ballot";
+  const words = (key: string) => {
+    const [y, m, day] = key.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, day)).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  };
+  try {
+    return words(civilDateKey(d, zone || "UTC"));
+  } catch {
+    return words(civilDateKey(d, "UTC"));
+  }
+}
+
 export function wireReaders(d: ReaderDeps): void {
   deps = d;
 }
@@ -97,7 +156,9 @@ const AUDIENCE_RANK: Record<ReaderAudience, number> = { public: 0, member: 1, ad
 export function readerRefusal(r: VillageReader, viewer: ReaderViewer): string | null {
   const viewerRank = viewer.isAdmin ? 2 : viewer.id ? 1 : 0;
   if (viewerRank < AUDIENCE_RANK[r.audience]) return `${r.key} is not for this audience`;
+  if (r.admittedOnly && !viewer.isAdmin && viewer.admitted !== true) return `${r.key} is for the village's admitted members`;
   if (r.module && !deps.moduleIsOn(r.module)) return `${r.key} needs the ${r.module} module, which is off`;
+  if (r.module && !viewer.isAdmin && deps.moduleLifecycle?.(r.module) === "preview") return `${r.key} needs the ${r.module} module, which is open to admins only`;
   if (r.requiresVar && !deps.boolVar(r.requiresVar)) return `${r.key} needs ${r.requiresVar} switched on`;
   if (r.capability && !viewer.holds(r.capability)) return `${r.key} needs the ${r.capability} capability`;
   return null;
@@ -322,7 +383,9 @@ export const READERS: VillageReader[] = [
   },
   {
     key: "quests.library",
-    describe: "The quests on offer, with their circle and what they pay in gratitude.",
+    // No quest pays Gratitude (Rye, 2026-10-21), and the word belongs to the
+    // recognition token alone (2026-11-01), so the old reward label is not read.
+    describe: "The quests on offer, with their circle and status.",
     module: "quests",
     audience: "member",
     maxTokens: 800,
@@ -330,13 +393,12 @@ export const READERS: VillageReader[] = [
       (
         await rows(
           pool,
-          "SELECT id, title, circle, gratitude, status FROM quests WHERE is_example = 0 ORDER BY title LIMIT 120",
+          "SELECT id, title, circle, status FROM quests WHERE is_example = 0 ORDER BY title LIMIT 120",
         )
       ).map((r) => ({
         id: String(r.id),
         title: String(r.title),
         circle: r.circle ?? null,
-        gratitude: Number(r.gratitude ?? 0),
         status: String(r.status),
       })),
   },
@@ -455,6 +517,48 @@ READERS.push({
   maxTokens: 500,
   read: async ({ pool, viewer }) => weekAhead(pool, { userId: viewer.id, isAdmin: viewer.isAdmin }),
 });
+
+// ── The canvas, for the companion (Wave 4, plan 5.4) ─────────────────────────
+//
+// Behind the Governance Canvas module (Rye's module ruling, 2026-10-01): with
+// it off, the companion is handed none of the three and is never told they
+// exist, exactly as for any other module's reader. The canvas and its
+// matrix are `admittedOnly`, the rule their own routes apply; the library is
+// counsel and public metadata, so any member may read it. The SQL lives in
+// the repos and in villageBrain.ts, behind server/lib/companionCanvas.ts.
+READERS.push(
+  {
+    key: "canvas.answers",
+    module: "canvas",
+    describe:
+      "The village's governance canvas: for each block, the answer the village adopted and its latest reading. Members' words only: a section whose words stay with the administrators is listed under `others` with its state, and is never blank. Name a block in the question to read it whole.",
+    audience: "member",
+    admittedOnly: true,
+    maxTokens: 2200,
+    // The words are members' whoever asks; an administrator is told the
+    // state of the sections whose words stay out (companionCanvas.ts header).
+    read: async ({ pool, query, viewer }) => canvasAnswersForMembers(pool, query, { admin: viewer.isAdmin }),
+  },
+  {
+    key: "canvas.library",
+    module: "canvas",
+    describe:
+      "Reading for a governance question: Canvas Resources that fit it, and the sections of the platform's own governance shelf that bear on it. Counsel, below the village's own record.",
+    audience: "member",
+    maxTokens: 900,
+    read: async ({ pool, query }) => canvasLibrary(pool, query ?? ""),
+  },
+  {
+    key: "matrix.rows",
+    module: "canvas",
+    describe:
+      "The rows of the Decision Matrix the village wrote: for each kind of decision, who approves it, who is asked first, who is told, and the method.",
+    audience: "member",
+    admittedOnly: true,
+    maxTokens: 900,
+    read: async ({ pool }) => matrixRowsForMembers(pool),
+  },
+);
 
 export const READER_KEYS = READERS.map((r) => r.key);
 

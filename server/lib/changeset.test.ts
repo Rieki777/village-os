@@ -22,7 +22,7 @@ import {
   changeSetSnapsToBoundary,
   changeSetWaitsForCycleClose,
   elementsFor,
-  NEVER_BY_CHANGESET,
+  VOTE_RUNS_ON,
   UntypedElementError,
   validateElements,
   type ChangesetDeps,
@@ -30,7 +30,8 @@ import {
 import { dryRunProposal } from "./proposalDryRun";
 import { loadVariables, numberVar, rawValue, setVariable, wireVariableGuard } from "./variables";
 import { DEFAULT_EXIT_POLICY, exitLeverRefusal } from "./exitPolicy";
-import { loadModuleSettings } from "./modules";
+import { effectiveLifecycle, loadModuleSettings } from "./modules";
+import { GOVERNANCE_NARROWING_NEEDS_A_HOLDER } from "../../shared/moduleSwitch";
 import { villageId } from "./economy";
 import { mintRuleKey } from "../../shared/mintRuleKeys";
 import { VARIABLES, applyTimingOf } from "../../shared/gameVariables";
@@ -115,11 +116,31 @@ describe.skipIf(!configured)("phase one refuses before anything is written", () 
     expect(out.ok, JSON.stringify(out)).toBe(true);
   });
 
-  it("refuses to switch the part of the Game that holds the vote", async () => {
-    expect(NEVER_BY_CHANGESET.has("governance")).toBe(true);
-    const out = await validateElements(deps(), [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }]);
-    expect(out.ok).toBe(false);
-    expect(out.ok === false && out.problem).toContain("cannot be switched by a vote");
+  /*
+   * G.3 (canvas follow-up, Article 0): the part of the Game that holds the vote
+   * is votable now. What stays refused is the one narrowing that would strand
+   * every vote after it, and only while nobody holds module.switch live; the
+   * refusal names the seat vote that gets past it.
+   */
+  it("lets a vote switch the part of the Game that holds the vote, except below members with nobody to switch it back (AC1.4)", async () => {
+    expect(VOTE_RUNS_ON.has("governance")).toBe(true);
+    await loadModuleSettings(pool);
+    const start = effectiveLifecycle("governance");
+    const switchTo = (to: string) => [{ kind: "module_lifecycle" as const, moduleId: "governance", to }];
+    // Widening is always allowed, holder or not, and it lands.
+    const up = await applyChangeSet(deps(), { ballotId: "bal-gov-up", proposalRef: "gm:gov-up", actor: null, changes: switchTo("members") });
+    expect(up, JSON.stringify(up)).toMatchObject({ ok: true, applied: ["module:governance"] });
+    expect(effectiveLifecycle("governance")).toBe("members");
+    // Below members with nobody holding module.switch: refused, naming the seat vote.
+    const refused = await validateElements(deps(), switchTo("off"));
+    expect(refused.ok).toBe(false);
+    const said = GOVERNANCE_NARROWING_NEEDS_A_HOLDER.charAt(0).toLowerCase() + GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(1, -1);
+    expect(refused.ok === false && refused.problem).toBe(said);
+    expect(refused.ok === false && refused.problem).toContain("which votes on who holds it");
+    // Somebody holds module.switch live: they could turn it back on, so the vote may narrow it.
+    const down = await applyChangeSet({ ...deps(), anySwitchHolder: async () => true }, { ballotId: "bal-gov-down", proposalRef: "gm:gov-down", actor: null, changes: switchTo(start) });
+    expect(down, JSON.stringify(down)).toMatchObject({ ok: true });
+    expect(effectiveLifecycle("governance")).toBe(start);
   });
 
   it("refuses to switch into token mode on a token that cannot weigh a vote", async () => {
@@ -192,10 +213,10 @@ describe.skipIf(!configured)("the legacy apply throws rather than half-applying"
         deps(),
         {
           id: "gmp-untyped",
-          title: "A brand change this build cannot make",
+          title: "A role change this build cannot make",
           changeSet: [
             { kind: "dial", key: "governance.consent_window_days", to: "6" },
-            { kind: "brand_field", field: "project.name", to: "Something" },
+            { kind: "role", act: "declare", role: "Something" },
           ],
           proposerUserId: "u-a",
           hyphaRef: null,
@@ -237,6 +258,79 @@ describe.skipIf(!configured)("the legacy apply throws rather than half-applying"
       expect((e as UntypedElementError).kind).toBe("role");
       expect((e as Error).message).toContain("Item 2 of 2");
     }
+  });
+
+  it("a carried brand change writes the one field, through the brand writer, on the ledger (Rye, 2026-11-06)", async () => {
+    let stored: any = { project: { name: "Larksfield", tagline: "By the river" } };
+    const withBrand = (): ChangesetDeps => ({ ...deps(), brand: { read: () => stored, write: async (next) => { stored = next; } } });
+    await applyMechanicsProposal(
+      withBrand(),
+      {
+        id: "gmp-brand",
+        title: "Rename the village",
+        changeSet: [{ kind: "brand_field", field: "project.name", to: "Larkfield" }],
+        proposerUserId: "u-a",
+        hyphaRef: null,
+        status: "passed_onsite",
+        ballotId: "bal-brand",
+      },
+      "u-a",
+      { onApplied: async () => {} },
+    );
+    expect(stored.project).toEqual({ name: "Larkfield", tagline: "By the river" });
+    const rows = await elementsFor(pool, "bal-brand");
+    expect(rows.map((r) => [r.kind, r.oldValue, r.newValue])).toEqual([["brand_field", "Larksfield", "Larkfield"]]);
+    expect(rows[0].sentence).toContain("project.name");
+  });
+
+  it("a carried currency vote writes the code and says on the ledger that nothing is converted (Rye, 2026-11-06)", async () => {
+    let stored: any = { project: { name: "Larksfield", fiatCurrency: "CRC" } };
+    const withBrand = (): ChangesetDeps => ({ ...deps(), brand: { read: () => stored, write: async (next) => { stored = next; } } });
+    await applyMechanicsProposal(
+      withBrand(),
+      {
+        id: "gmp-currency",
+        title: "Count in dollars",
+        changeSet: [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" }],
+        proposerUserId: "u-a",
+        hyphaRef: null,
+        status: "passed_onsite",
+        ballotId: "bal-currency",
+      },
+      "u-a",
+      { onApplied: async () => {} },
+    );
+    expect(stored.project).toEqual({ name: "Larksfield", fiatCurrency: "USD" });
+    const rows = await elementsFor(pool, "bal-currency");
+    expect(rows.map((r) => [r.kind, r.oldValue, r.newValue])).toEqual([["brand_field", "CRC", "USD"]]);
+    expect(rows[0].sentence).toContain("currency changes from CRC to USD");
+    expect(rows[0].sentence).toContain("Nothing already recorded is converted");
+  });
+
+  it("control: with no brand writer, a brand change is refused before the first write", async () => {
+    const before = numberVar("governance.vote_days");
+    const out = await applyMechanicsProposal(
+        deps(),
+        {
+          id: "gmp-brand-blind",
+          title: "Rename, with no writer",
+          changeSet: [
+            { kind: "dial", key: "governance.vote_days", to: String(before + 1) },
+            { kind: "brand_field", field: "project.name", to: "Larkfield" },
+          ],
+          proposerUserId: "u-a",
+          hyphaRef: null,
+          status: "passed_onsite",
+          ballotId: "bal-brand-blind",
+        },
+        "u-a",
+        { onApplied: async () => {} },
+      );
+    expect((out as any).ok).toBe(false);
+    expect(JSON.stringify(out)).toContain("cannot write the village's brand");
+    await loadVariables(pool);
+    expect(numberVar("governance.vote_days")).toBe(before);
+    expect(await elementsFor(pool, "bal-brand-blind")).toEqual([]);
   });
 
   it("returns cleanly on a proposal that already applied", async () => {

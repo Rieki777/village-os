@@ -69,6 +69,14 @@ export const DOC_PATH = path.join(ROOT, "docs", "VARIABLES.md");
  */
 export const SOURCES = [
   "shared/gameVariables.ts",
+  // Added when the issuance cap's dial took its scope sentence from here, so
+  // the dial and the Mint by hand panel say the same thing (2026-11-01).
+  "shared/mintCapWords.ts",
+  // The change-set cap dial reads its default, floor and ceiling from here
+  // (Rye, 2026-11-06).
+  "shared/changeSetCap.ts",
+  // The change-request gathering limit dial reads its key and default here.
+  "shared/changeRequestLimits.ts",
   "shared/gameConfig.ts",
   "shared/capabilities.ts",
   "shared/villageMoon.ts",
@@ -91,6 +99,13 @@ export const SOURCES = [
   // subject constant from here, the same way it imports the settlement's, so
   // the registry reaches this file transitively.
   "shared/governingPurpose.ts",
+  // Added with the conflict agreement (Wave 3a), for the same reason again:
+  // `shared/ballotSubjects.ts` imports the `conflict_agreement` subject
+  // constant from here.
+  "shared/conflictAgreement.ts",
+  "shared/closingPolicies.ts",
+  // The village agreement subject (`agreement`), priced structural since D8.
+  "shared/agreements.ts",
   // Added with the village's own seasons: `validateVariable` refuses a
   // `calendar.seasons` list through the grammar this file holds.
   "shared/villageSeasons.ts",
@@ -279,6 +294,7 @@ const RENDERED_FIELDS = [
   "max",
   "choices",
   "unit",
+  "blank",
   "ring",
   "applyTiming",
   "criticality",
@@ -393,6 +409,14 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
   if (def.unit !== undefined && (!isString(def.unit) || !def.unit.trim())) {
     fail(`variables-doc: the dial "${def.key}" has a unit that is not a word`);
   }
+  // `blank` says what an empty number means, so it is words, and only a number
+  // dial has a blank that differs from a value (shared/gameVariables.ts).
+  if (def.blank !== undefined && (!isString(def.blank) || !def.blank.trim())) {
+    fail(`variables-doc: the dial "${def.key}" says what blank means in no words`);
+  }
+  if (def.blank !== undefined && !["integer", "decimal", "percentage"].includes(def.type)) {
+    fail(`variables-doc: the dial "${def.key}" says what a blank number means and is not a number`);
+  }
   if (def.type === "choice" && (!Array.isArray(def.choices) || def.choices.length === 0)) {
     fail(
       `variables-doc: the dial "${def.key}" is a choice and carries no choices, so neither this ` +
@@ -434,6 +458,7 @@ function readVariable(def, index, types, rings, timings, ringOf, applyTimingOf, 
     min: def.min ?? null,
     max: def.max ?? null,
     unit: def.unit ?? null,
+    blank: def.blank ?? null,
     choices,
     ring,
     ringExplicit: def.ring !== undefined,
@@ -587,7 +612,7 @@ export function rangeOf(v) {
   return "no bounds are set";
 }
 
-const defaultOf = (v) => (v.default === "" ? "blank" : `\`${v.default}\``);
+const defaultOf = (v) => (v.default === "" ? (v.blank ? `blank, which is ${v.blank}` : "blank") : `\`${v.default}\``);
 
 function variableSection(v) {
   const lines = [];
@@ -602,6 +627,7 @@ function variableSection(v) {
     ["Range", rangeOf(v)],
   ];
   if (v.unit) rows.push(["Counted in", v.unit]);
+  if (v.blank) rows.push(["Left blank", `${v.blank}, and 0 is the number zero`]);
   rows.push(["Who may change it", RING_GLOSS[v.ring].short]);
   rows.push(["A change takes effect", TIMING_GLOSS[v.applyTiming].short]);
   // The tier is what PRICES a change to this dial: it sets the floor a ballot

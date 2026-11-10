@@ -95,7 +95,7 @@ subtlety in this system; see section 7.
 | A moon closes | `runSettlement` | Pays each holder their role's own list, or the flat `role.cycle` amounts for a role with none, through `quoteWorkPay`, in full |
 | A cycle is closed by an admin | the cycle-close route | Splits `gratitude.pool_per_cycle` of the pool token by recognition received. A human act, never a job |
 | A member thanks another | `give()`, or `sendGratitude()` for a heart | Spends the member's cycle allowance |
-| An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold |
+| An admin mints by hand | the admin mint route | Capped per cycle, refused when the admin is the recipient, cosigned over a threshold. A grant waiting for its second signature is approved by `approveMintRequest` (`server/lib/mintRequests.ts`), which the admin route and a carried village vote on the grant both call |
 | A member spends | a stay night, a seat fee, a library escrow, a member-to-member send | See section 12 |
 | A member asks to redeem | `requestRedemption`, `server/lib/redemptionStore.ts` | Holds the asked amount in `sys:redemption-hold` when `redemption.holds_on_propose` is on, and holds nothing when it is off. A refusal, a withdrawal or an expiry returns a held amount by reversing the hold |
 | A redemption is confirmed | `settleRedemption`, `server/lib/redemptionStore.ts` | Retires the tokens to `sys:redeemed`, which only ever receives, taking them from the hold if one was taken and from the member otherwise |
@@ -132,7 +132,7 @@ A key names an OCCURRENCE, never a thing, and `token_ledger.idempotency_key` is 
 | `adj-<Date.now()>-<Math.random().toString(36).slice(2, 6)>` | `server/routes/stays.ts` |
 | `admin_mint:<Date.now()>-<Math.random().toString(36).slice(2, 8)>` | `server/index.ts` |
 | `admin_mint:<slug>:<body>` | `server/index.ts` |
-| `admin_mint:req:<id>` | `server/index.ts` |
+| `admin_mint:req:<id>` | `server/lib/mintRequests.ts` |
 | `circle_treasury:<kind>:<budgetId.slice(0, 40)>:<tail>` | `server/routes/circleTreasury.ts` |
 | `circle_treasury:dormant:<circleId.slice(0, 40)>:<tokenSlug>:<day>:<balanceMinor>:<accountRows>` | `server/lib/circleTreasury.ts` |
 | `circle-bonus:<recordId>:<unit>` | `server/lib/circleBonus.ts` |
@@ -300,6 +300,12 @@ this village read from a chain it does not control. Never write a hypha token as
 though minting it here creates anything. `postTransfer` refuses to move one at
 all, by name, and every boot refuses to start if a ledger row for one exists.
 
+Decision 5, as amended by Rye on 2026-11-09: **equity lives on the platform first.** Until Hypha goes
+live for a village, the equity it issues (Earned Equity, and investment equity from the voice-from-money
+work) is a `platform` token and this ledger is its record. When Hypha goes live a token can graduate:
+Hypha becomes the source and the row here turns `hypha`, a read-only mirror from then on. A token is
+never both at once. The seeded `equity` and `voice` rows above are mirrors and stay unpostable.
+
 **What a token is called, what it means, and what all of them are called
 together are the village's own words (0283).** Rye, 2026-10-23: "Village Tokens
 is the umbrella word, which should be able to be set in admin to name each type
@@ -398,16 +404,16 @@ The mint rules a fresh village is seeded with:
 <!-- generated:mint-rules start -->
 | Trigger | Token | Amount | Ceiling | Recipient | Enabled |
 | --- | --- | --- | --- | --- | --- |
-| `quest.completed` | `village-voice` | 10 | 100 | claimant | yes |
-| `quest.completed` | `credits` | 25 | 250 | claimant | yes |
-| `role.cycle` | `village-voice` | read from the work | 200 | holder | yes |
-| `role.cycle` | `credits` | read from the work | 250 | holder | yes |
-| `role.cycle` | `gratitude` | 20 | 100 | holder | **no** |
-| `proposal.accepted` | `village-voice` | 10 | 100 | claimant | yes |
-| `proposal.accepted` | `credits` | 25 | 250 | claimant | yes |
-| `proposal.accepted` | `earned-equity` | 1 | 1 | claimant | **no** |
-| `quest.completed` | `earned-equity` | 1 | 1 | claimant | **no** |
-| `role.cycle` | `earned-equity` | read from the work | 1 | holder | **no** |
+| `quest.completed` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
+| `quest.completed` | `credits` | 25 | none, work is paid in full | claimant | yes |
+| `role.cycle` | `village-voice` | read from the work | none, work is paid in full | holder | yes |
+| `role.cycle` | `credits` | read from the work | none, work is paid in full | holder | yes |
+| `role.cycle` | `gratitude` | 20 | none, work is paid in full | holder | **no** |
+| `proposal.accepted` | `village-voice` | 10 | none, work is paid in full | claimant | yes |
+| `proposal.accepted` | `credits` | 25 | none, work is paid in full | claimant | yes |
+| `proposal.accepted` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `quest.completed` | `earned-equity` | read from the work | none, work is paid in full | claimant | yes |
+| `role.cycle` | `earned-equity` | read from the work | none, work is paid in full | holder | yes |
 
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
@@ -521,9 +527,18 @@ rule stayed on would have paid 65 for one piece of work. Under `quoteWorkPay` a 
 replaces the flat amounts for that piece of work, so turning values on needs no flag day
 and no rule change: the flat rules go on paying the quests nobody has valued yet.
 
+**Earned Equity means what each village says it means (Rye, 2026-11-05).** Its meaning is
+"unique project to project, SET IN ADMIN per village": the token's meaning field (Admin, Tokens;
+0283), shown on the wallet and on every pay line that pays it (`PayLine.meaning`). Its three
+rules are seeded on with the amount blank (`enableEarnedEquityRules` queued the same on running
+villages from the next cycle), so it pays only what a quest, role or proposal names, and
+`payLineProblem` refuses any piece of work that names it until the village has written what it
+is a share of. A blank Earned Equity rule no role names is the ordinary state and is not
+reported as a rule that paid nobody.
+
 **An accepted proposal is work (Rye, 2026-10-23: "definitely a work token").** An accepted
 Work With Us proposal is priced like a quest, from the `proposal.accepted` rules (seeded at 10
-Village Voice and 25 Village Credits, Earned Equity off), through `quoteWorkPay`, by
+Village Voice and 25 Village Credits, Earned Equity on and blank), through `quoteWorkPay`, by
 `payAcceptedProposal` in `server/lib/proposalAward.ts`. It used to mint 100 Gratitude from the
 recognition faucet; `gratitude.proposal_accept_award` is retired, and Gratitude is only ever
 sent from one member to another (`GRATITUDE_ONLY_SENT`). The admin hand-mint and circle
@@ -599,6 +614,24 @@ well"). It is in the founding stewards' handover set, so a village that launches
 founding seat and can hand it over like any other steward power. The seeded Treasury role grants it
 too: a new village gets that from `server/seeds/roles-seed.json`, and a running village gets it
 once from the `cash-pay-to-treasury-2026-10-30` boot step, on its role with the id `treasury`.
+
+**The invoice rails and the treasury sync (0335, Rye 2026-11-06) read this record and never write
+it.** A member's own "Send for approval" also emails the invoice, with a PDF and its bill ref in the
+subject, to the village's Sera inbox when the moon-review setting `seraInbox` names one (blank on
+the platform, so nothing is emailed by default). The copy that leaves names the member by village
+name and bridge code-name; the legal name on the pay route never leaves the village (Rye,
+2026-11-06). While two or more people hold `cash.pay` or `steward.veto`, a new inbox address waits
+for a second of them to confirm it, and every member is told the new address when it applies;
+clearing the inbox applies at once, since it only stops mail (C7, Rye 2026-11-06). Each invoice carries one track: sent, received by
+Sera, approved, paid. Sent, approved and paid are read off `moon_invoices` and the transfer note the
+transfers door writes, so nothing is copied and nothing can count twice; received is read only off
+Sera's own typed record. The Sync on the member's Cash card reconciles three sources, each shown with
+when it was last read: the ledger and `cash_owed` here, the Base chain (`readOnchainBalance`), and
+Sera's invoice records. A difference is flagged to the `cash.pay` holder and never averaged, and a
+flag closes only when a later sync reads both sides fresh and no longer sees it. Finance approval
+and the Treasurer's transfer stay the only writes to `cash_owed`: a sync writes no ledger row, no
+balance and no cash row, which `server/lib/holdingsReconcile.test.ts` checks over every statement it
+sends.
 
 **An erasure leaves these rows.** They are the village's record of money it owed and paid, and a
 row holds an account id and an amount, never a name, so an erased member reads as the tombstone
@@ -702,7 +735,15 @@ directly to Base. **What exists today is stage 1**, and `server/lib/voiceClaim.t
 says so in one line that is worth reading before believing any of this reaches a
 chain: `export const BRIDGE_DISPATCH_BUILT = false;`. Nothing in this build
 dispatches a claim to Hypha. A claim is recorded, the voice is debited and held
-at the bridge, and something outside this repository has to confirm it.
+at the bridge, and something outside this repository has to confirm it. That
+confirmation arrives at a receiver signed with `HYPHA_VOICE_WEBHOOK_SECRET`, and
+the check that guards it (`checkVoiceSecret`) refuses a value shared with any
+other secret the village holds, the session key and the callback secrets typed
+into Admin, Integrations included (readiness R171): anything able to sign that
+other callback could otherwise confirm a claim on value. The secret itself has a
+slot under Admin, Integrations too, so a founder without the host can set it: the
+same check runs when it is saved, and a callback secret that copies it is refused
+there as well (`voiceSecretWriteRefusal`).
 
 ### Earned equity crosses the same bridge (0266)
 
@@ -2575,6 +2616,20 @@ posting is derived from any of these figures. A token with no rate is a real sta
 and while any money cap is set a request that cannot be valued is refused instead
 of passing unmeasured.
 
+**2026-11-05: the three money ceilings fail closed (Rye's decision 3; his yes came
+on 2026-11-06).** `redemption.max_per_request`, `redemption.max_per_member_per_cycle`
+and `redemption.max_village_per_cycle` ship blank, and blank is no ceiling. A
+ceiling of 0 is zero: nobody redeems past it, and it counts as a money cap that is
+set, so a request that cannot be valued is refused under it. `optionalNumberVar` in
+`server/lib/variables.ts` reads a blank ceiling as null, and `moneyCapsSet` in
+`server/lib/redemption.ts` counts a 0 as set. `requestRedemption` in
+`server/lib/redemptionStore.ts` takes its range lock over the cycle's village asks
+only when the village ceiling is set, 0 included. Until this a 0 meant no ceiling, so the once-only boot step
+`redemption-ceilings-blank-2026-11-05` (`server/lib/redemptionCeilings.ts`) turns a
+stored 0 into blank on a running village and writes one `platform` row to the
+mechanics ledger for each. The ceilings are read at the ask and never stored on a
+request (0213 keeps the rate, the fees and the currency), so no open request changes.
+
 **2026-09-15: who confirms is derived, and a village with no steward votes.**
 `redemption.confirmed_by` is retired. The ask counts who holds `redemption.confirm`
 through the village's own powers, excluding the admin short-circuit, and routes to
@@ -3131,6 +3186,9 @@ forever. Re-running it moves nothing.
 
 ### Who can trigger it
 
+Every route below lives in `server/routes/exits.ts`, moved out of `server/index.ts`
+on 2026-09-27 with no change to what any of them does.
+
 - **A member can open their own exit**: `POST /api/profile/request-exit`,
   password-confirmed, refused if they would strand the village.
 - **An admin can open one** for somebody else, voluntary or involuntary:
@@ -3306,7 +3364,10 @@ under the co-sign line and over it, so no grant waits for a second steward in a
 departed member's name. The co-signed approval
 (`POST /api/admin/mint-requests/:id/approve`) asks it again when the second
 steward signs, so a grant asked for while a member was here mints nothing once
-they have left; it stays pending, and a steward can decline it. A former member
+they have left; it stays pending, and a steward can decline it. The same
+function, `approveMintRequest` in `server/lib/mintRequests.ts`, lands a carried
+village vote on the grant (`POST /api/governance/mint-requests/:id/put-to-village`),
+so the vote meets every one of these refusals too. A former member
 can still be minted to. Pinned by `server/lib/gratitude.tombstone.test.ts` and
 `server/needsTombstone.routes.e2e.test.ts`.
 
@@ -3353,6 +3414,21 @@ the flag while any of the four terms in `EXIT_POLICY_TERMS` still matches the
 platform's words, naming every field that does. Adopting the platform's meaning is
 still available; adopting its wording while claiming the community decided it is
 not.
+
+The same comparison now reaches the public by KEY. `platformDefaultTermKeys` is the
+list `platformDefaultTerms` labels, and `GET /api/exit-policy` answers it as
+`platformWording`. `/governance` and `/roles` print the restorative steps as the
+village's conflict process only when `restorativeSteps` is absent from that list,
+and say the village has not written its steps otherwise. Nothing about value,
+settlement or any balance reads it: it decides which words a public page may call
+the village's own.
+
+The restorative block also carries the conflict door (2026-09-27): a cover role,
+a promised reply time in hours with no platform default, and a named contact
+outside the village. The launch checklist's `conflict-door` row reads them
+(`server/lib/launchGovernance.ts`), and `restorativeDoorProblem` refuses a
+malformed save. None of the three is a term the publish gate compares, and none
+of them touches a value, a settlement or a balance.
 
 So the state today is exact, **and the sentence that used to stand here is not,
 because the levers landed under it.** It read: no code pays them out, converts
@@ -3493,27 +3569,26 @@ touches that.
 
 ### The two halves of the exit promise are governed differently
 
-The ten dials are Ring 2, so a village votes them. The PUBLISHED policy those
-dials must agree with is not: `PUT /api/admin/exit-policy` writes the
-`exit-policy` document through `dbDocument`, guarded by `isAdmin` alone, and
-`CHANGE_ITEM_KINDS` (`shared/dryRun/types.ts`) is dial, mint_rule,
-weight_allocation, mode_switch, module_lifecycle, brand_field and role, with no
-document kind at all; `brand_field` reaches the brand document and nothing else.
-So after the Birthing, an administrator still edits by hand what a departing
-member is told they get, while the numbers that decide what they actually get go
-to a vote.
+The ten dials are Ring 2, so a village votes them. Since the canvas follow-up
+(G.1 and G.2, 2026-11-09) the PUBLISHED policy goes to a vote too, once the Game
+has started. `CHANGE_ITEM_KINDS` (`shared/dryRun/types.ts`) now carries
+`exit_terms` and `exit_restorative`, priced at the structural tier, and a carried
+change set saves the `exit-policy` document through the exit policy's own save
+(`server/lib/consequenceVote.ts`, which lays the change over the policy as every
+reader is served it). After the Birthing, `PUT /api/admin/exit-policy` refuses a
+change to the exit terms with 409 `exit_terms_are_a_vote`, naming that vote, and
+it locks the care door whether or not Conflict Evolution is on. Before the
+Birthing the administrators still write the policy directly, as they write every
+founding document.
 
-The consequence for the cooling period is exact. The save-time guard refuses a
-cooling period longer than the published notice, and it reads that notice at the
-moment a DIAL is written. Because the exit policy route is outside the changeset
-path, the published notice can be lowered BELOW an already-saved cooling period
-afterwards with nothing re-checking, and the governance session's landing-time
-reading does not catch it either, because that reading only sees what a
-changeset carries. What that can no longer do is hold a member's balance past
-the date their own exit row promised, because the settle date is capped at
-`notice_ends_at`. A repair is a named Phase 2 task for the governance lane: a
-`document` item kind covering exit-policy, that route behind the post-Birthing
-refuse-and-redirect, and these two exit levers in the set-level predicates.
+The consequence for the cooling period still holds in one place. The save-time
+guard refuses a cooling period longer than the published notice, and it reads
+that notice at the moment a DIAL is written. A carried `exit_terms` change that
+lowers the published notice is saved through the exit policy's own save, and
+nothing re-reads an already-saved cooling period against it at landing. What
+that can no longer do is hold a member's balance past the date their own exit
+row promised, because the settle date is capped at `notice_ends_at`. The
+remaining repair is these two exit levers in the set-level predicates.
 
 ### Redemption is this act for a member who stays, and the two share a shape and no code
 
@@ -3974,8 +4049,12 @@ type]
 It cannot: its change argument is `{ amount?, ceiling?, enabled? }` and it
 writes only `pending_amount`, `pending_ceiling`, `pending_enabled` and
 `pending_from_cycle`, which is exactly what `applyPendingRules` copies across.
-Nothing in this build can move a rule's trigger or its token at all, because
-the only writer of `mint_rules` ROWS is `seedEconomy` at boot.
+Nothing in this build can move a rule's trigger or its token at all. A row is
+written by `seedEconomy` at boot, and since vote-path gap 8 by a carried
+village vote creating a NEW rule (`createMintRule`, `server/lib/mintRuleCreate.ts`),
+which may name only `quest.completed`, `role.cycle` or `proposal.accepted` and
+refuses Gratitude, a Hypha token, an example token and a token with no faucet.
+No admin route creates a rule.
 
 What is true is the second half. Both seeded `village-voice` rules do pay
 contributions (`quest.completed`) and seats (`role.cycle`), so the shipped
@@ -4011,6 +4090,25 @@ exactly what they were written to stop, so R5 is a ruling that reopens a hole
 somebody closed on purpose, and it needs the founder's word about what it may
 reopen and what it may not.
 
+**2026-11-08: the founder's word arrived, and it keeps those three functions.**
+Rye answered through the master coordinator: Voice comes from value at the
+village model's `voicePerUnit`; a donation earns Voice at that rate, an
+investment buys equity at face value and earns Voice at a tenth of it, and
+nothing else earns Voice, not dues, shop goods, stays nor credit packs. Voice
+stays off the exchange, so `tradingProblem`, `weightTokenListingProblem` and
+`weightTokenProblem` do not change. Money reaches Voice only through a gift the
+Treasurer records, never through a purchase.
+
+The first piece is a read. `workEarnedVoice` (`server/lib/voiceProvenance.ts`)
+answers how much of a member's Voice came from work, so a ballot can count only
+that and Funding rounds can keep money and backing Voice out of pot ballots. It
+is the member's balance times the share of Voice minted to them from work
+sources (an allow-list in `shared/voiceFromMoney.ts`: a source nobody named is
+never work), each source net of its own clawbacks. To net a clawback against
+the posting it undoes, `originalKeyOf` in `server/lib/ledger.ts` is now
+exported; what it does is unchanged. Decay takes the same share of every
+holder, which is why a share of the balance is the right count.
+
 ---
 
 ## 17. Crowdpooling, and where the boundary falls
@@ -4034,10 +4132,12 @@ measured five ways at `1861f7d` and all five agree.**
    over `ledger.ts`, `economy.ts`, `spending.ts`, `exchange.ts`, `exit.ts`,
    `library.ts`, `stays.ts`, `eventSeats.ts`, `voiceClaim.ts`, `mintCap.ts` and
    `gratitude.ts` returns nothing.
-4. **No mint rule can fire on one.** The only writer of `mint_rules` ROWS is
-   `seedEconomy` (section 16, R2), and the triggers it seeds are `quest.completed`
-   and `role.cycle`. There is no route that creates a rule, so there is no trigger
-   a campaign could be attached to even by an admin.
+4. **No mint rule can fire on one.** The writers of `mint_rules` ROWS are
+   `seedEconomy` (section 16, R2) and a carried village vote creating a new rule
+   (`createMintRule`), and the only triggers either can name are
+   `quest.completed`, `role.cycle` and `proposal.accepted`. No route creates a
+   rule on any other trigger, so there is no trigger a campaign could be
+   attached to even by a vote.
 5. **It has no dial of its own in the economy's plane.** There is no
    `crowdpool.*` game variable. The one variable it reads is `governance.hub_url`,
    which is an address and never an amount, and its campaign list lives in

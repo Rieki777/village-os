@@ -228,7 +228,8 @@ const ALLOWED_KEYS: Record<Exclude<DraftKind, "cash_payment" | "ask">, readonly 
   gratitude_note: ["amount", "message", ...RECIPIENT_KEYS],
   message: ["conversationId", "body", ...RECIPIENT_KEYS],
   quest: ["title", "description", "firstStep"],
-  email: ["subject", "text"],
+  // `toOutside` on an email: the one vendor address the mail opens to (ruling 15, 2026-10-31).
+  email: ["subject", "text", "toOutside"],
 };
 
 /** The payload fields that hold words. Ids are left out: a record id is often seven digits in a row. */
@@ -237,6 +238,25 @@ const PROSE_FIELDS = ["note", "message", "body", "title", "description", "firstS
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 /** Seven or more digits, allowing the spaces, dots, dashes and brackets a phone number is written with. */
 const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/;
+
+/** Exactly one email address and nothing else, the shape an email draft's `toOutside` takes. */
+const ONE_ADDRESS_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+
+function oneAddress(v: unknown): string | null {
+  if (v === undefined || v === null || v === "") return null;
+  if (typeof v !== "string" || v.length > 254 || !ONE_ADDRESS_RE.test(v.trim())) return "toOutside holds one email address, the vendor's";
+  return null;
+}
+
+/** Every email address in a draft's `toOutside`, lower-cased, so the caller can ask whether one is a member's. */
+export function outsideAddressesOf(p: Record<string, unknown> | null | undefined): string[] {
+  const v = p?.toOutside;
+  if (typeof v !== "string") return [];
+  return Array.from(v.matchAll(new RegExp(EMAIL_RE.source, "gi")), (m) => m[0].toLowerCase());
+}
+
+/** Why a draft naming a member's own address is refused: at landing, at the yes, and from the outside service. */
+export const MEMBER_ADDRESS = "That address belongs to a member of this village, and a member's address never goes in a draft.";
 
 /** True when any string anywhere in the value carries an email address or a phone number. */
 export function carriesContact(v: unknown): boolean {
@@ -281,9 +301,11 @@ function oneRecipient(p: Record<string, unknown>): string | null {
  *
  * Refuses: a kind with no door (its refusal sentence), an unknown field, a
  * fraction anywhere an amount goes, and an email address or a phone number in
- * any prose field. A vendor's address may sit in one declared field only, a
- * purchase's `toOutside` (Rye, 2026-10-31: "don't refuse them"; the outside
- * service's rule), and nowhere else.
+ * any prose field. A vendor's address may sit in one declared field only,
+ * `toOutside` (Rye, 2026-10-31: "don't refuse them"; the outside service's
+ * rule), and nowhere else: a purchase's vendor line, or the one address an
+ * email opens to. Whether an address is a member's is the database's question,
+ * asked by the caller (`landItem`, `planConfirm`): a member's own never goes.
  */
 export function validateCompanionPayload(kind: unknown, payload: unknown): string | null {
   if (!isDraftKind(kind)) return `This village does not know the draft kind ${JSON.stringify(String(kind ?? "")).slice(0, 40)}.`;
@@ -327,7 +349,7 @@ export function validateCompanionPayload(kind: unknown, payload: unknown): strin
     case "quest":
       return text(p.title, "title", 3, 120) ?? optionalText(p.description, "description", 2000) ?? optionalText(p.firstStep, "firstStep", 400);
     case "email":
-      return text(p.subject, "subject", 1, 200) ?? text(p.text, "text", 1, 4000);
+      return text(p.subject, "subject", 1, 200) ?? text(p.text, "text", 1, 4000) ?? oneAddress(p.toOutside);
   }
   return "That kind has no validator.";
 }
@@ -493,6 +515,8 @@ export interface CompanionView {
   engineConnected: boolean;
   /** Who answers the chat right now, which is the village guide while the outside side is not connected. */
   chatEngine: string;
+  /** The outside agent's name as the saberra module gives it, for the engine picker. */
+  outsideEngine: string;
   name: string;
   /** "Personal companion", "Treasurer companion", "Pizza oven quest". */
   scopeLine: string;

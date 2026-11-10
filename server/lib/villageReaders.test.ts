@@ -14,6 +14,7 @@ import fs from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 import {
+  deadlineInVillage,
   READERS,
   READER_KEYS,
   callReader,
@@ -398,8 +399,10 @@ describe("the village record is readable", () => {
     // Without this reader the derivation job fills a table the tool loop
     // cannot see, and "what did we decide about X" stays unanswerable.
     expect(READER_KEYS).toContain("record.decisions");
-    // Nine since round 4 (lane L6 added events.week, the week-ahead reader).
-    expect(READER_KEYS).toHaveLength(9);
+    // Nine since round 4 (lane L6 added events.week, the week-ahead reader),
+    // twelve since Wave 4 (the companion: canvas.answers, canvas.library,
+    // matrix.rows).
+    expect(READER_KEYS).toHaveLength(12);
     const r = READERS.find((x) => x.key === "record.decisions")!;
     expect(r.audience).toBe("member");
     // The brain is core: no module of its own, so a fork with everything
@@ -413,5 +416,40 @@ describe("the village record is readable", () => {
     expect(readerRefusal(READERS.find((x) => x.key === "record.decisions")!, viewer())).toBeNull();
     expect(readerCatalog(viewer()).map((r) => r.key)).toContain("record.decisions");
     expect(readerCatalog(anon).map((r) => r.key)).not.toContain("record.decisions");
+  });
+});
+
+describe("a ballot's deadline, as the village reads it (R134)", () => {
+  // 23:30 UTC on 12 November is already the 13th in Auckland: the container clock was a day out.
+  const AT = "2026-11-12T23:30:00.000Z";
+
+  it("is the day in the village's own calendar, with the month as a word", () => {
+    expect(deadlineInVillage(AT, "Pacific/Auckland")).toBe("13 November 2026");
+    expect(deadlineInVillage(AT, "America/Los_Angeles")).toBe("12 November 2026");
+  });
+
+  it("falls back to UTC for a zone that is not a zone", () => {
+    expect(deadlineInVillage(AT, "Not/AZone")).toBe("12 November 2026");
+  });
+
+  it("says nothing it cannot read", () => {
+    expect(deadlineInVillage("not a date", "UTC")).toBe("the date on the ballot");
+  });
+});
+
+describe("the quest library tells Maia nothing about Gratitude pay", () => {
+  // Rye, 2026-11-01: "Gratitude ONLY for the recognition token and NOT for the
+  // credit or earned equity tokens". No quest pays Gratitude (2026-10-21), so
+  // the description she reads and the rows she is handed say nothing of it,
+  // even for a quest that still carries its old reward label.
+  it("describes the quests without Gratitude and hands over no Gratitude figure", async () => {
+    const reader = READERS.find((r) => r.key === "quests.library")!;
+    expect(reader.describe).not.toMatch(/gratitude/i);
+    const pool = {
+      query: async () => [[{ id: "q1", title: "Plant the swale", circle: "land", gratitude: "50-100", status: "active" }]],
+    } as any;
+    const rows = (await reader.read({ pool, viewer: viewer() })) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({ id: "q1", title: "Plant the swale", circle: "land", status: "active" });
   });
 });

@@ -91,7 +91,7 @@ describe("your own", () => {
   it("says so when there is nothing yet", async () => {
     serve({ "/api/profile/alignments": () => json({ alignments: [] }) });
     render(<AlignedSection />);
-    expect(await screen.findByText("Nothing yet. When you align with the village's letter or apply for roles, the words you align with are kept here.")).toBeTruthy();
+    expect(await screen.findByText("Nothing yet. When you align with the village's letter or propose for roles, the words you align with are kept here.")).toBeTruthy();
   });
 
   it("your membership letter sits beside your seat terms, says what the village did with the signing, and opens its words in place", async () => {
@@ -124,7 +124,7 @@ describe("your own", () => {
     // The words open in place: there is no application page for a letter.
     const words = screen.getByText("Read the words you aligned with");
     expect(words.closest("details")?.textContent).toContain("Tamsin planted the first grove.");
-    expect(screen.getAllByRole("link", { name: "Read the application" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Read the proposal" })).toHaveLength(1);
     // The copy aligns; it never signs.
     expect(card.textContent ?? "").not.toMatch(/\bsign/i);
   });

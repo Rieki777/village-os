@@ -106,15 +106,15 @@ function headlineSize(text: string): string {
 /** Icons for the stages and the people cards, handed out in order. */
 const STAGE_ICONS = [Heart, Calendar, Users, CheckCircle2, HomeIcon, TreePine];
 const PERSONA_LOOKS = [
-  { icon: Laptop, color: "bg-teal/10", iconColor: "text-teal-700" },
+  { icon: Laptop, color: "bg-teal/10", iconColor: "text-teal-deep" },
   { icon: GraduationCap, color: "bg-sage/20", iconColor: "text-sage" },
-  { icon: Sunset, color: "bg-amber/20", iconColor: "text-amber-700" },
+  { icon: Sunset, color: "bg-amber/20", iconColor: "text-amber-ink" },
   { icon: Zap, color: "bg-primary/10", iconColor: "text-primary" },
-  { icon: Briefcase, color: "bg-teal-light/20", iconColor: "text-teal-600" },
+  { icon: Briefcase, color: "bg-teal-light/20", iconColor: "text-teal-deep" },
   { icon: Globe, color: "bg-sage-light/40", iconColor: "text-sage" },
-  { icon: MapPin, color: "bg-teal/10", iconColor: "text-teal-700" },
+  { icon: MapPin, color: "bg-teal/10", iconColor: "text-teal-deep" },
   { icon: FileText, color: "bg-sage/20", iconColor: "text-sage" },
-  { icon: Heart, color: "bg-amber/20", iconColor: "text-amber-700" },
+  { icon: Heart, color: "bg-amber/20", iconColor: "text-amber-ink" },
 ];
 
 export default function Home() {

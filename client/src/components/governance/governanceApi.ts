@@ -12,6 +12,7 @@
  * field the server stopped sending should fail at the typecheck, not by
  * quietly showing an empty bar to a village mid-vote.
  */
+import type { VoiceSpreadView } from "@shared/voiceSpread";
 import { authToken } from "@/lib/gameApi";
 import type { BallotMethod, VoteChoice } from "@shared/governanceEngine";
 
@@ -97,7 +98,13 @@ export interface Ballot {
   electorateCount: number;
   opensAt: string;
   closesAt: string;
-  status: "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+  status: "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
+  /** 0334: present only when the quorum fallback was on as this ballot opened. */
+  quorumFallback?: true;
+  /** 0334: present only on a re-run, the first ballot it asks again. */
+  rerunOf?: string;
+  /** 0334: present only on a first ballot that was asked again, its re-run. */
+  rerunId?: string | null;
   outcomeNote: string | null;
   closedBy: string | null;
   closedAt: string | null;
@@ -258,7 +265,8 @@ export interface BallotCard {
   electorateCount: number;
   opensAt: string;
   closesAt: string;
-  status: "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+  status: "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
+  rerunOf?: string;
   outcomeNote: string | null;
   closedAt: string | null;
   tallies: { yesW: number; noW: number; abstainW: number };
@@ -385,6 +393,8 @@ export const fetchBallots = (page?: { limit?: number; offset?: number }) => {
 export const fetchBallot = (id: string) =>
   call<DecisionRecord>(`/api/governance/ballots/${encodeURIComponent(id)}`);
 export const fetchStanding = () => call<Standing>("/api/governance/standing");
+/** How Voice is spread over the roll, and this season's votes as counts. Groups only: names nobody. */
+export const fetchVoiceSpread = () => call<VoiceSpreadView>("/api/governance/voice-spread");
 
 /**
  * Lineage for the objections a panel is already holding, asked for by their
@@ -522,7 +532,9 @@ export const ruleObjection = (id: string, objectionId: string, ruling: string, n
 
 export interface CloseResult {
   success: true;
-  outcome: "passed" | "failed" | "no_quorum";
+  outcome: "passed" | "failed" | "no_quorum" | "no_quorum_rerun";
+  /** 0334: the re-run the quorum fallback opened, when it did. */
+  rerunBallotId?: string | null;
   unity: number;
   quorum: number;
   tallies: { yesW: number; noW: number; abstainW: number };

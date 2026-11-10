@@ -601,7 +601,7 @@ export const MODULES: ModuleDef[] = [
   //    per-deployment admin act. ──────────────────────────────────────────────
   {
     id: "map",
-    guild: [],
+    guild: ["satellite-imagery-key"],
     setupNeeds: [
       {
         id: "first-circle",
@@ -1443,6 +1443,81 @@ export const MODULES: ModuleDef[] = [
     // surface; saved results stay in their table and return when it is on.
   },
   {
+    id: "funding-rounds",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "pot-holder",
+        kind: "hands",
+        ref: "pot.steward",
+        title: "Seat someone in the Treasury role, or another role that holds the funding pots",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/funding-rounds.md Setup; server/lib/starterRoles.ts POT_STEWARD_GRANTS",
+      },
+    ],
+    tier: "included",
+    // An idea names its author, kept even when the idea is shown without a
+    // name, and the interaction record names the member who acted (0338).
+    dataClass: "member-pii",
+    group: "coordinate",
+    setup: "none",
+    name: "Funding rounds",
+    description:
+      "The village chooses together which quests the season funds, within a pot. Members share rough ideas, shape them into quests, tick the ones they would fund, and the count shows both what Voice chose and what one member, one vote chose. Funded quests hold their share of the pot and are paid when the work is done.",
+    // Each idea opens a forum thread when the forum is on; funded ideas become
+    // quests; the pot's holder is a role seated on the map.
+    requires: [],
+    recommends: ["forum", "governance", "map"],
+    capabilities: ["pot.steward"],
+    variableKeys: [],
+    apiPrefixes: ["/api/funding-rounds"],
+    // openStateCheck attached by the server at boot: a round past its seed
+    // stage and not closed holds the module on (server/lib/fundingRounds.ts).
+  },
+  {
+    id: "places",
+    guild: [],
+    setupNeeds: [
+      {
+        id: "registry-keeper",
+        kind: "hands",
+        ref: "place.tend",
+        title: "Seat someone in a role that keeps the place registry, then load the village's places",
+        scope: "village",
+        phase: "before-enable",
+        need: "recommended",
+        fixAt: "/admin?tab=circles-map",
+        since: "1.2.0",
+        certainty: "verified",
+        source: "docs/modules/places.md Setup",
+      },
+    ],
+    tier: "included",
+    // A place is village content: its name, zone, stage and words. Who holds
+    // its roles is read from the org chart and sent only on the map's own
+    // viewPeople tier, and no child's location is ever stored (0354).
+    dataClass: "village-content",
+    group: "know-and-decide",
+    setup: "none",
+    name: "Living places",
+    description:
+      "Every place on the land as a living invitation: what it is, which stage it has reached from idea to built, which permits it waits on, the roles that care for it, and how to step forward as its steward.",
+    // The anchors come from the map's published scene, and a place with no
+    // anchor is listed without being drawn, so the map is recommended, never
+    // required.
+    requires: [],
+    recommends: ["map", "governance"],
+    capabilities: ["place.tend", "place.permit"],
+    // A visitor reads the public tier only while the org chart is public.
+    variableKeys: ["map.public_structure"],
+    apiPrefixes: ["/api/place-registry"],
+  },
+  {
     id: "session-card",
     guild: [],
     tier: "included",
@@ -1591,6 +1666,69 @@ export const MODULES: ModuleDef[] = [
     ],
     // `/api/season-plans`: each member's season plan and the village page of them (season plans RC1).
     apiPrefixes: ["/api/governance", "/api/admin/governance", "/api/season-plans"],
+  },
+  /*
+   * THE TWO GOVERNANCE CANVAS MODULES (Rye's module ruling, 2026-10-01).
+   *
+   * The canvas build first shipped as core and always on. The ruling made it
+   * two optional modules, both OFF like every non-core module, that a founder
+   * switches on in Modules. Nothing turns either one on by itself, a season
+   * file included. Each works alone: neither requires the other.
+   *
+   * What stays core for every village whatever these say: the exit policy and
+   * its restorative path, the private intake, the closing policy row, the
+   * governance-on-for-members row and the build's honest-copy fixes.
+   */
+  {
+    id: "canvas",
+    guild: [],
+    tier: "included",
+    // Every reading names the member who recorded it, and suggestions carry
+    // their author. The canvas is the village's own account of itself, read
+    // by its admitted members.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    // Works the moment it is on: the first reading is the first content, and
+    // "not decided yet, because..." counts as one.
+    setup: "none",
+    name: "Governance Canvas",
+    description:
+      "The village reads how it governs itself, block by block, on the twelve blocks of the Governance Canvas: a reading per block, the season map, five frames to walk each block in, a Decision Matrix, one public line per block, a printable workbook and a companion that answers from the village's own record. While it is on, every block must be on record before the village is asked to start its Game.",
+    requires: [],
+    // The canvas's Power block reads the governance engine and the calendar
+    // offers its new-moon gathering. Better with both, whole without either.
+    recommends: ["governance", "events"],
+    // The pen is `story.tell`, which is core. The canvas adds no capability.
+    capabilities: [],
+    variableKeys: [],
+    // `/api/documents` is the member's notebook (own documents and the export
+    // pack), which the ruling puts inside this module.
+    apiPrefixes: ["/api/canvas", "/api/documents"],
+    // No openStateCheck: a reading holds no value anybody is owed. Off hides
+    // every surface; the readings stay in their table for when it is on again.
+  },
+  {
+    id: "conflict-evolution",
+    guild: [],
+    tier: "included",
+    // The agreement names the people who hold the care and cover roles and an
+    // outside contact, and an ombuds ask names the member who sent it.
+    dataClass: "member-pii",
+    group: "know-and-decide",
+    // Works the moment it is on: the agreement starts from the exit policy's
+    // own restorative steps, and the launch row says what is still missing.
+    setup: "none",
+    name: "Conflict Evolution",
+    description:
+      "A conflict agreement the village writes and changes by vote: where a conflict goes, who takes it and who covers, how soon a member hears back, a contact outside the village, and a private ask to the ombuds. While it is on, the village names a working conflict door before it is asked to start its Game.",
+    requires: [],
+    recommends: ["governance"],
+    capabilities: [],
+    variableKeys: [],
+    // `/api/care` holds no route yet. It is listed so the routes that follow
+    // the agreement (the care stages, routing and the consequences ladder)
+    // mount behind this gate the day they land.
+    apiPrefixes: ["/api/conflict-agreement", "/api/admin/conflict-agreement", "/api/care"],
   },
   {
     id: "hypha",

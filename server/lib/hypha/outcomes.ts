@@ -103,7 +103,7 @@ export async function matchOutcome(
 export type SpaceCheck =
   /** The village recorded a space id and the delivery named the same one. */
   | { verdict: "match" }
-  /** The village recorded no space id. Nothing was checked and nothing is claimed. */
+  /** The village recorded no space id. Nothing was checked, so a passed outcome waits for a person (R039). */
   | { verdict: "unconfigured" }
   /** The village recorded one and the delivery named nothing. Accepted, reported. */
   | { verdict: "unstated" }
@@ -129,9 +129,10 @@ export type SpaceCheck =
  * serving everybody.
  *
  * WHAT IT CANNOT DO. A delivery that names no space cannot be checked, and this
- * returns `unstated` for it instead of pretending. The caller accepts those and
- * reports them, so an operator learns the check is idle rather than reading a
- * green that means nothing. Refusing them instead would take a working
+ * returns `unstated` for it instead of pretending. The caller records those,
+ * reports them, and never applies one on its own (R039): a passed outcome
+ * nobody could check waits for a person, so an operator learns the check is
+ * idle and no dial moves on it. Refusing them outright would take a working
  * integration down the first time a sender dropped an optional field.
  */
 export function checkSpace(configuredSpaceId: string, payload: any): SpaceCheck {

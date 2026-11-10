@@ -24,7 +24,7 @@ The image bakes in no secrets. Every secret arrives as an environment
 variable at run time, which is what makes publishing it safe.
 
 The repository, `github.com/ReGen-Civics/village-os`, is public too, under the
-MIT licence. Nobody needs an account, an access token or access to the
+AGPL-3.0-or-later licence. Nobody needs an account, an access token or access to the
 repository to pull and run a release.
 
 ### History: the one human step, done once

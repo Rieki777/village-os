@@ -41,6 +41,7 @@ export type Capability =
   // rung check anywhere: a village that wants its book closed moves the rung.
   // `map.viewPeople` is never used for this, because it opens at guest.
   | "terms.read" // read what each seat offers whoever holds it, money included
+  | "records.confidential" // read the village's private records; held only while aligned with its confidentiality agreement as it reads now
   | "map.contact" // reach a role holder through the contact relay
   | "map.edit" // enter build mode and keep a draft of the land
   | "map.publish" // push a draft onto the live map everyone sees
@@ -81,6 +82,17 @@ export type Capability =
   | "intake.moderate" // work the queues strangers and members put things into
   | "library.keep" // keep the shared library: what comes in, what goes out
   | "story.tell" // say what the village is, in its own words, in public
+  // ── The private brief key (canvas follow-up G.4, Rye 2026-11-06) ─────────
+  //
+  // Read and write the four brief sections that stay out of every public
+  // and member reading: people, legal, land and constraints
+  // (`ADMIN_ONLY_SECTIONS`, shared/canvasFrames.ts). Article 0: everything
+  // changes by a village vote, so the administrators' hold on these sections
+  // has to have a door. A `power_grant` vote seats it on a role; its live
+  // holders then hold the canvas admin pen and the Brain editor's four private
+  // sections, and an unseated admin is refused. With nobody holding it the
+  // administrators keep them, as before.
+  | "brief.private" // read and write the brief's four private sections
   | "dial.set" // turn the village's own dials, within the open ring
   // ── The proposal key (0141) ──────────────────────────────────────────────
   //
@@ -121,6 +133,22 @@ export type Capability =
   // that a payment went out. It moves nothing on the platform, because the
   // platform never pays cash; it writes down that the village did.
   | "cash.pay" // read the cash the village owes, and mark a payment made
+  // ── The role pay key (Rye, 2026-11-06, the valuation lane's C2) ───────────
+  //
+  // "Role pay is set by the Treasurer AND the valuation algorithm." This is the
+  // Treasurer's half: setting what a role is worth and pays, beside the
+  // engine's suggestion (shared/valuationEngine.ts). Born transferable and held
+  // back to the mature handover, like `cash.pay`; the seeded Treasury role
+  // grants it. With no live holder, a role's pay goes to the village through an
+  // org draft put to the vote (constitution 0.3).
+  //
+  // The cash budget is the same power (budgets spec R21, Rye's C1, 9 Nov): the
+  // budget sets how much of each moon's work is paid in cash, so one power gives
+  // one answer. Every budget write goes through its door (server/routes/budgets.ts).
+  | "role.pay" // keep the cash budget, and set what a role is worth and pays
+  | "pot.steward" // hold a funding pot: open its rounds, set their dates, rule on whether an idea fits
+  | "place.tend" // keep the place registry: import the seed, confirm a match, set readiness, adopt a stage change
+  | "place.permit" // keep a place's permit checklist and its preserve and riparian answers
   // ── The module switch (Rye, 2026-10-09) ──────────────────────────────────
   //
   // Before launch the founders turn modules on from the library. After launch
@@ -188,7 +216,29 @@ export type Capability =
   // Decision 19 (3 November, an interim step): approve one's OWN moon recap
   // and invoice, marked "Approved by the member themselves" for review after
   // the fact. Granted once to the Treasury power group only.
-  | "moon.approve_own"; // approve one's own moon recap and invoice
+  | "moon.approve_own" // approve one's own moon recap and invoice
+  //
+  // ── The power that hands out powers (Rye, 2026-11-01; ROLE_POWERS_DESIGN.md §6) ──
+  //
+  // Giving powers to the village's roles and taking them away: which Power
+  // groups a seat carries, and what a group can do. HOLDER-ONLY on the routes
+  // that use it (server/lib/holderOnly.ts): an admin who was never given it is
+  // refused while anybody holds it, so "only the holders" is enforced rather
+  // than described. With nobody holding it the routes fall through to an
+  // admin, which is how a fresh village sets itself up.
+  | "power.assign" // give powers to roles, and take them away
+  //
+  // ── The operator powers (ROLE_POWERS_DESIGN.md §9a) ──────────────────────
+  //
+  // About 150 admin routes had no power behind them, so a village that held
+  // every power still needed an administrator. These four name the clusters
+  // no other key describes (server/lib/operatorRoutes.ts maps each route), so
+  // a mature village can hold them too. Secrets are their own key, so that
+  // holding the settings never reaches a provider key.
+  | "operator.accounts" // members' accounts, stages and exits
+  | "operator.config" // settings with no power of their own
+  | "operator.secrets" // provider keys and the email sender, write-only
+  | "operator.recover"; // the repair tools
 
 /**
  * The canonical list, as a VALUE: badge validation and unlock diffs iterate
@@ -203,6 +253,7 @@ export const ALL_CAPABILITIES: Capability[] = [
   "proposal.decide",
   "map.viewPeople",
   "terms.read",
+  "records.confidential",
   "map.contact",
   "map.edit",
   "map.publish",
@@ -228,10 +279,15 @@ export const ALL_CAPABILITIES: Capability[] = [
   "intake.moderate",
   "library.keep",
   "story.tell",
+  "brief.private",
   "dial.set",
   "quest.approve",
   "redemption.confirm",
   "cash.pay",
+  "role.pay",
+  "pot.steward",
+  "place.tend",
+  "place.permit",
   "module.switch",
   "steward.veto",
   "comms.manage",
@@ -240,6 +296,11 @@ export const ALL_CAPABILITIES: Capability[] = [
   "moon.approve",
   "moon.approve_alone",
   "moon.approve_own",
+  "power.assign",
+  "operator.accounts",
+  "operator.config",
+  "operator.secrets",
+  "operator.recover",
 ];
 
 /**
@@ -268,6 +329,7 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "proposal.decide": "Record a decision's outcome",
   "map.viewPeople": "See who holds roles on the village map",
   "terms.read": "Read what each role offers, money included",
+  "records.confidential": "Read the village's private records, while aligned with its confidentiality agreement",
   "map.contact": "Reach a role holder through the contact relay",
   "map.edit": "Draft changes to the land in build mode",
   "map.publish": "Publish a draft onto the live map",
@@ -295,10 +357,15 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "intake.moderate": "Work the village's queues and act on what gets reported",
   "library.keep": "Keep the shared library and its loans",
   "story.tell": "Say what the village is, in public, in its own words",
+  "brief.private": "Read and write the brief's private sections: people, legal, land and constraints",
   "dial.set": "Turn the village's own dials",
   "quest.approve": "Put a proposed quest on the board and set what it pays",
   "redemption.confirm": "Confirm that a member was paid, and destroy the tokens they redeemed",
   "cash.pay": "Read the cash the village owes its members, and mark a payment made",
+  "role.pay": "Keep the village's cash budget, and set what a role is worth and pays",
+  "pot.steward": "Hold a funding pot: open its rounds, set their dates and rubric, and rule on whether an idea fits",
+  "place.tend": "Keep the place registry: load it from the seed, confirm a place, set its readiness, and adopt a stage change",
+  "place.permit": "Keep a place's permit checklist and its preserve and riparian answers",
   "module.switch": "Turn a module on for the village",
   "steward.veto": "Stop a carried decision inside its window, and say why",
   "comms.manage": "Run the village's email: its automations, their words, and letters",
@@ -307,6 +374,11 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   "moon.approve": "Approve the work in a member's end-of-moon recap",
   "moon.approve_alone": "Give both approvals of a member's end-of-moon recap by yourself",
   "moon.approve_own": "Approve your own end-of-moon recap and invoice, marked for review",
+  "power.assign": "Give powers to the village's roles, and take them away",
+  "operator.accounts": "Look after members' accounts: access, stage and exits",
+  "operator.config": "Keep the village's settings that have no power of their own",
+  "operator.secrets": "Write the village's provider keys and email sender",
+  "operator.recover": "Run the village's repair tools",
 };
 
 /**
@@ -478,6 +550,16 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // product, and a ceiling an operator cannot climb over is not a ceiling, it
   // is an outage.
   "intake.moderate": true,
+  // The power that hands out powers (ROLE_POWERS_DESIGN.md §6). A village
+  // that matures takes it with the rest: Rye, 2026-11-01, "All powers should be
+  // able to be passed to a village".
+  "power.assign": true,
+  // The operator powers: a village that runs with no admins holds these too
+  // (Rye, 2026-11-01). Mature villages only, by guidance and never by lock.
+  "operator.accounts": true,
+  "operator.config": true,
+  "operator.secrets": true,
+  "operator.recover": true,
   // Accepting a quest proposal is the moment a payout obligation is created,
   // which is exactly the sort of thing a village takes on for itself. Its one
   // route asks `guardCapability`, so the escape hatch and the public record
@@ -496,12 +578,26 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   // `grantCashPayToTreasury`). Its two routes ask `guardCapability`, so the
   // escape hatch and the public record this column promises are both there.
   "cash.pay": true,
+  // Rye, 2026-11-06: a new power the Treasury role holds, set beside the
+  // valuation engine. Its route asks `guardCapability`, and a holder of the role
+  // being paid is sent to the village instead (the conflict rule).
+  "role.pay": true,
+  "pot.steward": true,
+  // Living places (0354). FALSE until Rye says otherwise (spec C8, I.10): the
+  // two keys are new, and joining the handover set is his word to give. With
+  // no live holder the village still decides by its vote path (Article 0.3).
+  "place.tend": false,
+  "place.permit": false,
   // Turning a module on after launch. Its route counts live holders without
   // the admin short-circuit, so the escape hatch this column describes is the
   // village vote itself: with no holder, anybody may propose it.
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // Canvas follow-up G.4 (AC1.5, Rye 2026-11-06): born transferable, so the
+  // spec's "moves by a power_grant vote" is a real door. Its routes ask the
+  // one gate (`guardCapability`), so the escape hatch and the record are there.
+  "brief.private": true,
   "org.seat": true,
   "org.seatAgent": true,
   /*
@@ -593,6 +689,9 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
   "map.viewPeople": false,
   // Reading is a member's own act, so there is nobody for it to move to.
   "terms.read": false,
+  // A role grants it (a finance role, say); the alignment is asked on top, in the gate (ALIGNMENT_BOUND).
+  // Not a power the village takes back to itself: nothing gates behind it yet that carries the escape hatch.
+  "records.confidential": false,
   "map.contact": false,
   "map.edit": false,
   // A member-rung act, the same as opening a room: whoever runs sessions
@@ -662,12 +761,12 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  *
  * ── THIS IS A READING OF THOSE WORDS, AND IT HAS A PRODUCT CONSEQUENCE ─────
  *
- * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 23 keys
- * today. The other 21 are not withheld from anybody: they are personal acts
+ * "All powers" is read here as ALL TRANSFERABLE POWERS, which is 31 keys
+ * today. The other 24 are not withheld from anybody: they are personal acts
  * and deployment plumbing that were never anyone's to hold, and `TRANSFERABLE`
  * carries the reasoning key by key.
  *
- * Read this way, a launched village holds all 23 in the founding seat and has
+ * Read this way, a launched village holds all 31 in the founding seat and has
  * handed over none of them, which is the arc starting rather than finishing.
  * `villageHandoverState` in server/lib/capabilityHolding.ts measures how far
  * along it is, and it asks the narrow question on purpose: a power counts as
@@ -698,7 +797,24 @@ export const TRANSFERABLE: Record<Capability, boolean> = {
  * 18. `moon.approve` (0313) was born held back, which moved only the second
  * once more: 23 and 19. `moon.approve_alone` and `moon.approve_own` (the same
  * build, decision 18 and decision 19) were born held back too, and the pair
- * today is 23 and 21.
+ * today was 23 and 21. `power.assign` (the role powers build, 2026-11-05) was
+ * born transferable, the power that hands out powers being one a village takes
+ * with the rest, which moved only the first: 24 and 21. The four operator powers
+ * (the same build) were born transferable too, for the same ruling: 28 and 21.
+ * `role.pay` (Rye, 2026-11-06, the valuation lane's C2) was born transferable,
+ * the Treasurer's power to set role pay, which moved only the first: 29 and 21.
+ * `pot.steward` (Funding rounds, 0338) was born transferable with Rye's word of
+ * 2026-11-06, relayed: a funding pot is a power the Treasurer holds by default
+ * and can be handed to another role or the village. That moved only the first:
+ * 30 and 21.
+ * `place.tend` and `place.permit` (Living places, 0354) were born held back
+ * until Rye gives his word on them (the places spec, C8), which moved only the
+ * second: 30 and 23.
+ * `brief.private` (the canvas follow-up, G.4) was born transferable, the
+ * spec Rye accepted on 2026-11-06 naming it so, which moved only the first:
+ * 31 and 23. `records.confidential` (role journey L7) was born held back, a
+ * key no route gates behind yet and one the alignment binds on top, which
+ * moved only the second: 31 and 24.
  *
  * This sentence was itself wrong for one batch, and it is the reason the check
  * below reads the WHOLE paragraph rather than three sentences. It claimed
@@ -865,6 +981,7 @@ export const DENIABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true, // a look, like map.viewPeople: a deny may pause it
+  "records.confidential": true, // a look at private records: a warning badge may pause it
   "map.edit": true,
   "map.publish": true,
   "map.curatePhotos": true,
@@ -896,11 +1013,21 @@ export const DENIABLE: Record<Capability, boolean> = {
   // The same reasoning: a warning takes away signing off other people's cash,
   // and nothing about their own right to claim what they are owed.
   "cash.pay": true,
+  // The same: a warning takes away setting other people's pay.
+  "role.pay": true,
+  "pot.steward": true,
+  // Jobs, the same as the pot: a warning pauses keeping the registry or the
+  // permits, and takes no member's voice in a stage change.
+  "place.tend": true,
+  "place.permit": true,
   // A job as well. Pausing it stops somebody switching modules on alone; the
   // village can still propose one, and the vote decides.
   "module.switch": true,
   "library.keep": true,
   "story.tell": true,
+  // A job: a warning pauses somebody reading the private sections and takes
+  // away no say of theirs.
+  "brief.private": true,
   "dial.set": true,
   // A job, like `feed.announce`: pausing it stops somebody sending the
   // village's letters and changing its automations, and takes away nothing
@@ -917,6 +1044,14 @@ export const DENIABLE: Record<Capability, boolean> = {
   // Jobs as well: a warning pauses them and takes nothing the member holds.
   "moon.approve_alone": true,
   "moon.approve_own": true,
+  // A job, like keeping the library: a warning pauses somebody handing out
+  // powers and takes away nothing they hold as a say.
+  "power.assign": true,
+  // Jobs: a warning pauses them and takes nothing the member holds as a say.
+  "operator.accounts": true,
+  "operator.config": true,
+  "operator.secrets": true,
+  "operator.recover": true,
 };
 
 /**
@@ -1004,6 +1139,21 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   // from a seat in a named power group, never a badge (decisions 18 and 19).
   "moon.approve_alone": false,
   "moon.approve_own": false,
+  // FALSE: a badge is minted by an admin, and a badge that carried this would
+  // let an admin hand themselves the power to give every other power. Seats
+  // and Power groups only, the reason `steward.veto` gives.
+  "power.assign": false,
+  // FALSE, the reason `power.assign` gives: an admin mints badges, and these
+  // are the panel's own powers. Seats and Power groups only.
+  "operator.accounts": false,
+  "operator.config": false,
+  "operator.secrets": false,
+  "operator.recover": false,
+  // FALSE: the private sections name people, title holders and land, and they
+  // move onto a role by a `power_grant` vote (G.4). A badge is minted by an
+  // admin, so a badge carrying this would let an unseated admin hand
+  // themselves back the sections the village moved to a role.
+  "brief.private": false,
 
   // ── TRUE: every other key. A badge is an ordinary way to hand out a power
   // nobody should have to climb to, and the Cartographer badge over the
@@ -1015,6 +1165,7 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "proposal.decide": true,
   "map.viewPeople": true,
   "terms.read": true,
+  "records.confidential": true,
   "map.contact": true,
   "map.edit": true,
   "map.publish": true,
@@ -1044,6 +1195,14 @@ export const BADGE_GRANTABLE: Record<Capability, boolean> = {
   "quest.approve": true,
   "redemption.confirm": true,
   "cash.pay": true,
+  // Not by badge: "the Treasurer" is a holder through the Treasury role
+  // (coordinator, 2026-11-06), so a badge is not an honest way to hand it over.
+  "role.pay": false,
+  "pot.steward": true,
+  // Ordinary appointments: a badge is an honest way to hand somebody the
+  // registry or the permit checklist.
+  "place.tend": true,
+  "place.permit": true,
   // An ordinary appointment, the same as `feed.announce`: a badge is an
   // honest way to hand the village's email to somebody.
   "comms.manage": true,
@@ -1088,7 +1247,18 @@ export type CapabilitySource =
   | "carried by a greater key"
   | "badge"
   | "stage"
-  | "not granted";
+  | "not granted"
+  | "needs an alignment";
+
+/**
+ * KEYS HELD ONLY WITH A CURRENT ALIGNMENT (role journey L7). Whatever grants
+ * `records.confidential` (a role, a badge, a stage, the admin short-circuit, the
+ * break-glass) grants nothing until the actor holds the village's
+ * confidentiality agreement as it reads NOW (`alignedConfidentiality`). Changed
+ * words make every holder align again before the key reaches them, which is the
+ * point: private records are read under the words in force today.
+ */
+export const ALIGNMENT_BOUND: readonly Capability[] = ["records.confidential"];
 
 export interface CapabilityCtx {
   stageIndex: number;
@@ -1146,6 +1316,12 @@ export interface CapabilityCtx {
    * request the gate refuses.
    */
   adminOverride?: boolean;
+  /**
+   * The actor holds the village's confidentiality agreement as it reads now
+   * (server/lib/confidentiality.ts). Read by step 0 alone, for ALIGNMENT_BOUND
+   * keys. Absent reads as not aligned, so a caller that never asks holds none.
+   */
+  alignedConfidentiality?: boolean;
 }
 
 export interface CapabilityDecision {
@@ -1166,6 +1342,8 @@ export interface CapabilityDecision {
  * and runs identically on client and server.
  *
  * Order of authority — this ordering IS the policy (Gate E, amended):
+ *   0. an ALIGNMENT_BOUND key without its alignment -> false, for everybody,
+ *      the admin and the break-glass included (role journey L7).
  *   1. isAdmin, on a key the village does NOT hold -> true. Unchanged: the
  *      operator can always act on the scaffolding they are responsible for.
  *   1b. isAdmin, on a key the village DOES hold:
@@ -1299,6 +1477,10 @@ export const BREAK_GLASS_WAY_THROUGH =
 
 export function capabilityDecision(cap: Capability, ctx: CapabilityCtx): CapabilityDecision {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
+  // Step 0 (L7): a key bound to an alignment is held by nobody without it, admins and the glass included.
+  if (ALIGNMENT_BOUND.includes(cap) && ctx.alignedConfidentiality !== true) {
+    return { allowed: false, source: "needs an alignment", villageHolds, reachedPastVillage: false };
+  }
   if (ctx.isAdmin && !villageHolds) {
     return { allowed: true, source: "admin", villageHolds: false, reachedPastVillage: false };
   }

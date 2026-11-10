@@ -37,12 +37,15 @@ import Layout from "@/components/Layout";
 import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { useVillageName } from "@/hooks/useVillageName";
 import { authToken } from "@/lib/gameApi";
+import { useLingui } from "@lingui/react/macro";
+import VoiceArea from "@/components/voice/VoiceArea";
 
 const FIELD =
   "w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function RequestMembership() {
   const villageName = useVillageName();
+  const { t } = useLingui();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [why, setWhy] = useState("");
@@ -171,6 +174,14 @@ export default function RequestMembership() {
                   <label htmlFor="request-why" className="mb-2 block text-sm font-semibold text-card-foreground">
                     What draws you to {villageName}?
                   </label>
+                  <VoiceArea
+                    value={why}
+                    onValue={setWhy}
+                    talk={{
+                      label: t({ message: "What draws you here", context: "voice field label: join request" }),
+                      purpose: t({ message: "Why you want to join the village and what you hope to bring and find here.", context: "voice field purpose: join request" }),
+                    }}
+                  >
                   <textarea
                     id="request-why"
                     name="why"
@@ -180,6 +191,7 @@ export default function RequestMembership() {
                     onChange={(e) => setWhy(e.target.value)}
                     className={FIELD}
                   />
+                  </VoiceArea>
                 </div>
                 <div>
                   <label htmlFor="request-heard" className="mb-2 block text-sm font-semibold text-card-foreground">
@@ -222,6 +234,12 @@ export default function RequestMembership() {
                   Propose a role
                 </a>
                 .
+              </p>
+              {/* The draft board: every open role by character, a shortlist, then apply (pages/RoleDraft.tsx). */}
+              <p className="mt-3 text-center text-muted-foreground">
+                <a href="/roles/select" className="font-medium text-foreground underline underline-offset-2">
+                  {t({ message: "Select your roles", context: "join page link" })}
+                </a>
               </p>
             </>
           )}

@@ -36,6 +36,7 @@
  * server, and the proposal document is fetched, never rebuilt here — what is
  * voted on is what was checked.
  */
+import { ballotIdIn, HistoryEntry, historyHeaders, SettingHistory, type Amendment } from "@/components/governance/SettingHistory";
 import Layout from "@/components/Layout";
 import { useCallback, useEffect, useState } from "react";
 import { m } from "framer-motion";
@@ -60,6 +61,7 @@ import { dialFromSearch } from "@shared/comms/memberView";
 import InfoTip, { DialFact } from "@/components/InfoTip";
 import LongText from "@/components/LongText";
 import PurposeAlignmentField, { usePurposeAlignment } from "@/components/governance/PurposeAlignmentField";
+import { AskVillageButton, mayAskVillageOn } from "./gameMechanicsAskVillage";
 
 interface MechanicsVariable {
   key: string;
@@ -119,26 +121,8 @@ interface MechanicsSnapshot {
  * renders exactly as it did before. Nothing is inferred: no segment means no
  * link, never a guess at which vote it might have been.
  */
-export function ballotIdIn(proposalRef: string | null | undefined): string | null {
-  const m = /(?:^|\s)bal:(\S+)/.exec(String(proposalRef ?? ""));
-  return m ? m[1] : null;
-}
+export { ballotIdIn };
 
-interface Amendment {
-  id: string;
-  key: string;
-  label: string;
-  from: string | null;
-  fromWasDefault: boolean;
-  to: string | null;
-  toIsDefault: boolean;
-  withheld?: boolean; // the server held both values back (a credential), see server/lib/mechanicsHistory.ts
-  by: string | null;
-  source: string;
-  proposalRef: string | null;
-  note: string | null;
-  at: string;
-}
 
 interface ProposalChange {
   key: string;
@@ -166,7 +150,7 @@ export type ProposalStatus =
   | "applied";
 
 /** How the last ballot on a proposal ended (`ballots.status`). */
-export type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "withdrawn";
+export type BallotStatus = "open" | "passed" | "failed" | "no_quorum" | "no_quorum_rerun" | "withdrawn";
 
 interface Proposal {
   id: string;
@@ -200,6 +184,7 @@ interface Standing {
   mayOpenBallot: boolean;
   /** Proposals this viewer raised. The other half of who the route admits. */
   mine: string[];
+  mayAskVillage?: boolean; // a held outcome after launch (./gameMechanicsAskVillage.tsx)
 }
 
 export const STATUS_COPY: Record<ProposalStatus, { label: string; cls: string }> = {
@@ -569,7 +554,7 @@ export default function GameMechanics() {
   const openHistory = () => {
     setHistoryOpen((v) => !v);
     if (history === null) {
-      fetch("/api/game/mechanics/history")
+      fetch("/api/game/mechanics/history", { headers: historyHeaders() })
         .then((r) => (r.ok ? r.json() : []))
         .then((d) => setHistory(Array.isArray(d) ? d : []))
         .catch(() => setHistory([]));
@@ -1012,6 +997,7 @@ export default function GameMechanics() {
                                     {v.applyTiming === "cycle-close" && <span>changes take effect at the next cycle close</span>}
                                     <span className="font-mono">{v.key}</span>
                                   </p>
+                                  <SettingHistory settingKey={v.key} label={v.label} valueOf={amendmentValue} />
                                 </li>
                               );
                             })}
@@ -1139,6 +1125,7 @@ export default function GameMechanics() {
                               Open the village vote
                             </button>
                           )}
+                          {mayAskVillageOn(p, standing) && <AskVillageButton onAsk={() => openBallot(p)} />}
                           {/* 0219: the field asks itself whether to render, from
                               the same condition the route refuses on. */}
                           {mayOpenBallotOn(p) && <PurposeAlignmentField {...alignment.propsFor(p.id)} />}
@@ -1360,39 +1347,7 @@ export default function GameMechanics() {
                       <ul className="divide-y divide-stone-100">
                         {history.map((h) => (
                           <li key={h.id} className="px-4 py-3">
-                            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                              <span className="font-medium text-stone-900">{h.label}</span>
-                              <span className="text-xs text-stone-500">
-                                {new Date(h.at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                              </span>
-                            </div>
-                            <p className="text-sm text-stone-600 mt-0.5">
-                              <span className="line-through text-stone-500">
-                                {h.withheld ? "kept private" : `${amendmentValue(h.key, h.from)}${h.fromWasDefault ? " (default)" : ""}`}
-                              </span>{" "}
-                              → <span className="font-semibold text-teal-deep">{h.withheld ? "kept private" : amendmentValue(h.key, h.to)}</span>
-                              {!h.withheld && h.toIsDefault ? " (back to default)" : ""}
-                              {h.by ? ` · by ${h.by}` : ""}
-                              {h.source === "governance" ? " · by passed proposal" : ""}
-                              {h.source === "platform" ? " · platform migration" : ""}
-                            </p>
-                            {h.proposalRef && (
-                              <p className="text-[11px] text-stone-500 mt-0.5">
-                                <span className="font-mono">proposal: {h.proposalRef}</span>
-                                {ballotIdIn(h.proposalRef) && (
-                                  <>
-                                    {" · "}
-                                    <Link
-                                      href={`/decisions/${ballotIdIn(h.proposalRef)}`}
-                                      className="text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
-                                    >
-                                      read the vote that decided this
-                                    </Link>
-                                  </>
-                                )}
-                              </p>
-                            )}
-                            {h.note && <p className="text-[11px] text-stone-500 mt-0.5">{h.note}</p>}
+                            <HistoryEntry h={h} valueOf={amendmentValue} />
                           </li>
                         ))}
                       </ul>

@@ -17,7 +17,7 @@ forks for their module**, and all of it functional and beautiful.
 
 The hard part is not the store. It is that the customer owns the code.
 
-A village runs this platform on its own infrastructure, and the code is MIT: any village may fork the
+A village runs this platform on its own infrastructure, and the code is AGPL-3.0-or-later: any village may fork the
 repository and deploy its fork. It owns `shared/modules.ts`.
 Any `if (paid)` a developer writes is one edit away from being deleted, by somebody who is legally
 entitled to edit it and who has the file open anyway. So the usual answer, a feature flag checked at

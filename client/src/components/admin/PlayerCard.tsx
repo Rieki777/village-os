@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { ADMIN_FILTERS_ID } from "./adminFilters";
 import { CheckCircle2, Circle, LogOut, MinusCircle, Search, Trash2 } from "lucide-react";
 import type { PathLadder } from "@shared/pathLadders";
 import { formatTokenAmount } from "@/lib/tokenAmount";
@@ -234,7 +236,7 @@ export function PlayersFilters({
   const field = "rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm";
   const set = (k: keyof PlayerFilter) => (e: { target: { value: string } }) => onChange({ ...value, [k]: e.target.value });
   return (
-    <div role="search" className="mb-3 flex flex-wrap items-center gap-2">
+    <div role="search" id={ADMIN_FILTERS_ID} className="mb-3 flex scroll-mt-32 flex-wrap items-center gap-2">
       <label className="relative min-w-[12rem] flex-1">
         <span className="sr-only">Search players</span>
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
@@ -345,6 +347,7 @@ export function PlayerCard({
   onStage,
   onSignOut,
   onDelete,
+  footerExtra,
 }: {
   player: Player;
   /** Undefined while it loads. */
@@ -359,6 +362,8 @@ export function PlayerCard({
   onStage: (stageId: string | null) => void;
   onSignOut: () => void;
   onDelete: () => void;
+  /** More actions for the footer, drawn before Sign out everywhere. */
+  footerExtra?: ReactNode;
 }) {
   const access = accessOf(p.role);
   const ladderTitle = useGameConfig()?.ladder?.title;
@@ -458,6 +463,7 @@ export function PlayerCard({
       </div>
 
       <footer className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-5 py-2.5">
+        {footerExtra}
         <button
           type="button"
           onClick={onSignOut}

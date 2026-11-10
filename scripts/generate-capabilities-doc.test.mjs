@@ -103,7 +103,10 @@ export type CapabilitySource =
   | "carried by a greater key"
   | "badge"
   | "stage"
-  | "not granted";
+  | "not granted"
+  | "needs an alignment";
+
+const ALIGNMENT_BOUND: readonly Capability[] = [];
 
 const CARRIES: Partial<Record<Capability, readonly Capability[]>> = {
   "garden.plan": ["garden.tend"],
@@ -115,6 +118,9 @@ function carriedBy(held: readonly string[], cap: Capability): boolean {
 
 export function capabilityDecision(cap: any, ctx: any): any {
   const villageHolds = isVillageHeld(cap, ctx.villageHeld);
+  if (ALIGNMENT_BOUND.includes(cap) && ctx.alignedConfidentiality !== true) {
+    return { allowed: false, source: "needs an alignment", villageHolds, reachedPastVillage: false };
+  }
   if (ctx.isAdmin && !villageHolds) {
     return { allowed: true, source: "admin", villageHolds: false, reachedPastVillage: false };
   }
@@ -391,7 +397,10 @@ await check("THE RESOLUTION ORDER IS EMITTED IN THE ORDER THE GATE IMPLEMENTS IT
     );
     assert.ok(at(deny) < at(later), `the document prints ${later} before the deny that beats it`);
   }
-  assert.strictEqual(sources[0], "admin", "the admin short-circuit is the first thing the gate reads");
+  // Role journey L7: an alignment-bound key refuses everybody without its alignment, the admin included,
+  // so that refusal is read first; after it, the admin short-circuit is the first thing the gate reads.
+  assert.strictEqual(sources.filter((s) => s !== "needs an alignment")[0], "admin", "the admin short-circuit is the first grant the gate reads");
+  if (sources.includes("needs an alignment")) assert.strictEqual(sources[0], "needs an alignment", "the alignment refusal comes before every grant");
   assert.strictEqual(sources[sources.length - 1], "not granted", "the gate's fall-through is a refusal");
 });
 

@@ -2,224 +2,327 @@
   "assets": {
     "automation": {
       "at": "2026-08-16T17:22:56+00:00",
-      "bytes": 25200,
+      "bytes": 19446,
       "file": "automation.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "90ebb2771bf81580",
       "place": "the bell tower",
-      "preblur": 0,
-      "quality": 52
+      "preblur": 0.4,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "badges": {
       "at": "2026-08-16T17:23:00+00:00",
-      "bytes": 25292,
+      "bytes": 19206,
       "file": "badges.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "018895420c673051",
       "place": "school porch wall of woven badges",
-      "preblur": 0.6,
-      "quality": 68
+      "preblur": 0.0,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "commerce": {
       "at": "2026-08-16T17:23:03+00:00",
-      "bytes": 25586,
+      "bytes": 19040,
       "file": "commerce.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "f6bde1e1623da553",
       "place": "market stall with a donation bowl",
-      "preblur": 0.6,
-      "quality": 70
+      "preblur": 0.0,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
+    },
+    "comms": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19446,
+      "file": "comms.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "b31500a153f74cdb",
+      "place": "a post house with letter pigeonholes and a dovecote",
+      "preblur": 0.8,
+      "quality": 50
     },
     "crowdpool": {
       "at": "2026-09-02T18:35:27+00:00",
-      "bytes": 27598,
+      "bytes": 19222,
       "file": "crowdpool.webp",
       "place": "many small vessels gathered into one shared pool",
       "source": "ee35320",
-      "parametersRecorded": false
+      "parametersRecorded": false,
+      "reencodedAt": "2026-11-05T12:00:00+00:00",
+      "quality": 42,
+      "preblur": 0.8
     },
     "events": {
       "at": "2026-08-16T17:23:11+00:00",
-      "bytes": 25096,
+      "bytes": 19440,
       "file": "events.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "43f2b657ff75265d",
       "place": "the commons at dusk with lanterns",
-      "preblur": 0,
-      "quality": 56
+      "preblur": 0.4,
+      "quality": 46,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "exchange": {
       "at": "2026-08-16T17:23:01+00:00",
-      "bytes": 25364,
+      "bytes": 19400,
       "file": "exchange.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "ffc39357a7dbc55a",
       "place": "store counter with token jars",
-      "preblur": 0,
-      "quality": 52
+      "preblur": 0.4,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "feed": {
       "at": "2026-08-16T17:22:49+00:00",
-      "bytes": 25218,
+      "bytes": 19270,
       "file": "feed.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "80d2c5cff892b1f7",
       "place": "the village square at morning",
-      "preblur": 0.6,
-      "quality": 70
+      "preblur": 0.0,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "forum": {
       "at": "2026-08-16T17:22:48+00:00",
-      "bytes": 25386,
+      "bytes": 19036,
       "file": "forum.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "468a8ce6063ca350",
       "place": "round table under a roof",
+      "preblur": 0.4,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
+    },
+    "gene-keys": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19110,
+      "file": "gene-keys.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "fdb4572d0b717ad8",
+      "place": "a garden observatory with a carved six-line seal on its door",
       "preblur": 0.6,
-      "quality": 62
+      "quality": 40
     },
     "governance": {
       "at": "2026-09-02T18:35:27+00:00",
-      "bytes": 26636,
+      "bytes": 19102,
       "file": "governance.webp",
       "place": "a council circle of carved seats, hearth, speaking staff",
       "source": "ee35320",
-      "parametersRecorded": false
+      "parametersRecorded": false,
+      "reencodedAt": "2026-11-05T12:00:00+00:00",
+      "quality": 54,
+      "preblur": 0.8
     },
     "gratitude": {
       "at": "2026-08-16T17:22:39+00:00",
-      "bytes": 25464,
+      "bytes": 18906,
       "file": "gratitude.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "2c46bc4633c3159a",
       "place": "gift table under a shelter",
-      "preblur": 0,
-      "quality": 64
+      "preblur": 0.0,
+      "quality": 40,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "health": {
       "at": "2026-08-16T17:22:56+00:00",
-      "bytes": 25132,
+      "bytes": 19338,
       "file": "health.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "668b099f739f5fa0",
       "place": "the ridge weather station",
-      "preblur": 0,
-      "quality": 66
+      "preblur": 0.0,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "hypha": {
       "at": "2026-09-02T18:35:27+00:00",
-      "bytes": 26740,
+      "bytes": 19310,
       "file": "hypha.webp",
       "place": "the glowing mycelial network under the village",
       "source": "ee35320",
-      "parametersRecorded": false
+      "parametersRecorded": false,
+      "reencodedAt": "2026-11-05T12:00:00+00:00",
+      "quality": 42,
+      "preblur": 0.6
     },
     "introductions": {
       "at": "2026-09-02T18:35:27+00:00",
-      "bytes": 26278,
+      "bytes": 19230,
       "file": "introductions.webp",
       "place": "a garlanded gateway at the head of the path in",
       "source": "ee35320",
-      "parametersRecorded": false
+      "parametersRecorded": false,
+      "reencodedAt": "2026-11-05T12:00:00+00:00",
+      "quality": 48,
+      "preblur": 0.8
+    },
+    "journal": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19396,
+      "file": "journal.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "976ed8fc0dd3d8b2",
+      "place": "a writing nook with an open notebook by a round window",
+      "preblur": 0.8,
+      "quality": 44
     },
     "library": {
       "at": "2026-08-16T17:22:58+00:00",
-      "bytes": 25238,
+      "bytes": 19442,
       "file": "library.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "874b88ae329ee024",
       "place": "the tool shed",
-      "preblur": 0,
-      "quality": 52
+      "preblur": 0.4,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "map": {
       "at": "2026-08-16T17:22:45+00:00",
-      "bytes": 25172,
+      "bytes": 18938,
       "file": "map.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "ca6d4e154fb0eb09",
       "place": "the council fire",
-      "preblur": 0,
-      "quality": 62
+      "preblur": 0.0,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "messaging": {
       "at": "2026-08-16T17:22:53+00:00",
-      "bytes": 25474,
+      "bytes": 19304,
       "file": "messaging.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "7c83e4bfe02ae53f",
       "place": "a bench pair with a letter box",
       "preblur": 0.6,
-      "quality": 52
+      "quality": 40,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
+    },
+    "moon-review": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19146,
+      "file": "moon-review.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "0bb4ae5e48ecb9b0",
+      "place": "a terrace under the full moon with a ledger on a lectern",
+      "preblur": 0.8,
+      "quality": 46
     },
     "network": {
       "at": "2026-08-16T17:23:07+00:00",
-      "bytes": 25590,
+      "bytes": 19308,
       "file": "network.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "4d713767a4687090",
       "place": "the gate with blank signposts",
-      "preblur": 0.6,
-      "quality": 58
+      "preblur": 0.4,
+      "quality": 40,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "profiles": {
       "at": "2026-08-16T17:22:44+00:00",
-      "bytes": 25506,
+      "bytes": 19026,
       "file": "profiles.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "3178f3ee8b5f1f3b",
       "place": "cabin doorway with a blank name plate",
-      "preblur": 0,
-      "quality": 54
+      "preblur": 0.4,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "progression": {
       "at": "2026-08-16T17:22:42+00:00",
-      "bytes": 24816,
+      "bytes": 19472,
       "file": "progression.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "1d38942587e24e21",
       "place": "trail with waymarker stones",
-      "preblur": 0.6,
-      "quality": 58
+      "preblur": 0.4,
+      "quality": 42,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "quests": {
       "at": "2026-08-16T17:22:38+00:00",
-      "bytes": 25272,
+      "bytes": 19268,
       "file": "quests.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "eaa708c4ab4dea8c",
       "place": "notice board at the commons",
-      "preblur": 0,
-      "quality": 70
+      "preblur": 0.0,
+      "quality": 46,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
+    },
+    "redemption": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19112,
+      "file": "redemption.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "0424f1359ea8df67",
+      "place": "an exchange kiosk with a balance scale weighing tokens against goods",
+      "preblur": 0.6,
+      "quality": 44
     },
     "resources": {
       "at": "2026-09-02T18:35:27+00:00",
-      "bytes": 27470,
+      "bytes": 19448,
       "file": "resources.webp",
       "place": "an open storehouse of grain jars, tools and rope",
       "source": "ee35320",
-      "parametersRecorded": false
+      "parametersRecorded": false,
+      "reencodedAt": "2026-11-05T12:00:00+00:00",
+      "quality": 50,
+      "preblur": 0.6
+    },
+    "session-card": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19384,
+      "file": "session-card.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "ab9ecad6d2ed951a",
+      "place": "a pavilion table with a fan of cards and a sky globe",
+      "preblur": 0.8,
+      "quality": 48
+    },
+    "sessions": {
+      "at": "2026-11-05T12:00:00+00:00",
+      "bytes": 19276,
+      "file": "sessions.webp",
+      "model": "nano-banana-pro-preview",
+      "promptHash": "e5734f78076143b2",
+      "place": "a round pavilion with a circle of stools and an hourglass",
+      "preblur": 0.6,
+      "quality": 44
     },
     "stays": {
       "at": "2026-08-16T17:22:54+00:00",
-      "bytes": 24956,
+      "bytes": 19236,
       "file": "stays.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "abd6b46a272f6429",
       "place": "the guest cabin",
-      "preblur": 0,
-      "quality": 56
+      "preblur": 0.4,
+      "quality": 44,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     },
     "tools": {
       "at": "2026-08-16T17:23:09+00:00",
-      "bytes": 25374,
+      "bytes": 19374,
       "file": "tools.webp",
       "model": "nano-banana-pro-preview",
       "promptHash": "72083c020d400bfb",
       "place": "the lab workbench",
-      "preblur": 0.6,
-      "quality": 70
+      "preblur": 0.0,
+      "quality": 46,
+      "reencodedAt": "2026-11-05T12:00:00+00:00"
     }
   },
-  "updatedAt": "2026-09-02T18:35:27+00:00"
+  "updatedAt": "2026-11-05T12:00:00+00:00"
 }

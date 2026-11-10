@@ -24,10 +24,19 @@
  * at boot and refreshed whenever an admin creates a token (S9).
  *
  * `governance` is the guard that matters: 'platform' tokens are minted and
- * moved here; 'hypha' tokens (equity, voice) live on Base under Hypha and are
- * read-only mirrors — if this platform ever posted one it would quietly
- * become the source of truth for the cap table, which decision 5 says it must
- * never be. Boot invariants enforce that with a loud failure, not a comment.
+ * moved here; 'hypha' tokens live on Base under Hypha and are read-only
+ * mirrors. Boot invariants refuse any posting of a 'hypha' token with a loud
+ * failure, not a comment, so a token has exactly one source of truth.
+ *
+ * Decision 5, as amended by Rye on 2026-11-09: EQUITY LIVES ON THE PLATFORM
+ * FIRST. Until Hypha goes live for a village, its equity tokens (Earned
+ * Equity, and the economics lane's `invested-equity`) are 'platform' tokens,
+ * and this ledger is their cap table. When Hypha goes live the token can
+ * graduate: Hypha becomes the source, the row here turns 'hypha', and from
+ * then on it is a read-only mirror. What decision 5 still forbids is the two
+ * at once: a token that is both posted here and governed on Hypha. The
+ * seeded 'hypha' rows (0006) are the tokens that already graduated in that
+ * sense, and they stay unpostable.
  */
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { lostConcurrencyRace } from "../db/concurrency";
@@ -470,7 +479,7 @@ const REVERSAL_KEY_PREFIX = "reversal:";
  * key name" has to be exact or the answer is a guess. A key that is in the
  * namespace loosely but not exactly names no original, so it is refused.
  */
-function originalKeyOf(mirrorKey: string): string | null {
+export function originalKeyOf(mirrorKey: string): string | null {
   if (!mirrorKey.startsWith(REVERSAL_KEY_PREFIX)) return null;
   const rest = mirrorKey.slice(REVERSAL_KEY_PREFIX.length);
   const cut = rest.indexOf(":");

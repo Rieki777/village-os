@@ -272,7 +272,7 @@ export default function GameDashboard({
             <h2 className="font-display text-lg font-bold text-card-foreground">Quests</h2>
           </div>
           {me.quests.length === 0 ? (
-            <p className="text-sm text-muted-foreground mb-4">No Quests yet. Take your first one from the Quest Board.</p>
+            <p className="text-sm text-muted-foreground mb-4">No quests yet. Quests are another way to take part, alone or with others: find one on the Quest Board.</p>
           ) : (
             <ul className="space-y-2 mb-4">
               {[...activeQuests, ...doneQuests].slice(0, 4).map((q) => (

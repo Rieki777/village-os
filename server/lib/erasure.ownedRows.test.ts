@@ -811,6 +811,98 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
     ]);
   });
 
+  /*
+   * The cash budget (0360, budgets spec R26). A leaver's account id comes off
+   * the lines they changed, the rates they locked and the imports they ran;
+   * the role they acted as stays, and so does every row, and a bystander's
+   * attribution does not move.
+   */
+  it("de-attributes the budget lines, rate locks and imports a leaver made, keeps the role they acted as, and leaves a bystander's rows", async () => {
+    const leaver = await member("own-leaver-bd", "Wren Halloway");
+    await member("own-bd-ash", "Ash Moreno");
+    const line = (id: string, by: string, lockedBy: string | null) =>
+      q(
+        "INSERT INTO budget_lines (id, line_key, source, period_kind, period_key, starts_on, ends_on, category, planned_minor, currency, label, changed_by, changed_as, fx_locked_by) " +
+          "VALUES (?, ?, 'manual', 'month', '2026-11', '2026-11-01', '2026-11-30', 'role_pay', 1000, 'CRC', ?, ?, 'Treasury', ?)",
+        [id, `manual:${id}`, `Line ${id}`, by, lockedBy],
+      );
+    await line("bl-own-1", leaver.id, leaver.id);
+    await line("bl-own-2", "own-bd-ash", "own-bd-ash");
+    await line("bl-own-3", "own-bd-ash", leaver.id);
+    await q("INSERT INTO budget_syncs (id, source, `by`, by_as, ok) VALUES ('bs-own-1', 'upload', ?, 'Treasury', 1), ('bs-own-2', 'upload', 'own-bd-ash', 'Treasury', 1)", [leaver.id]);
+    await q("INSERT INTO budget_period_notes (period_key, note, changed_by, changed_as) VALUES ('2026-11', 'Read this moon slowly', ?, 'Treasury'), ('2026-12', 'Ash wrote this one', 'own-bd-ash', 'Treasury')", [leaver.id]);
+    await q("DELETE FROM budget_sources");
+    await q("INSERT INTO budget_envelopes (circle_id, period_kind, period_key, starts_on, ends_on, planned_minor, currency, changed_by, changed_as) VALUES ('c-a', 'month', '2026-11', '2026-11-01', '2026-11-30', 100, 'CRC', ?, 'Treasury'), ('c-b', 'month', '2026-11', '2026-11-01', '2026-11-30', 100, 'CRC', 'own-bd-ash', 'Treasury')", [leaver.id]);
+    await q("INSERT INTO budget_sources (source, `on`, mode, set_by, set_as, set_at) VALUES ('sera', 1, 'auto', ?, 'Treasury', NOW()), ('other-source', 1, 'review', 'own-bd-ash', 'Treasury', NOW())", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT id, changed_by, changed_as, fx_locked_by, planned_minor FROM budget_lines WHERE id LIKE 'bl-own-%' ORDER BY id"), "every line stays, without the leaver's id").toEqual([
+      { id: "bl-own-1", changed_by: null, changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+      { id: "bl-own-2", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: "own-bd-ash", planned_minor: 1000 },
+      { id: "bl-own-3", changed_by: "own-bd-ash", changed_as: "Treasury", fx_locked_by: null, planned_minor: 1000 },
+    ]);
+    expect(await q("SELECT id, `by`, by_as FROM budget_syncs WHERE id LIKE 'bs-own-%' ORDER BY id")).toEqual([
+      { id: "bs-own-1", by: null, by_as: "Treasury" },
+      { id: "bs-own-2", by: "own-bd-ash", by_as: "Treasury" },
+    ]);
+    expect(await q("SELECT period_key, note, changed_by, changed_as FROM budget_period_notes ORDER BY period_key"), "a period note stays, without the leaver's id").toEqual([
+      { period_key: "2026-11", note: "Read this moon slowly", changed_by: null, changed_as: "Treasury" },
+      { period_key: "2026-12", note: "Ash wrote this one", changed_by: "own-bd-ash", changed_as: "Treasury" },
+    ]);
+    expect(await q("SELECT source, set_by, set_as FROM budget_sources ORDER BY source"), "a source's switch stays, without the leaver's id; the re-check then turns it off").toEqual([
+      { source: "other-source", set_by: "own-bd-ash", set_as: "Treasury" },
+      { source: "sera", set_by: null, set_as: "Treasury" },
+    ]);
+    expect(await q("SELECT circle_id, changed_by, changed_as FROM budget_envelopes ORDER BY circle_id"), "an envelope stays, without the leaver's id").toEqual([
+      { circle_id: "c-a", changed_by: null, changed_as: "Treasury" },
+      { circle_id: "c-b", changed_by: "own-bd-ash", changed_as: "Treasury" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("budget-attribution-after-tombstone");
+  });
+
+  it("de-attributes their answers to the outside service's differences and the links they set, keeping the rows and everyone else's", async () => {
+    const leaver = await member("own-leaver-sera", "Wren Halloway");
+    await member("own-sera-ash", "Ash Moreno");
+    const answer = (key: string, actor: string) =>
+      q("INSERT INTO saberra_settled (difference_key, sera_hash, ours_hash, answer, door, actor_user_id) VALUES (?, 'aaaaaaaaaaaaaaaa', 'bbbbbbbbbbbbbbbb', 'kept', 'power', ?)", [key, actor]);
+    await answer("role:own-sera-1:aim", leaver.id);
+    await answer("role:own-sera-2:aim", "own-sera-ash");
+    await q("INSERT INTO saberra_links (subject_kind, page_key, our_id, set_by, actor_user_id) VALUES ('role', 'own-sera-1', 'r-1', 'keep', ?), ('role', 'own-sera-2', 'r-2', 'keep', 'own-sera-ash')", [leaver.id]);
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    expect(await q("SELECT difference_key, answer, actor_user_id FROM saberra_settled WHERE difference_key LIKE 'role:own-sera-%' ORDER BY difference_key")).toEqual([
+      { difference_key: "role:own-sera-1:aim", answer: "kept", actor_user_id: null },
+      { difference_key: "role:own-sera-2:aim", answer: "kept", actor_user_id: "own-sera-ash" },
+    ]);
+    expect(await q("SELECT page_key, our_id, actor_user_id FROM saberra_links WHERE page_key LIKE 'own-sera-%' ORDER BY page_key")).toEqual([
+      { page_key: "own-sera-1", our_id: "r-1", actor_user_id: null },
+      { page_key: "own-sera-2", our_id: "r-2", actor_user_id: "own-sera-ash" },
+    ]);
+    expect((await erasureRecord(pool, leaver.id))!.stepsDone).toContain("sera-answers-after-tombstone");
+  });
+
+  it("clears their id from the retirements they chose in a draft, and leaves everyone else's choice (review 15)", async () => {
+    const leaver = await member("own-leaver-rest", "Wren Halloway");
+    await member("own-rest-ash", "Ash Moreno");
+    await q("INSERT INTO org_drafts (id, title, status, source_kind) VALUES ('own-rest-d', 'Retire', 'open', 'agent')");
+    await q(
+      "INSERT INTO org_draft_changes (id, draft_id, op, org_role_id, payload, sort_order) VALUES ('own-rest-1', 'own-rest-d', 'rest_seat', 'r-1', ?, 1), ('own-rest-2', 'own-rest-d', 'rest_circle', 'circle:c-1', ?, 2), ('own-rest-3', 'own-rest-d', 'rest_seat', 'r-2', ?, 3)",
+      [JSON.stringify({ chosenBy: leaver.id, retiring: "sera" }), JSON.stringify({ chosenBy: leaver.id, retiring: "old-chart" }), JSON.stringify({ chosenBy: "own-rest-ash", retiring: "sera" })],
+    );
+
+    await anonymizeMember(pool, leaver, "admin-1", deps());
+
+    const rows = await q("SELECT id, payload FROM org_draft_changes WHERE id LIKE 'own-rest-%' ORDER BY id");
+    const pay = (r: any) => (typeof r.payload === "string" ? JSON.parse(r.payload) : r.payload);
+    expect(rows.map((r) => [r.id, pay(r).chosenBy, pay(r).chosenByDeparted ?? false])).toEqual([
+      ["own-rest-1", null, true],
+      ["own-rest-2", null, true],
+      ["own-rest-3", "own-rest-ash", false],
+    ]);
+  });
+
   it("runs every new step after the tombstone, between the role tensions and the role proposals, and runs clean twice", async () => {
     const leaver = await member("own-leaver-st", "Wren Halloway");
     await anonymizeMember(pool, leaver, "admin-1", deps());
@@ -824,7 +916,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       "guest-places-after-tombstone",
       "comms",
     ]);
-    expect(steps.slice(at, at + 12)).toEqual([
+    expect(steps.slice(at, at + 13)).toEqual([
       "role-tensions-after-tombstone",
       "event-places-after-tombstone",
       "housing-contacts-after-tombstone",
@@ -836,6 +928,7 @@ describe.skipIf(!configured)("the rows an erased member owned", () => {
       "investor-fact-words-after-tombstone",
       "stay-notes-after-tombstone",
       "purchase-emails-after-tombstone",
+      "application-review-after-tombstone",
       "role-proposals-after-tombstone",
     ]);
     expect(steps.indexOf("sessions-after-tombstone")).toBeGreaterThan(steps.indexOf("purchase-emails-after-tombstone"));

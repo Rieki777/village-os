@@ -216,6 +216,20 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     h.state.viewer = { id: "u-ivo", stage: "member" };
   });
 
+  it("draws the member door's aim and goal on the proposal's card, in place of an unfiled plan (0369, guide v2 B1)", async () => {
+    await file("sa-00000000000000c9", { answers: { aim: "Money kept true.", servesGoal: "One set of numbers everyone trusts", timeZone: null, windows: [], earliestStart: null, terms: null } });
+    try {
+      const r = await h.call("/api/governance/role-applications/sa-00000000000000c9/card");
+      expect(r.status).toBe(200);
+      const text = JSON.stringify(r.body);
+      expect(text).toContain("Money kept true.");
+      expect(text).toContain("One set of numbers everyone trusts");
+    } finally {
+      // The other tests count this village's applications: leave none behind.
+      await pool.query("DELETE FROM seat_applications WHERE id = 'sa-00000000000000c9'"); // module-review-ok: fixture SQL against this suite's scratch schema
+    }
+  });
+
   it("one person applying for five roles is one card, in proposal mode, at the member tier", async () => {
     const r = await h.call("/api/governance/role-applications/sa-00000000000000a1/card");
     expect(r.status, JSON.stringify(r.body)).toBe(200);
@@ -223,7 +237,7 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     const card = r.body.card;
     expect(card.roles.map((x: any) => x.id)).toEqual(roleIds);
     expect(card.header.name).toBe("Ana Quillfeather");
-    expect(card.header.rolesLine.startsWith("Applies for ")).toBe(true);
+    expect(card.header.rolesLine.startsWith("Proposes to hold ")).toBe(true);
     expect(card.across.tasks).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     expect(card.across.signs).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });
     for (const role of card.roles) expect(role.tensions).toEqual({ kind: "empty", words: "Open for now. You'll add these once the role is adopted." });

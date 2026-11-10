@@ -30,9 +30,15 @@ as off, and enabling one is a deliberate admin act recorded in `module_events`. 
 (quests, gratitude, progression, profiles) are the exception and cannot be disabled.
 
 **The village owns the code.** A village runs the published image on its own infrastructure, and the
-code is MIT: any village may fork this repository, change any file, including `shared/modules.ts`,
+code is AGPL-3.0-or-later: any village may fork this repository, change any file, including `shared/modules.ts`,
 and deploy its fork. That fact is the single most important input to
 how paid modules work here, and section 7 is entirely about it.
+
+**Modules are AGPL too.** A module merged into this repository is licensed under the GNU
+AGPL-3.0-or-later like the rest of the code (Rye's choice, 2026-11-09). There is no separate module
+licence and no closed module. A vendor may still charge for hosting, support or a licence key that
+unlocks a service it runs itself, but the module's source stays open. `CONTRIBUTING.md` carries the
+contributor terms that apply to your pull request.
 
 ## 2. Where things go
 

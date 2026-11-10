@@ -205,11 +205,11 @@ describe("a member who reads terms", () => {
   it("is sent to the application wizard with the seat picked, and posts nothing", async () => {
     const { applyHrefFor } = await import("./SeatTermsSlot");
     const href = applyHrefFor({ ...OPEN, termsOffer: null });
-    expect(href).toBe("/propose?type=role_application&seat=seat-water");
+    expect(href).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     render(<SeatTradingCard input={fromMapSeat(OPEN, DATA, { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" applyHref={href} />} />);
     const door = screen.getByRole("link", { name: "Raise your hand for Water Keeper" });
-    expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water");
-    expect(screen.getByText("Opens your application for this role and its terms. A role holder or the village adopts it.")).toBeTruthy();
+    expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
+    expect(screen.getByText("Opens your proposal for this role and its terms. A role holder or the village adopts it.")).toBeTruthy();
     fireEvent.click(door);
     expect(posted).toHaveLength(0);
   });
@@ -221,5 +221,31 @@ describe("a member who reads terms", () => {
     render(cardFor(OPEN));
     expect(screen.getByRole("button", { name: "Raise your hand for Water Keeper" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Raise your hand for Water Keeper" })).toBeNull();
+  });
+});
+
+/*
+ * A STRANGER'S DOOR ON AN OPEN ROLE (role journey, 2026-11-09). Rye is
+ * sharing a role card publicly. The person who opens it has no account, and
+ * registration is by invitation, so "Sign in" alone was a door drawn on a
+ * wall. The card now leads with applying, the account-free open proposal
+ * for this role, and keeps sign-in for a member who has an account.
+ */
+describe("a signed-out reader on an open role", () => {
+  const signedOut = (seat: object) => (
+    <SeatTradingCard input={fromMapSeat(seat, DATA, { signedIn: false })} ctx={CTX} action={<SeatAction circleId="land" />} />
+  );
+
+  it("is offered to apply for this role, through the open proposal for it", () => {
+    render(signedOut(OPEN));
+    const apply = screen.getByRole("link", { name: "Propose for Water Keeper" });
+    expect(apply.getAttribute("href")).toBe("/propose-a-role?role=seat-water&from=%2Froles%3Fseat%3Dseat-water");
+    // A member who has an account still has the way to sign in, back here.
+    expect(screen.getByRole("link", { name: /Sign in to raise your hand/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
+  });
+
+  it("offers nothing to apply for on a role somebody holds", () => {
+    render(signedOut(HELD));
+    expect(screen.queryByRole("link", { name: /^Apply for/ })).toBeNull();
   });
 });

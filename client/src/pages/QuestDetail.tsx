@@ -23,7 +23,10 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { CATALYST_FALLBACK, fetchGameMe, gameFetch, QuestClaim, useGameConfig, villageWord } from "@/lib/gameApi";
 import WorkPayBlock from "@/components/WorkPayBlock";
+import NextStepBox from "@/components/NextStepBox";
+import QuestSafety from "@/components/QuestSafety";
 import QuestActions from "@/components/QuestActions";
+import TakeCurrentPrice from "@/components/TakeCurrentPrice";
 import QuestCrews from "@/components/QuestCrews";
 import WorkChatButton from "@/components/messages/WorkChatButton";
 import QuestCard, { difficultyColors, iconFor, QuestPoster } from "@/components/QuestCard";
@@ -428,6 +431,9 @@ export default function QuestDetail() {
                 pay={quest.pay}
                 onChanged={refreshClaims}
               />
+              <TakeCurrentPrice claim={claim} quest={quest} onTaken={refreshClaims} />
+              {/* Who to talk to, the first task, the crew link and the date. */}
+              {!quest.isExample && <NextStepBox questId={quest.id} claimStatus={claim?.status} />}
               {/* The chat everyone on this quest shares, once two people are on it. */}
               {!quest.isExample && (
                 <div className="px-6 pb-5 empty:hidden">
@@ -435,6 +441,9 @@ export default function QuestDetail() {
                 </div>
               )}
             </div>
+
+            {/* What a physical quest asks of the body, before anyone claims. */}
+            {!quest.isExample && <QuestSafety questId={quest.id} signedIn={!!user} />}
 
             {/* The gate, in full color, saying what opens it */}
             {gateText && (
@@ -454,7 +463,11 @@ export default function QuestDetail() {
             )}
 
             {/* Who is walking it with you */}
-            {!quest.isExample && <QuestCrews questId={quest.id} signedIn={!!user} />}
+            {!quest.isExample && (
+              <div id="quest-crews" className="scroll-mt-20">
+                <QuestCrews questId={quest.id} signedIn={!!user} />
+              </div>
+            )}
 
             {/* Submitted state gets a small reassurance */}
             {claim?.status === "submitted" && (

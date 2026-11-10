@@ -162,7 +162,7 @@ function main(argv) {
     }
     console.error("");
     console.error(`Public tree guard FAILED: ${findings.length} finding(s) across ${files.length} tracked file(s).`);
-    console.error("Internal notes belong in the private operations repository (ReGen-Civics/village-os-ops).");
+    console.error("Internal notes belong in the private operations repository (ReGen-Civics/village-os-ops)."); // brand-ok: the upstream platform's own repository or image address, never a village's brand
     console.error("Anything that was a live secret must be ROTATED: deleting it here leaves it in git history.");
     process.exit(1);
   }

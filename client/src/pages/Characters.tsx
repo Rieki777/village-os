@@ -32,6 +32,7 @@
  *     also the largest. You arrive here by choosing to; the page does not need
  *     to announce itself.
  */
+import DraftCarry from "@/components/roleDraft/DraftCarry";
 import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,8 +42,12 @@ import { announceProfileChange } from "@/lib/profileRefresh";
 import { radioArrows } from "@/lib/radioArrows";
 import { Star, X } from "lucide-react";
 import PortraitStudio, { type StudioPayload } from "@/components/characters/PortraitStudio";
-import RolesThatFit from "@/components/characters/RolesThatFit";
+import RolesOpenNow from "@/components/characters/RolesOpenNow";
+import OpenNowBadge from "@/components/characters/OpenNowBadge";
+import RolesThatFit from "@/components/characters/RolesThatFit";
+
 import GeneKeysPrompt from "@/components/geneKeys/GeneKeysPrompt";
+import RoleStartSteps from "@/components/profile/RoleStartSteps";
 
 const headers = (): Record<string, string> => {
   const t = authToken();
@@ -57,6 +62,8 @@ interface Archetype {
   subtitle: string;
   blurb: string;
   examples: string[];
+  /** Roles tagged for this class that are open now (build days S2). Absent when the count could not be read. */
+  openNow?: number;
 }
 
 interface Character {
@@ -74,6 +81,8 @@ interface Character {
 
 interface Paths {
   roles: Array<{ id: string; name: string; recruiting: boolean; color: string | null }>;
+  /** Open roles tagged for no class, offered beside the fit (build days S2). */
+  alsoOpen?: Array<{ id: string; name: string; recruiting: boolean }>;
   questCount: number;
   /** The powers the village entrusts that suit this class. Absent from an older server. */
   powers?: Array<{ key: string; label: string }>;
@@ -317,6 +326,8 @@ export default function Characters() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-teal-deep/5 to-amber/5 pb-24 pt-6">
         <div className="container">
+          {/* A new holder lands here after sign-up: the steps before their role starts come first (role journey L7). */}
+          <RoleStartSteps className="mb-6" />
           {/* Small, because the picture is the headline. */}
           <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="text-sm font-semibold uppercase tracking-widest text-sage">
@@ -348,6 +359,19 @@ export default function Characters() {
             ) : null}
           </div>
 
+          {/* What they drafted on /roles/select before joining, if this browser kept it (components/roleDraft/DraftCarry.tsx). */}
+          {user && (
+            <div className="mb-4">
+              <DraftCarry
+                cast={archetypes}
+                userId={user?.id ? String(user.id) : null}
+                onPickCharacter={(key) => {
+                  stageSettled.current = true;
+                  setActiveKey(key);
+                }}
+              />
+            </div>
+          )}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[6rem_minmax(0,1fr)_20rem]">
             {/* THE STAGE, first in the DOM so a phone meets the character
                 immediately. The rail follows it on small screens and moves
@@ -549,7 +573,7 @@ export default function Characters() {
                         }}
                         aria-current={isActive ? "true" : undefined}
                         aria-label={a.name}
-                        aria-describedby={chosen ? `in-party-${a.key}` : undefined}
+                        aria-describedby={[chosen ? `in-party-${a.key}` : "", a.openNow ? `open-now-${a.key}` : ""].filter(Boolean).join(" ") || undefined}
                         title={a.name}
                         className={`relative block h-20 w-20 overflow-hidden rounded-xl border-2 bg-white transition ${
                           isActive
@@ -569,6 +593,7 @@ export default function Characters() {
                             className="h-full w-full object-cover object-top"
                           />
                         )}
+                        {a.openNow ? <OpenNowBadge n={a.openNow} id={`open-now-${a.key}`} /> : null}
                         {chosen ? (
                           <>
                             <Star
@@ -657,6 +682,7 @@ export default function Characters() {
                         : `${paths.questCount} quests on the land welcome these hands.`}
                     </p>
                   ) : null}
+                  {paths ? <RolesOpenNow archetypeKey={active.key} alsoOpen={paths.alsoOpen ?? []} /> : null}
 
                   {/*
                     WHAT THIS CLASS IS SUITED TO: the powers the village entrusts,

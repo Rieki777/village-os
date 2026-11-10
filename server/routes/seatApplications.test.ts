@@ -274,7 +274,22 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect((await apply({ seatIds: [s] })).status).toBe(201);
   });
 
-  it("refuses an example seat, a full seat and more than five seats", async () => {
+  it("keeps the member door's answers on the proposal, and forgets them with the member's other words (0369, guide v2 B1)", async () => {
+    const s = await seat("Answer keeper");
+    const answers = { aim: "Every newcomer feels at home.", servesGoal: "Food grown on the land", terms: { choice: "talk", note: "The moon rate" } };
+    const a = await apply({ seatIds: [s], answers });
+    expect(a.status).toBe(201);
+    expect((await readApplication(pool, a.body.id))!.answers).toEqual({ ...answers, timeZone: null, windows: [], earliestStart: null });
+    // CONTROL: a proposal sent with no answers keeps none.
+    const b = await apply({ seatIds: [await seat("Answerless keeper")] });
+    expect((await readApplication(pool, b.body.id))!.answers).toBeNull();
+    const { eraseApplicationWords } = await import("../repos/seatApplications");
+    const stored = await readApplication(pool, a.body.id);
+    await eraseApplicationWords(pool, stored!.candidateUserId);
+    expect((await readApplication(pool, a.body.id))!.answers).toBeNull();
+  });
+
+  it("refuses an example seat, a full seat and more than three roles (D3)", async () => {
     const example = await seat("Demo seat");
     await pool.query("UPDATE org_roles SET is_example = 1 WHERE id = ?", [example]); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
     const ex = await apply({ seatIds: [example] });
@@ -287,12 +302,12 @@ describe.skipIf(!configured)("applying, adopting and seating, on a real schema",
     expect(f.status).toBe(409);
     expect(f.body.code).toBe("seat_full");
 
-    const six = await Promise.all(["a", "b", "c", "d", "e", "f"].map((x) => seat(`Six ${x}`)));
-    const over = await apply({ seatIds: six });
+    const four = await Promise.all(["a", "b", "c", "d"].map((x) => seat(`Four ${x}`)));
+    const over = await apply({ seatIds: four });
     expect(over.status).toBe(400);
-    expect(over.body.error).toMatch(/at most 5 roles/);
-    // Control: five of them is one application.
-    expect((await apply({ seatIds: six.slice(0, 5) })).status).toBe(201);
+    expect(over.body.error).toMatch(/at most 3 roles/);
+    // Control: three of them is one application.
+    expect((await apply({ seatIds: four.slice(0, 3) })).status).toBe(201);
   });
 
   // ── Who adopts ───────────────────────────────────────────────────────────

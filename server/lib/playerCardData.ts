@@ -75,6 +75,7 @@
  * minute costs none. A table is read only when a sign that needs it is not in
  * the memo.
  */
+import type { RhythmDoc } from "../../shared/moonRhythm";
 import type { Pool } from "mysql2/promise";
 import { CAPABILITY_LABELS, type Capability } from "../../shared/capabilities";
 import { LUNAR_CLOCK } from "../../shared/cycleClock";
@@ -161,6 +162,11 @@ export interface CardContext {
    */
   frameworkTerms?: boolean;
   /**
+   * The village's moon rhythm (guide v2), from its end-of-moon review, while
+   * that review is on. Absent, the card draws the moon cycle as before.
+   */
+  moonRhythm?: RhythmDoc;
+  /**
    * The village the characters are read in, for the portrait in the card's
    * gold ring. Absent reads no portrait, and the card draws the initial.
    */
@@ -220,6 +226,12 @@ export interface CardProposal {
    * to roles is drawn with no edit here; roles the village has not created
    * yet; and the member's own season words in place of their filed plan.
    */
+  /**
+   * The member door's answers (0369, guide v2 B1): the aim and the season goal
+   * the proposal serves, drawn in place of the filed plan, so the status card
+   * shows what the member just wrote. A draft's own season words win.
+   */
+  answers?: { aim: string | null; servesGoal: string | null } | null;
   draft?: {
     words: Record<string, Record<string, unknown>>;
     newRoles: Array<{ id: string; circleId: string | null; circleName: string | null; seats: number; words: Record<string, unknown> }>;
@@ -540,6 +552,9 @@ export async function buildPlayerCards(
         flowsBack: (p.flowsBack as string | null) ?? null,
         stepBack: (p.stepBack as string | null) ?? null,
         timeCommitment: (p.timeCommitment as string | null) ?? null,
+        // The parameters block reads the same seat object /roles does (role journey PR-C).
+        // A role somebody holds is not held back by the Apply gate, so the profile never says Being written.
+        cardSeat: { timeCommitment: p.timeCommitment ?? null, card: p.card ? { ...(p.card as object), gated: false } : null },
         worksWith: seat.structure ? worksWith : undefined,
         powers: seat.structure
           ? (grantsByRole.get(id) ?? []).map((g) => ({
@@ -620,6 +635,8 @@ export async function buildPlayerCards(
       plan: memberUp
         ? draftSeason
           ? { aim: draftSeason.aim, goals: draftSeason.servesGoals }
+          : proposal?.answers && (proposal.answers.aim || proposal.answers.servesGoal)
+            ? { aim: proposal.answers.aim, goals: proposal.answers.servesGoal ? [{ goal: proposal.answers.servesGoal, howItHelps: null }] : [] }
           : plan
             ? {
                 aim: plan.aim ?? null,
@@ -647,6 +664,7 @@ export async function buildPlayerCards(
         signs(key, circleId)?.reading ?? { kind: "not-counted", key: key ?? null, words: "Not counted yet" },
       // 0274: the CCOS term on each heading, by the village's `org.ccos_terms`.
       frameworkTerms: ctx.frameworkTerms === true,
+      ...(ctx.moonRhythm ? { moonRhythm: { rhythm: ctx.moonRhythm } } : {}),
     };
     const card = buildPlayerCard(input);
 

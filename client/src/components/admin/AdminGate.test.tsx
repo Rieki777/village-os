@@ -80,10 +80,50 @@ describe("AdminGate", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 
-  it("refuses a signed-in member without the role", () => {
+  // Q5 (Rye, 2026-11-01): a member READS the panel. What it may read is the server's call.
+  it("lets a signed-in member without the role read the panel, with no form and no write control", async () => {
     auth.state = { user: { name: "Ash", role: "member" }, loading: false };
-    render(<AdminGate onAuth={vi.fn()} />);
-    expect(screen.getByRole("heading", { name: "Not an admin" })).toBeInTheDocument();
+    const fetched: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      fetched.push(url);
+      const body = url.endsWith("capabilities/holding")
+        ? { powers: [{ capability: "org.seat", title: "The village's roles", consequence: "seat people", heldBy: null }], roles: [] }
+        : url.endsWith("org/expiring")
+          ? [{ assignmentId: "a1", roleName: "Land steward", holder: "Jess Okafor", lapsed: false }]
+          : [];
+      return new Response(JSON.stringify(body), { status: 200 });
+    }));
+    try {
+      render(<AdminGate onAuth={vi.fn()} />);
+      expect(screen.getByRole("heading", { name: "How the village is run" })).toBeInTheDocument();
+      expect(await screen.findByText("The village's roles")).toBeInTheDocument();
+      // Role (FirstName), never a full name, even for a documented holder sent in full.
+      expect(await screen.findByText(/Land steward \(Jess\)/)).toBeInTheDocument();
+      expect(screen.queryByText(/Okafor/)).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Not an admin" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+      // Only the reads the server allows members, and every one a GET.
+      expect(fetched.sort()).toEqual(["/api/admin/capabilities/holding", "/api/admin/org/drafts", "/api/admin/org/expiring"]);
+      // Nothing to press but signing out, and the reader's own language (spec
+      // i18n US2), which changes how this page reads and nothing in the village.
+      expect(screen.getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
+        "Language: English (EN)",
+        "Sign out and switch accounts",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("says in one line that the panel opens to members, when the server refuses every read", async () => {
+    auth.state = { user: { name: "Gus", role: "member" }, loading: false };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
+    try {
+      render(<AdminGate onAuth={vi.fn()} />);
+      expect(await screen.findByText(/The admin panel opens to members of the village/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("links the forgotten password to the reset page, saying it came from the admin", () => {

@@ -13,11 +13,13 @@
 // is a member, so there is no admin-only reset and no admin-only OAuth.
 
 import { useEffect, useState } from "react";
+import MemberAdminView from "@/components/admin/MemberAdminView";
 import { Lock, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { PageLanguageBar } from "@/i18n/PageLanguageBar";
 
 /**
  * The sentence a refused sign-in shows, from what `login()` threw.
@@ -117,32 +119,17 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
     );
   }
 
+  // Q5 (Rye, 2026-11-01): a signed-in account that is not an admin reads the panel, and changes nothing.
+  // What it may read is the server's call (server/lib/memberReadable.ts); this only stops refusing at the door.
   if (user && !isAdmin) {
-    return (
-      <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-sm text-center">
-          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-7 h-7 text-red-500" />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-gray-900 mb-2">Not an admin</h1>
-          <p className="text-sm text-gray-500 mb-8">
-            You're signed in as <strong>{user.name}</strong>, but this account doesn't
-            have admin access. Ask a founder to grant it, or sign in with an admin
-            account.
-          </p>
-          <button
-            onClick={() => logout()}
-            className="w-full py-3 bg-teal-deep text-white rounded-lg font-medium hover:bg-teal-deep-dark transition-colors"
-          >
-            Sign out and switch accounts
-          </button>
-        </div>
-      </div>
-    );
+    return <MemberAdminView userName={user.name} onSignOut={() => logout()} />;
   }
 
   return (
-    <div className="min-h-screen bg-teal-deep flex items-center justify-center px-4">
+    <div className="min-h-screen bg-teal-deep flex flex-col px-4">
+      {/* The language selector (spec i18n US2): a row of its own, so it can never cover the card. */}
+      <PageLanguageBar tone="onDark" className="pt-3" />
+      <div className="flex flex-1 items-center justify-center py-6">
       {/* px-6 under sm so "Continue with Google" keeps to one line at 375px. */}
       <div className="bg-white rounded-2xl shadow-2xl px-6 py-10 sm:px-10 w-full max-w-sm">
         <div className="w-14 h-14 rounded-full bg-teal-deep/10 flex items-center justify-center mx-auto mb-6">
@@ -228,6 +215,7 @@ export default function AdminGate({ onAuth }: { onAuth: (token: string) => void 
           </p>
           <GoogleSignInButton next={here} />
         </div>
+      </div>
       </div>
     </div>
   );

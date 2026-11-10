@@ -42,7 +42,7 @@ export function powerInPlainWords(capability: string): PowerInPlainWords {
  * the veto that stops a carried decision, the money, the module switch and
  * the village's dials.
  */
-export const MATURE_ONLY: readonly Capability[] = ["steward.veto", "cash.pay", "exchange.manage", "module.switch", "dial.set"];
+export const MATURE_ONLY: readonly Capability[] = ["steward.veto", "cash.pay", "role.pay", "exchange.manage", "module.switch", "dial.set"];
 
 export function isMatureOnly(capability: string): boolean {
   return (MATURE_ONLY as readonly string[]).includes(capability);
@@ -89,4 +89,33 @@ export async function writeLaunchSelection(
   const selection: LaunchSelection = { capabilities: onlyHandoverPowers(capabilities), chosenBy, chosenAt: at.toISOString() };
   await writeConfigDocument(pool, LAUNCH_HANDOVER_KEY, { ...selection });
   return selection;
+}
+
+/**
+ * WHETHER THE LAUNCH'S CROSSING IS STILL OWED (R165).
+ *
+ * The launch hands the village the stewards' selection only when somebody
+ * holds the steward seat; with nobody seated it waits, and the comments said
+ * it crosses "the moment the village votes somebody into the role". Nothing
+ * did. This marker is what lets the vote-seating finish it exactly once:
+ *   waiting  the launch carried with nobody in the seat, so the selection is owed
+ *   crossed  the selection has crossed (at launch, or at the first vote-seating)
+ * Absent is a village that launched before this marker existed, and it is
+ * left alone: a later seating never re-crosses a power the village may since
+ * have voted back.
+ */
+export const LAUNCH_CROSSING_KEY = "launch-crossing";
+export type LaunchCrossing = "waiting" | "crossed";
+
+export async function readLaunchCrossing(pool: Pool): Promise<LaunchCrossing | null> {
+  try {
+    const doc = await readConfigDocument<{ state?: unknown }>(pool, LAUNCH_CROSSING_KEY);
+    return doc?.state === "waiting" || doc?.state === "crossed" ? doc.state : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeLaunchCrossing(pool: Pool, state: LaunchCrossing, at: Date = new Date()): Promise<void> {
+  await writeConfigDocument(pool, LAUNCH_CROSSING_KEY, { state, at: at.toISOString() });
 }

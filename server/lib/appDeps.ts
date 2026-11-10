@@ -135,6 +135,17 @@ export interface AppDeps {
   faqsRepo: DbDocument<Row>;
 
   /**
+   * The village's page content, one key per section, read and written WHOLE.
+   *
+   * `get()` hands back the cache itself (and the shared fallback object when
+   * no row exists), so a writer copies before it changes anything and hands
+   * the whole document to `put()`. Taken by server/routes/canvasPublic.ts for
+   * the one key it owns, `canvas`; the generic section doors stay in
+   * server/index.ts and refuse that key.
+   */
+  contentRepo: DbDocument<any>;
+
+  /**
    * The brand overlay document: identity, the nine image slots, theme, skin.
    *
    * TAKEN FOR TWO CALLS ONLY, and the distinction is the whole reason the
@@ -348,10 +359,10 @@ export interface AppDeps {
   /**
    * The weight-mode snapshot the NEXT ballot would freeze.
    *
-   * Six lines over two game variables, and the one place that decides what a
-   * village's weight mode is. A route module that rebuilt it locally would be
-   * the second place, which is how a seat reads "equal" on one screen and
-   * "token" on the next.
+   * A reader over the weight dials (server/lib/governanceWeights.ts), and the
+   * one place that decides what a village's weight mode is. A route module
+   * that rebuilt it locally would be the second place, which is how a seat
+   * reads "equal" on one screen and "token" on the next.
    */
   weightModeNow(): WeightModeSnapshot;
 

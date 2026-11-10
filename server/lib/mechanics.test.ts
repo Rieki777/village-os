@@ -18,11 +18,13 @@ import {
   proposalMarkdown,
   displayChangeValue,
   moduleChangeLabel,
-  CHANGE_SET_CAP,
+  CHANGE_SET_CAP_DEFAULT,
   EXECUTABLE_ITEM_KINDS,
   type ChangeItem,
   type MintRuleValues,
+  type ValidateChangeSetOptions,
 } from "./mechanics";
+import { GOVERNANCE_NARROWING_NEEDS_A_HOLDER } from "../../shared/moduleSwitch";
 import {
   CHANGE_ITEM_KINDS,
   GOVERNANCE_MODE,
@@ -118,11 +120,11 @@ describe("change-set validation", () => {
     expect(dup.problems.some((p) => p.problem.includes("twice"))).toBe(true);
     const big = await validateChangeSet(
       noPool,
-      Array.from({ length: 13 }, (_, i) => ({ key: `k${i}`, to: "1" })),
+      Array.from({ length: 23 }, (_, i) => ({ key: `k${i}`, to: "1" })),
       effective,
       0,
     );
-    expect(big.problems[0].problem).toContain("at most 12");
+    expect(big.problems[0].problem).toContain("at most 22");
   });
 
   it("a partial-bad set is refused whole — what is voted on is what was checked", async () => {
@@ -179,6 +181,32 @@ describe("the proposal document", () => {
       createdAt: "2026-07-31T00:00:00.000Z",
     });
     expect(md).toContain("takes effect at the next cycle close");
+  });
+
+  it("a currency vote tells the voter, before they vote, that nothing is converted (Rye, 2026-11-06)", () => {
+    const md = proposalMarkdown({
+      id: "gmp-test-currency",
+      title: "Count in yen",
+      rationale: "r",
+      changeSet: [{ key: "brand:project.fiatCurrency", from: "CRC", to: "JPY", kind: "brand_field", field: "project.fiatCurrency" }],
+      villageName: "V",
+      proposerName: "P",
+      supports: 0,
+      createdAt: "2026-07-31T00:00:00.000Z",
+    });
+    expect(md).toContain("| ↳ the village's currency changes from CRC to JPY. Nothing already recorded is converted");
+    expect(md).toContain("100 times larger");
+    const name = proposalMarkdown({
+      id: "gmp-test-name",
+      title: "Rename",
+      rationale: "r",
+      changeSet: [{ key: "brand:project.name", from: "A", to: "B", kind: "brand_field", field: "project.name" }],
+      villageName: "V",
+      proposerName: "P",
+      supports: 0,
+      createdAt: "2026-07-31T00:00:00.000Z",
+    });
+    expect(name, "control: a rename carries no currency line").not.toContain("Nothing already recorded is converted");
   });
 
   it("display values read like the game, not like storage", () => {
@@ -437,6 +465,17 @@ describe("typed change items", () => {
     expect(pricingOf({ kind: "dial", key: "not.a.dial", to: "1" }).criticality).toBe("routine");
   });
 
+  it("prices a brand change by its field: a name is routine, the currency code is the highest tier (Rye, 2026-11-06)", () => {
+    expect(pricingOf({ kind: "brand_field", field: "project.name", to: "Larkfield" })).toEqual({
+      subject: "mechanics",
+      criticality: "routine",
+    });
+    expect(pricingOf({ kind: "brand_field", field: "project.fiatCurrency", to: "USD" })).toEqual({
+      subject: "mechanics",
+      criticality: "constitutional",
+    });
+  });
+
   it("prices a mode switch at the constitutional subject", () => {
     expect(pricingOf({ kind: "mode_switch", to: "equal" })).toEqual({
       subject: GOVERNANCE_MODE,
@@ -461,6 +500,22 @@ describe("typed change items", () => {
 describe("what a whole change set costs", () => {
   const village = { unityPct: 80, quorumPct: 20 };
   const registry = thresholdSettingsFrom(() => 0);
+
+  it("asks the constitutional bar of a bundle that moves the currency, however small the rest of it is", () => {
+    const priced = priceChangeSet(
+      [
+        { kind: "brand_field", field: "project.tagline", to: "Where the two rivers meet" },
+        { kind: "brand_field", field: "project.fiatCurrency", to: "USD" },
+      ],
+      "custom",
+      village,
+      registry,
+    );
+    expect(priced.criticality).toBe("constitutional");
+    expect(priced.dials).toEqual(TIER_FLOORS.constitutional);
+    const nameOnly = priceChangeSet([{ kind: "brand_field", field: "project.tagline", to: "x" }], "custom", village, registry);
+    expect(nameOnly.criticality, "control: the same set without the currency").toBe("routine");
+  });
 
   it("leaves an ordinary set of routine dials exactly where it was", () => {
     const priced = priceChangeSet([{ key: "gratitude.base_budget", to: "150" }], "custom", village, registry);
@@ -542,33 +597,59 @@ describe("which kinds this build will take to a vote", () => {
    * module's lifecycle, and the minting rules that were already here), so the
    * list this pins is longer. What has NOT changed is the property the test is
    * for: a kind outside the set is refused at validation rather than voted on
-   * and silently dropped, and `brand_field` and `role` are still outside it.
+   * and silently dropped. `role` is still outside it; `brand_field` came in
+   * with Rye's 2026-11-06 rule, inside the limits of shared/brandVote.ts.
    */
   it("names the kinds it can carry out, and no more", () => {
+    // The consequence pen's three (exit_terms, exit_restorative, matrix_row) came in with canvas follow-up G.1, 2026-11-09.
     expect(Array.from(EXECUTABLE_ITEM_KINDS).sort()).toEqual([
+      "brand_field",
       "dial",
+      "exit_restorative",
+      "exit_terms",
+      "matrix_row",
       "mint_rule",
+      "mint_rule_create",
       "mode_switch",
       "module_lifecycle",
       "weight_allocation",
     ]);
     for (const kind of CHANGE_ITEM_KINDS) {
       if (EXECUTABLE_ITEM_KINDS.has(kind)) continue;
-      expect(["brand_field", "role"]).toContain(kind);
+      expect(["role"]).toContain(kind);
     }
   });
 
   it("refuses a kind it cannot apply, rather than voting on it and doing nothing", async () => {
     const { problems, normalized } = await validateChangeSet(
       noPool,
-      [{ kind: "brand_field", field: "project.name", to: "Somewhere" } as ChangeItem],
+      [{ kind: "role", act: "declare", role: "Seed Keeper" } as ChangeItem],
       effective,
       0,
     );
     expect(problems.length).toBe(1);
     expect(problems[0].problem).toContain("cannot yet carry out");
-    expect(problems[0].problem).toContain("brand_field");
+    expect(problems[0].problem).toContain("role");
     expect(normalized).toEqual([]);
+  });
+
+  it("takes a brand change to a vote, with where it starts from, and refuses what a vote may never write (Rye, 2026-11-06)", async () => {
+    const brand = { project: { name: "Larksfield", fiatCurrency: "EUR", apiKey: "" } };
+    const brandOf = () => brand;
+    const ok = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.name", to: "Larkfield" } as ChangeItem], effective, 0, undefined, { brandOf });
+    expect(ok.problems).toEqual([]);
+    expect(ok.normalized).toEqual([{ key: "brand:project.name", from: "Larksfield", to: "Larkfield", kind: "brand_field", field: "project.name" }]);
+    const currency = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.fiatCurrency", to: "USD" } as ChangeItem], effective, 0, undefined, { brandOf });
+    expect(currency.problems, "the currency goes to a vote too (Rye, 2026-11-06)").toEqual([]);
+    expect(currency.normalized).toEqual([{ key: "brand:project.fiatCurrency", from: "EUR", to: "USD", kind: "brand_field", field: "project.fiatCurrency" }]);
+    for (const [field, to] of [["project.fiatCurrency", "usd"], ["project.fiatCurrency", "EUR"], ["project.apiKey", "x"], ["project.nope", "x"], ["project.name", "Larksfield"]]) {
+      const refused = await validateChangeSet(noPool, [{ kind: "brand_field", field, to } as ChangeItem], effective, 0, undefined, { brandOf });
+      expect(refused.problems.length, `${field} -> ${to}`).toBe(1);
+      expect(refused.normalized).toEqual([]);
+    }
+    // Control: with no brand to read, nothing goes to a vote.
+    const blind = await validateChangeSet(noPool, [{ kind: "brand_field", field: "project.name", to: "Larkfield" } as ChangeItem], effective, 0);
+    expect(blind.problems[0].problem).toContain("cannot read the village's brand");
   });
 
   it("accepts one once the executor exists, which is the one line that lifts it", async () => {
@@ -617,13 +698,34 @@ describe("the door governance.weight_mode travels through", () => {
 
 describe("the cap on how much one proposal may move", () => {
   const effective = () => "1";
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ key: `made.up.${i}`, to: "2" }));
+  const capProblems = (problems: { problem: string }[]) => problems.filter((p) => p.problem.includes("at most"));
 
-  it("is still twelve, and says so in the sentence it refuses with", async () => {
-    expect(CHANGE_SET_CAP).toBe(12);
-    const thirteen = Array.from({ length: 13 }, (_, i) => ({ key: `made.up.${i}`, to: "2" }));
-    const { problems } = await validateChangeSet(noPool, thirteen, effective, 0);
+  it("is twenty-two by default (Rye, 2026-11-06), and says so in the sentence it refuses with", async () => {
+    expect(CHANGE_SET_CAP_DEFAULT).toBe(22);
+    const { problems } = await validateChangeSet(noPool, many(23), effective, 0);
     expect(problems.length).toBe(1);
-    expect(problems[0].problem).toContain("at most 12");
+    expect(problems[0].problem).toContain("at most 22");
+  });
+
+  it("lets twenty-two through to the item checks", async () => {
+    const { problems } = await validateChangeSet(noPool, many(22), effective, 0);
+    expect(capProblems(problems)).toEqual([]);
+  });
+
+  it("follows the village's own dial when the caller passes it", async () => {
+    const five = await validateChangeSet(noPool, many(6), effective, 0, undefined, { changeSetCap: 5 });
+    expect(five.problems.length).toBe(1);
+    expect(five.problems[0].problem).toContain("at most 5");
+    const thirty = await validateChangeSet(noPool, many(30), effective, 0, undefined, { changeSetCap: 30 });
+    expect(capProblems(thirty.problems)).toEqual([]);
+  });
+
+  it("never goes past the ceiling or under the floor written in code, whatever the caller passes", async () => {
+    const huge = await validateChangeSet(noPool, many(51), effective, 0, undefined, { changeSetCap: 10_000 });
+    expect(huge.problems[0].problem).toContain("at most 50");
+    const zero = await validateChangeSet(noPool, many(2), effective, 0, undefined, { changeSetCap: 0 });
+    expect(zero.problems[0].problem).toContain("at most 1");
   });
 });
 
@@ -721,7 +823,8 @@ describe("trials and the natural tier", () => {
   it("answers a setting's own tier with no discount", () => {
     expect(naturalTierFor("governance.weight_mode")).toBe("constitutional");
     expect(naturalTierFor(TIER_SETTING_KEYS.structural.quorum)).toBe("constitutional");
-    expect(naturalTierFor("governance.vote_days")).toBe("routine");
+    expect(naturalTierFor("governance.sensing_days")).toBe("routine");
+    expect(naturalTierFor("governance.vote_days")).toBe("structural");
   });
 
   it("answers routine for a key the registry has never heard of, the way pricing already does", () => {
@@ -763,7 +866,7 @@ describe("trials and the natural tier", () => {
   });
 
   it("allows a trial of a dial that prices nothing", () => {
-    expect(trialProblem([{ kind: "dial", key: "governance.vote_days", to: "9" }])).toBeNull();
+    expect(trialProblem([{ kind: "dial", key: "governance.sensing_days", to: "9" }])).toBeNull();
     expect(trialProblem([])).toBeNull();
   });
 });
@@ -780,13 +883,40 @@ describe("a module switch inside a change set (Rye, 2026-10-09)", () => {
     expect(asChangeItem(normalized[0] as any).kind).toBe("module_lifecycle");
   });
 
-  it("refuses a core module, the vote's own module, an unknown one and a no-op", async () => {
+  it("refuses a core module, an unknown one and a no-op", async () => {
     const run = async (item: ChangeItem) =>
       (await validateChangeSet(noPool, [item], () => "", 0, undefined, opts)).problems.map((p) => p.problem).join(" ");
     expect(await run(sw("quests", "members"))).toContain("always on");
-    expect(await run(sw("governance", "off"))).toContain("cannot switch it");
     expect(await run(sw("nothing-here", "members"))).toContain("no module by that name");
     expect(await run(sw("forum", "members"))).toContain("already");
+  });
+
+  /*
+   * G.3 (canvas follow-up, Article 0): the vote's own module is votable. It
+   * widens freely, and goes below members only while somebody holds
+   * module.switch live; the refusal names the seat vote that gets past it.
+   */
+  it("takes the vote's own module to a vote, except below members with nobody to switch it back (AC1.4)", async () => {
+    const at = (lc: "members" | "off") => ({ ...opts, moduleLifecycleOf: (id: string) => (id === "governance" ? lc : lifecycleOf(id)) });
+    const problems = async (to: string, o: ValidateChangeSetOptions) =>
+      (await validateChangeSet(noPool, [sw("governance", to)], () => "", 0, undefined, o)).problems.map((p) => p.problem);
+    expect(await problems("public", at("members"))).toEqual([]);
+    expect(await problems("members", at("off"))).toEqual([]);
+    expect(await problems("off", at("members"))).toEqual([GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(0, -1)]);
+    expect(await problems("preview", { ...at("members"), anySwitchHolder: async () => false })).toEqual([GOVERNANCE_NARROWING_NEEDS_A_HOLDER.slice(0, -1)]);
+    expect(await problems("off", { ...at("members"), anySwitchHolder: async () => true })).toEqual([]);
+  });
+
+  it("prices a switch of the vote's own module at the village's highest tier (AC1.4)", () => {
+    const village = { unityPct: 0, quorumPct: 0 };
+    const top = priceChangeSet([sw("governance", "public")], "custom", village);
+    expect(top.criticality).toBe("constitutional");
+    const forum = priceChangeSet([sw("forum", "public")], "custom", village);
+    expect(forum.criticality).toBe("structural");
+    // A village whose highest tier is structural prices it there, and no lower.
+    const settings = thresholdSettingsFrom(() => 0, (key) => (key === "governance.highest_tier" ? "structural" : ""));
+    expect(priceChangeSet([sw("governance", "public")], "custom", village, settings).criticality).toBe("structural");
+    expect(top.dials.unityPct).toBeGreaterThan(forum.dials.unityPct);
   });
 
   it("refuses a second proposal while one is still asking about the same module", async () => {

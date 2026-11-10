@@ -38,6 +38,8 @@ import { spawn, type ChildProcess } from "child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFree } from "./db/testDb";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
+import { TIER_FLOORS } from "../shared/governanceEngine";
 import { waitForHealth } from "./db/e2eBoot";
 
 const DB_CONFIGURED = testDbConfigured();
@@ -180,6 +182,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchweight-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
     },
@@ -242,8 +246,15 @@ beforeAll(async () => {
           "The village agrees what would put it right",
           "Whoever asked for this says whether it did",
         ],
+        // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+        ...CONFLICT_DOOR_READY,
       },
     },
+  })).status).toBe(200);
+  // What closing means, named AND adopted: blocking since Rye's ruling of
+  // 2026-09-25. Its own "no" and "yes" are server/closingPolicy.routes.e2e.test.ts.
+  expect((await call("PUT", "/api/admin/exit-policy/closing", {
+    body: { policyId: "own-words", statement: "If Larksfield closes, the barn and the land pass to the parish trust and the cash is shared among the members still here.", adopt: true },
   })).status).toBe(200);
   expect((await call("POST", "/api/admin/launch/confirm", { body: { id: "backups-drilled", done: true } })).status).toBe(200);
 
@@ -283,6 +294,11 @@ beforeAll(async () => {
   expect((await call("PUT", "/api/admin/purpose", {
     body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
+
+  // EVERY CANVAS BLOCK ON RECORD, which blocks the vote (2026-09-27). One reading
+  // each, at Absent with its sentence, through the real route. The refusal is
+  // driven row by row in server/lib/launchGovernance.db.test.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {
@@ -414,7 +430,7 @@ describe.skipIf(!DB_CONFIGURED)("everybody carries weight, and skew is left alon
  * pass once the window has run out. Every step is the real route; only the
  * clock is moved, the same way `expire` moves it.
  */
-async function turnOnByVote(moduleId: string, to: "members" | "public") {
+async function turnOnByVote(moduleId: string, to: "off" | "preview" | "members" | "public") {
   const made = await call("POST", "/api/game/mechanics/proposals", {
     body: {
       title: `Turn on ${moduleId}`,
@@ -524,9 +540,36 @@ describe.skipIf(!DB_CONFIGURED)("after the Birthing, what weighs a vote is the v
 
     // Refused means nothing was written. A 409 that had already flipped the
     // mode would be the worst of both.
+    // The listing answers grouped by category. This read `json.variables`,
+    // which the route never sends, so it found nothing and passed on nothing.
     const now = await call("GET", "/api/admin/variables");
-    const mode = (now.json?.variables ?? []).find((v: any) => v.key === "governance.weight_mode");
-    expect(String(mode?.value ?? mode?.default)).not.toBe("token");
+    const mode = (now.json?.categories ?? [])
+      .flatMap((c: any) => c.variables ?? [])
+      .find((v: any) => v.key === "governance.weight_mode");
+    expect(mode, "the mode is listed").toBeTruthy();
+    expect(String(mode?.value)).toBe("custom");
+  });
+
+  /*
+   * THE CAP ON ONE MEMBER'S WEIGHT IS THE SAME KIND OF DIAL (Rye, 2026-11-05).
+   * Switching it on or off moves what one vote weighs exactly as the mode does,
+   * so after the Birthing the panel refuses it the same way and the village
+   * raises it as a proposal at the constitutional bar.
+   */
+  it("refuses the admin flip of the weight cap too, and writes nothing", async () => {
+    for (const [key, value] of [["governance.weight_cap_on", "true"], ["governance.weight_cap_pct", "10"]]) {
+      const refused = await call("PUT", `/api/admin/variables/${key}`, { body: { value } });
+      expect(refused.status, `${key}: ${JSON.stringify(refused.json)}`).toBe(409);
+      expect(String(refused.json?.error)).toContain("the village's to decide");
+    }
+    // The listing answers grouped by category, so read every group.
+    const now = await call("GET", "/api/admin/variables");
+    const listed = (now.json?.categories ?? []).flatMap((c: any) => c.variables ?? []);
+    for (const [key, shipped] of [["governance.weight_cap_on", "false"], ["governance.weight_cap_pct", "20"]]) {
+      const dial = listed.find((v: any) => v.key === key);
+      expect(dial, `${key} is listed`).toBeTruthy();
+      expect(String(dial?.value), key).toBe(shipped);
+    }
   });
 
   it("refuses the admin weight-allocation writes too, and points at the proposal", async () => {
@@ -557,6 +600,134 @@ describe.skipIf(!DB_CONFIGURED)("after launch, turning a module on is the villag
     });
     expect(res.status, JSON.stringify(res.json)).toBe(403);
     expect(res.json?.proposeInstead).toBe(true);
+  });
+
+  it("the village renames itself by vote, through the change set (Rye, 2026-11-06)", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Rename the village",
+        rationale: "We picked the old name in a hurry, and the river has a better one.",
+        changes: [{ kind: "brand_field", field: "project.tagline", to: "Where the two rivers meet" }],
+      },
+    });
+    expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      body: { purposeAlignment: "Members asked for this together, and it lets the village name itself in the open." },
+    });
+    expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, wrenToken, idaToken]) expect((await vote(ballotId, t, "yes")).status).toBe(200);
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Everyone agreed to the new tagline." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    expect((await call("POST", "/api/admin/cycles/close", { body: {} })).status).toBe(200);
+    const brand = await call("GET", "/api/admin/brand");
+    expect(brand.json?.brand?.project?.tagline).toBe("Where the two rivers meet");
+  });
+
+  it("control: a currency vote names the code as the admin route stores it", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: { title: "Change currency", rationale: "A test of the code.", changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "crc" }] },
+    });
+    expect(made.status).toBe(400);
+    expect(JSON.stringify(made.json)).toContain("three letter code");
+  });
+
+  it("the village changes its currency by a vote at the highest tier, and the admin door stays locked (Rye, 2026-11-06)", async () => {
+    // Wren proposes, so the founder's proposals this cycle stay under the
+    // village's ceiling for the tests after this one.
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      token: wrenToken,
+      body: {
+        title: "Count in colones",
+        rationale: "Everything we pay and sell is priced in colones, so the village should count in them.",
+        changes: [{ kind: "brand_field", field: "project.fiatCurrency", to: "CRC" }],
+      },
+    });
+    expect(made.status, `propose: ${JSON.stringify(made.json)}`).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      token: wrenToken,
+      body: { purposeAlignment: "The village counts its pay, its prices and its dues in the money its members actually use." },
+    });
+    expect(opened.status, `open: ${JSON.stringify(opened.json)}`).toBe(200);
+    // The tagline vote above opened at the village's own routine bar. This one
+    // carries the constitutional floor.
+    expect(opened.json?.ballot?.unityPct, "unity at the highest tier").toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.unityPct);
+    expect(opened.json?.ballot?.quorumPct, "quorum at the highest tier").toBeGreaterThanOrEqual(TIER_FLOORS.constitutional.quorumPct);
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    for (const t of [founderToken, wrenToken, idaToken]) expect((await vote(ballotId, t, "yes")).status).toBe(200);
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Everyone agreed to count in colones." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).toBe("passed");
+    await pool.query("UPDATE ballots SET lands_at = DATE_SUB(NOW(), INTERVAL 1 HOUR), veto_closes_at = DATE_SUB(NOW(), INTERVAL 1 HOUR) WHERE id = ?", [ballotId]); // module-review-ok: fixture SQL against the suite's own scratch schema
+    expect((await call("POST", "/api/admin/cycles/close", { body: {} })).status).toBe(200);
+    const brand = await call("GET", "/api/admin/brand");
+    expect(brand.json?.brand?.project?.fiatCurrency).toBe("CRC");
+
+    // The lock still holds at the admin door, and names the door that is open.
+    const admin = await call("PUT", "/api/admin/brand", { body: { project: { fiatCurrency: "USD" } } });
+    expect(admin.status, JSON.stringify(admin.json)).toBe(409);
+    expect(admin.json?.proposeInstead).toBe("brand_field");
+    expect((await call("GET", "/api/admin/brand")).json?.brand?.project?.fiatCurrency).toBe("CRC");
+  });
+
+  it("refuses that admin a pause of governance, which nothing could turn back on (R156)", async () => {
+    const res = await call("PUT", "/api/admin/modules/governance/lifecycle", {
+      body: { lifecycle: "off" },
+    });
+    expect(res.status, JSON.stringify(res.json)).toBe(403);
+    const catalog = await call("GET", "/api/modules/catalog");
+    const row = (catalog.json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle, "governance is still on for members").toBe("members");
+  });
+
+  it("the village switches a module on AND off by vote while nobody holds module.switch (Rye, 2026-11-06)", async () => {
+    await turnOnByVote("forum", "members");
+    await turnOnByVote("forum", "off");
+  });
+
+  /*
+   * G.3 (canvas follow-up, Article 0): the module every vote runs on is
+   * votable now, at the highest tier. The one switch still refused is taking
+   * it below members while nobody holds module.switch live, since nothing
+   * could turn it back on, and the refusal names the vote on who holds that power.
+   */
+  it("control: the vote cannot take governance below members while nobody could switch it back, and says how to get past that", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Turn governance off",
+        rationale: "A vote that would end every vote after it.",
+        changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "off" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(400);
+    expect(JSON.stringify(made.json)).toContain("Give that power a holder first: raise a hand for the power to switch modules");
+    expect(JSON.stringify(made.json)).not.toContain("holds the vote itself");
+  });
+
+  it("a vote may widen governance, and its ballot is priced at the village's highest tier (AC1.4)", async () => {
+    const made = await call("POST", "/api/game/mechanics/proposals", {
+      body: {
+        title: "Open governance to visitors",
+        rationale: "Visitors should see how the village decides.",
+        changes: [{ kind: "module_lifecycle", moduleId: "governance", to: "public" }],
+      },
+    });
+    expect(made.status, JSON.stringify(made.json)).toBe(200);
+    const opened = await call("POST", `/api/governance/mechanics/${String(made.json?.id)}/open-ballot`, {
+      body: { purposeAlignment: "Members asked for this together, and it lets the village run its own affairs in the open." },
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    // governance.highest_tier is unset here, so the highest tier is constitutional: 97 and 97.
+    expect(opened.json?.ballot, JSON.stringify(opened.json)).toMatchObject({ unityPct: 97, quorumPct: 97 });
+    // Nobody votes: the ballot fails, and governance stays where it was.
+    const ballotId = String(opened.json?.ballot?.id ?? "");
+    await expire(ballotId);
+    const closed = await call("POST", `/api/governance/ballots/${ballotId}/close`, { body: { outcomeNote: "Nobody came." } });
+    expect(closed.json?.outcome, JSON.stringify(closed.json)).not.toBe("passed");
+    const row = ((await call("GET", "/api/modules/catalog")).json?.modules ?? []).find((m: any) => m.id === "governance");
+    expect(row?.lifecycle).toBe("members");
   });
 
   it("still lets that admin narrow a module that is on", async () => {

@@ -51,6 +51,7 @@
 import { circlesNamed, readProposedSeats, type CircleProblem, type LiveCircle } from "./proposedSeats";
 import type { RoleWordsLike } from "./roleFieldChanges";
 import { ROLE_CCOS_FIELDS } from "./roleCcos";
+import { readPayRange, type PayRange } from "./sourcePayRange";
 
 /** What the source's own status says, in the four words it uses, or `other`. */
 export type SourceStatus = "active" | "proposed" | "vacant" | "archived" | "other";
@@ -97,6 +98,8 @@ export interface SourcePay {
   terms: string | null;
   /** US dollars a month, as the source holds it. */
   monthlyUsd: number | null;
+  /** The range the source holds, structured or read from unambiguous terms text. Information, never a term. */
+  range?: PayRange | null;
 }
 
 /** A source's pay status read into its standing. Null when none was sent. */
@@ -138,7 +141,9 @@ export function readSourcePay(v: unknown): SourcePay | null {
     terms: str(o.terms, 600),
     monthlyUsd: dollarsOf(o.monthlyUsd),
   };
-  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null ? out : null;
+  const range = readPayRange(o.range);
+  if (range) out.range = range;
+  return out.model || out.statusLabel || out.terms || out.monthlyUsd !== null || range ? out : null;
 }
 
 /** The proposal kinds that change the chart. Everything else in a batch is a note. */
@@ -411,6 +416,7 @@ export function planStructure(
 
   const liveByName = new Map<string, PlanLiveSeat>();
   for (const s of seatsLive) liveByName.set(seatNameKey(s.name), s);
+  const liveById = new Map<string, PlanLiveSeat>(seatsLive.map((s) => [s.id, s]));
   const liveSeatIds = new Set(liveSeats.map((s) => s.id));
 
   const seats: PlanSeat[] = [];
@@ -427,8 +433,17 @@ export function planStructure(
       : [p.payload];
     read.seats.forEach((seat, index) => {
       const name = typeof seat.payload.name === "string" ? seat.payload.name : "";
-      const live = name ? liveByName.get(seatNameKey(name)) : undefined;
       const sent = rawList[index] ?? {};
+      const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
+      /*
+       * ITS OWN ID FIRST, then its name (D2, 2026-11-06). A role this village
+       * published from the source keeps an id made from the source's page id,
+       * so when the source sends it again the id IS this role, even if the
+       * village has renamed it since. It used to be matched by name only and
+       * then reported as an id collision with itself, so "update" could never
+       * pass for any role a sync had already made.
+       */
+      const live = liveById.get(id) ?? (name ? liveByName.get(seatNameKey(name)) : undefined);
       const statusLabel = sourceStatusLabel(sent.sourceStatus);
       const sourceStatus = sourceStatusOf(statusLabel);
       const sentCircle = text(sent.circleName) ?? text(sent.circle_name) ?? text(sent.circle);
@@ -443,11 +458,12 @@ export function planStructure(
         });
         return;
       }
-      const id = seatIdFor(seat.vendorId, `orgrole-${p.id.toLowerCase()}-${index + 1}`);
       const circleId = typeof seat.payload.circleId === "string" && seat.payload.circleId ? seat.payload.circleId : null;
       let problem: string | null = null;
       if (name.trim() === "") problem = "This role came with no name";
-      else if (liveSeatIds.has(id)) problem = `A role with the id "${id}" already exists`;
+      // A collision is ANOTHER record holding the id: a rested role, or one this
+      // seat did not match. Its own live self is not one.
+      else if (liveSeatIds.has(id) && live?.id !== id) problem = `A role with the id "${id}" already exists`;
       seats.push({
         key: `${p.id}#${index}`,
         proposalId: p.id,
@@ -475,6 +491,30 @@ export function planStructure(
   return { circles, seats, live: { circles: circlesLive, seats: seatsLive }, notes, archived };
 }
 
+/**
+ * The sentence that refuses accepting a chart batch outside the structure
+ * review when anything in it is archived at its source, or null when nothing
+ * is (D1, 2026-11-06).
+ *
+ * The /review accept builds circles and roles with no reading of the source's
+ * status, so an Archived circle accepted there was created: three weeks of
+ * archived circles waited in production on 2026-10-31. The structure review is
+ * the one place that keeps archived records out of the change and lists them
+ * apart, so this sends the steward there, and reads "archived" with
+ * `planStructure`'s own rule rather than a second copy of it.
+ */
+export function archivedRefusal(proposals: readonly PlanProposal[]): string | null {
+  const archived = planStructure(proposals, [], []).archived;
+  if (archived.length === 0) return null;
+  const tail = "Review the batch as one structure change, where archived records are listed apart.";
+  const quoted = archived.map((a) => (a.name ? `"${a.name}"` : "one with no name"));
+  if (archived.length === 1) {
+    return `${quoted[0]} is archived where it came from, so accepting it here would bring it back. ${tail}`;
+  }
+  const shown = quoted.slice(0, 3).join(", ") + (quoted.length > 3 ? ` and ${quoted.length - 3} more` : "");
+  return `${archived.length} of these are archived where they came from (${shown}), so accepting them here would bring them back. ${tail}`;
+}
+
 // ── The steward's decisions ─────────────────────────────────────────────
 
 /** What happens to one proposed seat named the same as a live seat. */
@@ -490,6 +530,12 @@ export interface StructureDecisions {
   conflicts?: Readonly<Record<string, ConflictChoice>>;
   /** Retire what the old chart leaves empty, in the same change. */
   retireOldChart?: boolean;
+  /**
+   * The village setting "Roles accepted from a sync start unlisted"
+   * (org.sync_starts_unlisted). Every role this accept creates is written
+   * unlisted, so a steward confirms it before any visitor can find it.
+   */
+  startUnlisted?: boolean;
 }
 
 export interface DecidedChange {
@@ -497,6 +543,43 @@ export interface DecidedChange {
   orgRoleId: string;
   payload: Record<string, unknown>;
 }
+
+// ── The builders: one per change a decision can make ─────────────────────
+//
+// `decideStructure` below builds every change through these, and so does the
+// differences list (shared/seraSettle.ts), so there is ONE writer of each op.
+// The list takes one difference at a time, and spec R12 holds it to exactly
+// that field: `seatField` names one field and nothing else, never the
+// whole-record update an accepted structure makes.
+
+/** A new circle, by id, with its name, purpose and parent. */
+export const circleCreate = (id: string, name: string, purpose: unknown = null, parentId: unknown = null): DecidedChange => ({
+  op: "create_circle",
+  orgRoleId: `circle:${id}`,
+  payload: { name, purpose, parentCircleId: parentId },
+});
+
+/** A new role with the fields it is made with. */
+export const seatCreate = (id: string, payload: Record<string, unknown>): DecidedChange => ({ op: "create_seat", orgRoleId: id, payload: { ...payload } });
+
+/** An update naming the fields it changes. */
+export const seatUpdate = (id: string, payload: Record<string, unknown>): DecidedChange => ({ op: "update_seat", orgRoleId: id, payload: { ...payload } });
+
+/** The fields one difference may change on a role, one at a time (R12). */
+export type SeatField = "name" | "aim" | "circleId";
+
+/** One field of a role, and nothing else beside it. */
+export const seatField = (id: string, field: SeatField, value: string): DecidedChange => seatUpdate(id, { [field]: value });
+
+/** Retire a role, stamped with who chose to, which is what tells a person's retirement from a machine's (orgDrafts `stewardChose`). */
+export const seatRest = (id: string, chosenBy: string, retiring: string): DecidedChange => ({ op: "rest_seat", orgRoleId: id, payload: { chosenBy, retiring } });
+
+/** Retire a circle, stamped the same way. */
+export const circleRest = (id: string, chosenBy: string, retiring: string): DecidedChange => ({
+  op: "rest_circle",
+  orgRoleId: `circle:${id}`,
+  payload: { chosenBy, retiring },
+});
 
 export interface RetireSet {
   seats: Array<{ id: string; name: string; circleId: string | null }>;
@@ -665,30 +748,25 @@ export function decideStructure(
 
   // ── The changes, in the order publish applies them ──
   const changes: DecidedChange[] = [];
-  for (const c of parentsFirst(keptNew)) {
-    changes.push({
-      op: "create_circle",
-      orgRoleId: `circle:${c.id}`,
-      payload: { name: c.name, purpose: c.purpose, parentCircleId: c.parentId },
-    });
-  }
+  for (const c of parentsFirst(keptNew)) changes.push(circleCreate(c.id, c.name, c.purpose, c.parentId));
   for (const s of updates) {
     const payload: Record<string, unknown> = {};
     for (const k of UPDATE_FIELDS) if (s.payload[k] !== undefined) payload[k] = s.payload[k];
     if (s.circleId) payload.circleId = s.circleId;
-    changes.push({ op: "update_seat", orgRoleId: s.match!.seatId, payload });
+    changes.push(seatUpdate(s.match!.seatId, payload));
   }
   for (const s of creates) {
     const renamed = renames.get(s.key);
-    changes.push({
-      op: "create_seat",
-      orgRoleId: s.id,
-      payload: renamed !== undefined ? { ...s.payload, name: renamed } : { ...s.payload },
-    });
+    changes.push(
+      seatCreate(s.id, {
+        ...(renamed !== undefined ? { ...s.payload, name: renamed } : s.payload),
+        ...(decisions.startUnlisted === true ? { listed: false } : {}),
+      }),
+    );
   }
   if (retiring) {
-    for (const s of retire.seats) changes.push({ op: "rest_seat", orgRoleId: s.id, payload: { chosenBy: actor, retiring: "old-chart" } });
-    for (const c of retire.circles) changes.push({ op: "rest_circle", orgRoleId: `circle:${c.id}`, payload: { chosenBy: actor, retiring: "old-chart" } });
+    for (const s of retire.seats) changes.push(seatRest(s.id, actor, "old-chart"));
+    for (const c of retire.circles) changes.push(circleRest(c.id, actor, "old-chart"));
   }
 
   // ── What happens to each proposal ──

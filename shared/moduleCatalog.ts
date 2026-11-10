@@ -383,6 +383,39 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     hue: 205,
     emblem: "Vote",
   },
+  canvas: {
+    promise: "How the village governs itself, read block by block on the Governance Canvas.",
+    benefits: [
+      "A reading for each of the twelve blocks: a level and one sentence, with who recorded it and when",
+      "Five frames for each block: sense it, see what the village already runs, learn, say the village's answer, adopt a change",
+      "Anybody in the village suggests a change, and whoever holds the power adopts it",
+      "A Decision Matrix of who approves, who is asked and who is told, and one public line per block",
+      "A printable workbook of the canvas, and a guide that answers from the village's own record first",
+    ],
+    forWhom: "Villages that want to see where their governance stands before they ask members to start.",
+    setupSummary:
+      "Nothing to set up. Record the first reading when you are ready; while it is on, every block needs one before the Game starts.",
+    dataSummary:
+      "Each block's readings with who recorded them, suggestions with their author, the Decision Matrix rows the village wrote, and the public lines.",
+    hue: 90,
+    emblem: "LayoutGrid",
+  },
+  "conflict-evolution": {
+    promise: "Somewhere for a conflict to go, written by the village and changed by its vote.",
+    benefits: [
+      "A conflict agreement: the steps, who takes a conflict and who covers when they cannot",
+      "A reply time in hours the village chose, and a contact outside the village",
+      "A private ask to the outside contact that carries no words and sends nothing",
+      "The founders write it before the Game starts, and after that a change is a vote",
+    ],
+    forWhom: "Villages that want a conflict door every member can find before they need it.",
+    setupSummary:
+      "Nothing to set up first. The agreement starts from your exit policy's restorative steps; while it is on, the launch checklist asks for a working door.",
+    dataSummary:
+      "The agreement, which names the people in its care and cover roles and an outside contact, and a record of who asked the outside contact to talk, and when.",
+    hue: 345,
+    emblem: "HeartHandshake",
+  },
   introductions: {
     promise: "A few good introductions a week, and both people say yes first.",
     benefits: [
@@ -425,6 +458,34 @@ export const MODULE_CATALOG: Record<string, ModuleCatalogEntry> = {
     dataSummary: "Each member's saved result: their lines, keys and type. Birth details are never sent to the village or kept.",
     hue: 160,
     emblem: "Sparkles",
+  },
+  "funding-rounds": {
+    promise: "Choose together which quests the season funds, within a pot.",
+    benefits: [
+      "Members share rough ideas, by name or without one, and each idea opens its own forum thread",
+      "Ideas are shaped into quests with a price, then members tick every one they would fund",
+      "The count shows what Voice chose beside what one member, one vote chose, and says where they differ",
+      "Funded quests hold their share of the pot and are paid when the work is done, so the pot is never spent twice",
+    ],
+    forWhom: "Villages with a budget to share that want the people doing the work to choose where it goes.",
+    setupSummary: "Seat someone who holds the pots, by default the Treasury role, then open a pot and a round.",
+    dataSummary: "Each idea and who shared it, kept private when they share it without a name; members' ticks; and a record of each act for later rewards.",
+    hue: 45,
+    emblem: "Sprout",
+  },
+  places: {
+    promise: "Every place on the land as a living invitation, from the first idea to a building that needs care.",
+    benefits: [
+      "One list of every place, by zone, with the stage it has reached and how ready it is",
+      "Each place shows the roles that care for it, its open quests and what it waits on",
+      "A place reaches building only with its permits complete and a steward in place, or by the village's highest vote",
+      "Anyone can step forward to steward a place, with what they would build, with whom and by when",
+    ],
+    forWhom: "Villages building on their land that want every place to say what it needs and who it is waiting for.",
+    setupSummary: "Seat someone who keeps the registry, then load the village's places from its seed.",
+    dataSummary: "Each place's name, zone, stage, permits and words. Who holds its roles is read from the org chart, never copied.",
+    hue: 120,
+    emblem: "Landmark",
   },
   "session-card": {
     promise: "A card to pull as a session opens, so the room starts present with each other and the day.",

@@ -5,31 +5,27 @@
  *   PUT  /api/admin/purpose                the founder writes it
  *   POST /api/governance/purpose-changes   the village votes to change it
  *
- * ── TWO DOORS, AND ONLY ONE OF THEM IS EVER OPEN ───────────────────────────
+ * ── TWO DOORS ──────────────────────────────────────────────────────────────
  *
  * Rye, 2026-09-23, verbatim: "Founder keeps the pen until they give over all
  * steward powers to the village."
  *
- * So the founder's write is open while the handover is incomplete and refuses
- * once it is done, and the change ballot is the mirror image. Both ask
+ * SUPERSEDED ON ONE POINT (Rye, 2026-11-06): Article 0 wins over "founder
+ * keeps the pen". A highest-tier vote may change the purpose statement at any
+ * time, before the handover too. So the change ballot is open on every
+ * village; before the handover it is priced at the village's highest set tier
+ * and counted as `custom`, and after it the price is the ordinary one.
+ *
+ * What still follows the 2026-09-23 ruling is the founder's direct write: open
+ * while the handover is incomplete, refused once it is done. It asks
  * `founderPenRefusal`, which asks `villageHandoverState`, which reads the same
- * table and the same map the capability gate reads. One fact, one read, two
- * routes that cannot disagree about it.
+ * table and the same map the capability gate reads.
  *
- * ── THE BALLOT HALF IS DORMANT, AND IT IS BUILT ANYWAY ─────────────────────
- *
- * No village on this platform has completed a handover. Amora holds zero of
- * its nineteen transferable powers: `capability_holding` is created empty and
- * nothing seeds it. So `POST /api/governance/purpose-changes` refuses on every
- * deployment alive today, and the founder path is the one that matters first.
- * It is built because a rule with one half built is a rule nobody can rely on,
- * and because the day the pen moves is not a day anybody wants to be shipping
- * the machinery that moves it.
- *
- * Everything green about the ballot path is green against a SEEDED FIXTURE.
- * That is worth saying in the file and not only in a report, because a green
- * suite against a fixture has already been read in this repository as evidence
- * about a production state that did not exist.
+ * No village on this platform has completed a handover yet, so the
+ * after-handover price is green only against a SEEDED FIXTURE. That is worth
+ * saying in the file and not only in a report, because a green suite against a
+ * fixture has already been read in this repository as evidence about a
+ * production state that did not exist.
  *
  * MOUNTED BEHIND requireModule("governance") for the /api/governance prefix,
  * which server/index.ts installs before this module's register() is called.
@@ -42,7 +38,7 @@ import { openBallot, withdrawBallot } from "../lib/ballots";
 import { recordGpsChangeProposal } from "../repos/gpsChangeProposals";
 import { capabilityDecision, hasCapability } from "../../shared/capabilities";
 import { GPS_CHANGE, purposeStatementProblem } from "../../shared/governingPurpose";
-import { thresholdsFor } from "../../shared/ballotSubjects";
+import { thresholdSettingsFrom, thresholdsFor } from "../../shared/ballotSubjects";
 import { villageBallotMethod, type BallotMethod } from "../../shared/governanceEngine";
 import {
   founderPenRefusal,
@@ -167,19 +163,14 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
 
     /*
-     * DORMANT UNTIL THE HANDOVER COMPLETES, and the refusal counts out loud
-     * how far off that is. A door that says "not yet, and here is how far" is
-     * a different thing from a door that 409s.
+     * OPEN BEFORE THE HANDOVER TOO (Rye, 2026-11-06: Article 0 wins over
+     * "founder keeps the pen"). Before the handover completes this vote is
+     * priced at the village's highest tier and counted as `custom`, so unity
+     * is counted whatever method the village runs; the founder's direct write
+     * stays open beside it. After the handover the price is the ordinary one.
      */
     const handover = (await purposePenState(pool)).handover;
-    if (!handover.complete) {
-      return res.status(409).json({
-        error:
-          `The founder writes this village's governing purpose statement until every power has been handed over. ` +
-          `${handover.remaining.length} of ${handover.total} are still on the admin panel, so this one goes to them and not to a vote.`,
-        handover,
-      });
-    }
+    const beforeHandover = !handover.complete;
 
     const ctx = await capabilityCtx(user);
     /*
@@ -205,15 +196,22 @@ export function register(app: Express, deps: Deps): void {
     }
 
     const villageMethod = villageBallotMethod(stringVar("governance.default_method"));
+    // A tier bar the village raised is the bar this vote freezes (the conflict agreement's twin, Wave 3a audit).
+    const settings = thresholdSettingsFrom((key) => numberVar(key), (key) => stringVar(key));
+    const baseMethod: BallotMethod = beforeHandover
+      ? "custom"
+      : villageMethod === "hypha" ? "custom" : (villageMethod as BallotMethod);
     const dials = thresholdsFor(
-      { subjects: [GPS_CHANGE] },
-      villageMethod === "hypha" ? "custom" : (villageMethod as BallotMethod),
+      // Before the handover: the highest tier this village has set (19E), the bar Article 0 names.
+      beforeHandover ? { subjects: [GPS_CHANGE], criticality: settings.highest } : { subjects: [GPS_CHANGE] },
+      baseMethod,
       {
         unityPct: Math.max(0, numberVar("governance.unity_pct")),
         quorumPct: Math.max(0, numberVar("governance.quorum_pct")),
       },
+      settings,
     );
-    const conducts: BallotMethod = dials.method ?? (villageMethod === "hypha" ? "custom" : villageMethod);
+    const conducts: BallotMethod = dials.method ?? baseMethod;
     const snapshot = weightModeNow();
 
     const title = "The village asks to change what it is for";

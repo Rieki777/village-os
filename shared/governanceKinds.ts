@@ -150,11 +150,15 @@ export const KIND_FOR_SUBJECT: Readonly<Record<string, GovernanceKind>> = {
 export const KIND_FOR_ITEM_KIND: Readonly<Record<string, GovernanceKind>> = {
   dial: "game_change",
   mint_rule: "game_change",
+  mint_rule_create: "game_change",
   weight_allocation: "game_change",
   mode_switch: "game_change",
   module_lifecycle: "game_change",
   brand_field: "game_change",
   role: "game_change",
+  exit_terms: "game_change",
+  exit_restorative: "game_change",
+  matrix_row: "game_change",
   token_send: "token_send",
 };
 
@@ -265,6 +269,26 @@ export const SEAT_SUBJECTS: ReadonlySet<string> = new Set(["role_seat", "role_un
 /** Is this a seating act, which waits its window and admits no veto? */
 export function isSeatSubject(subjectType: string): boolean {
   return SEAT_SUBJECTS.has(String(subjectType).toLowerCase());
+}
+
+/**
+ * THE SUBJECTS A BALLOT CARRIES A CHANGE SET FOR: a mechanics proposal row,
+ * whose elements each carry a size.
+ *
+ * The landing loop reads the size of a decision off these elements when it
+ * asks whether a steward may stop it (`outOfStewardTierReach` in
+ * server/lib/applyDue.ts), and every other subject has no elements, so it is
+ * judged at `routine` whatever its bar to pass. That makes this list part of
+ * the steward's reach, which is why it lives here where the Decision Matrix
+ * (shared/decisionMatrix.ts) can read the same list the landing loop reads.
+ * It was spelled inline in applyDue.ts as two string compares; that function
+ * now reads this set.
+ */
+export const CHANGE_SET_SUBJECTS: ReadonlySet<string> = new Set(["mechanics", "mint_rule"]);
+
+/** Is this subject's ballot backed by a mechanics proposal row and its change set? */
+export function carriesChangeSet(subjectType: string): boolean {
+  return CHANGE_SET_SUBJECTS.has(String(subjectType));
 }
 
 /**

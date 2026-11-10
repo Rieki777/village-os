@@ -111,7 +111,8 @@ import {
   settleRedemption,
 } from "../lib/redemptionStore";
 import { balanceOf, memberAccount } from "../lib/ledger";
-import { numberVar, stringVar } from "../lib/variables";
+import { numberVar, optionalNumberVar, stringVar } from "../lib/variables";
+import { redemptionClosingNoticeFor } from "../lib/closingPolicy";
 
 type Deps = Pick<
   AppDeps,
@@ -280,6 +281,11 @@ export function register(app: Express, deps: Deps): void {
     // warning alone, and it costs no extra query.
     const exchangeRate = resolveRedemptionRate({ ...common, source: "exchange" });
     const minorOf = (human: number) => Math.round(Math.max(0, human) * Math.pow(10, exponentOf(currency)));
+    // A ceiling left blank is no ceiling (null); 0 is a ceiling of zero (Rye, 2026-11-05).
+    const ceilingOf = (key: string) => {
+      const human = optionalNumberVar(key);
+      return human === null ? null : minorOf(human);
+    };
     return {
       currencies,
       currency,
@@ -289,9 +295,9 @@ export function register(app: Express, deps: Deps): void {
       feePct: numberVar("redemption.fee_pct"),
       feeFixed: numberVar("redemption.fee_fixed"),
       minMinor: minorOf(numberVar("redemption.min_amount")),
-      maxPerRequestMinor: minorOf(numberVar("redemption.max_per_request")),
-      memberCapMinor: minorOf(numberVar("redemption.max_per_member_per_cycle")),
-      villageCapMinor: minorOf(numberVar("redemption.max_village_per_cycle")),
+      maxPerRequestMinor: ceilingOf("redemption.max_per_request"),
+      memberCapMinor: ceilingOf("redemption.max_per_member_per_cycle"),
+      villageCapMinor: ceilingOf("redemption.max_village_per_cycle"),
       processText: String(stringVar("redemption.process_text") ?? ""),
     };
   }
@@ -389,6 +395,10 @@ export function register(app: Express, deps: Deps): void {
         || (await redemptionKeyHolders().catch(() => [] as string[])).includes(String(user.id)),
       perCycle,
       openedThisCycle,
+      // The closing policy's consequence for redeeming, or null when the
+      // village has not named one that reads closing-day balances (Rye,
+      // 2026-09-25). shared/closingPolicies.ts `redemptionClosingNotice`.
+      closingNotice: await redemptionClosingNoticeFor(pool),
       // ONE RESOLUTION PER TOKEN, so the form can show what each is worth
       // before a member picks one. `moneyContext` reads the posted price for
       // that token and the one daily rate table.

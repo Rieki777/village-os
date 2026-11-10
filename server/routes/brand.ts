@@ -34,6 +34,7 @@ import type { Express } from "express";
 import type { AppDeps } from "../lib/appDeps";
 import { sanitiseMapSkin } from "../../shared/mapSkin";
 import { normaliseProjectCurrency } from "../../shared/money";
+import { BRAND_CURRENCY_FIELD } from "../../shared/brandVote";
 import { GAME_CONFIG } from "../../shared/gameConfig";
 
 /** The brand document as this module hands it back and takes it in. */
@@ -49,10 +50,12 @@ type Deps = Pick<AppDeps, "isAdmin" | "brandRepo"> & {
   getBrand(): BrandDocument;
   /** Drops an alt-text key whose image slot is empty. Same reason on read and write. */
   withoutOrphanedAlt<T extends Record<string, any>>(images: T): T;
+  /** The instant this village launched, or null (`launchedAtOf`, server/lib/launch.ts). */
+  launchedAt(): Promise<string | null>;
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, brandRepo, getBrand, withoutOrphanedAlt } = deps;
+  const { isAdmin, brandRepo, getBrand, withoutOrphanedAlt, launchedAt } = deps;
 
   app.get("/api/admin/brand", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
@@ -74,6 +77,28 @@ export function register(app: Express, deps: Deps): void {
     const badCurrency = normaliseProjectCurrency(req.body.project);
     if (badCurrency) return res.status(400).json({ error: badCurrency });
     const current = getBrand();
+    /*
+     * THE CURRENCY IS SET AT LAUNCH (Rye, 2026-11-05: "currency lock: YES, set
+     * at launch"). Work, Voice and cash are all counted in it, so a change after
+     * value has been issued would re-price every balance and record at once.
+     * Before launch it changes freely. From launch a different code is refused;
+     * the same code (a wizard posting its whole section back) passes, and a
+     * village that somehow launched with none may set it once.
+     */
+    const asked = req.body.project && typeof req.body.project === "object" && "fiatCurrency" in req.body.project
+      ? String(req.body.project.fiatCurrency ?? "")
+      : null;
+    const held = String(current.project?.fiatCurrency ?? "").trim();
+    if (asked !== null && held && asked !== held && (await launchedAt())) {
+      // The lock holds here by default. A village vote at the highest tier is
+      // the door that stays open (Rye, 2026-11-06; shared/brandVote.ts).
+      return res.status(409).json({
+        code: "currency_locked",
+        error: `This village's currency was set at launch and stays ${held} here. Everything already paid and owed is counted in it. A village vote at the highest tier can change it: raise it as a proposal.`,
+        proposeInstead: "brand_field",
+        field: BRAND_CURRENCY_FIELD,
+      });
+    }
     const next = {
       project: { ...current.project, ...(req.body.project ?? {}) },
       currency: { ...current.currency, ...(req.body.currency ?? {}) },

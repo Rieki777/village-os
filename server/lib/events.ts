@@ -10,6 +10,7 @@
  * would invert their importance. Failures are logged loudly instead.
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { SEAT_JOURNAL_ROWS_SQL } from "../repos/orgSeatErasure";
 
 /**
  * WHAT KIND of actor did this (S74). Assistant paths pass 'agent', so the first
@@ -60,6 +61,49 @@ export interface EventRow {
   at: string;
 }
 
+/**
+ * SOMETHING THAT WANTS TO KNOW AN EVENT WAS RECORDED.
+ *
+ * The canvas's key moments (server/lib/canvasRevisit.ts) are the first: a
+ * founder claiming the instance, a peer village added, a circle accepted from
+ * a draft and the Birthing opened each already record an audit event here, so
+ * the moment hangs off the event rather than adding a line to the route that
+ * recorded it. That is what keeps `server/index.ts`, where those routes live,
+ * from growing.
+ *
+ * THE RULES, and each one protects the caller of `recordEvent`:
+ *
+ *  - An observer is told only after the row is written. A failed insert is
+ *    not an event, so nothing downstream of it fires.
+ *  - An observer is SYNCHRONOUS and must return at once. One that has work to
+ *    do starts it and returns, and the work may never be awaited by the
+ *    request that recorded the event.
+ *  - An observer that throws is logged and skipped. The event stands, the
+ *    other observers still run, and the mutation that recorded it is never
+ *    told: an event is a trace, and so is anything hanging off it.
+ */
+export type EventObserver = (e: Readonly<EventInput>) => void;
+
+const observers = new Set<EventObserver>();
+
+/** Start telling `fn` about every event recorded from now on. Returns the way to stop. */
+export function observeEvents(fn: EventObserver): () => void {
+  observers.add(fn);
+  return () => {
+    observers.delete(fn);
+  };
+}
+
+function tellObservers(e: EventInput): void {
+  for (const fn of Array.from(observers)) {
+    try {
+      fn(e);
+    } catch (err) {
+      console.error("[events] an observer threw (the event stands)", err);
+    }
+  }
+}
+
 // Ids sort in write order inside one process: the millisecond, never less
 // than one past the previous id's, then a random tail. A reader that orders
 // rows written in the same millisecond (`subscriptionCancelRows`) reads them
@@ -94,7 +138,9 @@ export async function recordEvent(pool: Pool, e: EventInput, opts: { throwOnFail
   } catch (err) {
     if (opts.throwOnFailure) throw err;
     console.error("[events] recordEvent failed (mutation unaffected)", err);
+    return;
   }
+  tellObservers(e);
 }
 
 function rowToEvent(r: RowDataPacket): EventRow {
@@ -122,8 +168,12 @@ export async function recentEvents(
     // Example events are illustrative, not history. This spine feeds the
     // public Pulse and the feed's "village happenings", so an unfiltered read
     // presents seeded copy as things that actually happened here.
+    // A seat journal's public lines are for the journal, never the Pulse (R103,
+    // SEAT_JOURNAL_ROWS_SQL in server/repos/orgSeatErasure.ts).
     "SELECT id, kind, text, actor_user_id, actor_kind, origin_module_id, entity_type, entity_ref, audience, at " +
-      "FROM health_events WHERE audience = ? AND is_example = 0 ORDER BY at DESC, id DESC LIMIT ?",
+      "FROM health_events WHERE audience = ? AND is_example = 0" +
+      (audience === "public" ? ` AND NOT ${SEAT_JOURNAL_ROWS_SQL}` : "") +
+      " ORDER BY at DESC, id DESC LIMIT ?",
     [audience, Math.max(1, Math.min(500, limit))],
   );
   return rows.map(rowToEvent);

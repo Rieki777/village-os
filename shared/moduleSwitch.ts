@@ -42,13 +42,42 @@ export function widens(from: ModuleLifecycle, to: ModuleLifecycle): boolean {
 }
 
 /**
- * Modules whose lifecycle a change set may never move, whatever the vote said.
- * One entry, and it is the module the vote itself runs on: a set that turned
- * governance off would strand every open ballot and the vote to switch it back
- * could not be held. Lives here so the validator in server/lib/mechanics.ts and
- * the executor in server/lib/changeset.ts read the same set.
+ * THE MODULE THE VOTE ITSELF RUNS ON (canvas follow-up G.3, 2026-11-09).
+ *
+ * This was `NEVER_BY_CHANGESET`: a change set could never move governance,
+ * because a set that turned it off would strand every open ballot and the vote
+ * to switch it back could not be held. Article 0 (Rye, 2026-11-06) says
+ * everything a village runs on changes by its highest-tier vote, so a change
+ * set may switch it now, priced at the village's highest tier
+ * (`pricingOf`, server/lib/mechanics.ts), and the stranding is answered
+ * narrowly instead (`voteModuleSwitchProblem` below): widening is always
+ * allowed, and narrowing it below members only while somebody holds
+ * `module.switch` live, who could turn it back on without a vote. Lives here
+ * so the validator in server/lib/mechanics.ts, the executor in
+ * server/lib/changeset.ts and the admins' valve below read the same set.
  */
-export const NEVER_BY_CHANGESET: ReadonlySet<string> = new Set(["governance"]);
+export const VOTE_RUNS_ON: ReadonlySet<string> = new Set(["governance"]);
+
+/**
+ * Said to a vote that would take the module the vote runs on below members
+ * while nobody holds `module.switch` live. It names the vote that gets past
+ * it: seat a holder first.
+ */
+export const GOVERNANCE_NARROWING_NEEDS_A_HOLDER =
+  "Nobody holds the power to switch modules, so if governance went below members nothing could turn it back on: the vote that would do it runs on governance. " +
+  "Give that power a holder first: raise a hand for the power to switch modules and put it to the village, which votes on who holds it. Then this can carry.";
+
+/**
+ * Why a vote may not move this module from `from` to `to`, or null. Only the
+ * module the vote runs on is asked anything: widening it is always allowed, and
+ * narrowing it below members waits for a live holder of `module.switch`.
+ */
+export function voteModuleSwitchProblem(moduleId: string, from: ModuleLifecycle, to: ModuleLifecycle, anyHolder: boolean): string | null {
+  if (!VOTE_RUNS_ON.has(moduleId)) return null;
+  if (SWITCH_RANK[to] >= SWITCH_RANK[from]) return null;
+  if (SWITCH_RANK[to] >= SWITCH_RANK.members) return null;
+  return anyHolder ? null : GOVERNANCE_NARROWING_NEEDS_A_HOLDER;
+}
 
 /** The capability key a village gives to whoever switches modules on after launch. */
 export const MODULE_SWITCH_KEY = "module.switch" as const;
@@ -97,6 +126,15 @@ export const AFTER_LAUNCH_ON =
   "Since the launch, turning a module on is the village's call. Propose it and the village decides, or ask whoever looks after modules here.";
 
 /**
+ * Said to an admin who tries to pause or turn off governance after launch while
+ * nobody holds `module.switch` live (R156). A vote runs on governance
+ * (VOTE_RUNS_ON), so once it is quiet no vote could turn it back on, and with
+ * no holder nothing could.
+ */
+export const GOVERNANCE_PAUSE_STRANDS =
+  "Nobody holds the power to switch modules, so if governance went quiet nothing could turn it back on: the vote that would do it runs on governance. The village can hand that power to a role by vote first.";
+
+/**
  * May this actor move this module from `from` to `to`?
  *
  * Before launch: admins and founders, as it has always been.
@@ -111,6 +149,10 @@ export function switchVerdict(input: {
   holder: boolean;
   from: ModuleLifecycle;
   to: ModuleLifecycle;
+  /** The module being switched. Needed only for the governance case below. */
+  moduleId?: string;
+  /** Somebody, anybody, holds `module.switch` live right now. */
+  anyHolder?: boolean;
 }): SwitchVerdict {
   const { launched, admin, holder, from, to } = input;
   if (!launched) {
@@ -121,6 +163,10 @@ export function switchVerdict(input: {
   if (holder) return { ok: true, announce };
   if (!admin) return { ok: false, status: 401, error: "auth_required" };
   if (widens(from, to)) return { ok: false, status: 403, error: AFTER_LAUNCH_ON, proposeInstead: true };
+  // The valve stays shut on the module the vote runs on when nobody could open it again (R156).
+  if (input.moduleId && VOTE_RUNS_ON.has(input.moduleId) && !input.anyHolder) {
+    return { ok: false, status: 403, error: GOVERNANCE_PAUSE_STRANDS };
+  }
   return { ok: true, announce };
 }
 

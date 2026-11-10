@@ -32,6 +32,7 @@ import { testPool, provisionTestDb, testDbConfigured, type TestDb, waitForPortFr
 import { waitForHealth } from "./db/e2eBoot";
 import { HANDOVER_SET } from "../shared/capabilities";
 import { PURPOSE_EXAMPLE } from "../shared/governingPurpose";
+import { CONFLICT_DOOR_READY, recordEveryCanvasBlock } from "./db/launchGovernanceFixture";
 
 const DB_CONFIGURED = testDbConfigured();
 if (!DB_CONFIGURED) {
@@ -225,6 +226,8 @@ beforeAll(async () => {
       DATABASE_URL: testDb.url,
       ADMIN_PASSWORD: ADMIN,
       AUTH_TOKEN_SECRET: "launchvote-token-secret", // module-review-ok: a fixture signing secret for a throwaway server on a scratch schema, same as every e2e suite
+      // A launch vote needs the site-address row (R108), and this village is meant to be ready.
+      FRONTEND_URL: BASE,
       VILLAGE_SECRETS_KEY: "1f".repeat(32), // module-review-ok: fixture sealing key, same as every e2e suite
       RESEND_API_KEY: "",
       ANTHROPIC_API_KEY: "",
@@ -297,10 +300,18 @@ beforeAll(async () => {
           "The village agrees what would put it right",
           "Whoever asked for this says whether it did",
         ],
+        // The conflict door, which blocks the vote: server/db/launchGovernanceFixture.ts.
+        ...CONFLICT_DOOR_READY,
       },
     },
   });
   expect(policy.status, JSON.stringify(policy.json)).toBe(200);
+
+  // What closing means, named AND adopted: blocking since Rye's ruling of
+  // 2026-09-25. Its own "no" and "yes" are server/closingPolicy.routes.e2e.test.ts.
+  expect((await call("PUT", "/api/admin/exit-policy/closing", {
+    body: { policyId: "own-words", statement: "If Larksfield closes, the barn and the land pass to the parish trust and the cash is shared among the members still here.", adopt: true },
+  })).status).toBe(200);
 
   const backups = await call("POST", "/api/admin/launch/confirm", {
     body: { id: "backups-drilled", done: true },
@@ -350,6 +361,11 @@ beforeAll(async () => {
   expect((await call("PUT", "/api/admin/purpose", {
     body: { statement: PURPOSE_EXAMPLE },
   })).status).toBe(200);
+
+  // EVERY CANVAS BLOCK ON RECORD, which blocks the vote (2026-09-27). One reading
+  // each, at Absent with its sentence, through the real route. The refusal is
+  // driven row by row in server/lib/launchGovernance.db.test.ts.
+  await recordEveryCanvasBlock(call);
 }, 240_000);
 
 afterAll(async () => {
@@ -416,9 +432,38 @@ describe.skipIf(!DB_CONFIGURED)("a village sets itself up alone, and can issue n
     expect(early.json?.onTheRoll).toBe(2);
     expect(await launchBallots()).toEqual([]);
   });
+
+  it("the head count is the village's own dial: two clears the floor, and three brings it back (Rye, 2026-11-06)", async () => {
+    const set = (value: string) => call("PUT", "/api/admin/variables/governance.launch_min_electorate", { body: { value } });
+    expect((await set("0")).status, "never below one").toBeGreaterThanOrEqual(400);
+    expect((await set("2")).status).toBe(200);
+    try {
+      const status = await call("GET", "/api/admin/launch");
+      expect(status.json?.vote?.minElectorate).toBe(2);
+      expect(status.json?.vote?.tooFew ?? null, "two on the roll is enough now").toBeNull();
+    } finally {
+      expect((await set("3")).status).toBe(200);
+    }
+    // Control: back at the default, the same two are one short again.
+    const again = await call("GET", "/api/admin/launch");
+    expect(again.json?.vote?.minElectorate).toBe(3);
+    expect(String(again.json?.vote?.tooFew)).toContain("One more member");
+    expect(await launchBallots()).toEqual([]);
+  });
 });
 
 describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be asked", () => {
+  /*
+   * THE BIRTHING IS A KEY MOMENT (plan 4.2, Wave 4). Switching governance on in
+   * the setup above was one too, and it is the same moment in the same moon, so
+   * its notices are cleared here: what the case after the propose reads is the
+   * Birthing's own raise and nothing the setup left.
+   */
+  beforeAll(async () => {
+    if (!DB_CONFIGURED) return;
+    await pool.query("DELETE FROM notifications WHERE type = 'canvas_revisit'"); // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+  });
+
   it("opens at 100 and 100, with the roll frozen at three", async () => {
     const ida = await register("Ida Kestrel", "ida");
     idaToken = ida.token; idaId = ida.id;
@@ -442,6 +487,31 @@ describe.skipIf(!DB_CONFIGURED)("the third member arrives and the vote can be as
     expect(Number(rows[0].unity)).toBe(100);
     expect(Number(rows[0].quorum)).toBe(100);
     expect(rows[0].roll).toBe(3);
+  });
+
+  it("asks the admins, before the vote: look at Power, Resourcing, Legal and Impact again", async () => {
+    // The propose records `launch:proposed:<ballot>`, and the moment hangs off
+    // that event (server/lib/canvasRevisit.ts). Fire and forget, so wait for
+    // four rows and a second read that agrees.
+    const read = async () => {
+      const [r] = await pool.query<any[]>( // module-review-ok: fixture SQL against the S5 scratch schema, never a production table
+        "SELECT user_id, title, body, actor_user_id FROM notifications WHERE type = 'canvas_revisit' ORDER BY title",
+      );
+      return r;
+    };
+    const deadline = Date.now() + 20_000;
+    while ((await read()).length < 4 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 600));
+    const rows = await read();
+    expect(rows.map((r) => r.title)).toEqual([
+      "Before you raise: look at Impact again.",
+      "Before you raise: look at Legal again.",
+      "Before you raise: look at Power again.",
+      "Before you raise: look at Resourcing again.",
+    ]);
+    // Before the handover, and with nobody holding the canvas pen, the admins alone.
+    expect(new Set(rows.map((r) => String(r.user_id)))).toEqual(new Set([founderId]));
+    expect(rows.every((r) => r.actor_user_id === null && !/\d/.test(String(r.body)))).toBe(true);
   });
 
   it("puts the slate IN the frozen document, so a member votes on it", async () => {

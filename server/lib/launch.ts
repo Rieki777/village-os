@@ -44,6 +44,7 @@ import { storedVariableValue } from "../repos/gameVariableRows";
 import { countWords, purposeStatementProblem } from "../../shared/governingPurpose";
 import { MAP_WALK_DOC, welcomeWalkCheck } from "../../shared/mapAddress";
 import { governingPurpose } from "./governingPurpose";
+import { CLOSING_CHECK_KEY, closingLaunchCheck } from "./closingPolicy";
 import { villageSecretsLaunchCheck } from "./secrets";
 import { LAUNCH_PROOFS } from "./launchProofs";
 
@@ -57,9 +58,50 @@ const GPS_CHECK_KEY = "gps-written";
 
 /** The sealing key's row, resolved by name for the same reason. */
 const SECRETS_KEY_CHECK_KEY = "village-secrets-key";
+
+/**
+ * Whether FRONTEND_URL names an address a link can sit on (readiness R108).
+ *
+ * Shape only: an http or https URL with a host, no quotes, no `NAME=` pasted
+ * in front. Whether that address really reaches this village is DNS's
+ * question, and the custom-domain row asks it. The detail names what is
+ * wrong, the way the sealing key's does, because "not set" for a value that
+ * is set in the wrong shape sends a founder looking in the wrong place.
+ */
+export function siteAddressLaunchCheck(env: NodeJS.ProcessEnv = process.env): { state: CheckState; detail: string } {
+  const raw = String(env.FRONTEND_URL ?? "").trim();
+  if (!raw) {
+    return {
+      state: "missing",
+      detail: "FRONTEND_URL is not set, so emailed links take their address from the first request this server answered.",
+    };
+  }
+  if (/^["']|["']$/.test(raw)) return { state: "missing", detail: "FRONTEND_URL is set with quotes around it. Set the address alone." };
+  if (/^[A-Z_]+=/.test(raw)) return { state: "missing", detail: "FRONTEND_URL starts with a variable name and an equals sign. Set the address alone." };
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { state: "missing", detail: "FRONTEND_URL does not read as an address. Write it with its scheme, such as https://village.example.org." };
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return { state: "missing", detail: `FRONTEND_URL starts with ${url.protocol} and links need http or https.` };
+  }
+  if (!url.hostname) return { state: "missing", detail: "FRONTEND_URL names no host." };
+  return { state: "ok", detail: `Emailed links go to ${url.origin}.` };
+}
+
+/**
+ * Rows read straight from the environment, beside the evidence rows below. An
+ * injected check still wins, so a test can hold every other row still.
+ */
+const ENV_CHECKS: Record<string, (env: NodeJS.ProcessEnv) => { state: CheckState; detail: string }> = {
+  "site-address": siteAddressLaunchCheck,
+};
 import { readConfigDocument } from "../repos/appConfigDocs";
 import { commsChecklist, commsLaunchRow, type SetupItem } from "./comms/setup";
 import { normalizeSeasonConfig } from "./seasonCalendar";
+import { governanceRowFor } from "./launchGovernance";
 
 export type CheckState = "ok" | "missing" | "partial";
 
@@ -107,6 +149,11 @@ export interface LaunchStatus {
    * (R74); the checklist gates the question, never the answer.
    */
   readyToLaunch: boolean;
+  /**
+   * Blocking rows still open that the launch vote may carry (`carriedByVote`).
+   * Counted in `blockingOpen`, and left out of `readyToLaunch`.
+   */
+  carriedOpen: Array<{ id: string; title: string }>;
   launchedAt: string | null;
   launchedBy: string | null;
   /** The ballot that carried, on a village that launched by its own vote. */
@@ -291,6 +338,14 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
       continue;
     }
 
+    // WHAT CLOSING MEANS (Rye, 2026-09-25), read off the exit policy document
+    // the same way the statement above is read: a pool, no cache, nothing in
+    // server/index.ts. server/lib/closingPolicy.ts.
+    if (req.checkKey === CLOSING_CHECK_KEY) {
+      items.push({ ...req, ...(await closingLaunchCheck(pool)) });
+      continue;
+    }
+
     /*
      * WHERE THE VILLAGE IS, resolved HERE for the reason the `decide:` branch
      * above gives: `server/index.ts` sits at exactly its line baseline, and
@@ -305,6 +360,27 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
     if (req.checkKey.startsWith("village:")) {
       const read = await villageFactFor(pool, req.checkKey.slice("village:".length));
       items.push({ ...req, state: read.state, detail: read.detail });
+      continue;
+    }
+
+    /*
+     * THE GOVERNANCE ROWS (2026-09-27): every canvas block on record, a door
+     * for a conflict with a promised reply, and governance open to members.
+     * Resolved in server/lib/launchGovernance.ts for the reason the `village:`
+     * branch gives: none of them needs a boot cache, and server/index.ts only
+     * ever gets smaller. The module lifecycle is the one fact from outside,
+     * and it arrives through `deps`, which already carries it.
+     *
+     * A read that throws fails THIS row visibly, the same way a wired check's
+     * throw does below, and never the whole checklist.
+     */
+    if (req.checkKey.startsWith("canvas:") || req.checkKey.startsWith("governance:")) {
+      try {
+        const read = await governanceRowFor(pool, deps, req.checkKey);
+        items.push({ ...req, state: read.state, detail: read.detail });
+      } catch (e: any) {
+        items.push({ ...req, state: "missing", detail: `Check failed: ${String(e?.message ?? e).slice(0, 120)}` });
+      }
       continue;
     }
 
@@ -362,7 +438,10 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
      * An injected check still wins, so a test can hold every other row still.
      */
     const proof = LAUNCH_PROOFS[req.checkKey];
-    const check = deps.checks[req.checkKey] ?? (proof ? () => proof(pool, deps.env ?? process.env) : undefined);
+    const fromEnv = ENV_CHECKS[req.checkKey];
+    const check =
+      deps.checks[req.checkKey] ??
+      (proof ? () => proof(pool, deps.env ?? process.env) : fromEnv ? () => fromEnv(deps.env ?? process.env) : undefined);
     if (!check) {
       // A registry entry without a resolver is a wiring bug. Fail VISIBLY on
       // the page rather than silently dropping the row â€” a checklist that
@@ -380,11 +459,15 @@ export async function launchStatus(pool: Pool, deps: LaunchDeps): Promise<Launch
 
   const blockingOpen = items.filter((i) => i.severity === "blocking" && i.state !== "ok").length;
   const recommendedOpen = items.filter((i) => i.severity === "recommended" && i.state !== "ok").length;
+  const carriedOpen = items
+    .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.carriedByVote === true)
+    .map((i) => ({ id: i.id, title: i.title }));
   return {
     items,
     blockingOpen,
     recommendedOpen,
-    readyToLaunch: blockingOpen === 0,
+    readyToLaunch: blockingOpen - carriedOpen.length === 0,
+    carriedOpen,
     launchedAt: state.launchedAt,
     launchedBy: state.launchedBy,
     launchedByBallotId: state.launchedByBallotId ?? null,
@@ -610,7 +693,7 @@ export async function launchVoteBlocked(
   }
   if (!status.readyToLaunch) {
     const open = status.items
-      .filter((i) => i.severity === "blocking" && i.state !== "ok")
+      .filter((i) => i.severity === "blocking" && i.state !== "ok" && i.carriedByVote !== true)
       .map((i) => i.title);
     return {
       error: `${open.length} item(s) on the journey still block the launch vote.`,

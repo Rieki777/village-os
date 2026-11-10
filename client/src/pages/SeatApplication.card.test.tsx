@@ -146,9 +146,9 @@ afterEach(() => {
 describe("the application page draws the candidate's card in proposal mode", () => {
   it("one card for both roles, live sections reading Starts once adopted, the controls still below", async () => {
     const { container } = render(<SeatApplication />);
-    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" });
+    await screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Lead steward and Platform steward" });
     // The approved design's tagline; each role it asks for is named on its tile and in full.
-    const card = await screen.findByText(/^Applying for two roles/).then(() =>
+    const card = await screen.findByText(/^Proposing for two roles/).then(() =>
       container.querySelector('[data-player-card][data-card-mode="proposal"]'),
     );
     expect(card).toBeTruthy();
@@ -170,7 +170,7 @@ describe("the application page draws the candidate's card in proposal mode", () 
   it("CONTROL: when the card cannot load, the stacked role cards come back", async () => {
     cardAnswer = () => json({ error: "This application has no card to show." }, 404);
     const { container } = render(<SeatApplication />);
-    await screen.findByRole("heading", { name: "Ana Quillfeather applies for Lead steward and Platform steward" });
+    await screen.findByRole("heading", { name: "Ana Quillfeather proposes to hold Lead steward and Platform steward" });
     await screen.findAllByText("Recorded here. Paid outside the platform.");
     expect(container.querySelector("[data-player-card]")).toBeNull();
     expect(screen.getAllByText(/Lead steward/).length).toBeGreaterThan(0);

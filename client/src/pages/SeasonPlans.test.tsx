@@ -28,6 +28,7 @@ vi.mock("@/components/Layout", () => ({
 }));
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: signedIn }),
+  useOptionalAuth: () => ({ user: signedIn }),
 }));
 vi.mock("@/modules/ModuleProvider", () => ({
   useModules: () => ({ loaded: true, modules: [{ id: "governance", lifecycle: "members" }] }),
@@ -184,7 +185,7 @@ describe("your own season", () => {
     render(<MySeason />);
     const carry = await screen.findAllByRole("link", { name: "Carry on" });
     expect(carry[0].getAttribute("href")).toBe("/propose?type=role_application&seat=seat-host&renew=seat-host&season=s-next");
-    expect(screen.getByRole("link", { name: "Apply for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
+    expect(screen.getByRole("link", { name: "Propose for a role" }).getAttribute("href")).toBe("/propose?type=role_application&season=s-next");
     expect(screen.getByText("Open until 31 March 2027.")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Hand it back" })[1]);
@@ -200,8 +201,8 @@ describe("your own season", () => {
   it("tells a reader below the member rung that applying opens later, with no Apply link and no Propose a role (red team U5, U11)", async () => {
     mine = () => json({ ...MINE, mayApply: false });
     render(<MySeason />);
-    expect(await screen.findByText("Applying for a role opens at the member rung. Once you reach it, you can apply here.")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Apply for a role" })).toBeNull();
+    expect(await screen.findByText("Proposing for a role opens at the member rung. Once you reach it, you can propose here.")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Propose for a role" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Propose a role" })).toBeNull();
   });
 

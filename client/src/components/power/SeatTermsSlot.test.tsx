@@ -107,7 +107,7 @@ describe("a host, the map's seat card", () => {
     fireEvent.click(screen.getByRole("button", { name: /Settings/ }));
     expect(screen.getByText("No terms on offer yet.")).toBeVisible();
     const link = screen.getByRole("link", { name: "Propose terms" });
-    expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=water-keeper");
+    expect(link.getAttribute("href")).toBe("/propose?type=role_application&seat=water-keeper&terms=write");
   });
 
   it("a standing example offers no way to propose terms for it", () => {

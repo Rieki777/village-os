@@ -62,6 +62,7 @@ import {
   REDEMPTION_HOLD,
   VOTE_PATH_BUILT,
   canSettleRedemption,
+  moneyCapsSet,
   redemptionMoneyRefusal,
   redemptionRefusal,
   redemptionReleases,
@@ -192,11 +193,15 @@ export interface RedeemMoney {
   quote: RedemptionQuote | null;
   /** The village's own words for what happens next, as they read today. */
   processText: string;
-  /** Minor units of `currency`. Zero means no cap. */
+  /** Minor units of `currency`. A floor of zero is no floor. */
   minMinor: number;
-  maxPerRequestMinor: number;
-  memberCapMinor: number;
-  villageCapMinor: number;
+  /**
+   * Minor units of `currency`. Null is no ceiling and 0 is a ceiling of zero
+   * (Rye, 2026-11-05: redemption fails closed).
+   */
+  maxPerRequestMinor: number | null;
+  memberCapMinor: number | null;
+  villageCapMinor: number | null;
   feePct: number;
   feeFixed: number;
 }
@@ -359,17 +364,13 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
     const money = input.money;
     if (money) {
       const memberRows = await moneyAskedSinceRows(conn, villageId(), input.userId, input.cycleStart);
-      const villageRows = money.villageCapMinor > 0
+      const villageRows = money.villageCapMinor !== null
         ? await villageMoneyAskedSinceRowsForUpdate(conn, villageId(), input.cycleStart)
         : [];
       const memberSoFar = totalInCurrency(memberRows as any[], money.currency);
       const villageSoFar = totalInCurrency(villageRows as any[], money.currency);
       const say = (minor: number) => formatMoney(minor, money.currency);
-      const capsSet =
-        money.minMinor > 0 ||
-        money.maxPerRequestMinor > 0 ||
-        money.memberCapMinor > 0 ||
-        money.villageCapMinor > 0;
+      const capsSet = moneyCapsSet(money);
       const moneyRefusal = redemptionMoneyRefusal({
         valued: !!money.quote,
         capsSet,
@@ -382,9 +383,9 @@ export async function requestRedemption(pool: Pool, input: RedeemInput): Promise
         villageCapMinor: money.villageCapMinor,
         grossText: say(money.quote?.grossMinor ?? 0),
         minText: say(money.minMinor),
-        maxText: say(money.maxPerRequestMinor),
-        memberLeftText: say(Math.max(0, money.memberCapMinor - memberSoFar)),
-        villageLeftText: say(Math.max(0, money.villageCapMinor - villageSoFar)),
+        maxText: say(money.maxPerRequestMinor ?? 0),
+        memberLeftText: say(Math.max(0, (money.memberCapMinor ?? 0) - memberSoFar)),
+        villageLeftText: say(Math.max(0, (money.villageCapMinor ?? 0) - villageSoFar)),
       });
       if (moneyRefusal) {
         await conn.rollback();

@@ -91,9 +91,10 @@ so it is not the dangerous shape, and checking which one you have costs one `ls`
 
 The authoritative list is printed straight from the workflows themselves, so it is right on the
 day you run it. It reads EVERY workflow that runs on a pull request, not only `ci.yml`: four of
-them do, and the gates reachable only through `module-intake.yml` include the raw-SQL burn-down.
-This sentence used to say "straight from `ci.yml`", which was true of the source and got read as
-true of the gate set, and the gap was 14 named steps:
+them do. The raw-SQL burn-down and the contribution rules used to be reachable only through the
+path-gated `module-intake.yml`, which skipped 98 of 150 landings; `ci.yml` runs the same validator
+on every pull request since readiness R207. This sentence used to say "straight from `ci.yml`",
+which was true of the source and got read as true of the gate set, and the gap was 14 named steps:
 
 ```
 node scripts/module-facts.mjs
@@ -126,6 +127,21 @@ node scripts/module-facts.mjs
   were NOT most of it: 4.8 minutes for the 74 e2e files against 18.3 for the 781 others, ten of
   those in the living-map suites under `shared/mapArtifact*`. That is why CI now shards the whole
   suite rather than splitting e2e from unit (see the next section).
+
+### Generated docs: lanes never regenerate or commit them
+
+**Main owns `docs/GOVERNANCE.md`, `docs/knowledge/governance-lineage.md`, `docs/TOKENS.md`,
+`docs/VARIABLES.md`, `docs/MODULES.md`, `docs/CAPABILITIES.md`, the `generated:` regions of
+`docs/ECONOMICS.md`, and `client/src/locales/en.po`** (Rye, 2026-11-09). A pull request does not
+run their generators and does not commit them; `.github/workflows/generated-docs.yml` regenerates
+them after every merge as one bot commit. Committing them is what made every landing conflict every
+open pull request. CI fails a pull request that edits one (`scripts/check-generated-docs-untouched.mjs`),
+the doc guards run in PR mode (the generator must run and its rules must hold; the committed copy need
+not match), and the would-be GOVERNANCE.md and ECONOMICS.md diff is in the `verify` job summary for
+reviewers. The integrator composes without regenerating or re-extracting. Put one line in every lane
+brief: "Do not run or commit the generators' output; main regenerates it after the merge."
+Flow, modes and the move-to-a-new-repository notes: `docs/GENERATED_DOCS.md`; short form:
+`.claude/skills/generated-docs/SKILL.md`. The list is `GENERATED_FILES` in `scripts/lib/generatedDocs.mjs`.
 
 ### If you are one of several sessions: do NOT run the full suite
 
@@ -191,8 +207,7 @@ batch's PR as you push it, because until then it has no run at all. The
 pull_request run is the better of the two for a component anyway: it tests the branch ALREADY
 MERGED with main. Two consequences. A CONFLICTING pull request gets no pull_request run, so a
 conflicted lane branch has NO run at all and its lane must merge main before anybody can verify
-it, even though the generated-doc conflict that every batch landing causes stays the integrator's
-to resolve. And counting "every job that is listed succeeded" is NOT a green: jobs appear
+it. (Generated docs no longer conflict: main owns them, see "Generated docs" below.) And counting "every job that is listed succeeded" is NOT a green: jobs appear
 progressively, so an incomplete run reads as 5 of 5 while the sixth has not been created. Assert a
 FLOOR on the job count. And a cancelled
 run is not a red, since `ci.yml` cancels superseded
@@ -281,7 +296,10 @@ display faces are a different path and still accept `.woff` (`server/index.ts` s
 The woff2 bytes themselves are unhinted copies committed in `client/src/fonts`: every glyph,
 code point and layout feature of the @fontsource file, without the TrueType hinting, which took
 another 84 KB off the ceiling. `useUnhintedFonts` in `vite.config.ts` points the @fontsource CSS
-at them. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
+at them. Eight of the families are served from ONE variable file each (`<family>-latin-wght-<style>.woff2`):
+every weight's @font-face keeps its own single weight and only its url points at the shared file,
+so font matching is unchanged and the 39 static files became 9, about 370 KB off the ceiling.
+`--check` proves per cut that the variable instance lays text out exactly as the static cut did. A cut added to `client/src/main.tsx` needs `python scripts/unhint-fonts.py` (then
 `--check`), or `client/src/lib/unhintedFonts.test.ts` fails.
 
 The build marker is composed WHOLE in `scripts/build-server.mjs`, from the commit date and the
@@ -556,7 +574,11 @@ pages — a fork REPLACES those wholesale, so its own name is not debt there; th
 script, and the line is drawn at product: anything a signed-in member coordinates through stays
 ratcheted), and HARD-CLEAN — everything else, where any brand hit fails. A genuine false
 positive takes an inline `brand-ok: <reason>` ON THE LINE ITSELF; a waiver on the line above
-does nothing. New code is born clean, everywhere.
+does nothing. New code is born clean, everywhere. The PUBLISHER's own name, in any spelling
+("ReGen Civics", "regen-civics", "ReGenCivics"), is allowed only in the files its `ATTRIBUTION`
+list names, up to the count each entry gives (the coordinator, 2026-11-08, R063): it names the
+publisher there (the profile import and its file format, the hub, the hosting path) and is residue
+anywhere a village's own name belongs.
 
 The comment stripping lives in `scripts/brand-strip.mjs` and is tested by
 `node scripts/check-brand-refs.test.mjs` — it was wrong twice, and both times the guard reported

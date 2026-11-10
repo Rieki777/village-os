@@ -32,15 +32,15 @@
 import { useEffect, useState } from "react";
 import {
   Activity, Award, BedDouble, CalendarDays, Circle, Coins, Globe, Hammer,
-  Handshake, Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Newspaper,
-  Network, NotebookPen, Orbit, Sparkles, TrendingUp, Users, Vote, Wrench, type LucideIcon,
+  Handshake, Heart, HeartHandshake, Landmark, LayoutGrid, Mail, MessageCircle, MessagesSquare, Mic, Newspaper,
+  Network, NotebookPen, Orbit, Sparkles, Sprout, TrendingUp, Users, Vote, Wrench, type LucideIcon,
 } from "lucide-react";
 import { BUNDLED_MODULE_ART } from "./bundledModuleArt";
 
 const EMBLEMS: Record<string, LucideIcon> = {
   Activity, Award, BedDouble, CalendarDays, Coins, Globe, Hammer, Handshake,
-  Heart, Landmark, Mail, MessageCircle, MessagesSquare, Mic, Network, Newspaper, NotebookPen,
-  Orbit, Sparkles, TrendingUp, Users, Vote, Wrench,
+  Heart, HeartHandshake, Landmark, LayoutGrid, Mail, MessageCircle, MessagesSquare, Mic, Network, Newspaper, NotebookPen,
+  Orbit, Sparkles, Sprout, TrendingUp, Users, Vote, Wrench,
 };
 
 /** Every emblem the catalog may name, for the test that holds the two together. */
