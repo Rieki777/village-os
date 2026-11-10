@@ -20,7 +20,7 @@
  * (a rename, a moved directory) reads as the failure it would be rather than
  * as a silent pass.
  */
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -39,30 +39,54 @@ if (files.length === 0) {
 }
 
 let failed = 0;
-for (const f of files) {
-  const r = spawnSync(process.execPath, [path.join(DIR, f)], { encoding: "utf8" });
+
+/*
+ * CONCURRENCY. The self-tests are independent child processes (each reads the
+ * repository and its own fixtures; none writes outside a temp directory), and
+ * they were run one after another: 3.3 minutes median in the verify job
+ * (CI audit, 2026-11-10). They now run SELF_TEST_JOBS at a time (default 4, the
+ * runner's vCPU count). Output is still printed in sorted file order, after
+ * each result is in, so a red log reads the same as before and a failure keeps
+ * every line the child printed. SELF_TEST_JOBS=1 restores the serial run.
+ */
+const JOBS = Math.max(1, Number(process.env.SELF_TEST_JOBS ?? 4) || 4);
+
+function runOne(f) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(DIR, f)], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    child.on("error", (e) => resolve({ f, status: 1, signal: null, out: String(e) }));
+    child.on("close", (status, signal) => resolve({ f, status, signal, out }));
+  });
+}
+
+const results = new Array(files.length);
+let next = 0;
+await Promise.all(
+  Array.from({ length: Math.min(JOBS, files.length) }, async () => {
+    while (next < files.length) {
+      const i = next++;
+      results[i] = await runOne(files[i]);
+    }
+  }),
+);
+
+for (const r of results) {
   const ok = r.status === 0;
   if (!ok) failed += 1;
-  const all = `${r.stdout ?? ""}${r.stderr ?? ""}`
+  const all = r.out
     .split("\n")
     .map((l) => l.trimEnd())
     .filter((l) => l.trim());
-  console.log(`${ok ? "ok  " : "FAIL"}  ${f}  ${all[all.length - 1]?.trim() ?? ""}`);
-  // On failure, print what the child actually said.
-  //
-  // This kept ONLY that last line on BOTH paths. A passing guard ends with its
-  // own summary, so the output looked deliberate, and nobody noticed that the
-  // failing path was discarding every line naming WHICH assertion failed and
-  // why. CI then said `check-migration-compat: 2 failure(s) of 24` and stopped:
-  // a red build carrying no way to act on it. The failure that exposed this
-  // could not be reproduced locally either, because CI runs mysql:8 and this
-  // machine's test database is MariaDB, so the single place the reason existed
-  // was the log that was throwing it away.
+  console.log(`${ok ? "ok  " : "FAIL"}  ${r.f}  ${all[all.length - 1]?.trim() ?? ""}`);
+  // On failure, print what the child actually said: every line naming which
+  // assertion failed and why (a red build must carry a way to act on it).
   if (!ok) {
     for (const l of all) console.log(`        ${l}`);
     if (r.status === null) console.log(`        (killed by signal ${r.signal})`);
   }
 }
 
-console.log(`\n${files.length} guard self-test(s) run, ${failed} failed.`);
-process.exit(failed === 0 ? 0 : 1);
+
