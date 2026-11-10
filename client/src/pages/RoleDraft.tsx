@@ -47,6 +47,7 @@ import ArtImage from "@/components/roleDraft/ArtImage";
 import Burst, { reducedMotion } from "@/components/roleDraft/Burst";
 import { useVillageName } from "@/hooks/useVillageName";
 import { gameFetch, useSeason } from "@/lib/gameApi";
+import { useModuleOn } from "@/modules/ModuleProvider";
 import { readStoredJson, writeStoredJson } from "@/lib/safeStorage";
 import { fromOrgSeat, seasonForSheet } from "@shared/roleSheetInputs";
 import { OPEN_PROPOSAL_MAX_ROLES } from "@shared/openProposals";
@@ -157,7 +158,10 @@ function useCast(): CastMember[] {
  */
 function usePlaceInvites(): PlaceInvite[] {
   const [places, setPlaces] = useState<PlaceInvite[]>([]);
+  // The registry is behind the places module; asking while it is off is a 404 on every visit (role audit, 10 Nov 2026).
+  const placesOn = useModuleOn("places");
   useEffect(() => {
+    if (!placesOn) return;
     let live = true;
     gameFetch("/api/place-registry")
       .then((r) => (r.ok ? r.json() : null))
@@ -173,7 +177,7 @@ function usePlaceInvites(): PlaceInvite[] {
     return () => {
       live = false;
     };
-  }, []);
+  }, [placesOn]);
   return places;
 }
 

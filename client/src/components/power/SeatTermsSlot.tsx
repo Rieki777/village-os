@@ -19,6 +19,7 @@
 import type { ReactNode } from "react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { proposeTermsHref } from "@shared/seatTermsOffer";
+import { applySeatsHref } from "@shared/seatApplyLinks";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 import SeatTermsDrawer from "./SeatTermsDrawer";
 import WorkPayBlock from "@/components/WorkPayBlock";
@@ -85,7 +86,8 @@ export function applyHrefFor(seat: Record<string, any> | null | undefined): stri
   // A full seat has no place to apply for (red team U4).
   if (seat.state === "filled") return null;
   const id = String(seat.id ?? "").trim();
-  return id ? proposeTermsHref(id) : null;
+  // The member door: the role picked, the terms on offer read-only, and back to this card (Rye, 10 Nov 2026).
+  return id ? applySeatsHref([id], { from: `/roles?seat=${id}` }) : null;
 }
 
 /**

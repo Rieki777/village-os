@@ -18,6 +18,7 @@
 import { authToken } from "@/lib/gameApi";
 import type { PickSource } from "./wizardConfig";
 import type { WorkPay } from "@shared/workValue";
+import { isListed } from "@shared/roleListing";
 
 export interface PickOption {
   value: string;
@@ -30,6 +31,8 @@ export interface PickOption {
   holderIds?: string[];
   /** Seats only: what it pays, at the `terms.read` tier (server/lib/workPay.ts). Absent below it. */
   pay?: WorkPay | null;
+  /** Seats only: whether the village lists the role (shared/roleListing.ts). */
+  listed?: boolean;
 }
 
 const headers = (): Record<string, string> => {
@@ -124,6 +127,8 @@ export async function loadPickOptions(source: PickSource): Promise<PickOption[]>
           full: r.state === "filled",
           holderIds: Array.isArray(r.holders) ? r.holders.map((h: any) => String(h?.userId ?? "")).filter(Boolean) : [],
           ...(r.pay ? { pay: r.pay as WorkPay } : {}),
+          // Role journey PR-A: a steward is served unlisted roles too; the role application never offers them.
+          listed: isListed(r),
         }));
     }
     case "circles": {

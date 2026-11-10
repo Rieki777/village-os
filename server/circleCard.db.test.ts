@@ -174,7 +174,7 @@ describe.skipIf(!configured)("the circle card, on a real schema", () => {
     try {
       const member = section((await read("c-garden")).body.card, "roles") as Extract<CircleSection, { kind: "roles" }>;
       const memberRows = member.slot.kind === "shown" ? member.slot.value : [];
-      expect(memberRows.find((r) => r.id === "seat-seed")?.applyHref).toBe("/propose?type=role_application&seat=seat-seed");
+      expect(memberRows.find((r) => r.id === "seat-seed")?.applyHref).toBe("/propose?type=role_application&seat=seat-seed&from=%2Fcircles%2Fc-garden");
     } finally {
       admin = false;
     }

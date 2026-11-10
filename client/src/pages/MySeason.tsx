@@ -68,7 +68,7 @@ export const MY_SEASON_WORDS = {
   heldThrough: "You hold it through your application",
   applyMembersOnly: "Applying for a role opens at the member rung. Once you reach it, you can apply here.",
   applyHeading: "Apply for a role",
-  applyLine: "Ask the village for any role on the chart. You pick up to five in one application.",
+  applyLine: "Ask the village for any role on the chart. You pick up to three in one application.",
   apply: "Apply for a role",
   applicationsHeading: "Your applications this season",
   partHeading: "Your part",

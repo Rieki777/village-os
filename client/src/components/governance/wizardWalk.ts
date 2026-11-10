@@ -21,6 +21,9 @@
  * StepKey, never a number.
  */
 import { WIZARD_STEPS, typeConfig, type StepKey, type TypeStepOverride } from "./wizardConfig";
+import { isDoor } from "./wizardDoor";
+
+export { isDoor };
 
 export interface WalkStep {
   key: StepKey;
@@ -36,24 +39,26 @@ export interface WalkStep {
  * pick a known one, so an unrecognised draft lands somewhere it can recover
  * from instead of on an empty stepper.
  */
-export function walkFor(typeId: string | null | undefined): WalkStep[] {
+export function walkFor(typeId: string | null | undefined, answers?: Record<string, unknown>): WalkStep[] {
   const cfg = typeId ? typeConfig(typeId) : null;
   if (!cfg) return [{ key: "type", label: WIZARD_STEPS[0].label }];
-  return WIZARD_STEPS.filter((s) => !cfg.steps[s.key]?.skip).map((s) => {
+  return WIZARD_STEPS.filter((s) => !cfg.steps[s.key]?.skip && !(s.key === "type" && isDoor(answers))).map((s) => {
     const over: TypeStepOverride | undefined = cfg.steps[s.key];
-    return { key: s.key, label: over?.label ?? s.label, intro: over?.intro };
+    const door = isDoor(answers);
+    return { key: s.key, label: (door ? over?.doorLabel : undefined) ?? over?.label ?? s.label, intro: (door ? over?.doorIntro : undefined) ?? over?.intro };
   });
 }
 
-/** The fields this type renders in this step, in order. Empty is legal. */
-export function fieldsFor(typeId: string | null | undefined, step: StepKey) {
+/** The fields this type asks in this step, in order: those whose `showWhen` holds. Empty is legal. */
+export function fieldsFor(typeId: string | null | undefined, step: StepKey, answers?: Record<string, unknown>) {
   const cfg = typeId ? typeConfig(typeId) : null;
-  return cfg?.steps?.[step]?.fields ?? [];
+  const all = cfg?.steps?.[step]?.fields ?? [];
+  return all.filter((f) => !f.showWhen || f.showWhen(answers ?? {}));
 }
 
 /** Where a step sits in this type's walk, or -1 when the type skips it. */
-export function positionOf(typeId: string | null | undefined, step: StepKey): number {
-  return walkFor(typeId).findIndex((s) => s.key === step);
+export function positionOf(typeId: string | null | undefined, step: StepKey, answers?: Record<string, unknown>): number {
+  return walkFor(typeId, answers).findIndex((s) => s.key === step);
 }
 
 /**
@@ -61,16 +66,16 @@ export function positionOf(typeId: string | null | undefined, step: StepKey): nu
  * answers from the front of the walk rather than from nowhere, so a stale
  * pointer moves the member forward instead of stranding them.
  */
-export function nextStep(typeId: string | null | undefined, from: StepKey): StepKey | null {
-  const walk = walkFor(typeId);
+export function nextStep(typeId: string | null | undefined, from: StepKey, answers?: Record<string, unknown>): StepKey | null {
+  const walk = walkFor(typeId, answers);
   const at = walk.findIndex((s) => s.key === from);
   if (at < 0) return walk[0]?.key ?? null;
   return walk[at + 1]?.key ?? null;
 }
 
 /** The step before this one, or null at the start. Symmetric with nextStep. */
-export function prevStep(typeId: string | null | undefined, from: StepKey): StepKey | null {
-  const walk = walkFor(typeId);
+export function prevStep(typeId: string | null | undefined, from: StepKey, answers?: Record<string, unknown>): StepKey | null {
+  const walk = walkFor(typeId, answers);
   const at = walk.findIndex((s) => s.key === from);
   if (at < 0) return walk[0]?.key ?? null;
   return at === 0 ? null : walk[at - 1].key;
@@ -83,8 +88,8 @@ export function prevStep(typeId: string | null | undefined, from: StepKey): Step
  * lands on the nearest real step, and the walk's first step is always the
  * fallback, so continuing a draft can never render nothing.
  */
-export function stepAtIndex(typeId: string | null | undefined, index: number): StepKey {
-  const walk = walkFor(typeId);
+export function stepAtIndex(typeId: string | null | undefined, index: number, answers?: Record<string, unknown>): StepKey {
+  const walk = walkFor(typeId, answers);
   if (walk.length === 0) return "type";
   const n = Number.isFinite(index) ? Math.trunc(index) : 0;
   return walk[Math.min(Math.max(0, n), walk.length - 1)].key;
@@ -108,8 +113,8 @@ export interface WizardProblem {
  */
 export function problemsFor(typeId: string | null | undefined, answers: Record<string, unknown>): WizardProblem[] {
   const out: WizardProblem[] = [];
-  for (const step of walkFor(typeId)) {
-    for (const field of fieldsFor(typeId, step.key)) {
+  for (const step of walkFor(typeId, answers)) {
+    for (const field of fieldsFor(typeId, step.key, answers)) {
       if (!field.problem) continue;
       const message = field.problem(answers[field.key], answers);
       if (message) out.push({ step: step.key, field: field.key, label: field.label, message });

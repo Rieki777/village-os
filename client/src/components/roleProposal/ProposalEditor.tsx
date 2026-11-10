@@ -4,7 +4,7 @@
  * indicator, and autosave on every change.
  *
  *   1 Pick your roles        existing roles (held by you, open, held by
- *                            someone else) or a new one, at most five
+ *                            someone else) or a new one, at most three
  *   2 Each role's words      every role word the card shows, gold where it
  *                            differs from the posted role; above them, bring
  *                            in a description of your role, and the prompt
@@ -215,7 +215,7 @@ export default function ProposalEditor({ initial, me }: { initial: ProposalOut; 
 
   const save = useAutosave(send);
   const seededRole = useRef(false);
-  // A role card can open this draft with that role already picked, up to the five.
+  // A role card can open this draft with that role already picked, up to the three.
   useEffect(() => {
     if (proposal.status !== "draft" || seededRole.current || !org || org === "failed") return;
     const role = roleFromUrl();

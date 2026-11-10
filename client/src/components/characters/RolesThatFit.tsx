@@ -4,7 +4,7 @@
  * Rye asked for the character selection to be a place "where you can click on
  * what roles you want to apply for and make a proposal". So under the chosen
  * class, the open seats that suit it, each a small card with its circle, its
- * aim and its open places, and a box to add it. Up to five, the most one
+ * aim and its open places, and a box to add it. Up to three, the most one
  * application holds, and "Propose these" opens "Apply for a seat" with every
  * picked seat already on the list (`applySeatsHref`).
  *

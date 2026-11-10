@@ -350,6 +350,23 @@ export async function placeOnRoles(
  * arrival made places it, so a second arrival places nothing twice. A proposal
  * adopted onto an account already here made no invitation and was placed then.
  */
+/**
+ * WHAT AN ADOPTED PROPOSAL'S LINK SAYS ON THE SIGN-UP PAGE (role audit, 10 Nov
+ * 2026): the roles it places the person on, and the name and address they sent,
+ * so the account step finishes the application instead of starting over. Only
+ * an adopted proposal answers; anything else reads as an ordinary invitation.
+ */
+export function describeFor(deps: Pick<DecideDeps, "getPool">): (inviteId: string) => Promise<{ roles: string[]; name: string | null; email: string | null } | null> {
+  return async (inviteId) => {
+    const id = proposalOfInvite(inviteId);
+    if (!id) return null;
+    const pool = deps.getPool();
+    const proposal = await store.readOpenProposal(pool, id);
+    if (!proposal || proposal.status !== "adopted") return null;
+    return { roles: await roleNames(pool, proposal), name: proposal.name ?? null, email: proposal.email ?? null };
+  };
+}
+
 export function arrivalFor(deps: DecideDeps): InvitedArrival {
   return async ({ inviteId, inviterUserId, userId }) => {
     const id = proposalOfInvite(inviteId);

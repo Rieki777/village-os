@@ -67,6 +67,11 @@ describe.skipIf(!configured)("what a class opens (MySQL)", () => {
     await role("fit-full", JSON.stringify(["catalyzing"]), { seats: 1 });
     await seat("fit-full", "u3");
 
+    // Unlisted (role journey PR-A): in no list and no count, tagged or not (role audit, 10 Nov 2026).
+    await role("unlisted-fit", JSON.stringify(["catalyzing"]));
+    await role("unlisted-open", null);
+    await pool.query("UPDATE `org_roles` SET `listed` = 0 WHERE `id` IN ('unlisted-fit', 'unlisted-open')"); // module-review-ok: fixture SQL against the scratch schema this suite provisioned
+
     await quest("q-fit", JSON.stringify(["catalyzing"]));
     await quest("q-other", JSON.stringify(["building"]));
     await quest("q-null", null);

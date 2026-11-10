@@ -10,7 +10,7 @@
  * Each role says what it pays, the same block its card on the map shows, so
  * a member reads cash, tokens, Voice and badges before picking it.
  *
- * At most five, across existing and new (`limits.maxRoles`). Once five are
+ * At most three, across existing and new (`limits.maxRoles`). Once three are
  * picked the rest are disabled and the count says why.
  */
 import { useState } from "react";

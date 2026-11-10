@@ -42,9 +42,13 @@ export const OFFER_WORDS = {
     "Terms on offer are written by a member of this village. A proposal from an outside service never carries them",
 } as const;
 
-/** Where "Propose terms" goes: the seat application wizard, with the seat picked. */
+/**
+ * Where "Propose terms" goes, for a role whose card offers none: the role
+ * application with the terms editor open (`terms=write`, so it is never the
+ * read-only member door).
+ */
 export function proposeTermsHref(seatId: string): string {
-  return `/propose?type=role_application&seat=${encodeURIComponent(seatId)}`;
+  return `/propose?type=role_application&seat=${encodeURIComponent(seatId)}&terms=write`;
 }
 
 // ── Terms on offer ──────────────────────────────────────────────────────────

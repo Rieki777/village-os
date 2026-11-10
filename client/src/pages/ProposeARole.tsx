@@ -26,8 +26,9 @@ import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "wouter";
-import { ArrowRight, MailCheck } from "lucide-react";
+import { Link, useParams } from "wouter";
+import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
+import { doorBackOf } from "@shared/seatApplyLinks";
 import Layout from "@/components/Layout";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { readStoredJson } from "@/lib/safeStorage";
@@ -86,13 +87,16 @@ function Notice({ title, children }: { title: string; children: React.ReactNode 
 
 /** The link in the confirmation email. */
 export function ConfirmProposal() {
-  const [said, setSaid] = useState<{ ok: boolean; message: string } | null>(null);
+  const { t } = useLingui();
+  const [said, setSaid] = useState<{ ok: boolean; message: string; statusPath?: string | null } | null>(null);
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token") ?? "";
     fetch("/api/open-proposals/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone });
+        // The applicant's own page (role journey L5): shown once here as well as mailed, and only an address of its own.
+        const statusPath = typeof data?.statusPath === "string" && data.statusPath.startsWith("/application-status/") ? data.statusPath : null;
+        setSaid({ ok: r.ok, message: typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : OPEN_WORDS.confirmGone, statusPath });
       })
       .catch(() => setSaid({ ok: false, message: OPEN_WORDS.confirmGone }));
   }, []);
@@ -101,6 +105,14 @@ export function ConfirmProposal() {
       {said ? (
         <Notice title={said.ok ? "Confirmed" : "That link didn't work"}>
           <p>{said.message}</p>
+          {said.ok && said.statusPath && (
+            <>
+              <a href={said.statusPath} className={`${BUTTON} mt-6`} data-status-link="">
+                {t`Follow where your proposal is`}
+              </a>
+              <p className="mt-3 text-sm text-muted-foreground">{t`We emailed you this link too. Keep it to yourself: it is how we know it is you.`}</p>
+            </>
+          )}
           {!said.ok && (
             <a href="/propose-a-role" className={`${BUTTON} mt-6`}>
               Propose again
@@ -285,11 +297,24 @@ export default function ProposeARole() {
   }
 
   const seasonName = form.season?.name || "next season";
+  // Only when a door sent the visitor here with `from`; a shared link stands on its own.
+  const cameFrom = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("from") ? doorBackOf(window.location.search, "", window.location.origin) : null;
   const invalid = (field: string) => (error?.field === field ? { "aria-invalid": true, "aria-describedby": "propose-error" } : {});
 
   return (
     <Shell>
       <div className="mb-8">
+        {/* Back to the board or the role card the visitor came from (role audit, 10 Nov 2026). */}
+        {cameFrom && (
+          <Link
+            href={cameFrom.href}
+            className="mb-3 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            data-door-back=""
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            {cameFrom.card ? t`Back to the role` : cameFrom.circle ? t`Back to the circle` : t`Back to the roles`}
+          </Link>
+        )}
         <h1 className="font-display text-4xl font-bold text-foreground">{OPEN_WORDS.heading(form.village)}</h1>
         <CastStrip href="/roles/select" size="size-16" />
         <p className="mt-3 text-muted-foreground">
@@ -382,6 +407,8 @@ export default function ProposeARole() {
             </label>
             <input id="propose-aim" required maxLength={OPEN_AIM_MAX} value={aim} onChange={(e) => setAim(e.target.value)} className={FIELD} {...invalid("aim")} />
           </div>
+          {/* The practicalities, then the season, then the agreements, then who you are (role audit, 10 Nov 2026). */}
+          <Practicalities value={practical} onChange={setPractical} />
           <SeasonServes goals={form.goals} serves={serves} onServes={setServes} hours={hours} onHours={setHours} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
@@ -406,7 +433,6 @@ export default function ProposeARole() {
               {t`An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.`}
             </p>
           </div>
-          <Practicalities value={practical} onChange={setPractical} />
           {/* The honeypot. Named `hp` so no autofill heuristic fills it; see ReserveHome.tsx. */}
           <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", top: 0 }}>
             <input type="text" name="hp" tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} />

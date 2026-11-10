@@ -102,11 +102,11 @@ describe("addPick", () => {
 
 describe("applyHrefFor", () => {
   it("sends a visitor to the open proposal with every pick ticked", () => {
-    expect(applyHrefFor(["lfs", "half"], false)).toBe("/propose-a-role?role=lfs&role=half");
+    expect(applyHrefFor(["lfs", "half"], false)).toBe("/propose-a-role?role=lfs&role=half&from=%2Froles%2Fdraft");
   });
 
   it("sends a member to one role application carrying every pick", () => {
-    expect(applyHrefFor(["lfs", "half"], true)).toBe("/propose?type=role_application&seat=lfs&seat=half");
+    expect(applyHrefFor(["lfs", "half"], true)).toBe("/propose?type=role_application&seat=lfs&seat=half&from=%2Froles%2Fdraft");
   });
 
   it("has no door with nothing drafted", () => {
