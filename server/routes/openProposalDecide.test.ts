@@ -442,7 +442,7 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
     /** Send with two references and a background-check consent, as somebody with no account, and confirm. */
     const withReferences = async (email: string) => {
       const before = state.sent.length;
-      const res = await fetch(`${base}/api/open-proposals`, {
+      const res = await fetch(`${base}/api/open-proposals`, { // module-review-ok: a test calling its own local server, never an outside host
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

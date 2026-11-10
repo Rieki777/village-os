@@ -40,9 +40,9 @@ async function fillAndSend() {
   fireEvent.click((await screen.findByText("Gate Keeper")).closest("[data-role]")!.querySelector("input[type=checkbox]")!);
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "a@b.test" } });
-  // Form v2 (#1071): the aim and the terms are required.
+  // Form v2 (#1071): the aim and the commitment are required (the terms step, joining lane PR 3).
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "Food grown here." } });
-  fireEvent.click(screen.getByLabelText("I accept the terms on offer."));
+  fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
   const why = screen.getByLabelText(OPEN_WORDS.whyLabel) as HTMLTextAreaElement;
   const before = why.value;
   // The agreements as PR-E draws them: the membership letter aligned with here, the NDA promised for once approved.
