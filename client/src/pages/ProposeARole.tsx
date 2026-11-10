@@ -27,6 +27,8 @@ import { useParams } from "wouter";
 import { ArrowRight, MailCheck } from "lucide-react";
 import Layout from "@/components/Layout";
 import { useOptionalAuth } from "@/contexts/AuthContext";
+import { readStoredJson } from "@/lib/safeStorage";
+import { IKIGAI_KEY, ikigaiFromStored, whyFromIkigai } from "@shared/roleDiscover";
 import { OPEN_AIM_MAX, OPEN_NOTE_MAX, OPEN_PROPOSAL_MAX_ROLES, OPEN_WHY_MAX, OPEN_WORDS } from "@shared/openProposals";
 
 const FIELD =
@@ -146,6 +148,13 @@ export default function ProposeARole() {
       })
       .catch(() => setForm({ kind: "failed" }));
   }, [link]);
+
+  // R-Ikigai answers the person ticked on the draft board become their own words in "Why you", once, and only into an empty field.
+  useEffect(() => {
+    const read = readStoredJson("local", IKIGAI_KEY);
+    const words = whyFromIkigai(ikigaiFromStored(read.status === "value" ? read.value : null));
+    if (words) setWhy((w) => w || words);
+  }, []);
 
   // A guest who is signed in: their own name and address, which they can still change.
   useEffect(() => {

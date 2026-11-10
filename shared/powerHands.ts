@@ -280,11 +280,15 @@ export function whoMayPutHandToVillage(
  * second one. So every pen below is `whoMayPutHandToVillage` asked a question
  * shaped for it, and the only new thing is `scaffolding`:
  *
- *   purpose      the governing purpose statement. The founder keeps the pen
- *                until every transferable power is handed over (GPS ruling 3),
- *                so the village holds it exactly when the handover is
- *                complete, and until then the founders carry it. After, a
- *                change is a ballot (`POST /api/governance/purpose-changes`).
+ *   purpose      the governing purpose statement. The founder keeps the
+ *                direct pen until every transferable power is handed over
+ *                (GPS ruling 3), so the village holds it exactly when the
+ *                handover is complete, and until then the founders carry it.
+ *                After, a change is a ballot (`POST /api/governance/purpose-changes`).
+ *                Since Rye's ruling of 2026-11-06 (Article 0 wins over
+ *                "founder keeps the pen") that ballot is open BEFORE the
+ *                handover too, priced at the village's highest tier, so the
+ *                rule carries `alsoByVote` while the founders hold the pen.
  *   prose        the canvas's words in a brief section. `story.tell`, asked
  *                of the ONE gate, before the handover and after it: the gate
  *                already follows the village's holding of that key (an admin
@@ -304,15 +308,19 @@ export function whoMayPutHandToVillage(
  *                server/routes/canvasFrames.ts).
  *   module       a module switched on or off (governance, on the Power
  *                block). Before the Birthing, the administrators, which is the
- *                lifecycle route's own guard; after, a mechanics proposal
- *                carrying the lifecycle change, which the village decides.
- *                Unless no vote can carry it (`votable: false`): the module
- *                the vote itself runs on is never moved by a change set
- *                (`NEVER_BY_CHANGESET`, server/lib/changeset.ts), so it stays
- *                with the administrators after the Birthing too.
+ *                lifecycle route's own guard. After it, whoever holds
+ *                `module.switch` live switches it, as the module library lets
+ *                them (canvas follow-up D1, 2026-11-09); with no holder, a
+ *                mechanics proposal carrying the lifecycle change, which the
+ *                village decides. Governance itself is votable since G.3, at
+ *                the highest tier. `votable: false` is kept for a module no
+ *                vote could carry, and then the administrators keep it.
  *   admin        `people`, `legal`, `land` and `constraints`. Plan 2.3 keeps
- *                these with administrators for reading and writing, before
- *                the Birthing and after it.
+ *                these with administrators for reading and writing. After
+ *                the Birthing, once a `power_grant` vote seats
+ *                `brief.private` on a role, its live holders hold this pen
+ *                and an unseated admin is refused; with no live holder the
+ *                administrators keep it (canvas follow-up G.4, D1).
  *
  * Why `purposeHolds` is the AGGREGATE handover and not a capability: the
  * statement is not a capability, nobody holds a `gps.edit` key, and
@@ -334,7 +342,21 @@ export interface CanvasPenFacts {
    * administrators after the Birthing, because a vote would have nowhere to go.
    */
   votable?: boolean;
+  /**
+   * Who holds a pen's power live, by pen (canvas follow-up D1): the members
+   * seated in a role carrying the key the pen names (`PEN_HOLDER_KEYS`),
+   * counted the way the gate counts. Absent or empty means nobody. Only the
+   * pens that read it ask, after the Birthing: the module pen (`module.switch`)
+   * and the admin pen (`brief.private`, G.4).
+   */
+  holders?: Partial<Record<CanvasPen, readonly string[]>>;
 }
+
+/**
+ * The key whose live holders hold a pen, by pen. The module pen asks
+ * `module.switch`, which is what the module library asks after launch.
+ */
+export const PEN_HOLDER_KEYS: Partial<Record<CanvasPen, string>> = { module: "module.switch", admin: "brief.private" };
 
 export interface CanvasAdoptionRule {
   pen: CanvasPen;
@@ -344,6 +366,14 @@ export interface CanvasAdoptionRule {
   because: HandOpenerReason;
   /** The capability the gate is asked, when `who` is `the-gate`. */
   capability?: "story.tell" | "dial.set";
+  /**
+   * Beside a direct pen, any member may also put this to the village's vote.
+   * Only the purpose pen before the handover (Rye, 2026-11-06): the founders
+   * write directly, and a highest-tier vote may change the statement too.
+   */
+  alsoByVote?: true;
+  /** Who may act, when `who` is `live-holders`. */
+  holders?: readonly string[];
 }
 
 /** Which power a canvas answer's adoption needs, as one rule. Pure. */
@@ -353,17 +383,27 @@ export function whoAdoptsCanvasAnswer(pen: CanvasPen, facts: CanvasPenFacts): Ca
     prose: () => whoMayPutHandToVillage(false, [], "the-gate"),
     consequence: () => whoMayPutHandToVillage(facts.birthed, [], "admins"),
     dial: () => whoMayPutHandToVillage(facts.birthed, [], "the-gate"),
-    module: () => whoMayPutHandToVillage(facts.birthed && facts.votable !== false, [], "admins"),
-    admin: () => whoMayPutHandToVillage(false, [], "admins"),
+    module: () => {
+      if (!facts.birthed) return whoMayPutHandToVillage(false, [], "admins");
+      const holders = (facts.holders?.module ?? []).filter((h) => h !== "");
+      // A live holder switches it; with none, the village votes, unless no vote can carry it.
+      return whoMayPutHandToVillage(holders.length === 0 && facts.votable !== false, holders, "admins");
+    },
+    admin: () => whoMayPutHandToVillage(false, facts.birthed ? (facts.holders?.admin ?? []) : [], "admins"),
   };
   const rule = asked[pen]();
   const capability = rule.who !== "the-gate" ? undefined : pen === "dial" ? ("dial.set" as const) : ("story.tell" as const);
+  const how = rule.who === "any-member" ? "ballot" : "act";
+  // Article 0 (Rye, 2026-11-06): the purpose vote is open while the founders still hold the direct pen.
+  const alsoByVote = pen === "purpose" && how === "act";
   return {
     pen,
-    how: rule.who === "any-member" ? "ballot" : "act",
+    how,
     who: rule.who,
     because: rule.because,
     ...(capability ? { capability } : {}),
+    ...(alsoByVote ? { alsoByVote: true as const } : {}),
+    ...(rule.who === "live-holders" ? { holders: rule.holders } : {}),
   };
 }
 
@@ -379,11 +419,20 @@ export function canvasPenSentence(rule: CanvasAdoptionRule): string {
     }
     return "The Game has started, so adopting this goes to a vote of the whole village.";
   }
-  if (rule.pen === "purpose") return "The founders keep the purpose statement until every power is handed to the village.";
+  if (rule.pen === "purpose") {
+    return "The founders write the purpose statement until every power is handed to the village, and any member can put a new statement to a vote of the whole village at its highest bar.";
+  }
   if (rule.pen === "prose") return "Whoever holds the village's story adopts these words.";
   if (rule.pen === "dial") return "Whoever may turn the village's dials adopts this before the Game starts.";
+  if (rule.pen === "admin" && rule.who === "live-holders") {
+    return "This section is for whoever holds the brief's private sections, for reading and for writing.";
+  }
   if (rule.pen === "admin") return "This section stays with the administrators, for reading and for writing.";
-  if (rule.pen === "module") return "The administrators switch this part of the Game on or off in the module library.";
+  if (rule.pen === "module") {
+    return rule.who === "live-holders"
+      ? "Whoever holds the power to switch modules switches this part of the Game on or off."
+      : "The administrators switch this part of the Game on or off in the module library.";
+  }
   return "The founders adopt this before the Game starts.";
 }
 

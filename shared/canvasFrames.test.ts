@@ -33,7 +33,8 @@ describe("the setting doors", () => {
   });
 
   it("maps plan 2.3's table: Team, Power, Conflict and Resourcing write; Roles and Meetings link out", () => {
-    expect(doorsForBlock("team").map((d) => d.id)).toEqual(["dial:membership.vouches_required", "exit:terms"]);
+    // The closing words (D3) join the Team block, suggested from their own card on /exit-policy.
+    expect(doorsForBlock("team").map((d) => d.id)).toEqual(["dial:membership.vouches_required", "exit:terms", "exit:closing"]);
     expect(doorsForBlock("power").map((d) => d.id)).toEqual(["dial:governance.default_method", "module:governance"]);
     expect(doorsForBlock("conflict").map((d) => d.id)).toEqual(["exit:restorative"]);
     expect(doorsForBlock("resourcing").map((d) => d.id)).toEqual(["dial:ledger.admin_mint_cycle_cap"]);

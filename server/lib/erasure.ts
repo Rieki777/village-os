@@ -160,6 +160,8 @@
  * silent any more.
  */
 import { forgetAgeBand } from "../repos/questSafety";
+import { blankConfigListField } from "../repos/appConfigDocs";
+import { OMBUDS_ASKS_KEY } from "./conflictAgreement";
 import type { Pool } from "mysql2/promise";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -1750,6 +1752,24 @@ function sweepSteps(pool: Pool, target: any, actorId: string | null, deps: Erasu
       },
     },
     {
+      /*
+       * THE OMBUDS DOOR'S POINTERS (`ombuds-asks`, server/lib/conflictAgreement.ts;
+       * D10a, 2026-11-09). Each one keeps that somebody asked an outside
+       * contact, when, and which; none carries words. The record stays whole
+       * so the village can still count how often the door was used, and
+       * `askedBy` is blanked, because who asked for outside help in a conflict
+       * is about them (blankConfigListField in server/repos/appConfigDocs.ts).
+       *
+       * AFTER THE TOMBSTONE, for the reason the needs step gives: the door
+       * takes an ask from any signed-in session until the sessions die. Keyed
+       * on the member's id, so a resume or a second run finds nobody to blank.
+       */
+      name: "ombuds-asks-after-tombstone",
+      run: async () => {
+        await blankConfigListField(pool, OMBUDS_ASKS_KEY, "asks", "askedBy", String(target.id ?? ""));
+      },
+    },
+    {
       // A chat or a draft can still land between the first pass and the
       // tombstone, so it runs again, as the last step that deletes the
       // member's own data. Two steps follow it on purpose and touch none:
@@ -2321,6 +2341,7 @@ export const BACKFILL_BY_ID: ReadonlySet<string> = new Set([
   "member-asks-after-tombstone",
   "moon-reviews-after-tombstone",
   "notebook-after-tombstone",
+  "ombuds-asks-after-tombstone",
   "product-subscriptions-after-tombstone",
 ]);
 

@@ -160,3 +160,80 @@ describe("the door to propose a change", () => {
     expect(screen.queryByRole("button", { name: "Propose a change" })).toBeNull();
   });
 });
+
+// Sweep decision D3 (Rye, 2026-11-06): with the Governance Canvas on, the door
+// is a suggestion box for every signed-in member, on the canvas's exit:closing
+// door; adoption keeps its gate on the server. With it off, the advisory door
+// above stays as the fallback.
+describe("the suggestion box, when the canvas is on (D3)", () => {
+  const CANVAS_ON = { ...GOVERNANCE_ON, id: "canvas", name: "Governance Canvas" };
+
+  it("offers Suggest a change to a member who cannot open votes, with governance off, and no advisory ask", async () => {
+    catalog.modules = [CANVAS_ON];
+    gov.facts = { ok: true, data: { mayOpenAdvisory: false } };
+    render(<ClosingPolicyCard closing={ADOPTED} />);
+    expect(screen.getByRole("button", { name: "Suggest a change" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Propose a change" })).toBeNull();
+    expect(screen.queryByText(/has not turned governance on yet/)).toBeNull();
+    expect(screen.queryByText(/does not open those yet/)).toBeNull();
+  });
+
+  it("offers nothing to a signed-out reader", () => {
+    catalog.modules = [CANVAS_ON];
+    auth.user = null;
+    render(<ClosingPolicyCard closing={ADOPTED} />);
+    expect(screen.queryByRole("button", { name: "Suggest a change" })).toBeNull();
+  });
+
+  it("files a canvas suggestion on the exit:closing door carrying the words", async () => {
+    catalog.modules = [CANVAS_ON, GOVERNANCE_ON];
+    const sent: any[] = [];
+    const fetchMock = vi.fn(async (url: string, init: any) => {
+      sent.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify({ proposal: { id: 7 } }), { status: 201 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<ClosingPolicyCard closing={ADOPTED} />);
+      fireEvent.click(screen.getByRole("button", { name: "Suggest a change" }));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "own-words" } });
+      const boxes = screen.getAllByRole("textbox");
+      fireEvent.change(boxes[0], { target: { value: OWN } });
+      fireEvent.change(boxes[1], { target: { value: "The land should stay with the watershed." } });
+      fireEvent.click(screen.getByRole("button", { name: "Send the suggestion" }));
+      await screen.findByRole("status");
+      expect(sent).toEqual([
+        {
+          url: "/api/canvas/proposals",
+          body: {
+            blockId: "team",
+            target: "setting",
+            door: "exit:closing",
+            change: { policyId: "own-words", statement: OWN },
+            body: "The land should stay with the watershed.",
+          },
+        },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses words the server would refuse, before sending anything", async () => {
+    catalog.modules = [CANVAS_ON];
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<ClosingPolicyCard closing={ADOPTED} />);
+      fireEvent.click(screen.getByRole("button", { name: "Suggest a change" }));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "own-words" } });
+      fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "TBD" } });
+      fireEvent.change(screen.getAllByRole("textbox")[1], { target: { value: "Because." } });
+      fireEvent.click(screen.getByRole("button", { name: "Send the suggestion" }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/at least 8 words/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
