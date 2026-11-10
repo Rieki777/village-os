@@ -371,6 +371,11 @@ export default function CoCreatorsGuide() {
                         <p className="text-sm text-muted-foreground">
                           <Emphasized text={circle.body} />
                         </p>
+                        {circle.ask && (
+                          <p className="mt-2 text-sm italic text-foreground">
+                            <Emphasized text={circle.ask} />
+                          </p>
+                        )}
                       </div>
                     );
                   })}

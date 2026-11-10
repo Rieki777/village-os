@@ -113,6 +113,13 @@ export interface OpenProposalBody {
   term?: OpenProposalTerm;
   /** The applicant's own role card (shared/openProposalCard.ts). Absent on a proposal sent before it existed. */
   card?: OpenProposalCard;
+  /**
+   * The membership letter the applicant aligned with on the form, by the
+   * version the form drew (Rye's answer 8, 9 Nov 2026). Recorded against the
+   * address once it confirms (server/lib/applicationMembership.ts). Absent:
+   * they did not align on the form, and are asked before their role starts.
+   */
+  membership?: { letterVersion: string };
 }
 
 export interface OpenProposalInput {
@@ -125,6 +132,12 @@ export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string; err
 
 /** Trimmed, and cut one past the cap so "too long" can still be told from "at the cap". `trim()`, never a regex: an anchored `\s+$` runs slow on a long run of spaces. */
 const text = (v: unknown, max: number): string => String(typeof v === "string" ? v : "").trim().slice(0, max + 1);
+
+/** A stored or sent membership alignment: a letter version, or nothing. */
+export function membershipOf(raw: unknown): { letterVersion: string } | null {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>).letterVersion : null;
+  return typeof v === "string" && /^lv-[0-9a-f]{16}$/.test(v) ? { letterVersion: v } : null;
+}
 
 /** What a stored body reads as, whatever was stored. Never throws. */
 export function openBodyOf(raw: unknown): OpenProposalBody {
@@ -139,6 +152,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     aim: text(o.aim, OPEN_AIM_MAX).slice(0, OPEN_AIM_MAX),
     ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
     ...(cardOf(o.card) ? { card: cardOf(o.card) } : {}),
+    ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
   };
 }
 

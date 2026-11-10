@@ -62,7 +62,7 @@ import type { InvitedArrival } from "./inviteDoor";
 import type { NotifyInput } from "./notify";
 import { isTombstone } from "./oauthAccounts";
 import { listOrgRoles, type LapseContext } from "./orgChart";
-import { adoptApplication, settleDepsOf, tellOutcome } from "./seatApplicationCloser";
+import { adoptApplication, settleDepsOf, tellOutcome, wholeSecond } from "./seatApplicationCloser";
 import { prepareApplication, writeApplicationOn } from "./seatApplicationWrite";
 import { inTransaction } from "../repos/liveSessions";
 import { inviteById, revokeInvite } from "../repos/memberInvites";
@@ -276,7 +276,9 @@ export async function placeOnRoles(
   // at adoption, never before the moon's first day, and ends on its last day
   // (shared/openProposalTerm.ts, Rye 9 Nov 2026).
   const moonStart = term ? civilDateInstant(term.startsOn, tz) : null;
-  const startsAt = term ? (moonStart && moonStart.getTime() > now.getTime() ? moonStart : now) : season ? civilDateInstant(season.startsOn, tz) : null;
+  // "Now" in whole seconds, the precision `starts_at` keeps (see startReached in seatApplicationCloser.ts).
+  const nowSecond = wholeSecond(now);
+  const startsAt = term ? (moonStart && moonStart.getTime() > now.getTime() ? moonStart : nowSecond) : season ? civilDateInstant(season.startsOn, tz) : null;
   if (!season || !startsAt) return { ok: false, code: "cannot", error: "The season this proposal was for is no longer on the village's calendar, so nothing was changed." };
   if (term && civilDateKey(now, tz) > term.endsOn) {
     return { ok: false, code: "cannot", error: "The moon this proposal was for has ended, so nothing was changed. Ask them to propose again for this moon." };

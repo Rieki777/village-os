@@ -30,7 +30,10 @@ type Deps = Pick<
   AppDeps,
   "isAdmin" | "authedUser" | "adminActor" | "guardCapability" | "mayStillSee" | "getPool" | "members" | "circlesRepo"
 > &
-  CarryDeps;
+  CarryDeps & {
+    /** A village variable read as a flag. `boolVar` in server/index.ts. */
+    boolVar?(key: string): boolean;
+  };
 
 const idList = (v: unknown): string[] | null => {
   const raw = Array.isArray(v) ? v : typeof v === "string" && v !== "" ? v.split(",") : [];
@@ -39,7 +42,7 @@ const idList = (v: unknown): string[] | null => {
 };
 
 export function register(app: Express, deps: Deps): void {
-  const { isAdmin, authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo, liveHoldersOf } = deps;
+  const { isAdmin, authedUser, adminActor, guardCapability, mayStillSee, getPool, members, circlesRepo, liveHoldersOf, boolVar } = deps;
 
   /*
    * AFTER THE ACCEPT THIS ANSWERS WITH THE DRAFT. A batch accepted whole has
@@ -103,7 +106,8 @@ export function register(app: Express, deps: Deps): void {
       circles: circlesRepo.all() as RepoCircle[],
       batchId: String(req.params.batchId),
       ids: idList(req.body?.ids),
-      decisions: readDecisions(req.body),
+      // The village setting decides this, never the request (role journey PR-A).
+      decisions: { ...readDecisions(req.body), startUnlisted: boolVar?.("org.sync_starts_unlisted") === true },
       actor,
       dryRun: req.body?.dryRun === true,
       roster,

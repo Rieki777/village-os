@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 206 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 213 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 229 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 236 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-256 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 32 boolean, 34 choice, 40 text, 1 longtext.
+263 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 37 boolean, 34 choice, 42 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ Each dial also says WHEN a change lands. 229 of them as soon as it is saved, and
 | Gratitude | 11 | 11 | 0 |
 | Ledger | 17 | 9 | 8 |
 | The Mint | 7 | 6 | 1 |
-| Progression | 31 | 31 | 0 |
+| Progression | 34 | 34 | 0 |
 | Quests | 3 | 3 | 0 |
 | Governance | 51 | 45 | 6 |
 | Tokens | 4 | 1 | 3 |
@@ -57,7 +57,7 @@ Each dial also says WHEN a change lands. 229 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 4 | 3 | 1 |
+| The village's people | 8 | 7 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -128,6 +128,9 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Which Voice wanes | `economy.voice_decay_basis` | The Mint | choice | `all` | the whole village |
 | How often every role reopens | `org.reassignment_cadence` | Progression | choice | `season_turn` | the whole village |
 | Most changes one outside batch can propose | `org.proposal_change_limit` | Progression | integer | `500` | the whole village |
+| A role starts only after: confidentiality | `org.start_after_confidentiality` | Progression | boolean | `false` | the whole village |
+| A role starts only after: membership | `org.start_after_membership` | Progression | boolean | `false` | the whole village |
+| A paid role starts only after its terms | `org.start_after_paid_terms` | Progression | boolean | `false` | the whole village |
 | Sending-budget multiplier: Visitor | `progression.multiplier.visitor` | Progression | decimal | `0` | the whole village |
 | Sending-budget multiplier: Guest | `progression.multiplier.guest` | Progression | decimal | `1` | the whole village |
 | Sending-budget multiplier: Immersant | `progression.multiplier.immersant` | Progression | decimal | `1` | the whole village |
@@ -266,6 +269,10 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
 | Ask the circle to consent after the conversations | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
 | The role that sends first replies to applicants | `org.onboarding_role` | The village's people | text | blank | the whole village |
+| Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
+| A role needs a complete card before anyone can apply | `org.apply_needs_complete_card` | The village's people | boolean | `false` | the whole village |
+| The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
+| The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
@@ -1000,7 +1007,7 @@ What it may be set to:
 
 ## Progression
 
-31 dials. 31 for the whole village.
+34 dials. 34 for the whole village.
 
 ### How often every role reopens
 
@@ -1034,6 +1041,48 @@ How many roles one batch from an outside service can put into a single draft. A 
 | Default | `500` |
 | Range | 1 to 10000 |
 | Counted in | changes |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role starts only after: confidentiality
+
+When on, an adopted role does not start until its holder has aligned with the village's confidentiality agreement as it reads now. Write the agreement's words first (Admin, content, the confidentiality section): with no words written, nobody can align, and roles wait.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_confidentiality` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role starts only after: membership
+
+When on, an adopted role does not start until its holder has aligned with the village's membership letter. Somebody who aligned when they applied is not asked again. No payment is ever part of it.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_membership` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A paid role starts only after its terms
+
+When on, a role whose terms carry pay, an allowance or a bonus does not start until its holder has aligned with those terms, the agreed rate included. Roles with no money in their terms are not asked.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.start_after_paid_terms` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -3334,7 +3383,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-4 dials. 3 for the whole village, 1 for the founder or an admin.
+8 dials. 7 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3371,6 +3420,62 @@ The role whose holders are reminded to send each applicant a first reply within 
 | Fact | Value |
 | --- | --- |
 | Key | `org.onboarding_role` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Roles accepted from a sync start unlisted
+
+On, a role that arrives from a sync and is accepted starts unlisted: holders, stewards and admins see it, and no visitor or member browsing the village does. A steward lists it once its card is ready. Off, an accepted role is listed at once.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.sync_starts_unlisted` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role needs a complete card before anyone can apply
+
+On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.apply_needs_complete_card` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The role that holds first conversations
+
+The role whose holders hold the first conversation with somebody who applies for a role. The card names it as the first step, and its booking link is where the first conversation is booked. Leave it empty and the card names no first step. Paste the role id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.first_conversation_role` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The circle that consents paid roles
+
+The circle whose consent a paid role needs before anybody is seated in it. The card names it when the role is paid. Leave it empty and the card names no consenting circle. Paste the circle id from the org chart.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.paid_consent_circle` |
 | Type | text, free text, one line |
 | Default | blank |
 | Range | no bounds are set |
@@ -4591,10 +4696,12 @@ What it may be set to:
 
 The generator reads these and fails loudly if any of them moves:
 
+- `shared/agreements.ts`
 - `shared/ballotSubjects.ts`
 - `shared/capabilities.ts`
 - `shared/changeRequestLimits.ts`
 - `shared/changeSetCap.ts`
+- `shared/closingPolicies.ts`
 - `shared/conflictAgreement.ts`
 - `shared/gameConfig.ts`
 - `shared/gameVariables.ts`

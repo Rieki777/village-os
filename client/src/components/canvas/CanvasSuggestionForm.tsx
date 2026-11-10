@@ -30,8 +30,8 @@
  * lifecycle) is kept per aim.
  *
  * WHERE A SUGGESTION CANNOT BE CARRIED, the box says so before anybody writes
- * (`suggestionFate`): after the Birthing the exit terms and the matrix wait for
- * a vote not built yet, the care door changes only by the conflict agreement's
+ * (`suggestionFate`): after the Birthing the exit terms and the matrix are filed
+ * by their author as a structural vote, the care door changes only by the conflict agreement's
  * own vote, and after the handover the purpose statement's vote is opened from
  * Start a proposal. Suggesting stays free in every case.
  */

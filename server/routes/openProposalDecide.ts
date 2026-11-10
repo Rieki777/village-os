@@ -52,6 +52,7 @@
  * (server/lib/inviteDoor.ts).
  */
 import { listOrgRoles } from "../lib/orgChart";
+import { membershipAlignedFor } from "../lib/applicationMembership";
 import { identityKey } from "../../shared/openProposals";
 import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
@@ -285,6 +286,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         season: season ? { id: String(season.id), name: String(season.name ?? "") || null, startsOn: String(season.startsOn) } : null,
         term: p.body.term ?? null,
         card: p.body.card ?? null,
+        // The membership letter, aligned with at application or from their account (Rye's answer 8): a yes or a no.
+        membership: { aligned: await membershipAlignedFor(pool, p.email, may.own ?? null) },
         roles,
         why: p.body.why,
         aim: p.body.aim,

@@ -41,9 +41,16 @@ describe("parseCard", () => {
     expect(parseCard({ ...GOOD, roles: [{ roleId: "nope", moves: [], firstMoon: [] }] }, CTX).ok).toBe(false);
   });
 
-  it("needs both agreements ticked: the Love Letter before seating, the NDA once approved", () => {
+  it("needs the NDA promise ticked; the Love Letter is aligned with on the form, never ticked (Rye's answer 8)", () => {
     const r = parseCard({ ...GOOD, agreed: { loveLetter: true, nda: false } }, CTX);
     expect(r).toMatchObject({ ok: false, field: "agreed" });
+    // No Love Letter tick at all: the card stands on the NDA alone.
+    expect(parseCard({ ...GOOD, agreed: { nda: true } }, CTX)).toMatchObject({ ok: true, card: { agreed: { loveLetter: false, nda: true } } });
+  });
+
+  it("stays tolerant of a card sent with the old Love Letter tick, and keeps it as stored", () => {
+    expect(parseCard({ ...GOOD, agreed: { loveLetter: true, nda: true } }, CTX)).toMatchObject({ ok: true, card: { agreed: { loveLetter: true, nda: true } } });
+    expect(cardOf({ ...GOOD, agreed: { loveLetter: true, nda: true } })?.agreed).toEqual({ loveLetter: true, nda: true });
   });
 
   it("caps every list and every line", () => {

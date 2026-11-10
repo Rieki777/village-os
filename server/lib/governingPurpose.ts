@@ -10,8 +10,8 @@
  *
  * Two paths write this document and they land years apart. The founder's own
  * write happens on day one, through the setup wizard. The closer's write
- * happens when a village that has finished its handover carries a change
- * ballot, which under the pen ruling may be a long way off. Both go through
+ * happens when a village carries a change ballot, which since Rye's ruling
+ * of 2026-11-06 may be before the handover too (at the highest tier). Both go through
  * `writeGoverningPurpose`, so a statement the founder could not save is a
  * statement the closer cannot land either. Two validators agreeing by
  * inspection is how a standard drifts, and this one would drift unwatched
@@ -110,6 +110,12 @@ export async function writeGoverningPurpose(
  *
  * Rye, 2026-09-23, verbatim: "Founder keeps the pen until they give over all
  * steward powers to the village."
+ *
+ * SUPERSEDED ON ONE POINT (Rye, 2026-11-06): Article 0 wins over "founder
+ * keeps the pen", so a highest-tier vote may change the statement at any
+ * time, before the handover too (server/routes/governingPurpose.ts prices it).
+ * What this function still decides is the founder's DIRECT write: theirs until
+ * the handover completes, the village's ballot alone after it.
  *
  * THIS IS TIED TO THE HANDOVER AND NOT TO WHETHER THE GAME HAS STARTED, and
  * the difference is about to be real. `founderPowerStands` in
