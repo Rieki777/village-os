@@ -2,7 +2,7 @@
  * THE ADDRESS THAT OPENS "APPLY FOR A SEAT" WITH SEVERAL SEATS PICKED.
  *
  * A seat card's door picks one seat (`proposeTermsHref`, `?seat=<id>`). The
- * character page lets a member pick up to five seats that fit their character
+ * character page lets a member pick up to three roles that fit their character
  * and propose them in one application, so the wizard's start reads a LIST:
  * the `seat` parameter repeated, `?seat=a&seat=b`, or one `seats=a,b,c`. The
  * builder writes the repeated form, which an older reader still opens on the
@@ -43,12 +43,49 @@ export function seatsFromSearch(search: string | URLSearchParams): string[] {
 }
 
 /** Where "Propose these" goes: the wizard on "Apply for a seat" with every picked seat. */
-export function applySeatsHref(seatIds: readonly string[], opts: { seasonId?: string | null } = {}): string {
+export function applySeatsHref(seatIds: readonly string[], opts: { seasonId?: string | null; from?: string | null } = {}): string {
   const q = new URLSearchParams({ type: "role_application" });
   for (const id of seatIds) {
     const s = String(id ?? "").trim();
     if (s) q.append("seat", s);
   }
   if (opts.seasonId) q.set("season", opts.seasonId);
+  // Where the member came from, so the door's back link returns there (Rye, 10 Nov 2026).
+  const from = doorFrom(opts.from);
+  if (from) q.set("from", from);
   return `/propose?${q.toString()}`;
+}
+
+/**
+ * WHERE A MEMBER CAME FROM, read safely. Only a same-site path counts: one
+ * slash, then a path (never `//host`, never a scheme). Anything else is no
+ * answer, and the door falls back to the roles board.
+ */
+export function doorFrom(raw: unknown): string | null {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s || s.length > 300 || !s.startsWith("/") || s.startsWith("//") || s.startsWith("/\\") || Array.from({ length: s.length }, (_, i) => s.charCodeAt(i)).some((c) => c < 32)) return null;
+  return s;
+}
+
+/** The roles board, where a member who came from nowhere we know is sent back to. */
+export const DOOR_HOME = "/roles/draft";
+
+/**
+ * WHERE A DOOR'S BACK LINK GOES, for the member door and the open form alike:
+ * the `from` the role card or the board sent, else the same-site page the
+ * browser came from, else the roles board. `card` says whether it is one role's
+ * card ("Back to the role") or a list ("Back to the roles").
+ */
+export function doorBackOf(search: string, referrer: string, origin: string): { href: string; card: boolean } {
+  let href = doorFrom(new URLSearchParams(search).get("from"));
+  if (!href && referrer) {
+    try {
+      const r = new URL(referrer);
+      if (r.origin === origin && r.pathname !== "/propose" && !r.pathname.startsWith("/propose-a-role")) href = doorFrom(r.pathname + r.search);
+    } catch {
+      /* not a URL */
+    }
+  }
+  const to = href ?? DOOR_HOME;
+  return { href: to, card: /^\/roles\?(.*&)?seat=/.test(to) };
 }

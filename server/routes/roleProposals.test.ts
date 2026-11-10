@@ -276,14 +276,14 @@ describe.skipIf(!configured)("role proposals, on a real schema", () => {
     expect(waiting.text).not.toContain(water);
   });
 
-  it("holds at most five roles", async () => {
+  it("holds at most three roles (D3)", async () => {
     const ids = [];
-    for (const name of ["Path One", "Path Two", "Path Three", "Path Four", "Path Five", "Path Six"]) ids.push(await role(name));
-    const draft = await readyDraft(ids.slice(0, 5));
-    expect(draft.roles).toHaveLength(5);
-    const six = await h.call("PUT", `${P}/${draft.id}`, { roles: ids.map((roleId) => ({ roleId })) });
-    expect(six.status).toBe(400);
-    expect(six.body.error).toBe(PROPOSAL_WORDS.tooManyRoles);
+    for (const name of ["Path One", "Path Two", "Path Three", "Path Four"]) ids.push(await role(name));
+    const draft = await readyDraft(ids.slice(0, 3));
+    expect(draft.roles).toHaveLength(3);
+    const four = await h.call("PUT", `${P}/${draft.id}`, { roles: ids.map((roleId) => ({ roleId })) });
+    expect(four.status).toBe(400);
+    expect(four.body.error).toBe(PROPOSAL_WORDS.tooManyRoles);
     const plusNew = await h.call("PUT", `${P}/${draft.id}`, { newRoles: [{ circleId: "c-land", words: { name: "Orchard Keeper" } }] });
     expect(plusNew.status).toBe(400);
   });

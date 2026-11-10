@@ -9,7 +9,7 @@
  *   1. CONFIRMING ASKS THE CIRCLE. Every live holder of a role in the circles
  *      of the proposed roles is asked to consent or object within 2 business
  *      days (shared/roleProposalConsent.ts, the member proposals' window), and
- *      the live holders of the power that seats people hear it waits on them.
+ *      the live holders of the power to place people in roles hear it waits on them.
  *      Nothing is asked and nobody hears before the address confirms.
  *   2. A MEMBERS-ONLY PAGE, `/open-proposals/:id`, where a member reads it, an
  *      asked holder consents or objects, and a holder of the power adopts it or
@@ -117,22 +117,22 @@ export const DECIDE_WORDS = {
 
   // The decider's card.
   deciderHeading: "For the village",
-  deciderLine: "You hold the power that seats people. Adopt it for the village, or decline it.",
+  deciderLine: "You hold the power to place people in roles. Adopt it for the village, or decline it.",
   adopt: "Adopt for the village",
   decline: "Decline",
   declineAsk: "Decline it? They get a short, kind email saying no.",
   declineYes: "Yes, decline it",
   declineNo: "Keep it",
-  ownProposal: "This proposal came from your own address, so it is decided by another holder of the power that seats people.",
+  ownProposal: "This proposal came from your own address, so it is decided by another holder of the power to place people in roles.",
   /** A former member's address (coordinator, 2026-10-31, after Rye's ruling that former members never invite). */
   formerMember: "This address belongs to somebody who left the village. Welcoming a former member back is its own act, so this proposal is not adopted here. You can still decline it.",
   /** The door after a handover, and with nobody in the chair. Plain, and no path invented. */
   door: {
-    "village-holds-it": "The village holds the power that seats people now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
-    "nobody-holds-it": "Right now nobody holds the power that seats people, so this proposal waits here until somebody does.",
-    "a-role-holds-it": "It is adopted or declined by a holder of the power that seats people.",
+    "village-holds-it": "The village holds the power to place people in roles now, so nobody adopts this proposal on their own. It waits here until the village settles how it adopts one from outside.",
+    "nobody-holds-it": "Right now nobody holds the power to place people in roles, so this proposal waits here until somebody does.",
+    "a-role-holds-it": "It is adopted or declined by a holder of the power to place people in roles.",
     // Answered only when a caller names who carries the power until the village holds it (shared/powerHands.ts).
-    "the-scaffolding-holds-it": "Until the village holds the power that seats people, the founders and stewards adopt or decline it.",
+    "the-scaffolding-holds-it": "Until the village holds the power to place people in roles, the founders and stewards adopt or decline it.",
   } satisfies Record<DoorReason, string>,
 
   // What a decision answers. Every one that sends nothing says what to do instead.
@@ -153,7 +153,7 @@ export const DECIDE_WORDS = {
   copied: "Copied",
 
   // Refusals, each with what to do.
-  notAHolder: "Adopting or declining a proposal is for a live holder of the power that seats people.",
+  notAHolder: "Adopting or declining a proposal is for a live holder of the power to place people in roles.",
   pending: "That address already has an application waiting for one of these roles. Decide that one on its page first.",
   decided: "This proposal has been decided, so there is nothing left to decide.",
   raced: "Somebody else decided this proposal a moment ago. Read it again.",
@@ -253,7 +253,7 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
 export const OPEN_NOTICE_WORDS = {
   waitingTitle: (roles: readonly string[]) => `A role proposal from outside the village waits on you: ${andList(roles) || "a role"}`,
   waitingBody: "Open it to adopt it for the village or decline it. It waits under Tasks on your profile too.",
-  /** To the admins, when nobody holds the power that seats people live, or the village holds it. No vote is opened. */
+  /** To the admins, when nobody holds the power to place people in roles live, or the village holds it. No vote is opened. */
   nobodyToDecideTitle: (roles: readonly string[]) => `A role proposal from outside the village is waiting, and nobody in a role can adopt it now: ${andList(roles) || "a role"}`,
   arrivalFailedTitle: (roles: readonly string[]) => `An adopted proposal's roles could not be set up: ${andList(roles) || "a role"}`,
 } as const;

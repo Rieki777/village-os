@@ -151,9 +151,10 @@ export function addPick(picks: readonly string[], id: string): { picks: string[]
  */
 export function applyHrefFor(picks: readonly string[], member: boolean): string | null {
   if (!picks.length) return null;
-  if (member) return applySeatsHref(picks);
+  if (member) return applySeatsHref(picks, { from: "/roles/draft" });
   const [first, ...rest] = picks;
-  return [openProposalHref(first), ...rest.map((id) => `role=${encodeURIComponent(id)}`)].join("&");
+  // `from`: the open form's back link returns to the board (role audit, 10 Nov 2026).
+  return [openProposalHref(first), ...rest.map((id) => `role=${encodeURIComponent(id)}`), `from=${encodeURIComponent("/roles/draft")}`].join("&");
 }
 
 /** Whether this reader was sent any role's character tags. Strangers get them only when the village shows its structure publicly. */

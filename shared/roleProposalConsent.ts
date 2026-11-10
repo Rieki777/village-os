@@ -154,10 +154,10 @@ export function objectionTension(roleNames: readonly string[], reason: string): 
 
 export const CONSENT_WORDS = {
   open: (closesOnDay: string) => `The circle is asked to consent or object by ${civilDayWords(closesOnDay)}.`,
-  objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. It can still be adopted by a holder of the power that seats people.",
+  objected: "A member of the circle objected, so the proposal goes to the circle's next meeting. It can still be adopted by a holder of the power to place people in roles.",
   consented: "Consented by the circle",
-  lapsed: "The circle's 2 business days passed with no consent. It can still be adopted by a holder of the power that seats people.",
-  noOtherHolders: "Nobody else holds a role in this circle, so the circle cannot consent. It is adopted by a holder of the power that seats people.",
+  lapsed: "The circle's 2 business days passed with no consent. It can still be adopted by a holder of the power to place people in roles.",
+  noOtherHolders: "Nobody else holds a role in this circle, so the circle cannot consent. It is adopted by a holder of the power to place people in roles.",
   /** The one click that records a circle's consent. */
   record: "Record the adoption",
   reasonNeeded: "Say why you object, so the circle can talk it through.",
@@ -172,7 +172,7 @@ export const CONSENT_WORDS = {
   sessionsOff: "Live Sessions is off, so the objection waits on the application page.",
   askTitle: (roles: readonly string[]) => `Your circle is asked about a role proposal: ${seatList(roles)}`,
   askBody: (closesOnDay: string) => `Consent or object by ${civilDayWords(closesOnDay)}. It waits under Tasks on your profile too.`,
-  noVote: "A proposal that changes roles is adopted by its circle's consent or by a holder of the power that seats people. It does not go to a village vote.",
+  noVote: "A proposal that changes roles is adopted by its circle's consent or by a holder of the power to place people in roles. It does not go to a village vote.",
   candidateOpens: "The member who proposed it opens this vote.",
 
   // The application page's controls (role proposals PR D).

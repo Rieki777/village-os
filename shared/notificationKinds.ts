@@ -331,7 +331,7 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
   },
   open_role_proposal_waiting: {
     group: "decisions",
-    blurb: "Somebody from outside the village proposes to hold roles. You hold the power that seats people, so it is yours to adopt or decline.",
+    blurb: "Somebody from outside the village proposes to hold roles. You hold the power to place people in roles, so it is yours to adopt or decline.",
     many: "{n} role proposals from outside the village wait on you.",
     celebrate: false,
   },

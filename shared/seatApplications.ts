@@ -49,9 +49,9 @@ export const ROLE_APPLICATION = "role_application";
 /** The power that adopts seat applications. */
 export const ADOPTING_POWER = "org.seat";
 
-/** One application holds at least one seat and at most five. */
+/** One application holds at least one role and at most three (D3: three everywhere, the board's and the open form's limit too). */
 export const MIN_SEATS = 1;
-export const MAX_SEATS = 5;
+export const MAX_SEATS = 3;
 
 /** The longest the member's own words may run, each. */
 export const WORDS_MAX = 2000;
@@ -202,7 +202,7 @@ export function adoptRefusal(rule: HandOpenerRule, actorId: string, candidateId:
     return {
       status: 403,
       error: "not_a_holder",
-      message: "Adopting an application for the village is for a live holder of the power that seats people.",
+      message: "Adopting an application for the village is for a live holder of the power to place people in roles.",
     };
   }
   return null;
@@ -220,7 +220,7 @@ export function putToVillageRefusal(rule: HandOpenerRule, actorId: string): Door
   return {
     status: 403,
     error: "not_a_holder",
-    message: "Sending an application to the village is for a live holder of the power that seats people.",
+    message: "Sending an application to the village is for a live holder of the power to place people in roles.",
   };
 }
 

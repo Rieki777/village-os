@@ -9,7 +9,7 @@
  * What a member reads, in the order they ask it:
  *
  *   WHICH ROLES, ON WHAT TERMS   the candidate's player card in proposal mode
- *                                (PR 3): one card for up to five roles, its
+ *                                (PR 3): one card for up to three roles, its
  *                                live sections reading "Starts once adopted",
  *                                then the Settings drawer OPEN on the terms.
  *                                Should the card fail to load, each role as its
@@ -81,9 +81,9 @@ export const APPLICATION_WORDS = {
   why: "Why them",
   wordsRemoved: "These words were removed at the member's request.",
   holderHeading: "For the village",
-  holderLine: "You hold the power that seats people. Adopt it for the village, or send it to the village to decide.",
+  holderLine: "You hold the power to place people in roles. Adopt it for the village, or send it to the village to decide.",
   /** A role proposal that changes roles never goes to a village vote (role proposals PR B). */
-  powerLine: "You hold the power that seats people. Adopt it for the village.",
+  powerLine: "You hold the power to place people in roles. Adopt it for the village.",
   ownTerms: "Your own terms go to the village to adopt.",
   align: "Align for the village",
   putToVillage: "Put it to the village",

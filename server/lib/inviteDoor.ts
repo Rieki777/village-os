@@ -92,6 +92,36 @@ export type InvitedArrival = (arrival: { inviteId: string; inviterUserId: string
 const arrivals: Array<{ prefix: string; run: InvitedArrival }> = [];
 
 /**
+ * WHAT A LINK NAMED AFTER A DECISION SAYS ABOUT ITSELF on the sign-up page
+ * (role audit, 10 Nov 2026: the selection carries forward). An adopted
+ * proposal's link names the roles it places the person on, and gives back the
+ * name and address the person sent, so they finish rather than start again.
+ * Read only behind a good token, the one-use link that went to that address.
+ */
+export type InviteFor = { roles: string[]; name: string | null; email: string | null };
+export type InviteDescriber = (inviteId: string) => Promise<InviteFor | null>;
+const describers: Array<{ prefix: string; describe: InviteDescriber }> = [];
+
+/** Register how a link whose id starts with `prefix` describes itself. Called once, at boot. */
+export function whenInviteDescribed(prefix: string, describe: InviteDescriber): void {
+  if (!prefix) throw new Error("an invite describer needs the prefix of the links it is for");
+  describers.push({ prefix, describe });
+}
+
+/** What the link this id names is for, or null for an ordinary invitation. Never throws. */
+export async function describeInvite(inviteId: string): Promise<InviteFor | null> {
+  for (const d of describers) {
+    if (!inviteId.startsWith(d.prefix)) continue;
+    try {
+      return await d.describe(inviteId);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Register what an arrival through a link whose id starts with `prefix` does.
  * Called once, from the feature that mints such links, at boot.
  */

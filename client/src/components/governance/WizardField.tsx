@@ -39,6 +39,8 @@ import { isSearchSource, loadPickOptions, searchMembers, type PickOption } from 
 import { SeatTermForRole, type SeatTermLook } from "@/components/power/SeatTermField";
 import SeatSettingsEditor from "./SeatSettingsEditor";
 import SeatPicksField from "./SeatPicksField";
+import SeasonGoalField from "./SeasonGoalField";
+import TermsOnOfferField from "./TermsOnOfferField";
 import { useVillagePresets } from "@/lib/seatPresetsRead";
 
 export interface MechanicsVariableLite {
@@ -286,6 +288,12 @@ export default function WizardField({
       return (
         <SeatPicksField field={field} value={value} onChange={onChange} describedBy={describedBy} invalid={!!problem} footerNode={footer} />
       );
+
+    case "seasonGoal":
+      return <SeasonGoalField field={field} value={value} onChange={onChange} problem={problem} />;
+
+    case "termsOnOffer":
+      return <TermsOnOfferField field={field} value={value} onChange={onChange} answers={answers ?? {}} problem={problem} />;
 
     case "changeSet":
       return (

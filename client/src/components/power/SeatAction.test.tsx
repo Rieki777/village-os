@@ -205,10 +205,10 @@ describe("a member who reads terms", () => {
   it("is sent to the application wizard with the seat picked, and posts nothing", async () => {
     const { applyHrefFor } = await import("./SeatTermsSlot");
     const href = applyHrefFor({ ...OPEN, termsOffer: null });
-    expect(href).toBe("/propose?type=role_application&seat=seat-water");
+    expect(href).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     render(<SeatTradingCard input={fromMapSeat(OPEN, DATA, { signedIn: true })} ctx={CTX} action={<SeatAction circleId="land" applyHref={href} />} />);
     const door = screen.getByRole("link", { name: "Raise your hand for Water Keeper" });
-    expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water");
+    expect(door.getAttribute("href")).toBe("/propose?type=role_application&seat=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     expect(screen.getByText("Opens your application for this role and its terms. A role holder or the village adopts it.")).toBeTruthy();
     fireEvent.click(door);
     expect(posted).toHaveLength(0);
@@ -239,7 +239,7 @@ describe("a signed-out reader on an open role", () => {
   it("is offered to apply for this role, through the open proposal for it", () => {
     render(signedOut(OPEN));
     const apply = screen.getByRole("link", { name: "Apply for Water Keeper" });
-    expect(apply.getAttribute("href")).toBe("/propose-a-role?role=seat-water");
+    expect(apply.getAttribute("href")).toBe("/propose-a-role?role=seat-water&from=%2Froles%3Fseat%3Dseat-water");
     // A member who has an account still has the way to sign in, back here.
     expect(screen.getByRole("link", { name: /Sign in to raise your hand/ }).getAttribute("href")).toMatch(/^\/login\?next=/);
   });

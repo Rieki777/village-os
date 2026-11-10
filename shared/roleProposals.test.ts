@@ -223,14 +223,16 @@ describe("a body update", () => {
   });
 
   it(`holds at most ${MAX_SEATS} roles across those the village has and new ones`, () => {
+    // D3: three everywhere, the board's, the open form's and the member door's limit (Rye, 10 Nov 2026).
+    expect(MAX_SEATS).toBe(3);
     expect(MAX_PROPOSAL_ROLES).toBe(MAX_SEATS);
-    const five = ["role-garden", "role-kitchen", "role-water", "role-paths", "role-tools"].map((roleId) => ({ roleId }));
-    expect(parseBodyUpdate({ roles: five }, emptyBody(), ctx()).ok).toBe(true);
-    const six = [...five, { roleId: "role-seeds" }];
-    expect(parseBodyUpdate({ roles: six }, emptyBody(), ctx())).toEqual({ ok: false, field: "roles", error: PROPOSAL_WORDS.tooManyRoles });
-    const four = five.slice(0, 4);
-    const two = [1, 2].map((i) => ({ circleId: "circle-land", words: { name: `New role ${i}` } }));
-    expect(parseBodyUpdate({ roles: four, newRoles: two }, emptyBody(), ctx())).toEqual({ ok: false, field: "newRoles", error: PROPOSAL_WORDS.tooManyRoles });
+    const three = ["role-garden", "role-kitchen", "role-water"].map((roleId) => ({ roleId }));
+    expect(parseBodyUpdate({ roles: three }, emptyBody(), ctx()).ok).toBe(true);
+    const four = [...three, { roleId: "role-paths" }];
+    expect(parseBodyUpdate({ roles: four }, emptyBody(), ctx())).toEqual({ ok: false, field: "roles", error: PROPOSAL_WORDS.tooManyRoles });
+    const two = three.slice(0, 2);
+    const twoNew = [1, 2].map((i) => ({ circleId: "circle-land", words: { name: `New role ${i}` } }));
+    expect(parseBodyUpdate({ roles: two, newRoles: twoNew }, emptyBody(), ctx())).toEqual({ ok: false, field: "newRoles", error: PROPOSAL_WORDS.tooManyRoles });
   });
 
   it("refuses a role the village does not fill, and the same role twice", () => {

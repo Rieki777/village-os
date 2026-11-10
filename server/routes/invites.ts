@@ -28,7 +28,7 @@ import type { Express } from "express";
 import type { Pool } from "mysql2/promise";
 
 import type { AppDeps } from "../lib/appDeps";
-import type { InviteDoor } from "../lib/inviteDoor";
+import { describeInvite, type InviteDoor } from "../lib/inviteDoor";
 import {
   INVITE_DAYS,
   INVITE_REFUSALS,
@@ -175,11 +175,14 @@ export function register(app: Express, deps: Deps): void {
     if (!token) return res.json({ inviteOnly, valid: false, error: INVITE_REFUSALS.unknown });
     const found = await invites.resolve(token);
     if (!found.ok) return res.json({ inviteOnly, valid: false, error: found.error });
+    // A link made by an adopted proposal says what it is for: the roles, and what the person sent.
+    const forWhat = await describeInvite(found.id);
     res.json({
       inviteOnly,
       valid: true,
       invitedBy: firstName(found.inviterName),
       daysLeft: daysLeft(found.secondsLeft),
+      ...(forWhat ? { forRoles: forWhat.roles, name: forWhat.name, email: forWhat.email } : {}),
     });
   });
 }

@@ -42,6 +42,13 @@ export interface OpenPaths {
  * "no match", which is how untagged rows vanished from every class.
  */
 const UNTAGGED = "(`archetypes` IS NULL OR JSON_LENGTH(`archetypes`) = 0)";
+/**
+ * Role journey PR-A: an unlisted role is in no list a visitor or member browses
+ * (shared/roleListing.ts; NULL reads as listed). The character page a new
+ * account lands on still offered them, and its class cards counted them (role
+ * audit, 10 Nov 2026).
+ */
+const LISTED = "(r.`listed` IS NULL OR r.`listed` <> 0)";
 
 /** Live seatings per role, members and documented holders alike, agents excluded. */
 const LIVE_SEATINGS =
@@ -83,13 +90,13 @@ export async function openPathsFor(
   const tagged = "JSON_CONTAINS(`archetypes`, JSON_QUOTE(?))";
   const [roles] = await pool.query<RowDataPacket[]>(
     "SELECT `id`, `name`, `seats`, `recruiting`, `circle_id`, `color` FROM `org_roles` " +
-      `WHERE \`active\` = 1 AND \`is_example\` = 0 AND ${tagged} ` +
+      `WHERE \`active\` = 1 AND \`is_example\` = 0 AND ${LISTED.replace(/r\./g, "")} AND ${tagged} ` +
       "ORDER BY `recruiting` DESC, `sort_order`, `name` LIMIT 12",
     [archetypeKey],
   );
   const [also] = await pool.query<RowDataPacket[]>(
     "SELECT r.`id`, r.`name`, r.`seats`, r.`recruiting`, r.`circle_id`, r.`color` FROM `org_roles` r " +
-      `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND ${UNTAGGED.replace(/`archetypes`/g, "r.`archetypes`")} AND ${OPEN_NOW} ` +
+      `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND ${LISTED} AND ${UNTAGGED.replace(/`archetypes`/g, "r.`archetypes`")} AND ${OPEN_NOW} ` +
       "ORDER BY r.`recruiting` DESC, r.`sort_order`, r.`name` LIMIT 12",
   );
   const [quests] = await pool.query<RowDataPacket[]>(
@@ -116,14 +123,14 @@ export async function openNowCounts(pool: Pool, keys: readonly string[]): Promis
   for (const key of keys) {
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT COUNT(*) AS n FROM `org_roles` r " +
-        `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND JSON_CONTAINS(r.\`archetypes\`, JSON_QUOTE(?)) AND ${OPEN_NOW}`,
+        `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND ${LISTED} AND JSON_CONTAINS(r.\`archetypes\`, JSON_QUOTE(?)) AND ${OPEN_NOW}`,
       [key],
     );
     byKey[key] = Number(rows[0]?.n ?? 0);
   }
   const [u] = await pool.query<RowDataPacket[]>(
     "SELECT COUNT(*) AS n FROM `org_roles` r " +
-      `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND ${UNTAGGED.replace(/`archetypes`/g, "r.`archetypes`")} AND ${OPEN_NOW}`,
+      `WHERE r.\`active\` = 1 AND r.\`is_example\` = 0 AND ${LISTED} AND ${UNTAGGED.replace(/`archetypes`/g, "r.`archetypes`")} AND ${OPEN_NOW}`,
   );
   return { byKey, untagged: Number(u[0]?.n ?? 0) };
 }

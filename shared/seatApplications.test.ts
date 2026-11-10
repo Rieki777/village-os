@@ -34,9 +34,10 @@ const body = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("parseApplicationInput", () => {
-  it("reads one to five distinct seats, and an old draft's single seat", () => {
+  it("reads one to three distinct roles (D3), and an old draft's single seat", () => {
     expect(parseApplicationInput(body()).ok).toBe(true);
-    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c", "d", "e"] })).ok).toBe(true);
+    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c"] })).ok).toBe(true);
+    expect(parseApplicationInput(body({ seatIds: ["a", "b", "c", "d"] }))).toMatchObject({ ok: false, field: "seatIds" });
     const old = parseApplicationInput({ ...body(), seatIds: undefined, orgRoleId: "seat-old" });
     expect(old.ok && old.input.seatIds).toEqual(["seat-old"]);
   });
