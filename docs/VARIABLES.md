@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 207 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 208 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 230 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 231 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-257 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 32 boolean, 34 choice, 41 text, 1 longtext.
+258 dials in 37 categories. 148 carry a minimum and a maximum. By type: 111 integer, 19 decimal, 19 percentage, 33 boolean, 34 choice, 41 text, 1 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -57,7 +57,7 @@ Each dial also says WHEN a change lands. 230 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 5 | 4 | 1 |
+| The village's people | 6 | 5 | 1 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -265,6 +265,7 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Keep the record of a removed photograph for | `map.photo_tombstone_days` | Village map | integer | `180` | the founder or an admin |
 | Show who holds each role to visitors | `org.public_people` | The village's people | boolean | `true` | the founder or an admin |
 | Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
+| A role needs a complete card before anyone can apply | `org.apply_needs_complete_card` | The village's people | boolean | `false` | the whole village |
 | The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
 | The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
@@ -3335,7 +3336,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-5 dials. 4 for the whole village, 1 for the founder or an admin.
+6 dials. 5 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3358,6 +3359,20 @@ On, a role that arrives from a sync and is accepted starts unlisted: holders, st
 | Fact | Value |
 | --- | --- |
 | Key | `org.sync_starts_unlisted` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### A role needs a complete card before anyone can apply
+
+On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.apply_needs_complete_card` |
 | Type | boolean, on or off |
 | Default | `false` |
 | Range | on or off |

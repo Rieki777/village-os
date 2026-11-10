@@ -540,6 +540,9 @@ export async function buildPlayerCards(
         flowsBack: (p.flowsBack as string | null) ?? null,
         stepBack: (p.stepBack as string | null) ?? null,
         timeCommitment: (p.timeCommitment as string | null) ?? null,
+        // The parameters block reads the same seat object /roles does (role journey PR-C).
+        // A role somebody holds is not held back by the Apply gate, so the profile never says Being written.
+        cardSeat: { timeCommitment: p.timeCommitment ?? null, card: p.card ? { ...(p.card as object), gated: false } : null },
         worksWith: seat.structure ? worksWith : undefined,
         powers: seat.structure
           ? (grantsByRole.get(id) ?? []).map((g) => ({

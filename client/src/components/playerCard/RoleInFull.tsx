@@ -42,6 +42,7 @@ import DecideDoors, { type DecideDoorWords } from "@/components/review/DecideDoo
 import { ROLE_PROPOSAL_WORDS as PW } from "@shared/playerCardProposals";
 import { CardEditContext, ChangedContext, ChangedMark, EditInPlace, Eyebrow, GOLD_FRAME, isChanged, ListSlot, PendingNote, SlotView, useChanged } from "./cardParts";
 import { CardTerm } from "./CcosTerm";
+import RoleCardParams from "@/components/power/RoleCardParams";
 
 /** The hint under each "Holding this role well" line's edit control. */
 const HOLDING_HINTS: Record<HoldingKey, string> = {
@@ -205,6 +206,7 @@ export function RoleInFull({ role, health = null }: { role: RoleOut; health?: He
           {role.powers.heading}: {suited.join(", ")}. {role.powers.note}
         </p>
       ) : null}
+      {role.cardSeat ? <RoleCardParams seat={role.cardSeat} /> : null}
       {time.kind === "shown" ? <ChangedMark k="timeCommitment" /> : null}
       {editing && time.kind !== "unread" ? (
         <div data-role-section="timeCommitment">
