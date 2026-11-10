@@ -6,7 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "wouter";
+import { STEWARD_JOURNEY, RESIDENT_JOURNEY } from "@shared/pageContent/journeys";
 import { memoryLocation } from "wouter/memory-location";
 import type { ReactNode } from "react";
 
@@ -41,12 +44,15 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+const seed = (id: string) => JSON.parse(fs.readFileSync(path.resolve(process.cwd(), `server/seeds/amora/pages/page-journey-${id}.json`), "utf8")); // brand-ok: the first village's own record, read to prove it carries its own link
+const FOUNDING = "https://amora.cr/founding-seeder/"; // brand-ok: the first village's own record, read to prove it carries its own link
+
 const hrefOf = (name: RegExp) => screen.getAllByRole("link", { name }).map((a) => a.getAttribute("href"));
 
 describe("/steward", () => {
   it("shows the eleven steps in order, each with whose move it is", async () => {
     show();
-    const list = await screen.findByRole("list");
+    const list = (await screen.findByText("Start at the roles")).closest("ol")!;
     const items = within(list).getAllByRole("listitem");
     expect(items).toHaveLength(11);
     expect(items[0]).toHaveTextContent(/Start at the roles/);
@@ -89,9 +95,9 @@ describe("/steward", () => {
     expect(hrefOf(/^Open admin/)).toEqual(["/admin"]);
   });
 
-  it("offers an event as an invitation, and one moon in brief", async () => {
+  it("says the optional ones are not required, and gives one moon in brief", async () => {
     show();
-    expect(await screen.findByRole("link", { name: /Come to an event/ })).toHaveAttribute("href", "https://example.org/events");
+    expect(await screen.findByText(/Nobody has to do the optional ones/)).toBeInTheDocument();
     expect(screen.getByText(/never for hours/)).toBeInTheDocument();
   });
 
@@ -109,5 +115,48 @@ describe("/steward", () => {
     expect(text).not.toMatch(/Role Holder|\bSage\b|\bGuide\b|highest voice|Path of Growth|every 3 months|Begin My Stewardship/i);
     expect(document.querySelector("form")).toBeNull();
     expect(screen.getByRole("link", { name: /Ask us a question/ })).toHaveAttribute("href", expect.stringMatching(/^mailto:/));
+  });
+
+  it("shows four cards under Getting to know us, with Optional on the second and third only", async () => {
+    show();
+    await screen.findByText("Getting to know us");
+    const cards = ["Come to an Event", "Take Part in Events", "Village Immersion", "Community Training"].map((t) => screen.getByText(t).closest("div.bg-card") as HTMLElement);
+    expect(cards.map((c) => !!within(c).queryByText("Optional"))).toEqual([false, true, true, false]);
+    expect(screen.queryByText(/steps completed/)).toBeNull();
+  });
+
+  it("opens a card to its button, and an external link opens safely", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    show();
+    await screen.findByText("Getting to know us");
+    await userEvent.setup().click(screen.getByText("Take Part in Events"));
+    const link = screen.getByRole("link", { name: /View Events/ });
+    expect(link).toHaveAttribute("href", "https://example.org/events");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+});
+
+describe("the Founding Seeders live in the village's own words, not the platform's", () => {
+  const items = (doc: any) => (doc.getToKnow.items as Record<string, string>[]);
+
+  it("carries the link and the extended immersion in the village's steward file", () => {
+    const immersion = items(seed("steward"))[2];
+    expect(immersion.title).toBe("Village Weaving Immersion");
+    expect(immersion.mark).toBe("Optional");
+    expect(immersion.description).toMatch(/Founding Seeders/);
+    expect(immersion.actionLabel).toBe("Meet the Founding Seeders");
+    expect(immersion.actionTarget).toBe(FOUNDING);
+    expect(items(seed("steward")).map((r) => r.mark)).toEqual(["", "Optional", "Optional", ""]);
+  });
+
+  it("links the village's resident step to the same page", () => {
+    const step = seed("resident").steps.items.find((r: Record<string, string>) => /Founding Seeder/.test(r.title));
+    expect(step.actionTarget).toBe(FOUNDING);
+  });
+
+  it("leaves both platform defaults free of that name and link", () => {
+    for (const spec of [STEWARD_JOURNEY, RESIDENT_JOURNEY]) {
+      expect(JSON.stringify(spec)).not.toMatch(/Founding Seeder|amora\.cr/i); // brand-ok: the first village's own record, read to prove it carries its own link
+    }
   });
 });

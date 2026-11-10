@@ -159,7 +159,7 @@ const show = (Page: ComponentType) =>
 
 /** The steps the page drew, by their titles, in order. */
 const stepTitles = (spec: PageSpec, doc: Record<string, any>): string[] =>
-  (doc.steps?.items ?? []).map((row: Record<string, string>) => row.title).filter(Boolean);
+  [...(doc.getToKnow?.items ?? doc.steps?.items ?? [])].map((row: Record<string, string>) => row.title).filter(Boolean);
 
 /**
  * Everything a visitor can reach on the page: its text, every link's address
