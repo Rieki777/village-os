@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SEAT_PRESETS as PRESETS, WHOLE_PRESETS } from "./seatPresets";
 import { GLOSSARY, MONEY_PROMISE, fillTogetherTag, plainTerm, presetExample, presetTag, recommendsPay, unsureLine, wholeCardCopy, wholeCardTag } from "./termCards";
 import { OPS_FALLBACK } from "./roleProposalHonesty";
-import { SETTINGS_GROUPS } from "./seatSettings";
+import { GROUP_LABELS, SETTINGS_GROUPS } from "./seatSettings";
 
 describe("terms preset cards", () => {
   it("names the four whole roles, with a plain example and no pay recommendation", () => {
@@ -37,7 +37,9 @@ describe("terms preset cards", () => {
 
   it("puts the plain phrase before the official word, and explains the jargon", () => {
     expect(plainTerm("rhythm")).toBe("How often you meet (rhythm)");
-    for (const group of SETTINGS_GROUPS) expect(plainTerm(group)).toContain(`(${group})`);
+    // The label in brackets, which is the stored key except where the words moved on (quests reads Tasks, guide v2).
+    for (const group of SETTINGS_GROUPS) expect(plainTerm(group)).toContain(`(${GROUP_LABELS[group].toLowerCase()})`);
+    expect(plainTerm("quests")).toBe("How many tasks you take on each moon (tasks)");
     expect(GLOSSARY.map((g) => g.key)).toEqual(["clocks", "rhythm", "allowance", "scoreboard", "domain"]);
     for (const g of GLOSSARY) {
       expect(g.plain.length).toBeGreaterThan(g.word.length);

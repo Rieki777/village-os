@@ -23,7 +23,7 @@ export const GROUP_PLAIN: Record<SettingsGroup, string> = {
   pay: "Money for the work, if the role has any",
   allowance: "Money for costs, if the role has any",
   bonus: "Extra pay on top, if the role has any",
-  quests: "How many quests you take on",
+  quests: "How many tasks you take on each moon",
   scoreboard: "How you and the village see the role going",
   ending: "How you step back from the role",
 };
