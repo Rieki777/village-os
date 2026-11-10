@@ -20,6 +20,8 @@
  */
 import { EMPTY_ROLE_CARD, RoleAsks, SeasonServes, type RoleCardState } from "@/components/openProposal/RoleCardBridge";
 import { MembershipAtApplication, type MembershipChoice } from "@/components/openProposal/MembershipAtApplication";
+import { AttachmentFields, linksToSend } from "@/components/openProposal/ProposalAttachments";
+import type { ProposalLink } from "@shared/proposalAttachments";
 import { termOf, type OpenProposalTerm } from "@shared/openProposalTerm";
 import { civilDayWords } from "@shared/seasonPlans";
 import { useLingui } from "@lingui/react/macro";
@@ -146,6 +148,9 @@ export default function ProposeARole() {
   const [practical, setPractical] = useState<Practical>(() => ({ timeZone: browserTimeZone(), windows: [], earliestStart: "", terms: { choice: "", note: "" } }));
   const [hours, setHours] = useState("");
   const [agreed, setAgreed] = useState({ nda: false });
+  /** Links to their work and files, for the deciders only (Rye, 10 Nov 2026). */
+  const [links, setLinks] = useState<ProposalLink[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   /** The membership alignment made here (Rye's answer 8); it answers the Love Letter tick. */
   const [membership, setMembership] = useState<MembershipChoice>({ kind: "none" });
   const [letterRead, setLetterRead] = useState(0);
@@ -207,41 +212,49 @@ export default function ProposeARole() {
     setSending(true);
     setError(null);
     try {
-      const res = await fetch("/api/open-proposals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email,
-          why,
-          aim,
-          hp,
-          link: link || undefined,
-          roles: Object.entries(picked).map(([roleId, note]) => ({ roleId, note })),
-          // The applicant's own card, one section per section of the open card.
-          card: {
-            roles: Object.keys(picked).map((roleId) => {
-              const c = cards[roleId] ?? EMPTY_ROLE_CARD;
-              return {
-                roleId,
-                moves: Object.entries(c.moves).map(([text, target]) => ({ text, target })),
-                firstMoon: c.quests.filter((q) => q.quest.trim()),
-              };
-            }),
-            timeZone: practical.timeZone.trim(),
-            windows: practical.windows,
-            earliestStart: practical.earliestStart,
-            terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
-            // Guide v2: each role card names the season goals its work serves.
-            serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
-            hours,
-            // The NDA promise only: the membership letter is aligned with below, never ticked.
-            agreed,
-          },
-          // The letter version the applicant aligned with here; recorded once the address confirms.
-          ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
-        }),
-      });
+      const proposal = {
+        name,
+        email,
+        why,
+        aim,
+        hp,
+        link: link || undefined,
+        roles: Object.entries(picked).map(([roleId, note]) => ({ roleId, note })),
+        // The applicant's own card, one section per section of the open card.
+        card: {
+          roles: Object.keys(picked).map((roleId) => {
+            const c = cards[roleId] ?? EMPTY_ROLE_CARD;
+            return {
+              roleId,
+              moves: Object.entries(c.moves).map(([text, target]) => ({ text, target })),
+              firstMoon: c.quests.filter((q) => q.quest.trim()),
+            };
+          }),
+          timeZone: practical.timeZone.trim(),
+          windows: practical.windows,
+          earliestStart: practical.earliestStart,
+          terms: practical.terms.choice ? { choice: practical.terms.choice, note: practical.terms.note.trim() } : undefined,
+          // Guide v2: each role card names the season goals its work serves.
+          serves: Object.keys(picked).flatMap((roleId) => Object.entries(cards[roleId]?.serves ?? {}).map(([goalId, how]) => ({ goalId, how, roleId }))),
+          hours,
+          // The NDA promise only: the membership letter is aligned with below, never ticked.
+          agreed,
+        },
+        // The letter version the applicant aligned with here; recorded once the address confirms.
+        ...(membership.kind === "aligned" ? { membership: { letterVersion: membership.letterVersion } } : {}),
+        links: linksToSend(links),
+      };
+      // With files, the proposal goes as one field of a multipart post (server/routes/openProposals.ts).
+      let request: RequestInit;
+      if (files.length) {
+        const fd = new FormData();
+        fd.append("proposal", JSON.stringify(proposal));
+        for (const f of files) fd.append("files", f, f.name);
+        request = { method: "POST", body: fd };
+      } else {
+        request = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proposal) };
+      }
+      const res = await fetch("/api/open-proposals", request);
       const data = await res.json().catch(() => ({}));
       // The letter changed while they read it: show it again, untick, and say so.
       if (!res.ok && data?.field === "membership") setLetterRead((n) => n + 1);
@@ -411,6 +424,13 @@ export default function ProposeARole() {
           <SeasonServes goals={form.goals} serves={NO_GLOBAL_SERVES} onServes={() => {}} showGoals={false} showHours={false} hours={hours} onHours={setHours} agreed={agreed}
             onAgreed={setAgreed}
             membership={<MembershipAtApplication signedIn={!!me} choice={membership} onChoice={setMembership} refreshKey={letterRead} />}
+          />
+          <AttachmentFields
+            links={links}
+            onLinks={setLinks}
+            files={files}
+            onFiles={setFiles}
+            invalid={error && (error.field === "links" || error.field === "files") ? { field: error.field, message: error.message } : null}
           />
           <div>
             <label htmlFor="propose-name" className="mb-2 block text-sm font-semibold text-card-foreground">

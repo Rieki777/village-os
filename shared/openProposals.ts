@@ -21,6 +21,7 @@
 /** The village's public link. */
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
+import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
@@ -120,6 +121,10 @@ export interface OpenProposalBody {
    * they did not align on the form, and are asked before their role starts.
    */
   membership?: { letterVersion: string };
+  /** Labelled https links to the applicant's work, for the deciders only, never fetched (shared/proposalAttachments.ts). */
+  links?: ProposalLink[];
+  /** Files the applicant attached, for the deciders only; the bytes are in a private folder (server/lib/proposalFiles.ts). */
+  files?: ProposalFile[];
 }
 
 export interface OpenProposalInput {
@@ -153,6 +158,8 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(termOf(o.term) ? { term: termOf(o.term) } : {}),
     ...(cardOf(o.card) ? { card: cardOf(o.card) } : {}),
     ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
+    ...(linksOf(o.links).length ? { links: linksOf(o.links) } : {}),
+    ...(filesOf(o.files).length ? { files: filesOf(o.files) } : {}),
   };
 }
 
@@ -188,6 +195,10 @@ export function parseOpenProposal(
   if (why.length > OPEN_WHY_MAX) return { ok: false, field: "why", error: OPEN_WORDS.tooLong("Why you", OPEN_WHY_MAX) };
   const aim = text(o.aim, OPEN_AIM_MAX);
   if (aim.length > OPEN_AIM_MAX) return { ok: false, field: "aim", error: OPEN_WORDS.tooLong("Your aim", OPEN_AIM_MAX) };
+  // Links to their work (Rye, 10 Nov 2026): checked for shape, never fetched.
+  const linked = parseProposalLinks(o.links);
+  if (!linked.ok) return { ok: false, field: "links", error: linked.error };
+  const links = linked.links.length ? { links: linked.links } : {};
   // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
   if (o.card !== undefined && o.card !== null) {
     // Form v2 (brief v2, 5.4): the aim is required once the applicant writes their card.
@@ -198,9 +209,9 @@ export function parseOpenProposal(
       goalIds: ctx.goalIds ?? new Set(),
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
-    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card } } };
+    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links } } };
   }
-  return { ok: true, value: { name, email, body: { roles, why, aim } } };
+  return { ok: true, value: { name, email, body: { roles, why, aim, ...links } } };
 }
 
 /** "A", "A and B", "A, B and C". */

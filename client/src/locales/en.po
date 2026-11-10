@@ -751,6 +751,11 @@ msgctxt "valuation receipt"
 msgid "Wide range"
 msgstr "Wide range"
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments heading"
+msgid "Links and files"
+msgstr "Links and files"
+
 #: client/src/pages/RequestMembership.tsx
 msgctxt "join page link"
 msgid "Draft your roles"
@@ -795,6 +800,12 @@ msgstr "The village is deciding a change to this right now."
 #: client/src/components/openProposal/RoleCardBridge.tsx
 #~ msgid "They agreed to sign the Love Letter before seating, and the NDA once approved."
 #~ msgstr "They agreed to sign the Love Letter before seating, and the NDA once approved."
+
+#. placeholder {0}: i + 1
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Link {0}: what it is"
+msgstr "Link {0}: what it is"
 
 #: client/src/components/TakeCurrentPrice.tsx
 msgid "This quest has a new price."
@@ -1231,6 +1242,12 @@ msgstr "Struck words are only here. Underlined words are only in {theirsTitle}."
 msgctxt "role draft step"
 msgid "Scout the open roles"
 msgstr "Scout the open roles"
+
+#. placeholder {0}: i + 1
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Link {0}: web address"
+msgstr "Link {0}: web address"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Your role runs from adoption to the next new moon, {moonEnds}. Each moon you lay out what you will contribute."
@@ -2049,6 +2066,10 @@ msgctxt "canvas export button, busy"
 msgid "Building the pack"
 msgstr "Building the pack"
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Only the people who decide your proposal can see your links and files. No AI reads them. We delete them when we delete your proposal, or when we remove your name and email."
+msgstr "Only the people who decide your proposal can see your links and files. No AI reads them. We delete them when we delete your proposal, or when we remove your name and email."
+
 #: client/src/components/canvas/ConflictAgreementEditor.tsx
 msgid "For example: the two of us and the care holder"
 msgstr "For example: the two of us and the care holder"
@@ -2085,6 +2106,12 @@ msgstr "Start from ours instead"
 msgctxt "pricing desk"
 msgid "Send for signing"
 msgstr "Send for signing"
+
+#. placeholder {0}: f.name
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Remove {0}"
+msgstr "Remove {0}"
 
 #: client/src/components/journey/TestRun.tsx
 msgctxt "test run section toggle"
@@ -2254,6 +2281,11 @@ msgstr "Promised reply time, in hours"
 msgctxt "a note about every change"
 msgid "The whole request"
 msgstr "The whole request"
+
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Links to your work (optional)"
+msgstr "Links to your work (optional)"
 
 #: client/src/components/admin/SigningKeyCard.tsx
 msgctxt "signing key"
@@ -2772,6 +2804,10 @@ msgctxt "sera answers"
 msgid "Changed since it was taken"
 msgstr "Changed since it was taken"
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Each file has to be {mb} MB or less."
+msgstr "Each file has to be {mb} MB or less."
+
 #: client/src/components/valuation/PricingDesk.tsx
 msgctxt "pricing desk"
 msgid "Waiting for a signer"
@@ -2991,6 +3027,11 @@ msgstr "As much as"
 #: client/src/components/canvas/CanvasFrameAdopt.tsx
 msgid "Suggest one under Say"
 msgstr "Suggest one under Say"
+
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal link label placeholder"
+msgid "What it is"
+msgstr "What it is"
 
 #: client/src/components/TreasurySync.tsx
 msgctxt "treasury sync"
@@ -3401,6 +3442,10 @@ msgctxt "open proposal card"
 msgid "The task"
 msgstr "The task"
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Each link has to be a full web address starting with https://."
+msgstr "Each link has to be a full web address starting with https://."
+
 #: client/src/components/NextStepBox.tsx
 msgctxt "next step box"
 msgid "Talk to {label}"
@@ -3560,6 +3605,10 @@ msgstr "Read the list again"
 msgid "What happens when somebody is asked to leave"
 msgstr "What happens when somebody is asked to leave"
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Up to {PROPOSAL_LINKS_MAX} links, each starting with https://. We never open them for you: only the people who decide your proposal see them."
+msgstr "Up to {PROPOSAL_LINKS_MAX} links, each starting with https://. We never open them for you: only the people who decide your proposal see them."
+
 #: client/src/components/admin/AgreementDocumentUpload.tsx
 msgid "Attach a new document"
 msgstr "Attach a new document"
@@ -3610,6 +3659,11 @@ msgstr "({count} of at most {cap})"
 msgctxt "a private intake was not sent"
 msgid "Could not send"
 msgstr "Could not send"
+
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Attach a file"
+msgstr "Attach a file"
 
 #: client/src/components/roleEdit/RoleEditor.tsx
 msgctxt "role editor"
@@ -4070,6 +4124,12 @@ msgstr "Tick all shown"
 msgctxt "role draft"
 msgid "Loading the open roles…"
 msgstr "Loading the open roles…"
+
+#. placeholder {0}: i + 1
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Remove link {0}"
+msgstr "Remove link {0}"
 
 #: client/src/pages/FundingRounds.tsx
 msgctxt "funding rounds"
@@ -5963,6 +6023,11 @@ msgctxt "admin helper panel, who answers"
 msgid "Answers come from Claude, on your village's own Anthropic key."
 msgstr "Answers come from Claude, on your village's own Anthropic key."
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Add a link"
+msgstr "Add a link"
+
 #: client/src/pages/ChangeRequests.tsx
 msgctxt "the value a member suggests"
 msgid "Your value"
@@ -6250,6 +6315,10 @@ msgstr "Small changes"
 #: client/src/components/review/SeraMember.tsx
 msgid "These reach you as a draft to publish, once someone who reads the list puts them in one."
 msgstr "These reach you as a draft to publish, once someone who reads the list puts them in one."
+
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Up to {PROPOSAL_FILES_MAX} files: PDF, Word (.docx), PNG or JPG, {mb} MB each."
+msgstr "Up to {PROPOSAL_FILES_MAX} files: PDF, Word (.docx), PNG or JPG, {mb} MB each."
 
 #: client/src/components/TreasurySync.tsx
 msgid "Sync reads three sources again: this village's records, the Base chain (the public ledger some tokens live on) and Sera (the village's record keeper). It only reads, so nothing is paid or moved. Any difference goes to the Treasurer. You can sync once a minute."
@@ -7241,6 +7310,10 @@ msgstr "Proposals are for:"
 msgid "Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records."
 msgstr "Once you are approved into a role, you align with the village's confidentiality agreement (NDA), before you see any confidential records."
 
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgid "Only the people who decide this proposal see these. Open links with care: they lead off this site."
+msgstr "Only the people who decide this proposal see these. Open links with care: they lead off this site."
+
 #: client/src/components/review/SeraActs.tsx
 msgctxt "sera answers"
 msgid "Edit: start from {owner}"
@@ -7699,6 +7772,11 @@ msgstr "How this was worked out"
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgid "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
 msgstr "{markers} of {electorate} members chose, and this round needed {quorum}% of the village. Nothing was funded, and the pot keeps its money for the next round."
+
+#: client/src/components/openProposal/ProposalAttachments.tsx
+msgctxt "open proposal attachments"
+msgid "Files (optional)"
+msgstr "Files (optional)"
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
