@@ -1,44 +1,24 @@
 import Layout from "@/components/Layout";
 import { useVillageLinks } from "@/lib/gameApi";
-import { altOr, useBrandImages } from "@/lib/gameApi";
+import { altOr, useBrandImages, useGameConfig } from "@/lib/gameApi";
 import FaqSection from "@/components/FaqSection";
-import PathConsentBox, { FORM_CONSENT_FIELD } from "@/components/comms/PathConsentBox";
 import { Emphasized, Highlighted } from "@/components/PageText";
 import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
-import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
+import { useJourneyContent } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
-import { JOURNEY_LEGACY_STEP_IDS, STEWARD_JOURNEY } from "@shared/pageContent/journeys";
+import { STEWARD_JOURNEY, STEWARD_STAGE_CIRCLE, STEWARD_STAGE_YOURS } from "@shared/pageContent/journeys";
+import { useIsAdmin } from "@/contexts/AuthContext";
+import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import type { ResolvedSection } from "@shared/pageContent/types";
-import { useState, useEffect, useRef } from "react";
-import { m, AnimatePresence } from "framer-motion";
-import {
-  Users,
-  ArrowRight,
-  CheckCircle2,
-  Circle,
-  Calendar,
-  Heart,
-  BookOpen,
-  Award,
-  Star,
-  Compass,
-  Crown,
-  Sparkles,
-  ChevronDown,
-  ExternalLink
-} from "lucide-react";
+import { m } from "framer-motion";
+import { Users, ArrowRight, Compass, Heart, Moon, ExternalLink, ShieldCheck } from "lucide-react";
 
 /*
  * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Steward
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
- * icons, handed out by position, and the form's machinery.
+ * layout and the doors, which go to fixed places in the app.
  */
-
-/** Icons for the steps, in order; a longer list starts again from the top. */
-const STEP_ICONS = [Calendar, Users, Users, BookOpen, Heart, Users, Compass, Award, Star];
-/** Icons for the path of growth and the long-term cards, in order. */
-const LADDER_ICONS = [Star, Compass, Crown];
-const ARC_ICONS = [Compass, Crown];
 
 export default function StewardJourney() {
   // This village's own destinations. Blank hides the control.
@@ -50,8 +30,8 @@ export default function StewardJourney() {
   const heroPrimary = buttonAction(hero?.primaryLabel, hero?.primaryTarget, targets);
   const heroSecondary = buttonAction(hero?.secondaryLabel, hero?.secondaryTarget, targets);
   const brand = useBrandImages();
-  const progress = useJourneyProgress("amora-steward-progress", steps, JOURNEY_LEGACY_STEP_IDS.steward);
-  const [expandedStep, setExpandedStep] = useState<number | null>(0);
+  const admin = useIsAdmin();
+  const adminPath = useGameConfig()?.project?.adminPath || "/admin";
   // Until the saved words arrive the hero keeps its space and stays
   // invisible, so a visitor never reads the defaults and watches them change.
   const waiting = hero ? "" : " invisible";
@@ -129,8 +109,8 @@ export default function StewardJourney() {
             >
               {heroPrimary && (
                 <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
                   {heroPrimary.label}
+                  <ArrowRight className="w-5 h-5" />
                 </JourneyLink>
               )}
               {heroSecondary && (
@@ -146,366 +126,196 @@ export default function StewardJourney() {
         </div>
       </section>
 
-      {/* Interactive Journey Steps */}
-      {page && steps && (
-      <section className="py-20 bg-background">
-        <div className="container">
-          <m.div
-            className="text-center mb-8"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.steps.fields.heading}
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto mb-6">
-              <Emphasized text={page.steps.fields.intro} />
-            </p>
+      {/* Meet us first: an invitation, never a requirement. */}
+      {page && !page.meetFirst.hidden && (
+        <section className="py-12 bg-sage/10">
+          <div className="container">
+            <div className="max-w-2xl mx-auto text-center">
+              <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
+                {page.meetFirst.fields.heading}
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                <Emphasized text={page.meetFirst.fields.body} />
+              </p>
+              <BandButton section={page.meetFirst} targets={targets} />
+            </div>
+          </div>
+        </section>
+      )}
 
-            {/* Progress Bar */}
-            <div className="max-w-md mx-auto">
-              <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <m.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-sage to-coral rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress.progress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {progress.doneCount} of {progress.total} steps completed
+      {/* Four doors */}
+      <section className="py-16 bg-background" aria-labelledby="steward-doors">
+        <div className="container">
+          <h2 id="steward-doors" className="font-display text-3xl md:text-4xl font-semibold text-foreground text-center mb-8 break-words">
+            <Trans>Which door is yours?</Trans>
+          </h2>
+          <div className="grid md:grid-cols-2 gap-4 max-w-4xl mx-auto">
+            <Door href="/roles" icon={<Compass className="w-5 h-5 text-sage" />} title={<Trans>New here and ready for a role</Trans>} action={<Trans context="steward front door">Find your role</Trans>}>
+              <Trans>Start with the open roles and what each one asks of you.</Trans>
+            </Door>
+            <Door href="/role-proposals/new" icon={<Users className="w-5 h-5 text-sage" />} title={<Trans context="steward front door">Already a member</Trans>} action={<Trans context="steward front door">Propose a role</Trans>}>
+              <Trans>You have an account here. Go straight to proposing yourself for a role.</Trans>
+            </Door>
+            <Door
+              href="/quests"
+              secondHref="/map"
+              icon={<Heart className="w-5 h-5 text-sage" />}
+              title={<Trans>Not ready for a role yet</Trans>}
+              action={<Trans context="steward front door">See the quests</Trans>}
+              secondAction={<Trans context="steward front door">Explore the map</Trans>}
+            >
+              <Trans>Take a quest or look around the land first. A role will still be here when you are ready.</Trans>
+            </Door>
+            {admin && (
+              <Door
+                href="/approvals"
+                secondHref={adminPath}
+                icon={<ShieldCheck className="w-5 h-5 text-sage" />}
+                title={<Trans context="steward front door">Stewarding the roles</Trans>}
+                action={<Trans>Open the approval inbox</Trans>}
+                secondAction={<Trans context="steward front door">Open admin</Trans>}
+              >
+                <Trans>For stewards and admins: proposals waiting on you, and the tools behind the roles.</Trans>
+              </Door>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* The eleven steps */}
+      {page && steps && (
+        <section className="py-16 bg-sage/5">
+          <div className="container">
+            <div className="text-center mb-8">
+              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
+                {page.steps.fields.heading}
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                <Emphasized text={page.steps.fields.intro} />
               </p>
             </div>
-          </m.div>
-
-          <div className="max-w-3xl mx-auto">
-            <div className="space-y-3">
+            <ol className="max-w-3xl mx-auto space-y-3">
               {steps.map((step, index) => {
-                const isCompleted = progress.isDone(step);
-                const isExpanded = expandedStep === index;
-                const StepIcon = STEP_ICONS[index % STEP_ICONS.length];
                 const action = buttonAction(step.actionLabel, step.actionTarget, targets);
-
+                const circle = step.stage === STEWARD_STAGE_CIRCLE;
                 return (
-                  <m.div
-                    key={`${index}-${step.title}`}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`bg-card rounded-xl shadow-sm overflow-hidden transition-all ${
-                      isCompleted ? "border-l-4 border-sage" : "border-l-4 border-transparent hover:border-coral/50"
-                    }`}
-                  >
-                    <div
-                      className="p-5 cursor-pointer"
-                      onClick={() => setExpandedStep(isExpanded ? null : index)}
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* A checkbox — the comment was right, the markup was not.
-                            Named and stateful now; see ProsperityJourney. */}
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={isCompleted}
-                          aria-label={`${step.title}: mark as ${isCompleted ? "not done" : "done"}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            progress.toggle(step);
-                          }}
-                          className="flex-shrink-0 mt-0.5 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+                  <li key={`${index}-${step.title}`} className="bg-card rounded-xl shadow-sm p-5 flex items-start gap-4 min-w-0">
+                    <span className="w-9 h-9 shrink-0 rounded-full bg-teal-deep/10 text-teal-deep font-semibold flex items-center justify-center" aria-hidden="true">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                        <h3 className="font-display text-lg font-semibold text-foreground basis-24 grow max-w-full break-words">{step.title}</h3>
+                        <span
+                          className={`px-2 py-0.5 text-xs font-medium rounded ${
+                            circle ? "bg-coral/15 text-foreground" : step.stage === STEWARD_STAGE_YOURS ? "bg-sage/15 text-foreground" : "bg-muted text-muted-foreground"
+                          }`}
                         >
-                          <m.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            {isCompleted ? (
-                              <CheckCircle2 className="w-6 h-6 text-sage" />
-                            ) : (
-                              <Circle className="w-6 h-6 text-muted-foreground hover:text-teal-deep transition-colors" />
-                            )}
-                          </m.div>
-                        </button>
-
-                        {/* Icon */}
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                          isCompleted ? "bg-sage/10" : "bg-teal-deep/10"
-                        }`}>
-                          <StepIcon className={`w-5 h-5 ${isCompleted ? "text-sage" : "text-teal-deep"}`} />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            {/* The title keeps to the chip's line while it has 6rem there, and
-                                takes its own line below the chip when it does not: a long
-                                stage name at 320px left it a sliver one letter wide. */}
-                            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0">
-                              <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                                isCompleted ? "bg-sage/10 text-sage" : "bg-muted text-muted-foreground"
-                              }`}>
-                                {step.stage}
-                              </span>
-                              <h3 className={`font-display text-lg font-semibold basis-24 grow max-w-full break-words ${
-                                isCompleted ? "text-muted-foreground" : "text-foreground"
-                              }`}>
-                                {step.title}
-                              </h3>
-                            </div>
-                            <m.div className="shrink-0" animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                              <ChevronDown className="w-5 h-5 text-muted-foreground" />
-                            </m.div>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1 break-words">
-                            {step.description}
-                          </p>
-                        </div>
+                          {step.stage}
+                        </span>
                       </div>
-                    </div>
-
-                    {/* Expanded Details */}
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <m.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-5 pb-5 pt-0 ml-14">
-                            <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                              <ul className="grid grid-cols-2 gap-2">
-                                {stepPoints(step).map((detail, i) => (
-                                  <m.li
-                                    key={i}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 break-words"
-                                  >
-                                    <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-sage" />
-                                    <span className="min-w-0 break-words">{detail}</span>
-                                  </m.li>
-                                ))}
-                              </ul>
-                            </div>
-                            {action && (
-                              <JourneyLink
-                                action={action.action}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-sage text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity"
-                              >
-                                {action.label}
-                                {leavesSite(action.action) ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                              </JourneyLink>
-                            )}
-                          </div>
-                        </m.div>
+                      <p className="text-sm text-muted-foreground mt-1 break-words">{step.description}</p>
+                      {stepPoints(step).length > 0 && (
+                        <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc pl-5">
+                          {stepPoints(step).map((point, i) => (
+                            <li key={i} className="break-words">{point}</li>
+                          ))}
+                        </ul>
                       )}
-                    </AnimatePresence>
-                  </m.div>
+                      {action && (
+                        <JourneyLink action={action.action} className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-teal-deep underline underline-offset-2">
+                          {action.label}
+                          {leavesSite(action.action) ? <ExternalLink className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                        </JourneyLink>
+                      )}
+                    </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
-        </div>
-      </section>
+        </section>
       )}
 
-      {/* Advancement Path */}
-      {page && !page.ladder.hidden && (
-      <section className="py-20 bg-sage text-white">
+      {/* One moon, in brief */}
+      <section className="py-16 bg-cream">
         <div className="container">
-          <m.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-3xl md:text-4xl font-semibold mb-4 break-words">
-              {page.ladder.fields.heading}
-            </h2>
-            {/* /70 measured 3.83:1 against this section's own green on the
-                deployed build, under AA's 4.5:1 at 16px. Full white is 5.95:1
-                on the same ground. */}
-            <p className="text-white max-w-2xl mx-auto">
-              <Emphasized text={page.ladder.fields.intro} />
-            </p>
-          </m.div>
-
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {page.ladder.lists.items.map((level, index) => {
-              const LevelIcon = LADDER_ICONS[index % LADDER_ICONS.length];
-              return (
-              <m.div
-                key={`${index}-${level.level}`}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="bg-white/10 p-6 rounded-xl text-center backdrop-blur-sm min-w-0"
-              >
-                <m.div
-                  className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-8 h-8" />
-                </m.div>
-                <h3 className="font-display text-xl font-semibold mb-2 break-words">
-                  {level.level}
-                </h3>
-                {/* Full white, not /70 and /90. These sit on `bg-white/10`
-                    over the section's green, and that tint composites LIGHTER
-                    than the section itself, so the fade that reads fine
-                    elsewhere loses here. Measured on the deployed build,
-                    all six viewports: /70 gave 3.21:1 and /90 gave 4.19:1,
-                    both under AA's 4.5:1 for text this size. Full white is
-                    4.73:1 on that composite. The hierarchy between the two
-                    lines is carried by `font-medium`, which already
-                    distinguished them. */}
-                <p className="text-white text-sm mb-3 break-words">
-                  {level.requirement}
-                </p>
-                <p className="text-white text-sm font-medium break-words">
-                  {level.benefits}
-                </p>
-              </m.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-      )}
-
-      {/* Long-Term Arc */}
-      {page && !page.arc.hidden && (
-      <section className="py-20 bg-sage/5">
-        <div className="container">
-          <m.div
-            className="text-center mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
+          <div className="max-w-3xl mx-auto text-center">
+            <Moon className="w-10 h-10 text-sage mx-auto mb-4" aria-hidden="true" />
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.arc.fields.heading}
+              <Trans context="steward front door">One moon</Trans>
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              <Emphasized text={page.arc.fields.intro} />
+            <p className="text-muted-foreground">
+              <Trans>Roles run from new moon to new moon. Each moon you and your circle agree what you will deliver, and we pay for the work delivered, never for hours.</Trans>
             </p>
-          </m.div>
-
-          <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-            {page.arc.lists.items.map((level, index) => {
-              const LevelIcon = ARC_ICONS[index % ARC_ICONS.length];
-              return (
-              <m.div
-                key={`${index}-${level.level}`}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-                whileHover={{ y: -8, scale: 1.02 }}
-                className="bg-card p-6 rounded-xl shadow-sm border border-sage/20 min-w-0"
-              >
-                <m.div
-                  className="w-14 h-14 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-4"
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <LevelIcon className="w-7 h-7 text-sage" />
-                </m.div>
-                <h3 className="font-display text-xl font-semibold text-foreground text-center mb-2 break-words">
-                  {level.level}
-                </h3>
-                <p className="text-center text-muted-foreground text-sm break-words">
-                  {level.description}
-                </p>
-              </m.div>
-              );
-            })}
           </div>
         </div>
       </section>
-      )}
-
-      {/* Seasonal Rhythm */}
-      {page && !page.seasons.hidden && (
-      <section className="py-20 bg-cream">
-        <div className="container">
-          <m.div
-            className="max-w-3xl mx-auto text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <m.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Sparkles className="w-12 h-12 text-sage mx-auto mb-6" />
-            </m.div>
-            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-              {page.seasons.fields.heading}
-            </h2>
-            <p className="text-muted-foreground mb-8">
-              <Emphasized text={page.seasons.fields.body} />
-            </p>
-            <BandButton section={page.seasons} targets={targets} />
-          </m.div>
-        </div>
-      </section>
-      )}
 
       {/* Rights & Responsibilities */}
       {page && !page.rights.hidden && (
-      <section className="py-16 bg-background">
-        <div className="container">
-          <m.div
-            className="max-w-3xl mx-auto text-center"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
-              {page.rights.fields.heading}
-            </h2>
-            <p className="text-muted-foreground mb-6">
-              <Emphasized text={page.rights.fields.body} />
-            </p>
-            <BandButton section={page.rights} targets={targets} />
-          </m.div>
-        </div>
-      </section>
-      )}
-
-      {/* Your Next Step */}
-      {page && !page.nextStep.hidden && (
-      <section className="py-20 bg-sage/10">
-        <div className="container">
-          <m.div
-            className="max-w-2xl mx-auto"
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-          >
-            <div className="text-center mb-8">
-              <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
-                {page.nextStep.fields.heading}
+        <section className="py-16 bg-background">
+          <div className="container">
+            <div className="max-w-3xl mx-auto text-center">
+              <h2 className="font-display text-2xl md:text-3xl font-semibold text-foreground mb-3 break-words">
+                {page.rights.fields.heading}
               </h2>
-              <p className="text-muted-foreground">
-                <Emphasized text={page.nextStep.fields.body} />
+              <p className="text-muted-foreground mb-6">
+                <Emphasized text={page.rights.fields.body} />
               </p>
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <BandButton section={page.rights} targets={targets} />
+                <Link href="/exit-policy" className="text-sm font-medium text-teal-deep underline underline-offset-2">
+                  <Trans>How leaving a role works</Trans>
+                </Link>
+              </div>
             </div>
-
-            <StewardNextStepForm words={page.nextStep.fields} />
-          </m.div>
-        </div>
-      </section>
+          </div>
+        </section>
       )}
 
       {page && <FaqSection pathway="steward" heading={page.faq.fields.heading} />}
     </Layout>
+  );
+}
+
+/** One of the four doors: a title, a line, and one or two links. */
+function Door({
+  href,
+  secondHref,
+  icon,
+  title,
+  action,
+  secondAction,
+  children,
+}: {
+  href: string;
+  secondHref?: string;
+  icon: React.ReactNode;
+  title: React.ReactNode;
+  action: React.ReactNode;
+  secondAction?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-card rounded-xl shadow-sm p-6 min-w-0 flex flex-col">
+      <div className="flex items-center gap-3 mb-2">
+        <span className="w-10 h-10 shrink-0 rounded-lg bg-sage/10 flex items-center justify-center" aria-hidden="true">{icon}</span>
+        <h3 className="font-display text-xl font-semibold text-foreground break-words min-w-0">{title}</h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4 break-words">{children}</p>
+      <div className="mt-auto flex flex-wrap gap-3">
+        <Link href={href} className="inline-flex items-center gap-2 px-4 py-2 bg-sage text-white rounded-full text-sm font-medium hover:opacity-90 transition-opacity">
+          {action}
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+        {secondHref && (
+          <Link href={secondHref} className="inline-flex items-center gap-2 px-4 py-2 border border-sage text-foreground rounded-full text-sm font-medium hover:bg-sage/10 transition-colors">
+            {secondAction}
+          </Link>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -518,184 +328,5 @@ function BandButton({ section, targets }: { section: ResolvedSection; targets: T
       {cta.label}
       <ArrowRight className="w-5 h-5" />
     </JourneyLink>
-  );
-}
-
-function StewardNextStepForm({ words }: { words: Readonly<Record<string, string>> }) {
-  // Blank hides the two invitations below rather than sending a
-  // would-be steward to a different village's calendar.
-  const { eventsUrl } = useVillageLinks();
-  const [form, setForm] = useState({ name: "", email: "", gifts: "", question: "" });
-  const [consent, setConsent] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  // The welcome replaces the form and its button, so focus would fall to
-  // <body> and a screen reader would hear nothing. Focus goes to the welcome.
-  const welcome = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (submitted) welcome.current?.focus();
-  }, [submitted]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/forms/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "steward-interest", data: { ...form, [FORM_CONSENT_FIELD]: consent } }),
-      });
-      if (!res.ok) throw new Error("Submission failed");
-      setSubmitted(true);
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (submitted) {
-    return (
-      <m.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-card rounded-2xl p-10 shadow-sm text-center"
-      >
-        <div className="w-16 h-16 rounded-full bg-sage/20 flex items-center justify-center mx-auto mb-6">
-          <CheckCircle2 className="w-8 h-8 text-sage" />
-        </div>
-        <h3 ref={welcome} tabIndex={-1} className="font-display text-2xl font-bold text-foreground mb-3 outline-none break-words">
-          {words.thanksHeading}
-        </h3>
-        <p className="text-muted-foreground mb-6">
-          <Emphasized text={words.thanksBody} />
-        </p>
-        {eventsUrl && words.thanksCta && (
-          <a
-            href={eventsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"
-          >
-            <Calendar className="w-5 h-5" />
-            {words.thanksCta}
-          </a>
-        )}
-      </m.div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-card rounded-2xl p-8 shadow-sm space-y-5">
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          {/* Each label is tied to its field by htmlFor. They were plain text
-              above unlinked inputs, so a screen reader announced four
-              controls here with no names at all. */}
-          <label htmlFor="steward-name" className="block text-sm font-medium text-foreground mb-1.5">
-            Your name <span className="text-destructive">*</span>
-          </label>
-          <input
-            id="steward-name"
-            type="text"
-            autoComplete="name"
-            required
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Full name"
-          />
-        </div>
-        <div>
-          <label htmlFor="steward-email" className="block text-sm font-medium text-foreground mb-1.5">
-            Email <span className="text-destructive">*</span>
-          </label>
-          <input
-            id="steward-email"
-            type="email"
-            autoComplete="email"
-            required
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="you@example.com"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor="steward-gifts" className="block text-sm font-medium text-foreground mb-1.5 break-words">
-          {words.giftsLabel}
-        </label>
-        <input
-          id="steward-gifts"
-          type="text"
-          value={form.gifts}
-          onChange={(e) => setForm((f) => ({ ...f, gifts: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder={words.giftsHint || undefined}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="steward-question" className="block text-sm font-medium text-foreground mb-1.5 break-words">
-          {words.questionLabel}
-        </label>
-        <textarea
-          id="steward-question"
-          rows={3}
-          value={form.question}
-          onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-background border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-          placeholder={words.questionHint || undefined}
-        />
-      </div>
-
-      <PathConsentBox checked={consent} onChange={setConsent} />
-
-      <AnimatePresence>
-        {error && (
-          <m.p
-            role="alert"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="text-sm text-destructive"
-          >
-            {error}
-          </m.p>
-        )}
-      </AnimatePresence>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full px-4 py-3 bg-sage text-white rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        {loading ? (
-          <span>Sending...</span>
-        ) : (
-          <>
-            <Heart className="w-5 h-5 shrink-0" />
-            <span className="min-w-0 break-words text-center">{words.submitLabel}</span>
-          </>
-        )}
-      </button>
-      {eventsUrl && words.footnote && (
-        <p className="text-xs text-muted-foreground text-center">
-          <Highlighted
-            text={words.footnote}
-            phrase={words.footnoteLink}
-            render={(phrase) => (
-              <a href={eventsUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                {phrase}
-              </a>
-            )}
-          />
-        </p>
-      )}
-    </form>
   );
 }

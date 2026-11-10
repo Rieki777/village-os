@@ -78,6 +78,8 @@ const ALLOWLIST = {
 
   // The old address of the role selection board. It redirects to /roles/select and nothing links to it on purpose; old bookmarks and shared links are its doors.
   "/roles/draft": "a redirect to /roles/select kept for old links",
+  "/join": "a redirect to /roles for the address people guess at; nothing links to it on purpose",
+  "/apply": "a redirect to /roles for the address people guess at; nothing links to it on purpose",
 
   // One funding round (0338). Its doors are the round cards on /funding-rounds and
   // the link every idea's forum thread carries, which the server writes into the

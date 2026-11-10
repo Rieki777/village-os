@@ -360,6 +360,9 @@ function Router() {
       {/* The old address, kept so every shared link and bookmark still lands (the board was called a draft until 9 Nov 2026). */}
       <Route path="/roles/draft">{() => <Redirect to="/roles/select" replace />}</Route>
       <Route path="/roles" component={Roles} />
+      {/* /join and /apply were 404s that people guessed at. There is one front door now. */}
+      <Route path="/join">{() => <Redirect to="/roles" replace />}</Route>
+      <Route path="/apply">{() => <Redirect to="/roles" replace />}</Route>
       <Route path="/how-we-create" component={HowWeCreate} />
       <Route path="/co-creators-guide" component={CoCreatorsGuide} />
       <Route path="/housing" component={Housing} />
