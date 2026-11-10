@@ -58,6 +58,8 @@ import { parseRoleCcosField, roleCcosProblem } from "../../shared/roleCcosParse"
 import { carriesRolePay, DRAFT_PAY_KEYS, draftPayEdit, draftPayProblem } from "./draftRolePay";
 import { rolePayRules } from "./workPay";
 import type { MintRule } from "./economy";
+import { liveParameterKeys, parameterKeysIn, parameterProblem, parametersBefore, parameterStored, putParametersBack, PARAMETERS_NOT_HERE } from "./roleParameterColumns";
+import { PARAMETER_COLUMNS } from "../../shared/roleParameters";
 
 /** The refusal a publish gives when the draft no longer holds what the person was shown (review 12). */
 export const DRAFT_CHANGED_SINCE_SHOWN = "This draft changed since you opened it. Read it again before publishing.";
@@ -1242,6 +1244,8 @@ export function previewLoadedDraft(
         // with fewer keeps loading and can still be edited elsewhere.
         if (!blocked) blocked = roleCcosProblem(c.payload);
         if (!blocked) blocked = termsBlock(c.payload);
+        // The listing details of the role card (shared/roleParameters.ts): shape only here, the column checked at publish.
+        if (!blocked) blocked = parameterProblem(c.payload);
         // The role's pay (0.4: the vote path the valuation engine names must be able to carry it).
         if (!blocked) blocked = draftPayProblem(c.payload, context.payRules, draft.sourceKind !== "human");
         if (carriesRolePay(c.payload)) reads = `Edit ${name} and its pay`;
@@ -1251,7 +1255,7 @@ export function previewLoadedDraft(
         // `accountabilities` is written by its own branch in `applyChange`
         // and is a real change: the card's "What you can count on me for"
         // proposal carries nothing else, and this used to block it.
-        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k));
+        const touched = Object.keys(c.payload ?? {}).filter((k) => k in SEAT_FIELDS || k === "accountabilities" || (DRAFT_PAY_KEYS as readonly string[]).includes(k) || parameterKeysIn({ [k]: 1 }).length > 0);
         if (!blocked && touched.length === 0) {
           blocked = "This names no field this village can change on a role";
         }
@@ -1516,7 +1520,8 @@ async function captureBefore(conn: PoolConnection, c: DraftChange): Promise<any>
     "SELECT id, circle_id, name, aim, domain, accountabilities, why_it_matters, seats, criticality, active, recruiting, terms_offer, terms_offer_at, terms_offer_by, bring_me, not_mine, runbook, exists_while, authorities, responsibilities, signs_stretched, flows_back, step_back, time_commitment, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM org_roles WHERE id = ?", // module-review-ok: a step inside the publish or revert transaction on its own connection; server/repos/orgDrafts.ts explains why a transaction step cannot move to a repo
     [c.orgRoleId],
   );
-  return row ?? null;
+  // And the listing details of the role card, when this database has their columns (roleParameterColumns.ts).
+  return row ? { ...row, ...(c.op === "update_seat" ? await parametersBefore(conn, c.orgRoleId) : {}) } : null;
 }
 
 /** Column names are a fixed map, never interpolated from a payload key. */
@@ -1802,6 +1807,16 @@ async function applyChange(
     sets.push("`" + col + "` = ?");
     args.push(v);
   }
+  // The listing details of the role card: only where the database has the column, and said in words where it has not.
+  const named = parameterKeysIn(p);
+  if (named.length) {
+    const live = new Set(await liveParameterKeys(conn));
+    for (const k of named) {
+      if (!live.has(k)) throw new Error(PARAMETERS_NOT_HERE);
+      sets.push("`" + PARAMETER_COLUMNS[k] + "` = ?");
+      args.push(parameterStored(k, p[k]));
+    }
+  }
   refuseAccountabilities(p, "update_seat");
   if (Array.isArray(p.accountabilities)) {
     sets.push("`accountabilities` = ?");
@@ -1994,6 +2009,7 @@ export async function revertDraft(
             hadPay, b.cash_minor ?? null, hadPay, b.cash_currency ?? null,
             c.orgRoleId],
         );
+        if (c.op === "update_seat") await putParametersBack(conn, c.orgRoleId, b);
       }
     }
     // Same count, same reason as publish: without it a second revert put

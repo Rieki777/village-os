@@ -37,6 +37,7 @@ import { useLingui } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
 import InfoTip from "@/components/InfoTip";
 import SeatTradingCard from "@/components/power/SeatTradingCard";
+import EditRoleButton from "@/components/roleEdit/EditRoleButton";
 import { useClassNames } from "@/components/power/useClassNames";
 import { readsTerms } from "@/components/characters/RolesThatFit";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
@@ -396,6 +397,7 @@ export default function RoleDraft() {
                             embedded
                             settings={termsSlotFor(role.raw as Record<string, any>)}
                           />
+                          <EditRoleButton roleId={role.id} className="mt-3" onSaved={() => window.location.reload()} />
                         </div>
                       )}
                       <div className="flex gap-2 px-4 pb-4">

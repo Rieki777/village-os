@@ -46,6 +46,7 @@ import RolePowerGroupsEditor from "@/components/admin/RolePowerGroupsEditor";
 import RoleHandoverEditor from "@/components/admin/RoleHandoverEditor";
 import RoleCcosEditor from "@/components/admin/RoleCcosEditor";
 import RoleCharacterTags from "@/components/admin/RoleCharacterTags";
+import EditRoleButton, { NewRoleFromCardButton } from "@/components/roleEdit/EditRoleButton";
 import VillagePresetsEditor from "@/components/admin/VillagePresetsEditor";
 import { SeatClaimAsks, type SeatClaimAsk } from "@/components/admin/SeatClaimAsks";
 import { UndrawnSeatAsks } from "@/components/admin/UndrawnSeatAsks";
@@ -145,6 +146,7 @@ export function OrgChartTab({ password }: { password: string }) {
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Org Chart</h2>
+        <div className="mt-2"><NewRoleFromCardButton onMade={() => void load()} /></div>
         <p className="text-sm text-gray-500 mt-1">
           Circles, the roles inside them, and who holds each role. This is what
           /roles, /circles and /team show, and edits are live immediately.
@@ -482,6 +484,8 @@ export function OrgChartTab({ password }: { password: string }) {
                       {!r.isExample && <RoleCcosEditor role={r} call={call} onSaved={() => void load()} />}
                       {/* Which characters the role suits, the village's word over the boot-time guess (role draft board, 9 Nov). */}
                       {!r.isExample && <RoleCharacterTags role={r} call={call} onSaved={() => void load()} />}
+                      {/* The one editor for the whole card, for a holder of the power to decide the structure or an admin (role journey, PR-B). */}
+                      {!r.isExample && <EditRoleButton roleId={r.id} className="mt-2" onSaved={() => void load()} />}
 
                       {journal[r.id] === "loading" && (
                         <p className="text-xs text-gray-400 mt-2">Reading the history…</p>
