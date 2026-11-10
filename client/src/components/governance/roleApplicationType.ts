@@ -176,7 +176,7 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           rows: 4,
           maxLength: 1500,
           label: "Why you",
-          placeholder: "I have kept the north line running for two seasons and I already know where it silts up.",
+          placeholder: "I have been planting food forests for 20 years. I've been living on and near the project for 5, and I'm deeply familiar with the land.",
           required: true,
           // The member reads the label "Why you", so the problem names it the same way (red team U11).
           problem: atLeast(30, '"Why you"'),
