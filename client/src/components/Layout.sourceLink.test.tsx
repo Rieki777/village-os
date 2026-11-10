@@ -1,18 +1,17 @@
 // @vitest-environment jsdom
 /**
- * THE FOOTER'S "SOURCE CODE" LINK (AGPL-3.0-or-later, section 13).
+ * THE FOOTER'S SOURCE LINKS (AGPL-3.0-or-later, section 13).
  *
- * Anyone who runs a changed version of Village OS for other people must offer
- * those people its source. Every village's footer therefore links to the
- * address in the village setting `platform.source_url`, served as `sourceUrl`
- * in the public config. These pin that the link renders from the setting, that
- * an empty or unsafe setting falls back to the public repository, and that the
- * link is absent only while the config is still loading.
+ * Every village's footer links the upstream Village OS source, a platform
+ * constant. A village that runs changed code sets `village.source_url`, served
+ * as `villageSourceUrl` in the public config, and the footer then shows a
+ * second link named for the village. Blank, or anything that is not https,
+ * shows no second link.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Router } from "wouter";
-import { DEFAULT_SOURCE_URL } from "@shared/sourceUrl";
+import { UPSTREAM_SOURCE_URL } from "@shared/sourceUrl";
 
 const useGameConfigMock = vi.fn();
 
@@ -40,7 +39,7 @@ const CONFIG = {
   images: {} as Record<string, string>,
 };
 
-function sourceLink(): HTMLAnchorElement | null {
+function footerLinks(): { upstream: HTMLAnchorElement | null; village: HTMLAnchorElement | null } {
   render(
     <Router>
       <Layout>
@@ -48,35 +47,53 @@ function sourceLink(): HTMLAnchorElement | null {
       </Layout>
     </Router>,
   );
-  const links = Array.from(screen.getByRole("contentinfo").querySelectorAll("a")).filter(
-    (a) => a.textContent?.trim() === "Source code",
-  );
-  expect(links.length).toBeLessThanOrEqual(1);
-  return (links[0] as HTMLAnchorElement | undefined) ?? null;
+  const links = Array.from(screen.getByRole("contentinfo").querySelectorAll("a"));
+  const text = (a: Element) => a.textContent?.trim() ?? "";
+  return {
+    upstream: (links.find((a) => text(a) === "Village OS source") as HTMLAnchorElement | undefined) ?? null,
+    village: (links.find((a) => /source$/.test(text(a)) && text(a) !== "Village OS source") as HTMLAnchorElement | undefined) ?? null,
+  };
 }
 
-describe("the footer's Source code link", () => {
+describe("the footer's source links", () => {
   beforeEach(() => useGameConfigMock.mockReset());
 
-  it("points at the address the village set", () => {
-    useGameConfigMock.mockReturnValue({ ...CONFIG, sourceUrl: "https://code.example.org/our-village" });
-    const link = sourceLink();
-    expect(link).not.toBeNull();
-    expect(link!.getAttribute("href")).toBe("https://code.example.org/our-village");
-  });
-
-  it("points at the public Village OS repository when the config carries nothing (an older server)", () => {
+  it("always links the upstream Village OS source once the config has answered", () => {
     useGameConfigMock.mockReturnValue({ ...CONFIG });
-    expect(sourceLink()!.getAttribute("href")).toBe(DEFAULT_SOURCE_URL);
+    expect(footerLinks().upstream!.getAttribute("href")).toBe(UPSTREAM_SOURCE_URL);
   });
 
-  it("CONTROL: an address that is not http or https never becomes the link", () => {
-    useGameConfigMock.mockReturnValue({ ...CONFIG, sourceUrl: "javascript:alert(1)" });
-    expect(sourceLink()!.getAttribute("href")).toBe(DEFAULT_SOURCE_URL);
+  it("shows the village's own link, named for the village, from the setting", () => {
+    useGameConfigMock.mockReturnValue({ ...CONFIG, villageSourceUrl: "https://code.example.org/our-village" });
+    const { upstream, village } = footerLinks();
+    expect(upstream).not.toBeNull();
+    expect(village).not.toBeNull();
+    expect(village!.getAttribute("href")).toBe("https://code.example.org/our-village");
+    expect(village!.textContent?.trim()).toBe("Willowbrook's source");
   });
 
-  it("renders nothing while the config is still loading", () => {
+  it("hides the village link when the setting is blank or absent", () => {
+    for (const cfg of [{ ...CONFIG }, { ...CONFIG, villageSourceUrl: "" }]) {
+      useGameConfigMock.mockReturnValue(cfg);
+      const { unmount } = render(<span />);
+      unmount();
+      expect(footerLinks().village).toBeNull();
+      document.body.innerHTML = "";
+    }
+  });
+
+  it("CONTROL: a non-https address never becomes a link", () => {
+    for (const bad of ["http://code.example.org/x", "javascript:alert(1)"]) {
+      useGameConfigMock.mockReturnValue({ ...CONFIG, villageSourceUrl: bad });
+      expect(footerLinks().village).toBeNull();
+      document.body.innerHTML = "";
+    }
+  });
+
+  it("renders neither link while the config is still loading", () => {
     useGameConfigMock.mockReturnValue(null);
-    expect(sourceLink()).toBeNull();
+    const { upstream, village } = footerLinks();
+    expect(upstream).toBeNull();
+    expect(village).toBeNull();
   });
 });

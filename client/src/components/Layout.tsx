@@ -19,7 +19,7 @@ import MobileTabBar, { isBareRoute } from "./mobile/MobileTabBar";
 import MobileFab from "./mobile/MobileFab";
 import NextStepTrail from "./NextStepTrail";
 import { SITE_FOOTER_SIGNOFF } from "@shared/pageContent/site";
-import { servedSourceUrl } from "@shared/sourceUrl";
+import { UPSTREAM_SOURCE_URL, servedVillageSourceUrl } from "@shared/sourceUrl";
 import { storyPageShown } from "@/lib/brochure";
 
 interface LayoutProps {
@@ -50,6 +50,7 @@ export default function Layout({ children }: LayoutProps) {
   const siteUrl = String(cfg?.project?.siteUrl ?? "").trim();
   const eventsUrl = String(cfg?.project?.eventsUrl ?? "").trim();
   const villageName = String(cfg?.project?.name ?? "").trim();
+  const villageSource = servedVillageSourceUrl(cfg?.villageSourceUrl); // https only; "" hides the link (shared/sourceUrl.ts)
   // One subscription for the whole shell instead of thirteen useModule calls.
   // The nav is data now (config/nav.ts), and a list cannot call a hook per row.
   const { modules } = useModules();
@@ -820,12 +821,24 @@ export default function Layout({ children }: LayoutProps) {
                 {cfg && (
                   <li>
                     <a
-                      href={servedSourceUrl(cfg.sourceUrl)}
+                      href={UPSTREAM_SOURCE_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-white hover:underline transition-colors text-sm block py-1.5"
                     >
-                      <Trans context="site footer">Source code</Trans>
+                      <Trans context="site footer">Village OS source</Trans>
+                    </a>
+                  </li>
+                )}
+                {cfg && villageSource && (
+                  <li>
+                    <a
+                      href={villageSource}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white hover:underline transition-colors text-sm block py-1.5"
+                    >
+                      {villageName ? <Trans context="site footer">{villageName}'s source</Trans> : <Trans context="site footer">Our source</Trans>}
                     </a>
                   </li>
                 )}

@@ -1714,6 +1714,11 @@ msgstr "Why the village needs it"
 msgid "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 msgstr "No round is open yet. When the pot's holder opens one, ideas are welcome here."
 
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Village OS source"
+msgstr "Village OS source"
+
 #: client/src/components/fundingRounds/RoundParts.tsx
 msgctxt "funding rounds"
 msgid "Talk about it"
@@ -1818,6 +1823,11 @@ msgstr "The conflict agreement"
 msgctxt "workbook cover, a line for names"
 msgid "Filled in by"
 msgstr "Filled in by"
+
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "Our source"
+msgstr "Our source"
 
 #: client/src/components/canvas/CanvasSeason.tsx
 msgid "A season file comes from whoever runs your season, or you can write your own. The format, and a template to copy, are in the platform's source under docs/seasons."
@@ -4408,6 +4418,11 @@ msgstr "{done} prices set."
 msgid "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
 msgstr "Waiting for a second signer: another Treasurer or a steward. Until they sign, the role's pay stays as it is. If nobody signs within 7 days, put the change to the village in an org draft."
 
+#: client/src/components/Layout.tsx
+msgctxt "site footer"
+msgid "{villageName}'s source"
+msgstr "{villageName}'s source"
+
 #: client/src/components/canvas/CanvasWorkbookSheet.tsx
 msgctxt "workbook cover title"
 msgid "Governance Canvas workbook"
@@ -5204,9 +5219,9 @@ msgid "Move to its own change request"
 msgstr "Move to its own change request"
 
 #: client/src/components/Layout.tsx
-msgctxt "site footer"
-msgid "Source code"
-msgstr "Source code"
+#~ msgctxt "site footer"
+#~ msgid "Source code"
+#~ msgstr "Source code"
 
 #: client/src/pages/RoleDraft.tsx
 msgid "Once you are approved into a role, you sign the village's confidentiality agreement (NDA), before you see any confidential records."

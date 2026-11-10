@@ -85,9 +85,9 @@ In plain words:
 
 - Anyone may use, change and host Village OS, for any purpose.
 - Anyone who runs a changed version for other people must offer those people its source code. The
-  footer of every village has a "Source code" link for this. A village that runs modified code points
-  it at its own copy in the village setting `platform.source_url`; the default is the public
-  Village OS repository.
+  footer of every village links the public Village OS source. A village that changes the code sets
+  its own link in the village setting `village.source_url` (Admin), and the footer then shows a
+  second link to the village's own copy. It must be an https address.
 - Nobody may take it, close it and sell it. Anything built from it stays open under the same
   license, and so does every future repository of the project.
 - Modules are under the same license as the rest.

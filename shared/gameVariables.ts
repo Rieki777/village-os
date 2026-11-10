@@ -3148,17 +3148,18 @@ export const VARIABLES: VariableDef[] = [
   },
 
   /*
-   * THE SOURCE-CODE LINK IN EVERY FOOTER (AGPL-3.0-or-later, section 13,
-   * shared/sourceUrl.ts). A village that runs changed code must offer its
-   * people that code, so this is where it says where. Blank, or anything that is
-   * not an http or https address, means the public Village OS repository.
+   * THE VILLAGE'S OWN SOURCE-CODE LINK (AGPL-3.0-or-later, section 13,
+   * shared/sourceUrl.ts). The footer always links the upstream Village OS
+   * repository, a platform constant. A village that runs changed code must also
+   * offer its people that code, so this is where it says where. Blank, or
+   * anything that is not an https address, shows no second link.
    */
   {
-    key: "platform.source_url",
-    category: "Platform",
-    label: "Where this village shares its source code",
+    key: "village.source_url",
+    category: "Village",
+    label: "Where this village shares its own source code",
     description:
-      "The footer's \"Source code\" link goes here. Leave it empty to point at the public Village OS repository. If this village runs a changed version of the software, set it to the address of your own copy of the code, because the licence says the people who use your village must be able to get it.",
+      "The footer shows a second source link, named for your village, when this is set. Leave it empty if you run the software as published, because the footer already links the public Village OS code. If this village runs a changed version, set it to the https address of your own copy of the code, because the licence says the people who use your village must be able to get it.",
     type: "text",
     default: "",
   },

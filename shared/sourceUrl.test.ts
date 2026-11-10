@@ -1,23 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { DEFAULT_SOURCE_URL, servedSourceUrl, SOURCE_URL_KEY } from "./sourceUrl";
+import { UPSTREAM_SOURCE_URL, servedVillageSourceUrl, VILLAGE_SOURCE_URL_KEY } from "./sourceUrl";
 import { VARIABLES_BY_KEY } from "./gameVariables";
 
-describe("servedSourceUrl", () => {
-  it("blank means the public repository", () => {
-    expect(servedSourceUrl("")).toBe(DEFAULT_SOURCE_URL);
-    expect(servedSourceUrl("   ")).toBe(DEFAULT_SOURCE_URL);
-    expect(servedSourceUrl(undefined)).toBe(DEFAULT_SOURCE_URL);
+describe("servedVillageSourceUrl", () => {
+  it("blank means there is no village link", () => {
+    expect(servedVillageSourceUrl("")).toBe("");
+    expect(servedVillageSourceUrl("   ")).toBe("");
+    expect(servedVillageSourceUrl(undefined)).toBe("");
   });
-  it("serves an http or https address", () => {
-    expect(servedSourceUrl(" https://git.example.org/v/os ")).toBe("https://git.example.org/v/os");
+  it("serves an https address", () => {
+    expect(servedVillageSourceUrl(" https://git.example.org/v/os ")).toBe("https://git.example.org/v/os");
   });
-  it("drops anything else", () => {
-    for (const bad of ["javascript:alert(1)", "data:text/html,x", "ftp://x.org/a", "not a url", "//x.org"]) {
-      expect(servedSourceUrl(bad)).toBe(DEFAULT_SOURCE_URL);
+  it("refuses anything that is not https", () => {
+    for (const bad of ["http://x.org/a", "javascript:alert(1)", "data:text/html,x", "ftp://x.org/a", "not a url", "//x.org"]) {
+      expect(servedVillageSourceUrl(bad)).toBe("");
     }
   });
+  it("keeps the upstream address in one constant, https", () => {
+    expect(UPSTREAM_SOURCE_URL.startsWith("https://")).toBe(true);
+  });
   it("is a registered village setting that defaults to blank", () => {
-    const def = VARIABLES_BY_KEY[SOURCE_URL_KEY];
+    const def = VARIABLES_BY_KEY[VILLAGE_SOURCE_URL_KEY];
     expect(def).toBeTruthy();
     expect(def.type).toBe("text");
     expect(def.default).toBe("");
