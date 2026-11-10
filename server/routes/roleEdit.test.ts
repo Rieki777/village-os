@@ -90,7 +90,7 @@ async function seedRole(extra: Record<string, unknown> = {}): Promise<{ id: stri
 }
 
 const row = async (id: string) => {
-  const [rows]: any = await pool.query("SELECT aim, domain, recruiting, terms_offer, terms_offer_by FROM org_roles WHERE id = ?", [id]);
+  const [rows]: any = await pool.query("SELECT aim, domain, recruiting, terms_offer, terms_offer_by FROM org_roles WHERE id = ?", [id]); // module-review-ok: a test reading the table it asserts on
   return rows[0];
 };
 
@@ -142,7 +142,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       expect(saved.status).toBe(200);
       expect(saved.json.changed).toEqual(["Purpose"]);
       expect((await row(id)).aim).toBe("Keep the reading room alive");
-      const [[draft]]: any = await pool.query("SELECT d.status, d.source_kind, d.published_by FROM org_drafts d JOIN org_draft_changes c ON c.draft_id = d.id WHERE c.org_role_id = ? AND d.title LIKE 'Edit role:%'", [id]);
+      const [[draft]]: any = await pool.query("SELECT d.status, d.source_kind, d.published_by FROM org_drafts d JOIN org_draft_changes c ON c.draft_id = d.id WHERE c.org_role_id = ? AND d.title LIKE 'Edit role:%'", [id]); // module-review-ok: a test reading the table it asserts on
       expect([draft.status, draft.source_kind, draft.published_by]).toEqual(["published", "human", "holder-1"]);
     });
 
@@ -183,10 +183,10 @@ describe.skipIf(!configured)("Edit this role", () => {
 
     it("refuses a save that changes nothing, and writes no draft", async () => {
       const { id } = await seedRole();
-      const [[before]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_drafts");
+      const [[before]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_drafts"); // module-review-ok: a test reading the table it asserts on
       const r = await call("POST", `/api/org/role-edit/${id}`, "holder-1", { words: { aim: "Old aim" } });
       expect(r.status).toBe(400);
-      const [[after]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_drafts");
+      const [[after]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_drafts"); // module-review-ok: a test reading the table it asserts on
       expect(after.n).toBe(before.n);
     });
 
@@ -232,7 +232,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       const live = await liveParameterKeys(pool);
       if (!live.includes("conversations")) return;
       const other = await seedRole();
-      const [[before]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      const [[before]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]); // module-review-ok: a test reading the table it asserts on
       expect(before.track).toBeNull();
       const body = {
         parameters: {
@@ -247,7 +247,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       };
       const saved = await call("POST", `/api/org/role-edit/${id}`, "holder-1", body);
       expect(saved.status).toBe(200);
-      const [[after]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      const [[after]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]); // module-review-ok: a test reading the table it asserts on
       expect([after.track, after.conversation_mode, after.booking_url]).toEqual(["contractor", "separate", "https://cal.example/lead"]);
       const steps = typeof after.conversations === "string" ? JSON.parse(after.conversations) : after.conversations;
       expect(steps).toEqual(body.parameters.conversations);
@@ -258,7 +258,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       const edit = h.json.entries.find((e: any) => e.fromEditor);
       expect(edit.canRevert).toBe(true);
       expect((await call("POST", `/api/org/role-edit/${id}/history/${edit.draftId}/revert`, "holder-1")).status).toBe(200);
-      const [[back]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]);
+      const [[back]]: any = await pool.query("SELECT track, conversations, conversation_mode, booking_url FROM org_roles WHERE id = ?", [id]); // module-review-ok: a test reading the table it asserts on
       expect([back.track, back.conversations, back.conversation_mode, back.booking_url]).toEqual([null, null, null, null]);
     });
   });
@@ -277,7 +277,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       // The editor is told whether the reader holds terms.read, which the range needs; the route leaves the range out without it.
       expect(typeof (await call("GET", `/api/org/role-edit/${id}`, "holder-1")).json.mayReadTerms).toBe("boolean");
       expect(await row(id)).toEqual(before);
-      const [[drafts]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_draft_changes WHERE org_role_id = ? AND op = 'update_seat'", [id]);
+      const [[drafts]]: any = await pool.query("SELECT COUNT(*) AS n FROM org_draft_changes WHERE org_role_id = ? AND op = 'update_seat'", [id]); // module-review-ok: a test reading the table it asserts on
       expect(drafts.n).toBe(0);
       // The person's save is what writes it.
       const group = { kind: "range", currency: "USD", minMinor: 100000, maxMinor: 150000, per: "month", note: "Funding-dependent" };
@@ -399,7 +399,7 @@ describe.skipIf(!configured)("Edit this role", () => {
       const made = await call("POST", "/api/org/role-edit/new-from-card", "holder-1", { text: card, circleId: circle, create: true });
       expect(made.status).toBe(200);
       expect(made.json.created).toBe(true);
-      const [[created]]: any = await pool.query("SELECT name, circle_id, recruiting, aim FROM org_roles WHERE id = ?", [made.json.roleId]);
+      const [[created]]: any = await pool.query("SELECT name, circle_id, recruiting, aim FROM org_roles WHERE id = ?", [made.json.roleId]); // module-review-ok: a test reading the table it asserts on
       expect(created).toMatchObject({ name: "Lantern Keeper", circle_id: circle, recruiting: 0, aim: "Keep the lanterns lit" });
     });
 
