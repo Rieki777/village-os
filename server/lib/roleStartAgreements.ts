@@ -71,7 +71,7 @@ export const anyDialOn = (d: RoleStartDials): boolean => d.confidentiality || d.
 export interface RoleStartDeps {
   dials: () => RoleStartDials;
   /** The village's agreement now, or null when it has written none. */
-  agreement: () => ServedAgreement | null;
+  agreement: () => ServedAgreement | null | Promise<ServedAgreement | null>;
   /** A membership the village already granted (a signing accepted before alignments existed). */
   membershipGranted: (userId: string) => Promise<boolean>;
 }
@@ -101,7 +101,7 @@ export function makeRoleStartGate(deps: RoleStartDeps): RoleStartGate {
     const dials = deps.dials();
     if (!anyDialOn(dials)) return [];
     const steps: StartStep[] = [];
-    if (dials.confidentiality && !(await holdsCurrentAgreement(conn, app.candidateUserId, deps.agreement(), now))) steps.push("confidentiality");
+    if (dials.confidentiality && !(await holdsCurrentAgreement(conn, app.candidateUserId, await deps.agreement(), now))) steps.push("confidentiality");
     if (dials.membership && !(await holdsMembership(conn, deps, app.candidateUserId, now))) steps.push("membership");
     if (dials.paidTerms && carriesMoney(app.settings) && !(await alignedWithTerms(conn, app))) steps.push("terms");
     return steps;

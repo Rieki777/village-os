@@ -21,9 +21,22 @@
  * REGISTERED from server/index.ts with one line. No `recordEvent`: the
  * alignment row is the record.
  */
-import type { Express } from "express";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import type { Express, Request } from "express";
+import multer from "multer";
 import { ALIGN_WORDS, RECONFIRM_FRESH_MS } from "../../shared/alignments";
-import { CONFIDENTIALITY_SECTION, CONFIDENTIALITY_WORDS } from "../../shared/confidentiality";
+import {
+  AGREEMENT_DOCUMENT_HREF,
+  AGREEMENT_DOCUMENT_MAX_BYTES,
+  CONFIDENTIALITY_SECTION,
+  CONFIDENTIALITY_WORDS,
+  documentOf,
+  type ServedAgreement,
+} from "../../shared/confidentiality";
+import { dbDocument } from "../repos/store-db";
+import { storedFileProblem } from "../lib/villageDocuments";
 import type { AppDeps } from "../lib/appDeps";
 import { alignConfidentiality, currentAgreement, holdsCurrentAgreement } from "../lib/confidentiality";
 import { confirmedUntil, confirmWithFor } from "../lib/identityConfirm";
@@ -31,7 +44,13 @@ import { installRoleStartGate, makeRoleStartGate, roleStartDials } from "../lib/
 import { seasonSaved } from "../lib/seasonTurn";
 import { inApplicationTransaction } from "../repos/seatApplications";
 
-type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members"> & {
+type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "members" | "guardCapability"> & {
+  /**
+   * Where the attached document's bytes live: a folder OUTSIDE the uploads
+   * volume, because `/api/uploads/:filename` answers anybody. Nothing serves
+   * this folder but the members-only read below.
+   */
+  documentDir: string;
   /** The village's content document now (`contentRepo.get()`). */
   content: () => Record<string, unknown> | null | undefined;
   boolVar: (key: string) => boolean;
@@ -59,10 +78,32 @@ export async function holdsConfidentiality(userId: string): Promise<boolean> {
   return readHolds ? readHolds(userId) : false;
 }
 
+/** The `app_config` key the attached document's record lives under: its title, fingerprint and size. Never public. */
+export const AGREEMENT_DOCUMENT_KEY = "confidentiality-document";
+
 export function register(app: Express, deps: Deps): void {
-  const { authedUser, getPool, overLimit, members } = deps;
+  const { authedUser, getPool, overLimit, members, guardCapability } = deps;
   const now = () => (deps.now ? deps.now() : new Date());
-  const agreement = () => currentAgreement((deps.content() ?? {})[CONFIDENTIALITY_SECTION]);
+  /*
+   * THE ATTACHED DOCUMENT'S RECORD, read once and kept. A record that failed to
+   * read is read again next time, so a slow first query never hides a document
+   * for the life of the process.
+   */
+  const attached = dbDocument(getPool(), AGREEMENT_DOCUMENT_KEY, {} as Record<string, unknown>);
+  let loading: Promise<void> | null = null;
+  const ready = () =>
+    (loading ??= attached.load().catch((e) => {
+      loading = null;
+      throw e;
+    }));
+  let written = false;
+  const agreement = async (): Promise<ServedAgreement | null> => {
+    await ready();
+    const out = currentAgreement((deps.content() ?? {})[CONFIDENTIALITY_SECTION], attached.get());
+    written = out !== null;
+    return out;
+  };
+  const fileOf = (sha256: string) => path.join(deps.documentDir, `${sha256}.pdf`);
 
   installRoleStartGate(
     makeRoleStartGate({
@@ -70,11 +111,11 @@ export function register(app: Express, deps: Deps): void {
       agreement,
       membershipGranted: async (id) => !!((await members.byId(id)) as any)?.membershipGranted,
     }),
-    () => agreement() !== null,
+    () => written,
   );
 
   readHolds = async (userId) => {
-    const current = agreement();
+    const current = await agreement();
     if (!current) return false;
     const seen = holds.get(userId);
     const t = now().getTime();
@@ -85,12 +126,108 @@ export function register(app: Express, deps: Deps): void {
   };
 
 
+  /*
+   * THE AGREEMENT, FOR SOMEBODY SIGNED IN. A visitor learns only whether there
+   * is one: the words name the attached document, and the document's title is
+   * for the people aligning with it, never a page a visitor can reach.
+   */
   app.get("/api/confidentiality", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    const current = agreement();
+    const current = await agreement();
     const user = await authedUser(req);
-    const you = user && current ? { holds: await holdsCurrentAgreement(getPool(), String(user.id), current, now()) } : null;
-    res.json({ agreement: current, you, message: current ? null : CONFIDENTIALITY_WORDS.none });
+    if (!user) {
+      return res.json({ agreement: null, exists: current !== null, you: null, message: current ? CONFIDENTIALITY_WORDS.signInToRead : CONFIDENTIALITY_WORDS.none });
+    }
+    const you = current ? { holds: await holdsCurrentAgreement(getPool(), String(user.id), current, now()) } : null;
+    const served = current
+      ? { ...current, document: current.document ? { title: current.document.title, size: current.document.size, href: AGREEMENT_DOCUMENT_HREF } : null }
+      : null;
+    res.json({ agreement: served, exists: current !== null, you, message: current ? null : CONFIDENTIALITY_WORDS.none });
+  });
+
+  /*
+   * THE DOCUMENT ITSELF, to a signed-in member at the step where they align,
+   * and to nobody else. Read from the folder outside the uploads volume, kept
+   * out of every cache and every index, and opened in the browser. A visitor is
+   * answered 401 and learns nothing about it.
+   */
+  app.get(AGREEMENT_DOCUMENT_HREF, async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const user = await authedUser(req);
+    if (!user) return res.status(401).json({ error: "auth_required", message: CONFIDENTIALITY_WORDS.signInToRead });
+    if (await overLimit(`confidentiality-document:${String(user.id)}`, 60, 60 * 60 * 1000)) {
+      return res.status(429).json({ error: "too_many_asks", message: "That is a lot of reading in an hour. Try again in a little while." });
+    }
+    await ready();
+    const doc = documentOf(attached.get());
+    if (!doc) return res.status(404).json({ error: "no_document", message: "The village has not attached a document to its agreement." });
+    let bytes: Buffer;
+    try {
+      bytes = await fs.promises.readFile(fileOf(doc.sha256));
+    } catch {
+      return res.status(404).json({ error: "no_document", message: "The agreement's document could not be found. Tell the village's admins." });
+    }
+    // The file on disk is the file that was fingerprinted, or it is not served.
+    if (crypto.createHash("sha256").update(bytes).digest("hex") !== doc.sha256) {
+      return res.status(409).json({ error: "document_changed", message: "The agreement's document does not match the one the village attached. Tell the village's admins." });
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="agreement-${doc.sha256.slice(0, 12)}.pdf"`);
+    res.send(bytes);
+  });
+
+  // ── Admin: attach the document (story.tell, the hand that writes the words) ──
+  const upload = multer({ storage: multer.memoryStorage(), defParamCharset: "utf8", limits: { fileSize: AGREEMENT_DOCUMENT_MAX_BYTES, files: 1, fields: 2 } });
+
+  app.get("/api/admin/confidentiality/document", async (req, res) => {
+    if (!(await guardCapability(req, res, "story.tell"))) return;
+    await ready();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ document: documentOf(attached.get()) });
+  });
+
+  app.post("/api/admin/confidentiality/document", async (req, res) => {
+    if (!(await guardCapability(req, res, "story.tell"))) return;
+    upload.single("file")(req, res, (err: any) => {
+      void store(err).catch((e) => {
+        console.error("[confidentiality] the document was not attached", e);
+        if (!res.headersSent) res.status(500).json({ error: "The document could not be attached. Nothing was changed." });
+      });
+    });
+    async function store(err: any) {
+      if (err) {
+        const tooBig = err?.code === "LIMIT_FILE_SIZE";
+        return res.status(tooBig ? 413 : 400).json({ error: tooBig ? "That file is larger than 10 MB." : "That file could not be read." });
+      }
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file) return res.status(400).json({ error: "Pick the agreement's PDF to attach." });
+      if (!/\.pdf$/i.test(file.originalname) || storedFileProblem("pdf", file.buffer)) return res.status(400).json({ error: "Attach the agreement as a PDF." });
+      // The title the admin typed, else the file's own name: the village's words, never the platform's.
+      const typed = String((req.body as Record<string, unknown> | undefined)?.title ?? "").replace(/\s+/g, " ").trim();
+      const title = (typed || file.originalname.replace(/\.pdf$/i, "").replace(/\s+/g, " ").trim()).slice(0, 200);
+      if (!title) return res.status(400).json({ error: "Give the document a title." });
+      const sha256 = crypto.createHash("sha256").update(file.buffer).digest("hex");
+      await fs.promises.mkdir(deps.documentDir, { recursive: true });
+      const target = fileOf(sha256);
+      const temp = `${target}.${crypto.randomBytes(4).toString("hex")}.part`;
+      await fs.promises.writeFile(temp, file.buffer);
+      await fs.promises.rename(temp, target);
+      await ready();
+      const doc = { title, sha256, size: file.buffer.length, attachedAt: now().toISOString() };
+      await attached.put(doc);
+      // A new document is new words: every holder is asked again, and no cached yes outlives it.
+      holds.clear();
+      res.json({ success: true, document: documentOf(doc) });
+    }
+  });
+
+  app.delete("/api/admin/confidentiality/document", async (req, res) => {
+    if (!(await guardCapability(req, res, "story.tell"))) return;
+    await ready();
+    await attached.put({});
+    holds.clear();
+    res.json({ success: true, document: null });
   });
 
   app.post("/api/profile/confidentiality", async (req, res) => {
@@ -100,7 +237,7 @@ export function register(app: Express, deps: Deps): void {
     if (await overLimit(`align-confidentiality:${userId}`, ASKS, WINDOW_MS)) {
       return res.status(429).json({ error: "too_many_asks", message: "That is a lot of aligning in a few minutes. Wait a little and try again." });
     }
-    const current = agreement();
+    const current = await agreement();
     if (!current) return res.status(409).json({ error: "no_agreement", message: CONFIDENTIALITY_WORDS.none });
     if (req.body?.version !== current.version) return res.status(409).json({ error: "words_changed", message: CONFIDENTIALITY_WORDS.changed, agreement: current });
     // One click, identity re-confirmed: the agreement binds a person, so a stale confirmation asks again.

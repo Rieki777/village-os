@@ -54,9 +54,13 @@ export function agreementVersionOf(words: { title: string; body: string }): stri
   return `cv-${crypto.createHash("sha256").update(bytes, "utf8").digest("hex").slice(0, 16)}`;
 }
 
-/** The agreement as the village's content section renders it now, or null when it has written none. */
-export function currentAgreement(section: unknown): ServedAgreement | null {
-  const words = renderAgreement(section);
+/**
+ * The agreement as the village's content section and its attached document
+ * render it now, or null when it has neither. The document's fingerprint is in
+ * the words, so the version covers the file.
+ */
+export function currentAgreement(section: unknown, attached: unknown = null): ServedAgreement | null {
+  const words = renderAgreement(section, attached);
   return words ? { ...words, version: agreementVersionOf(words) } : null;
 }
 

@@ -155,9 +155,20 @@ const COVENANT: SectionSpec = {
 };
 
 /** The sections that have a field editor. Anything else gets raw JSON alone. */
+/** The confidentiality agreement's words (role journey L7). The PDF is attached in the panel above them. */
+const CONFIDENTIALITY: SectionSpec = {
+  intro:
+    "The words members align with before they read the village's private records, and before a role that needs them starts. Changing them asks everybody who aligned to align again.",
+  fields: [
+    { path: ["title"], label: "The agreement's name", help: "What the alignment card calls it. Blank reads as Confidentiality agreement.", kind: "text" },
+    { path: ["body"], label: "The agreement's words", help: "Shown beside the Align button. With a document attached, a short line pointing to it is enough.", kind: "long", rows: 8 },
+  ],
+};
+
 export const SECTION_FIELDS: Record<string, SectionSpec> = {
   legal: LEGAL,
   covenant: COVENANT,
+  confidentiality: CONFIDENTIALITY,
 };
 
 /** Read a nested path, tolerating every missing level. */

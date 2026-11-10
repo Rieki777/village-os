@@ -48,11 +48,41 @@ export function readConfidentialityRef(ref: string): { version: string; alignmen
   return AGREEMENT_VERSION.test(version) && alignmentId ? { version, alignmentId } : null;
 }
 
+/**
+ * THE AGREEMENT'S DOCUMENT, when the village attached one (a signed PDF the
+ * agreement is). Uploaded in Admin; the bytes live outside every public door
+ * and are read only by a signed-in member at the step where they align
+ * (server/routes/confidentiality.ts). `sha256` is the file's own fingerprint,
+ * so a new upload is new words and every holder is asked again.
+ */
+export interface AgreementDocument {
+  title: string;
+  sha256: string;
+  size: number;
+}
+
+/** A stored document record, read back safely; anything that is not one is no document. */
+export function documentOf(raw: unknown): AgreementDocument | null {
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const sha256 = typeof o.sha256 === "string" && /^[0-9a-f]{64}$/.test(o.sha256) ? o.sha256 : null;
+  const title = text(o.title).slice(0, 200);
+  const size = typeof o.size === "number" && Number.isFinite(o.size) && o.size > 0 ? Math.floor(o.size) : 0;
+  return sha256 && title && size ? { title, sha256, size } : null;
+}
+
+/** The most a document may weigh: a signed agreement of a few pages fits many times over. */
+export const AGREEMENT_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Where a signed-in member reads the document. Never linked from a page a visitor can reach. */
+export const AGREEMENT_DOCUMENT_HREF = "/api/confidentiality/document";
+
 export interface AgreementWords {
   title: string;
   body: string;
   /** The sentence beside the button, kept on the alignment row. */
   intent: string;
+  /** The attached document, when there is one. Its title reaches signed-in members only. */
+  document: AgreementDocument | null;
 }
 
 /** The agreement as the server serves it: the words, and the version the page sends back. */
@@ -76,16 +106,26 @@ export function agreementIntent(title: string): string {
   return `I align with the ${title}.`.slice(0, 300);
 }
 
+/** The line the stored words carry about the document, so an alignment records which file it was. */
+export function documentLine(d: AgreementDocument): string {
+  return `The agreement document: ${d.title} (PDF, fingerprint ${d.sha256}).`;
+}
+
 /**
- * The village's words from its content section, or null when it has written
- * none. A section with a title and no body is no agreement.
+ * The village's words from its content section and the document it attached,
+ * or null when it has neither. A section with a title and no body is no
+ * agreement, unless a document is attached: then the document is the agreement.
+ * The document's line is part of the words, so the fingerprint of the words
+ * covers the file and a new upload asks everyone again.
  */
-export function renderAgreement(section: unknown): AgreementWords | null {
+export function renderAgreement(section: unknown, attached: unknown = null): AgreementWords | null {
   const o = section && typeof section === "object" ? (section as Record<string, unknown>) : {};
-  const body = tidy(text(o.body));
-  if (!body) return null;
+  const document = documentOf(attached);
+  const own = tidy(text(o.body));
+  if (!own && !document) return null;
   const title = (text(o.title) || DEFAULT_AGREEMENT_TITLE).slice(0, 200);
-  return { title, body: `${body}\n`, intent: agreementIntent(title) };
+  const blocks = [own || CONFIDENTIALITY_WORDS.documentIsTheAgreement, ...(document ? [documentLine(document)] : [])];
+  return { title, body: `${blocks.join("\n\n")}\n`, intent: agreementIntent(title), document };
 }
 
 /** What every surface says about the agreement. Never "sign" alone: aligning is the village's way of signing (D11). */
@@ -98,6 +138,10 @@ export const CONFIDENTIALITY_WORDS = {
   none: "The village has not written its confidentiality agreement yet.",
   changed: "The agreement changed while you were reading it. Read it again, then align.",
   unreadable: "The agreement could not be read just now. Try again in a moment.",
+  signInToRead: "Sign in to read the agreement and align.",
+  documentIsTheAgreement: "The agreement is the document attached here. Read it before you align.",
+  readDocument: (title: string) => `Read ${title} (PDF)`,
+  documentNote: "Only signed-in members who are aligning can open it. Keep it to yourself.",
   alignFirst: "These records are private. Align with the village's confidentiality agreement first: it is one click on the Aligned page, then come back.",
 } as const;
 

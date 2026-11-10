@@ -8,13 +8,13 @@
  * again. A village that wrote no agreement shows nothing here.
  */
 import { useEffect, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { FileText, ShieldCheck } from "lucide-react";
 import { ALIGN_WORDS } from "@shared/alignments";
 import { CONFIDENTIALITY_WORDS } from "@shared/confidentiality";
 import AlignButton from "./AlignButton";
-import { alignConfidentiality, fetchConfidentiality } from "./alignmentsApi";
+import { alignConfidentiality, fetchConfidentiality, openAgreementDocument } from "./alignmentsApi";
 
-type Agreement = { title: string; body: string; intent: string; version: string };
+type Agreement = { title: string; body: string; intent: string; version: string; document: { title: string; size: number; href: string } | null };
 
 export default function ConfidentialityCard() {
   const [agreement, setAgreement] = useState<Agreement | null>(null);
@@ -45,6 +45,19 @@ export default function ConfidentialityCard() {
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
         {CONFIDENTIALITY_WORDS.lede} {ALIGN_WORDS.waysOfSigning}
       </p>
+      {agreement.document && (
+        <div data-agreement-document="" className="mt-3">
+          <button
+            type="button"
+            onClick={() => void openAgreementDocument(agreement.document!.href).then((ok) => !ok && setNotice(CONFIDENTIALITY_WORDS.unreadable))}
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <FileText className="size-4" aria-hidden="true" />
+            {CONFIDENTIALITY_WORDS.readDocument(agreement.document.title)}
+          </button>
+          <p className="mt-1 text-xs text-muted-foreground">{CONFIDENTIALITY_WORDS.documentNote}</p>
+        </div>
+      )}
       <details className="mt-3 rounded-lg border border-border bg-background p-3 text-sm text-foreground">
         <summary className="min-h-11 cursor-pointer py-2 font-semibold">{agreement.title}</summary>
         <div className="mt-2 whitespace-pre-line break-words">{agreement.body}</div>
