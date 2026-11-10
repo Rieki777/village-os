@@ -128,6 +128,21 @@ node scripts/module-facts.mjs
   those in the living-map suites under `shared/mapArtifact*`. That is why CI now shards the whole
   suite rather than splitting e2e from unit (see the next section).
 
+### Generated docs: lanes never regenerate or commit them
+
+**Main owns `docs/GOVERNANCE.md`, `docs/knowledge/governance-lineage.md`, `docs/TOKENS.md`,
+`docs/VARIABLES.md`, `docs/MODULES.md`, `docs/CAPABILITIES.md`, the `generated:` regions of
+`docs/ECONOMICS.md`, and `client/src/locales/en.po`** (Rye, 2026-11-09). A pull request does not
+run their generators and does not commit them; `.github/workflows/generated-docs.yml` regenerates
+them after every merge as one bot commit. Committing them is what made every landing conflict every
+open pull request. CI fails a pull request that edits one (`scripts/check-generated-docs-untouched.mjs`),
+the doc guards run in PR mode (the generator must run and its rules must hold; the committed copy need
+not match), and the would-be GOVERNANCE.md and ECONOMICS.md diff is in the `verify` job summary for
+reviewers. The integrator composes without regenerating or re-extracting. Put one line in every lane
+brief: "Do not run or commit the generators' output; main regenerates it after the merge."
+Flow, modes and the move-to-a-new-repository notes: `docs/GENERATED_DOCS.md`; short form:
+`.claude/skills/generated-docs/SKILL.md`. The list is `GENERATED_FILES` in `scripts/lib/generatedDocs.mjs`.
+
 ### If you are one of several sessions: do NOT run the full suite
 
 **A lane runs its own tests. The session that MERGES runs the full suite, once, on the
@@ -192,8 +207,7 @@ batch's PR as you push it, because until then it has no run at all. The
 pull_request run is the better of the two for a component anyway: it tests the branch ALREADY
 MERGED with main. Two consequences. A CONFLICTING pull request gets no pull_request run, so a
 conflicted lane branch has NO run at all and its lane must merge main before anybody can verify
-it, even though the generated-doc conflict that every batch landing causes stays the integrator's
-to resolve. And counting "every job that is listed succeeded" is NOT a green: jobs appear
+it. (Generated docs no longer conflict: main owns them, see "Generated docs" below.) And counting "every job that is listed succeeded" is NOT a green: jobs appear
 progressively, so an incomplete run reads as 5 of 5 while the sixth has not been created. Assert a
 FLOOR on the job count. And a cancelled
 run is not a red, since `ci.yml` cancels superseded

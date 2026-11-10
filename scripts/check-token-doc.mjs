@@ -26,6 +26,7 @@
  *   node scripts/check-token-doc.mjs --list   print what the generator reads
  */
 import fs from "node:fs";
+import { driftIsFatal } from "./lib/generatedDocs.mjs";
 import path from "node:path";
 import { DOC_PATH, ROOT, SOURCES, generateDetailed } from "./generate-token-doc.mjs";
 
@@ -105,6 +106,7 @@ function main() {
 
   const found = fs.readFileSync(DOC_PATH, "utf8");
   const diff = firstDifference(normalise(wanted), normalise(found));
+  if (diff && !driftIsFatal({ label: REL, found, wanted, regenerate: REGENERATE })) return;
   if (!diff) {
     report([
       `Token doc guard passed. ${REL} matches the code: ` +

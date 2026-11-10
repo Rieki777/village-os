@@ -791,6 +791,19 @@ jobs:
         # compiled in and no Admin setting reaches it; the per-file count only falls.
         run: node scripts/check-tailwind-palette.mjs
 
+      - name: Generated docs are main's, not this pull request's
+        # Main regenerates GOVERNANCE.md, governance-lineage.md, TOKENS.md, VARIABLES.md,
+        # MODULES.md, CAPABILITIES.md, the generated regions of ECONOMICS.md and en.po after
+        # every merge (.github/workflows/generated-docs.yml). A pull request that commits one
+        # conflicts with the next landing, and a conflicted pull request gets no CI. So this
+        # fails a pull request that edits them, and the doc guards below run in PR mode:
+        # the generator must run and its rules must hold, the committed copy need not match,
+        # and the would-be GOVERNANCE.md and ECONOMICS.md diff lands in this job's summary.
+        # ci.yml never sets GENERATED_DOCS_MODE=strict: a merge commit is one bot commit
+        # older than its docs, so strict here would be red on every merge. Strict lives in
+        # generated-docs.yml, after it has written. See docs/GENERATED_DOCS.md.
+        run: node scripts/check-generated-docs-untouched.mjs
+
       - name: Token doc
         # docs/TOKENS.md is GENERATED from the migrations and the server
         # source, and this is the step that makes it worth reading. It

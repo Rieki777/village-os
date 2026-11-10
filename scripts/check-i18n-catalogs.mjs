@@ -33,6 +33,7 @@
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { docsMode } from "./lib/generatedDocs.mjs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,14 +143,21 @@ function staleSourceIds(committed) {
   fs.writeFileSync(cfg, `import base from "file:///${real.replace(/^\//, "")}";\nexport default { ...base, rootDir: ${JSON.stringify(ROOT.split(path.sep).join("/"))}, catalogs: base.catalogs.map((c) => ({ ...c, path: ${JSON.stringify(tmp.split(path.sep).join("/"))} + "/{locale}" })) };\n`);
   const r = spawnSync(process.execPath, [path.join(ROOT, "node_modules", "@lingui", "cli", "dist", "lingui.js"), "extract", "--config", cfg], { cwd: ROOT, encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "--import tsx" } });
   if (r.status !== 0) throw new Error(`lingui extract failed:\n${r.stdout}${r.stderr}`);
-  return read(path.join(tmp, "en.po"), "en").then((fresh) => Object.keys(fresh).filter((id) => !fresh[id].obsolete && !(id in committed)).map((id) => fresh[id].message ?? id));
+  return read(path.join(tmp, "en.po"), "en").then((fresh) => Object.keys(fresh).filter((id) => !fresh[id].obsolete && !(id in committed)).map((id) => ({ message: fresh[id].message ?? id, context: fresh[id].context })));
 }
 
 export async function checkCatalogs({ dir, scope, skipExtract }) {
   const problems = [];
   const en = await read(path.join(dir, "en.po"), "en");
   if (!skipExtract) {
-    for (const m of await staleSourceIds(en)) problems.push(`en.po is stale: "${m}" is in the code but not in the catalog. Run: pnpm i18n:extract`);
+    // en.po is written by `lingui extract` and main owns it (scripts/lib/generatedDocs.mjs). On a
+    // pull request a message missing from it is expected, so only strict mode (main's own workflow,
+    // after it has extracted) calls it a problem. Every other catalog rule below still runs.
+    // The extraction still RUNS, and a new message is still held to the context rule (R9).
+    for (const { message, context } of await staleSourceIds(en)) {
+      if (docsMode() === "strict") problems.push(`en.po is stale: "${message}" is in the code but not in the catalog. Run: pnpm i18n:extract`);
+      else for (const p of sourceProblems({ message, context })) problems.push(`en (new, not yet in en.po): ${p}`);
+    }
   }
   for (const [, e] of Object.entries(en)) {
     if (e.obsolete) continue;

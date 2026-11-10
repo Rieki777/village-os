@@ -31,7 +31,6 @@ const NOT_YET = {
   // Regenerate-and-compare checks. Each generator has its own test, which is
   // where the document's content is held; the check is only that comparison.
   "check-capabilities-doc": "Regenerates docs/CAPABILITIES.md and compares; generate-capabilities-doc.test.mjs tests the generator, nothing yet drives the comparison red.",
-  "check-governance-doc": "Regenerates docs/GOVERNANCE.md and its lineage and compares; generate-governance-doc.test.mjs tests the generator, nothing yet drives the comparison red.",
   "check-modules-doc": "Regenerates docs/MODULES.md and compares; generate-modules-doc.test.mjs tests the generator, nothing yet drives the comparison red.",
   "check-variables-doc": "Regenerates docs/VARIABLES.md and compares; generate-variables-doc.test.mjs tests the generator, nothing yet drives the comparison red.",
   // Budgets measured on a built tree, which a self-test does not have.

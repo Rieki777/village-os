@@ -74,6 +74,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+// These suites prove the guard goes red on drift, which is STRICT mode. Pull requests run the guards in
+// pr mode (scripts/lib/generatedDocs.mjs); this file asks for the other one.
+process.env.GENERATED_DOCS_MODE = "strict";
 import { fileURLToPath } from "node:url";
 import { generate, setConst } from "./generate-token-doc.mjs";
 import { constInitializerText } from "./generate-economics-doc.mjs";
@@ -137,6 +140,8 @@ function newTree(label, { doc = EXPECTED, omit = [], ledger = null } = {}) {
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.copyFileSync(GENERATOR, path.join(root, "scripts", "generate-token-doc.mjs"));
   fs.copyFileSync(GUARD, path.join(root, "scripts", "check-token-doc.mjs"));
+  fs.mkdirSync(path.join(root, "scripts", "lib"), { recursive: true });
+  fs.copyFileSync(path.join(path.dirname(GUARD), "lib", "generatedDocs.mjs"), path.join(root, "scripts", "lib", "generatedDocs.mjs"));
   for (const name of LINKED) {
     if (omit.includes(name)) continue;
     // A case that rewrites the keystone declaration needs a REAL COPY of

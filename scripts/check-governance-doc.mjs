@@ -33,6 +33,7 @@
  *   node scripts/check-governance-doc.mjs --list   print what the generator reads
  */
 import fs from "node:fs";
+import { driftIsFatal } from "./lib/generatedDocs.mjs";
 import path from "node:path";
 import { DOC_PATH, LINEAGE_PATH, ROOT, SOURCES, generateDetailed } from "./generate-governance-doc.mjs";
 
@@ -103,7 +104,7 @@ function main() {
   }
   const foundLineage = fs.readFileSync(LINEAGE_PATH, "utf8");
   const lineageDiff = firstDifference(normalise(wantedLineage), normalise(foundLineage));
-  if (lineageDiff) {
+  if (lineageDiff && driftIsFatal({ label: LINEAGE_REL, found: foundLineage, wanted: wantedLineage, seen: true, regenerate: REGENERATE })) {
     report([
       `${LINEAGE_REL} and the code have come apart. ${lineageDiff.differing} line(s) differ.`,
       "",
@@ -119,6 +120,7 @@ function main() {
 
   const found = fs.readFileSync(DOC_PATH, "utf8");
   const diff = firstDifference(normalise(wanted), normalise(found));
+  if (diff && !driftIsFatal({ label: REL, found, wanted, seen: true, regenerate: REGENERATE })) return;
   if (!diff) {
     const staged = Object.entries(facts.staged).filter(([, still]) => still).length;
     report([
