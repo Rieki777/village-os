@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { CARD_LIMITS, CARD_WINDOWS, type FirstMoonGoal } from "@shared/openProposalCard";
 import { BLANK_GOAL, type ProposalGoal } from "@shared/proposalGoals";
+import { TERM_KEYS, TERM_LABELS, type TermAnswers } from "@shared/termsWords";
 import GoalsList from "@/components/governance/GoalsList";
 
 export interface RoleCardState {
@@ -44,7 +45,7 @@ export function RoleAsks({
   roleId,
   roleName,
   aim,
-  timeCommitment,
+  commitmentPct,
   accountabilities,
   goals,
   value,
@@ -53,7 +54,8 @@ export function RoleAsks({
   roleId: string;
   roleName: string;
   aim: string | null;
-  timeCommitment: string | null;
+  /** The commitment the role asks, when its card says (joining lane PR 3). */
+  commitmentPct: number | null;
   accountabilities: readonly string[];
   /** The season's goals, to pick which this role's work serves (guide v2). Absent: the card asks nothing about them. */
   goals?: ReadonlyArray<{ id: string; text: string }>;
@@ -71,7 +73,7 @@ export function RoleAsks({
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "What this role asks", context: "open proposal card" })}</p>
         {aim && <p className="mt-1 text-sm text-foreground">{aim}</p>}
-        {timeCommitment && <p className="mt-1 text-xs text-muted-foreground">{t({ message: `Time: roughly ${timeCommitment}`, context: "open proposal card" })}</p>}
+        {commitmentPct !== null && <p className="mt-1 text-xs text-muted-foreground">{t({ message: `Commitment: ${commitmentPct}%`, context: "open proposal card" })}</p>}
       </div>
       {accountabilities.length > 0 && (
         <fieldset className="grid gap-2">
@@ -175,23 +177,16 @@ export function SeasonServes({
   goals,
   serves,
   onServes,
-  hours,
-  onHours,
   agreed,
   onAgreed,
   membership,
   showGoals = true,
-  showHours = true,
 }: {
   /** Off when each role card asks its own goal (guide v2); the no-goals line still shows. */
   showGoals?: boolean;
-  /** Off when the practicalities ask the time first (guide v2). */
-  showHours?: boolean;
   goals: ReadonlyArray<{ id: string; text: string }>;
   serves: Record<string, string>;
   onServes: (next: Record<string, string>) => void;
-  hours: string;
-  onHours: (v: string) => void;
   agreed: { nda: boolean };
   onAgreed: (next: { nda: boolean }) => void;
   /**
@@ -253,7 +248,6 @@ export function SeasonServes({
           })}
         </fieldset>
       )}
-      {showHours && <HoursField hours={hours} onHours={onHours} />}
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
         {membership}
@@ -280,16 +274,16 @@ export function CardSideBySide({
 }: {
   /** The applicant aligned with the membership letter, on the form or from their account (Rye's answer 8). */
   membershipAligned?: boolean;
-  roles: ReadonlyArray<{ id: string; name: string | null; accountabilities?: string[]; timeCommitment?: string | null }>;
+  roles: ReadonlyArray<{ id: string; name: string | null; accountabilities?: string[]; commitmentPct?: number | null }>;
   card: {
     roles: Array<{ roleId: string; moves: Array<{ text: string; target: string }>; firstMoon: FirstMoonGoal[] }>;
     serves: Array<{ goalId: string; how: string; goal?: string; roleId?: string }>;
-    hours: string;
+    commitmentPct?: number;
     agreed: { loveLetter?: boolean; nda: boolean };
     timeZone?: string;
     windows?: string[];
     earliestStart?: string;
-    terms?: { choice: "accept" | "talk"; note: string };
+    terms?: { choice: "accept" | "talk"; note: string; answers?: TermAnswers };
   } | null;
 }) {
   const { t } = useLingui();
@@ -318,14 +312,14 @@ export function CardSideBySide({
         const mine = card.roles.find((x) => x.roleId === r.id) ?? { moves: [], firstMoon: [] };
         const asks = r.accountabilities ?? [];
         const roleName = r.name ?? r.id;
-        const time = r.timeCommitment ?? "";
+        const asked = r.commitmentPct ?? null;
         return (
           <div key={r.id} className="overflow-hidden rounded-xl border border-border" data-side-by-side={r.id}>
             <p className="bg-primary px-3 py-2 text-sm font-bold text-primary-foreground">{roleName}</p>
             <div className="grid sm:grid-cols-2">
               <div className="min-w-0 border-b border-border p-3 sm:border-b-0 sm:border-r">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{t({ message: "The role asks", context: "open proposal side by side" })}</p>
-                {time && <p className="mt-1 text-xs text-muted-foreground">{t({ message: `Time: roughly ${time}`, context: "open proposal side by side" })}</p>}
+                {asked !== null && <p className="mt-1 text-xs text-muted-foreground">{t({ message: `Commitment: ${asked}%`, context: "open proposal side by side" })}</p>}
                 <ul className="mt-2 grid gap-1 text-sm">
                   {asks.length === 0 && <li className="text-muted-foreground">{t`This role lists no goals yet.`}</li>}
                   {asks.map((a) => {
@@ -401,7 +395,11 @@ export function CardSideBySide({
         ) : (
           <p className="mt-1 text-muted-foreground">{t({ message: "None picked.", context: "open proposal side by side goals" })}</p>
         )}
-        {card.hours && <p className="mt-2 text-foreground">{t`Time they can give: ${card.hours}`}</p>}
+        {card.commitmentPct !== undefined && (
+          <p className="mt-2 text-foreground" data-their-commitment="">
+            {t`Their commitment: ${card.commitmentPct}%`}
+          </p>
+        )}
         {card.timeZone && <p className="mt-1 text-foreground">{t({ message: `Time zone: ${tz}`, context: "open proposal side by side" })}</p>}
         {card.earliestStart && <p className="mt-1 text-foreground">{t({ message: `Earliest start: ${start}`, context: "open proposal side by side" })}</p>}
         {card.windows && card.windows.length > 0 && <p className="mt-1 text-foreground">{t({ message: `Usual times: ${windowList}`, context: "open proposal side by side" })}</p>}
@@ -412,6 +410,22 @@ export function CardSideBySide({
         ) : card.terms?.choice === "accept" ? (
           <p className="mt-1 text-foreground">{t`Accepts the terms on offer.`}</p>
         ) : null}
+        {card.terms?.answers && (
+          <ul className="mt-2 grid gap-1 text-foreground" data-terms-answers="">
+            {TERM_KEYS.filter((k) => card.terms?.answers?.[k]).map((k) => {
+              const a = card.terms!.answers![k]!;
+              const label = TERM_LABELS[k];
+              return (
+                <li key={k}>
+                  <span className="font-semibold">{label}</span>
+                  {": "}
+                  {a.choice === "accept" ? t`Accepts` : t`Wants to talk`}
+                  {a.note ? `: ${a.note}` : ""}
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <p className="mt-2 text-foreground">
           {membershipAligned ? t`They aligned with the membership letter when they proposed.` : t`They have not aligned with the membership letter yet.`}{" "}
           {card.agreed.nda ? t`They will align with the confidentiality agreement once approved.` : t`They have not promised the confidentiality agreement.`}
@@ -449,14 +463,12 @@ export interface Practical {
   timeZone: string;
   windows: string[];
   earliestStart: string;
-  terms: { choice: "" | "accept" | "talk"; note: string };
 }
 
 /**
  * FORM V2's PRACTICALITIES (role journey brief v2, 5.4): the time zone (from
  * the browser, editable), the usual times they can meet, the earliest start,
- * and the terms on offer: accepted, or a wish to talk about them, which every
- * reviewer sees flagged. Conversations are booked across time zones, so the zone
+ * and, on the terms step, TermsEight. Conversations are booked across time zones, so the zone
  * leads.
  */
 /**
@@ -517,28 +529,6 @@ export function Practicalities({ value, onChange, part = "all" }: { value: Pract
           ))}
         </div>
       </fieldset>
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-semibold text-card-foreground">{t`The terms on offer`}</legend>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "accept"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "accept" } })} />
-          {t`I accept the terms on offer.`}
-        </label>
-        <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="radio" name="card-terms" required className="mt-1 size-4 accent-primary" checked={value.terms.choice === "talk"} onChange={() => onChange({ ...value, terms: { ...value.terms, choice: "talk" } })} />
-          {t`I'd like to talk about the terms.`}
-        </label>
-        {value.terms.choice === "talk" && (
-          <textarea
-            aria-label={t`What you would like to talk about in the terms`}
-            required
-            rows={3}
-            maxLength={CARD_LIMITS.termsNote}
-            value={value.terms.note}
-            onChange={(e) => onChange({ ...value, terms: { ...value.terms, note: e.target.value } })}
-            className={FIELD}
-          />
-        )}
-      </fieldset>
       </>
       )}
     </div>
@@ -592,20 +582,6 @@ export function NextForRoles({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-/** "The time you can give", with the line that pay is never for hours. Asked first among the practicalities (guide v2). */
-export function HoursField({ hours, onHours }: { hours: string; onHours: (v: string) => void }) {
-  const { t } = useLingui();
-  return (
-    <div>
-      <label htmlFor="card-hours" className="mb-2 block text-sm font-semibold text-card-foreground">
-        {t`The time you can give (optional)`}
-      </label>
-      <input id="card-hours" maxLength={CARD_LIMITS.hours} value={hours} onChange={(e) => onHours(e.target.value)} placeholder={t({ message: "e.g. roughly 25 hours a week", context: "open proposal card" })} className={FIELD} />
-      <p className="mt-1 text-xs text-muted-foreground">{t`We don't pay for hours. We pay for contracted work and the contributions you lay out each moon and season.`}</p>
     </div>
   );
 }

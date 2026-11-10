@@ -51,6 +51,7 @@
  * account it makes finishes the adoption at the welcome step
  * (server/lib/inviteDoor.ts).
  */
+import { publicTermsOf } from "../../shared/seatTermsOffer";
 import { listOrgRoles } from "../lib/orgChart";
 import { membershipAlignedFor } from "../lib/applicationMembership";
 import { identityKey } from "../../shared/openProposals";
@@ -193,7 +194,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         circle: named.get(r.roleId)?.circle ?? null,
         note: r.note,
         accountabilities: Array.isArray(role?.accountabilities) ? role.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
-        timeCommitment: role?.timeCommitment ?? null,
+        commitmentPct: publicTermsOf(role?.termsOffer ?? null).commitmentPct,
       };
     });
   }

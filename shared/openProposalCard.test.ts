@@ -20,9 +20,9 @@ const GOOD = {
     { roleId: "events", moves: [{ text: "Monthly potluck", target: "" }], firstMoon: [{ quest: "Hold the first potluck", doneWhen: "twelve neighbours have eaten" }] },
   ],
   serves: [{ goalId: "g-investor", how: "Investors read one set of numbers." }],
-  hours: "About 25 a week",
+  commitmentPct: 60,
   agreed: { loveLetter: true, nda: true },
-  terms: { choice: "accept", note: "" },
+  terms: { answers: { term: { choice: "accept", note: "" } } },
 };
 
 describe("parseCard", () => {
@@ -57,7 +57,7 @@ describe("parseCard", () => {
   it("caps every list and every line", () => {
     const many = Array.from({ length: 9 }, (_, i) => ({ quest: `q${i}`, doneWhen: "d" }));
     expect(parseCard({ ...GOOD, roles: [{ roleId: "events", moves: [], firstMoon: many }] }, CTX).ok).toBe(false);
-    expect(parseCard({ ...GOOD, hours: "x".repeat(CARD_LIMITS.hours + 1) }, CTX).ok).toBe(false);
+    expect(parseCard({ ...GOOD, terms: { answers: { term: { choice: "talk", note: "x".repeat(400) } } } }, CTX).ok).toBe(false);
   });
 });
 
@@ -114,7 +114,8 @@ describe("cardOf and cardSummary", () => {
     expect(text).toContain("A cash view every Monday (13 of 13 Mondays)");
     expect(text).toContain("Publish the first Monday cash view: done when it reaches every circle lead");
     expect(text).toContain("Investor ready: Investors read one set of numbers.");
-    expect(text).toContain("About 25 a week");
+    expect(text).toContain("Commitment: 60%");
+    expect(text).not.toMatch(/hour/i);
     expect(text.length).toBeLessThanOrEqual(2000);
   });
 });
@@ -133,10 +134,12 @@ describe("form v2: the person's practicalities and the terms (role journey brief
     expect(parseCard({ ...V2, earliestStart: "soon" }, CTX)).toMatchObject({ ok: false, field: "earliestStart" });
   });
 
-  it("needs a terms choice, and a note when they want to talk about the terms", () => {
-    expect(parseCard({ ...V2, terms: undefined }, CTX)).toMatchObject({ ok: false, field: "terms" });
+  it("needs an answer for each written setting, and a note when the older whole choice is talk", () => {
+    expect(parseCard({ ...V2, terms: undefined }, { ...CTX, writtenTerms: ["term"] })).toMatchObject({ ok: false, field: "terms" });
     expect(parseCard({ ...V2, terms: { choice: "talk", note: "" } }, CTX)).toMatchObject({ ok: false, field: "terms" });
     expect(parseCard({ ...V2, terms: { choice: "accept", note: "" } }, CTX).ok).toBe(true);
+    // A card with no commitment is refused: there is no default.
+    expect(parseCard({ ...V2, commitmentPct: undefined }, CTX)).toMatchObject({ ok: false, field: "terms" });
   });
 
   it("needs at least one of the season's goals when the season has any", () => {

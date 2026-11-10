@@ -60,6 +60,8 @@
  * ratchet on that file holds. MOUNTED BELOW requireModule("governance") for the
  * /api/governance prefix, which is what keeps the module's gate in front of it.
  */
+import { publicTermsOf } from "../../shared/seatTermsOffer";
+import { judgeTermsStep, writtenKeys } from "../../shared/termsWords";
 import type { Express } from "express";
 import type { PoolConnection } from "mysql2/promise";
 import { isVillageHeld, type Capability } from "../../shared/capabilities";
@@ -128,6 +130,7 @@ import {
   type StoredApplication,
   goalsOfRoles,
   alwaysCheckedAmong,
+  termsOffersOf,
 } from "../repos/seatApplications";
 import { parseAboutYou } from "../../shared/proposalAbout";
 import { readTexts } from "../repos/alignments";
@@ -607,6 +610,12 @@ export function register(app: Express, deps: Deps): void {
       const own = await goalsOfRoles(pool, input.seatIds);
       const judged = parseGoals(input.answers.goals.map((g) => ({ ...g, roleId: g.roleId || input.seatIds[0] })), { roleIds: new Set(input.seatIds), roleGoalsOf: (id) => own.get(id) ?? [], today: now.toISOString().slice(0, 10) });
       if (!judged.ok) return answer(400, { error: judged.error, field: "goals" });
+    }
+    // The terms step (joining lane PR 3): every setting the roles have written is answered.
+    if (input.answers?.terms?.answers !== undefined) {
+      const offers = (await termsOffersOf(pool, input.seatIds)).map((o) => publicTermsOf(o));
+      const judged = judgeTermsStep({ answers: input.answers.terms.answers, commitmentPct: input.answers.terms.commitmentPct }, writtenKeys(offers));
+      if (!judged.ok) return answer(400, { error: judged.error, field: "terms" });
     }
     // About you (joining lane PR 2): judged here because only here do we know which roles are always checked.
     if (input.aboutYouRaw) {

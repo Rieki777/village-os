@@ -1,0 +1,15 @@
+{
+  "about": "The wordings a Lead Financial Steward candidate sees for each of the eight settings (the lead's, 10 Nov 2026). The role lives in Amora's database, so nothing loads this file. Apply it by hand: Admin, Roles, the Lead Financial Steward, Terms on offer. Type each wording into its field under \"What we suggest, setting by setting\", and choose the commitment (100). Putting terms on offer through Admin replaces the role's whole offer, so keep the pay and allowance groups already there. Platform defaults stay empty.",
+  "role": "Lead Financial Steward",
+  "clocks": { "commitmentPct": 100 },
+  "words": {
+    "term": "We renew together each moon. The first three are a trial for both of us.",
+    "clocks": "Full commitment (100%). You manage your own workload. We overlap at least four hours a day with Costa Rica time (9:00 to 13:00), and we reply to each other within one business day.",
+    "rhythm": "We plan the week together at Monday's session and cap it at Friday's. Plus your Monday cash view, the close by business day 10, and the End of Moon review.",
+    "allowance": "Up to US$100 to 300 a moon for tools and software, agreed ahead of time. Travel to the land is covered when we've approved it first.",
+    "bonus": "Earned Equity, under the moon-contract rule, plus 5 to 10% of the moon's pay when its goals are met. We'll shape the exact mix with you.",
+    "goals": "Three to five major goals each moon. Together they're the value of your contract for that moon, and they're what we show investors and funders. Each one has a \"done when\".",
+    "scoreboard": "The five measures on the role card.",
+    "ending": "Either of us can end it with one moon's notice. You leave a handover note, hand back all access, and we pay your last invoice within 10 days."
+  }
+}

@@ -270,6 +270,8 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
     const { references: _r, about: _a, backgroundCheck: _b, ...rest } = answers;
     answers = rest;
   }
+  let deliverablesOut = deliverables;
+  const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;
   // The terms step (PR 3): when the door sends the eight answers, the commitment is required and each answer is a choice.
   const sentTerms = sentAnswers && isPlainTerms(sentAnswers.terms) ? sentAnswers.terms : null;
   if (sentTerms && sentTerms.answers !== undefined) {
@@ -277,8 +279,6 @@ export function parseApplicationInput(body: unknown): ParsedApplication {
     if (!step.ok) return { ok: false, field: "terms", error: step.error };
     if (answers?.terms) answers = { ...answers, terms: { ...answers.terms, answers: step.value.answers, commitmentPct: step.value.commitmentPct } };
   }
-  let deliverablesOut = deliverables;
-  const sentAnswers = b.answers && typeof b.answers === "object" && !Array.isArray(b.answers) ? (b.answers as Record<string, unknown>) : null;
   if (sentAnswers && sentAnswers.goals !== undefined && sentAnswers.goals !== null) {
     // One role: every goal is for it, whether or not the door said so.
     const only = seatIds.length === 1 ? seatIds[0]! : "";

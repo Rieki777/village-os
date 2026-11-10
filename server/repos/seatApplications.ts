@@ -635,6 +635,14 @@ export async function goalsOfRoles(db: Db, roleIds: readonly string[]): Promise<
 }
 
 /** Which of these roles are always background-checked (0370), whatever a candidate's references say. */
+/** The terms on offer of these roles, raw as stored, in the order asked (joining lane PR 3: which settings are written). */
+export async function termsOffersOf(db: Db, roleIds: readonly string[]): Promise<unknown[]> {
+  if (roleIds.length === 0) return [];
+  const [rows] = await db.query<RowDataPacket[]>(`SELECT id, terms_offer FROM org_roles WHERE id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
+  const by = new Map(rows.map((r: any) => [String(r.id), r.terms_offer ?? null]));
+  return roleIds.map((id) => by.get(id) ?? null);
+}
+
 export async function alwaysCheckedAmong(db: Db, roleIds: readonly string[]): Promise<string[]> {
   if (!roleIds.length) return [];
   const [rows] = await db.query<RowDataPacket[]>(`SELECT id FROM org_roles WHERE always_checked = 1 AND id IN (${roleIds.map(() => "?").join(",")})`, [...roleIds]);
