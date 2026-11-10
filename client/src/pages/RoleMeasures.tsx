@@ -2,7 +2,7 @@
  * `/role-measures`: how the role journey is going, for members (L11).
  *
  * Counts and medians per season and circle, from stamped times. No names. A
- * number built from fewer than three people is withheld and shown as a dash,
+ * number built from fewer than three people is withheld and shown as "too few",
  * so nobody can be picked out of it. The server is server/routes/roleMeasures.ts.
  */
 import { useEffect, useState } from "react";
@@ -14,9 +14,9 @@ import type { MeasureRow, Share } from "@shared/roleMeasures";
 
 type Served = MeasureRow & { circleName: string | null };
 
-const pct = (s: Share) => (s.share === null ? "–" : `${Math.round(s.share * 100)}%`);
+const pct = (s: Share) => (s.share === null ? "too few" : `${Math.round(s.share * 100)}%`);
 const count = (s: Share) => (s.eligible === 0 ? "" : ` (${s.yes} of ${s.eligible})`);
-const hours = (h: number | null) => (h === null ? "–" : h < 48 ? `${h} hours` : `${Math.round(h / 24)} days`);
+const hours = (h: number | null) => (h === null ? "too few" : h < 48 ? `${h} hours` : `${Math.round(h / 24)} days`);
 
 export default function RoleMeasures() {
   const [rows, setRows] = useState<Served[] | null>(null);
@@ -42,7 +42,7 @@ export default function RoleMeasures() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-semibold"><Trans>How roles are going</Trans></h1>
         <p className="mt-2 text-sm opacity-80">
-          <Trans>Counts and medians per season and circle, from stamped times. No names. A dash means fewer than three people, so the number is withheld.</Trans>
+          <Trans>Counts and medians per season and circle, from stamped times. No names. "Too few" means fewer than three people, so the number is withheld.</Trans>
         </p>
         {problem && <p role="alert" className="mt-6">{problem}</p>}
         {!problem && rows === null && <BreathingLoader />}
