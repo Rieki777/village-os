@@ -18,6 +18,7 @@
  * the holder's own route and the HTTP wiring runs it as the holder.
  */
 import type { ToolContext, ToolDef, ToolOutcome, RouteAnswer } from "./agentMcp";
+import { neverProposable } from "../../shared/approvalInbox";
 import { AI_APPROVAL_WORDS, LETTER_WORDS, parseLetter, parseRoleChange, parseSeating, projectChart } from "../../shared/agentProposals";
 
 const NO_ARGS = { type: "object", properties: {}, additionalProperties: false } as const;
@@ -250,6 +251,107 @@ export const TIER_B_TOOLS: readonly ToolDef[] = [
       if (a.status === 404) return { ok: false, error: NOT_OPEN };
       if (a.status >= 300) return refusal("The path did not take that", a);
       return { ok: true, result: { written: true, echo, answer: a.body } };
+    },
+  },
+];
+
+/** The proposals that go to the approval inbox (role journey L13, part A). Each files a waiting item and changes nothing. */
+const INBOX_NOTE =
+  "It only files a proposal for a person to approve in the approval inbox, through that thing's own route. Nothing changes until then, and it lapses in seven days. Money, secrets, erasure, invites and power changes are refused at filing.";
+const ASK_FIRST = "Call it first without confirmToken: it writes nothing and answers with what it would file and a confirmToken. Show that to the member, and after their yes call it again with the same arguments and the token.";
+const CONFIRM_PROP = { type: "string", description: "From the first call. Leave it out to see what would be written." } as const;
+
+export const INBOX_TOOLS: readonly ToolDef[] = [
+  {
+    name: "propose_setting",
+    scope: "settings.propose",
+    kind: "write",
+    title: "Propose a village setting",
+    description: `Proposes a change to a village setting (target variable, with key and value), a module switch (target module, with id and lifecycle off, preview, members or public), or what public proposals are for (target open_proposals_term, with term season or moon). The org.start_after switches are village settings. ${INBOX_NOTE} ${ASK_FIRST}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", enum: ["variable", "module", "open_proposals_term"] },
+        key: { type: "string", description: "For a variable: its key, such as org.start_after_open." },
+        value: { type: "string", description: "For a variable: the new value, as text." },
+        id: { type: "string", description: "For a module: its id." },
+        lifecycle: { type: "string", enum: ["off", "preview", "members", "public"] },
+        term: { type: "string", enum: ["season", "moon"] },
+        confirmToken: CONFIRM_PROP,
+      },
+      required: ["target"],
+      additionalProperties: false,
+    },
+    routes: [`POST ${PROPOSALS}/setting`],
+    async run(args, ctx) {
+      const subject = String(args.key ?? args.id ?? "");
+      const never = subject ? neverProposable(subject) : null;
+      if (never) return { ok: false, error: never.words, detail: { code: "never_proposable", key: never.key } };
+      const body: Record<string, unknown> = { target: args.target };
+      for (const k of ["key", "value", "id", "lifecycle", "term"]) if (args[k] !== undefined) body[k] = args[k];
+      return proposeWrite("propose_setting", args, ctx, `${PROPOSALS}/setting`, body, "Setting proposals are not open on this server yet.");
+    },
+  },
+  {
+    name: "propose_listing",
+    scope: "listing.propose",
+    kind: "write",
+    title: "Propose which roles are listed",
+    description: `Proposes "list only these" (only: a list of role ids), or listing or unlisting one role (roleId and listed). ${INBOX_NOTE} ${ASK_FIRST}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        only: { type: "array", items: { type: "string" }, description: "List only these roles, and unlist every other one." },
+        roleId: { type: "string" },
+        listed: { type: "boolean", description: "For one role: true to list, false to unlist." },
+        confirmToken: CONFIRM_PROP,
+      },
+      additionalProperties: false,
+    },
+    routes: [`POST ${PROPOSALS}/listing`],
+    async run(args, ctx) {
+      const body: Record<string, unknown> = {};
+      for (const k of ["only", "roleId", "listed"]) if (args[k] !== undefined) body[k] = args[k];
+      return proposeWrite("propose_listing", args, ctx, `${PROPOSALS}/listing`, body, "Listing proposals are not open on this server yet.");
+    },
+  },
+  {
+    name: "propose_page_copy",
+    scope: "pages.propose",
+    kind: "write",
+    title: "Propose new words for a page",
+    description: `Proposes new content for one Admin Pages content block (section, and the block as it is saved there). It is read against the page's own rules at filing and again by the page's route when a person approves, and it is refused if the words changed in between. ${INBOX_NOTE} ${ASK_FIRST}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        section: { type: "string", description: "The content block's name." },
+        content: { type: "object", description: "The block, as Admin Pages saves it." },
+        confirmToken: CONFIRM_PROP,
+      },
+      required: ["section", "content"],
+      additionalProperties: false,
+    },
+    routes: [`POST ${PROPOSALS}/page-copy`],
+    async run(args, ctx) {
+      const never = neverProposable(String(args.section ?? ""));
+      if (never) return { ok: false, error: never.words, detail: { code: "never_proposable", key: never.key } };
+      return proposeWrite("propose_page_copy", args, ctx, `${PROPOSALS}/page-copy`, { section: args.section, content: args.content }, "Page proposals are not open on this server yet.");
+    },
+  },
+  {
+    name: "propose_map_publish",
+    scope: "map.propose",
+    kind: "write",
+    title: "Propose publishing the map draft",
+    description: `Proposes publishing the map draft this member has saved. The approver publishes it through the map's own publish route, with the draft as it stands then. ${INBOX_NOTE} ${ASK_FIRST}`,
+    inputSchema: {
+      type: "object",
+      properties: { note: { type: "string", description: "A line saying what changed." }, confirmToken: CONFIRM_PROP },
+      additionalProperties: false,
+    },
+    routes: [`POST ${PROPOSALS}/map-publish`],
+    async run(args, ctx) {
+      return proposeWrite("propose_map_publish", args, ctx, `${PROPOSALS}/map-publish`, args.note === undefined ? {} : { note: args.note }, "Map proposals are not open on this server yet.");
     },
   },
 ];

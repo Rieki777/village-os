@@ -25,6 +25,8 @@ export interface StoredProposal {
   title: string;
   body: string | null;
   createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
 }
 
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : String(v ?? ""));
@@ -42,6 +44,8 @@ function toProposal(r: RowDataPacket): StoredProposal {
     title: String(r.title ?? ""),
     body: r.body === null || r.body === undefined ? null : String(r.body),
     createdAt: iso(r.created_at),
+    resolvedBy: r.resolved_by === null || r.resolved_by === undefined ? null : String(r.resolved_by),
+    resolvedAt: r.resolved_at === null || r.resolved_at === undefined ? null : iso(r.resolved_at),
   };
 }
 
@@ -92,6 +96,54 @@ export async function resolveProposal(db: Db, id: string, status: "taken" | "dis
   return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
 }
 
+/** A person's edit of a waiting letter. False when it is no longer waiting. */
+export async function editWaitingLetter(db: Db, id: string, title: string, body: string): Promise<boolean> {
+  const [res] = await db.query("UPDATE `agent_proposals` SET `title` = ?, `body` = ? WHERE `id` = ? AND `kind` = 'letter' AND `status` = 'waiting'", [title.slice(0, 200), body, id]);
+  return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
+}
+
+/** Every waiting letter, oldest first, for the screen where a person reads and sends them. */
+export async function listAllWaitingLetters(db: Db, limit = 100): Promise<StoredProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `agent_proposals` WHERE `kind` = 'letter' AND `status` = 'waiting' ORDER BY `created_at` ASC LIMIT ?", [Math.min(Math.max(limit, 1), 200)]);
+  return rows.map(toProposal);
+}
+
+// ── The approval inbox (role journey L13, part A) ────────────────────────────
+
+/** Lapse every unletter proposal that waited past its seven days. Returns how many lapsed. */
+export async function expireOld(db: Db, olderThanMs: number, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - olderThanMs);
+  const [res] = await db.query(
+    "UPDATE `agent_proposals` SET `status` = 'expired', `resolved_at` = CURRENT_TIMESTAMP(3) WHERE `kind` <> 'letter' AND `status` = 'waiting' AND `created_at` < ?",
+    [cutoff],
+  );
+  return Number((res as { affectedRows?: number }).affectedRows ?? 0);
+}
+
+/** Waiting proposals other than letters, oldest first. */
+export async function listInboxWaiting(db: Db, limit = 100): Promise<StoredProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `agent_proposals` WHERE `kind` <> 'letter' AND `status` = 'waiting' ORDER BY `created_at` ASC LIMIT ?", [Math.min(Math.max(limit, 1), 200)]);
+  return rows.map(toProposal);
+}
+
+/** Decisions from the last 30 days, newest first, for the record under the inbox. */
+export async function listInboxDecided(db: Db, limit = 50): Promise<StoredProposal[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    "SELECT * FROM `agent_proposals` WHERE `kind` <> 'letter' AND `status` <> 'waiting' AND COALESCE(`resolved_at`, `created_at`) > DATE_SUB(NOW(), INTERVAL 30 DAY) ORDER BY COALESCE(`resolved_at`, `created_at`) DESC LIMIT ?",
+    [Math.min(Math.max(limit, 1), 200)],
+  );
+  return rows.map(toProposal);
+}
+
+/** Record a decision on a waiting (or, for a revert, an approved) proposal, rewriting its body with the decision in it. */
+export async function decideProposal(db: Db, id: string, from: ProposalState, to: ProposalState, by: string, body: string): Promise<boolean> {
+  const [res] = await db.query(
+    "UPDATE `agent_proposals` SET `status` = ?, `resolved_by` = ?, `resolved_at` = CURRENT_TIMESTAMP(3), `body` = ? WHERE `id` = ? AND `status` = ?",
+    [to, by, body, id, from],
+  );
+  return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
+}
+
 /** A role that is not a standing example, by id. */
 export async function liveRoleById(db: Db, id: string): Promise<{ id: string; name: string } | null> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name` FROM `org_roles` WHERE `id` = ? AND `is_example` = 0 LIMIT 1", [id]);
@@ -115,20 +167,25 @@ export async function conversationsWaitingOn(db: Db, userId: string): Promise<Ro
   return rows;
 }
 
-/** A person's edit of a waiting letter. False when it is no longer waiting. */
-export async function editWaitingLetter(db: Db, id: string, title: string, body: string): Promise<boolean> {
-  const [res] = await db.query("UPDATE `agent_proposals` SET `title` = ?, `body` = ? WHERE `id` = ? AND `kind` = 'letter' AND `status` = 'waiting'", [title.slice(0, 200), body, id]);
-  return Number((res as { affectedRows?: number }).affectedRows ?? 0) > 0;
-}
-
-/** Every waiting letter, oldest first, for the screen where a person reads and sends them. */
-export async function listAllWaitingLetters(db: Db, limit = 100): Promise<StoredProposal[]> {
-  const [rows] = await db.query<RowDataPacket[]>("SELECT * FROM `agent_proposals` WHERE `kind` = 'letter' AND `status` = 'waiting' ORDER BY `created_at` ASC LIMIT ?", [Math.min(Math.max(limit, 1), 200)]);
-  return rows.map(toProposal);
-}
-
 /** The candidate's user id on a member's application, or null. */
 export async function candidateOfApplication(db: Db, ref: string): Promise<string | null> {
   const [rows] = await db.query<RowDataPacket[]>("SELECT `candidate_user_id` FROM `seat_applications` WHERE `id` = ? LIMIT 1", [ref]);
   return rows[0]?.candidate_user_id ? String(rows[0].candidate_user_id) : null;
+}
+
+/** Whether the village has role listing (the `listed` column). */
+export async function hasListingColumn(db: Db): Promise<boolean> {
+  try {
+    await db.query("SELECT `listed` FROM `org_roles` LIMIT 1");
+    return true;
+  } catch (e) {
+    if ((e as { errno?: number })?.errno === 1054) return false;
+    throw e;
+  }
+}
+
+/** Every role that is not a standing example, with its listing flag (null reads as listed). */
+export async function rolesWithListing(db: Db): Promise<Array<{ id: string; name: string; listed: number | null }>> {
+  const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name`, `listed` FROM `org_roles` WHERE `is_example` = 0");
+  return rows.map((r) => ({ id: String(r.id), name: String(r.name), listed: r.listed === null || r.listed === undefined ? null : Number(r.listed) }));
 }
