@@ -50,7 +50,7 @@ export default function RootLine({ quiet }: { quiet: (path: string, stepHref?: s
   const stops = chaptersOf(path.walked);
 
   return (
-    <aside aria-label={eyebrow} data-root-line="" data-path-state={path.state}>
+    <aside aria-label={eyebrow} data-root-line="" data-path-state={path.state} className="sheet-night">
       {/* Phone: one line, one target, the whole path a thumb away. */}
       <Link href="/path" aria-label={`${eyebrow}: ${said.step}. ${openWords}`} className="block focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:hidden" data-root-phone="">
         <RootStrip seed={glyph}>{said.step}</RootStrip>

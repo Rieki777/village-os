@@ -232,7 +232,7 @@ export default function NeedCard() {
 
   return (
     <div className="bg-card text-card-foreground rounded-2xl shadow-lg p-8 border border-border">
-      <h3 className="text-xl font-display font-bold text-teal-deep flex items-center gap-2 mb-2">
+      <h3 className="text-xl font-display font-bold text-card-foreground flex items-center gap-2 mb-2">
         <Heart className="w-6 h-6" />
         I feel ____ because I need ____.
       </h3>
