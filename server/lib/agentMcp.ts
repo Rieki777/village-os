@@ -517,7 +517,7 @@ export const MCP_TOOLS: readonly ToolDef[] = [
     kind: "write",
     title: "Call an admin path",
     description:
-      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
+      "Calls one admin path the village has opened to agents, as the holder, with the holder's own admin checks. GET answers at once. A write answers first with what it would do and a confirmToken; call again with the same arguments and the token to make it. Some writes a person makes in the app, and the answer says so. A role card, org draft, wording or seating write carries approvedBy and approvalNote in its body: who approved it and their approval in this chat, quoted; it is kept in the village's audit and its organisational memory. Erasure, powers, money, secrets and the agent accounts are never reachable here.",
     inputSchema: {
       type: "object",
       properties: {
