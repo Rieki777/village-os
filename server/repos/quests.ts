@@ -12,7 +12,8 @@
  * paths; `consentedCounts()` (grouped) exists so listing N members costs one
  * query, not N.
  */
-import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { rootsFrom } from "../../shared/archetypeRoots";
 import { parseRewardRange } from "../../shared/questRewards";
 import { readValueTokens, readWorkValue, valueTokensToStore, type TokenAmount } from "../../shared/workValue";
 import { lostConcurrencyRace } from "../db/concurrency";
@@ -131,6 +132,16 @@ export interface QuestRecord {
   cashMinor?: number | null;
   /** The village's currency when the cash was set, stamped by the server. */
   cashCurrency?: string | null;
+  /**
+   * The roots this quest grows from (0069's `archetypes`; the five archetypes
+   * as roots, 11 Nov 2026): one to three archetype keys, or none yet. A lens
+   * and never a gate: no claim reads it. Written only by `setQuestRoots`, never
+   * by the save path above, so an older editor that does not send it cannot
+   * clear it.
+   */
+  archetypes?: string[];
+  /** True while the roots are still the boot seed's guess and nobody has confirmed them. */
+  archetypesSuggested?: boolean;
 }
 
 /**
@@ -194,7 +205,7 @@ const QUEST_SELECT =
   // is_example is selected so consumers can filter. Without it no downstream
   // code could tell an example quest from a real one â€” the work-exchange
   // suggester was offering seeded quests to real guests as paid work.
-  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency FROM quests";
+  "SELECT id, title, subtitle, description, impact, story, first_step, steps, deliverable, tips, image_url, gratitude, duration, difficulty, circle, status, icon, role_required, min_stage, requires_role, stay_credit_reward, tags, sort_order, is_example, starts_at, ends_at, due_at, value_minor, value_currency, value_tokens, cash_minor, cash_currency, archetypes, archetypes_suggested FROM quests";
 
 /** JSON column â†’ string array, tolerant of junk: an empty list renders fine. */
 function toList(v: unknown): string[] {
@@ -242,6 +253,8 @@ function rowToQuest(r: RowDataPacket): QuestRecord {
     valueTokens: readValueTokens(r.value_tokens),
     cashMinor: readWorkValue(r.cash_minor, r.cash_currency)?.minor ?? null,
     cashCurrency: readWorkValue(r.cash_minor, r.cash_currency)?.currency ?? null,
+    archetypes: rootsFrom(r.archetypes),
+    archetypesSuggested: Number(r.archetypes_suggested ?? 0) === 1,
   };
 }
 
@@ -405,6 +418,24 @@ export function questsRepo(pool: Pool): QuestsRepo {
       });
     },
   };
+}
+
+/**
+ * SET THE ROOTS A QUEST GROWS FROM, as a person's word.
+ *
+ * The one write of `quests.archetypes`. The guess flag clears in the same
+ * statement, so the boot seed (`suggestClassTags`, which only touches rows
+ * whose roots are NULL) never overwrites what a person chose. An empty list is
+ * stored as `[]`, which is a decision ("not tagged"), and is not NULL, so the
+ * seed leaves that alone too. The caller checks the keys against the cast
+ * first (`rootsForWork`, shared/archetypeRoots.ts).
+ */
+export async function setQuestRoots(pool: Pool, id: string, roots: readonly string[]): Promise<boolean> {
+  const [r] = await pool.query<ResultSetHeader>(
+    "UPDATE `quests` SET `archetypes` = ?, `archetypes_suggested` = 0 WHERE `id` = ?",
+    [JSON.stringify(roots), id],
+  );
+  return Number(r.affectedRows ?? 0) > 0;
 }
 
 /** What keeping a starter answers with. */

@@ -1,5 +1,9 @@
 import Layout from "@/components/Layout";
-import { WORLD } from "@/components/journey/look";
+import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, RING, WORLD } from "@/components/journey/look";
+import { SeedOfLife } from "@/components/journey/nature";
+import FirstSteps from "@/components/tracks/FirstSteps";
+import TwoTracks from "@/components/tracks/TwoTracks";
+import { usePageContent } from "@/hooks/usePageContent";
 import { altOr, useBrandImages, useGameConfig, useVillageLinks } from "@/lib/gameApi";
 import { figureWithCurrency } from "@shared/money";
 import WhyCostaRica from "@/components/WhyCostaRica";
@@ -10,9 +14,10 @@ import { Emphasized, Highlighted } from "@/components/PageText";
 import { JourneyLink, leavesSite } from "@/components/journey/JourneyLink";
 import { useJourneyContent, useJourneyProgress } from "@/hooks/useJourneyContent";
 import { buttonAction, stepPoints, type TargetContext } from "@/lib/journeyPage";
-import { JOURNEY_LEGACY_STEP_IDS, RESIDENT_JOURNEY } from "@shared/pageContent/journeys";
+import { JOURNEY_LEGACY_STEP_IDS, RESIDENT_JOURNEY, STEWARD_JOURNEY } from "@shared/pageContent/journeys";
 import type { ResolvedSection } from "@shared/pageContent/types";
 import { useState, useEffect } from "react";
+import { useLingui } from "@lingui/react/macro";
 import { m, AnimatePresence } from "framer-motion";
 import {
   Home,
@@ -29,7 +34,6 @@ import {
   Building,
   ChevronDown,
   ExternalLink,
-  Sparkles,
   BookOpen,
   Sprout,
   Wallet,
@@ -40,6 +44,13 @@ import {
  * EVERY WORD ON THIS PAGE IS THE VILLAGE'S OWN, from Admin, Pages, Resident
  * journey (shared/pageContent/journeys.ts). What stays here is the look: the
  * icons, handed out by position.
+ *
+ * ONE FLOW, TWO TRACKS (build list section 8, 11 Nov 2026). The first steps
+ * and the fork into two paths are the steward page's sections, written once
+ * there and shown here as well; this page's own steps are the resident track,
+ * which always carries the village's early supporters step from its own list.
+ * It stands in the same night world as the steward page, in the game's
+ * playful register (docs/DESIGN_RULE.md).
  *
  * THE DEPOSIT FIGURES ARE NOT WRITTEN ANYWHERE IN CODE (founder ruling,
  * 2026-09-03). The deposit step said "from $5k to $20k+ depending on the home
@@ -121,9 +132,15 @@ export default function ResidentJourney() {
     "background-note": backgroundCheckNote ? `, ${backgroundCheckNote}` : "",
     "transfer-note": transferNote ? ` ${transferNote}` : "",
   }));
+  // The first steps and the two paths, from the steward page where they are written once.
+  const shared = usePageContent(STEWARD_JOURNEY);
   const hero = page?.hero.fields;
   const steps = page?.steps.lists.items ?? null;
   const progress = useJourneyProgress("amora-resident-progress", steps, JOURNEY_LEGACY_STEP_IDS.resident);
+  const { t } = useLingui();
+  const walkedCount = progress.doneCount;
+  const stepCount = progress.total;
+  const seedLabel = t({ message: `${walkedCount} of ${stepCount} steps completed`, context: "resident track ticked off" });
   // This village's own destinations. Blank hides the control that uses one.
   const { eventsUrl, mailTo } = useVillageLinks();
   const targets: TargetContext = { eventsUrl, mailTo, subject: "" };
@@ -179,14 +196,11 @@ export default function ResidentJourney() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center gap-3 mb-6"
             >
-              <m.div
-                className="w-12 h-12 shrink-0 rounded-xl bg-teal-deep flex items-center justify-center"
-                animate={{ rotate: [0, 5, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <Home className="w-6 h-6 text-white" />
-              </m.div>
-              <span className={`text-notice font-medium tracking-wide uppercase text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
+              {/* A gold ring, the way the sheet carries its icons. It used to rock forever beside the text. */}
+              <span className={`${RING} size-12`} aria-hidden="true">
+                <Home className="w-6 h-6" />
+              </span>
+              <span className={`${EYEBROW} text-sm min-w-0 break-words${waiting}`}>{hero?.eyebrow || " "}</span>
             </m.div>
 
             <m.h1
@@ -218,16 +232,13 @@ export default function ResidentJourney() {
               className="flex flex-wrap gap-4"
             >
               {heroPrimary && (
-                <JourneyLink action={heroPrimary.action} className="btn-village flex items-center gap-2">
+                <JourneyLink action={heroPrimary.action} className={BTN_PRIMARY}>
                   <Calendar className="w-5 h-5" />
                   {heroPrimary.label}
                 </JourneyLink>
               )}
               {heroSecondary && (
-                <JourneyLink
-                  action={heroSecondary.action}
-                  className="px-6 py-3 bg-card text-foreground rounded-full font-medium uppercase tracking-wider text-sm border border-border hover:bg-muted transition-all"
-                >
+                <JourneyLink action={heroSecondary.action} className={`${BTN_SECONDARY} bg-card`}>
                   {heroSecondary.label}
                 </JourneyLink>
               )}
@@ -235,6 +246,23 @@ export default function ResidentJourney() {
           </div>
         </div>
       </section>
+
+      {/* The first steps everyone takes, shared with the steward page. */}
+      {page && shared && !page.entry.hidden && !shared.getToKnow.hidden && (
+        <div className="border-y border-border/60 bg-card/40">
+          <FirstSteps
+            section={shared.getToKnow}
+            heading={page.entry.fields.heading}
+            body={page.entry.fields.body}
+            targets={targets}
+            showExceptions={false}
+            register="game"
+          />
+        </div>
+      )}
+
+      {/* Where the path divides: this page is the home path. */}
+      {shared && <TwoTracks section={shared.tracks} here="resident" />}
 
       {/* Land Share Info */}
       {page && !page.tenure.hidden && (
@@ -260,7 +288,7 @@ export default function ResidentJourney() {
 
       {/* Interactive Journey Steps */}
       {page && steps && (
-      <section className="py-20 bg-background">
+      <section id="home-path" className="scroll-mt-20 py-20 bg-background">
         <div className="container">
           <m.div
             className="text-center mb-8"
@@ -275,16 +303,14 @@ export default function ResidentJourney() {
               <Emphasized text={page.steps.fields.intro} />
             </p>
 
-            {/* Progress Bar */}
-            <div className="max-w-md mx-auto">
-              <div className="relative h-3 bg-muted rounded-full overflow-hidden mb-2">
-                <m.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-notice to-notice rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress.progress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-              </div>
+            {/* Progress grows as a Seed of Life, one circle per step ticked; never a filling bar. */}
+            <div className="flex flex-col items-center gap-2">
+              <SeedOfLife
+                total={Math.min(Math.max(progress.total, 1), 19)}
+                walked={Math.min(progress.doneCount, 19)}
+                label={seedLabel}
+                size="md"
+              />
               <p className="text-sm text-muted-foreground">
                 {progress.doneCount} of {progress.total} steps completed
               </p>
@@ -394,7 +420,7 @@ export default function ResidentJourney() {
                                     transition={{ delay: i * 0.05 }}
                                     className="flex items-center gap-2 text-xs text-muted-foreground min-w-0 break-words"
                                   >
-                                    <div className="w-1 h-1 shrink-0 rounded-full bg-teal-deep" />
+                                    <div className="w-1 h-1 shrink-0 rounded-full bg-open" />
                                     <span className="min-w-0 break-words">{detail}</span>
                                   </m.li>
                                 ))}
@@ -403,7 +429,7 @@ export default function ResidentJourney() {
                             {action && (
                               <JourneyLink
                                 action={action.action}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-full text-xs font-medium hover:bg-teal-deep-dark transition"
+                                className={`${BTN_PRIMARY} text-sm`}
                               >
                                 {action.label}
                                 {leavesSite(action.action) ? <ExternalLink className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
@@ -575,12 +601,7 @@ export default function ResidentJourney() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <m.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <Sparkles className="w-12 h-12 text-notice mx-auto mb-6" />
-            </m.div>
+            <Sprout className="w-12 h-12 text-open mx-auto mb-6" aria-hidden="true" />
             <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4 break-words">
               {page.closing.fields.heading}
             </h2>
@@ -589,7 +610,7 @@ export default function ResidentJourney() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               {closingPrimary && (
-                <JourneyLink action={closingPrimary.action} className="btn-village flex items-center gap-2">
+                <JourneyLink action={closingPrimary.action} className={BTN_PRIMARY}>
                   <Calendar className="w-5 h-5" />
                   {closingPrimary.label}
                 </JourneyLink>
@@ -617,7 +638,7 @@ function BandButton({ section, targets, icon = false }: { section: ResolvedSecti
   const cta = buttonAction(section.fields.ctaLabel, section.fields.ctaTarget, targets);
   if (!cta) return null;
   return (
-    <JourneyLink action={cta.action} className="btn-village inline-flex items-center gap-2">
+    <JourneyLink action={cta.action} className={BTN_PRIMARY}>
       {icon ? <Calendar className="w-5 h-5" /> : null}
       {cta.label}
       {icon ? null : <ArrowRight className="w-4 h-4" />}

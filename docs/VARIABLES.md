@@ -22,21 +22,21 @@ There is no timestamp and no author line, on purpose. Both would change on every
 
 ## Who may change what
 
-Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 217 open and 50 founder:
+Every dial carries a RING, which is the platform's ceiling on who may move it. There are 2 of them, and today 230 open and 50 founder:
 
 - **open**, the whole village. Community-governable. These are the dials the village decides together, through the proposal loop. A founder can close one of these to their community; the platform ceiling says it may be open.
 - **founder**, the founder or an admin. Founder-held. Legal posture, infrastructure, privacy windows and abuse guards. They stay visible to everybody and they are never proposable. Nothing can open one of these to the village.
 
 The BOUNDS are constitutional in every case. Governance moves a value between the min and the max printed below; nothing here moves the min or the max. That is what keeps a vote from turning a dial into a different mechanism.
 
-Each dial also says WHEN a change lands. 240 of them as soon as it is saved, and 27 of them at the next cycle close.
+Each dial also says WHEN a change lands. 253 of them as soon as it is saved, and 27 of them at the next cycle close.
 
 - **instant**, as soon as it is saved. The new value is live immediately.
 - **cycle-close**, at the next cycle close. Changing one of these mid-cycle would move the basis a settlement is already being measured against, so the new value waits for the cycle to close. That gap is deliberate: it gives the village the window between a decision passing and the decision biting.
 
 ## At a glance
 
-267 dials in 38 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 38 boolean, 34 choice, 44 text, 1 longtext.
+280 dials in 39 categories. 149 carry a minimum and a maximum. By type: 112 integer, 19 decimal, 19 percentage, 41 boolean, 34 choice, 50 text, 5 longtext.
 
 | Category | Dials | the whole village | the founder or an admin |
 | --- | --- | --- | --- |
@@ -57,7 +57,8 @@ Each dial also says WHEN a change lands. 240 of them as soon as it is saved, and
 | Data lifecycle | 3 | 0 | 3 |
 | Automation | 1 | 0 | 1 |
 | Village map | 12 | 9 | 3 |
-| The village's people | 10 | 9 | 1 |
+| The village's people | 16 | 15 | 1 |
+| The founding team | 7 | 7 | 0 |
 | Events | 3 | 3 | 0 |
 | Forum | 1 | 1 | 0 |
 | Companions | 2 | 2 | 0 |
@@ -272,12 +273,25 @@ The whole registry in one table, for finding a dial. Each one is written out in 
 | Ask the circle to consent after the conversations | `org.consent_after_interviews` | The village's people | boolean | `false` | the whole village |
 | The role that sends first replies to applicants | `org.onboarding_role` | The village's people | text | blank | the whole village |
 | Days we promise to reply to a role proposal | `org.applicant_reply_days` | The village's people | integer | `7` | the whole village |
+| Review each application before the conversations | `org.review_before_conversations` | The village's people | boolean | `false` | the whole village |
+| The way to stay close, named in the not-invited letter | `org.stay_close_name` | The village's people | text | blank | the whole village |
+| Where the way to stay close is | `org.stay_close_link` | The village's people | text | blank | the whole village |
 | Roles accepted from a sync start unlisted | `org.sync_starts_unlisted` | The village's people | boolean | `false` | the whole village |
 | The track a role without one reads as | `org.default_track` | The village's people | text | blank | the whole village |
 | A role needs a complete card before anyone can apply | `org.apply_needs_complete_card` | The village's people | boolean | `false` | the whole village |
 | The role that holds first conversations | `org.first_conversation_role` | The village's people | text | blank | the whole village |
 | The circle that consents paid roles | `org.paid_consent_circle` | The village's people | text | blank | the whole village |
 | Show the CCOS term on circle and role card headings | `org.ccos_terms` | The village's people | boolean | `true` | the whole village |
+| Feature the founding team on the Roles page | `org.founding_team` | The village's people | boolean | `false` | the whole village |
+| The founding team's roles | `org.founding_team_roles` | The village's people | text | blank | the whole village |
+| Show pay ranges on role cards | `org.show_pay_ranges` | The village's people | boolean | `false` | the whole village |
+| How pay works, on every role card | `org.pay_shape` | The founding team | text | blank | the whole village |
+| The at-risk line under the pay shape | `org.pay_shape_at_risk` | The founding team | text | blank | the whole village |
+| The note under the pay shape | `org.pay_shape_note` | The founding team | text | blank | the whole village |
+| Ways to get to know us before applying | `org.founding_know_us` | The founding team | longtext | `Join a community call Visit the land Share a meal with us` | the whole village |
+| The note while a way to get to know us is not ticked | `org.founding_know_us_note` | The founding team | longtext | `We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.` | the whole village |
+| What the first cycle looks like | `org.founding_first_cycle` | The founding team | longtext | `Your first cycle is one month. At its end, either side may choose to stop there, with thanks.` | the whole village |
+| The first conversations after joining | `org.founding_first_conversations` | The founding team | longtext | blank | the whole village |
 | Let members RSVP | `events.rsvp_enabled` | Events | boolean | `true` | the whole village |
 | Show gatherings this far ahead | `events.upcoming_days` | Events | integer | `90` | the whole village |
 | Keep finished gatherings listed for | `events.past_visible_days` | Events | integer | `30` | the whole village |
@@ -3402,7 +3416,7 @@ A photograph taken down loses its file immediately. What stays is the record of 
 
 ## The village's people
 
-10 dials. 9 for the whole village, 1 for the founder or an admin.
+16 dials. 15 for the whole village, 1 for the founder or an admin.
 
 ### Show who holds each role to visitors
 
@@ -3457,6 +3471,48 @@ The number of days the applicant's status page says we reply within. It is a pro
 | Default | `7` |
 | Range | 1 to 60 |
 | Counted in | days |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Review each application before the conversations
+
+On, an application waits for our review once its address confirms: a holder of the power to place people in roles invites the applicant to the conversations, in the order the role names them, or sends the not-invited letter, which thanks them and points to open ways to stay close. The first conversation opens only with the invitation, and the circle is asked to consent once the conversations are written up. Off, the first conversation opens as the address confirms. An application keeps the setting it confirmed under.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.review_before_conversations` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The way to stay close, named in the not-invited letter
+
+The name of the village's open way in for someone not invited to a role, such as its supporters' circle. The not-invited letter and the status page point to it first, then to quests and events. Leave it empty and they point to quests and events only.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.stay_close_name` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Where the way to stay close is
+
+A page of this site, such as /resident, or an https address. Used only when the way to stay close has a name.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.stay_close_link` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |
@@ -3541,6 +3597,150 @@ Each heading on a circle card, and on each role in full on a player's card, is p
 | Type | boolean, on or off |
 | Default | `true` |
 | Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Feature the founding team on the Roles page
+
+On, the top of the Roles and Circles page is a quiet "Join the founding team" section: the paid founding roles the village is hiring for, each with its full card and one Apply act. The roles are the ones written in "The founding team's roles". Off, the page opens on the roles and circles as before.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_team` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The founding team's roles
+
+The roles the founding team section features, in the order they show: paste each role id from the org chart, separated by commas or new lines. A role that is unlisted, ended or held as an example is left out of the section. Empty, the section shows nothing.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_team_roles` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Show pay ranges on role cards
+
+Off, no role card shows a pay range or an amount to visitors or members, whatever a role's terms hold: a card shows how pay works (its shares) instead. On, an open listed role whose terms name a pay range shows that range on its card to everyone. People who hold the power to read terms still read the full terms either way.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.show_pay_ranges` |
+| Type | boolean, on or off |
+| Default | `false` |
+| Range | on or off |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+## The founding team
+
+7 dials. 7 for the whole village.
+
+### How pay works, on every role card
+
+The shape of the pay every role card shows under "How pay works", as shares of the whole, never an amount: write each share's name and percent, separated by commas, like Cash 40, Equity 55, Credits 5. The shares add up to 100 or less. A role whose card writes its own shares shows those instead. Empty, cards show no pay shape.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The at-risk line under the pay shape
+
+One line under the shares on every role card, in the village's words, saying which part of the pay depends on what the village raises or earns. No amounts. Empty, no line.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape_at_risk` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The note under the pay shape
+
+The last line under the pay shape on every role card, like Indicative only. Terms are still being defined and are subject to legal review. No amounts. A role's card may write its own. Empty, no note.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.pay_shape_note` |
+| Type | text, free text, one line |
+| Default | blank |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### Ways to get to know us before applying
+
+The first step of the application lists these, one per line, and the applicant ticks the ones they have done. The step never stops anyone applying. Up to eight lines.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_know_us` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Join a community call Visit the land Share a meal with us` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The note while a way to get to know us is not ticked
+
+Shown on the first step of the application whenever a way is not ticked yet. It encourages, and the applicant can always continue.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_know_us_note` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you live far away and the next call is more than a week away, or if you feel you're an incredibly strong candidate.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### What the first cycle looks like
+
+Shown on the Your first day step of the application: how long the first cycle is, when it runs, and that either side may end it there.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_first_cycle` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | `Your first cycle is one month. At its end, either side may choose to stop there, with thanks.` |
+| Range | no bounds are set |
+| Who may change it | the whole village |
+| A change takes effect | as soon as it is saved |
+| What it costs to change | a routine vote |
+
+### The first conversations after joining
+
+Shown on the Your first day step: the first conversations a new team member has once they are chosen, one per line. Leave it empty and none are listed.
+
+| Fact | Value |
+| --- | --- |
+| Key | `org.founding_first_conversations` |
+| Type | longtext, free text, several lines, shown to members as plain words |
+| Default | blank |
+| Range | no bounds are set |
 | Who may change it | the whole village |
 | A change takes effect | as soon as it is saved |
 | What it costs to change | a routine vote |

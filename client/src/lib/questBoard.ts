@@ -37,6 +37,8 @@ export interface BoardQuest {
   valueTokens?: { token: string; amount: number }[] | null;
   cashMinor?: number | null;
   cashCurrency?: string | null;
+  /** The roots this quest grows from, one to three archetype keys (the five archetypes as roots). Absent from an older server. */
+  archetypes?: string[];
   duration?: string | null;
   difficulty?: string | null;
   circle?: string | null;

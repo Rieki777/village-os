@@ -1,44 +1,51 @@
 /**
- * THE FIREFLY PATH, the pure half (game feel wave 2, lane 1 option B).
+ * THE APPLICATION'S STEPS, the pure half (the lead, 11 Nov 2026; Phase A, lane A1).
  *
- * The open proposal form (/propose-a-role) is six mossy stones, one question
- * on each: your role, your moon, why you, your energy, about you, send. Every
- * check the form makes still runs in one place (pages/ProposeARole.tsx); this
- * file says which stone each finding belongs to, so Next can judge only the
- * stone you stand on and Send can review the whole path in the order it is
- * walked.
+ * The application for a listed role (/propose-a-role, "Apply: [role name]")
+ * is six steps: Get to know us, About you, Your value, The terms, Your first
+ * day, Review & submit. It keeps the Firefly Path's mechanics (game feel wave
+ * 2): every check the form makes still runs in one place
+ * (pages/ProposeARole.tsx), and this file says which step each finding belongs
+ * to, so Continue judges only the step you are on and Send reviews the whole
+ * application in the order it is walked.
  *
  * No React here, so a test can read every rule without drawing a page.
  */
 
-export const STONES = ["role", "moon", "why", "energy", "about", "send"] as const;
+export const STONES = ["know", "about", "value", "terms", "first", "review"] as const;
 export type Stone = (typeof STONES)[number];
 export const LAST_STONE = STONES.length - 1;
 
 /**
- * Which stone a field the checks or the server name lives on. A field nobody
- * placed (a server refusal with no field, a rate limit) belongs to Send, where
- * the person pressed the button.
+ * Which step a field the checks or the server name lives on. A field nobody
+ * placed (a server refusal with no field, a rate limit, the role itself)
+ * belongs to Review & submit, where the person pressed the button.
  */
 export function stoneOfField(field: string | null | undefined): number {
   switch (field) {
-    case "roles":
+    case "knowUs":
       return 0;
-    case "aim":
-    case "card":
-    case "serves":
-    case "drafts:moon":
-      return 1;
     case "why":
-      return 2;
-    case "terms":
-      return 3;
+    case "name":
+    case "email":
     case "checkConsent":
     case "references":
     case "about":
     case "links":
     case "files":
+    case "selfKnowledge":
     case "drafts:about":
+      return 1;
+    case "aim":
+    case "card":
+    case "serves":
+    case "drafts:moon":
+      return 2;
+    case "terms":
+      return 3;
+    case "timeZone":
+    case "windows":
+    case "earliestStart":
       return 4;
     default:
       return LAST_STONE;

@@ -418,6 +418,8 @@ The mint rules a fresh village is seeded with:
 Seeded by `seedEconomy` in `server/lib/economySeed.ts` with `INSERT IGNORE` on (village, trigger, token), so an amount a village has edited is never restored by a redeploy.
 <!-- generated:mint-rules end -->
 
+The same boot seed also moves an archetype class still holding a name the platform retired to its new name (`moveRetiredArchetypeNames`, the five archetypes as roots, 2026-11-11). It touches names only, on a class nobody made their own, and no token, rule, balance or amount.
+
 The disabled `role.cycle` gratitude rule is off by Rye's ruling of 2026-08-30. It
 is shipped off rather than deleted because **there is no route that CREATES a mint
 rule**: `PATCH /api/admin/economy/rules/:id` edits amount, ceiling and enabled on

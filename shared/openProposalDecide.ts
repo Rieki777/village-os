@@ -72,6 +72,8 @@ export interface OpenDecision {
 
 /** "Declined on 4 Nov". The day is the caller's, in the village's zone. */
 export const declinedWords = (shortDay: string): string => `Declined on ${shortDay}`;
+/** "Not invited, on 4 Nov": our review's answer, kept as the decision's words. */
+export const notInvitedWords = (shortDay: string): string => `Not invited, on ${shortDay}`;
 
 /** Why an email did not go out, in the decider's words. */
 export type NotSentWhy = "not_set_up" | "bad_address" | "no_address" | "failed";
@@ -180,6 +182,28 @@ export const DECIDE_WORDS = {
   conversationMissing: (role: string) => `The conversation with ${role} is not written up yet.`,
   conversationUnheld: (role: string) => `Nobody holds ${role} right now, so nobody can hold that conversation. Seat somebody in ${role} on the chart, and they can hold it.`,
   chartLink: "Open the chart",
+
+  // Our review (Phase A): invite to the conversations, or send the not-invited letter. Calm, and never personal.
+  review: {
+    heading: "Our review",
+    line: "Read the application through, then answer it. An invitation opens the conversations in order. The not-invited letter thanks them warmly and points to open ways to stay close.",
+    conversations: "The conversations, in order",
+    noConversations: "This role names no conversations, so an invitation takes the application straight to the circle's decision.",
+    invite: "Invite to the conversations",
+    notInvite: "Send the not-invited letter",
+    notInviteAsk: "Send the not-invited letter? It thanks them, says we found someone more closely matched to this role, and points to open ways to stay close. It names no reason of its own, and your note rides with it only if you write one.",
+    notInviteYes: "Yes, send the letter",
+    notInviteNo: "Keep reading",
+    invitedEmailed: "Invited. The invitation went by email, and the first conversation is open.",
+    invitedNotEmailed: (why: NotSentWhy) => `Invited. ${NOT_SENT[why]} The first conversation is open, so tell them yourself.`,
+    notInvitedEmailed: "The not-invited letter went by email.",
+    notInvitedNotEmailed: (why: NotSentWhy) => `Recorded as not invited. ${NOT_SENT[why]}`,
+    first: "Our review comes first: invite them to the conversations, or send the not-invited letter.",
+    done: "Our review of this application is already answered.",
+    none: "This application has no review step, so there is nothing to invite to.",
+    invited: "Invited to the conversations",
+    inReview: "Waiting for our review",
+  },
 } as const;
 
 /**
@@ -271,7 +295,15 @@ export interface AdoptLetterIn {
   note?: string | null;
   /** Every seat of a role is taken: adopted for when a seat opens (audit B3). The letter promises no day. */
   waitsForSeat?: boolean;
+  /** Our review came first (Phase A): the yes is said as the circle's welcome, with the first cycle. */
+  reviewed?: boolean;
 }
+
+/** The headline, and the first cycle's line for a reviewed application. */
+const yesLines = (i: AdoptLetterIn, w: ReturnType<typeof wordsIn>): string[] =>
+  i.reviewed && !i.waitsForSeat
+    ? [w.adopt.headlineReviewed(i.village, w.list(i.roleNames) || w.aRole), "", w.adopt.firstCycle]
+    : [w.adopt.headline(i.village, w.list(i.roleNames) || w.aRole, forWhen(i))];
 
 /**
  * THE ADOPTION LETTER'S EXTRA LINES (audit P11 and B3), in every applicant language. Kept here
@@ -344,7 +376,7 @@ export function adoptedInviteLetter(i: AdoptLetterIn & { link: string; days: num
     text: [
       w.hello(i.firstName),
       "",
-      w.adopt.headline(i.village, w.list(i.roleNames) || w.aRole, forWhen(i)),
+      ...yesLines(i, w),
       ...noteLines(i.lang, i.note),
       "",
       w.adopt.inviteIntro,
@@ -372,7 +404,7 @@ export function adoptedAccountLetter(i: AdoptLetterIn & { signIn: string }): { s
     text: [
       w.hello(i.firstName),
       "",
-      w.adopt.headline(i.village, w.list(i.roleNames) || w.aRole, forWhen(i)),
+      ...yesLines(i, w),
       ...noteLines(i.lang, i.note),
       "",
       w.adopt.signIn(whenRolesStart(i)),
@@ -408,6 +440,103 @@ export function declinedLetter(i: { firstName: string | null; village: string; r
   };
 }
 
+/** One conversation as the invitation lists it: the interviewing role's name and its minutes, from the role's own list. */
+export interface InvitedConversation {
+  role: string;
+  minutes: number;
+}
+
+/**
+ * THE INVITATION (Phase A): our review said yes. The conversations come from
+ * the role's own list, in order; no person and no role is written here.
+ */
+export function invitedLetter(i: {
+  firstName: string | null;
+  village: string;
+  roleNames: readonly string[];
+  conversations: readonly InvitedConversation[];
+  statusLink: string | null;
+  lang?: ApplicantLanguage;
+  note?: string | null;
+}): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
+  const total = i.conversations.reduce((n, c) => n + c.minutes, 0);
+  const talks = i.conversations.length
+    ? ["", w.invite.conversationsIntro, ...i.conversations.map((c, n) => `${n + 1}. ${w.invite.conversation(c.role, c.minutes)}`), w.invite.total(total), "", w.invite.booking]
+    : [];
+  return {
+    subject: w.invite.subject(i.village),
+    text: [
+      w.hello(i.firstName),
+      "",
+      w.invite.headline(w.list(i.roleNames) || w.aRole),
+      ...noteLines(i.lang, i.note),
+      ...talks,
+      "",
+      w.invite.after,
+      "",
+      i.statusLink ? w.statusLinkLine(i.statusLink) : w.keepStatusLink,
+      "",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Where the not-invited letter points: the village's own way to stay close (its
+ * name and link are village data, `org.stay_close_name` and `org.stay_close_link`),
+ * then quests and events where the village runs them.
+ */
+export interface StayClose {
+  program: { name: string; href: string } | null;
+  quests: boolean;
+  events: boolean;
+}
+
+/** A link a letter can carry: a path is made the site's own; an https address stands as it is. */
+export function letterHref(site: string, href: string): string {
+  const h = href.trim();
+  if (/^https:\/\//i.test(h)) return h;
+  return `${site.replace(/\/+$/, "")}/${h.replace(/^\/+/, "")}`;
+}
+
+/**
+ * THE NOT-INVITED LETTER (build list 6.6): thanks them, says we found someone
+ * more closely matched to this role, invites them to stay in touch, and points
+ * to the village's own way to stay close, quests and events. Never personal: it
+ * gives no reason of its own, and a decider's note is the only other line.
+ */
+export function notInvitedLetter(i: {
+  firstName: string | null;
+  village: string;
+  roleNames: readonly string[];
+  site: string;
+  stayClose: StayClose;
+  lang?: ApplicantLanguage;
+  note?: string | null;
+}): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
+  const doors = [
+    ...(i.stayClose.program ? [w.notInvited.program(i.stayClose.program.name, letterHref(i.site, i.stayClose.program.href))] : []),
+    ...(i.stayClose.quests ? [w.notInvited.quest(letterHref(i.site, "/quests"))] : []),
+    ...(i.stayClose.events ? [w.notInvited.events(letterHref(i.site, "/events"))] : []),
+  ];
+  return {
+    subject: w.notInvited.subject(i.village),
+    text: [
+      w.hello(i.firstName),
+      "",
+      w.notInvited.thanks(w.list(i.roleNames) || w.aRole, i.village),
+      "",
+      w.notInvited.matched,
+      ...noteLines(i.lang, i.note),
+      ...(doors.length ? ["", w.notInvited.stayClose, ...doors] : []),
+      "",
+      w.notInvited.closing,
+      "",
+    ].join("\n"),
+  };
+}
+
 /** The same no, as the status page says it. Links are paths, so the page makes them its own. */
 export const DECLINED_PAGE_WORDS = {
   heading: "Thank you for proposing",
@@ -422,7 +551,7 @@ export const replyPromise = (days: number, lang?: ApplicantLanguage): string => 
 
 // ── Updates about a proposal, to the person who made it ─────────────────────
 
-export type ApplicantUpdateKind = "confirmed" | "first_reply" | "conversation" | "consent" | "terms" | "adopted" | "declined";
+export type ApplicantUpdateKind = "confirmed" | "first_reply" | "conversation" | "consent" | "terms" | "adopted" | "declined" | "invited" | "not_invited";
 
 /** Kinds that go as an email as well as to the profile. The rest already have a letter of their own, so they only reach the profile. */
 export const UPDATE_EMAILS: Record<ApplicantUpdateKind, boolean> = {
@@ -433,6 +562,9 @@ export const UPDATE_EMAILS: Record<ApplicantUpdateKind, boolean> = {
   terms: true,
   adopted: false,
   declined: false,
+  // Our review's two answers each have a letter of their own (invitedLetter, notInvitedLetter).
+  invited: false,
+  not_invited: false,
 };
 
 /** One update's title (the email's subject and the profile's headline) and its text. A decider's note rides under the text. */
@@ -460,6 +592,10 @@ export function applicantUpdate(
       return { title: u.adoptedTitle(i.village), text: withNote(u.adopted(i.village, roles, w.adopt.nextAfterProfile)) };
     case "declined":
       return { title: u.declinedTitle(i.village), text: withNote(u.declined(roles)) };
+    case "invited":
+      return { title: u.invitedTitle, text: withNote(u.invited(roles)) };
+    case "not_invited":
+      return { title: u.notInvitedTitle(i.village), text: withNote(u.notInvited(roles)) };
   }
 }
 

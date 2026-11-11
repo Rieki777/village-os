@@ -72,7 +72,10 @@ import {
 } from "../lib/messaging";
 import { effectiveLifecycle } from "../lib/modules";
 import { linksForSubject, unlinkSubject } from "../lib/needs";
-import { keepExampleQuest, questClosed, type QuestRecord } from "../repos/quests";
+import { keepExampleQuest, questClosed, setQuestRoots, type QuestRecord } from "../repos/quests";
+import { listArchetypeRows } from "../repos/archetypes";
+import { villageId } from "../lib/economy";
+import { rootsForWork } from "../../shared/archetypeRoots";
 import { bellQuestClaimed, type ResolvedNextStep } from "../lib/questNextStep";
 import { claimRefusalFor, isPhysicalQuest, minimumAgesOnByDefault } from "../lib/questClaimGate";
 import type { ClaimRefusal } from "../../shared/questClaimGate";
@@ -850,6 +853,25 @@ export function register(app: Express, deps: Deps): void {
    * the new rules would refuse are named in the reply and on the record, so
    * whoever changed it sees who it now affects (spec R3).
    */
+  /*
+   * THE ROOTS A QUEST GROWS FROM (the five archetypes as roots, 11 Nov 2026).
+   *
+   * Its own write, beside the safety one, so a roots change never rides an
+   * unrelated edit and an older editor that does not know roots cannot clear
+   * them. One to three keys from THIS village's cast, or none ("not tagged
+   * yet"). A lens and never a gate: the claim handler below reads none of it.
+   */
+  app.put("/api/admin/quests/:id/roots", async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
+    const id = String(req.params.id);
+    if (await isExampleRow(getPool(), "quests", id)) return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    const cast = (await listArchetypeRows(getPool(), villageId())).map((a) => a.key);
+    const checked = rootsForWork(req.body?.roots, cast);
+    if (!checked.ok) return res.status(400).json({ error: checked.error, field: "roots" });
+    if (!(await setQuestRoots(getPool(), id, checked.roots))) return res.status(404).json({ error: "Not found" });
+    res.json({ id, roots: checked.roots });
+  });
+
   app.put("/api/admin/quests/:id/safety", async (req, res) => {
     if (!(await isAdmin(req))) return res.status(401).json({ error: "auth_required" });
     const quest = await questsRepo.byId(String(req.params.id));

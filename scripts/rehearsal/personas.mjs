@@ -10,8 +10,10 @@
  *                    status page.
  *   3. member        An existing member proposing a role for next season through
  *                    the member's door, step by step, and submitting.
- *   4. steward       The steward who decides: reads persona 2's proposal, offers
- *                    different terms, then adopts.
+ *   4. steward       The steward who decides: reads persona 2's proposal,
+ *                    invites them to the conversations (our review), offers
+ *                    different terms, then adopts; then answers persona 1's
+ *                    application with the warm not-invited letter.
  *   5. holder        Persona 2 again, adopted: registers from the invitation,
  *                    aligns with confidentiality and the terms, and reads the
  *                    profile in their first hour.
@@ -82,8 +84,9 @@ async function check(page, label) {
 }
 
 /**
- * THE FIREFLY PATH (wave 2): the open form is six stones, one question each,
- * and only the stone you stand on is shown. Next judges its stone and moves on.
+ * THE APPLICATION (Phase A, 11 Nov 2026): six steps, Get to know us, About
+ * you, Your value, The terms, Your first day, Review & submit, and only the
+ * step you stand on is shown. Continue judges its step and moves on.
  */
 async function stoneNext(page, want) {
   await page.locator("[data-stone-next]").click();
@@ -91,7 +94,20 @@ async function stoneNext(page, want) {
   const now = await page.getAttribute("form[data-open-proposal]", "data-stone-now");
   if (want && now !== want) {
     const said = await alerts(page);
-    throw new Error(`held on stone "${now}" on the way to "${want}": ${said.join(" | ").slice(0, 240)}`);
+    throw new Error(`held on step "${now}" on the way to "${want}": ${said.join(" | ").slice(0, 240)}`);
+  }
+}
+
+/** The first value item on Your value: what it brings, how we know it is done, and the season goal it serves. */
+async function valueItem(page, what, doneWhen, goal) {
+  const list = page.locator("[data-goals-list]");
+  await list.locator('input[id$="-0-title"]').fill(what);
+  await list.locator('input[id$="-0-done"]').fill(doneWhen);
+  const pick = list.locator('select[id$="-0-serves"]');
+  if (await pick.count()) {
+    const options = await pick.locator("option").allTextContents();
+    const at = options.findIndex((o) => goal.test(o));
+    await pick.selectOption({ index: at > 0 ? at : 1 });
   }
 }
 
@@ -112,38 +128,38 @@ export async function neighbour(w, ctx) {
     await pick.click();
     await page.waitForTimeout(400);
   });
-  await w.look("select-picked", { next: page.getByRole("link", { name: /propon|propose/i }).last() });
-  await w.step("open the proposal form", async () => {
-    const link = page.getByRole("link", { name: /propon|propose/i }).last();
+  // Phase A: a listed role is applied for ("Apply", or the Spanish "Postular"/"Aplicar"/"Solicitar").
+  await w.look("select-picked", { next: page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last() });
+  await w.step("open the application", async () => {
+    const link = page.getByRole("link", { name: /aplic|postul|solicit|apply|propon|propose/i }).last();
     if (await link.count()) await link.click();
     else await w.goto(`/propose-a-role?role=${ctx.seed.roles.land}`);
     await page.locator("form[data-open-proposal]").waitFor();
     await settle(page);
   });
-  await w.step("fill the proposal", async () => {
-    await stoneNext(page, "moon");
-    await page.fill("#propose-aim", "Que el agua y la tierra se lean cada luna.");
-    await page.getByLabel(/^(The goal|La meta)$/).first().fill("Caminar la quebrada con los vecinos");
-    await page.getByLabel(/^(Done when|Listo cuando)$/).first().fill("cuando tengamos el primer mapa del agua");
-    const serve = page.getByRole("checkbox", { name: /Clean water all year/ }).first();
-    if (await serve.count()) await serve.check();
-    await stoneNext(page, "why");
-    await page.fill("#propose-why", "Vivo río arriba y camino la quebrada desde niña.");
-    await stoneNext(page, "energy");
-    const commit = page.locator("#propose-terms-commitment");
-    if (await commit.count()) await commit.selectOption({ label: "30%" }).catch(() => {});
+  await w.step("fill the application", async () => {
+    // Get to know us: one way ticked; the step never locks.
+    await check(page, /Visit the land/i);
     await stoneNext(page, "about");
-    await check(page, /agree to the background check|acepto la verificación de antecedentes/i);
-    const tz = page.getByLabel(/time zone|zona horaria/i).first();
-    if (await tz.count()) await tz.fill("America/Costa_Rica").catch(() => {});
-    await stoneNext(page, "send");
-    await check(page, /I align with the Membership agreement/i);
-    await check(page, /confidentiality agreement|acuerdo de confidencialidad/i);
     await page.fill("#propose-name", "Lucía Mora");
     await page.fill("#propose-email", email);
+    await page.fill("#propose-why", "Vivo río arriba y camino la quebrada desde niña.");
+    await check(page, /agree to the background check|acepto la verificación de antecedentes/i);
+    await stoneNext(page, "value");
+    await page.fill("#propose-aim", "Que el agua y la tierra se lean cada luna.");
+    await valueItem(page, "Caminar la quebrada con los vecinos", "cuando tengamos el primer mapa del agua", /Clean water all year/);
+    await stoneNext(page, "terms");
+    const commit = page.locator("#propose-terms-commitment");
+    if (await commit.count()) await commit.selectOption({ label: "30%" }).catch(() => {});
+    await stoneNext(page, "first");
+    const tz = page.getByLabel(/time zone|zona horaria/i).first();
+    if (await tz.count()) await tz.fill("America/Costa_Rica").catch(() => {});
+    await stoneNext(page, "review");
+    await check(page, /I align with the Membership agreement/i);
+    await check(page, /confidentiality agreement|acuerdo de confidencialidad/i);
   });
   await w.look("form-filled", { next: page.locator("form[data-open-proposal] button[type=submit]") });
-  await w.step("send the proposal", () => sendOpenForm(page));
+  await w.step("send the application", () => sendOpenForm(page));
   await w.look("sent", { full: false });
   const confirm = await w.step("the confirm email arrives", () => waitForMail(ctx.mail, email, /./));
   await w.step("open the confirm link", async () => {
@@ -168,14 +184,31 @@ export async function professional(w, ctx) {
     await w.goto("/steward?utm_source=newsletter&utm_medium=email");
     await page.locator("main").waitFor();
   });
-  await w.look("steward", { next: page.getByRole("link", { name: /Find your role/i }) });
+  // The steward page is one flow since 2026-11-11: its one main act is the founding team's invitation.
+  await w.look("steward", { next: page.getByRole("link", { name: /Join the founding team/i }) });
+  await w.step("tick the first steps the professional has taken", async () => {
+    const boxes = page.locator("#first-steps [role=checkbox]");
+    if (!(await boxes.count())) throw new Error("the steward page shows no first steps");
+    await boxes.first().click();
+  });
   await w.step("find a role", async () => {
-    const first = page.getByRole("link", { name: /Find your role/i }).first();
+    const first = page.getByRole("link", { name: /Join the founding team/i }).first();
     if (await first.count()) await first.click();
     else await w.goto("/roles");
     await settle(page);
   });
   await w.look("find-your-role");
+  // Phase A: the founding team leads /roles; the professional reads the Finance Steward's card there.
+  await w.step("read the founding team's Finance Steward card", async () => {
+    await w.goto("/roles");
+    const section = page.getByRole("region", { name: /Join the founding team|equipo fundador/i });
+    await section.waitFor();
+    const row = section.getByRole("button", { name: /Finance Steward/ }).first();
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await section.locator("[data-testid=pay-split]").first().waitFor();
+    await settle(page);
+  });
+  await w.look("founding-card", { next: page.getByRole("link", { name: /Apply for this role/ }).first() });
   await w.step("open the Finance Steward's full card", async () => {
     await w.goto("/roles/select");
     const card = page.getByRole("button", { name: /Full card for Finance Steward/i }).first();
@@ -184,21 +217,23 @@ export async function professional(w, ctx) {
     await page.getByRole("region", { name: /The full card for Finance Steward/i }).waitFor();
   });
   await w.look("full-card");
-  await w.step("open the proposal form", async () => {
+  await w.step("open the application", async () => {
     await w.goto(`/propose-a-role?role=${ctx.seed.roles.finance}`);
     await page.locator("form[data-open-proposal]").waitFor();
     await settle(page);
   });
-  await w.step("fill the proposal with two terms to talk about", async () => {
-    await stoneNext(page, "moon");
-    await page.fill("#propose-aim", "One set of numbers every member trusts, by the end of the season.");
-    await page.getByLabel("The goal", { exact: true }).first().fill("Publish the first weekly view of our money");
-    await page.getByLabel("Done when", { exact: true }).first().fill("every circle has read it");
-    const serve = page.getByRole("checkbox", { name: /Clear and trusted money/ }).first();
-    if (await serve.count()) await serve.check();
-    await stoneNext(page, "why");
+  await w.step("fill the application with two terms to talk about", async () => {
+    await check(page, /community call/i);
+    await check(page, /Visit the land/i);
+    await stoneNext(page, "about");
+    await page.fill("#propose-name", "Ana Whitfield");
+    await page.fill("#propose-email", email);
     await page.fill("#propose-why", "Fifteen years keeping the books for cooperatives; I want my craft to hold a living place.");
-    await stoneNext(page, "energy");
+    await check(page, /agree to the background check/i);
+    await stoneNext(page, "value");
+    await page.fill("#propose-aim", "One set of numbers every member trusts, by the end of the season.");
+    await valueItem(page, "Publish the first weekly view of our money", "every circle has read it", /Clear and trusted money/);
+    await stoneNext(page, "terms");
     const groups = page.locator("[role=radiogroup]");
     const n = await groups.count();
     for (let i = 0; i < n; i++) {
@@ -215,18 +250,16 @@ export async function professional(w, ctx) {
     }
     const commit = page.locator("#propose-terms-commitment");
     if (await commit.count()) await commit.selectOption({ label: "100%" }).catch(() => {});
-    await stoneNext(page, "about");
-    await check(page, /agree to the background check/i);
+    await check(page, /I would like a ramp-up/i);
+    await stoneNext(page, "first");
     const tz = page.getByLabel(/time zone/i).first();
     if (await tz.count()) await tz.fill("Europe/London").catch(() => {});
-    await stoneNext(page, "send");
+    await stoneNext(page, "review");
     await check(page, /I align with the Membership agreement/i);
     await check(page, /confidentiality agreement/i);
-    await page.fill("#propose-name", "Ana Whitfield");
-    await page.fill("#propose-email", email);
   });
   await w.look("form-filled", { next: page.locator("form[data-open-proposal] button[type=submit]") });
-  await w.step("send the proposal", () => sendOpenForm(page));
+  await w.step("send the application", () => sendOpenForm(page));
   await w.look("sent", { full: false });
   const confirm = await w.step("the confirm email arrives", () => waitForMail(ctx.mail, email, /./));
   await w.step("open the confirm link", () => openMailLink(w, linkIn(confirm, /\/propose-a-role\/confirm/)));
@@ -332,6 +365,19 @@ export async function steward(w, ctx) {
     await page.locator("[data-terms-we-offer]").waitFor();
   });
   await w.look("reads");
+  // Our review comes first (Phase A): the steward invites the professional to the conversations before anything else.
+  await w.step("invite to the conversations", async () => {
+    const invite = page.getByRole("button", { name: /Invite to the conversations/i }).first();
+    await invite.scrollIntoViewIfNeeded();
+    await invite.click();
+    await settle(page, 1500);
+    // The page's answer to the click, and nothing else on it (the open-talks warning is an alert of its own).
+    const said = (await page.locator("[data-decision-said]").innerText().catch(() => "")).trim();
+    if (!/^Invited/.test(said)) throw new Error(`invite not answered as invited: ${said.slice(0, 200)}`);
+    await page.locator("[data-terms-we-offer]").waitFor();
+  });
+  await w.look("invited");
+  await w.step("the applicant is invited to the conversations", () => waitForMail(ctx.mail, applicant, /invitation to talk/i));
   await w.step("offer different terms", async () => {
     await page.locator("[data-term-row=allowance] textarea").fill("A tools allowance each moon that covers accounting software, agreed ahead of time.");
     await page.locator("[data-term-row=bonus] textarea").fill("A share of the moon's value when its goals are met; we walk you through it in our first conversation.");
@@ -353,6 +399,24 @@ export async function steward(w, ctx) {
   });
   await w.look("adopted");
   await w.step("the applicant is invited", () => waitForMail(ctx.mail, applicant, /adopt/i));
+  // The neighbour's application, answered with the not-invited letter: warm, never personal.
+  const neighbour = emailFor("neighbour", w.vp);
+  let nid;
+  await w.step("find the neighbour's application", async () => {
+    const res = await fetch(`${ctx.base}/api/admin/open-proposals`, { headers: { authorization: `Bearer ${ctx.seed.founder}` } });
+    nid = ((await res.json()).proposals ?? []).find((p) => p.email === neighbour)?.id;
+    if (!nid) throw new Error("the neighbour's application is not waiting");
+    await w.goto(`/open-proposals/${nid}`);
+    await page.locator("[data-our-review]").waitFor();
+  });
+  await w.look("our-review");
+  await w.step("send the not-invited letter", async () => {
+    await page.getByRole("button", { name: /Send the not-invited letter/i }).first().click();
+    await page.getByRole("button", { name: /Yes, send the letter/i }).click();
+    await settle(page, 1500);
+  });
+  await w.look("not-invited");
+  await w.step("the neighbour receives the not-invited letter", () => waitForMail(ctx.mail, neighbour, /Gracias por postularte|Thank you for applying/i));
 }
 
 // ── 5. The holder's first hour ────────────────────────────────────────────
@@ -423,6 +487,27 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
+  // they grow from, and the quests board shows what grows from them first,
+  // with one switch to see everything.
+  await w.step("pick a root on the characters page", async () => {
+    await w.goto("/profile/characters");
+    await settle(page, 1500);
+    await page.getByRole("button", { name: /Grow from this root|Save this look/ }).first().click();
+    await page.waitForTimeout(1500);
+    if (!(await page.getByRole("heading", { name: "Your roots" }).count())) throw new Error("the page does not show the roots just picked");
+  });
+  await w.look("roots");
+  await w.step("see the quests that grow from those roots, and switch to all", async () => {
+    await w.goto("/quests");
+    await settle(page, 1500);
+    const sw = page.getByRole("switch", { name: "Show only what matches my roots" });
+    if ((await sw.getAttribute("aria-checked")) !== "true") throw new Error("the roots filter is not on by default once a root is picked");
+    await sw.click();
+    if ((await sw.getAttribute("aria-checked")) !== "false") throw new Error("the roots filter did not turn off");
+    await sw.click();
+  });
+  await w.look("quests-by-roots");
 }
 
 export const PERSONAS = [

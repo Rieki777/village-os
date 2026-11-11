@@ -9655,8 +9655,14 @@ async function startServer() {
     return null;
   }
 
-  app.get("/api/circles", async (_req, res) => {
-    res.json(circlesRepo.all());
+  // The same listed-circle rule as `/api/org` and the map (`circlesToShow`, shared/roleListing.ts): a reader
+  // who cannot see unlisted roles never finds a circle that only holds them here either (Phase A).
+  app.get("/api/circles", async (req, res) => {
+    const viewer = await authedUser(req);
+    const admin = await isAdmin(req);
+    const capCtx = viewer ? await capabilityCtx(viewer) : null;
+    const [roles, assignments] = await Promise.all([listOrgRoles(getPool()), listOrgAssignments(getPool(), lapseContext())]);
+    res.json(circlesToShow(circlesRepo.all() as Array<{ id: string; parentCircleId?: string | null }>, roles, listingViewerFor({ admin, capCtx, userId: viewer?.id, assignments })));
   });
 
   /**

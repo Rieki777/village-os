@@ -71,9 +71,10 @@ export default function RolesOpenNow({ archetypeKey, alsoOpen }: { archetypeKey:
               const name = r.name;
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-sage/30 px-3 py-2">
-                  <span className="min-w-0 flex-1 break-words text-sm text-teal-deep">{name}</span>
+                  {/* basis-48: the name takes its own line before it shrinks, so a narrow column never wraps it one letter per line (phase A, 1280). */}
+                  <span className="min-w-0 flex-1 basis-48 break-words text-sm text-teal-deep">{name}</span>
                   <Link href={applySeatsHref([r.id])} className="inline-flex min-h-11 items-center text-sm font-medium text-teal-deep underline">
-                    <Trans context="character card, propose for one open role">Propose for {name}</Trans>
+                    <Trans context="character card, apply for one open role">Apply for {name}</Trans>
                   </Link>
                 </li>
               );
