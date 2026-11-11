@@ -6,8 +6,6 @@ import { BTN_NOTICE, BTN_PRIMARY, BTN_SECONDARY, CARD, H1, H2, LINK, RING, TILE,
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
-/** The link from a circle's group to its own card (`/circles/:id`). */
-const OPEN_CIRCLE_CARD = "Open this circle's card";
 import { m, AnimatePresence } from "framer-motion";
 import { ArrowRight, Briefcase, ChevronDown, Link2 } from "lucide-react";
 import { iconFor } from "@/lib/circleIcons";
@@ -29,12 +27,11 @@ import SeatVendorFacts from "@/components/power/SeatVendorFacts";
 import RoleHolderCards from "@/components/playerCard/RoleHolderCards";
 import RaiseTension from "@/components/roleTension/RaiseTension";
 import { proposeRoleHref } from "@/components/roleProposal/QuickPath";
-import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 import { useClassNames } from "@/components/power/useClassNames";
 import { useModule } from "@/modules/ModuleProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLingui } from "@lingui/react/macro";
-import { STATE_WORDS, isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
+import { isSeatState, type SeatStateWord, type SheetContext } from "@shared/roleSheet";
 import { fromOrgSeat, orgHolderName, seasonForSheet, seatHistoryShown } from "@shared/roleSheetInputs";
 import { coordinatingCircle } from "@shared/coordinatingCircle";
 
@@ -140,6 +137,7 @@ function seatLink(id: string): string {
  * accessible name, so a reader who says what they see still reaches it.
  */
 function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }) {
+  const { t } = useLingui();
   const link = seatLink(seatId);
   const [said, setSaid] = useState<"" | "copied" | "refused">("");
   // A count so a second refusal selects the field again.
@@ -152,8 +150,8 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
   }, [refused]);
   useEffect(() => {
     if (said !== "copied") return;
-    const t = window.setTimeout(() => setSaid(""), 4000);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setSaid(""), 4000);
+    return () => window.clearTimeout(timer);
   }, [said]);
   const fallBack = () => {
     setRefused((n) => n + 1);
@@ -167,20 +165,20 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
   };
   const line =
     said === "copied"
-      ? `Link to ${seatName} copied.`
+      ? t({ message: `Link to ${seatName} copied.`, context: "roles page, seat link" })
       : said === "refused"
-        ? "Copying did not work here. The link is selected in the field below."
+        ? t`Copying did not work here. The link is selected in the field below.`
         : "";
   return (
     <div className="pt-4 border-t border-border space-y-2">
       <button
         type="button"
         onClick={copy}
-        aria-label={`Copy link to ${seatName}`}
+        aria-label={t({ message: `Copy link to ${seatName}`, context: "roles page, seat link" })}
         className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
       >
         <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-        Copy link
+        {t({ message: `Copy link`, context: "roles page, seat link" })}
       </button>
       {refused > 0 && (
         <input
@@ -188,7 +186,7 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
           type="text"
           readOnly
           value={link}
-          aria-label={`Link to ${seatName}`}
+          aria-label={t({ message: `Link to ${seatName}`, context: "roles page, seat link" })}
           onFocus={(e) => e.currentTarget.select()}
           className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
         />
@@ -214,7 +212,15 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   // Whose words the vendor panel shows. Taken from the listing rather than
   // written here, because another fork's connector is a different service
   // and a literal would be this platform naming one of them.
-  const vendorName = useModule("saberra")?.name ?? "the connected service";
+  const { t } = useLingui();
+  const vendorName = useModule("saberra")?.name ?? t({ message: `the connected service`, context: "roles page, a connected service's fallback name" });
+  const stateWords: Record<SeatStateWord, string> = {
+    open: t({ message: `Open`, context: "roles page, seat state" }),
+    partial: t({ message: `Partly held`, context: "roles page, seat state" }),
+    filled: t({ message: `Held`, context: "roles page, seat state" }),
+    forming: t({ message: `Forming`, context: "roles page, seat state" }),
+    expired: t`Ready to be re-chosen`,
+  };
   const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
   const Icon = iconFor(role.icon);
   // Admin-editable colour, resolved together with the ink that stays legible
@@ -258,7 +264,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="font-display text-lg font-bold text-foreground leading-tight">{role.name}</h3>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge[role.status]}`}>
-                  {STATE_WORDS[role.status]}
+                  {stateWords[role.status]}
                 </span>
                 <NotListedChip role={role.raw} />
               </div>
@@ -313,7 +319,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
                 <Link href={proposeRoleHref(role.id)} className={`w-fit ${BTN_NOTICE}`}>
-                  {RP_WORDS.proposeThisRole}
+                  {t`Propose this role for next season`}
                 </Link>
               )}
               {!role.isExample && <RaiseTension roleId={role.id} roleName={role.name} />}
@@ -471,9 +477,9 @@ export default function Roles() {
   const orgPending = roles === null && !failed;
   // A link to one role (?seat=) names that role in the page heading, not the whole page.
   const linkedName = linked ? ((roles ?? []) as Array<{ id: string; name: string }>).find((r) => r.id === linked)?.name ?? null : null;
-  const circlesHow = `Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on)${
-    coordinator ? `, and links back to the ${String(coordinator.name)}.` : "."
-  }`;
+  const circlesHow = coordinator
+    ? t`Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on), and links back to the ${String(coordinator.name)}.`
+    : t`Working groups with real authority. Each circle has an aim (what it works toward) and a domain (what it decides on).`;
 
   // Grouped by circle, in the order the village sorted its circles, with a
   // dormant circle's seats still listed under it.
@@ -506,17 +512,17 @@ export default function Roles() {
               <Briefcase className="w-7 h-7" aria-hidden="true" />
             </div>
             <h1 className={`${H1} mb-4`}>
-              {linkedName ?? "Roles and Circles"}
+              {linkedName ?? t({ message: `Roles and Circles`, context: "roles page" })}
             </h1>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
             <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
-              The village organizes itself the way a forest does:{" "}
-              <InfoTip tip="Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.">circles</InfoTip>{" "}
-              of care, each holding its own ground, and every{" "}
-              <InfoTip tip="A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it.">role</InfoTip>{" "}
-              is a way to hold some of it with your own hands, by{" "}
-              <InfoTip tip="A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.">consent</InfoTip>.
+              {t`The village organizes itself the way a forest does:`}{" "}
+              <InfoTip tip={t`Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.`}>{t({ message: `circles`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              {t`of care, each holding its own ground, and every`}{" "}
+              <InfoTip tip={t`A role is a named responsibility inside a circle, with an aim, a domain, and accountabilities. The role belongs to the circle, and a person steps into it.`}>{t({ message: `role`, context: "roles page, intro word with a tooltip" })}</InfoTip>{" "}
+              {t`is a way to hold some of it with your own hands, by`}{" "}
+              <InfoTip tip={t`A decision moves forward when nobody holds a reasoned objection. Consent is quieter than consensus and faster than voting.`}>{t({ message: `consent`, context: "roles page, intro word with a tooltip" })}</InfoTip>.
             </p>
             <div className="mt-4 flex justify-center">
               <NewRoleFromCardButton onMade={() => window.location.reload()} />
@@ -555,9 +561,9 @@ export default function Roles() {
               className="mb-14 grid sm:grid-cols-3 gap-4"
             >
               {[
-                { label: "Circles", description: circlesHow, pending: orgPending },
-                { label: "Roles", description: "Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned." },
-                { label: "Consent", description: "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar." },
+                { label: t({ message: `Circles`, context: "roles page, how it works" }), description: circlesHow, pending: orgPending },
+                { label: t({ message: `Roles`, context: "roles page, how it works" }), description: t`Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned.` },
+                { label: t({ message: `Consent`, context: "roles page, how it works" }), description: t`Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar.` },
               ].map((item) => (
                 <div key={item.label} className={TILE}>
                   <div className="text-sm font-bold text-foreground mb-1">{item.label}</div>
@@ -584,16 +590,16 @@ export default function Roles() {
                 line to the failure line is the thing announced. */}
             <div role="status">
               {roles === null && !failed && (
-                <div className="text-center text-muted-foreground py-16">Loading roles…</div>
+                <div className="text-center text-muted-foreground py-16">{t({ message: `Loading roles…`, context: "roles page" })}</div>
               )}
               {failed && (
                 <div className="text-center text-muted-foreground py-16">
-                  The roles list is catching its breath. Please refresh in a moment.
+                  {t`The roles list is catching its breath. Please refresh in a moment.`}
                 </div>
               )}
               {linkMissed && (
                 <p className="text-center text-sm text-muted-foreground mb-8">
-                  That role is not on this page anymore.
+                  {t`That role is not on this page anymore.`}
                 </p>
               )}
             </div>
@@ -611,7 +617,7 @@ export default function Roles() {
                       href={`/circles/${encodeURIComponent(circleId)}`}
                       className={`inline-flex min-h-11 items-center text-sm ${LINK}`}
                     >
-                      {OPEN_CIRCLE_CARD}
+                      {t`Open this circle's card`}
                     </Link>
                   ) : null}
                 </div>
@@ -648,7 +654,7 @@ export default function Roles() {
               className={`mt-4 ${CARD}`}
             >
               <h2 className={`${H2} mb-4`}>
-                When a Tension Is Between People
+                {t`When a Tension Is Between People`}
               </h2>
               <VillageConflictSteps />
             </m.div>
@@ -661,7 +667,7 @@ export default function Roles() {
             className="mt-12 text-center"
           >
             <Link href="/circles" className={BTN_SECONDARY}>
-              Explore Our Circles
+              {t({ message: `Explore Our Circles`, context: "roles page" })}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </m.div>

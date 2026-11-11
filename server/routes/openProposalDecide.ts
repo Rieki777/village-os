@@ -149,7 +149,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
   };
 
   /** Updates to the person who proposed: their bell, once they have an account (the email already has its own letter). */
-  const tell = makeApplicantTeller({ getPool, members, notify: deps.notify, postEmail, projectName });
+  const tell = makeApplicantTeller({ getPool, members, notify: deps.notify, postEmail, projectName, siteUrl: site });
 
   /** The signed-in member holding `terms.read`, or null after answering 401. */
   async function reader(req: any, res: any): Promise<any | null> {

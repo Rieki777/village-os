@@ -168,7 +168,7 @@ export function register(app: Express, deps: Deps): void {
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
   };
 
-  const tellApplicant = makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail, projectName });
+  const tellApplicant = makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail, projectName, siteUrl: site });
 
   /** The switch, read fresh: one small row, and an admin who just flipped it sees it at once. */
   async function settings(): Promise<OpenProposalSettings> {

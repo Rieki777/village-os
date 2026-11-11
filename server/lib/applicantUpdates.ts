@@ -32,13 +32,19 @@ import { numberVar } from "./variables";
 import { escapeHtml } from "./comms/mailer";
 import { languageOf } from "./applicantLanguage";
 import { STATUS_LINK_STARTS } from "../../shared/applicantWords";
+import { signLink } from "./comms/links";
 
 const WENT: ReadonlySet<PostResult["status"]> = new Set<PostResult["status"]>(["sending", "sent", "delivered", "duplicate"]);
 
 export interface TellDeps extends Pick<DecideDeps, "getPool" | "members" | "notify"> {
   postEmail(email: OutgoingEmail): Promise<PostResult>;
   projectName(): string;
+  /** The deployment's origin, so a letter can carry a link. Absent: the letter points to the first email's link instead. */
+  siteUrl?(): string;
 }
+
+/** How long the link in an update works. The status page is read-only apart from the applicant's own answers, and a proposal is decided within weeks. */
+const STATUS_LINK_DAYS = 60;
 
 /** What one update may add: which part of a kind (the position of a conversation), and facts the words use. */
 export interface UpdateFacts {
@@ -58,7 +64,14 @@ async function accountFor(members: TellDeps["members"], email: string | null): P
 
 const keyOf = (ref: string, kind: ApplicantUpdateKind, part?: string) => `${ref}:update:${kind}${part ? `:${part}` : ""}`;
 
-async function wordsFor(deps: Pick<TellDeps, "getPool" | "projectName">, p: proposals.StoredOpenProposal, kind: ApplicantUpdateKind, facts: UpdateFacts) {
+/** A link to the applicant's own status page, signed for this proposal alone. Null when the deployment cannot say its address. */
+export function statusLinkFor(deps: Pick<TellDeps, "siteUrl">, ref: string): string | null {
+  const origin = deps.siteUrl?.().replace(/\/+$/, "");
+  if (!origin) return null;
+  return `${origin}/application-status/${encodeURIComponent(ref)}?token=${encodeURIComponent(signLink("application_status", { ref }, STATUS_LINK_DAYS))}`;
+}
+
+async function wordsFor(deps: Pick<TellDeps, "getPool" | "projectName" | "siteUrl">, p: proposals.StoredOpenProposal, kind: ApplicantUpdateKind, facts: UpdateFacts) {
   const names = await review.roleNamesById(deps.getPool(), p.body.roles.map((r) => r.roleId));
   return applicantUpdate(kind, {
     firstName: greetingName(p.name),
@@ -69,6 +82,8 @@ async function wordsFor(deps: Pick<TellDeps, "getPool" | "projectName">, p: prop
     minutes: facts.minutes ?? null,
     lang: languageOf(p),
     note: p.body.note ?? null,
+    // Only the letters that ask the applicant to open the page carry the link; the rest never pointed there.
+    statusLink: kind === "conversation" || kind === "terms" || kind === "first_reply" || kind === "consent" ? statusLinkFor(deps, p.id) : null,
   });
 }
 
