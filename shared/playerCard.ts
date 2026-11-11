@@ -49,7 +49,31 @@ import { roleCcos, roleTerm, type HoldingWellOut, type ListSectionOut, type Text
 import type { RoleEditKey } from "./playerCardEdit";
 import { APPLICATION_STATUSES, OPEN_STATUSES, applicationHref, type ApplicationStatus } from "./seatApplications";
 import { applicationGroup, PAST_SEATING_WORDS, type PastSeating } from "./applicationGroups";
-import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, loadHoursLine, openRowLine } from "./roleProposalHonesty";
+import { AFTER_ADOPT_LINE, MEMBER_LATER_LINE, OPEN_ROW_AGAIN, loadHoursLine, openRowLine } from "./roleProposalHonesty";
+
+
+/**
+ * A proposal card names who fills its open rows once, in the first one, and the
+ * rest say "too" (audit P6: the same sentence stood in eight rows). Walks the
+ * built card in its own order, so the first row drawn keeps the name.
+ */
+function nameOpenRowsOnce<T>(card: T, line: string): T {
+  let seen = false;
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") {
+      if (v !== line) return v;
+      if (!seen) {
+        seen = true;
+        return v;
+      }
+      return OPEN_ROW_AGAIN;
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(card) as T;
+}
 import { MONEY_LINE, type SeatSettings } from "./seatSettings";
 import type { AccomplishmentMoon } from "./taskAccomplishments";
 import { roleProposalsOut, type RoleProposalIn, type RoleProposalOut } from "./playerCardProposals";
@@ -1157,6 +1181,11 @@ function accomplished(input: PlayerCardInput, roles: PlayerRoleIn[]): Accomplish
 // ── The card ───────────────────────────────────────────────────────────────
 
 export function buildPlayerCard(input: PlayerCardInput): PlayerCard {
+  const built = buildCard(input);
+  return input.mode === "proposal" ? nameOpenRowsOnce(built, openRowLine(input.fillWith)) : built;
+}
+
+function buildCard(input: PlayerCardInput): PlayerCard {
   const roles = input.roles;
   const list = roles ?? [];
   const roleOuts = list.map((r) => roleOut(r, input));

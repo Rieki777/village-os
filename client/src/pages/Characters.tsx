@@ -425,6 +425,10 @@ export default function Characters() {
               </div>
 
               {/*
+                PORTRAIT STYLE, NOT A GENDER (audit P8). The art comes in two cuts and
+                the stored value is an enum of two, so the choice is named for the art
+                and anybody can take either. A third value needs a migration.
+
                 TWO CHOICES THAT SAID NOTHING ABOUT THEMSELVES.
 
                 Both groups conveyed which option was live by COLOUR ALONE:
@@ -439,7 +443,7 @@ export default function Characters() {
                 enforces the 44px floor.
               */}
               <div className="mt-4 flex flex-wrap items-center justify-center gap-5">
-                <div role="radiogroup" aria-label="Presentation" className="flex items-center gap-2">
+                <div role="radiogroup" aria-label="Portrait style" className="flex items-center gap-2">
                   {(["f", "m"] as const).map((p) => (
                     <button
                       key={p}
@@ -455,7 +459,7 @@ export default function Characters() {
                           : "border-gray-300 bg-white text-gray-700"
                       }`}
                     >
-                      {p === "f" ? "She" : "He"}
+                      {p === "f" ? "Style one" : "Style two"}
                     </button>
                   ))}
                 </div>

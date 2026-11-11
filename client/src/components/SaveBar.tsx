@@ -118,8 +118,13 @@ export default function SaveBar({
   }, [count, status, t]);
 
   // A new edit after a failure goes back to the plain prompt.
+  // Only a count that GOES UP is a new edit. The count a save just cleared can
+  // still read as it was for a render or two (the bar's total is read through
+  // the registry), and that stale number must not cancel "Saved".
+  const lastCount = useRef(count);
   useEffect(() => {
-    if (status === "saved" && count > 0) setStatus("idle");
+    if (status === "saved" && count > lastCount.current) setStatus("idle");
+    lastCount.current = count;
   }, [count, status]);
 
   useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);

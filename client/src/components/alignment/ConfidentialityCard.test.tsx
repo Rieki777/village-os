@@ -18,6 +18,7 @@ vi.mock("@/components/auth/ConfirmWithGoogle", () => ({
   useIdentityConfirm: () => ({ confirmWith: "password", confirmed: false, reset: () => undefined }),
 }));
 
+import { ALIGN_WORDS } from "@shared/alignments";
 import ConfidentialityCard from "./ConfidentialityCard";
 
 const AGREEMENT = { title: "Confidentiality agreement", body: "Keep it to yourself.\n", intent: "I align with the Confidentiality agreement.", version: "cv-0123456789abcdef" };
@@ -60,5 +61,20 @@ describe("the confidentiality card", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ agreement: null, exists: true, you: null })));
     const { container } = render(<ConfidentialityCard />);
     await waitFor(() => expect(container.innerHTML).toBe(""));
+  });
+
+  it("asks for the password with a reason that fits an agreement, not the line about money (audit M9)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/confidentiality") return json({ agreement: { ...AGREEMENT, document: null }, you: { holds: false } });
+        if (init?.method === "POST") return json({ error: "reconfirm_required", message: "x" }, 403);
+        return json({});
+      }),
+    );
+    render(<ConfidentialityCard />);
+    fireEvent.click(await screen.findByRole("button", { name: "Align" }));
+    expect(await screen.findByText(ALIGN_WORDS.reconfirmAgreementLine)).toBeTruthy();
+    expect(screen.queryByText(/carry money/)).toBeNull();
   });
 });

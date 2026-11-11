@@ -12,10 +12,16 @@ import { applicationHref } from "./seatApplications";
 export const START_STEPS = ["confidentiality", "membership", "terms"] as const;
 export type StartStep = (typeof START_STEPS)[number];
 
+/** How many days the first stretch is. Next-season prompts and the ladder wait until it has passed. */
+export const FIRST_DAYS = 14;
+
 const COUNT = ["No steps", "One step", "Two steps", "Three steps"] as const;
 
 export const START_WORDS = {
   title: (n: number) => `${COUNT[Math.min(n, 3)]} before your role starts`,
+  /** The card's own heading: it lists every step, so it carries no count. */
+  cardTitle: "Before you start",
+  alignWith: (title: string) => `Align with ${title}`,
   step: {
     confidentiality: "Align with the village's confidentiality agreement.",
     membership: "Align with the membership letter.",

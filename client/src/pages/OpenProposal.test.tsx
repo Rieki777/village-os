@@ -169,6 +169,34 @@ describe("the open proposal page", () => {
     expect(asked).toContain(`POST /api/governance/open-proposals/${ID}/adopt`);
   });
 
+  it("audit M10: Adopt is disabled while a conversation is not written up, and names whose, with the chart for a role nobody holds", async () => {
+    const conversations = [
+      { roleId: "r-a", role: "Channel Role", unheld: false, words: DECIDE_WORDS.conversationMissing("Channel Role") },
+      { roleId: "r-b", role: "Data Role", unheld: true, words: DECIDE_WORDS.conversationUnheld("Data Role") },
+    ];
+    answer = () => json({ proposal: served({ you: POWER, beforeAdopt: { conversations, seatsFull: [], seatsWords: null } }) });
+    render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adopt })) as HTMLButtonElement;
+    expect(adopt.disabled).toBe(true);
+    expect(screen.getByText(DECIDE_WORDS.conversationMissing("Channel Role"))).toBeTruthy();
+    expect(screen.getByRole("link", { name: DECIDE_WORDS.chartLink }).getAttribute("href")).toBe("/map/circles");
+  });
+
+  it("audit B3: every place filled says the count, and Adopt goes only for when a place opens, chosen on purpose", async () => {
+    const seatsWords = DECIDE_WORDS.seatsFull([{ name: "Gate Keeper", seats: 1, taken: 1 }]);
+    answer = () => json({ proposal: served({ you: POWER, beforeAdopt: { conversations: [], seatsFull: [{ name: "Gate Keeper", seats: 1, taken: 1 }], seatsWords } }) });
+    render(<OpenProposal />);
+    const adopt = (await screen.findByRole("button", { name: DECIDE_WORDS.adoptWhenASeatOpens })) as HTMLButtonElement;
+    expect(screen.getByText(seatsWords)).toBeTruthy();
+    expect(adopt.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Adopt them for when a place opens" }));
+    expect(adopt.disabled).toBe(false);
+    fireEvent.click(adopt);
+    await waitFor(() => expect(asked).toContain(`POST /api/governance/open-proposals/${ID}/adopt`));
+    const call = (fetch as unknown as { mock: { calls: Array<[string, { body?: string }]> } }).mock.calls.find(([u]) => u.endsWith("/adopt"));
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ whenASeatOpens: true });
+  });
+
   it("once the circle has consented, the same click reads Record the adoption", async () => {
     answer = () => json({ proposal: served({ you: POWER }, "consented") });
     render(<OpenProposal />);

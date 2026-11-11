@@ -17,6 +17,8 @@
  * `// check:` and listed in the lane's report.
  */
 
+import { STEP_WORDS } from "./applicationReview";
+
 export const APPLICANT_LANGUAGES = ["en", "es"] as const;
 export type ApplicantLanguage = (typeof APPLICANT_LANGUAGES)[number];
 export const DEFAULT_APPLICANT_LANGUAGE: ApplicantLanguage = "en";
@@ -30,6 +32,8 @@ export interface ApplicantMessages {
   aRole: string;
   /** The line that points to the status link in the first email. Also how a notice drops it. */
   keepStatusLink: string;
+  /** The same pointer with the link itself in it, for a letter sent by a door that can mint one. */
+  statusLinkLine(link: string): string;
   replyPromise(days: number): string;
   /** Introduces a decider's note in an email or a notice. */
   noteIntro: string;
@@ -97,6 +101,49 @@ export interface ApplicantMessages {
     again: string;
     noteHeading: string;
   };
+
+  /** The status page itself (`/application-status/:ref`): every word the page draws, so it reads in one language. */
+  status: {
+    heading: string;
+    missing: string;
+    nextLabel: string;
+    by(day: string): string;
+    /** The eyebrow over the card: the step the proposal is on. */
+    step: Record<"confirmed" | "first_reply" | "interview" | "scores_in" | "consent" | "decided" | "cleared", string>;
+    /** The path, line by line. */
+    received: string;
+    firstReply: string;
+    conversationWith(role: string, minutes: number): string;
+    consent: string;
+    decision: string;
+    stateDone: string;
+    stateNow: string;
+    stateLater: string;
+    /** What happens next, one line each. */
+    move: {
+      firstReply: string;
+      interview(role: string, minutes: number): string;
+      interviewWaiting: string;
+      consent: string;
+      adopted: string;
+      withdrawn: string;
+      declined: string;
+    };
+    booking: {
+      label: string;
+      block(total: string, firstRole: string | null): string;
+      split: string;
+      splitAsk: string;
+      /** "100 minutes": minutes only, so a long block never reads as time that is counted. */
+      minutes(total: number): string;
+    };
+    references: {
+      none: string;
+      some(n: number): string;
+    };
+    private: string;
+    wait: { heading: string; line: string; quests: string; map: string; events: string };
+  };
 }
 
 const enList = (items: readonly string[]): string => {
@@ -127,6 +174,7 @@ const en: ApplicantMessages = {
   list: enList,
   aRole: "a role",
   keepStatusLink: "Your status page link is in the first email we sent you, so you can follow it any time.",
+  statusLinkLine: (link) => `Your status page, to follow it any time: ${link}`,
   replyPromise: (days) => `We reply within ${days} ${days === 1 ? "day" : "days"}.`,
   noteIntro: "A note from us:",
   day: dayIn("en-GB"),
@@ -196,6 +244,58 @@ const en: ApplicantMessages = {
     again: "Or propose again next season.",
     noteHeading: "A note for you",
   },
+
+  status: {
+    heading: "Where your proposal is",
+    missing: "That link does not match a proposal. Check the link in your email.",
+    nextLabel: "What happens next",
+    by: (day) => `By ${day}`,
+    step: {
+      confirmed: "Received",
+      first_reply: "First reply",
+      interview: "Conversation",
+      scores_in: "Conversations done",
+      consent: "The circle's consent",
+      decided: "Decision",
+      cleared: "Cleared",
+    },
+    received: "Received",
+    firstReply: "First reply",
+    conversationWith: (role, minutes) => `Conversation with ${role} (${minutes} minutes)`,
+    consent: "The circle's consent",
+    decision: "Decision",
+    stateDone: "done",
+    stateNow: "now",
+    stateLater: "later",
+    move: {
+      firstReply: "Our move: the role that welcomes people writes to you with a time to talk.",
+      interview: (role, minutes) => `Our move: ${role} talks with you for ${minutes} minutes, then adds a note.`,
+      interviewWaiting: "Our move: we arrange the next conversation once the last one is written up.",
+      consent: "Our move: the circle weighs your proposal and consents, or says what is missing.",
+      adopted: "Your move: make your account. The link to make it is in your email.",
+      withdrawn: "Nothing more is needed. You withdrew this proposal.",
+      declined: "Nothing more is needed from you. We have answered.",
+    },
+    booking: {
+      label: "How the conversations are booked",
+      block: (total, firstRole) => `The conversations are one block of ${total}, booked through ${firstRole ?? "the first role"}, with the others joining at set times. Ask for them to be split over days if that suits you better.`,
+      split: "The conversations are booked one at a time, over several days, each through its own role.",
+      splitAsk: "Split the conversations over days",
+      minutes: (total) => `${total} minutes`,
+    },
+    references: {
+      none: "You gave no references, so we run a background check. You agreed to it when you proposed. We cover its cost, and we contact no one before our first conversation with you.",
+      some: (n) => `You gave ${n} ${n === 1 ? "reference" : "references"}. We contact references only after our first conversation, and only with your OK.`,
+    },
+    private: "This page shows steps only. What the people who talk with you write down stays with them.",
+    wait: {
+      heading: "While you wait",
+      line: "The village is open to you. Here are three ways to look around:",
+      quests: "Take a quest",
+      map: "See the living map",
+      events: "Come to an event",
+    },
+  },
 };
 
 const es: ApplicantMessages = {
@@ -203,6 +303,7 @@ const es: ApplicantMessages = {
   list: esList,
   aRole: "un rol",
   keepStatusLink: "El enlace a la página del estado de tu propuesta está en el primer correo que te enviamos, para que puedas seguirla cuando quieras.",
+  statusLinkLine: (link) => `La página del estado de tu propuesta, para seguirla cuando quieras: ${link}`, // needs-native-review
   replyPromise: (days) => `Respondemos en un plazo de ${days} ${days === 1 ? "día" : "días"}.`,
   noteIntro: "Una nota de parte nuestra:",
   day: dayIn("es"),
@@ -272,6 +373,59 @@ const es: ApplicantMessages = {
     again: "O vuelve a proponer la próxima temporada.",
     noteHeading: "Una nota para ti",
   },
+
+  // needs-native-review: the whole status block below
+  status: {
+    heading: "Dónde está tu propuesta",
+    missing: "Ese enlace no corresponde a ninguna propuesta. Revisa el enlace de tu correo.",
+    nextLabel: "Lo que sigue",
+    by: (day) => `Para el ${day}`,
+    step: {
+      confirmed: "Recibida",
+      first_reply: "Primera respuesta",
+      interview: "Conversación",
+      scores_in: "Conversaciones terminadas",
+      consent: "El consentimiento del círculo",
+      decided: "Decisión",
+      cleared: "Resuelta",
+    },
+    received: "Recibida",
+    firstReply: "Primera respuesta",
+    conversationWith: (role, minutes) => `Conversación con ${role} (${minutes} minutos)`,
+    consent: "El consentimiento del círculo",
+    decision: "Decisión",
+    stateDone: "hecho",
+    stateNow: "ahora",
+    stateLater: "después",
+    move: {
+      firstReply: "Nos toca a nosotros: el rol que da la bienvenida a las personas te escribe para acordar un momento para conversar.",
+      interview: (role, minutes) => `Nos toca a nosotros: ${role} conversa contigo unos ${minutes} minutos y luego deja una nota.`,
+      interviewWaiting: "Nos toca a nosotros: acordamos la siguiente conversación cuando la anterior esté escrita.",
+      consent: "Nos toca a nosotros: el círculo valora tu propuesta y da su consentimiento, o dice qué falta.",
+      adopted: "Te toca a ti: crear tu cuenta. El enlace para hacerlo está en tu correo.",
+      withdrawn: "No hace falta nada más. Retiraste esta propuesta.",
+      declined: "No hace falta nada más de tu parte. Ya respondimos.",
+    },
+    booking: {
+      label: "Cómo se agendan las conversaciones",
+      block: (total, firstRole) => `Las conversaciones son un solo bloque de ${total}, agendado con ${firstRole ?? "el primer rol"}, y los demás roles se suman en momentos fijos. Si te queda mejor, pide que se repartan en varios días.`,
+      split: "Las conversaciones se agendan una por una, en varios días, cada una con su propio rol.",
+      splitAsk: "Repartir las conversaciones en varios días",
+      minutes: (total) => `${total} minutos`,
+    },
+    references: {
+      none: "No diste referencias, así que haremos una verificación de antecedentes. Aceptaste cuando enviaste tu propuesta. Nosotros cubrimos su costo y no contactamos a nadie antes de nuestra primera conversación contigo.",
+      some: (n) => `Diste ${n} ${n === 1 ? "referencia" : "referencias"}. Contactamos a las referencias solo después de nuestra primera conversación, y solo con tu visto bueno.`,
+    },
+    private: "Esta página muestra solo los pasos. Lo que anotan las personas que conversan contigo se queda con ellas.",
+    wait: {
+      heading: "Mientras esperas",
+      line: "La aldea está abierta para ti. Aquí hay tres formas de conocerla:",
+      quests: "Toma una misión",
+      map: "Mira el mapa vivo",
+      events: "Ven a un evento",
+    },
+  },
 };
 
 /** The tables. `Record<ApplicantLanguage, ...>` makes a language without a table, or a table with a missing line, a compile error. */
@@ -280,7 +434,7 @@ export const LANGUAGES: Record<ApplicantLanguage, ApplicantMessages> = { en, es 
 export const wordsIn = (lang: ApplicantLanguage | null | undefined): ApplicantMessages => LANGUAGES[lang && isApplicantLanguage(lang) ? lang : DEFAULT_APPLICANT_LANGUAGE];
 
 /** How every language's "your status page link" line begins, so a notice can drop it whichever language wrote it. */
-export const STATUS_LINK_STARTS: readonly string[] = APPLICANT_LANGUAGES.map((l) => LANGUAGES[l].keepStatusLink.slice(0, 21));
+export const STATUS_LINK_STARTS: readonly string[] = APPLICANT_LANGUAGES.flatMap((l) => [LANGUAGES[l].keepStatusLink.slice(0, 21), LANGUAGES[l].statusLinkLine("").slice(0, 21)]);
 
 /** A decider's note for an applicant: plain text, trimmed, one blank line at most, capped. Null when empty. */
 export const APPLICANT_NOTE_MAX = 600;
@@ -295,4 +449,92 @@ export function cleanNote(raw: unknown): string | null {
   while (out.length && out[out.length - 1] === "") out.pop();
   const s = out.join("\n").slice(0, APPLICANT_NOTE_MAX).trim();
   return s ? s : null;
+}
+
+// ── The status page, read in the applicant's language ───────────────────────
+
+/** What `/api/application-status` serves that the view reads (shared/applicationReview.ts `statusFor`, plus the route's own fields). */
+export interface StatusServedForView {
+  step: string;
+  actsNext: string;
+  path: Array<{ label: string; state: "done" | "now" | "later" }>;
+  booking: string | null;
+  mode: "block" | "split";
+  outcome?: "adopted" | "declined" | "withdrawn" | null;
+  referencesGiven?: number | null;
+}
+
+export interface StatusView {
+  stepWords: string;
+  move: string;
+  path: Array<{ label: string; state: "done" | "now" | "later" }>;
+  booking: { text: string; canSplit: boolean } | null;
+  references: string | null;
+}
+
+const CONVERSATION_LABEL = /^Conversation with (.+) \((\d+) minutes\)$/;
+const INTERVIEW_MOVE = /^(.+) talks with you for (\d+) minutes, then adds a note\.$/;
+
+/**
+ * The status page's words, from the steps the server sends. The server writes
+ * the path and the "next" line in English (shared/applicationReview.ts), so this
+ * reads them by shape and says them again in the applicant's language, and it
+ * shapes three things the raw path got wrong:
+ *   - only ONE step reads "now": the first, so the page never points two ways;
+ *   - after a decline or a withdrawal the steps that never happened leave the
+ *     path, and "The circle's consent" with them, because nobody consented;
+ *   - the references line never follows a decision, so "you gave no references"
+ *     does not sit under a thank-you.
+ * The background check is stated only as far as the server tells us: how many
+ * references were given. Whether a role always needs a check is not on this page.
+ */
+export function statusView(lang: ApplicantLanguage | null | undefined, s: StatusServedForView): StatusView {
+  const w = wordsIn(lang).status;
+  const decided = s.outcome === "declined" || s.outcome === "withdrawn" || s.outcome === "adopted";
+  const closed = s.outcome === "declined" || s.outcome === "withdrawn";
+
+  const say = (label: string): string => {
+    if (label === STEP_WORDS.confirmed) return w.received;
+    if (label === STEP_WORDS.first_reply) return w.firstReply;
+    if (label === STEP_WORDS.consent) return w.consent;
+    if (label === STEP_WORDS.decided) return w.decision;
+    const m = CONVERSATION_LABEL.exec(label);
+    if (m) return w.conversationWith(m[1], Number(m[2]));
+    return label;
+  };
+
+  let seenNow = false;
+  const path: StatusView["path"] = [];
+  for (const p of s.path) {
+    if (closed && (p.label === STEP_WORDS.consent || p.state !== "done")) continue;
+    if (decided && p.state === "now") continue;
+    let state = p.state;
+    if (state === "now") {
+      if (seenNow) state = "later";
+      seenNow = true;
+    }
+    path.push({ label: say(p.label), state });
+  }
+
+  let move: string;
+  if (s.outcome === "adopted") move = w.move.adopted;
+  else if (s.outcome === "withdrawn") move = w.move.withdrawn;
+  else if (s.outcome === "declined") move = w.move.declined;
+  else if (s.step === "first_reply") move = w.move.firstReply;
+  else if (s.step === "consent") move = w.move.consent;
+  else {
+    const m = INTERVIEW_MOVE.exec(s.actsNext);
+    move = m ? w.move.interview(m[1], Number(m[2])) : w.move.interviewWaiting;
+  }
+
+  const talks = s.path.map((p) => CONVERSATION_LABEL.exec(p.label)).filter((m): m is RegExpExecArray => !!m);
+  const total = talks.reduce((n, m) => n + Number(m[2]), 0);
+  const booking =
+    s.booking && !decided && talks.length > 0
+      ? { text: s.mode === "split" ? w.booking.split : w.booking.block(w.booking.minutes(total), talks[0][1]), canSplit: s.mode === "block" }
+      : null;
+
+  const references = closed || typeof s.referencesGiven !== "number" ? null : s.referencesGiven === 0 ? w.references.none : w.references.some(s.referencesGiven);
+
+  return { stepWords: (w.step as Record<string, string>)[s.step] ?? s.step, move, path, booking, references };
 }

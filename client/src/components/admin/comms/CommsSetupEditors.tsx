@@ -11,6 +11,7 @@
  * Light-only, like every admin surface: fixed grays on fixed white.
  */
 import { useCallback, useEffect, useState } from "react";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
 import { toast } from "sonner";
 import { Check, Copy } from "lucide-react";
 import { refusal } from "@/components/admin/adminApi";
@@ -77,7 +78,22 @@ export function useSaver(props: EditorProps) {
     },
     [props],
   );
-  return { busy, refused, setRefused, save };
+  /**
+   * The same write for the floating save bar: it answers what the server said
+   * (ok only when the write landed) and says nothing itself, because the bar
+   * is what says "Saved" or names the refusal.
+   */
+  const saveForBar = useCallback(
+    async (path: string, method: "POST" | "PUT", body: unknown): Promise<SaveResult> => {
+      setRefused(null);
+      const r = await commsCall<SettingsPayload>(path, props.password, { method, body });
+      if (!r.ok) return { ok: false, reason: refusal(r.data, "That was not saved.") };
+      if (r.data?.checklist) props.apply(r.data);
+      return { ok: true };
+    },
+    [props],
+  );
+  return { busy, refused, setRefused, save, saveForBar };
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -317,7 +333,8 @@ export function SenderEditor(props: EditorProps) {
   const domain = data.settings.domain;
   const [name, setName] = useState(data.sender.name);
   const [address, setAddress] = useState(data.sender.address);
-  const { busy, refused, save } = useSaver(props);
+  const { refused, saveForBar } = useSaver(props);
+  const changes = (name !== data.sender.name ? 1 : 0) + (address !== data.sender.address ? 1 : 0);
   return (
     <div className="space-y-3">
       {data.sender.line && (
@@ -346,14 +363,12 @@ export function SenderEditor(props: EditorProps) {
       <p className="text-xs text-gray-500">
         {domain ? `The address has to end in @${domain}.` : "Add the sending domain first. The address has to be on it."}
       </p>
-      <button
-        type="button"
-        disabled={busy || !name.trim() || !address.trim()}
-        onClick={() => save("/admin/comms/settings/sender", "PUT", { name, address }, "Sender saved")}
-        className={primaryCls}
-      >
-        {busy ? "Saving..." : "Save sender"}
-      </button>
+      <SaveBar
+        count={changes}
+        onSave={async () => (!name.trim() || !address.trim() ? { ok: false, reason: "Give the sender a name and an address." } : saveForBar("/admin/comms/settings/sender", "PUT", { name, address }))}
+        onDiscard={() => { setName(data.sender.name); setAddress(data.sender.address); }}
+        what="the sender"
+      />
       <Refused text={refused} />
     </div>
   );

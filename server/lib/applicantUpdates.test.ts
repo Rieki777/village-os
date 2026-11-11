@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { withoutStatusLink } from "./applicantUpdates";
+import { statusLinkFor, withoutStatusLink } from "./applicantUpdates";
+import { verifyLink } from "./comms/links";
+import { applicantUpdate } from "../../shared/openProposalDecide";
 
 describe("withoutStatusLink", () => {
   it("drops the status page link line and the blank lines before it", () => {
@@ -24,5 +26,35 @@ describe("withoutStatusLink", () => {
     const t1 = Date.now();
     withoutStatusLink(noMatch);
     expect(Date.now() - t1).toBeLessThan(1000);
+  });
+});
+
+describe("the status link in a letter", () => {
+  const i = { firstName: "Ana", village: "V", roleNames: ["Gate"], replyDays: 3 };
+  it("a letter given a link carries it, in either language, and the first-email pointer is gone", () => {
+    for (const lang of ["en", "es"] as const) {
+      for (const kind of ["conversation", "terms"] as const) {
+        const text = applicantUpdate(kind, { ...i, lang, statusLink: "https://x.test/application-status/op-1?token=t" }).text;
+        expect(text).toContain("https://x.test/application-status/op-1?token=t");
+        expect(text).not.toMatch(/first email|primer correo/);
+      }
+    }
+  });
+  it("without a link the old pointer stays, so a door that cannot mint one still says something true", () => {
+    expect(applicantUpdate("terms", i).text).toContain("first email we sent you");
+  });
+  it("a profile notice drops the line with the link in it", () => {
+    for (const lang of ["en", "es"] as const) {
+      const text = applicantUpdate("terms", { ...i, lang, statusLink: "https://x.test/application-status/op-1?token=t" }).text;
+      expect(withoutStatusLink(text)).not.toContain("token=");
+    }
+  });
+  it("the link is signed for this one proposal and refuses another purpose", () => {
+    const link = statusLinkFor({ siteUrl: () => "https://x.test/" }, "op-abc")!;
+    const token = new URL(link).searchParams.get("token")!;
+    expect(link.startsWith("https://x.test/application-status/op-abc?token=")).toBe(true);
+    expect(verifyLink("application_status", token)?.ref).toBe("op-abc");
+    expect(verifyLink("unsubscribe", token)).toBeNull();
+    expect(statusLinkFor({}, "op-abc")).toBeNull();
   });
 });

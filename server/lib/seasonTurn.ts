@@ -96,7 +96,7 @@ export async function runSeasonTurn(deps: SeasonTurnDeps): Promise<string> {
       if (outcome.kind === "seated") seated += 1;
     } else if (outcome.kind === "later" && outcome.steps?.length) {
       // Waiting on the agreements before the role starts (L7). Told once per set of steps; the next hour asks again.
-      await tellSteps(deps, stored, outcome.steps, null);
+      await tellSteps(deps, stored, outcome.steps, null, outcome.full ?? []);
     } else if (outcome.kind === "held-full") {
       held += 1;
       // A newly held application (it was adopted for later, and its seat is

@@ -155,6 +155,10 @@ export default function Register() {
   // An adopted application is joining to hold roles: the steward's path is already the answer, and
   // stays a choice the person can change (role audit, 10 Nov 2026).
   const adoptedForRoles = goodLink && (check?.forRoles?.length ?? 0) > 0;
+  /** The steward path is the answer, so the picker is not drawn (audit M7). Only when this village has that path to send. */
+  const skipPicker = adoptedForRoles && !!PATHS?.some((p) => p.id === "steward");
+  /** Where a new account lands: a holder is asked their steps on the profile, and everybody else picks a character first. */
+  const landing = adoptedForRoles ? "/profile" : "/profile/characters?first=1";
   useEffect(() => {
     if (!adoptedForRoles || !PATHS?.some((p) => p.id === "steward")) return;
     setSelectedPaths((prev) => (prev.length ? prev : ["steward"]));
@@ -179,20 +183,21 @@ export default function Register() {
       setError("Passwords don't match.");
       return;
     }
-    if (selectedPaths.length === 0) {
+    const chosenPaths = skipPicker ? ["steward"] : selectedPaths;
+    if (chosenPaths.length === 0) {
       setError("Choose a path to continue.");
       return;
     }
 
     setLoading(true);
     try {
-      if (goodLink) await register(name, email, password, selectedPaths, invite);
-      else await register(name, email, password, selectedPaths);
+      if (goodLink) await register(name, email, password, chosenPaths, invite);
+      else await register(name, email, password, chosenPaths);
       // Straight into the class select, skippable. Somebody who has just
       // signed up is the one moment they are most willing to say who they
       // want to be, and the one moment a form they cannot leave would be
       // worst. `first` only changes the copy and adds the way out.
-      navigate("/profile/characters?first=1");
+      navigate(landing);
     } catch (err) {
       setError(err instanceof Error ? err.message : "We couldn't create your account. Try again.");
     } finally {
@@ -217,7 +222,7 @@ export default function Register() {
               {/* R47: only the reader who can act on it sees it. Somebody held
                   at the door needs an invitation first, and the card says so. */}
               {!deciding && !heldAtTheDoor && (
-                <p className={LEDE + " mx-auto"}>Create your account and choose your path.</p>
+                <p className={LEDE + " mx-auto"}>{skipPicker ? "Create your account. Your first steps are waiting on your profile." : "Create your account and choose your path."}</p>
               )}
             </div>
 
@@ -363,6 +368,7 @@ export default function Register() {
                 </div>
               </div>
 
+              {!skipPicker && (
               <div>
                 <label className={`block ${LABEL} mb-4`}>
                   Choose your path. Pick more than one if you like.
@@ -394,6 +400,7 @@ export default function Register() {
                   ))}
                 </div>
               </div>
+              )}
 
               <button disabled={loading} type="submit" className={`${BTN_PRIMARY} w-full`}>
                 {loading ? "Creating your account…" : "Create account"}
@@ -425,7 +432,7 @@ export default function Register() {
               */}
               <GoogleSignInButton
                 label="Continue with Google"
-                next="/profile/characters?first=1"
+                next={landing}
                 invite={goodLink ? invite : undefined}
               />
             </form>

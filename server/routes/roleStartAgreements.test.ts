@@ -720,6 +720,24 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       });
     });
 
+    it("a village with no confidentiality agreement written is not asked for one on the profile (audit M18); the membership step still is", async () => {
+      dialsOn(true);
+      await moonMode(async () => {
+        const who = await newAccount("steps-no-agreement");
+        const id = await proposeAndConfirm(who.email);
+        expect((await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id)).status).toBe(200);
+        state.content = {};
+        try {
+          const mine = await call("GET", "/api/profile/role-start-steps", undefined, who.id);
+          expect(mine.status).toBe(200);
+          // No door could be drawn for the agreement, so the step is not listed. CONTROL: the letter still is.
+          expect(mine.body.waiting[0].steps.map((x: any) => x.step)).toEqual(["membership"]);
+        } finally {
+          state.content = { confidentiality: AGREEMENT };
+        }
+      });
+    });
+
     it("CONTROL: with the switches off the profile lists nothing, as the role starts at once", async () => {
       await moonMode(async () => {
         const who = await newAccount("steps-off");

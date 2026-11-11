@@ -19,13 +19,16 @@ import { docChangeCount } from "@/lib/unsavedChanges";
 const WORDS = {
   heading: "Onboarding path",
   intro:
-    "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay and a doneWhen. Paths already opened keep the steps they opened with.",
+    "The onboarding path every new holder sees on their profile: a title, phases (a name, fromDay, toDay and steps), each circle's own steps, optional check-in days, and the role that holds each owner key. A step has a title, an owner (holder, buddy, onboarding, access, memory or appointer), a dueDay, a doneWhen and, if you like, a link (an object with a label and an https href, shown as a button on the step). Paths already opened keep the steps they opened with.",
   label: "Onboarding path document (JSON)",
   on: "Switched on: new holders get this path. Tick only once the circle has consented.",
   notSaved: "The onboarding path did not save.",
   badJson: "That is not valid JSON.",
   failed: "The onboarding path did not load.",
 } as const;
+
+// A JSON document in a text box reads in a fixed-width face.
+const JSON_BOX = "mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground"; // design-ok: JSON document box
 
 export default function OnboardingPathEditor({ password }: { password: string }) {
   const [text, setText] = useState("");
@@ -106,7 +109,7 @@ export default function OnboardingPathEditor({ password }: { password: string })
           disabled={!loaded}
           rows={16}
           spellCheck={false}
-          className="mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-foreground"
+          className={JSON_BOX}
         />
       </label>
       <SaveBar count={loaded ? docChangeCount(savedText, text) : 0} onSave={save} onDiscard={() => setText(savedText)} what={WORDS.heading} />

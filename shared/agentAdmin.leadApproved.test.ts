@@ -43,6 +43,7 @@ const NEWLY_OPEN: Array<[string, string]> = [
   ["PUT", "/api/admin/org/drafts/d-1/vision"],
   ["POST", "/api/admin/org/roles/r-gardener/holders"],
   ["DELETE", "/api/admin/org/seatings/s-1"],
+  ["PATCH", "/api/admin/org/seatings/s-1"],
   ...AGENT_WORDING_VARIABLES.map((k) => ["PUT", `/api/admin/variables/${k}`] as [string, string]),
 ];
 
@@ -116,10 +117,10 @@ describe("with the opt-in on", () => {
     }
   });
 
-  it("saves the seed list, 88 paths, with every lead-approved write confirmed by the agent", () => {
+  it("saves the seed list, 89 paths, with every lead-approved write confirmed by the agent", () => {
     const r = parseAgentAdminPaths(seed, ON);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.paths).toHaveLength(88);
+    if (r.ok) expect(r.value.paths).toHaveLength(89);
   });
 
   it("never lifts erasure, money, members, personal data, secrets, accounts or agents", () => {
@@ -135,7 +136,26 @@ describe("with the opt-in on", () => {
       expect(["Ledger", "The Mint", "Gratitude"]).not.toContain(def.category);
       expect(k.startsWith("agents.")).toBe(false);
     }
-    expect(VARIABLES_BY_KEY["agents.lead_approved_writes"]?.default).toBe("false");
+    expect(VARIABLES_BY_KEY["agents.lead_approved_writes"]?.default).toBe("true");
+  });
+});
+
+describe("the switch ships on, and says why that is safe", () => {
+  const def = VARIABLES_BY_KEY["agents.lead_approved_writes"];
+  it("is on by default, first in its own Connector category, and no agent may set it", () => {
+    expect(def.default).toBe("true");
+    expect(def.category).toBe("Connector");
+    expect(def.label).toBe("Our agent may make the changes we approve in the chat");
+  });
+  it("tells the village the allow-list stays a person's and every write needs the approval note", () => {
+    expect(def.description).toContain("edited only by a person");
+    expect(def.description).toContain("approval note");
+  });
+  it("with it set off explicitly, nothing opens for any listed route", () => {
+    for (const [m, p] of NEWLY_OPEN) {
+      if (p.startsWith("/api/org/role-edit/")) continue;
+      expect(adminRequestDecision(m, p, seed, "agent-1", { leadApprovedWrites: false }), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+    }
   });
 });
 
@@ -190,6 +210,44 @@ describe("the body half", () => {
     expect(leadApprovedBodyProblem("unseat", "/api/admin/org/seatings/s-1", approval, { holderId: "agent-1", seat: { ...plainSeat, seatingIsAgent: true } })).toContain("agent");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: { ...plainSeat, isExample: true } })).toContain("example");
     expect(leadApprovedBodyProblem("seat", seatPath, { userId: "u-ana", ...approval }, { holderId: "agent-1", seat: null })).toContain("no such");
+  });
+});
+
+describe("changing a seating's focus and note (the lead, 11 Nov 2026)", () => {
+  const p = "/api/admin/org/seatings/s-1";
+  const approval = { approvedBy: "The lead", approvalNote: "Yes, move the note onto the member seating." };
+  const plainSeat: LeadSeatFacts = { found: true, roleId: "r-gardener", isExample: false, capabilities: ["quest.consent", "org.seat"], grantsAdmin: false };
+  const ctx = (seat: Partial<LeadSeatFacts> = {}) => ({ holderId: "agent-1", seat: { ...plainSeat, seatingUserId: "u-ana", ...seat } });
+
+  it("is a lead-approved kind on PATCH, lifting what unseat lifts", () => {
+    const e = LEAD_APPROVED_WRITES.find((w) => w.kind === "seat_note")!;
+    expect(e).toMatchObject({ method: "PATCH", path: "/api/admin/org/seatings/:id" });
+    expect(e.lifts).toEqual(LEAD_APPROVED_WRITES.find((w) => w.kind === "unseat")!.lifts);
+    expect(adminRequestDecision("PATCH", p, seed, "agent-1", ON)).toMatchObject({ ok: true, write: true, leadApproved: "seat_note" });
+    expect(adminRequestDecision("PATCH", p, listed([["PATCH", p]]), "agent-1")).toMatchObject({ ok: false, code: "always_a_person" });
+  });
+
+  it("goes ahead with the approval, and is refused without it", () => {
+    expect(leadApprovedBodyProblem("seat_note", p, { focus: "Springs", note: "Keeps the intake clear", ...approval }, ctx())).toBeNull();
+    for (const body of [{ focus: "x" }, { focus: "x", approvedBy: "The lead" }, { focus: "x", approvalNote: "yes please" }]) {
+      expect(leadApprovedBodyProblem("seat_note", p, body, ctx())).toBe(LEAD_APPROVAL_WORDS.approval);
+    }
+  });
+
+  it("refuses an agent's own seating, an agent seat, an example, a missing seat and any other field", () => {
+    const body = { focus: "x", ...approval };
+    expect(leadApprovedBodyProblem("seat_note", p, body, ctx({ seatingUserId: "agent-1" }))).toContain("itself");
+    expect(leadApprovedBodyProblem("seat_note", p, body, ctx({ seatingIsAgent: true }))).toContain("agent");
+    expect(leadApprovedBodyProblem("seat_note", p, body, ctx({ isExample: true }))).toContain("example");
+    expect(leadApprovedBodyProblem("seat_note", p, body, { holderId: "agent-1", seat: null })).toContain("no such");
+    expect(leadApprovedBodyProblem("seat_note", p, { ...body, termEndsAt: "2027-01-01" }, ctx())).toContain("termEndsAt");
+    expect(leadApprovedBodyProblem("seat_note", p, body, ctx({ capabilities: ["steward.veto"] }))).toContain("badge may never carry");
+  });
+
+  it("names the field names and never the words", () => {
+    const s = leadApprovalSubject("seat_note", p, { focus: "Secret focus", note: "Secret note", ...approval }, "r-1");
+    expect(s).toEqual({ what: "Changed a seating's note", target: "r-1", changed: ["focus", "note"] });
+    expect(JSON.stringify(s)).not.toContain("Secret");
   });
 });
 
@@ -266,6 +324,6 @@ describe("pasting a list in the panel", () => {
     expect(mergePastedAgentPaths(current, seed).ok).toBe(false);
     const on = mergePastedAgentPaths(current, seed, ON);
     expect(on.ok).toBe(true);
-    if (on.ok) expect(on.plan.merged).toHaveLength(88); // both paths on screen are on the seed list already
+    if (on.ok) expect(on.plan.merged).toHaveLength(89); // both paths on screen are on the seed list already
   });
 });

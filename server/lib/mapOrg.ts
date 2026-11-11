@@ -64,6 +64,8 @@ export interface MapOrgHolder {
   name: string;
   lapsed: boolean;
   isAgent: boolean;
+  /** 0374: the member who keeps an agent. Only on an agent's row, and only when one is recorded. */
+  keeper?: string;
 }
 
 export interface MapOrgRole {
@@ -157,6 +159,7 @@ export function projectMapOrg(input: MapOrgInput): MapOrgSnapshot {
               name: h.holderKind === "member" && h.userId ? input.memberName(h.userId) : str(h.displayName),
               lapsed: !!h.lapsed,
               isAgent: !!h.isAgent,
+              ...(h.isAgent && h.keeperUserId ? { keeper: input.memberName(h.keeperUserId) } : {}),
             }))
           : [],
       };

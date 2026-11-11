@@ -194,7 +194,7 @@ export function register(app: Express, deps: Deps): void {
         },
         adminPaths: async () => effectiveAgentAdminPaths(await readConfigDocument(getPool(), AGENT_ADMIN_PATHS_DOC)),
         applicantDataOpen: async () => parseAiApproval(await readConfigDocument(getPool(), AI_APPROVAL_DOC)).approved,
-        // The lead's ruling of 10 and 11 Nov 2026 (shared/agentAdmin.ts): off unless the village turns the variable on.
+        // The lead's ruling of 10 and 11 Nov 2026 (shared/agentAdmin.ts): on by default since 2026-11-11, off when the village turns the variable off.
         // Without the power groups or the notice wired, the opt-in reads as off, so nothing opens half-built.
         leadApproved: {
           on: async () => !!notifyAdmins && !!powerGroups && boolVar(LEAD_APPROVED_WRITES_VARIABLE),

@@ -20,8 +20,9 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search, ScrollText } from "lucide-react";
+import { Link } from "wouter";
+import { Trans } from "@lingui/react/macro";
 import Layout from "@/components/Layout";
-import { SignInDoors } from "@/components/modules/ModuleGate";
 import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import RegisterEntry from "@/components/alignment/RegisterEntry";
@@ -140,8 +141,14 @@ export default function Aligned() {
                 {ALIGNED_WORDS.membersOnlyLine}
               </p>
               {!user && (
-                <div className="mt-5">
-                  <SignInDoors next="/aligned" />
+                <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+                  {/* The shared SignInDoors draws in the brand ink, which is unreadable on the night ground (audit M4). */}
+                  <Link href={`/login?next=${encodeURIComponent("/aligned")}`} className={BTN_PRIMARY}>
+                    <Trans context="aligned page, signed out">Sign in</Trans>
+                  </Link>
+                  <Link href="/register" className={BTN_SECONDARY}>
+                    <Trans context="aligned page, signed out">Create an account</Trans>
+                  </Link>
                 </div>
               )}
             </div>

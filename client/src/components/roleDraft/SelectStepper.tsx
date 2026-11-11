@@ -15,12 +15,14 @@ export default function SelectStepper({
   reached,
   onGo,
   barLabel,
+  visited,
 }: {
   labels: readonly string[];
   step: number;
   reached: number;
   onGo: (i: number) => void;
   barLabel: string;
+  visited?: ReadonlySet<number>;
 }) {
-  return <Trail className="mt-6" labels={labels} step={step} reached={reached} onGo={onGo} barLabel={barLabel} />;
+  return <Trail className="mt-6" labels={labels} step={step} reached={reached} onGo={onGo} barLabel={barLabel} visited={visited} />;
 }

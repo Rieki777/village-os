@@ -66,13 +66,11 @@ import { useGameConfig } from "@/lib/gameApi";
 import BreathingLoader from "@/components/natural/BreathingLoader";
 import { gateLine, nameList } from "./gateCopy";
 import { internalPath } from "@/lib/internalPath";
+import { BTN_PRIMARY, BTN_SECONDARY } from "@/components/journey/look";
 
 
-const DOOR =
-  "inline-flex items-center justify-center min-h-[44px] px-5 rounded-lg font-semibold" +
-  " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2";
-const DOOR_PRIMARY = `${DOOR} bg-teal-deep text-white hover:bg-teal-deep-dark`;
-const DOOR_SECOND = `${DOOR} border border-teal-deep text-teal-deep hover:bg-teal-deep/5`;
+const DOOR_PRIMARY = BTN_PRIMARY;
+const DOOR_SECOND = BTN_SECONDARY;
 
 /**
  * BOTH DOORS, WITH NO CARD AROUND THEM.

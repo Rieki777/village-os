@@ -94,6 +94,14 @@ describe("a role with every CCOS word written", () => {
   });
 });
 
+describe("a role that states a commitment (audit M2)", () => {
+  it("hides the legacy time chip, since the card says the commitment", () => {
+    render(<PlayerRoleCardView data={payload({ ...WORDS, timeCommitment: "Roughly 40 hours a week", cardSeat: { commitmentPct: 60 } })} />);
+    expect(article().querySelector('[data-role-chip="time"]')).toBeNull();
+    expect(article().textContent).not.toContain("Roughly 40 hours a week");
+  });
+});
+
 describe("a role with none of the CCOS words written", () => {
   it("shows nothing extra: no section, no box, no chip", () => {
     render(<PlayerRoleCardView data={payload(NONE)} />);

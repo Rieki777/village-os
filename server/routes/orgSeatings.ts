@@ -1,9 +1,10 @@
 /**
  * Ending a seating, and forgetting the person who held it.
  *
- * Two routes, lifted out of server/index.ts unchanged:
+ * Routes, lifted out of server/index.ts unchanged:
  *
  *   DELETE /api/admin/org/seatings/:id         end a live holding
+ *   PATCH  /api/admin/org/seatings/:id         change a live holding's focus and note
  *   POST   /api/admin/org/seatings/:id/forget  take a documented name off
  *                                              every seat it appears on
  *
@@ -32,6 +33,11 @@ import type { AppDeps } from "../lib/appDeps";
 import { recordEvent } from "../lib/events";
 import { EXAMPLE_REFUSAL_BODY, isExampleRow } from "../lib/examples";
 import { endSeating, forgetDocumentedHolder } from "../lib/orgChart";
+import { updateSeatingText } from "../repos/orgSeatingText";
+
+/** The longest a seating's focus or note may be. */
+const SEATING_FOCUS_MAX = 200;
+const SEATING_NOTE_MAX = 1000;
 
 type Deps = Pick<AppDeps, "isAdmin" | "authedUser" | "guardCapability" | "adminActor" | "getPool">;
 
@@ -67,6 +73,42 @@ export function register(app: Express, deps: Deps): void {
         audience: reason ? "admin" : "public",
       });
     }
+    res.json({ success: true });
+  });
+
+  /**
+   * Change the focus and note on a live seating without ending it: the holder,
+   * the term and the start stay as they are. Same door as ending (`org.seat`)
+   * and the same refusal for a standing example. A key left out keeps its
+   * column; an empty string clears it.
+   */
+  app.patch("/api/admin/org/seatings/:id", async (req, res) => {
+    if (!(await guardCapability(req, res, "org.seat"))) return;
+    if (await isExampleRow(getPool(), "org_role_assignments", req.params.id)) {
+      return res.status(409).json(EXAMPLE_REFUSAL_BODY);
+    }
+    const text: { focus?: string | null; note?: string | null } = {};
+    for (const [key, max] of [["focus", SEATING_FOCUS_MAX], ["note", SEATING_NOTE_MAX]] as const) {
+      const raw = req.body?.[key];
+      if (raw === undefined) continue;
+      if (raw !== null && typeof raw !== "string") return res.status(400).json({ error: `${key} must be text` });
+      const v = (raw ?? "").trim();
+      if (v.length > max) return res.status(400).json({ error: `${key} is at most ${max} characters` });
+      text[key] = v || null;
+    }
+    if (text.focus === undefined && text.note === undefined) {
+      return res.status(400).json({ error: "Send a focus, a note, or both" });
+    }
+    const changed = await updateSeatingText(getPool(), req.params.id, text);
+    if (!changed) return res.status(404).json({ error: "No live seating with that id" });
+    void recordEvent(getPool(), {
+      kind: "org",
+      text: text.note ? "a holding's note was changed" : "a holding's focus was changed",
+      actorUserId: (await authedUser(req))?.id ?? null,
+      entityType: "org_role", entityRef: changed.orgRoleId,
+      // A note is an admin's own words and can name the person, so it stays admin.
+      audience: text.note ? "admin" : "public",
+    });
     res.json({ success: true });
   });
 

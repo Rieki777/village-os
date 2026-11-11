@@ -94,6 +94,9 @@ export function openRowLine(partner: string | null | undefined): string {
   return `We'll fill this together with ${opsPartner(partner)}.`;
 }
 
+/** Every open row after the first one on a card: the role is named once, so the rest do not repeat it. */
+export const OPEN_ROW_AGAIN = "We'll fill this together too.";
+
 /** The load card on a proposal: the hours are filled with the operations role. */
 export function loadHoursLine(partner: string | null | undefined): string {
   return `We'll set the load together with ${opsPartner(partner)}.`;

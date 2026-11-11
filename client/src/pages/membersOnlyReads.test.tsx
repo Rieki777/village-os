@@ -59,6 +59,8 @@ vi.mock("@/modules/ModuleProvider", () => ({
   useModule: (id: string) => ({ id, lifecycle: "public" }),
   // /roles mounts the vendor drawer, which asks this; no vendor is on here.
   useModuleOn: () => false,
+  // The profile dashboard asks which optional modules are on before it reads them (#1171); none is on here.
+  moduleIsOn: () => false,
 }));
 // /circles draws a scene per circle and a mini map, each its own subject and
 // neither a read this file is about.

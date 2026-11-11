@@ -3732,16 +3732,19 @@ export const VARIABLES: VariableDef[] = [
   // READ by server/routes/agentMcp.ts on every `admin_request` call, and by
   // the agent paths list when a person saves it (server/routes/agentAccounts.ts).
   // The ruling and the exact list are in shared/agentAdmin.ts, beside
-  // LEAD_APPROVED_WRITES. OFF by default: with it off, nothing changes for any
-  // village. No variable under `agents.` is one an agent may set itself.
+  // LEAD_APPROVED_WRITES. ON by default since 2026-11-11 (the lead's ruling): the
+  // agent's allow-list (agent-admin-paths) is still saved only by a person, and
+  // every write still carries a person's approval note, so on opens nothing by
+  // itself. With it set off, the connector does only what it did before. No
+  // variable under `agents.` is one an agent may set itself.
   {
     key: "agents.lead_approved_writes",
     category: "Connector",
     label: "Our agent may make the changes we approve in the chat",
     description:
-      "When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. Off, the connector does only what it did before.",
+      "When on, the village connector, acting for the person who connected it, may write a role's words, draft the wording of its terms, seat and unseat a person, and change the village's own wording, each time a person has approved it in the chat. Every seating names who approved it and quotes the approval, and every admin and founder is told. Pay, money, erasure, secrets, agent accounts and powers stay a person's act. It is on by default because it opens nothing by itself: the list of paths the agent may use is still edited only by a person, and every write still needs the approval note from the person in the chat. Off, the connector does only what it did before.",
     type: "boolean",
-    default: "false",
+    default: "true",
   },
 
   // ── Live Sessions: the room's own words and its usual length ──────────────

@@ -83,6 +83,8 @@ export interface LeadApprovalRecord {
   subject?: LeadApprovalSubject;
   approvedBy: string;
   approvalNote: string;
+  /** The plain sentence the connector's caller wrote for the person (admin_request's `summary`). */
+  summary?: string;
   /** One key per write: derived from the spent confirm token. */
   writeKey: string;
 }
@@ -121,7 +123,7 @@ export async function recordLeadApproval(
     // The approval can name people, so the line is admin-audience, and it names the agent as the actor.
     await recordEvent(deps.pool, {
       kind: "audit",
-      text: `connector (${deps.tokenPrefix}...): ${subject.what}${where}, with approval from ${a.approvedBy}: "${a.approvalNote.slice(0, 1000)}"`,
+      text: `connector (${deps.tokenPrefix}...): ${subject.what}${where}, with approval from ${a.approvedBy}: "${a.approvalNote.slice(0, 1000)}"${a.summary ? `. Summary given: "${a.summary.slice(0, 400)}"` : ""}`,
       actorUserId: deps.agentUserId,
       actorKind: "agent",
       entityType: APPROVAL_EVENT_ENTITY,
@@ -146,6 +148,7 @@ export async function recordLeadApproval(
     changed: subject.changed,
     approvedBy: a.approvedBy,
     approvalNote: a.approvalNote,
+    summary: a.summary,
     at: (deps.now ?? (() => new Date()))(),
   });
   try {

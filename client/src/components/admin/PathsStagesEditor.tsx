@@ -13,7 +13,9 @@
  * `PUT /api/admin/village-paths` then refuses.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, RotateCcw, Save } from "lucide-react";
+import { RefreshCw, RotateCcw } from "lucide-react";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { refreshGameConfig } from "@/lib/gameApi";
 import { GAME_CONFIG } from "@shared/gameConfig";
@@ -103,7 +105,6 @@ export default function PathsStagesEditor({ password }: { password: string }) {
   // Unknown is not empty: words that could not be read must not be saved
   // over, or one failed request erases a village's own names.
   const [loadError, setLoadError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -128,7 +129,6 @@ export default function PathsStagesEditor({ password }: { password: string }) {
   }, [load]);
 
   const problems = useMemo(() => villagePathsProblems(draft), [draft]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   /** What the founder typed in one box, or undefined while it follows the default. */
   const typed = (group: Group, id: string | null, field: string): string | undefined => {
@@ -154,8 +154,8 @@ export default function PathsStagesEditor({ password }: { password: string }) {
     setDraft(next);
   };
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (): Promise<SaveResult> => {
+    if (problems.length > 0) return { ok: false, reason: problems.join(" ") };
     setMessage(null);
     try {
       const res = await fetch(`${API_BASE}/admin/village-paths`, {
@@ -166,7 +166,7 @@ export default function PathsStagesEditor({ password }: { password: string }) {
         body: JSON.stringify(draft),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(refusal(body, `The server refused this save (${res.status}). Nothing changed.`));
+      if (!res.ok) return { ok: false, reason: refusal(body, `The server refused this save (${res.status}). Nothing changed.`) };
       const stored = body?.stored && typeof body.stored === "object" ? body.stored : {};
       setSaved(stored);
       setDraft(stored);
@@ -174,10 +174,10 @@ export default function PathsStagesEditor({ password }: { password: string }) {
       // The menu, the footer and any page open in this tab read the config
       // once; read it again so a renamed path shows here now.
       void refreshGameConfig();
-    } catch (e) {
-      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Save failed. Nothing changed." });
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: "The save could not reach the server. Nothing changed." };
     }
-    setSaving(false);
   };
 
   const ladderTitle = typed("ladder", null, "title");
@@ -194,14 +194,6 @@ export default function PathsStagesEditor({ password }: { password: string }) {
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={load} aria-label="Reload the saved words" className="p-2 text-muted-foreground hover:bg-muted rounded-lg">
             <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || loading || !!loadError || !dirty || problems.length > 0}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
-          >
-            <Save className="w-4 h-4" aria-hidden="true" /> {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -314,6 +306,12 @@ export default function PathsStagesEditor({ password }: { password: string }) {
           </section>
         </div>
       )}
+      <SaveBar
+        count={loading || loadError ? 0 : docChangeCount(JSON.stringify(saved), JSON.stringify(draft))}
+        onSave={save}
+        onDiscard={() => setDraft(saved)}
+        what="the paths and stages"
+      />
     </div>
   );
 }

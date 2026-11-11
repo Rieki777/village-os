@@ -329,6 +329,15 @@ export const NOTIFICATION_KINDS: Record<string, NotificationKind> = {
     many: "{n} role proposals from outside the village ask your circle to consent.",
     celebrate: false,
   },
+  // The answer on an agent's proposal, to the member who keeps the agent
+  // (0374, server/routes/openProposalDecide.ts). Bell only: an agent's proposal
+  // has no address to email.
+  open_role_proposal_decided: {
+    group: "decisions",
+    blurb: "The village answered a proposal for an agent you keep: seated on its roles, or declined.",
+    many: "{n} answers on proposals for agents you keep.",
+    celebrate: false,
+  },
   // An update about a role proposal, for the person who made it, once they
   // have an account. Bell only (no case in emailCadenceFor): the same words
   // already went to their address as an email, so a digest would be a third.

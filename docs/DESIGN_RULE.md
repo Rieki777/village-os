@@ -11,9 +11,12 @@ The rule exists as three things that agree with each other:
 - `scripts/check-design-rule.mjs`, which fails CI when a file on its list draws outside it.
 
 The joining journey is on the list today: `/steward`, `/roles`, `/roles/select`, `/propose-a-role`,
-the member door of `/propose`, `/love-letter` and `/application-status`, and the onboarding pages: `/aligned` (and the
+the member door of `/propose`, `/love-letter`, `/application-status` and `/role-applications/:id`, and the onboarding pages: `/aligned` (and the
 confidentiality and membership align cards), `/register`, `/set-password`, `/verify-email`, the onboarding path on the
-profile, `/approvals`, `/role-measures` and `/quests`. A page joins by being
+profile, `/approvals`, `/role-measures` and `/quests`, the membership align step inside the proposal form
+(`MembershipAtApplication`), `RoleCardBridge`, the signed-out card (`SignInDoors` in `ModuleGate`, whose two doors now
+take `BTN_PRIMARY` and `BTN_SECONDARY` on every page that shows them), Admin's onboarding path editor and
+`/request-membership`. A page joins by being
 added to `JOURNEY` (and `PAGES`, for a page) in the script, once it passes.
 `node scripts/check-design-rule.mjs --report` lists what the rule would flag everywhere else.
 

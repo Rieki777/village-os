@@ -79,6 +79,9 @@ const PAGES = [
   "client/src/pages/SetPassword.tsx",
   "client/src/pages/Register.tsx",
   "client/src/pages/Aligned.tsx",
+  "client/src/pages/SeatApplication.tsx",
+  "client/src/pages/ResidentJourney.tsx",
+  "client/src/pages/OpenProposal.tsx",
 ];
 
 /** Every file the joining journey draws with, pages included. */
@@ -87,6 +90,7 @@ const JOURNEY = [
   "client/src/components/journey/look.ts",
   "client/src/components/journey/Trail.tsx",
   "client/src/components/journey/Leaf.tsx",
+  "client/src/components/agent/ConnectorSetupPanel.tsx",
   "client/src/components/roleDraft/SeasonGoals.tsx",
   "client/src/components/roleDraft/ArchetypeStep.tsx",
   "client/src/components/roleDraft/IkigaiDoor.tsx",
@@ -115,6 +119,14 @@ const JOURNEY = [
   "client/src/components/alignment/RegisterEntry.tsx",
   "client/src/components/alignment/AlignButton.tsx",
   "client/src/components/alignment/ConfidentialityCard.tsx",
+  // The decider and holder side of a proposal (audit M11). CircleConsent.tsx joins once its two classes are on tokens.
+  "client/src/components/openProposal/AboutYou.tsx",
+  "client/src/components/openProposal/MembershipAtApplication.tsx",
+  "client/src/components/openProposal/ProposalAttachments.tsx",
+  "client/src/components/openProposal/RoleCardBridge.tsx",
+  "client/src/components/modules/ModuleGate.tsx",
+  "client/src/components/admin/OnboardingPathEditor.tsx",
+  "client/src/pages/RequestMembership.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);

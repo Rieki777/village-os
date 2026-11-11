@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 import { ADMIN_WORDS } from "@shared/moonRecap";
+import type { SaveResult } from "@/components/SaveBar";
 
 export type DocState<T> =
   | { kind: "loading" }
@@ -43,7 +44,8 @@ export function useSettingsDocument<T>(path: "payers" | "settings" | "rhythm", p
     void load();
   }, [load]);
 
-  const save = async (doc: T): Promise<void> => {
+  /** Answers what the server said, for the floating save bar: ok only when the write landed. */
+  const save = async (doc: T): Promise<SaveResult> => {
     setSaving(true);
     setMessage(null);
     try {
@@ -54,13 +56,19 @@ export function useSettingsDocument<T>(path: "payers" | "settings" | "rhythm", p
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 400) {
-        setMessage({ ok: false, text: refusal(body, ADMIN_WORDS.loadFailed) });
-        return;
+        const text = refusal(body, ADMIN_WORDS.loadFailed);
+        setMessage({ ok: false, text });
+        return { ok: false, reason: text };
       }
       take(res.status, body);
-      if (res.ok) setMessage({ ok: true, text: ADMIN_WORDS.saved(Number(body.changed) || 0) });
+      if (res.ok) {
+        setMessage({ ok: true, text: ADMIN_WORDS.saved(Number(body.changed) || 0) });
+        return { ok: true };
+      }
+      return { ok: false, reason: refusal(body, ADMIN_WORDS.loadFailed) };
     } catch {
       setMessage({ ok: false, text: ADMIN_WORDS.loadFailed });
+      return { ok: false, reason: ADMIN_WORDS.loadFailed };
     } finally {
       setSaving(false);
     }

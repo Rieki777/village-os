@@ -1,0 +1,20 @@
+{
+  "modules": [
+    "client/src/components/comms/PathConsentBox.tsx",
+    "client/src/components/natural/BreathingLoader.tsx",
+    "client/src/components/natural/MoonProgress.tsx",
+    "client/src/components/natural/index.ts",
+    "client/src/components/natural/moments.ts",
+    "client/src/components/natural/moonGeometry.ts",
+    "client/src/lib/celebrated.ts",
+    "shared/capabilities.ts",
+    "shared/comms/contracts.ts",
+    "shared/comms/memberView.ts",
+    "shared/comms/preferences.ts",
+    "shared/comms/settings.ts",
+    "shared/moduleCatalog.ts",
+    "shared/pageContent/goodNeighborName.ts",
+    "shared/pageContent/housing.ts",
+    "shared/pageContent/types.ts"
+  ]
+}

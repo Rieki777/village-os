@@ -262,12 +262,13 @@ describe.skipIf(!configured)("the proposal card and the grouped list, on a real 
     // Filed for the next season: its name and its dates, and no day counted of a season not begun.
     const next = (await h.call("/api/governance/role-applications/sa-00000000000000a3/card")).body.card.header;
     expect(next.eyebrow).toBe("Riverbend · Next");
-    expect(next.span).toBe("1 January to 31 May 2027");
+    // The season's endsOn is shown as the civil day written (audit M12, #1169).
+    expect(next.span).toBe("1 January to 1 June 2027");
     expect(next.moon.day).toBeNull();
     // Control: an application for the running season reads the running season, day counted.
     const now = (await h.call("/api/governance/role-applications/sa-00000000000000a1/card")).body.card.header;
     expect(now.eyebrow).toBe("Riverbend · Now");
-    expect(now.span).toBe("1 June to 31 December 2026");
+    expect(now.span).toBe("1 June 2026 to 1 January 2027");
     expect(now.moon.day).not.toBeNull();
   });
 

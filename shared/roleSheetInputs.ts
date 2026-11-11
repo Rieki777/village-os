@@ -114,6 +114,7 @@ function holderIn(h: any, opts: { literalAgent: boolean }): SeatHolderIn {
     kind: h?.kind === "member" || h?.kind === "documented" ? h.kind : undefined,
     isAgent: bool(h?.isAgent) ?? (opts.literalAgent && orgRowIsAgent(h) ? true : undefined),
     focus: has(h, "focus") ? str(h.focus) : undefined,
+    ...(typeof h?.keeper === "string" && h.keeper.trim() ? { keeper: h.keeper.trim() } : {}),
     lapsed: bool(h?.lapsed),
     avatar: typeof h?.avatar === "string" && h.avatar ? h.avatar : null,
     termEndsAt: typeof h?.termEndsAt === "string" && h.termEndsAt ? h.termEndsAt : null,

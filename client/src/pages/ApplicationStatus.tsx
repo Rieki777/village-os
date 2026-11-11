@@ -5,20 +5,17 @@
  * (server/routes/applicationReview.ts, shared/applicationReview.ts `statusFor`).
  * A visitor reaches it by the link in their email; a member by their profile.
  */
-import { ABOUT_WORDS } from "@shared/proposalAbout";
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
-import { BTN_SECONDARY, CARD_FEATURED, EYEBROW, H1, TILE, WORLD } from "@/components/journey/look";
+import { BTN_SECONDARY, CARD, CARD_FEATURED, EYEBROW, H1, H2, LINK, TILE, WORLD } from "@/components/journey/look";
 import { Check } from "lucide-react";
 import { BreathingLoader, useReducedMotion } from "@/components/natural";
 import { gameFetch } from "@/lib/gameApi";
-import { PANEL_WORDS } from "@shared/applicationReview";
 import { DECLINED_PAGE_WORDS } from "@shared/openProposalDecide";
 import { chooseApplicantLanguage } from "@shared/applicantLanguage";
-import { wordsIn } from "@shared/applicantWords";
+import { statusView, wordsIn } from "@shared/applicantWords";
 import { useLingui } from "@lingui/react/macro";
-import { civilDayWords } from "@shared/seasonPlans";
 import { TERM_NOTE_MAX } from "@shared/termsWords";
 
 interface Served {
@@ -162,6 +159,11 @@ export default function ApplicationStatus() {
   const [said, setSaid] = useState<string | null>(null);
   const token = typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("token") ?? "");
 
+  // The words this page owns follow the language the person is reading the site in, else the one kept on their proposal.
+  const lang = chooseApplicantLanguage({ chosenOnSite: i18n.locale, profile: s?.locale ?? null }).language;
+  const w = wordsIn(lang);
+  const view = s ? statusView(lang, s) : null;
+
   const split = async () => {
     const url = token ? `/api/application-status/${encodeURIComponent(ref)}/split?token=${encodeURIComponent(token)}` : `/api/governance/applications/${encodeURIComponent(ref)}/split`;
     try {
@@ -170,7 +172,7 @@ export default function ApplicationStatus() {
       setSaid(String(data?.message ?? data?.error ?? ""));
       if (res.ok) setS((cur) => (cur ? { ...cur, mode: "split" } : cur));
     } catch {
-      setSaid(PANEL_WORDS.statusMissing);
+      setSaid(w.status.missing);
     }
   };
 
@@ -192,9 +194,7 @@ export default function ApplicationStatus() {
   }, [ref]);
 
   const still = useReducedMotion();
-  // The words this page owns follow the language the person is reading the site in, else the one kept on their proposal.
-  const w = wordsIn(chooseApplicantLanguage({ chosenOnSite: i18n.locale, profile: s?.locale ?? null }).language);
-  const byDay = s?.by ? civilDayWords(new Date(s.by).toISOString().slice(0, 10)) : null;
+  const byDay = s?.by && !s.outcome ? w.day(new Date(s.by).toISOString().slice(0, 10)) : null;
 
   return (
     <Layout>
@@ -202,23 +202,20 @@ export default function ApplicationStatus() {
       <div className="container max-w-2xl px-4 py-8">
         {state === "loading" && (
           <div className="flex justify-center py-16">
-            <BreathingLoader label={PANEL_WORDS.statusHeading} />
+            <BreathingLoader label={w.status.heading} />
           </div>
         )}
-        {state === "missing" && <p className="sel-rise rounded-2xl border-2 border-dashed border-border bg-card p-6 text-foreground">{PANEL_WORDS.statusMissing}</p>}
-        {state === "ready" && s && (
+        {state === "missing" && <p className="sel-rise rounded-2xl border-2 border-dashed border-border bg-card p-6 text-foreground">{w.status.missing}</p>}
+        {state === "ready" && s && view && (
           <article className="space-y-6" data-application-step={s.step}>
             <header>
-              <h1 className={H1}>{PANEL_WORDS.statusHeading}</h1>
+              <h1 className={H1}>{w.status.heading}</h1>
               {s.roles.length > 0 && <p className="mt-1 text-muted-foreground">{s.roles.join(", ")}</p>}
             </header>
-            <section aria-label={PANEL_WORDS.statusNext} className={`sel-rise ${CARD_FEATURED}`}>
-              <p className={EYEBROW}>{s.stepWords}</p>
-              <p className="mt-1 text-lg text-foreground">
-                <span className="font-semibold">{PANEL_WORDS.statusNext}: </span>
-                {s.actsNext}
-              </p>
-              {byDay && <p className="mt-1 text-foreground">{PANEL_WORDS.statusBy(byDay)}</p>}
+            <section aria-label={w.status.nextLabel} className={`sel-rise ${CARD_FEATURED}`}>
+              <p className={EYEBROW}>{view.stepWords}</p>
+              <p className="mt-1 text-lg text-foreground">{view.move}</p>
+              {byDay && <p className="mt-1 text-foreground">{w.status.by(byDay)}</p>}
               {s.outcome == null && typeof s.replyDays === "number" && <p className="mt-1 text-foreground" data-reply-promise="">{w.replyPromise(s.replyDays)}</p>}
             </section>
             {s.note && (
@@ -248,7 +245,7 @@ export default function ApplicationStatus() {
             {/* The path as stepping stones: the line fills down to where you stand, one stone after another, and the
                 stone you are on answers with a ring on the water. Reduce motion: the filled path, at once. */}
             <ol className="jw-trail-v" data-motion={still ? "still" : "live"}>
-              {s.path.map((p, i) => (
+              {view.path.map((p, i) => (
                 <li
                   key={i}
                   className="sel-rise flex min-h-[52px] items-center gap-3 py-1"
@@ -260,29 +257,40 @@ export default function ApplicationStatus() {
                     <span className="jw-stone-face !m-0">{p.state === "done" ? <Check className="size-4" /> : p.state === "now" ? i + 1 : ""}</span>
                   </span>
                   <span className={p.state === "later" ? "text-muted-foreground" : p.state === "now" ? "font-bold text-foreground" : "font-medium text-foreground"}>{p.label}</span>
-                  <span className="sr-only">{p.state === "done" ? "done" : p.state === "now" ? "now" : "later"}</span>
+                  <span className="sr-only">{p.state === "done" ? w.status.stateDone : p.state === "now" ? w.status.stateNow : w.status.stateLater}</span>
                 </li>
               ))}
             </ol>
-            {typeof s.referencesGiven === "number" && (
-              <p className="text-sm text-muted-foreground" data-references-given="">{ABOUT_WORDS.given(s.referencesGiven)}</p>
+            {view.references && (
+              <p className="text-sm text-muted-foreground" data-references-given="">{view.references}</p>
             )}
-            {s.booking && (
-              <section aria-label={PANEL_WORDS.bookingLabel} className={TILE}>
-                <p className="text-foreground">{s.booking}</p>
-                {s.mode === "block" && (
+            {view.booking && (
+              <section aria-label={w.status.booking.label} className={TILE}>
+                <p className="text-foreground">{view.booking.text}</p>
+                {view.booking.canSplit && (
                   <button
                     type="button"
                     onClick={() => void split()}
                     className={`mt-3 ${BTN_SECONDARY}`}
                   >
-                    {PANEL_WORDS.splitAsk}
+                    {w.status.booking.splitAsk}
                   </button>
                 )}
                 {said && <p role="status" className="mt-2 text-sm text-foreground">{said}</p>}
               </section>
             )}
-            <p className="text-sm text-muted-foreground">{PANEL_WORDS.statusPrivate}</p>
+            {s.outcome == null && (
+              <section aria-labelledby="while-you-wait" className={CARD} data-while-you-wait="">
+                <h2 id="while-you-wait" className={H2}>{w.status.wait.heading}</h2>
+                <p className="mt-1 text-foreground">{w.status.wait.line}</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground">
+                  <li><a className={LINK} href="/quests">{w.status.wait.quests}</a></li>
+                  <li><a className={LINK} href="/map">{w.status.wait.map}</a></li>
+                  <li><a className={LINK} href="/events">{w.status.wait.events}</a></li>
+                </ul>
+              </section>
+            )}
+            <p className="text-sm text-muted-foreground">{w.status.private}</p>
           </article>
         )}
       </div>

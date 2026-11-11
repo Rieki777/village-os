@@ -119,7 +119,7 @@ describe("Admin, Paths & Stages", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Save$/ }));
     await waitFor(() => expect(writes).toHaveLength(1));
     expect(writes[0].was).toBe(contentVersion(stored));
-    expect(await screen.findByRole("status")).toHaveTextContent(MOVED);
+    expect(await screen.findByRole("alert")).toHaveTextContent(MOVED);
     expect(name.value, "nothing typed is lost").toBe("Keeper");
   });
 
@@ -127,6 +127,6 @@ describe("Admin, Paths & Stages", () => {
     stubFetch("fail", writes);
     open();
     expect(await screen.findByRole("alert")).toHaveTextContent(/Saving is off/);
-    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^Save$/ })).toBeNull();
   });
 });

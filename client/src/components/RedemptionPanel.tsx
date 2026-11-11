@@ -268,9 +268,9 @@ export default function RedemptionPanel() {
 
       <p className="text-sm text-muted-foreground">
         A redemption is an agreement between you and your village. You say what you would
-        like your tokens turned into: cash, a service, a share, a bicycle. A steward says
-        yes or no. The agreement is the village's to keep, and nothing in this software can
-        make anyone pay you. What happens here is the other half of it. When a steward
+        like in return for your tokens, and a steward says yes or no. Tokens have no financial
+        value of their own yet, so nothing is promised until a steward says yes. The agreement
+        is the village's to keep, and nothing in this software can make anyone pay you. What happens here is the other half of it. When a steward
         confirms that you have been paid, your tokens are destroyed, and they do not come back.
       </p>
 

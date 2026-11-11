@@ -438,6 +438,8 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
   describe("adopt for the moon running now", () => {
     it("offers it when the stored moon ended, and adopts onto the moon running now when the holder says so", async () => {
       const { id } = await confirmed("moon@example.test", [roleA]);
+      // Room for one more: a role with every place filled refuses an adoption (audit B3), which is not this test.
+      await q("UPDATE org_roles SET seats = 5 WHERE id = ?", [roleA]);
       await q("UPDATE open_role_proposals SET body_json = JSON_SET(body_json, '$.term', JSON_OBJECT('kind', 'moon', 'startsOn', '2020-01-01', 'endsOn', '2020-01-28')) WHERE id = ?", [id]);
       const refused = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(refused.status).toBe(409);
@@ -691,6 +693,25 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       expect(next.body.status.actsNext).toContain("Data Role");
       // Steps only: no level, no evidence, no scorer.
       expect(JSON.stringify(next.body)).not.toMatch(/strong|Heard it for|u-ia|score/i);
+    });
+
+    it("the letters that ask the applicant to look carry a working link of their own, signed for this proposal alone", async () => {
+      const { id } = await confirmed("letterlink@example.test");
+      const other = await confirmed("letterlink2@example.test");
+      const ivs = await interviews(id);
+      await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
+      await score(id, Number(ivs[0].id), IA.id, "strong");
+      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "A conversation is asked for");
+      expect(mail, "the conversation letter was sent").toBeTruthy();
+      // The audit's finding: this letter used to say the link was "in the first email".
+      const link = /https?:\/\/\S+\/application-status\/\S+/.exec(mail!.text)?.[0];
+      expect(link, "the letter carries a link").toBeTruthy();
+      const token = new URL(link!).searchParams.get("token") as string;
+      expect((await call("GET", `/api/application-status/${id}?token=${encodeURIComponent(token)}`, undefined, null)).status).toBe(200);
+      // CONTROLS: the link is for one proposal and one page. Another ref, a tampered token and a made-up one all answer 404.
+      expect((await call("GET", `/api/application-status/${other.id}?token=${encodeURIComponent(token)}`, undefined, null)).status).toBe(404);
+      expect((await call("GET", `/api/application-status/${id}?token=${encodeURIComponent(token.slice(0, -2) + "xx")}`, undefined, null)).status).toBe(404);
+      expect((await call("GET", `/api/application-status/${id}?token=a.b`, undefined, null)).status).toBe(404);
     });
 
     it("answers one 404 for a wrong token and an unknown ref", async () => {

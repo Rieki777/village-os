@@ -142,6 +142,7 @@ export const LINK_PURPOSES = [
   "recap_answer",
   "letters_confirm",
   "rsvp_next",
+  "application_status",
 ] as const;
 export type LinkPurpose = (typeof LINK_PURPOSES)[number];
 

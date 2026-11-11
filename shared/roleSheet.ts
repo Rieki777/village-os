@@ -33,7 +33,7 @@
 import { ARCHETYPE_KEYS } from "./archetypes";
 import { cssColourForCircle } from "./circleView";
 import { decidesByById, howChosenById } from "./power";
-import { COMMITMENT_LABELS, COMMITMENT_PHRASES, SHEET_WORDS, moreOpenLine, type CommitmentKey } from "./roleSheetWords";
+import { COMMITMENT_LABELS, COMMITMENT_PHRASES, SHEET_WORDS, moreOpenLine, keptByLine, type CommitmentKey } from "./roleSheetWords";
 
 // The copy deck lives in its own file and is read from here, so a host imports
 // every word the card prints from one place.
@@ -72,6 +72,8 @@ export interface SeatHolderIn {
   userId?: string | null;
   kind?: "member" | "documented";
   isAgent?: boolean;
+  /** 0374: the member who keeps an agent, by name. Only on an agent's row. */
+  keeper?: string | null;
   focus?: string | null;
   lapsed?: boolean;
   avatar?: string | null;
@@ -664,7 +666,8 @@ export function rosterFor(
     const ready = !!h.lapsed;
     const base = { key: `holder-${i}`, ready, avatar: null, pickKey: null, subIsDate: false };
     if (h.isAgent) {
-      spots.push({ ...base, kind: "agent", title: SHEET_WORDS.agent, sub: ready ? SHEET_WORDS.readyToBeRechosen : null });
+      const keeper = h.keeper && h.keeper.trim() ? h.keeper.trim() : null;
+      spots.push({ ...base, kind: "agent", title: SHEET_WORDS.agent, sub: ready ? SHEET_WORDS.readyToBeRechosen : keeper ? keptByLine(keeper) : null });
       return;
     }
     const name = h.name && h.name.trim() ? h.name.trim() : null;

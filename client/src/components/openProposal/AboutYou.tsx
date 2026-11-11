@@ -213,6 +213,17 @@ export interface ServedAboutYou {
   backgroundCheck: BackgroundCheck | null;
 }
 
+const CONSENT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+/**
+ * The consent day as `formatDay` in shared/roleSheet.ts writes it ("10 Nov 2026", local time). Written here
+ * on purpose (batch 153): importing roleSheet into this component reshuffled rollup's small-chunk merging until
+ * two lazy-only modules rode the first page, and the boot-set guard refused the build.
+ */
+function consentDay(at: string): string {
+  const t = new Date(at);
+  return Number.isNaN(t.getTime()) ? "" : `${t.getDate()} ${CONSENT_MONTHS[t.getMonth()]} ${t.getFullYear()}`;
+}
+
 export function AboutYouView({ about }: { about: ServedAboutYou | null | undefined }) {
   const { t } = useLingui();
   if (!about) return null;
@@ -224,7 +235,8 @@ export function AboutYouView({ about }: { about: ServedAboutYou | null | undefin
   ].filter(Boolean) as Array<{ label: string; text: string }>;
   if (!facts.length && !references.length && !backgroundCheck) return null;
   const consent = backgroundCheck?.consent;
-  const day = consent ? new Date(consent.at).toISOString().slice(0, 10) : "";
+  // "10 Nov 2026", the way the rest of the card writes a day, never the ISO form (audit P5).
+  const day = consent ? consentDay(consent.at) : "";
   return (
     <section aria-labelledby="op-aboutyou" className="grid gap-3" data-aboutyou="">
       <h2 id="op-aboutyou" className="text-lg font-bold text-foreground">
