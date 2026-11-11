@@ -6,7 +6,7 @@
  * (`/roles/select?archetype=<key>`, read by pages/RoleDraft.tsx). "See all
  * roles" is the other way through, and is handled by the page.
  */
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { useLingui } from "@lingui/react/macro";
@@ -67,7 +67,6 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cast.map((c, i) => {
             const picks = c.examples.slice(0, 2).map(lower);
-            const drawnTo = picks.join(` ${t({ message: "or", context: "roles page archetypes, between two examples" })} `);
             return (
               <li key={c.key} className="sel-rise flex" style={{ animationDelay: `${i * 70}ms` }}>
                 <Link
@@ -85,8 +84,16 @@ export default function ArchetypeStep({ onSeeAll, allShown }: { onSeeAll: () => 
                     {c.blurb && <span className="leading-relaxed">{c.blurb}</span>}
                     {picks.length > 0 && (
                       <span className="leading-relaxed text-muted-foreground">
-                        <span className="font-semibold text-foreground">{t({ message: "You might pick this if", context: "roles page archetypes" })}</span>{" "}
-                        {t({ message: `you are drawn to ${drawnTo}.`, context: "roles page archetypes" })}
+                        {/* The examples are the village's own words, in its own language. They sit
+                            as quoted labels after the sentence, never spliced into it, so a Spanish
+                            reader gets a whole Spanish sentence and then the village's words. */}
+                        <span className="font-semibold text-foreground">{t({ message: "You might pick this if you are drawn to:", context: "roles page archetypes, before the village's own examples" })}</span>{" "}
+                        {picks.map((p, j) => (
+                          <Fragment key={j}>
+                            {j > 0 && ` ${t({ message: "or", context: "roles page archetypes, between two examples" })} `}
+                            <q>{p}</q>
+                          </Fragment>
+                        ))}
                       </span>
                     )}
                     <span className="mt-auto inline-flex min-h-11 w-fit items-center gap-2 rounded-lg border border-notice/70 px-4 font-medium text-notice transition-colors group-hover:bg-notice group-hover:text-background">
