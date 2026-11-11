@@ -23,7 +23,7 @@ import BreathingLoader from "@/components/natural/BreathingLoader";
 import { SeatSomebody } from "@/components/power/SeatSomebody";
 import { OrgChartTab } from "@/components/admin/OrgChartTab";
 import { changedKeys, confirmLeave } from "@/lib/unsavedChanges";
-import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import SaveBar, { saveEach, type SaveResult } from "@/components/SaveBar";
 import SeasonPlanWindowFields, { type PlanWindowValue } from "@/components/admin/SeasonPlanWindowFields";
 import { AppointToRole } from "@/components/admin/AppointToRole";
 import PlayersTab from "@/components/admin/PlayersTab";
@@ -7007,6 +7007,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const [brand, setBrand] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [savingSection, setSavingSection] = useState<string | null>(null);
+  const [savedBrand, setSavedBrand] = useState<any>(null); // As the server holds it: the save bar counts against this.
   const [savedCurrency, setSavedCurrency] = useState(""); // As last stored, so the picker can say when a choice is not saved yet.
   const wizard = useWizardFacts();
   const needsSetup = useNeedsSetupObservation(password);
@@ -7014,7 +7015,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, { headers: authHeaders(password) });
       const data = await res.json();
-      setBrand(data.brand);
+      setBrand(data.brand); setSavedBrand(data.brand);
       setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
       setDefaults(data.defaults);
     } catch { toast.error("Failed to load setup"); }
@@ -7022,7 +7023,8 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
   useEffect(() => { load(); }, [load]);
 
-  const saveBrand = async (section: string, partial: any) => {
+  /** Null when it landed, the server's reason when it did not. Groups not in `partial` keep their unsaved edits. */
+  const saveBrand = async (section: string, partial: any): Promise<string | null> => {
     setSavingSection(section);
     try {
       const res = await fetch(`${API_BASE}/admin/brand`, {
@@ -7030,14 +7032,20 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify(partial),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) { setSavingSection(null); return refusal(await res.json().catch(() => ({})), "Save failed"); }
       const data = await res.json();
-      setBrand(data.brand); void refreshGameConfig();
+      setSavedBrand(data.brand); void refreshGameConfig();
+      setBrand((prev: any) => ({ ...data.brand, ...Object.fromEntries(Object.keys(prev ?? {}).filter((k) => !(k in partial)).map((k) => [k, prev[k]])) }));
       setSavedCurrency(String(data.brand?.project?.fiatCurrency ?? ""));
-      toast.success("Saved");
-    } catch { toast.error("Save failed"); }
-    setSavingSection(null);
+      setSavingSection(null);
+      return null;
+    } catch { setSavingSection(null); return "Save failed"; }
   };
+  const brandGroups = (["project", "images"] as const).filter((g) => savedBrand && brand && changedKeys(savedBrand[g] ?? {}, brand[g] ?? {}).length > 0);
+  const brandChanges = brandGroups.reduce((n, g) => n + changedKeys(savedBrand[g] ?? {}, brand[g] ?? {}).length, 0);
+  const saveBrandBar = async (): Promise<SaveResult> => (await saveEach(brandGroups.map((g) => ({
+    key: g, label: g === "project" ? "Identity" : "Pictures", run: () => saveBrand(g, { [g]: brand[g] }),
+  })))).result;
 
   const setField = (group: "project" | "currency" | "images", key: string, value: string) =>
     setBrand({ ...brand, [group]: { ...brand[group], [key]: value } });
@@ -7045,7 +7053,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const toggleStep = (key: string) => {
     const next = { ...brand.setup, [key]: !brand.setup[key] };
     setBrand({ ...brand, setup: next });
-    saveBrand("setup", { setup: next });
+    void saveBrand("setup", { setup: next }).then((why) => { if (why) toast.error(why); });
   };
 
   if (!brand || !defaults) return <div className="text-center py-12 text-gray-400">Loading...</div>;
@@ -7062,7 +7070,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
   const resetSetup = () => {
     const cleared = Object.fromEntries(SETUP_STEPS.map((s) => [s.key, false]));
     setBrand({ ...brand, setup: cleared });
-    saveBrand("setup", { setup: cleared });
+    void saveBrand("setup", { setup: cleared }).then((why) => { if (why) toast.error(why); });
   };
 
   /* `project` only. The two `currency` calls came out with the dead boxes, and
@@ -7189,9 +7197,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             writes it. The route merges rather than replaces, so an old stored
             value stays exactly where it is; nothing reads it, and this screen
             no longer adds to it. */}
-        <button onClick={() => saveBrand("identity", { project: brand.project })} disabled={savingSection === "identity"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {savingSection === "identity" ? "Saving..." : "Save identity"}
-        </button>
         <p className="text-xs text-gray-400 mt-2">Instantly updates the game layer (profile, recognition, season banner, pulse). Page marketing copy is edited under Content below.</p>
       </SetupSection>
 
@@ -7217,9 +7222,6 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
             "A tab icon has no alt text. Browsers name the tab from the page title, so there is nothing here for a screen reader to read.",
           )}
         </div>
-        <button onClick={() => saveBrand("images", { images: brand.images })} disabled={savingSection === "images"} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {savingSection === "images" ? "Saving..." : "Save pictures"}
-        </button>
         <p className="text-xs text-gray-400 mt-2">The logo, footer mark and tab icon apply live, no deploy. Alt text ships with the pictures and is what a screen reader reads aloud in place of the image. What a shared link shows (its sentence and picture) is set in Make it yours, Pages, Whole site, and falls back to your Tagline and homepage picture.</p>
         {/* Typography lives with Pictures: both are "how the village looks".
             Self-contained component — see client/src/components/TypographyPanel.tsx. */}
@@ -7318,6 +7320,7 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
           </li>
         </ol>
       </SetupSection>
+      <SaveBar count={brandChanges} onSave={saveBrandBar} onDiscard={() => setBrand((b: any) => ({ ...b, project: savedBrand.project, images: savedBrand.images }))} />
     </div>
   );
 }
