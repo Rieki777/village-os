@@ -245,15 +245,17 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
     const waiting = (await applicationsOfCandidates(pool, [String(user.id)])).filter((a) => a.status === "adopted" || a.status === "held-full");
-    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }> }> = [];
+    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat: boolean }> = [];
     if (waiting.length) {
       const conn = await pool.getConnection();
       try {
         for (const app of waiting) {
           if ((await seatingsEverHolding(conn, app.id)) > 0) continue;
           const steps = await stepsBeforeStart(conn, app, now());
-          if (!steps.length) continue;
-          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })) });
+          // Held because every seat is taken: shown even with no step left, so the card says the role starts when a seat opens (audit B3).
+          const waitsForSeat = app.status === "held-full";
+          if (!steps.length && !waitsForSeat) continue;
+          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })), waitsForSeat });
         }
       } finally {
         conn.release();

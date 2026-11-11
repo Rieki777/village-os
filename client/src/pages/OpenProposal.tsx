@@ -77,6 +77,12 @@ export interface ServedOpenProposal {
   aboutYou?: ServedAboutYou | null;
   /** The terms we offer, with the history: deciders only. */
   offer?: ServedDeciderOffer | null;
+  /** What is left before Adopt, for a decider (audit M10, B3): conversations not written up, roles with every seat taken. */
+  beforeAdopt?: {
+    conversations: Array<{ roleId: string; role: string; unheld: boolean; words: string }>;
+    seatsFull: Array<{ name: string; seats: number; taken: number }>;
+    seatsWords: string | null;
+  } | null;
   you: { mayEditTerms?: boolean; holdsThePower: boolean; own: boolean; mayAdopt: boolean; mayDecline: boolean; mayReissue: boolean; formerMember?: boolean };
 }
 
@@ -126,6 +132,8 @@ export default function OpenProposal() {
   const [note, setNote] = useState("");
   // Adopting while a setting is still being talked about asks once more (joining lane PR 4).
   const [knowsOpenTalks, setKnowsOpenTalks] = useState(false);
+  // Every seat taken: adopting is for when a seat opens, chosen on purpose (audit B3).
+  const [forASeat, setForASeat] = useState(false);
 
   const load = useCallback(async () => {
     const answer = await ask<{ proposal: ServedOpenProposal }>(base(id));
@@ -329,12 +337,19 @@ export default function OpenProposal() {
                       </p>
                     </div>
                     {p.you.mayAdopt && p.offer && <div className="mt-3"><OpenTalksWarning settings={p.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
+                    {p.you.mayAdopt && <BeforeAdopt left={p.beforeAdopt ?? null} forASeat={forASeat} onForASeat={setForASeat} />}
                     {!declining ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {p.you.mayAdopt && (
-                          <button type="button" disabled={busy || (!!p.offer?.openTalks.length && !knowsOpenTalks)} onClick={() => void act(`${base(p.id)}/adopt`, knowsOpenTalks ? { confirmOpenTalks: true } : undefined, true)} className={PRIMARY}>
+                          <button
+                            type="button"
+                            disabled={busy || (!!p.offer?.openTalks.length && !knowsOpenTalks) || !!p.beforeAdopt?.conversations.length || (!!p.beforeAdopt?.seatsFull.length && !forASeat)}
+                            aria-describedby={p.beforeAdopt && (p.beforeAdopt.conversations.length || p.beforeAdopt.seatsFull.length) ? "op-before-adopt" : undefined}
+                            onClick={() => void act(`${base(p.id)}/adopt`, { ...(knowsOpenTalks ? { confirmOpenTalks: true } : {}), ...(forASeat ? { whenASeatOpens: true } : {}) }, true)}
+                            className={PRIMARY}
+                          >
                             <Check className="h-4 w-4" aria-hidden="true" />
-                            {record ?? DECIDE_WORDS.adopt}
+                            {p.beforeAdopt?.seatsFull.length ? DECIDE_WORDS.adoptWhenASeatOpens : (record ?? DECIDE_WORDS.adopt)}
                           </button>
                         )}
                         {p.you.mayDecline && (
@@ -427,5 +442,47 @@ export default function OpenProposal() {
         )}
       </div>
     </Layout>
+  );
+}
+
+/**
+ * WHAT IS LEFT BEFORE YOU CAN ADOPT (audit M10, B3): each conversation not written up, by role,
+ * with a door to the chart when nobody holds that role; and, when every seat of a role is taken,
+ * the sentence with the seat count and the deliberate choice to adopt for when a seat opens.
+ * Adopt stays disabled until the list is clear, so it never answers a refusal the page could have shown.
+ */
+function BeforeAdopt({ left, forASeat, onForASeat }: { left: ServedOpenProposal["beforeAdopt"] | null; forASeat: boolean; onForASeat: (v: boolean) => void }) {
+  const { t } = useLingui();
+  if (!left || (!left.conversations.length && !left.seatsFull.length)) return null;
+  return (
+    <div id="op-before-adopt" className="mt-3 rounded-xl border-2 border-notice/60 bg-card p-4" data-before-adopt="">
+      <p className="font-semibold text-foreground">{DECIDE_WORDS.leftHeading}</p>
+      {left.conversations.length > 0 && (
+        <ul className="mt-2 grid gap-2 text-sm text-foreground">
+          {left.conversations.map((c) => (
+            <li key={c.roleId} data-conversation-left={c.unheld ? "unheld" : "missing"}>
+              {c.words}
+              {c.unheld && (
+                <>
+                  {" "}
+                  <Link href="/map/circles" className="font-semibold text-notice underline underline-offset-2">
+                    {DECIDE_WORDS.chartLink}
+                  </Link>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {left.seatsWords && (
+        <div className="mt-2" data-seats-full="">
+          <p className="text-sm text-foreground">{left.seatsWords}</p>
+          <label className="mt-2 flex min-h-11 items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" checked={forASeat} onChange={(e) => onForASeat(e.target.checked)} className="size-5" />
+            {t`Adopt them for when a place opens`}
+          </label>
+        </div>
+      )}
+    </div>
   );
 }

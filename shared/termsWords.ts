@@ -107,3 +107,40 @@ export function notesAsText(a: TermAnswers): string {
     .map((k) => `${TERM_LABELS[k]}: ${a[k]?.note || "let's talk"}`)
     .join("\n");
 }
+
+/** The settings group each of the eight wordings belongs to in a seat's settings (`shared/seatSettings.ts`). Goals are the `quests` group. */
+export const WORD_GROUP: Record<TermKey, string> = {
+  term: "term",
+  clocks: "clocks",
+  rhythm: "rhythm",
+  allowance: "allowance",
+  bonus: "bonus",
+  goals: "quests",
+  scoreboard: "scoreboard",
+  ending: "ending",
+};
+
+/**
+ * THE AGREED WORDS INTO THE ROWS A HOLDER ALIGNS WITH (audit B2, 11 Nov 2026). The rows are the
+ * settings' own (`settingsWords`), which read only the structured groups, so a setting agreed in
+ * words read "We'll fill this together" and the commitment under Clocks read "Not set". Each
+ * group with agreed words becomes set: its wording is the headline when the group had none, or
+ * its first line otherwise, and the commitment rides under Clocks. Pure; the rows are copied.
+ */
+export function withAgreedWords<R extends { group: string; set: boolean; headline: string; lines: string[] }>(
+  rows: readonly R[],
+  words: TermsWords | null | undefined,
+  commitmentPct: number | null | undefined,
+  notSet: string,
+): R[] {
+  return rows.map((row) => {
+    const key = TERM_KEYS.find((k) => WORD_GROUP[k] === row.group);
+    const said = key ? words?.[key]?.trim() : "";
+    const pct = row.group === "clocks" && isCommitment(commitmentPct) ? commitmentWords(commitmentPct) : "";
+    const extra = [said, pct].filter((x): x is string => !!x);
+    if (!extra.length) return row;
+    const lines = [...extra, ...(row.set ? row.lines : [])];
+    const keep = row.set && row.headline !== notSet;
+    return { ...row, set: true, headline: keep ? row.headline : (lines.shift() as string), lines };
+  });
+}

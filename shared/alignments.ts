@@ -24,7 +24,8 @@
  */
 import { opsPartner } from "./roleProposalHonesty";
 import { seatList } from "./seatApplications";
-import { MONEY_GROUPS, settingsWords, type SeatSettings } from "./seatSettings";
+import { MONEY_GROUPS, NOT_SET, settingsWords, type SeatSettings } from "./seatSettings";
+import { withAgreedWords } from "./termsWords";
 
 /**
  * The subjects a text can be about. Seat terms, and since PR9 the membership
@@ -131,7 +132,8 @@ export interface RenderedText {
 export function renderSeatTermsText(seatNames: readonly string[], settings: SeatSettings, partner?: string | null): RenderedText {
   const title = `Terms for ${seatList(seatNames)}`.slice(0, 200);
   const who = opsPartner(partner);
-  const rows = settingsWords(settings);
+  // The words agreed for each setting and the commitment are part of what is signed (audit B2).
+  const rows = withAgreedWords(settingsWords(settings), settings.words, settings.clocks?.commitmentPct, NOT_SET);
   const set = rows.filter((r) => r.set);
   const unset = rows.filter((r) => !r.set);
   const lines = [

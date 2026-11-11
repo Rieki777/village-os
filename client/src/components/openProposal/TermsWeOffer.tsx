@@ -6,12 +6,16 @@
  *
  * Drawn in the profile's look (docs/DESIGN_RULE.md): the semantic tokens only, panels and tiles,
  * a gold main act, 44px targets. Used by the open proposal page and the member door's application page.
+ *
+ * TYPED WORDS ARE NEVER LOST QUIETLY (audit M5): every unsaved wording or commitment counts on the
+ * house save bar ("1 change not saved yet · Revision 2"), which also guards leaving the page.
  */
 import { useState } from "react";
 import { useLingui } from "@lingui/react/macro";
 import { COMMITMENT_CHOICES } from "@shared/termsWords";
 import { OFFER_WORD_MAX } from "@shared/counterOffer";
 import { gameFetch } from "@/lib/gameApi";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
 
 export interface ServedDeciderOffer {
   revision: number;
@@ -56,7 +60,7 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
   const commitmentEdit = pct !== "" && Number(pct) !== offer.ourCommitment;
   const dirty = edits.length > 0 || commitmentEdit;
 
-  const save = async () => {
+  const save = async (): Promise<SaveResult> => {
     setBusy(true);
     setSaid(null);
     try {
@@ -71,18 +75,26 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setSaid({ ok: false, text: String(data?.message ?? data?.error ?? t`That did not save. Try again.`) });
-      } else {
-        setWords({});
-        setPct("");
-        setSaid({ ok: true, text: t`Saved. We told the applicant.` });
-        onSaved();
+        const reason = String(data?.message ?? data?.error ?? t`That did not save. Try again.`);
+        setSaid({ ok: false, text: reason });
+        return { ok: false, reason };
       }
+      setWords({});
+      setPct("");
+      setSaid({ ok: true, text: t`Saved. We told the applicant.` });
+      onSaved();
+      return { ok: true };
     } catch {
-      setSaid({ ok: false, text: t`That did not save. Try again.` });
+      const reason = t`That did not save. Try again.`;
+      setSaid({ ok: false, text: reason });
+      return { ok: false, reason };
     } finally {
       setBusy(false);
     }
+  };
+  const discard = () => {
+    setWords({});
+    setPct("");
   };
 
   const choiceWords = (c: "accept" | "talk") => (c === "accept" ? t({ message: `I accept`, context: "reviewer's terms panel for a proposal" }) : t({ message: `Let's talk`, context: "reviewer's terms panel for a proposal" }));
@@ -165,6 +177,15 @@ export default function TermsWeOffer({ offer, mayEdit, savePath, onSaved }: { of
             </p>
           )}
         </div>
+      )}
+
+      {mayEdit && (
+        <SaveBar
+          count={edits.length + (commitmentEdit ? 1 : 0)}
+          onSave={save}
+          onDiscard={discard}
+          what={t({ message: `Revision ${offer.revision + 1} of the terms`, context: "save bar, the counter-offer being saved" })}
+        />
       )}
 
       <details className="mt-5" data-terms-history="">
