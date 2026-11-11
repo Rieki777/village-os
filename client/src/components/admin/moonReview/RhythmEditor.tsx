@@ -10,6 +10,8 @@
 import { useEffect, useState } from "react";
 import { ADMIN_WORDS } from "@shared/moonRecap";
 import type { RhythmDoc } from "@shared/moonRhythm";
+import SaveBar from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { buttonClass, inputClass, labelClass, primaryClass, useSettingsDocument } from "./useSettingsDocument";
 
 const W = ADMIN_WORDS.rhythm;
@@ -75,11 +77,9 @@ export default function RhythmEditor({ password }: { password: string }) {
       </section>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={primaryClass} disabled={saving} onClick={() => void save(fromDraft(d))}>
-          {saving ? ADMIN_WORDS.saving : ADMIN_WORDS.save}
-        </button>
         {message && <p role={message.ok ? "status" : "alert"} className="text-sm text-foreground">{message.text}</p>}
       </div>
+      <SaveBar count={docChangeCount(state.kind === "ready" ? JSON.stringify(toDraft(state.doc)) : null, JSON.stringify(d))} onSave={() => save(fromDraft(d))} onDiscard={() => setD(toDraft((state as { doc: RhythmDoc }).doc))} what="the moon rhythm" />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { announceThemeChange } from "@/lib/liveTheme";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
 import { FONT_CATALOG, offeringsFor, type FontRole } from "@shared/fontCatalog";
 
 /**
@@ -37,6 +39,8 @@ const ROLE_FIELDS: Record<FontRole, "fontDisplay" | "fontBody" | "fontAccent"> =
   accent: "fontAccent",
 };
 
+const FONT_KEYS = ["fontDisplay", "fontBody", "fontAccent"] as const;
+
 interface ThemeFields {
   fontDisplay?: string;
   fontBody?: string;
@@ -48,7 +52,8 @@ interface ThemeFields {
 
 export default function TypographyPanel({ password }: { password: string }) {
   const [theme, setTheme] = useState<ThemeFields | null>(null);
-  const [saving, setSaving] = useState(false);
+  /** The three font fields as the server last had them, so the bar knows what changed. */
+  const [saved, setSaved] = useState<ThemeFields | null>(null);
   const [uploading, setUploading] = useState(false);
   const [family, setFamily] = useState("");
   const [ack, setAck] = useState(false);
@@ -59,6 +64,7 @@ export default function TypographyPanel({ password }: { password: string }) {
       const res = await fetch("/api/admin/brand", { headers: { Authorization: `Bearer ${password}` } });
       const data = await res.json();
       setTheme(data.brand?.theme ?? {});
+      setSaved(data.brand?.theme ?? {});
     } catch {
       toast.error("Could not load typography");
     }
@@ -72,8 +78,7 @@ export default function TypographyPanel({ password }: { password: string }) {
   // Look panel beside it had saved since, so a founder who saved their colour
   // and then their fonts lost the colour without a word (found in production, 2026-10-14).
   // The Look panel already sends only its own fields; this one now does too.
-  const save = async (next: ThemeFields) => {
-    setSaving(true);
+  const save = async (next: ThemeFields): Promise<SaveResult> => {
     try {
       const res = await fetch("/api/admin/brand", {
         method: "PUT",
@@ -82,15 +87,15 @@ export default function TypographyPanel({ password }: { password: string }) {
           theme: { fontDisplay: next.fontDisplay ?? "", fontBody: next.fontBody ?? "", fontAccent: next.fontAccent ?? "" },
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) return { ok: false, reason: "The server did not accept the typography." };
       const data = await res.json();
       setTheme(data.brand?.theme ?? next);
+      setSaved(data.brand?.theme ?? next);
       announceThemeChange();
-      toast.success("Typography saved. Open pages re-typeset now");
+      return { ok: true };
     } catch {
-      toast.error("Save failed");
+      return { ok: false, reason: "The save could not reach the server." };
     }
-    setSaving(false);
   };
 
   const upload = async () => {
@@ -174,13 +179,12 @@ export default function TypographyPanel({ password }: { password: string }) {
         })}
       </div>
 
-      <button
-        onClick={() => save(theme)}
-        disabled={saving}
-        className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50"
-      >
-        {saving ? "Saving..." : "Save typography"}
-      </button>
+      <SaveBar
+        count={changedKeys(saved as Record<string, unknown>, theme as Record<string, unknown>, FONT_KEYS).length}
+        onSave={() => save(theme)}
+        onDiscard={() => setTheme(saved)}
+        what="the typography"
+      />
 
       <div className="border-t border-gray-100 mt-6 pt-5">
         <h4 className="text-sm font-medium text-gray-900 mb-1">Bring your own font</h4>

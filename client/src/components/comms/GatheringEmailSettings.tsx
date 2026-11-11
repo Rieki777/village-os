@@ -14,6 +14,8 @@
  */
 import { useEffect, useState } from "react";
 import { authToken } from "@/lib/gameApi";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
 import {
   REMINDER_CHOICES,
   reminderLabel,
@@ -50,7 +52,6 @@ export default function GatheringEmailSettings({ eventId, token, manages }: { ev
   const [minutes, setMinutes] = useState<number[]>([]);
   const [guests, setGuests] = useState<GuestSetting>("default");
   const [host, setHost] = useState<string>("");
-  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
@@ -87,9 +88,21 @@ export default function GatheringEmailSettings({ eventId, token, manages }: { ev
   const toggleMinute = (m: number) =>
     setMinutes((list) => (list.includes(m) ? list.filter((x) => x !== m) : sortedReminders([...list, m])));
 
-  const save = async () => {
-    setBusy(true);
+  /** What the server holds now, in the same shape as the form, so the bar counts by value. */
+  const held = view
+    ? {
+        mode: view.reminders.mode,
+        minutes: view.reminders.mode === "custom" ? view.reminders.minutes : view.effective.reminderMinutes,
+        guests: view.guests,
+        host: view.hostUserId ?? "",
+      }
+    : null;
+  const formNow = { mode, minutes: mode === "custom" ? minutes : held?.minutes ?? [], guests, host };
+  const changed = held ? changedKeys<Record<string, unknown>>(held, formNow).length : 0;
+
+  const save = async (): Promise<SaveResult> => {
     setNote(null);
+    if (mode === "custom" && minutes.length === 0) return { ok: false, reason: "Pick at least one reminder time, or choose another option." };
     const reminders: ReminderSetting = mode === "custom" ? { mode, minutes } : { mode };
     try {
       const r = await fetch(`/api/events/${encodeURIComponent(eventId)}/comms`, {
@@ -100,12 +113,12 @@ export default function GatheringEmailSettings({ eventId, token, manages }: { ev
       const d = await r.json().catch(() => ({}));
       if (r.ok && d?.settings) {
         take(d.settings);
-        setNote({ ok: true, text: "Saved" });
-      } else setNote({ ok: false, text: d?.error ?? "That didn't save. Try again." });
+        return { ok: true };
+      }
+      return { ok: false, reason: d?.error ?? "That didn't save. Try again." };
     } catch {
-      setNote({ ok: false, text: "That didn't save. Try again." });
+      return { ok: false, reason: "That didn't save. Try again." };
     }
-    setBusy(false);
   };
 
   const villageTimes = view?.village.reminderMinutes.length ? view.village.reminderMinutes.map(reminderLabel).join(", ") : "none";
@@ -183,14 +196,7 @@ export default function GatheringEmailSettings({ eventId, token, manages }: { ev
                 </select>
                 <p className="mt-0.5 text-xs text-muted-foreground">The host is asked for the recap after it ends.</p>
               </div>
-              <button
-                type="button"
-                onClick={save}
-                disabled={busy || (mode === "custom" && minutes.length === 0)}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-deep text-white disabled:opacity-50"
-              >
-                {busy ? "Saving..." : "Save email settings"}
-              </button>
+              <SaveBar count={changed} onSave={save} onDiscard={() => view && take(view)} what="the gathering email settings" />
             </>
           )}
           {note && (

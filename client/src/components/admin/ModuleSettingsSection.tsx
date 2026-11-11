@@ -44,6 +44,7 @@ import {
   ToolsCategoriesEditor,
 } from "@/components/admin/ModuleConfigPanels";
 import SaberraConfigPanel from "@/components/admin/SaberraConfigPanel";
+import SaveBar, { saveEach, type SaveResult } from "@/components/SaveBar";
 
 /** A variable row as GET /api/admin/variables sends it. */
 interface Dial {
@@ -271,6 +272,41 @@ export default function ModuleSettingsSection({
     }
   };
 
+  /** Every dial typed into and not yet saved: the floating save bar's count. */
+  const changedDials = (dials ?? []).filter((v) => drafts[v.key] !== undefined && drafts[v.key] !== v.value);
+  /**
+   * One Save for every dial changed here, through the same write route a single
+   * dial used. A refusal stays on the dial it refused and keeps its typed
+   * value; the ones that landed let go.
+   */
+  const saveAll = async (): Promise<SaveResult> => {
+    setSaving("all");
+    const { result, failedKeys } = await saveEach(changedDials.map((v) => ({
+      key: v.key,
+      label: v.label,
+      run: async () => {
+        const res = await fetch(`${API_BASE}/admin/variables/${encodeURIComponent(v.key)}`, {
+          method: "PUT",
+          headers: authHeaders(password, { "Content-Type": "application/json" }),
+          body: JSON.stringify({ value: drafts[v.key] }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setRefused((r) => { const n = { ...r }; delete n[v.key]; return n; });
+          return null;
+        }
+        const sentence = refusal(d, "That value was refused");
+        setRefused((r) => ({ ...r, [v.key]: sentence }));
+        return sentence;
+      },
+    })));
+    setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([k]) => failedKeys.has(k))));
+    setSaving(null);
+    if (result.ok || (result.failed?.length ?? 0) < changedDials.length) window.dispatchEvent(new Event("module:saved"));
+    await load();
+    return result;
+  };
+
   const ConfigPanel = CONFIG_PANELS[moduleId];
   const elsewhere = ELSEWHERE[moduleId];
   const off = lifecycle === "off";
@@ -464,14 +500,6 @@ export default function ModuleSettingsSection({
                         className={`${inputCls} w-40`}
                       />
                     )}
-                    <button
-                      type="button"
-                      onClick={() => save(v, draft)}
-                      disabled={!dirty || saving === v.key}
-                      className={saveCls}
-                    >
-                      {saving === v.key ? "Saving…" : "Save"}
-                    </button>
                     {asking && !dirty && (
                       /*
                        * THE ONLY WAY TO AGREE WITH A DEFAULT.
@@ -545,6 +573,7 @@ export default function ModuleSettingsSection({
           )}
         </>
       )}
+      <SaveBar count={changedDials.length} onSave={saveAll} onDiscard={() => setDrafts({})} what={moduleName} />
     </div>
   );
 }
