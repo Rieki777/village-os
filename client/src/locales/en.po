@@ -627,6 +627,11 @@ msgstr "Readings and tools picked for {name} are not built yet."
 msgid "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 msgstr "The village authorised one copy for the steward this vote names. It has not been downloaded yet."
 
+#: client/src/pages/ProposeARole.tsx
+msgctxt "open proposal sent"
+msgid "Check {sentTo}. We sent a link to confirm it's you. Your proposal reaches the village once you open it."
+msgstr "Check {sentTo}. We sent a link to confirm it's you. Your proposal reaches the village once you open it."
+
 #: client/src/components/journey/EconomicsView.tsx
 msgctxt "settlement table column"
 msgid "Acks"
@@ -4836,6 +4841,10 @@ msgstr "Opening funding rounds"
 msgctxt "open proposal: an agent's proposal"
 msgid "What it is"
 msgstr "What it is"
+
+#: client/src/pages/RoleProposal.tsx
+msgid "Members sign in here to propose the roles they will hold this moon."
+msgstr "Members sign in here to propose the roles they will hold this moon."
 
 #: client/src/components/review/SeraBulk.tsx
 msgctxt "sera answers"
@@ -11008,6 +11017,10 @@ msgstr "{0} of {1} held"
 #: client/src/components/governance/TermsEight.tsx
 msgid "We'll set this together."
 msgstr "We'll set this together."
+
+#: client/src/pages/RoleProposal.tsx
+msgid "Propose a role for this moon without an account"
+msgstr "Propose a role for this moon without an account"
 
 #: client/src/components/admin/AiAgentsApprovalPanel.tsx
 msgid "The approval of AI agents could not be read. Reload to try again."
