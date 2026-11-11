@@ -207,10 +207,10 @@ export default function Register() {
 
   return (
     <Layout>
-      <div className={`${WORLD} py-16`}>
+      <div className={`${WORLD} py-8 sm:py-16`}>
         <div className="container max-w-2xl">
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="text-center mb-12">
+            <div className="text-center mb-6 sm:mb-12">
               <div className="flex justify-center mb-4">
                 <div className={`${RING} size-16`}>
                   <Heart className="size-7" aria-hidden="true" />
@@ -402,10 +402,18 @@ export default function Register() {
               </div>
               )}
 
-              <button disabled={loading} type="submit" className={`${BTN_PRIMARY} w-full`}>
-                {loading ? "Creating your account…" : "Create account"}
-                {!loading && <ArrowRight className="size-5" aria-hidden="true" />}
-              </button>
+              {/*
+                On a phone the act rides along at the bottom of the screen while
+                the form is in view, within a thumb's reach from the first
+                screen. From sm up it sits in the form's flow, where a desktop
+                reader finishes the fields and finds it.
+              */}
+              <div className="sticky bottom-3 z-10 sm:static">
+                <button disabled={loading} type="submit" className={`${BTN_PRIMARY} w-full shadow-sm sm:shadow-none`}>
+                  {loading ? "Creating your account…" : "Create account"}
+                  {!loading && <ArrowRight className="size-5" aria-hidden="true" />}
+                </button>
+              </div>
 
               {/*
                 Joining with Google, beside the form and never in place of it.

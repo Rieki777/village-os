@@ -352,7 +352,7 @@ export default function StewardJourney() {
               </p>
               <div className="flex flex-wrap items-center justify-center gap-4">
                 <BandButton section={page.rights} targets={targets} />
-                <Link href="/exit-policy" className={`text-sm ${LINK}`}>
+                <Link href="/exit-policy" className={`inline-flex min-h-11 items-center text-sm ${LINK}`}>
                   <Trans>How leaving a role works</Trans>
                 </Link>
               </div>

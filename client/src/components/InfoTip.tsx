@@ -69,7 +69,7 @@
  * crowdpool pieces), so the two tooltip families read as one voice.
  */
 import { decayReachSentence } from "@shared/tokenScale";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 const PLAQUE_MAX_W = 264;
 
@@ -90,6 +90,23 @@ const PLAQUE_MAX_W = 264;
 export const WORDED_TAP = "relative py-3.5 -my-3.5 before:absolute before:inset-y-0 before:-inset-x-2.5 before:content-['']";
 /** How far WORDED_TAP grows the box on each side vertically, so the plaque still opens beside the words. */
 const WORDED_PAD_Y = 14;
+/** The smallest box a thumb is asked to hit, in CSS pixels (WCAG 2.5.5). */
+export const TAP_MIN = 44;
+
+/**
+ * How far a worded trigger narrower than TAP_MIN grows on each side, and the
+ * style that does it. The rehearsal (11 Nov 2026) measured "role" at 35px wide
+ * on /roles at 390: WORDED_TAP's inset widens the hit area, and a measurement
+ * of the button's own box cannot see a pseudo-element. Padding with an equal
+ * negative margin grows the box and gives the space back, so the words stay
+ * where they were. A word that short never needs to wrap, and `nowrap` is what
+ * stops the padding wrapping it one letter per line.
+ */
+export function widenStyle(naturalWidth: number): React.CSSProperties | undefined {
+  if (!(naturalWidth > 0) || naturalWidth >= TAP_MIN) return undefined;
+  const side = Math.ceil((TAP_MIN - naturalWidth) / 2);
+  return { paddingLeft: side, paddingRight: side, marginLeft: -side, marginRight: -side, whiteSpace: "nowrap" };
+}
 
 interface InfoTipProps {
   /** The plain mechanics, one to three short sentences. Text only. */
@@ -120,6 +137,22 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
   // ignores mouseleave and closes on outside tap, Escape, or a second tap.
   const pinned = useRef(false);
   const id = useId();
+  // A short worded trigger's natural width, measured once it is laid out.
+  const [natural, setNatural] = useState(0);
+  useLayoutEffect(() => {
+    const el = triggerRef.current;
+    if (!padded || !el) return;
+    const measure = () => {
+      const pad = (parseFloat(el.style.paddingLeft) || 0) * 2;
+      setNatural(el.getBoundingClientRect().width - pad);
+    };
+    measure();
+    let live = true;
+    document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+    };
+  }, [padded, children]);
 
   const place = () => {
     const el = triggerRef.current;
@@ -199,6 +232,7 @@ export default function InfoTip({ tip, children, label, className = "", triggerC
         onMouseLeave={() => {
           if (!pinned.current) setOpen(false);
         }}
+        style={padded ? widenStyle(natural) : undefined}
         className={
           bare
             // `before:-inset-1.5` grows the TOUCH TARGET and nothing else.

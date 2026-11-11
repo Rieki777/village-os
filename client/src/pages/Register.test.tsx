@@ -64,6 +64,15 @@ describe("Register", () => {
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
   });
 
+  it("keeps the act within a thumb's reach on a phone and in the form's flow from sm up (rehearsal: 983px down at 390)", async () => {
+    renderRegister();
+    const submit = await screen.findByRole("button", { name: /create account/i });
+    const holder = submit.parentElement!;
+    expect(holder.className.split(/\s+/)).toEqual(expect.arrayContaining(["sticky", "bottom-3", "sm:static"]));
+    // Inside the form, so the pin ends where the form ends and the Google door below never sits under it.
+    expect(holder.closest("form")).not.toBeNull();
+  });
+
   it("refuses to submit when the passwords do not match, without calling register", async () => {
     const user = userEvent.setup();
     renderRegister();

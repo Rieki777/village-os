@@ -183,7 +183,8 @@ export class Walk {
     return page
       .evaluate(async (rules) => {
         const r = await window.axe.run(document, { runOnly: { type: "rule", values: rules } });
-        return r.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length }));
+        // The first few nodes' selectors, so a finding names where to look.
+        return r.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 3).map((n) => n.target.join(" ")) }));
       }, AXE_RULES)
       .catch((e) => [{ id: "axe-error", impact: "unknown", nodes: 0, error: String(e).slice(0, 160) }]);
   }
