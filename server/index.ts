@@ -1513,6 +1513,8 @@ const circlesRepo = dbCollection(getPool(), {
     { js: "status", db: "status" },
     { js: "order", db: "sort_order", kind: "int" },
     { js: "isExample", db: "is_example", kind: "bool" },
+    // 0372: the anchor mark. In the spec so replaceAll does not reset it.
+    { js: "isAnchor", db: "is_anchor", kind: "bool" },
     // 0083: how this circle decides. In the spec for the same reason
     // grownFromOrgRoleId is: replaceAll re-INSERTs exactly these columns, so
     // leaving them out would reset every circle's declared method on the next

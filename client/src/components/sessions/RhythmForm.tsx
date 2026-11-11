@@ -13,6 +13,8 @@
  * field reads the room's own sizes (44px), and the words come from
  * shared/sessionRhythm.ts.
  */
+import type { PickerCircle } from "@shared/circlePicker";
+import CirclePicker from "@/components/circles/CirclePicker";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SESSION_LIMITS } from "@shared/sessions";
 import { RHYTHM_COPY, RHYTHM_LIMITS, WEEKDAYS, addDays, villageKey, type RhythmInput } from "@shared/sessionRhythm";
@@ -32,7 +34,7 @@ function howOftenOf(r: RhythmInput | null): HowOften {
 export interface RhythmFormProps {
   idBase: string;
   /** The circles this person may set a rhythm for. */
-  circles: { id: string; name: string }[];
+  circles: PickerCircle[];
   /** Changing an existing rhythm: its circle, fixed, and the rhythm as it is. */
   fixedCircleId?: string;
   initial?: RhythmInput | null;
@@ -91,16 +93,7 @@ export default function RhythmForm({ idBase, circles, fixedCircleId, initial, la
           <label htmlFor={`${idBase}-circle`} className={LABEL}>
             {RHYTHM_COPY.circleLabel}
           </label>
-          <select id={`${idBase}-circle`} autoFocus className={`mt-1 ${INPUT}`} value={circleId} onChange={(e) => setCircleId(e.target.value)}>
-            <option value="" disabled>
-              {RHYTHM_COPY.circleChoose}
-            </option>
-            {circles.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <CirclePicker id={`${idBase}-circle`} className={`mt-1 ${INPUT}`} circles={circles} value={circleId} onChange={setCircleId} placeholder={RHYTHM_COPY.circleChoose} autoDefault />
         </div>
       )}
       <div>

@@ -184,6 +184,11 @@ export function register(app: Express, deps: Deps): void {
       const refused = parentingRefusal(all as any[], merged.id, merged.parentCircleId);
       if (refused) return res.status(400).json(refused);
     }
+    // 0372: one anchor at most. Marking this circle clears the mark from the others.
+    if (req.body?.isAnchor !== undefined) {
+      merged.isAnchor = req.body.isAnchor === true;
+      if (merged.isAnchor) for (const other of all as any[]) if (other.id !== merged.id) other.isAnchor = false;
+    }
     all[idx] = { ...merged, aliases };
     await circlesRepo.replaceAll(all);
     res.json({ ...all[idx], ...(await onCircleStatusChange(getPool(), all[idx], wasStatus, adminActor(req)?.id ?? null, listBudgets)) });

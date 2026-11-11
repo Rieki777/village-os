@@ -70,6 +70,7 @@
  */
 import type { Express, NextFunction, Request, Response } from "express";
 import { GAME_CONFIG } from "../../shared/gameConfig";
+import { anchorCircleId, circleStanding } from "../../shared/circlePicker";
 import { isAdmitted } from "../lib/admission";
 import type { AppDeps } from "../lib/appDeps";
 import { recordFeedback } from "../lib/feedback";
@@ -241,11 +242,14 @@ export function register(app: Express, deps: Deps): void {
   };
 
   /** The circles a session can belong to: live ones, never a dormant circle or a standing example. */
-  const circles = (): { id: string; name: string }[] =>
-    (circlesRepo.all() as Array<{ id?: unknown; name?: unknown; status?: unknown; isExample?: unknown }>)
-      .filter((c) => typeof c?.id === "string" && c.id && c.status !== "dormant" && !c.isExample)
-      .map((c) => ({ id: String(c.id), name: String(c.name ?? c.id) }))
+  const circles = (): { id: string; name: string; status: string; anchor: boolean }[] => {
+    const rows = circlesRepo.all() as Array<{ id?: unknown; name?: unknown; status?: unknown; isExample?: unknown; isAnchor?: unknown; parentCircleId?: unknown }>;
+    const anchor = anchorCircleId(rows.map((c) => ({ id: String(c.id ?? ""), name: String(c.name ?? ""), isAnchor: !!c.isAnchor, parentCircleId: c.parentCircleId ? String(c.parentCircleId) : null, isExample: !!c.isExample })));
+    return rows
+      .filter((c) => typeof c?.id === "string" && c.id && circleStanding(c.status as string) !== "hidden" && !c.isExample)
+      .map((c) => ({ id: String(c.id), name: String(c.name ?? c.id), status: String(c.status ?? "active"), anchor: String(c.id) === anchor }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  };
   const circleName = (id: string | null): string | null => {
     if (!id) return null;
     const c = (circlesRepo.all() as Array<{ id?: unknown; name?: unknown }>).find((x) => x?.id === id);
