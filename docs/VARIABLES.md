@@ -3489,7 +3489,7 @@ What a role whose card names no track reads as: contractor, volunteer, employee 
 
 ### A role needs a complete card before anyone can apply
 
-On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, rough hours, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
+On, a role whose card is not complete shows "Being written" in place of Apply, and the open form leaves it out. A card is complete when its aim, what it decides on, what it answers for, commitment, track, reward type, term, a village goal, selection criteria and interviewing roles are written, and, for a paid role, a pay range is on offer. Off, Apply shows on every open role as before.
 
 | Fact | Value |
 | --- | --- |

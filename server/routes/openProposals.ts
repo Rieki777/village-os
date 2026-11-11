@@ -74,6 +74,7 @@ import { effectiveLifecycle } from "../lib/modules";
 import { listOrgRoles } from "../lib/orgChart";
 import { singlePublicAddress } from "../lib/publicAddress";
 import { registerJob } from "../lib/scheduler";
+import { clearAboutYouDecidedBefore } from "../repos/seatApplications";
 import { accountFor, arrivalFor, confirmAndAsk, describeFor, tellTheCircle } from "../lib/openProposalDecide";
 import { whenInviteDescribed, whenInvitedArrives } from "../lib/inviteDoor";
 import { alignAtApplication, carryToAccount, type SigningDoor } from "../lib/applicationMembership";
@@ -87,13 +88,17 @@ import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposal
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
 import { boolVar, numberVar } from "../lib/variables";
+import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
+import { wordsIn } from "../../shared/applicantWords";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
 import * as store from "../repos/openProposals";
 import { villageCircles } from "../repos/roleProposals";
 import { activeClock } from "../lib/gratitude-cycles";
-import { isTermMode, moonTermFor, moonTermWords, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
+import { isTermMode, moonTermFor, type OpenProposalTerm, type OpenProposalTermMode } from "../../shared/openProposalTerm";
 import { isListed } from "../../shared/roleListing";
 import { gateOf } from "../lib/roleCardProjection";
+import { publicTermsOf } from "../../shared/seatTermsOffer";
+import { writtenKeys } from "../../shared/termsWords";
 import { ATTACHMENT_WORDS, PROPOSAL_FILES_MAX, PROPOSAL_FILE_MAX_BYTES } from "../../shared/proposalAttachments";
 import { checkProposalFiles, removeProposalFiles, sweepProposalFiles, writeProposalFiles, type UploadedFile } from "../lib/proposalFiles";
 
@@ -231,6 +236,10 @@ export function register(app: Express, deps: Deps): void {
         accountabilities: Array.isArray(r.accountabilities) ? r.accountabilities.map((a: unknown) => String(a ?? "").trim()).filter(Boolean) : [],
         whyItMatters: r.whyItMatters ?? null,
         timeCommitment: (r as any).timeCommitment ?? null,
+        // The role's suggested wording for the eight settings and the commitment it asks (joining lane PR 3). Words only: no other term leaves here.
+        terms: publicTermsOf(r.termsOffer),
+        // A role always background-checked (0370): the form says a check happens whatever the references say.
+        alwaysChecked: r.alwaysChecked === true,
         // The conversations in the role's order, as its public card shows them (role journey L5), so the
         // form and the board can say what happens next (role audit, 10 Nov 2026). The booking link is
         // not here: it is offered once the address is confirmed (L6).
@@ -319,13 +328,18 @@ export function register(app: Express, deps: Deps): void {
     const season = t.season;
     const roles = await offered();
     const outcomes = new Map(roles.map((r) => [r.id, r.accountabilities]));
+    const alwaysChecked = new Set(roles.filter((r) => r.alwaysChecked).map((r) => r.id));
+    const termsOf = new Map(roles.map((r) => [r.id, r.terms]));
     const parsed = parseOpenProposal(body, {
+      writtenTerms: (ids) => writtenKeys(ids.map((id) => termsOf.get(id))),
       roleIds: new Set(roles.map((r) => r.id)),
       address: singlePublicAddress,
       accountabilitiesOf: (id) => outcomes.get(id) ?? [],
       goalIds: new Set(t.goals.map((g) => g.id)),
       // A goal's date must fall in this moon (shared/proposalGoals.ts).
       today: new Date().toISOString().slice(0, 10),
+      alwaysChecked: (id) => alwaysChecked.has(id),
+      now: now(),
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).
@@ -351,7 +365,9 @@ export function register(app: Express, deps: Deps): void {
       if (!asked || asked.letterVersion !== letter.version) return res.status(409).json({ error: LETTER_WORDS.changed, field: "membership", letter });
       membership = asked;
     }
-    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}) };
+    // The language their emails come in: chosen once, here, by the rule in shared/applicantLanguage.ts.
+    const locale = await languageForNewProposal({ getPool, members: deps.members }, { clientLocale: body.locale, email, acceptLanguage: req.headers["accept-language"] });
+    const proposal = { ...parsed.value.body, ...(card ? { card } : {}), ...(t.term ? { term: t.term } : {}), ...(membership ? { membership } : {}), locale };
     const emailKey = emailKeyOf(email);
     if (await overLimit(`open-proposal:email:${limiterAddressKey(emailKey)}`, 3, 24 * 60 * 60_000)) return res.status(429).json({ error: OPEN_WORDS.tooMany });
     // The last gate before an email goes: the village's overall hourly cap on confirmations.
@@ -376,7 +392,8 @@ export function register(app: Express, deps: Deps): void {
       village: projectName(),
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
-      ...(t.term ? { when: moonTermWords(t.term) } : {}),
+      lang: locale,
+      ...(t.term ? { when: wordsIn(locale).confirm.thisMoon(wordsIn(locale).day(t.term.startsOn), wordsIn(locale).day(t.term.endsOn)) } : {}),
     });
     const sent = await postEmail({
       idempotencyKey: `open-proposal:${id}:confirm`,
@@ -442,18 +459,15 @@ export function register(app: Express, deps: Deps): void {
     if (confirmed.review?.statusToken) {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
-        const text = `Your proposal is with the village. Follow where it is, who acts next and by when:
-
-${site()}${statusPath}
-
-${replyPromise(numberVar("org.applicant_reply_days"))} Keep this link to yourself: it is how we know it is you.`;
+        const lang = languageOf(confirmed.proposal);
+        const text = wordsIn(lang).statusEmail.text(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")));
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: "Where your proposal is",
+            subject: wordsIn(lang).statusEmail.subject,
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
@@ -583,10 +597,12 @@ export async function tidyOpenProposals(pool: Pool, at: Date, fileDir?: string):
     if (!invite || invite.usedByUserId) continue;
     if (await store.anonymiseOpenProposal(pool, p.id, at)) anonymised += 1;
   }
+  // The member door's applications lose the same three sections at the same age (withdrawn or not adopted).
+  const doorCleared = await clearAboutYouDecidedBefore(pool, cutoff);
   // Scores and conversation notes follow the application's retention (role journey L5): cleared with the name and address.
   const cleared = await clearReviewOf(pool, await refsDueForClearing(pool, cutoff), at);
   if (cleared > 0) console.log(`[open-proposals] ${cleared} reviews cleared with their anonymised applications`);
   // Files follow the row (Rye, 10 Nov 2026): a deleted or anonymised proposal keeps none.
   const files = fileDir ? await sweepProposalFiles(fileDir, (ids) => store.proposalsKeepingFiles(pool, ids)) : 0;
-  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${files ? `, ${files} file folders removed` : ""}`;
+  return `${deleted} unconfirmed deleted, ${expired} undecided closed, ${anonymised} anonymised${doorCleared ? `, ${doorCleared} member-door applications cleared of references` : ""}${files ? `, ${files} file folders removed` : ""}`;
 }

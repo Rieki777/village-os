@@ -80,7 +80,7 @@ export default function WizardSeatPreview({
         <span aria-hidden="true" className="size-2 rounded-full bg-open" />
         {SHEET_WORDS.livePreview}
       </p>
-      <p className="mt-1.5 text-xs text-stone-600">{seatPreviewSub(picked)}</p>
+      <p className="mt-1.5 text-xs text-muted-foreground">{seatPreviewSub(picked)}</p>
       <div className="mt-3">
         <SeatTradingCard
           input={input}

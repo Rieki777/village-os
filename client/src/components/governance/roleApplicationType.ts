@@ -25,6 +25,8 @@
  * terms on offer in the terms step (`roleApplicationStart`), which is where a
  * seat card's raised hand sends a member who reads terms.
  */
+import { aboutYouBody, aboutYouOf } from "@/components/openProposal/AboutYou";
+import { aboutYouStepProblem } from "./AboutYouField";
 import { UserPlus } from "lucide-react";
 import { parseSeatSettings } from "@shared/seatSettings";
 import { MAX_SEATS } from "@shared/seatApplications";
@@ -36,7 +38,10 @@ import { pickedSeats } from "./SeatPicksField";
 import { fetchApplication } from "./seatApplicationsApi";
 import { OPEN_AIM_MAX } from "@shared/openProposals";
 import { isDoor } from "./wizardDoor";
+import { TERM_KEYS, commitmentWords, isCommitment, judgeTermsStep, notesAsText, overallChoice, type TermAnswers, type TermKey } from "@shared/termsWords";
 import { goalsAsText, parseGoals, type ProposalGoal } from "@shared/proposalGoals";
+import { DRAFT_WORDS, isTextDraft, withoutDraftFlag, type DraftableGoal } from "@shared/seraDrafts";
+import { marksOf } from "./seraDraftAnswers";
 
 /** The goals the member listed, as the list holds them (GoalsField), or none. */
 export function goalsOfAnswers(a: Record<string, unknown>): ProposalGoal[] {
@@ -45,30 +50,51 @@ export function goalsOfAnswers(a: Record<string, unknown>): ProposalGoal[] {
 
 /** The goals step's verdict, in the shared rules' own words: at least one, each with a title and a done when. */
 export const goalsProblem = (v: unknown): string | null => {
+  // A goal Sera drafted is the member's only once they edit or keep it.
+  if (Array.isArray(v) && v.some((g) => (g as DraftableGoal)?.seraDraft === true)) return DRAFT_WORDS.blocked(["goals"]);
   const judged = parseGoals(v ?? [], {});
   return judged.ok ? null : judged.error;
 };
 
-/** The door's terms answer: accepted or a wish to talk, and the terms on offer it showed (TermsOnOfferField). */
+/**
+ * The door's terms answer (joining lane PR 3): an answer to each setting the roles have written, the
+ * candidate's commitment, and the terms on offer it showed (TermsOnOfferField). `choice` and `note` are
+ * the whole answer in the older words: "talk" when any setting is, with each note on a line.
+ */
 export interface TermsChoice {
   choice: "accept" | "talk";
   note: string;
   settings: unknown;
+  answers: TermAnswers;
+  /** Null until chosen: there is no default. */
+  commitmentPct: number | null;
+  /** The settings the picked roles have written: each needs an answer. */
+  written: TermKey[];
 }
 
 export function termsChoiceOf(v: unknown): TermsChoice | null {
   if (!v || typeof v !== "object") return null;
   const o = v as Record<string, unknown>;
-  if (o.choice !== "accept" && o.choice !== "talk") return null;
-  return { choice: o.choice, note: typeof o.note === "string" ? o.note : "", settings: o.settings ?? null };
+  const judged = judgeTermsStep({ answers: o.answers, commitmentPct: 0 }, []);
+  const answers = judged.ok ? judged.value.answers : {};
+  const written = Array.isArray(o.written) ? TERM_KEYS.filter((k) => (o.written as unknown[]).includes(k)) : [];
+  return {
+    choice: overallChoice(answers),
+    note: notesAsText(answers),
+    settings: o.settings ?? null,
+    answers,
+    commitmentPct: isCommitment(o.commitmentPct) ? o.commitmentPct : null,
+    written,
+  };
 }
 
-/** The door's terms verdict: a choice, a note when talking, and terms the route will read. */
+/** The door's terms verdict: each written setting answered, the commitment chosen, and terms the route will read. */
 export const termsChoiceProblem = (v: unknown, a: Record<string, unknown>): string | null => {
   if (!isDoor(a)) return null;
   const t = termsChoiceOf(v);
-  if (!t) return "Say whether you accept the terms on offer, or would like to talk about them.";
-  if (t.choice === "talk" && !t.note.trim()) return "Say what you would like to talk about in the terms.";
+  if (!t) return "Say whether you accept each setting, or would like to talk about it, and choose your commitment.";
+  const judged = judgeTermsStep({ answers: t.answers, commitmentPct: t.commitmentPct }, t.written);
+  if (!judged.ok) return judged.error;
   return settingsProblem(t.settings);
 };
 
@@ -79,15 +105,17 @@ export function doorAnswers(a: Record<string, unknown>): Record<string, unknown>
   return {
     aim: String(a.aim ?? "").trim() || null,
     servesGoal: goal && goal !== NO_SEASON_GOALS ? goal : null,
-    terms: t ? { choice: t.choice, note: t.note.trim() } : null,
+    terms: t ? { choice: t.choice, note: t.note.trim(), answers: t.answers, commitmentPct: t.commitmentPct } : null,
     goals: goalsForRoute(a),
+    // About you (PR 2): judged again by the route, which knows which roles are always checked.
+    ...aboutYouBody(aboutYouOf(a.aboutYou)),
   };
 }
 
 /** The goals as the route reads them: blank rows left out, each tied to a role (the only one, when there is one). */
 export function goalsForRoute(a: Record<string, unknown>): ProposalGoal[] {
   const seats = pickedSeats(a.seatIds ?? a.seatId);
-  return goalsOfAnswers(a)
+  return withoutDraftFlag(goalsOfAnswers(a))
     .filter((g) => g.title?.trim() || g.doneWhen?.trim() || g.moves || g.serves || g.date)
     .map((g) => ({ ...g, roleId: g.roleId || seats[0] || "", serves: g.serves === NO_SEASON_GOALS ? "" : g.serves }));
 }
@@ -111,6 +139,7 @@ export function doorDeliverables(a: Record<string, unknown>): unknown {
   const t = termsChoiceOf(a.termsChoice);
   if (t?.choice === "accept") lines.push("Accepts the terms on offer.");
   if (t?.choice === "talk") lines.push(`Wants to talk about the terms: ${t.note.trim()}`);
+  if (t && t.commitmentPct !== null) lines.push(commitmentWords(t.commitmentPct));
   const own = goalsForRoute(a).length ? goalsAsText(goalsForRoute(a)) : String(a.deliverables ?? "").trim();
   return [lines.join("\n"), own].filter(Boolean).join("\n\n");
 }
@@ -211,7 +240,8 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
           placeholder: "Food grows here every season, and two more people know how.",
           required: true,
           showWhen: isDoor,
-          problem: (v, a) => (isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : null),
+          problem: (v, a) =>
+            isDoor(a) && !String(v ?? "").trim() ? "Say your aim for this role." : isTextDraft(String(v ?? ""), marksOf(a).aim) ? DRAFT_WORDS.blocked(["aim"]) : null,
         },
         {
           // Joining lane PR 1: a list of goals, each with a "done when", where a textarea of tasks stood.
@@ -232,9 +262,24 @@ export const ROLE_APPLICATION_TYPE: WizardTypeConfig = {
         },
       ],
     },
+    about: {
+      label: "About you",
+      intro: "A few facts, up to three references, and how a background check works. Your time zone is on your profile and your earliest start is the first day on the next step, so we don't ask them again.",
+      fields: [
+        {
+          key: "aboutYou",
+          kind: "aboutYou",
+          label: "About you",
+          help: "Only the people who decide your proposal see this. No AI reads it.",
+          // The member door only: a renewal or a season plan carries on a seat, so it asks no references.
+          showWhen: isDoor,
+          problem: (v, a) => aboutYouStepProblem(v, a) ?? (isTextDraft(aboutYouOf(v).story, marksOf(a).story) ? DRAFT_WORDS.blocked(["story"]) : null),
+        },
+      ],
+    },
     terms: {
       doorLabel: "The terms",
-      doorIntro: "The terms each role offers. Accept them, or say what you would like to talk about: the people deciding see it. You don't write terms here.",
+      doorIntro: "Each role's suggestion for the eight settings. Accept each one, or mark it let's talk: the people deciding see your answers. You don't write terms here.",
       label: "Your terms",
       intro: "The terms you would hold these roles on. Start from a preset, or from the role's own terms on offer, and change what does not fit.",
       fields: [

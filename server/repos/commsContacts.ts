@@ -26,6 +26,8 @@ export interface ContactRow {
   userId: string | null;
   firstSource: string;
   timezone: string | null;
+  /** The site language they were using when they gave the address (0371), or null. */
+  locale?: string | null;
 }
 
 const toRow = (r: RowDataPacket): ContactRow => ({
@@ -36,9 +38,10 @@ const toRow = (r: RowDataPacket): ContactRow => ({
   userId: r.user_id == null ? null : String(r.user_id),
   firstSource: String(r.first_source),
   timezone: r.timezone == null ? null : String(r.timezone),
+  locale: r.locale == null ? null : String(r.locale),
 });
 
-const COLUMNS = "id, email_key, email, name, user_id, first_source, timezone";
+const COLUMNS = "id, email_key, email, name, user_id, first_source, timezone, locale";
 
 /** The contact filed under one key, or null. */
 export async function contactByEmailKey(pool: Pool, emailKey: string): Promise<ContactRow | null> {
@@ -77,15 +80,17 @@ export async function upsertContact(
     userId: string | null;
     source: string;
     timezone: string | null;
+    locale?: string | null;
   },
 ): Promise<{ id: string; created: boolean }> {
   await pool.query( // module-review-ok: the address book's one table, one row, no cache above it
-    "INSERT INTO comms_contacts (id, village_id, email_key, email, name, user_id, first_source, timezone) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+    "INSERT INTO comms_contacts (id, village_id, email_key, email, name, user_id, first_source, timezone, locale) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON DUPLICATE KEY UPDATE " +
       "name = COALESCE(name, VALUES(name)), " +
       "user_id = COALESCE(user_id, VALUES(user_id)), " +
       "timezone = COALESCE(timezone, VALUES(timezone)), " +
+      "locale = COALESCE(VALUES(locale), locale), " +
       "updated_at = CURRENT_TIMESTAMP",
     [
       input.id,
@@ -96,6 +101,7 @@ export async function upsertContact(
       input.userId,
       input.source.slice(0, 64),
       input.timezone ? input.timezone.slice(0, 64) : null,
+      input.locale ? input.locale.slice(0, 16) : null,
     ],
   );
   const row = await contactByEmailKey(pool, input.emailKey);

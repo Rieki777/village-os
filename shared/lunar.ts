@@ -343,6 +343,15 @@ export function civilDaysBetween(a: Date, b: Date, timeZone: string): number {
   return Math.round((Date.UTC(cb.year, cb.month - 1, cb.day) - Date.UTC(ca.year, ca.month - 1, ca.day)) / DAY_MS);
 }
 
+/**
+ * "Day N of M" over a span, counting BOTH end days, in the village's own time zone. The one count the role chart's
+ * header and the profile's hero both print, so the same season reads the same number in both. N never passes M or drops below 1.
+ */
+export function daysOfSpan(start: Date, end: Date, now: Date, timeZone: string): { day: number; of: number } {
+  const of = civilDaysBetween(start, end, timeZone) + 1;
+  return { day: Math.min(of, Math.max(1, civilDaysBetween(start, now, timeZone) + 1)), of };
+}
+
 // ── Lunar months: twelve or thirteen moons anchored to a solar event ─────────
 
 export const YEAR_ANCHORS = ["december_solstice", "march_equinox", "june_solstice", "september_equinox"] as const;

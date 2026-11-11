@@ -45,8 +45,8 @@ export default function DraftCards({
 
   return (
     <section>
-      <h2 className="text-base font-bold text-stone-900">Pick up where you left off</h2>
-      <p className="mt-0.5 text-sm text-stone-600">
+      <h2 className="text-base font-bold text-foreground">Pick up where you left off</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">
         {drafts.length === 1 ? "One proposal is" : `${drafts.length} proposals are`} half written. They are yours alone
         until you publish.
       </p>
@@ -58,13 +58,13 @@ export default function DraftCards({
           return (
             <li
               key={d.id}
-              className="rounded-xl border-2 border-dashed border-stone-300 bg-white p-4"
+              className="rounded-xl border-2 border-dashed border-border bg-card p-4"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
                   {cfg?.title ?? d.wizardType}
                 </span>
-                <span className="text-xs text-stone-500">
+                <span className="text-xs text-muted-foreground">
                   Last edited{" "}
                   {new Date(d.updatedAt).toLocaleDateString(undefined, {
                     month: "short",
@@ -74,8 +74,8 @@ export default function DraftCards({
                   })}
                 </span>
               </div>
-              <p className="mt-1.5 text-sm font-semibold text-stone-900">{draftTitle(d)}</p>
-              <p className="mt-0.5 text-xs text-stone-600">
+              <p className="mt-1.5 text-sm font-semibold text-foreground">{draftTitle(d)}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 You stopped at {walk[at]?.label ?? "the beginning"}, step {at + 1} of {walk.length}.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -83,7 +83,7 @@ export default function DraftCards({
                   type="button"
                   disabled={busyId === d.id}
                   onClick={() => onContinue(d)}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-teal-deep px-4 text-sm font-semibold text-white hover:bg-teal-deep-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep focus-visible:ring-offset-2 disabled:opacity-60"
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-notice px-4 text-sm font-semibold text-background hover:bg-notice/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60"
                 >
                   <FileEdit className="w-4 h-4" aria-hidden="true" />
                   Continue
@@ -92,7 +92,7 @@ export default function DraftCards({
                   type="button"
                   disabled={busyId === d.id}
                   onClick={() => onDiscard(d)}
-                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-60"
+                  className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
                 >
                   <Trash2 className="w-4 h-4" aria-hidden="true" />
                   Discard

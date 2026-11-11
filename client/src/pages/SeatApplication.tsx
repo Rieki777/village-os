@@ -37,6 +37,9 @@
  * Money in the terms is a record: the drawer prints "Recorded here. Paid
  * outside the platform." beside every money row.
  */
+import { AboutYouView } from "@/components/openProposal/AboutYou";
+import TermsWeOffer, { OpenTalksWarning } from "@/components/openProposal/TermsWeOffer";
+import { ABOUT_WORDS } from "@shared/proposalAbout";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -234,6 +237,8 @@ export default function SeatApplication() {
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
   // Withdraw asks once before it acts (red team U1).
   const [asking, setAsking] = useState(false);
+  // Adopting while a setting is still being talked about asks once more (joining lane PR 4).
+  const [knowsOpenTalks, setKnowsOpenTalks] = useState(false);
 
   const load = useCallback(async () => {
     const answer = await fetchApplication(id);
@@ -393,6 +398,14 @@ export default function SeatApplication() {
               )}
             </section>
 
+            {app.offer && <TermsWeOffer offer={app.offer} mayEdit={!!app.you?.mayEditTerms} savePath={`/api/governance/role-applications/${encodeURIComponent(app.id)}/terms`} onSaved={() => void load()} />}
+            <AboutYouView about={app.aboutYou} />
+            {typeof app.referencesGiven === "number" && (
+              <p className="text-sm text-muted-foreground" data-references-given="">
+                {ABOUT_WORDS.given(app.referencesGiven)}
+              </p>
+            )}
+
             {/* A role proposal: where the circle's consent stands, and an asked holder's Consent or Object (PR D). */}
             {app.proposal?.consent && (
               <CircleConsent
@@ -436,6 +449,7 @@ export default function SeatApplication() {
                     {record ? CONSENT_WORDS.recordLine : app.proposal?.changesRoles ? APPLICATION_WORDS.powerLine : APPLICATION_WORDS.holderLine}
                   </p>
                 )}
+                {app.you.mayAdopt && app.offer && <div className="mt-3"><OpenTalksWarning settings={app.offer.openTalks} confirmed={knowsOpenTalks} onConfirm={setKnowsOpenTalks} /></div>}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {app.you.mayAdopt && (
                     // The holder's adopt click IS the village's alignment. Money terms may ask the re-confirm first.
@@ -443,8 +457,8 @@ export default function SeatApplication() {
                     <AlignButton
                       label={record ?? ALIGN_WORDS.forTheVillage}
                       sentence={intentSentence(app.seats.map((x) => x.name), true)}
-                      disabled={busy}
-                      onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST")}
+                      disabled={busy || (!!app.offer?.openTalks.length && !knowsOpenTalks)}
+                      onAlign={() => alignCall<any>(`/api/governance/role-applications/${encodeURIComponent(app.id)}/adopt`, "POST", knowsOpenTalks ? { confirmOpenTalks: true } : undefined)}
                       onDone={(data) => {
                         // A role proposal answers with its decision record, which names a role, never a person.
                         const text = typeof data?.decided === "string" ? data.decided : typeof data?.message === "string" ? data.message : "Adopted for the village.";

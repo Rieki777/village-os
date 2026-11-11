@@ -42,7 +42,7 @@ export interface WalkStep {
 export function walkFor(typeId: string | null | undefined, answers?: Record<string, unknown>): WalkStep[] {
   const cfg = typeId ? typeConfig(typeId) : null;
   if (!cfg) return [{ key: "type", label: WIZARD_STEPS[0].label }];
-  return WIZARD_STEPS.filter((s) => !cfg.steps[s.key]?.skip && !(s.key === "type" && isDoor(answers))).map((s) => {
+  return WIZARD_STEPS.filter((s) => !cfg.steps[s.key]?.skip && !(s.key === "type" && isDoor(answers)) && !(s.key === "about" && fieldsFor(typeId, "about", answers).length === 0)).map((s) => {
     const over: TypeStepOverride | undefined = cfg.steps[s.key];
     const door = isDoor(answers);
     return { key: s.key, label: (door ? over?.doorLabel : undefined) ?? over?.label ?? s.label, intro: (door ? over?.doorIntro : undefined) ?? over?.intro };

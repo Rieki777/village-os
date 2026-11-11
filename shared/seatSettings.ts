@@ -41,6 +41,7 @@
  */
 import { canonicalJson } from "./canonicalJson";
 import { isSignKey, type SignKey } from "./roleSigns";
+import { TERM_KEYS, type TermsWords } from "./termsWords";
 
 export const SEAT_SETTINGS_VERSION = 1 as const;
 
@@ -90,9 +91,17 @@ export interface TermSettings {
 
 export const PAY_CLOCKS = ["calendar-month", "moon"] as const;
 export const WORK_CLOCKS = ["moon", "week"] as const;
+/** Commitment is chosen in steps of ten, from none to full. There is no default: a person picks. */
+export const COMMITMENT_STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 export interface ClockSettings {
   pay?: (typeof PAY_CLOCKS)[number];
   work?: (typeof WORK_CLOCKS)[number];
+  /**
+   * How much of a person's energy and attention the role gets in a week, 0 to 100 in steps of 10.
+   * 100 is full commitment, and each person manages their own workload. A planning signal that is
+   * stored and shown and read by no pay code (`shared/termsWords.boundary.test.ts`).
+   */
+  commitmentPct?: number;
 }
 
 export const GATHERING_EVERY = ["week", "fortnight"] as const;
@@ -187,6 +196,11 @@ export interface SeatSettings {
   quests?: QuestSettings;
   scoreboard?: ScoreboardSettings;
   ending?: EndingSettings;
+  /**
+   * The role's suggested wording for each of the eight settings the proposal's terms step shows
+   * (`shared/termsWords.ts`). Words only: a setting the role has not written reads "We'll set this together."
+   */
+  words?: TermsWords;
   /** Which preset each group started from. Provenance only: values win. */
   presets?: PresetProvenance[];
 }
@@ -252,8 +266,8 @@ export interface ParsedSettings {
 const REFUSED_KEYS: Record<string, string> = {
   voice: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
   voiceWeight: "Voice is never a term of a role. Every member's say comes from the village's own rules.",
-  commitment: "A role is held whole. Terms carry no commitment share.",
-  commitmentPct: "A role is held whole. Terms carry no commitment share.",
+  commitment: "Commitment is set under Clocks, as commitmentPct, in steps of 10.",
+  commitmentPct: "Commitment is set under Clocks, as commitmentPct, in steps of 10.",
   deferredPct: "Deferred pay is written as a pay kind with a note.",
   tokenSlug: "Terms record money in a currency. Tokens are paid through the village's own rules.",
   tokenPerCycle: "Terms record money in a currency. Tokens are paid through the village's own rules.",
@@ -459,10 +473,16 @@ function readTerm(r: Reader, raw: unknown): TermSettings | undefined {
 function readClocks(r: Reader, raw: unknown): ClockSettings | undefined {
   const g = r.group("clocks", raw);
   if (!g) return undefined;
-  r.onlyKeys("clocks", g, ["pay", "work"]);
+  r.onlyKeys("clocks", g, ["pay", "work", "commitmentPct"]);
+  let commitmentPct: number | undefined;
+  if (g.commitmentPct !== undefined && g.commitmentPct !== null) {
+    if (typeof g.commitmentPct === "number" && (COMMITMENT_STEPS as readonly number[]).includes(g.commitmentPct)) commitmentPct = g.commitmentPct;
+    else r.refuse("clocks.commitmentPct", "Commitment runs from 0 to 100 in steps of 10.");
+  }
   return compact({
     pay: r.oneOf("clocks.pay", g.pay, PAY_CLOCKS),
     work: r.oneOf("clocks.work", g.work, WORK_CLOCKS),
+    commitmentPct,
   });
 }
 
@@ -681,6 +701,22 @@ const READERS: { [G in SettingsGroup]: (r: Reader, raw: unknown) => SeatSettings
  * (`MEASURES_NEW`). Every read of a stored value leaves it off, so terms
  * written before a limit keep loading as they are.
  */
+/** The suggested wording for each of the eight settings: a few sentences each, words only. */
+function readWords(r: Reader, raw: unknown): TermsWords | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isPlainObject(raw)) {
+    r.refuse("words", "The suggested wordings arrive as one line for each setting.");
+    return undefined;
+  }
+  r.onlyKeys("words", raw, TERM_KEYS);
+  const out: TermsWords = {};
+  for (const k of TERM_KEYS) {
+    const v = r.text(`words.${k}`, raw[k], 600);
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
 export function parseSeatSettings(raw: unknown, opts: ParseOptions = {}): ParsedSettings {
   const r = new Reader(opts.newWrite === true);
   if (raw === undefined || raw === null) {
@@ -693,13 +729,15 @@ export function parseSeatSettings(raw: unknown, opts: ParseOptions = {}): Parsed
   if (raw.v !== undefined && raw.v !== SEAT_SETTINGS_VERSION) {
     r.refuse("v", "These settings were written for a different version of the platform.");
   }
-  r.onlyKeys("", raw, ["v", "presets", ...SETTINGS_GROUPS]);
+  r.onlyKeys("", raw, ["v", "presets", "words", ...SETTINGS_GROUPS]);
   const out: SeatSettings = emptySettings();
   for (const group of SETTINGS_GROUPS) {
     if (raw[group] === undefined || raw[group] === null) continue;
     const value = READERS[group](r, raw[group]);
     if (value !== undefined) (out as any)[group] = value;
   }
+  const words = readWords(r, raw.words);
+  if (words && Object.keys(words).length > 0) out.words = words;
   const presets = readPresets(r, raw.presets);
   if (presets && presets.length > 0) out.presets = presets;
   const ok = r.problems.length === 0;

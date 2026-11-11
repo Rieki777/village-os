@@ -107,6 +107,8 @@ export const NOT_ROLE_WORDS: ReadonlySet<string> = new Set([
   "circleId",
   // Role journey: whether a steward has confirmed the role for discovery. A steward decision, never a word a member proposes.
   "listed",
+  // Joining lane PR 2: a steward decision, never a word a member proposes.
+  "alwaysChecked",
   // Role journey PR-C: the full card's parameters are steward and editor decisions, set where roles are edited, not words a member proposes.
   "villageGoals",
   "track",

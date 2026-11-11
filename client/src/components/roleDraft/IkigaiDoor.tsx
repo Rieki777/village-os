@@ -16,6 +16,8 @@ import { useOptionalAuth } from "@/contexts/AuthContext";
 import { authToken } from "@/lib/gameApi";
 import { DISCOVER_WORDS, IKIGAI_IDS, IKIGAI_LABELS, clipAnswer, hasIkigai, type GuideSuggestionOut, type IkigaiId, type IkigaiState } from "@shared/roleDiscover";
 import type { DraftRole } from "@shared/roleDraft";
+import { BTN_PRIMARY, BTN_SECONDARY } from "@/components/journey/look";
+
 
 export const GUIDE_URL = "/api/governance/role-discover/guide";
 
@@ -96,7 +98,7 @@ export default function IkigaiDoor({
           checked={state.carry}
           disabled={!hasIkigai(state)}
           onChange={(e) => onChange({ ...state, carry: e.target.checked })}
-          className="mt-1 size-4"
+          className="mt-0.5 size-5 shrink-0 accent-notice"
         />
         <span>{DISCOVER_WORDS.carry}</span>
       </label>
@@ -108,7 +110,7 @@ export default function IkigaiDoor({
               type="button"
               disabled={busy || !hasIkigai(state) || roles.length === 0}
               onClick={ask}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border px-4 text-sm font-semibold hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-ring"
+              className={`${BTN_SECONDARY} disabled:border-dashed`}
             >
               <Sparkles className="size-4" aria-hidden="true" />
               {DISCOVER_WORDS.askGuide}
@@ -130,7 +132,7 @@ export default function IkigaiDoor({
                 {out.suggestions.map((s) => (
                   <li key={s.roleId} className="text-sm">
                     <strong>{nameOf(s.roleId)}</strong>: {s.why}{" "}
-                    <button type="button" onClick={() => onDraft(s.roleId)} className="min-h-11 font-semibold underline underline-offset-2">
+                    <button type="button" onClick={() => onDraft(s.roleId)} className={`mt-1 ${BTN_PRIMARY}`}>
                       {t({ message: "Select this role", context: "role draft discover" })}
                     </button>
                   </li>

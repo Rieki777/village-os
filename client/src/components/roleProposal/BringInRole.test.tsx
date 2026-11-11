@@ -176,7 +176,7 @@ describe("bring in a description of your role", () => {
     expect(server.puts()).toEqual([]);
 
     // The member keeps the Bring me line only.
-    fireEvent.click(within(preview).getByLabelText(RC_WORDS.keep("Kitchen keeper: Time")));
+    fireEvent.click(within(preview).getByLabelText(RC_WORDS.keep("Kitchen keeper: Commitment")));
     fireEvent.click(within(preview).getByRole("button", { name: RC_WORDS.fill }));
     await waitFor(() => expect(server.puts()).toEqual([{ roles: [{ roleId: "r1", words: { bringMe: ["Food allergies", "Recipes"] }, reviewOn: null }], newRoles: [] }]));
     expect(await screen.findByText(RC_WORDS.filled)).toBeTruthy();

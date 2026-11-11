@@ -19,9 +19,13 @@
  */
 
 /** The village's public link. */
+import { cleanNote, isApplicantLanguage, wordsIn, type ApplicantLanguage } from "./applicantWords";
 import { termOf, type OpenProposalTerm } from "./openProposalTerm";
 import { cardOf, parseCard, type OpenProposalCard } from "./openProposalCard";
+import { counterOfferOf, type CounterOffer } from "./counterOffer";
+import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
+import type { TermKey } from "./termsWords";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
@@ -125,6 +129,16 @@ export interface OpenProposalBody {
   links?: ProposalLink[];
   /** Files the applicant attached, for the deciders only; the bytes are in a private folder (server/lib/proposalFiles.ts). */
   files?: ProposalFile[];
+  /** About you (joining lane PR 2): references and the background check are third-party data, for the deciders only, never read by an AI (shared/proposalAbout.ts). */
+  references?: ProposalReference[];
+  backgroundCheck?: BackgroundCheck;
+  about?: ProposalAbout;
+  /** The language this person's emails, notices and status page use (shared/applicantLanguage.ts). Chosen once, when they proposed. */
+  locale?: ApplicantLanguage;
+  /** A note a decider wrote for the applicant. The applicant's own data: shown to them on the status page and in the email, never to anybody else, never to an AI, removed when the proposal is anonymised or deleted. */
+  note?: string;
+  /** The steward's counter-offer on the terms, appended revision by revision (shared/counterOffer.ts). Written only by the decider door, never by the form. */
+  counterOffer?: CounterOffer;
 }
 
 export interface OpenProposalInput {
@@ -160,6 +174,12 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(membershipOf(o.membership) ? { membership: membershipOf(o.membership) as { letterVersion: string } } : {}),
     ...(linksOf(o.links).length ? { links: linksOf(o.links) } : {}),
     ...(filesOf(o.files).length ? { files: filesOf(o.files) } : {}),
+    ...(referencesOf(o.references).length ? { references: referencesOf(o.references) } : {}),
+    ...(backgroundCheckOf(o.backgroundCheck) ? { backgroundCheck: backgroundCheckOf(o.backgroundCheck) as BackgroundCheck } : {}),
+    ...(Object.keys(aboutOf(o.about)).length ? { about: aboutOf(o.about) } : {}),
+    ...(isApplicantLanguage(o.locale) ? { locale: o.locale } : {}),
+    ...(cleanNote(o.note) ? { note: cleanNote(o.note) as string } : {}),
+    ...(counterOfferOf(o.counterOffer) ? { counterOffer: counterOfferOf(o.counterOffer) as CounterOffer } : {}),
   };
 }
 
@@ -170,7 +190,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
  */
 export function parseOpenProposal(
   raw: unknown,
-  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string },
+  ctx: { roleIds: ReadonlySet<string>; address: (s: string) => string | null; accountabilitiesOf?: (roleId: string) => readonly string[]; goalIds?: ReadonlySet<string>; today?: string; alwaysChecked?: (roleId: string) => boolean; writtenTerms?: (roleIds: readonly string[]) => readonly TermKey[]; now?: Date },
 ): Parsed<OpenProposalInput> {
   const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const name = text(o.name, OPEN_NAME_MAX);
@@ -199,6 +219,20 @@ export function parseOpenProposal(
   const linked = parseProposalLinks(o.links);
   if (!linked.ok) return { ok: false, field: "links", error: linked.error };
   const links = linked.links.length ? { links: linked.links } : {};
+  // About you (joining lane PR 2): only when the form sent the section, so a form from before it still goes through.
+  let aboutYou: Pick<OpenProposalBody, "references" | "about" | "backgroundCheck"> = {};
+  if (o.references !== undefined || o.about !== undefined || o.checkConsent !== undefined) {
+    const judged = parseAboutYou(
+      { references: o.references, about: o.about, consent: o.checkConsent },
+      { alwaysChecked: roles.some((r) => ctx.alwaysChecked?.(r.roleId) === true), at: ctx.now ?? new Date() },
+    );
+    if (!judged.ok) return { ok: false, field: judged.field, error: judged.error };
+    aboutYou = {
+      ...(judged.value.references.length ? { references: judged.value.references } : {}),
+      ...(Object.keys(judged.value.about).length ? { about: judged.value.about } : {}),
+      backgroundCheck: judged.value.backgroundCheck,
+    };
+  }
   // The applicant's own card, when the form sent one (shared/openProposalCard.ts).
   if (o.card !== undefined && o.card !== null) {
     // Form v2 (brief v2, 5.4): the aim is required once the applicant writes their card.
@@ -208,11 +242,12 @@ export function parseOpenProposal(
       accountabilitiesOf: ctx.accountabilitiesOf ?? (() => []),
       goalIds: ctx.goalIds ?? new Set(),
       today: ctx.today,
+      writtenTerms: ctx.writtenTerms?.(roles.map((r) => r.roleId)),
     });
     if (!card.ok) return { ok: false, field: card.field, error: card.error };
-    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links } } };
+    return { ok: true, value: { name, email, body: { roles, why, aim, card: card.card, ...links, ...aboutYou } } };
   }
-  return { ok: true, value: { name, email, body: { roles, why, aim, ...links } } };
+  return { ok: true, value: { name, email, body: { roles, why, aim, ...links, ...aboutYou } } };
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -230,21 +265,22 @@ export function andList(items: readonly string[]): string {
  */
 export const OPEN_AI_DRAFTS = "An AI may help draft our replies to you; a person always reads and sends them, and no AI takes part in choosing.";
 
-/** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. */
-export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string }): { subject: string; text: string } {
+/** The email that asks the address to confirm. Nothing else reaches anybody until it is answered. `when` is already in the reader's language. */
+export function confirmLetter(i: { firstName: string | null; village: string; roleNames: readonly string[]; link: string; when?: string; lang?: ApplicantLanguage }): { subject: string; text: string } {
+  const w = wordsIn(i.lang);
   return {
-    subject: `Confirm your proposal to ${i.village}`,
+    subject: w.confirm.subject(i.village),
     text: [
-      i.firstName ? `Hi ${i.firstName},` : "Hi,",
+      w.hello(i.firstName),
       "",
-      `You proposed to hold ${andList(i.roleNames) || "a role"} in ${i.village} ${i.when ? `for ${i.when}` : "next season"}.`,
+      w.confirm.proposed(w.list(i.roleNames) || w.aRole, i.village, i.when ?? null),
       "",
-      "Confirm it's you, and your proposal goes to the village:",
+      w.confirm.ask,
       i.link,
       "",
-      `The link works for ${OPEN_CONFIRM_HOURS} hours. If this wasn't you, leave it, and nothing happens.`,
+      w.confirm.validFor(OPEN_CONFIRM_HOURS),
       "",
-      OPEN_AI_DRAFTS,
+      w.confirm.aiDrafts,
       "",
     ].join("\n"),
   };
