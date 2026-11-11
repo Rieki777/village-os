@@ -1,0 +1,25 @@
+/*
+ * Fireflies arriving at the bell (Phase B, B2). One flight, once, when a
+ * notice that waits on you arrives while the page is open: the lights drift
+ * in from below and to the left and settle where they rest. 1.6s, the bloom
+ * limit; transform and opacity only; nothing at all under reduced motion,
+ * where the lights are simply there.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes bell-ff-arrive {
+    from {
+      opacity: 0;
+      transform: translate(-28px, 22px) scale(0.6);
+    }
+    55% {
+      opacity: 1;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .bell-ff[data-arrival="true"] {
+    animation: bell-ff-arrive 1.6s cubic-bezier(0.3, 0.6, 0.2, 1) both;
+  }
+}
