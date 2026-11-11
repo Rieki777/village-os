@@ -93,6 +93,20 @@ describe("the wallet on a member's own profile", () => {
     modules.exchange = false;
   });
 
+  it("says what an equity token is in plain words, and lets the village's own words win", async () => {
+    vi.stubGlobal("fetch", serve(PAYLOAD));
+    const { unmount } = render(<WalletCard />);
+    await waitFor(() => expect(screen.getByText(/Earned Equity tracks contributions that were not paid\. It has no financial value yet\. What it will represent is still being decided together\./)).toBeInTheDocument());
+    // Only the equity row carries it: credits and voice are left as they were.
+    expect(screen.getAllByText(/tracks contributions that were not paid/)).toHaveLength(1);
+    unmount();
+    const own = { ...PAYLOAD, rows: PAYLOAD.rows.map((r) => (r.token === "earned-equity" ? { ...r, description: "The village's own sentence." } : r)) };
+    vi.stubGlobal("fetch", serve(own));
+    render(<WalletCard />);
+    await waitFor(() => expect(screen.getByText("The village's own sentence.")).toBeInTheDocument());
+    expect(screen.queryByText(/tracks contributions that were not paid/)).toBeNull();
+  });
+
   it("renders with the exchange module off, and asks the wallet route with the session", async () => {
     const fetchMock = serve(PAYLOAD);
     vi.stubGlobal("fetch", fetchMock);
