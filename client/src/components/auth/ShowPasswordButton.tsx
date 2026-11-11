@@ -12,7 +12,7 @@ export function ShowPasswordButton({ shown, onToggle }: { shown: boolean; onTogg
       onClick={onToggle}
       aria-label={shown ? "Hide password" : "Show password"}
       title={shown ? "Hide password" : "Show password"}
-      className="absolute right-1 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+      className="absolute right-1 top-1/2 -translate-y-1/2 flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {shown ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
     </button>

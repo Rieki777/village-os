@@ -72,6 +72,13 @@ const PAGES = [
   "client/src/pages/LoveLetter.tsx",
   "client/src/pages/ApplicationStatus.tsx",
   "client/src/pages/StewardJourney.tsx",
+  "client/src/pages/Quests.tsx",
+  "client/src/pages/RoleMeasures.tsx",
+  "client/src/pages/Approvals.tsx",
+  "client/src/pages/VerifyEmail.tsx",
+  "client/src/pages/SetPassword.tsx",
+  "client/src/pages/Register.tsx",
+  "client/src/pages/Aligned.tsx",
 ];
 
 /** Every file the joining journey draws with, pages included. */
@@ -98,6 +105,16 @@ const JOURNEY = [
   "client/src/components/governance/SeatPicksField.tsx",
   "client/src/components/governance/DraftCards.tsx",
   "client/src/components/FaqSection.tsx",
+  "client/src/components/approvals/ApprovalInbox.tsx",
+  "client/src/components/profile/OnboardingPath.tsx",
+  "client/src/components/alignment/EndingActions.tsx",
+  "client/src/components/alignment/LeavingEnds.tsx",
+  "client/src/components/alignment/AlignmentReview.tsx",
+  "client/src/components/alignment/AlignmentMarks.tsx",
+  "client/src/components/alignment/AlignmentCard.tsx",
+  "client/src/components/alignment/RegisterEntry.tsx",
+  "client/src/components/alignment/AlignButton.tsx",
+  "client/src/components/alignment/ConfidentialityCard.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);

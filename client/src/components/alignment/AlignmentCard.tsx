@@ -59,12 +59,12 @@ export default function AlignmentCard({
       {a.answer && <p data-signing-answer={a.answer} className="mt-1 text-sm text-foreground">{SIGNING_WORDS[a.answer]}</p>}
 
       {showWords && (
-        <pre
+        <div
           data-alignment-words=""
-          className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/40 p-4 font-sans text-sm leading-relaxed text-foreground"
+          className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/40 p-4 text-sm leading-relaxed text-foreground"
         >
           {a.body}
-        </pre>
+        </div>
       )}
 
       <div className="mt-3">

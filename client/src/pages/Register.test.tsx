@@ -154,8 +154,10 @@ describe("Register", () => {
     renderRegister();
     const signIn = screen.getByRole("link", { name: /sign in/i });
     const classes = signIn.className.split(/\s+/);
-    expect(classes).toContain("text-amber-ink");
+    // The page stands on the night ground now (docs/DESIGN_RULE.md): the link is gold, never a brand ink.
+    expect(classes).toContain("text-notice");
     expect(classes).not.toContain("text-amber");
+    expect(classes).not.toContain("text-amber-ink");
   });
 
   it("keeps the path pills off text-amber/text-teal/text-teal-light as foreground text (contrast regression guard)", async () => {

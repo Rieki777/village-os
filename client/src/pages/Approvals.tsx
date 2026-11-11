@@ -9,6 +9,7 @@ import ApprovalInbox from "@/components/approvals/ApprovalInbox";
 import { authToken } from "@/lib/gameApi";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { Link } from "wouter";
+import { H1, LINK, HINT, WORLD } from "@/components/journey/look";
 
 export default function Approvals() {
   const headers = useCallback((): Record<string, string> => {
@@ -22,20 +23,22 @@ export default function Approvals() {
   const signedOut = !!auth && !auth.loading && !auth.user;
   return (
     <Layout>
-      <div className="max-w-xl mx-auto px-4 py-8 space-y-4">
-        <h1 className="text-2xl font-bold text-foreground">
+      <div className={`${WORLD} py-8 sm:py-12`}>
+      <div className="mx-auto max-w-xl space-y-4 px-4">
+        <h1 className={H1}>
           <Trans context="approval inbox">Approvals</Trans>
         </h1>
         {signedOut ? (
-          <p className="text-sm text-muted-foreground">
+          <p className={HINT}>
             <Trans context="approval inbox">The approval inbox is for people who steward roles here.</Trans>{" "}
-            <Link href="/login" className="text-teal-deep underline">
+            <Link href="/login" className={LINK}>
               <Trans context="approval inbox">Sign in to see it</Trans>
             </Link>
           </p>
         ) : auth?.loading ? null : (
           <ApprovalInbox headers={headers} />
         )}
+      </div>
       </div>
     </Layout>
   );
