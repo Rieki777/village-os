@@ -7337,26 +7337,26 @@ export function SetupWizard({ password, onOpenTab }: { password: string; onOpenT
 
 function SettingsTab({ password }: { password: string }) {
   const [settings, setSettings] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
+  /** What the server last had, so the save bar counts changes by value. */
+  const [savedSettings, setSavedSettings] = useState<any>(null);
   const fiatCurrency = useGameConfig()?.project?.fiatCurrency ?? "";
   useEffect(() => {
     fetch(`${API_BASE}/admin/settings`, { headers: authHeaders(password) })
       .then((r) => r.json())
-      .then(setSettings)
+      .then((s) => { setSettings(s); setSavedSettings(s); })
       .catch(() => toast.error("Failed to load settings"));
   }, [password]);
-  const save = async () => {
-    setSaving(true);
+  const save = async (): Promise<SaveResult> => {
     try {
       const res = await fetch(`${API_BASE}/admin/settings`, {
         method: "PUT",
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify(settings),
       });
-      if (!res.ok) throw new Error();
-      toast.success("Settings saved");
-    } catch { toast.error("Save failed"); }
-    setSaving(false);
+      if (!res.ok) return { ok: false, reason: refusal(await res.json().catch(() => ({})), "The settings were not accepted.") };
+      setSavedSettings(settings);
+      return { ok: true };
+    } catch { return { ok: false, reason: "The save could not reach the server." }; }
   };
 
   if (!settings) return <div className="text-center py-12 text-gray-400">Loading...</div>;
@@ -7399,9 +7399,7 @@ function SettingsTab({ password }: { password: string }) {
           <h2 className="text-xl font-bold text-gray-900">Settings</h2>
           <p className="text-sm text-gray-500 mt-1">The plain numbers on the site you can change any time, no code needed.</p>
         </div>
-        <button onClick={save} disabled={saving} className="px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium disabled:opacity-50">
-          {saving ? "Saving..." : "Save"}
-        </button>
+        <SaveBar count={changedKeys(savedSettings, settings).length} onSave={save} onDiscard={() => setSettings(savedSettings)} what="the settings" />
       </div>
 
       <div className="border border-gray-200 rounded-xl p-5 max-w-xl">
