@@ -78,7 +78,21 @@ async function sendOpenForm(page) {
 
 async function check(page, label) {
   const box = page.getByLabel(label).first();
-  if (await box.count()) await box.check();
+  if (await box.count() && await box.isVisible()) await box.check();
+}
+
+/**
+ * THE FIREFLY PATH (wave 2): the open form is six stones, one question each,
+ * and only the stone you stand on is shown. Next judges its stone and moves on.
+ */
+async function stoneNext(page, want) {
+  await page.locator("[data-stone-next]").click();
+  await page.waitForTimeout(200);
+  const now = await page.getAttribute("form[data-open-proposal]", "data-stone-now");
+  if (want && now !== want) {
+    const said = await alerts(page);
+    throw new Error(`held on stone "${now}" on the way to "${want}": ${said.join(" | ").slice(0, 240)}`);
+  }
 }
 
 // ── 1. The neighbour ──────────────────────────────────────────────────────
@@ -107,21 +121,26 @@ export async function neighbour(w, ctx) {
     await settle(page);
   });
   await w.step("fill the proposal", async () => {
-    await page.fill("#propose-why", "Vivo río arriba y camino la quebrada desde niña.");
+    await stoneNext(page, "moon");
     await page.fill("#propose-aim", "Que el agua y la tierra se lean cada luna.");
     await page.getByLabel("The goal", { exact: true }).first().fill("Caminar la quebrada con los vecinos");
     await page.getByLabel("Done when", { exact: true }).first().fill("cuando tengamos el primer mapa del agua");
     const serve = page.getByRole("checkbox", { name: /Clean water all year/ }).first();
     if (await serve.count()) await serve.check();
+    await stoneNext(page, "why");
+    await page.fill("#propose-why", "Vivo río arriba y camino la quebrada desde niña.");
+    await stoneNext(page, "energy");
     const commit = page.locator("#propose-terms-commitment");
     if (await commit.count()) await commit.selectOption({ label: "30%" }).catch(() => {});
-    await check(page, /I align with the Membership agreement/i);
+    await stoneNext(page, "about");
     await check(page, /agree to the background check/i);
+    const tz = page.getByLabel(/time zone/i).first();
+    if (await tz.count()) await tz.fill("America/Costa_Rica").catch(() => {});
+    await stoneNext(page, "send");
+    await check(page, /I align with the Membership agreement/i);
     await check(page, /confidentiality agreement/i);
     await page.fill("#propose-name", "Lucía Mora");
     await page.fill("#propose-email", email);
-    const tz = page.getByLabel(/time zone/i).first();
-    if (await tz.count()) await tz.fill("America/Costa_Rica").catch(() => {});
   });
   await w.look("form-filled", { next: page.locator("form[data-open-proposal] button[type=submit]") });
   await w.step("send the proposal", () => sendOpenForm(page));
@@ -171,12 +190,15 @@ export async function professional(w, ctx) {
     await settle(page);
   });
   await w.step("fill the proposal with two terms to talk about", async () => {
-    await page.fill("#propose-why", "Fifteen years keeping the books for cooperatives; I want my craft to hold a living place.");
+    await stoneNext(page, "moon");
     await page.fill("#propose-aim", "One set of numbers every member trusts, by the end of the season.");
     await page.getByLabel("The goal", { exact: true }).first().fill("Publish the first weekly view of our money");
     await page.getByLabel("Done when", { exact: true }).first().fill("every circle has read it");
     const serve = page.getByRole("checkbox", { name: /Clear and trusted money/ }).first();
     if (await serve.count()) await serve.check();
+    await stoneNext(page, "why");
+    await page.fill("#propose-why", "Fifteen years keeping the books for cooperatives; I want my craft to hold a living place.");
+    await stoneNext(page, "energy");
     const groups = page.locator("[role=radiogroup]");
     const n = await groups.count();
     for (let i = 0; i < n; i++) {
@@ -193,13 +215,15 @@ export async function professional(w, ctx) {
     }
     const commit = page.locator("#propose-terms-commitment");
     if (await commit.count()) await commit.selectOption({ label: "100%" }).catch(() => {});
-    await check(page, /I align with the Membership agreement/i);
+    await stoneNext(page, "about");
     await check(page, /agree to the background check/i);
+    const tz = page.getByLabel(/time zone/i).first();
+    if (await tz.count()) await tz.fill("Europe/London").catch(() => {});
+    await stoneNext(page, "send");
+    await check(page, /I align with the Membership agreement/i);
     await check(page, /confidentiality agreement/i);
     await page.fill("#propose-name", "Ana Whitfield");
     await page.fill("#propose-email", email);
-    const tz = page.getByLabel(/time zone/i).first();
-    if (await tz.count()) await tz.fill("Europe/London").catch(() => {});
   });
   await w.look("form-filled", { next: page.locator("form[data-open-proposal] button[type=submit]") });
   await w.step("send the proposal", () => sendOpenForm(page));
@@ -223,6 +247,10 @@ export async function member(w) {
   const page = await w.open();
   await w.step("open the member's door", async () => {
     await w.goto("/role-proposals/new");
+    // B7 (wave 2): with this moon's roles open, the door asks which first; this member plans next season.
+    const season = page.locator('[data-door="season"]');
+    await Promise.race([season.waitFor().catch(() => {}), page.getByRole("button", { name: /Start the three questions/i }).waitFor().catch(() => {})]);
+    if (await season.count()) await season.click();
     await page.getByRole("button", { name: /Start the three questions/i }).waitFor();
   });
   await w.look("door", { next: page.getByRole("button", { name: /Start the three questions/i }) });
