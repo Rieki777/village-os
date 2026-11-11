@@ -92,7 +92,7 @@ export function RoleAsks({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-notice"
+                    className="mt-0.5 size-5 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && full}
                     onChange={() => {
@@ -146,7 +146,7 @@ export function RoleAsks({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-notice"
+                    className="mt-0.5 size-5 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && servesFull}
                     onChange={() => {
@@ -225,7 +225,7 @@ export function SeasonServes({
                   <input
                     id={id}
                     type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-notice"
+                    className="mt-0.5 size-5 shrink-0 accent-notice"
                     checked={on}
                     disabled={!on && full}
                     onChange={() => {
@@ -256,7 +256,7 @@ export function SeasonServes({
         <legend className="mb-1 text-sm font-semibold text-card-foreground">{t({ message: "Agreements", context: "open proposal card" })}</legend>
         {membership}
         <label className="flex min-h-11 items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" required className="mt-1 size-4 shrink-0 accent-notice" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
+          <input type="checkbox" required className="mt-0.5 size-5 shrink-0 accent-notice" checked={agreed.nda} onChange={(e) => onAgreed({ ...agreed, nda: e.target.checked })} />
           {t`Once approved into a role, I will align with the village's confidentiality agreement before I see any confidential records or my role starts.`}
         </label>
       </fieldset>
@@ -524,7 +524,7 @@ export function Practicalities({ value, onChange, part = "all" }: { value: Pract
             <label key={w} className="flex min-h-11 items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
-                className="size-4 accent-notice"
+                className="size-5 shrink-0 accent-notice"
                 checked={value.windows.includes(w)}
                 onChange={() => onChange({ ...value, windows: value.windows.includes(w) ? value.windows.filter((x) => x !== w) : [...value.windows, w] })}
               />

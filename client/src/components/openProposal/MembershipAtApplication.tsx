@@ -109,7 +109,7 @@ export function MembershipAtApplication({
         <input
           type="checkbox"
           required
-          className="mt-1 size-4 shrink-0 accent-notice"
+          className="mt-0.5 size-5 shrink-0 accent-notice"
           checked={choice.kind === "aligned"}
           onChange={(e) => onChoice(e.target.checked ? { kind: "aligned", letterVersion: letter.version } : { kind: "none" })}
         />

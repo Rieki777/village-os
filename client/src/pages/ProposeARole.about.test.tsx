@@ -8,15 +8,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 import { CHECK_WORDS, checkConsentVersion } from "@shared/proposalAbout";
 
-/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
-const fillGoals = () => {
-  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
-    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
-    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
-    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
-    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
-  }
-};
+// fillGoals is audit B1's helper; the walk along the six stones is the test kit's.
+import { fillGoals, sendNow, stoneNow } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -89,12 +82,14 @@ const ref = (n: number, name: string, how: string, contact: string) => {
 };
 
 describe("About you, on the open form", () => {
-  it("sits after the goals and before the terms, and holds the links, the files, the time zone and the earliest start (moved, not copied)", async () => {
+  it("is its own stone after the goals and the terms, and holds the links, the files, the time zone and the earliest start (moved, not copied)", async () => {
     serve(FORM);
     render(<ProposeARole />);
     await screen.findByText("Gate Keeper");
     fireEvent.click(box("r-gate"));
-    const section = (await screen.findByRole("heading", { name: "About you" })).closest("section") as HTMLElement;
+    // The "About you" stone (the firefly path): its own section, fifth of six.
+    const section = (await waitFor(() => document.querySelector('[data-stone="about"]') as HTMLElement)) as HTMLElement;
+    expect(section).toBeTruthy();
     expect(within(section).getByLabelText("Your time zone")).toBeTruthy();
     expect(within(section).getByLabelText(/earliest you could start/)).toBeTruthy();
     expect(section.querySelector("[data-attachments]")).toBeTruthy();
@@ -104,8 +99,10 @@ describe("About you, on the open form", () => {
     expect(document.querySelectorAll('input[id="card-tz"]')).toHaveLength(1);
     const form = document.querySelector("[data-open-proposal]") as HTMLElement;
     const order = (sel: string) => Array.from(form.querySelectorAll("*")).indexOf(form.querySelector(sel) as Element);
+    // The brief's order (wave 2, 11 Nov 2026): your role, your moon, why you, your energy, about you, send.
     expect(order("[data-role-goals], [data-goals-list], [data-role]")).toBeLessThan(order("[data-about-you-section]"));
-    expect(order("[data-about-you-section]")).toBeLessThan(order("[data-commitment]"));
+    expect(order("[data-commitment]")).toBeLessThan(order("[data-about-you-section]"));
+    expect(order("[data-about-you-section]")).toBeLessThan(order("#propose-name"));
   });
 
   it("says the lead's words beside the references and who sees them", async () => {
@@ -125,7 +122,7 @@ describe("About you, on the open form", () => {
     fireEvent.click(box("r-gate"));
     await fillRest();
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
     expect(posted).toHaveLength(0);
   });
@@ -140,7 +137,7 @@ describe("About you, on the open form", () => {
     expect(document.querySelector("[data-check-consent]")).toBeNull();
     fireEvent.change(screen.getByLabelText(/Where you are based/), { target: { value: "Uvita" } });
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.references).toEqual([{ name: "Ines Vargas", how: "We built a fence together", contact: "ines@example.org" }]);
     expect(posted[0].body.about).toEqual({ based: "Uvita" });
@@ -155,7 +152,7 @@ describe("About you, on the open form", () => {
     await fillRest();
     fireEvent.change(screen.getByLabelText("Reference 1: name"), { target: { value: "Ines" } });
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     expect((await screen.findByRole("alert")).textContent).toMatch(/needs a name|Give each reference/i);
     expect(posted).toHaveLength(0);
   });
@@ -165,18 +162,20 @@ describe("About you, on the open form", () => {
     render(<ProposeARole />);
     await screen.findByText("Gate Keeper");
     fireEvent.click(box("r-bank"));
-    expect(await screen.findByText(/A background check happens for this role whatever the references say/)).toBeTruthy();
+    // On the role's own row, and again on the role card beside the stone.
+    expect((await screen.findAllByText(/A background check happens for this role whatever the references say/)).length).toBeGreaterThan(0);
     expect(document.querySelector("[data-check-role]")).toBeTruthy();
     await fillRest();
     ref(1, "Ines Vargas", "We built a fence together", "ines@example.org");
     expect(document.querySelector("[data-check-consent]")).toBeTruthy();
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
+    expect(stoneNow()).toBe("about");
     expect(posted).toHaveLength(0);
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.checkConsent).toEqual({ given: true, version: checkConsentVersion() });
   });

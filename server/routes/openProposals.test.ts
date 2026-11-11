@@ -277,7 +277,8 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
       const { id, token } = await send();
       const ok = await call("POST", "/api/open-proposals/confirm", { token });
       // The applicant also gets the link to their own status page (role journey L5); only its hash is kept.
-      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`) });
+      // The firefly path's confirmed page: it speaks the language proposed in, and dates the first reply.
+      expect(ok.body).toEqual({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath: expect.stringContaining(`/application-status/${id}?token=`), locale: "en", replyDays: expect.any(Number) });
       expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
       const again = await call("POST", "/api/open-proposals/confirm", { token });
       expect(again.status).toBe(410);

@@ -11,15 +11,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OPEN_WORDS } from "@shared/openProposals";
 import { IKIGAI_KEY } from "@shared/roleDiscover";
 
-/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
-const fillGoals = () => {
-  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
-    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
-    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
-    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
-    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
-  }
-};
+// fillGoals is audit B1's helper; the walk along the six stones is the test kit's.
+import { fillGoals, sendNow } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: null }) }));
@@ -61,7 +54,7 @@ async function fillAndSend() {
   // About you: no references, so the background-check consent is ticked (joining lane PR 2).
   fireEvent.click(screen.getByLabelText(/agree to the background check/i));
   fillGoals();
-  fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+  sendNow();
   await screen.findByRole("heading", { name: "Check your email" });
   return before;
 }

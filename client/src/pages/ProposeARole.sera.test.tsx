@@ -12,15 +12,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { OPEN_WORDS } from "@shared/openProposals";
 import { DRAFT_WORDS } from "@shared/seraDrafts";
 
-/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
-const fillGoals = () => {
-  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
-    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
-    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
-    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
-    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
-  }
-};
+// fillGoals is audit B1's helper; the walk along the six stones is the test kit's.
+import { fillGoals, pressNext, sendNow, stoneNow } from "@/test/proposeStones";
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -79,6 +72,9 @@ const open = async () => {
   await screen.findByText("Gate Keeper");
   fireEvent.click(within(document.querySelector('[data-role="r-gate"]') as HTMLElement).getByRole("checkbox"));
   fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+  // The aim and its Sera button are on the second stone, "Your moon".
+  pressNext();
+  expect(stoneNow()).toBe("moon");
 };
 const fillRest = async () => {
   fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
@@ -106,14 +102,16 @@ describe("the open form with Ask Sera", () => {
 
     await fillRest();
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
+    // Held on "Your moon", where the draft sits: Next names it before the path goes on.
+    expect(stoneNow()).toBe("moon");
     expect((await screen.findByRole("alert")).textContent).toContain(DRAFT_WORDS.blocked(["aim"]));
     expect(posted).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Keep this" }));
     expect(screen.queryByText("Draft from Sera")).toBeNull();
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].aim).toBe("The gate opens at dawn, every day.");
     expect(JSON.stringify(posted[0])).not.toMatch(/sera|draft/i);
@@ -128,7 +126,7 @@ describe("the open form with Ask Sera", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "My own aim." } });
     await fillRest();
     fillGoals();
-    fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
+    sendNow();
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].aim).toBe("My own aim.");
   });
