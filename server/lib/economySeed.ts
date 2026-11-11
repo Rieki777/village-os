@@ -16,6 +16,7 @@
  */
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import { ARCHETYPES } from "../../shared/archetypes";
+import { moveRetiredArchetypeNames } from "../repos/archetypes";
 import { CREDITS, EARNED_EQUITY, ensureVoiceToken, HEARTS, VILLAGE_VOICE } from "./economy";
 
 /**
@@ -151,6 +152,12 @@ export async function seedEconomy(
       ],
     );
   }
+
+  // A NAME THE PLATFORM RETIRED moves to the new one, and nothing else does
+  // (shared/archetypes.ts, ARCHETYPE_NAMES_RETIRED). Only a row still holding
+  // exactly the old platform name, on a class nobody made their own: a village
+  // that typed its own name keeps it, as the statement above promises.
+  if (!opts.dryRun) await moveRetiredArchetypeNames(pool, villageId);
 
   for (const r of RULES) {
     // INSERT IGNORE against the natural key, so an amount a village has edited

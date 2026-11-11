@@ -6,6 +6,9 @@
  *
  *   beginReview        at confirm: the "received" step, the role's interviewers
  *                      become the application's, the first one is opened
+ *                      (or, when our review comes first, none until invited)
+ *   inviteToConversations / answerNotInvited
+ *                      our review's two answers, one per application
  *   announceReview     the notices that follow, after the transaction commits
  *   submitScore        one interviewer's scorecard; the next one opens
  *   scorecardsFor      who may read what (rule: mayReadScorecards)
@@ -44,7 +47,9 @@ import {
   parseCriteria,
   parseInterviewerRoles,
   parseScoreInput,
+  REVIEW_FIRST_VARIABLE,
   REVIEW_WORDS,
+  reviewStageOf,
   STALE_DAYS,
   statusFor,
   type ConversationMode,
@@ -53,7 +58,7 @@ import {
   type Status,
 } from "../../shared/applicationReview";
 import { civilDateKey } from "../../shared/lunar";
-import { openProposalHref } from "../../shared/openProposalDecide";
+import { DECIDE_WORDS, openProposalHref } from "../../shared/openProposalDecide";
 import { consentClosesAt } from "../../shared/roleProposalConsent";
 import { inTransaction } from "../repos/liveSessions";
 import * as repo from "../repos/applicationReview";
@@ -63,7 +68,7 @@ import { listOrgRoles } from "./orgChart";
 import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
 import type { DecideDeps } from "./openProposalDecide";
-import { numberVar } from "./variables";
+import { boolVar, numberVar, stringVar } from "./variables";
 import { verifyLink } from "./comms/links";
 import { languageOf } from "./applicantLanguage";
 import type { ApplicantLanguage } from "../../shared/applicantWords";
@@ -73,10 +78,31 @@ type Db = Pool | PoolConnection;
 export interface ReviewDeps extends Pick<DecideDeps, "getPool" | "notify" | "notifyAdmins" | "liveHoldersOf" | "calendar" | "now" | "members"> {
   /** The village setting `org.consent_after_interviews`. Absent reads as off. */
   consentAfterInterviews?: () => boolean;
+  /** The village setting `org.review_before_conversations`. Absent reads the setting itself (`reviewFirstOn`). */
+  reviewFirst?: () => boolean;
   /** The role that sends first replies (`org.onboarding_role`). Absent or empty reads as nobody. */
   onboardingRole?: () => string;
   /** Tells the person who proposed, by email and on their profile (server/lib/applicantUpdates.ts). Absent tells nobody. */
   tellApplicant?: import("./applicantUpdates").TellApplicant;
+}
+
+/** Whether our review comes before the conversations for an application confirming now. */
+export function reviewFirstOn(deps: Pick<ReviewDeps, "reviewFirst">): boolean {
+  return deps.reviewFirst ? deps.reviewFirst() : boolVar(REVIEW_FIRST_VARIABLE);
+}
+
+/**
+ * THE VILLAGE'S WAY TO STAY CLOSE (`org.stay_close_name`, `org.stay_close_link`),
+ * named in the not-invited letter and on the status page. Null when the village
+ * names none, or names one with nowhere to go.
+ */
+export function stayCloseProgram(): { name: string; href: string } | null {
+  const name = stringVar("org.stay_close_name").trim().slice(0, 80);
+  const href = stringVar("org.stay_close_link").trim().slice(0, 300);
+  if (!name || !href) return null;
+  if (!href.startsWith("/") && !/^https:\/\/[^\s]+$/i.test(href)) return null;
+  if (href.startsWith("//")) return null;
+  return { name, href };
 }
 
 const ADOPTING_POWER = "org.seat";
@@ -119,6 +145,8 @@ export interface ReviewStart {
   ref: string;
   roleIds: string[];
   interviews: InterviewerRole[];
+  /** Our review comes first: nothing opens, and nobody is asked to interview, until a decider invites. */
+  reviewFirst?: boolean;
   /** Shown once on the confirmation page and sent by email; only its hash is kept. Null when the applicant has an account. */
   statusToken: string | null;
   /** True when the circle's ask waits for the interviews. */
@@ -136,26 +164,29 @@ export const hashToken = (t: string): string => crypto.createHash("sha256").upda
 export async function beginReview(
   db: Db,
   deps: Pick<ReviewDeps, "consentAfterInterviews">,
-  p: { ref: string; roleIds: string[]; applicantUserId: string | null; at: Date },
+  p: { ref: string; roleIds: string[]; applicantUserId: string | null; at: Date; reviewFirst?: boolean },
 ): Promise<ReviewStart> {
   const setup = await setupFor(db, p.roleIds);
-  const holdConsent = !!deps.consentAfterInterviews?.() && setup.interviewers.length > 0 && kindOfRef(p.ref) === "open";
+  // Our review is for an open proposal: the doors that answer it are the open proposal's page.
+  const reviewFirst = !!p.reviewFirst && kindOfRef(p.ref) === "open";
+  // Reviewed first, the decision is the circle's consent after the conversations, so the ask always waits.
+  const holdConsent = reviewFirst || (!!deps.consentAfterInterviews?.() && setup.interviewers.length > 0 && kindOfRef(p.ref) === "open");
   const statusToken = p.applicantUserId ? null : crypto.randomBytes(24).toString("base64url");
   await repo.stampStep(db, {
     ref: p.ref,
     kind: "confirmed",
     at: p.at,
-    detail: { roleIds: p.roleIds, criteria: setup.criteria, mode: setup.mode, holdConsent, applicantUserId: p.applicantUserId, statusHash: statusToken ? hashToken(statusToken) : null },
+    detail: { roleIds: p.roleIds, criteria: setup.criteria, mode: setup.mode, holdConsent, reviewFirst, applicantUserId: p.applicantUserId, statusHash: statusToken ? hashToken(statusToken) : null },
   });
-  await repo.insertInterviews(db, p.ref, setup.interviewers, p.at);
+  await repo.insertInterviews(db, p.ref, setup.interviewers, p.at, !reviewFirst);
   if (!setup.interviewers.length) await repo.stampStep(db, { ref: p.ref, kind: "scores_in", at: p.at });
-  return { ref: p.ref, roleIds: p.roleIds, interviews: setup.interviewers, statusToken, holdConsent, at: p.at };
+  return { ref: p.ref, roleIds: p.roleIds, interviews: setup.interviewers, reviewFirst, statusToken, holdConsent, at: p.at };
 }
 
-/** After commit: the first interviewer's holders hear it waits on them. A retry writes nothing twice (stable keys). */
+/** After commit: the first interviewer's holders hear it waits on them. A retry writes nothing twice (stable keys). Reviewed first, nobody hears until the invitation. */
 export async function announceReview(deps: Pick<ReviewDeps, "getPool" | "notify" | "tellApplicant">, start: ReviewStart, applicantFirstName: string | null): Promise<void> {
   const first = start.interviews[0];
-  if (!first) return;
+  if (!first || start.reviewFirst) return;
   await tellInterviewers(deps, start.ref, 1, first.roleId, first.minutes, applicantFirstName);
 }
 
@@ -185,7 +216,7 @@ async function tellInterviewers(deps: Pick<ReviewDeps, "getPool" | "notify" | "t
 
 export type ScoreOutcome = { ok: true; scoresIn: boolean } | { ok: false; status: number; error: string; field?: string };
 
-async function confirmedDetail(db: Db, ref: string): Promise<{ roleIds: string[]; criteria: Criterion[]; mode: ConversationMode; holdConsent: boolean; applicantUserId: string | null; statusHash: string | null; at: Date } | null> {
+async function confirmedDetail(db: Db, ref: string): Promise<{ roleIds: string[]; criteria: Criterion[]; mode: ConversationMode; holdConsent: boolean; reviewFirst: boolean; applicantUserId: string | null; statusHash: string | null; at: Date } | null> {
   const step = (await repo.stepsOf(db, ref)).find((s) => s.kind === "confirmed");
   if (!step) return null;
   const d = step.detail ?? {};
@@ -194,6 +225,7 @@ async function confirmedDetail(db: Db, ref: string): Promise<{ roleIds: string[]
     criteria: parseCriteria(d.criteria),
     mode: parseConversationMode(d.mode),
     holdConsent: d.holdConsent === true,
+    reviewFirst: d.reviewFirst === true,
     applicantUserId: typeof d.applicantUserId === "string" ? d.applicantUserId : null,
     statusHash: typeof d.statusHash === "string" ? d.statusHash : null,
     at: step.at,
@@ -448,6 +480,83 @@ export async function hasRecused(deps: Pick<ReviewDeps, "getPool">, ref: string,
   return (await repo.recusedUsers(deps.getPool(), ref)).includes(userId);
 }
 
+// ── Our review: invite, or not (Phase A) ────────────────────────────────────
+
+export type ReviewAnswer =
+  | { ok: true; conversations: Array<{ roleId: string; role: string; minutes: number }> }
+  | { ok: false; status: number; error: string; code: "none" | "done" | "gone" };
+
+/** The application's conversations in order, by role name and minutes: what the invitation lists. */
+export async function conversationsOf(db: Db, ref: string): Promise<Array<{ roleId: string; role: string; minutes: number }>> {
+  const list = await repo.interviewsOf(db, ref);
+  const names = await repo.roleNamesById(db, list.map((i) => i.roleId));
+  return list.map((i) => ({ roleId: i.roleId, role: names.get(i.roleId) ?? i.roleId, minutes: i.minutes }));
+}
+
+/** Whether our review still waits on this application: it has a review step and nobody has answered it. */
+export async function reviewWaits(deps: Pick<ReviewDeps, "getPool">, ref: string): Promise<boolean> {
+  return reviewStageOf(await repo.stepsOf(deps.getPool(), ref)) === "review";
+}
+
+/** The answer's own checks, shared by both: a review step, still unanswered, the application still open. */
+async function answerable(db: Db, ref: string): Promise<Exclude<ReviewAnswer, { ok: true }> | null> {
+  const steps = await repo.stepsOf(db, ref);
+  const stage = reviewStageOf(steps);
+  if (!stage) return { ok: false, status: 409, error: DECIDE_WORDS.review.none, code: "none" };
+  if (steps.some((s) => s.kind === "decided")) return { ok: false, status: 409, error: REVIEW_WORDS.gone, code: "gone" };
+  if (stage !== "review") return { ok: false, status: 409, error: DECIDE_WORDS.review.done, code: "done" };
+  return null;
+}
+
+/**
+ * INVITE TO THE CONVERSATIONS. One `review` step answers it (the unique key
+ * admits one answer, so a not-invited letter pressed at the same moment loses),
+ * the first reply is stamped with it so the reply clock stops, and the first
+ * conversation opens. Its holders hear it waits on them. A role that names no
+ * conversations goes straight to the circle's consent. The caller has already
+ * checked who may answer; the invitation letter is the caller's to send.
+ */
+export async function inviteToConversations(deps: ReviewDeps, ref: string, actorId: string): Promise<ReviewAnswer> {
+  const pool = deps.getPool();
+  const at = deps.now();
+  const refused = await answerable(pool, ref);
+  if (refused) return refused;
+  let opened: { position: number; roleId: string; minutes: number } | null = null;
+  const won = await inTransaction(pool, async (conn) => {
+    if (!(await repo.stampStep(conn, { ref, kind: "review", at, actorUserId: actorId, detail: { answer: "invited" } }))) return false;
+    await repo.stampStep(conn, { ref, kind: "first_reply", at, actorUserId: actorId });
+    const first = [...(await repo.interviewsOf(conn, ref, true))].sort((a, b) => a.position - b.position).find((i) => i.state === "waiting");
+    if (first && (await repo.openInterview(conn, first.id, at))) opened = { position: first.position, roleId: first.roleId, minutes: first.minutes };
+    return true;
+  });
+  if (!won) return { ok: false, status: 409, error: DECIDE_WORDS.review.done, code: "done" };
+  const conversations = await conversationsOf(pool, ref);
+  const o = opened as { position: number; roleId: string; minutes: number } | null;
+  if (o) {
+    const name = (await proposals.readOpenProposal(pool, ref))?.name ?? null;
+    await tellInterviewers(deps, ref, o.position, o.roleId, o.minutes, firstName(name));
+  } else if (interviewsDone(await repo.interviewsOf(pool, ref))) {
+    // Nothing to talk through first: the decision is the circle's, now.
+    await openConsentRound(deps, ref);
+  }
+  return { ok: true, conversations };
+}
+
+/**
+ * NOT INVITED. One `review` step answers it, the same way, so it can never
+ * stand beside an invitation. The caller marks the proposal declined and sends
+ * the letter; this only records our review's answer.
+ */
+export async function answerNotInvited(deps: Pick<ReviewDeps, "getPool" | "now">, ref: string, actorId: string): Promise<ReviewAnswer> {
+  const pool = deps.getPool();
+  const refused = await answerable(pool, ref);
+  if (refused) return refused;
+  if (!(await repo.stampStep(pool, { ref, kind: "review", at: deps.now(), actorUserId: actorId, detail: { answer: "not_invited" } }))) {
+    return { ok: false, status: 409, error: DECIDE_WORDS.review.done, code: "done" };
+  }
+  return { ok: true, conversations: [] };
+}
+
 // ── Steps the doors stamp ───────────────────────────────────────────────────
 
 /** A person sent the first reply. Stamped once. */
@@ -497,7 +606,7 @@ export async function requestSplit(deps: ReviewDeps, ref: string): Promise<{ ok:
 // ── The applicant's status ──────────────────────────────────────────────────
 
 /** The status page's data. Steps, roles and times only: never a score, a note or a person. */
-export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null; locale: ApplicantLanguage; note: string | null; offer: Awaited<ReturnType<typeof applicantOffer>> }) | null> {
+export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status & { roles: string[]; booking: string | null; mode: ConversationMode; outcome: "adopted" | "declined" | "withdrawn" | null; replyDays: number; referencesGiven: number | null; locale: ApplicantLanguage; note: string | null; offer: Awaited<ReturnType<typeof applicantOffer>>; reviewFirst: boolean; notInvited: boolean; stayClose: { name: string; href: string } | null }) | null> {
   const pool = deps.getPool();
   const steps = await repo.stepsOf(pool, ref);
   const confirmed = steps.find((s) => s.kind === "confirmed");
@@ -508,7 +617,11 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   const tz = deps.calendar().timezone || "UTC";
   const asks = kindOfRef(ref) === "open" ? ((await asksFor(pool, [ref])).get(ref) ?? []) : [];
   const how = decidedStep?.detail?.how;
+  const stage = reviewStageOf(steps);
   const s = statusFor({
+    reviewFirst: stage !== null,
+    invitedAt: stage === "invited" ? (steps.find((x) => x.kind === "review")?.at ?? null) : null,
+    notInvited: stage === "not_invited",
     decided: how === "adopted" || how === "declined" || how === "withdrawn" ? how : decidedStep ? "declined" : null,
     firstReplyAt: steps.find((x) => x.kind === "first_reply")?.at ?? null,
     confirmedAt: confirmed.at,
@@ -526,7 +639,23 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   // The language and the decider's note belong to the applicant: they ride on the applicant's own page only (token or their account), never on a decider's read.
   const own = kindOfRef(ref) === "open" ? await proposals.readOpenProposal(pool, ref) : null;
   const referencesGiven = own && own.body.backgroundCheck ? (own.body.references ?? []).length : null;
-  return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven, locale: own ? languageOf(own) : "en", note: own?.body.note ?? null, offer: outcome ? null : await applicantOffer(pool, ref) };
+  // Reviewed first, the booking line waits for the invitation: before it, nothing is booked.
+  const bookingShown = stage === "review" || stage === "not_invited" ? null : booking;
+  return {
+    ...s,
+    roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id),
+    booking: bookingShown,
+    mode,
+    outcome,
+    replyDays: numberVar("org.applicant_reply_days"),
+    referencesGiven,
+    locale: own ? languageOf(own) : "en",
+    note: own?.body.note ?? null,
+    offer: outcome ? null : await applicantOffer(pool, ref),
+    reviewFirst: stage !== null,
+    notInvited: stage === "not_invited",
+    stayClose: stage === "not_invited" ? stayCloseProgram() : null,
+  };
 }
 
 /**
@@ -586,11 +715,13 @@ export async function reviewClockTick(deps: ReviewDeps): Promise<TickSummary> {
   for (const r of await repo.openReviews(pool)) {
     const names = await roleNamesOf(deps, r.ref);
     if (!r.firstReplyAt) {
+      // Reviewed first, the first reply IS our review's answer, and the reminder says what to do.
+      const reviewed = (await confirmedDetail(pool, r.ref))?.reviewFirst === true;
       if (now >= firstReplyDueAt(r.confirmedAt, tz)) {
-        await tell("application_first_reply_due", REVIEW_WORDS.firstReplyDue(names), `app:${r.ref}:reply-due`, r.ref);
+        await tell("application_first_reply_due", reviewed ? REVIEW_WORDS.reviewDue(names) : REVIEW_WORDS.firstReplyDue(names), `app:${r.ref}:reply-due`, r.ref);
         out.due++;
       } else if (now >= firstReplyReminderAt(r.confirmedAt, tz)) {
-        await tell("application_first_reply_due", REVIEW_WORDS.firstReplyReminder(names), `app:${r.ref}:reply-reminder`, r.ref);
+        await tell("application_first_reply_due", reviewed ? REVIEW_WORDS.reviewReminder(names) : REVIEW_WORDS.firstReplyReminder(names), `app:${r.ref}:reply-reminder`, r.ref);
         out.reminded++;
       }
     }

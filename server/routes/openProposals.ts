@@ -67,6 +67,9 @@ import {
   ipBucket,
   limiterAddressKey,
   safeGreeting,
+  APPLY_EMAIL_WORDS,
+  stepsAfterSubmit,
+  stepsAsLines,
 } from "../../shared/openProposals";
 import type { AppDeps } from "../lib/appDeps";
 import { post } from "../lib/comms/postOffice";
@@ -88,7 +91,9 @@ import { registerOpenProposalDecide, type DecideRouteDeps } from "./openProposal
 import { registerAgentProposals } from "./agentRoleProposals";
 import { registerApplicationReview } from "./applicationReview";
 import { clearReviewOf, refsDueForClearing } from "../repos/applicationReview";
-import { boolVar, numberVar } from "../lib/variables";
+import { boolVar, numberVar, rawValue } from "../lib/variables";
+import { foundingSetupFrom, type FoundingSetup } from "../../shared/foundingApplication";
+import { VARIABLES_BY_KEY } from "../../shared/gameVariables";
 import { languageForNewProposal, languageOf } from "../lib/applicantLanguage";
 import { wordsIn } from "../../shared/applicantWords";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
@@ -125,6 +130,8 @@ type Deps = Pick<
   boolVar?: (key: string) => boolean;
   /** A text setting: the village's default track (`org.default_track`) for the card gate. */
   stringVar?: (key: string) => string;
+  /** The application's village words. Absent: read from the village settings (shared/foundingApplication.ts). */
+  founding?: () => FoundingSetup;
 };
 
 /** The admin's switch for the public link (sheet 19i: on unless switched off). */
@@ -211,6 +218,14 @@ export function register(app: Express, deps: Deps): void {
     };
   }
 
+  /**
+   * The application's village words (shared/foundingApplication.ts): the ways
+   * to get to know us, the pay shape the role cards show, the first cycle.
+   * Read fresh on every request, so a change in Admin shows at once. A setting
+   * the registry does not know yet (the pay shape is lane A3's) reads as empty.
+   */
+  const founding = (): FoundingSetup => (deps.founding ? deps.founding() : foundingSetupFrom((key) => (VARIABLES_BY_KEY[key] ? rawValue(key) : "")));
+
   /** Next season by the village's calendar: the first that starts after today, or null. */
   function nextSeason() {
     const state = deps.seasonState();
@@ -283,6 +298,7 @@ export function register(app: Express, deps: Deps): void {
       goals: t?.goals ?? [],
       ...(t ? {} : { message: mode === "moon" ? OPEN_WORDS.noCurrentSeason : OPEN_WORDS.noSeason }),
       roles: t ? await offered() : [],
+      founding: founding(),
     });
   });
 
@@ -350,6 +366,8 @@ export function register(app: Express, deps: Deps): void {
       today: new Date().toISOString().slice(0, 10),
       alwaysChecked: (id) => alwaysChecked.has(id),
       now: now(),
+      // A tick is kept only for a way the village lists now, in its words as they read today.
+      knowUs: founding().knowUs,
     });
     if (!parsed.ok) return res.status(400).json({ error: parsed.error, field: parsed.field });
     // The files, every one checked before any is kept (Rye, 10 Nov 2026).
@@ -405,6 +423,8 @@ export function register(app: Express, deps: Deps): void {
       roleNames: proposal.roles.map((r) => byId.get(r.roleId) ?? "").filter(Boolean),
       link: `${site()}/propose-a-role/confirm?token=${encodeURIComponent(token)}`,
       lang: locale,
+      // The form is for a listed role: an application (Phase A vocabulary).
+      kind: "application",
       ...(t.term ? { when: wordsIn(locale).confirm.thisMoon(wordsIn(locale).day(t.term.startsOn), wordsIn(locale).day(t.term.endsOn)) } : {}),
     });
     const sent = await postEmail({
@@ -473,14 +493,17 @@ export function register(app: Express, deps: Deps): void {
       statusPath = `/application-status/${encodeURIComponent(confirmed.proposal.id)}?token=${encodeURIComponent(confirmed.review.statusToken)}`;
       if (confirmed.proposal.email) {
         const lang = languageOf(confirmed.proposal);
-        const text = wordsIn(lang).statusEmail.text(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")));
+        const apply = APPLY_EMAIL_WORDS[lang];
+        // The steps after submit (lane A2's one list, through the slot in shared/openProposals.ts), when there are any.
+        const steps = stepsAsLines(stepsAfterSubmit(lang, numberVar("org.applicant_reply_days")));
+        const text = `${apply.statusText(`${site()}${statusPath}`, wordsIn(lang).replyPromise(numberVar("org.applicant_reply_days")))}${steps ? `\n\n${steps}` : ""}`;
         try {
           await postEmail({
             idempotencyKey: `open-proposal:${confirmed.proposal.id}:status`,
             kind: "essential",
             origin: "open_proposal.status",
             to: { email: confirmed.proposal.email },
-            subject: wordsIn(lang).statusEmail.subject,
+            subject: apply.statusSubject,
             html: `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1f2937">${text
               .split("\n\n")
               .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br>")}</p>`)
@@ -495,7 +518,9 @@ export function register(app: Express, deps: Deps): void {
     // Somebody who already has an account reads it on their profile too; the email above is theirs either way.
     await tellApplicant(confirmed.proposal.id, "confirmed");
     // The language the applicant proposed in, so the confirmed page can speak it, and the first-reply window to date the next step.
-    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays: numberVar("org.applicant_reply_days") });
+    const replyDays = numberVar("org.applicant_reply_days");
+    const steps = stepsAfterSubmit(languageOf(confirmed.proposal), replyDays);
+    res.json({ confirmed: true, message: OPEN_WORDS.confirmed, statusPath, locale: languageOf(confirmed.proposal), replyDays, ...(steps.length ? { steps } : {}) });
   });
 
   // ── The desk ──────────────────────────────────────────────────────────────

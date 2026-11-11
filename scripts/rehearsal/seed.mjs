@@ -130,14 +130,56 @@ export async function seedVillage({ base, dbUrl, adminPassword, log = () => {} }
       "Full commitment",
       state.roles.finance,
     ]);
+    // The roots the board's work grows from (the five archetypes as roots). The
+    // starter quests are examples, which the roots route refuses, so the seed
+    // writes them here the way a founder's tags would read: a few quests on
+    // each root, and some left untagged, so the holder's filter has something
+    // to keep and something to set aside.
+    const [quests] = await db.query("SELECT id FROM quests ORDER BY sort_order, id");
+    const cycle = [["building"], ["storytelling", "catalyzing"], ["facilitating"], ["researching", "building"], []];
+    for (const [i, q] of quests.entries()) {
+      await db.query("UPDATE quests SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(cycle[i % cycle.length]), q.id]);
+    }
+    await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["researching", "catalyzing", "building"]), state.roles.finance]);
+    await db.query("UPDATE org_roles SET archetypes = ?, archetypes_suggested = 0 WHERE id = ?", [JSON.stringify(["building", "researching"]), state.roles.land]);
   } finally {
     await db.end();
   }
   await call("POST", `/api/admin/org/roles/${state.roles.welcome}/holders`, { userId: state.founderId, action: "add" }, F);
 
+  // Phase A: the founding team leads /roles with two paid roles, each card with its founding sections,
+  // the village's default split under it and a ceiling on the Finance Steward. Made-up words and figures.
+  for (const [k, v] of [
+    ["org.founding_team", true],
+    ["org.founding_team_roles", `${state.roles.finance}, ${state.roles.land}`],
+    ["org.pay_shape", "cash 40, equity 55, village credits 5"],
+    ["org.pay_shape_at_risk", "Part of the pay grows with what the village raises."],
+    ["org.pay_shape_note", "Indicative only. Terms are still being defined and are subject to legal review."],
+  ]) await call("PUT", `/api/admin/variables/${k}`, { value: v }, F);
+  await call(
+    "POST",
+    `/api/org/role-edit/${state.roles.finance}`,
+    {
+      sections: {
+        paid: true,
+        idealBackground: ["Ideally a background in finance", "Experience we'd love to see: shared land models"],
+        qualities: ["Holds the whole domain", "In it for the long run"],
+        aiCompanion: "Heron",
+        aiSupport: "An AI companion keeps the daily books moving, so the steward's time goes to the model.",
+        payCeiling: { amount: 5000, currency: "USD", per: "month" },
+        paySplitNote: "To be decided in the onboarding process.",
+      },
+    },
+    F,
+  );
+
   // The new holder's first steps.
   await call("PUT", "/api/admin/content/confidentiality", { title: "Confidentiality agreement", body: "What you read in our private records stays with you.\n\nYou keep it after you leave." }, F);
   for (const k of ["org.start_after_confidentiality", "org.start_after_membership"]) await call("PUT", `/api/admin/variables/${k}`, { value: true }, F);
+  // Our review comes before the conversations (Phase A), with a way to stay close the not-invited letter names.
+  await call("PUT", "/api/admin/variables/org.review_before_conversations", { value: true }, F);
+  await call("PUT", "/api/admin/variables/org.stay_close_name", { value: "Friends of the Village" }, F);
+  await call("PUT", "/api/admin/variables/org.stay_close_link", { value: "/resident" }, F);
 
   // Two existing members, one per viewport.
   for (const key of ["memberPhone", "memberDesktop"]) {

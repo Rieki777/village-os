@@ -150,6 +150,14 @@ describe("isQuietPath", () => {
     expect(isQuietPath("/quests?x=1", "/quests#top")).toBe(true);
     expect(isQuietPath("/profile/characters")).toBe(false);
   });
+
+  it("keeps the founding-team application in its own register: the strip stays away from every door into it", () => {
+    expect(isQuietPath("/propose-a-role")).toBe(true);
+    expect(isQuietPath("/propose-a-role?role=r-1")).toBe(true);
+    expect(isQuietPath("/propose-a-role/abc-token")).toBe(true);
+    expect(isQuietPath("/propose-a-role/confirm?token=x")).toBe(true);
+    expect(isQuietPath("/proposals")).toBe(false);
+  });
 });
 
 describe("chaptersOf", () => {

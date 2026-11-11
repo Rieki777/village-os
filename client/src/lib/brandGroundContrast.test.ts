@@ -635,7 +635,8 @@ const FIXED: Record<string, number> = {
   // (docs/DESIGN_RULE.md) and those buttons are the sheet's gold, no longer white on the brand. 54.
   "client/src/pages/Quests.tsx": 1,
   "client/src/pages/RequestMembership.tsx": 2,
-  "client/src/pages/ResidentJourney.tsx": 1,
+  // ResidentJourney.tsx's one left this list on 2026-11-11 (batch 155, lane A5): the resident track
+  // stands in the sheet's world (docs/DESIGN_RULE.md), so its steps draw no white-on-brand hover. 53.
   "client/src/pages/ResidentRights.tsx": 1,
   "client/src/pages/StewardRights.tsx": 1,
   "client/src/pages/Visit.tsx": 2,
@@ -647,11 +648,12 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
     // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
     // other primitives nothing imported. Its one fixed hover left with the file.
     // 56 since 2026-11-11, when ContentEditorTab's section Save moved to the floating save bar.
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(54);
+    // 53 since batch 155, when the resident track's step button moved into the sheet's world.
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(53);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(54 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(53 + 25);
   });
 
   for (const list of POINTER_LISTS) {

@@ -7,6 +7,7 @@ import { authToken } from "@/lib/gameApi";
 import type { PaySettings } from "@shared/seatSettings";
 import type { Interviewer, ParameterKey, ParameterValues } from "@shared/roleParameters";
 import type { WordValue } from "@shared/roleProposals";
+import type { RoleCardSections } from "@shared/roleCardSections";
 
 export const EDIT_URL = "/api/org/role-edit";
 
@@ -46,6 +47,8 @@ export interface EditorState {
   parameterKeys: ParameterKey[];
   pay: PaySettings | null;
   archetypes: string[];
+  /** The founding sections (shared/roleCardSections.ts). Absent from a server that predates them. */
+  sections?: RoleCardSections;
 }
 
 export interface EditorOpen {
@@ -107,6 +110,8 @@ export interface SaveBody {
   parameters?: Record<string, unknown>;
   pay?: PaySettings | null;
   archetypes?: string[];
+  /** The founding sections as typed; the server reads them with `readSections`. */
+  sections?: Record<string, unknown>;
 }
 
 export const readAccess = () => send<{ door: "power" | "admin" | null }>("GET", "/access");

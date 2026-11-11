@@ -37,6 +37,9 @@ import {
 } from "@/lib/questBoard";
 import { memberDoorShown } from "@/lib/brochure";
 import MaiaTypeLine from "@/components/geneKeys/MaiaTypeLine";
+import RootsFilterToggle from "@/components/roots/RootsFilterToggle";
+import { useRootsFilter } from "@/components/roots/useRootsFilter";
+import { useLingui } from "@lingui/react/macro";
 
 /*
  * The bare "?" is a 16px circle set inside a sentence, so its box cannot grow
@@ -88,6 +91,7 @@ const RING_COPY: Record<Ring, { title: string; blurb: string }> = {
  * hardcoded list.
  */
 export default function Quests() {
+  const { t } = useLingui();
   // The letter is a member's door: open to anybody signed in, a story page for a visitor (shared/brochure.ts).
   const letterConfig = useGameConfig();
   const letterOn = memberDoorShown(letterConfig, "/love-letter", !!useOptionalAuth()?.user);
@@ -178,12 +182,24 @@ export default function Quests() {
     return ["All", ...seen];
   }, [quests]);
 
-  const filtered = quests.filter((q) => {
+  // "Show only what matches my roots": on by default once the member has
+  // picked roots on their profile, one press to turn off (components/roots).
+  const roots = useRootsFilter(user?.id ?? null);
+  const byChips = quests.filter((q) => {
     const circleMatch = activeCircle === "All" || q.circle === activeCircle;
     const diffMatch =
       activeDifficulty === "All" || q.difficulty === activeDifficulty;
     return circleMatch && diffMatch;
   });
+  // The roots filter reads the WHOLE board, so "is anything tagged" is a fact
+  // about the village and never about whichever circle chip is pressed.
+  const byRoots = roots.apply(quests, (q) => q.archetypes);
+  const rootKept = new Set(byRoots.shown.map((q) => q.id));
+  const filtered = byChips.filter((q) => rootKept.has(q.id));
+  const rootsHidden = byChips.length - filtered.length;
+  // The switch is offered only when the board carries roots at all: a village
+  // that has tagged nothing yet has nothing to filter by.
+  const rootsOffered = roots.available && byRoots.tagged;
 
   // The filtered board, grouped into its rings. Filters apply inside a ring,
   // so narrowing to one circle empties the rings it does not touch instead of
@@ -424,6 +440,15 @@ export default function Quests() {
         </div>
       </section>
 
+      {/* "Show only what matches my roots", outside the sticky bar so a phone keeps its slim filter row. */}
+      {rootsOffered && (
+        <section className="pt-6 bg-background">
+          <div className="container max-w-7xl">
+            <RootsFilterToggle filter={roots} total={byChips.length} shown={filtered.length} noun="quests" />
+          </div>
+        </section>
+      )}
+
       {/* The board, in rings. Each ring is a plain section with its own count,
           so the page reads as a walk rather than as one long wall. */}
       <section className="py-16 bg-background">
@@ -498,8 +523,19 @@ export default function Quests() {
                   ? "The Quest Board didn't load. Reload to try again."
                   : quests.length === 0
                     ? "No Quests posted yet. Post the first one."
-                    : "No Quests match. Clear a filter to see more."}
+                    : roots.on && rootsHidden > 0
+                      ? t({ message: "None of these grow from your roots yet.", context: "quests board, roots filter hid everything" })
+                      : "No Quests match. Clear a filter to see more."}
               </p>
+              {!boardFailed && roots.on && rootsHidden > 0 && (
+                <button
+                  type="button"
+                  onClick={() => roots.setOn(false)}
+                  className={`${BTN_PRIMARY} mt-4`}
+                >
+                  {t({ message: "Show every quest", context: "quests board, roots filter hid everything" })}
+                </button>
+              )}
             </div>
           )}
 
