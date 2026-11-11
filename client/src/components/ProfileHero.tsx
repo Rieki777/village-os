@@ -13,6 +13,7 @@
  * server answered.
  */
 import { useEffect, useState, type ReactNode } from "react";
+import FramelessImg from "@/components/FramelessImg";
 import { m } from "framer-motion";
 import { authToken, useGameConfig } from "@/lib/gameApi";
 import { Link } from "wouter";
@@ -226,7 +227,7 @@ export default function ProfileHero({
   /* A character's art, or its initial when there is none or the file went missing. */
   const portrait = (size: "hero" | "card", c: Character | null) =>
     c?.avatar && !broken[c.id] ? (
-      <img
+      <FramelessImg
         src={c.avatar}
         alt={nameOf(c.archetypeKey)}
         onError={() => setBroken((b) => ({ ...b, [c.id]: true }))}

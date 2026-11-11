@@ -19,6 +19,7 @@
  * gold badge on the edge of the disc, each with its word for a screen reader.
  */
 import { PenLine, Star } from "lucide-react";
+import FramelessImg from "@/components/FramelessImg";
 import { ROOM_COPY, type SessionPerson } from "@shared/sessions";
 import { initialsFrom } from "@/components/power/holderFace";
 
@@ -46,7 +47,7 @@ export default function PersonDisc({
     <span className="relative inline-block shrink-0" data-person-disc={size} data-present={person.present ? "true" : "false"}>
       <span className={`grid place-items-center overflow-hidden font-semibold text-foreground ${shape} ${presence}`}>
         {person.avatar ? (
-          <img src={person.avatar} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+          <FramelessImg src={person.avatar} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
         ) : (
           <span aria-hidden="true">{initialsFrom(person.name)}</span>
         )}

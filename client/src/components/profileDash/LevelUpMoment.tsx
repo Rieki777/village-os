@@ -22,6 +22,7 @@
  */
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
+import FramelessImg from "@/components/FramelessImg";
 import { capabilityLabel } from "@shared/capabilities";
 import { playMoment } from "@/lib/sound";
 import type { StageAdvance } from "@/components/StageAdvanced";
@@ -123,7 +124,7 @@ export default function LevelUpMoment({
         </div>
         <div className="relative size-28 overflow-hidden rounded-full border-2 border-notice bg-muted sm:size-36 lg:size-44">
           {portrait?.src && !broken ? (
-            <img src={portrait.src} alt={portrait.label} onError={() => setBroken(true)} className="h-full w-full object-cover object-top" />
+            <FramelessImg src={portrait.src} alt={portrait.label} onError={() => setBroken(true)} className="h-full w-full object-cover object-top" />
           ) : (
             <span className="flex h-full w-full items-center justify-center font-display text-5xl text-foreground">
               {(portrait?.label ?? name).replace(/^The\s+/i, "").slice(0, 1)}
