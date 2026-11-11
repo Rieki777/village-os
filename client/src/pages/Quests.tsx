@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { BTN_PRIMARY, H1, RING, WORLD } from "@/components/journey/look";
 import WorkPayBlock from "@/components/WorkPayBlock";
 import { Link } from "wouter";
 import { m } from "framer-motion";
@@ -206,18 +207,19 @@ export default function Quests() {
 
   return (
     <Layout>
+      <div className={WORLD}>
       {/* Hero */}
-      <section className="py-10 md:py-24 bg-gradient-to-b from-teal/10 to-background">
+      <section className="py-10 md:py-24">
         <div className="container">
           <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-6"
           >
-            <div className="w-16 h-16 rounded-full bg-teal/10 flex items-center justify-center mx-auto mb-6">
-              <Compass className="w-8 h-8 text-teal-deep" />
+            <div className={`${RING} mx-auto mb-6 size-16`}>
+              <Compass className="size-7" aria-hidden="true" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
+            <h1 className={`${H1} mb-4`}>
               The Quest Board
             </h1>
             {/* R47: the Trail line leads, the reward word keeps its tooltip,
@@ -245,7 +247,7 @@ export default function Quests() {
           <div className="container max-w-7xl">
             <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm">
               <h2 className="font-display text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-                <Sprout className="w-5 h-5 text-teal-deep" />
+                <Sprout className="w-5 h-5 text-notice" />
                 {inFlight.length > 0 ? "Pick up where you left off" : "A good first quest"}
               </h2>
               {inFlight.length > 0 ? (
@@ -257,7 +259,7 @@ export default function Quests() {
                       <li key={c.id}>
                         <Link
                           href={`/quests/${q.id}`}
-                          className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-teal/40 hover:shadow-sm transition-all"
+                          className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-notice hover:shadow-sm transition-all"
                         >
                           <QuestPoster quest={q} className="w-14 h-14 rounded-xl shrink-0">
                             <Icon className="absolute inset-0 m-auto w-6 h-6 text-white" />
@@ -272,7 +274,7 @@ export default function Quests() {
                                 : "Turned in. Waiting on the circle's yes."}
                             </span>
                           </span>
-                          <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
+                          <ArrowRight className="w-4 h-4 text-notice shrink-0" />
                         </Link>
                       </li>
                     );
@@ -281,7 +283,7 @@ export default function Quests() {
               ) : suggestion ? (
                 <Link
                   href={`/quests/${suggestion.quest.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-teal/40 hover:shadow-sm transition-all"
+                  className="flex items-center gap-3 rounded-xl border border-border p-3 hover:border-notice hover:shadow-sm transition-all"
                 >
                   <QuestPoster quest={suggestion.quest} className="w-14 h-14 rounded-xl shrink-0">
                     {(() => {
@@ -303,7 +305,7 @@ export default function Quests() {
                       </span>
                     )}
                   </span>
-                  <ArrowRight className="w-4 h-4 text-teal-deep shrink-0" />
+                  <ArrowRight className="w-4 h-4 text-notice shrink-0" />
                 </Link>
               ) : null}
               {!inFlight.length && suggestion ? <MaiaTypeLine className="mt-3" /> : null}
@@ -336,7 +338,7 @@ export default function Quests() {
                 onClick={() => setActiveCircle(c)}
                 className={`px-3 min-h-[44px] inline-flex items-center whitespace-nowrap flex-shrink-0 rounded-full text-xs font-medium transition-colors ${
                   activeCircle === c
-                    ? "bg-teal-deep text-white"
+                    ? "bg-notice text-background"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
@@ -388,9 +390,9 @@ export default function Quests() {
        */}
       <section className="pb-2 bg-background">
         <div className="container">
-          <div className="max-w-2xl mx-auto bg-card border border-teal/20 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center gap-4 text-left mt-6">
-            <div className="w-12 h-12 rounded-xl bg-amber/15 flex items-center justify-center shrink-0">
-              <Lightbulb className="w-6 h-6 text-amber-ink" />
+          <div className="max-w-2xl mx-auto bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center gap-4 text-left mt-6">
+            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center shrink-0">
+              <Lightbulb className="w-6 h-6 text-notice" />
             </div>
             <div className="flex-1">
               <h2 className="font-display text-lg font-bold text-foreground">
@@ -402,7 +404,7 @@ export default function Quests() {
               </p>
             </div>
             <Link href="/propose-quest">
-              <a className="shrink-0 inline-flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-teal-deep-dark transition">
+              <a className={`${BTN_PRIMARY} shrink-0`}>
                 Propose a Quest
                 <ArrowRight className="w-4 h-4" />
               </a>
@@ -432,7 +434,7 @@ export default function Quests() {
                         {meta.title}
                       </h2>
                       {user && walkedIn[ring] > 0 && (
-                        <span className="text-sm font-medium text-teal-deep">
+                        <span className="text-sm font-medium text-notice">
                           {walkedIn[ring]} of {all.length} walked
                         </span>
                       )}
@@ -467,7 +469,7 @@ export default function Quests() {
                   {hidden > 0 && (
                     <button
                       onClick={() => setExpandedRings((r) => ({ ...r, [ring]: true }))}
-                      className="mt-5 min-h-11 px-5 rounded-lg border border-border font-semibold text-teal-deep hover:border-teal/40 transition-colors"
+                      className="mt-5 min-h-11 px-5 rounded-lg border border-border font-semibold text-notice hover:border-notice transition-colors"
                     >
                       Show all {all.length}
                     </button>
@@ -495,7 +497,7 @@ export default function Quests() {
           {signs && signs.recent.length > 0 && (
             <div className="max-w-3xl mx-auto mb-16">
               <h2 className="font-display text-xl font-bold text-foreground mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-gold" />
+                <Sparkles className="w-5 h-5 text-notice" />
                 Recently completed
               </h2>
               <ul className="space-y-2">
@@ -503,11 +505,11 @@ export default function Quests() {
                   <li key={`${r.questId}-${i}`}>
                     <Link
                       href={`/quests/${r.questId}`}
-                      className="flex items-center justify-between gap-3 bg-card border border-border rounded-xl px-4 py-3 hover:border-teal/40 transition-colors"
+                      className="flex items-center justify-between gap-3 bg-card border border-border rounded-xl px-4 py-3 hover:border-notice transition-colors"
                     >
                       <span className="text-sm text-foreground min-w-0 truncate">
                         <span className="font-semibold">{r.name}</span> completed{" "}
-                        <span className="font-medium text-teal-deep">{r.questTitle}</span>
+                        <span className="font-medium text-notice">{r.questTitle}</span>
                       </span>
                       <span className="text-xs text-muted-foreground shrink-0">
                         {relativeWhen(r.when, now)}
@@ -520,8 +522,8 @@ export default function Quests() {
           )}
 
           {/* CTA */}
-          <div className="max-w-3xl mx-auto text-center bg-gradient-to-br from-teal/10 to-sage/10 p-8 rounded-2xl border border-teal/10">
-            <Star className="w-12 h-12 text-primary mx-auto mb-4" />
+          <div className="max-w-3xl mx-auto text-center bg-card p-8 rounded-2xl border border-border shadow-sm">
+            <Star className="mx-auto mb-4 size-12 text-notice" aria-hidden="true" />
             <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-4">
               Find your first Quest
             </h2>
@@ -573,12 +575,13 @@ export default function Quests() {
               {villageName} sets its own rules for {currencyName}, {valueName} and its other tokens.
               {conversionNote ? ` ${conversionNote}` : ""}
             </p>
-            <Link href="/game-mechanics" className="inline-block mt-4 text-sm text-teal-deep underline">
+            <Link href="/game-mechanics" className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
               See this village's rules
             </Link>
           </div>
         </div>
       </section>
+      </div>
     </Layout>
   );
 }
