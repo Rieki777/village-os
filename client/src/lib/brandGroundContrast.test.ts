@@ -604,7 +604,8 @@ const POINTER_LISTS = (() => {
 const FIXED: Record<string, number> = {
   "client/src/components/GuideChat.tsx": 2,
   "client/src/components/QuestActions.tsx": 2,
-  "client/src/components/admin/ContentEditorTab.tsx": 1,
+  // ContentEditorTab.tsx's one left this list on 2026-11-11: its section Save button went to
+  // the floating save bar (components/SaveBar.tsx), so the tab draws no white-on-brand hover. 56.
   "client/src/components/profile/InvitePanel.tsx": 1,
   "client/src/components/ui/button.tsx": 1,
   "client/src/pages/Admin.tsx": 12,
@@ -644,11 +645,12 @@ describe("under the pointer, a brand button stays readable and visibly moves, li
   it(`reads every white-on-brand hover in client/src (${POINTER_LISTS.length}), and every one this change fixed`, () => {
     // 60 until 2026-10-30, when the unused shadcn ui/badge.tsx was deleted with 38
     // other primitives nothing imported. Its one fixed hover left with the file.
-    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(57);
+    // 56 since 2026-11-11, when ContentEditorTab's section Save moved to the floating save bar.
+    expect(Object.values(FIXED).reduce((n, v) => n + v, 0)).toBe(56);
     for (const [file, n] of Object.entries(FIXED)) {
       expect(POINTER_LISTS.filter((l) => l.file === file).length, `${file} hovers read`).toBeGreaterThanOrEqual(n);
     }
-    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(57 + 25);
+    expect(POINTER_LISTS.length).toBeGreaterThanOrEqual(56 + 25);
   });
 
   for (const list of POINTER_LISTS) {
