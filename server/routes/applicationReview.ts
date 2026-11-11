@@ -51,6 +51,8 @@ import type { DecideRouteDeps } from "./openProposalDecide";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
 import { applicantOffer, replyOffer } from "../lib/counterOffer";
 
+/** A status token: the first email's random one is 32 characters, a signed link's is about 130. */
+const TOKEN_MAX = 300;
 const MINUTE = 60_000;
 const CLOCK_EVERY_MS = 60 * MINUTE;
 export const REVIEW_CLOCK_JOB = "application-review-clock";
@@ -70,7 +72,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
     members: deps.members,
     consentAfterInterviews: () => boolVar("org.consent_after_interviews"),
     onboardingRole: () => stringVar("org.onboarding_role"),
-    tellApplicant: makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail: deps.postEmail, projectName: deps.projectName }),
+    tellApplicant: makeApplicantTeller({ getPool, members: deps.members, notify: deps.notify, postEmail: deps.postEmail, projectName: deps.projectName, siteUrl: () => deps.deploymentOrigin() }),
   };
 
   /** The signed-in member holding `terms.read`, or null after answering 401. */
@@ -93,7 +95,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
 
   app.get("/api/application-status/:ref", async (req, res) => {
     const ref = refOf(req);
-    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
     if (await overLimit(`application-status:${deps.clientIp ? deps.clientIp(req) : "x"}`, 60, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
     const s = ref && token ? await statusByToken(work, ref, token) : null;
     // One answer for an unknown ref and a wrong token, so a ref cannot be probed.
@@ -117,7 +119,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
 
   app.post("/api/application-status/:ref/terms", async (req, res) => {
     const ref = refOf(req);
-    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
     if (await overLimit(`application-terms:${deps.clientIp ? deps.clientIp(req) : "x"}`, 20, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
     if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);
     const out = await replyOffer(getPool(), ref, req.body?.replies, now());
@@ -140,7 +142,7 @@ export function registerApplicationReview(app: Express, deps: DecideRouteDeps & 
 
   app.post("/api/application-status/:ref/split", async (req, res) => {
     const ref = refOf(req);
-    const token = typeof req.query.token === "string" ? req.query.token.slice(0, 100) : "";
+    const token = typeof req.query.token === "string" ? req.query.token.slice(0, TOKEN_MAX) : "";
     if (await overLimit(`application-split:${deps.clientIp ? deps.clientIp(req) : "x"}`, 10, 10 * MINUTE)) return res.status(429).json({ error: "too_many" });
     // The link proves who asks, the way it does for the status page.
     if (!ref || !token || !(await statusByToken(work, ref, token))) return res.status(404).json(NOT_HERE);

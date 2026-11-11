@@ -693,6 +693,25 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
       expect(JSON.stringify(next.body)).not.toMatch(/strong|Heard it for|u-ia|score/i);
     });
 
+    it("the letters that ask the applicant to look carry a working link of their own, signed for this proposal alone", async () => {
+      const { id } = await confirmed("letterlink@example.test");
+      const other = await confirmed("letterlink2@example.test");
+      const ivs = await interviews(id);
+      await call("POST", `/api/governance/applications/${id}/first-reply`, {}, FOUNDER.id);
+      await score(id, Number(ivs[0].id), IA.id, "strong");
+      const mail = state.sent.find((m) => m.to.email === "letterlink@example.test" && m.subject === "A conversation is asked for");
+      expect(mail, "the conversation letter was sent").toBeTruthy();
+      // The audit's finding: this letter used to say the link was "in the first email".
+      const link = /https?:\/\/\S+\/application-status\/\S+/.exec(mail!.text)?.[0];
+      expect(link, "the letter carries a link").toBeTruthy();
+      const token = new URL(link!).searchParams.get("token") as string;
+      expect((await call("GET", `/api/application-status/${id}?token=${encodeURIComponent(token)}`, undefined, null)).status).toBe(200);
+      // CONTROLS: the link is for one proposal and one page. Another ref, a tampered token and a made-up one all answer 404.
+      expect((await call("GET", `/api/application-status/${other.id}?token=${encodeURIComponent(token)}`, undefined, null)).status).toBe(404);
+      expect((await call("GET", `/api/application-status/${id}?token=${encodeURIComponent(token.slice(0, -2) + "xx")}`, undefined, null)).status).toBe(404);
+      expect((await call("GET", `/api/application-status/${id}?token=a.b`, undefined, null)).status).toBe(404);
+    });
+
     it("answers one 404 for a wrong token and an unknown ref", async () => {
       const { id } = await confirmed("wrong@example.test");
       expect((await call("GET", `/api/application-status/${id}?token=nope`, undefined, null)).status).toBe(404);

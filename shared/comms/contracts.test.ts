@@ -23,7 +23,7 @@ describe("the comms vocabulary", () => {
       "no_permission", "suppressed", "over_cap", "paused", "module_off", "not_configured", "bad_address", "expired", "duplicate",
     ]);
     expect([...LINK_PURPOSES]).toEqual([
-      "unsubscribe", "preferences", "guest_confirm", "cant_make_it", "time_vote", "recap_answer", "letters_confirm", "rsvp_next",
+      "unsubscribe", "preferences", "guest_confirm", "cant_make_it", "time_vote", "recap_answer", "letters_confirm", "rsvp_next", "application_status",
     ]);
   });
 

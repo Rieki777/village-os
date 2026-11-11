@@ -64,6 +64,7 @@ import { isExampleUser } from "./examples";
 import { isTombstone } from "./oauthAccounts";
 import type { DecideDeps } from "./openProposalDecide";
 import { numberVar } from "./variables";
+import { verifyLink } from "./comms/links";
 import { languageOf } from "./applicantLanguage";
 import type { ApplicantLanguage } from "../../shared/applicantWords";
 
@@ -528,14 +529,27 @@ export async function statusOf(deps: ReviewDeps, ref: string): Promise<(Status &
   return { ...s, roles: (d?.roleIds ?? []).map((id) => roleNames.get(id) ?? id), booking, mode, outcome, replyDays: numberVar("org.applicant_reply_days"), referencesGiven, locale: own ? languageOf(own) : "en", note: own?.body.note ?? null, offer: outcome ? null : await applicantOffer(pool, ref) };
 }
 
-/** The status page for an emailed link: the ref and the token it was given. Constant-time compare. */
+/**
+ * The status page for an emailed link: the ref and the token it was given.
+ * Two kinds of token read it. The first email's own token is random and only its
+ * hash is kept (constant-time compare). The links the later updates carry
+ * (the "conversation asked" and "terms changed" letters) are signed for this one
+ * proposal, with an expiry, so the first link is never repeated or rotated;
+ * `verifyLink` answers for the purpose `application_status` alone and the
+ * payload must name this ref.
+ */
 export async function statusByToken(deps: ReviewDeps, ref: string, token: string) {
+  if (!token) return null;
   const d = await confirmedDetail(deps.getPool(), ref);
-  if (!d?.statusHash || !token) return null;
-  const a = Buffer.from(hashToken(token));
-  const b = Buffer.from(d.statusHash);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  return statusOf(deps, ref);
+  if (!d) return null;
+  if (d.statusHash) {
+    const a = Buffer.from(hashToken(token));
+    const b = Buffer.from(d.statusHash);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return statusOf(deps, ref);
+  }
+  const link = verifyLink("application_status", token);
+  if (link && link.ref === ref) return statusOf(deps, ref);
+  return null;
 }
 
 // ── Clocks: reminders only ──────────────────────────────────────────────────
