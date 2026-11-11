@@ -4,7 +4,7 @@
  * The centre circle is the first step; the six around it close one by one,
  * clockwise from the top. A path longer than seven continues into the
  * nineteen-circle Flower of Life on the same lattice. `walked` circles are
- * closed (gold), the `current` one is drawn in moonlight, the rest wait as
+ * closed (gold), the `current` one is drawn in firefly light, the rest wait as
  * dotted outlines.
  *
  * A circle that closes while the page is open draws its stroke once. With
@@ -95,7 +95,8 @@ export default function SeedOfLife({
           const state = circleState(i, done, now);
           const draws = state === "closed" && i >= firstSeen.current;
           const delay = draws ? Math.max(0, i - base) * 0.25 : 0;
-          const tone = state === "closed" ? "text-notice" : state === "current" ? "text-foreground" : "text-border";
+          // The step being walked is drawn in firefly light (the kit's own --nk-firefly), never stark white.
+          const tone = state === "closed" ? "text-notice" : state === "current" ? "nk-current" : "text-border";
           return (
             <circle
               key={i}

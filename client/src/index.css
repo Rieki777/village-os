@@ -1049,6 +1049,19 @@ html:has(#sera-changes [data-sera-strip-on]) {
 }
 
 /*
+ * A NIGHT PAGE SITS ON A NIGHT BODY. The night world is a class on a page's
+ * own wrapper, so the document under it kept the app's light ground: it showed
+ * as a pale band under the phone's bottom bar, in the safe area, and on every
+ * over-scroll (verify report). While a night page is up, the document takes
+ * the night ground too. The colour is the sheet's own knob, so a village that
+ * re-tints its night re-tints this with it.
+ */
+:root:has(main .sheet-night.min-h-screen),
+:root:has(main .sheet-night.min-h-screen) body {
+  background-color: var(--sheet-ground, #0d1411);
+}
+
+/*
  * The circle peek on the living map (`CirclePeek`, phones only) docks above
  * the tab bar while a circle is open, and the shortcuts button's corner is that
  * bar's right-hand end: left where it was, the button sat on the peek's
@@ -1114,6 +1127,20 @@ html:has(#sera-changes [data-sera-strip-on]) {
      not two: the tab bar steps out; the header menu still reaches every page. */
   :root:has([data-hides-tabbar-phone]) [data-mobile-tabbar] {
     display: none;
+  }
+}
+/*
+ * A page with its own bar at the bottom of a phone (the whole-path page's
+ * "resume") owns that edge the same way: the shortcuts button rides above it.
+ * And while somebody is typing on a phone the button steps out, because the
+ * keyboard pushes it up onto the very field being filled (verify B11).
+ */
+@media (width < 48rem) {
+  :root:has([data-bottom-bar]) [data-mobile-fab] {
+    translate: 0 calc(-1 * (var(--bottom-bar-h, 4.5rem) + 0.5rem));
+  }
+  :root:has(:is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"]), textarea, select, [contenteditable="true"]):focus) [data-mobile-fab] {
+    visibility: hidden;
   }
 }
 /* A role proposal's sticky Back/Next bar owns the bottom edge: at any width

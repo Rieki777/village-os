@@ -16,7 +16,7 @@
  * proposals. STATE_MAP 6.7 lists what each one needs.
  */
 import type { Pool } from "mysql2/promise";
-import { civilDay, civilDayOf, sayPath, yourPath, yourPathAll, type MemberFacts, type PathAnswer, type PathFacts, type SaidPath, type SeatingFacts } from "../../shared/yourPath";
+import { civilDay, civilDayOf, sayPath, yourPath, yourPathAll, type MemberFacts, type PathAnswer, type PathFacts, type PathMilestone, type SaidPath, type SeatingFacts } from "../../shared/yourPath";
 import { termWarningOpensFor, type CycleClock } from "../../shared/cycleClock";
 import { openExitOf, ownSeatings, recapEverSent } from "../repos/pathFacts";
 import { adoptedUnseatedSeats } from "../repos/seatRenewals";
@@ -110,6 +110,20 @@ export interface ServedPath extends PathAnswer {
   said: SaidPath;
   /** Every other rule that matches, in order: the whole-path page. */
   also: PathAnswer[];
+  /** The civil day of a milestone, where the village holds one: walked, or still ahead. */
+  dates: Partial<Record<PathMilestone, string>>;
+}
+
+/** The days the whole-path page can honestly name. A milestone with no recorded day gets none. */
+export function milestoneDates(f: PathFacts): Partial<Record<PathMilestone, string>> {
+  const out: Partial<Record<PathMilestone, string>> = {};
+  const started = f.seatings.map((s) => s.startedOn).filter((d): d is string => !!d).sort()[0];
+  const starts = f.applications.map((a) => a.firstDay).filter((d): d is string => !!d).sort()[0];
+  if (started) out.seated = started;
+  else if (starts) out.seated = starts;
+  if (f.onboarding) out.first_days = f.onboarding.dueOn;
+  if (f.moon && f.seatings.length) out.first_recap = f.moon.sendBy;
+  return out;
 }
 
 /** `me.path`: the one next step, with everything else that waits behind it. */
@@ -117,5 +131,5 @@ export async function pathFor(env: PathEnv, userId: string): Promise<ServedPath>
   const facts = await pathFactsFor(env, userId);
   const all = yourPathAll(facts);
   const first = all[0] ?? yourPath(facts);
-  return { ...first, today: civilDay(env.now, env.timeZone), said: sayPath(first, "en"), also: all.slice(1) };
+  return { ...first, today: civilDay(env.now, env.timeZone), said: sayPath(first, "en"), also: all.slice(1), dates: milestoneDates(facts) };
 }

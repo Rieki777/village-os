@@ -27,6 +27,8 @@ export interface RootStripProps {
   children: ReactNode;
   /** A second line a desktop has room for (hidden on a phone). */
   detail?: ReactNode;
+  /** What a desktop has room for at the far end: the step stops, a door to the whole path. Hidden on a phone. */
+  aside?: ReactNode;
   /** Make the whole strip a button that opens the path. */
   onOpen?: () => void;
   /** The button's accessible name when `onOpen` is given. */
@@ -59,7 +61,7 @@ function Root({ width, branches, className }: { width: number; branches: number;
   );
 }
 
-export default function RootStrip({ seed, children, detail, onOpen, openLabel, className = "" }: RootStripProps) {
+export default function RootStrip({ seed, children, detail, aside, onOpen, openLabel, className = "" }: RootStripProps) {
   const still = useReducedMotion();
   const body = (
     <>
@@ -70,6 +72,7 @@ export default function RootStrip({ seed, children, detail, onOpen, openLabel, c
         <span className="block truncate text-sm text-foreground sm:text-base">{children}</span>
         {detail ? <span className="hidden truncate text-sm text-muted-foreground lg:block">{detail}</span> : null}
       </span>
+      {aside ? <span className="relative hidden shrink-0 items-center gap-4 lg:flex">{aside}</span> : null}
       {onOpen ? (
         <ChevronRight aria-hidden="true" className="relative size-5 shrink-0 text-muted-foreground motion-safe:transition-transform group-hover:translate-x-0.5 group-hover:text-notice" />
       ) : null}

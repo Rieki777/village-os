@@ -201,7 +201,7 @@ export default function NotificationBell({ memberId = null }: NotificationBellPr
         {unseen > 0 && (
           <span
             aria-hidden="true"
-            className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-amber text-[10px] font-bold text-foreground flex items-center justify-center"
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber text-[11px] font-bold text-black flex items-center justify-center"
           >
             {unseen > 9 ? "9+" : unseen}
           </span>

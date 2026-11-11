@@ -145,7 +145,11 @@ export function register(app: Express, deps: Deps): void {
     if (!user) {
       return res.json({ agreement: null, exists: current !== null, you: null, message: current ? CONFIDENTIALITY_WORDS.signInToRead : CONFIDENTIALITY_WORDS.none });
     }
-    const you = current ? { holds: await holdsCurrentAgreement(getPool(), String(user.id), current, now()) } : null;
+    // Whether the last identity confirmation is still fresh, so the page asks for the password BEFORE the
+    // align is sent: sending first drew a 403 in the console on every first align (verify report, polish).
+    const until = confirmedUntil(user, RECONFIRM_FRESH_MS);
+    const confirmFresh = until !== null && now().getTime() <= until;
+    const you = current ? { holds: await holdsCurrentAgreement(getPool(), String(user.id), current, now()), confirmFresh } : null;
     const served = current
       ? { ...current, document: current.document ? { title: current.document.title, size: current.document.size, href: AGREEMENT_DOCUMENT_HREF } : null }
       : null;
