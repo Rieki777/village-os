@@ -8,6 +8,16 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
 import { CHECK_WORDS, checkConsentVersion } from "@shared/proposalAbout";
 
+/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
+const fillGoals = () => {
+  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
+    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
+    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
+    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
+    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
+  }
+};
+
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
@@ -114,6 +124,7 @@ describe("About you, on the open form", () => {
     await screen.findByText("Gate Keeper");
     fireEvent.click(box("r-gate"));
     await fillRest();
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
     expect(posted).toHaveLength(0);
@@ -128,6 +139,7 @@ describe("About you, on the open form", () => {
     ref(1, "Ines Vargas", "We built a fence together", "ines@example.org");
     expect(document.querySelector("[data-check-consent]")).toBeNull();
     fireEvent.change(screen.getByLabelText(/Where you are based/), { target: { value: "Uvita" } });
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.references).toEqual([{ name: "Ines Vargas", how: "We built a fence together", contact: "ines@example.org" }]);
@@ -142,6 +154,7 @@ describe("About you, on the open form", () => {
     fireEvent.click(box("r-gate"));
     await fillRest();
     fireEvent.change(screen.getByLabelText("Reference 1: name"), { target: { value: "Ines" } });
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/needs a name|Give each reference/i);
     expect(posted).toHaveLength(0);
@@ -157,10 +170,12 @@ describe("About you, on the open form", () => {
     await fillRest();
     ref(1, "Ines Vargas", "We built a fence together", "ines@example.org");
     expect(document.querySelector("[data-check-consent]")).toBeTruthy();
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/Tick the box/);
     expect(posted).toHaveLength(0);
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.checkConsent).toEqual({ given: true, version: checkConsentVersion() });

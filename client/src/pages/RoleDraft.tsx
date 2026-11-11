@@ -99,7 +99,7 @@ type Load = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; roles: D
  * (`GET /api/open-proposals/form`, public). A visitor's board shows only roles
  * the form would take, and no Apply when it is closed (red team, 9 Nov).
  */
-type FormRoleSteps = { id: string; name: string; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
+type FormRoleSteps = { id: string; name: string; terms?: { commitmentPct?: number | null }; conversations?: Array<{ role: string; minutes: number; finalApproval?: boolean }>; bookingUrl?: string | null };
 type FormState = { open: boolean; offered: Set<string> | null; message: string | null; term: OpenProposalTerm | null; roles: FormRoleSteps[] };
 
 function useProposalForm(): FormState | null {
@@ -192,6 +192,12 @@ export default function RoleDraft() {
   const cast = useCast();
   const places = usePlaceInvites();
   const form = useProposalForm();
+  /** What the role asks, read from its own terms first (a role that asks 100% says 100%), then from its card's line. */
+  const commitmentLine = (roleId: string, fromCard: string | null): string => {
+    const pct = form?.roles.find((r) => r.id === roleId)?.terms?.commitmentPct;
+    if (typeof pct === "number") return t({ message: `Commitment: ${pct}%`, context: "role draft stat" });
+    return /^Commitment: \d{1,3}%$/.test(fromCard ?? "") ? (fromCard as string) : t({ message: "Part or full commitment", context: "role draft stat" });
+  };
   const cardRef = useRef<HTMLDivElement | null>(null);
   const season = useSeason();
   const classNames = useClassNames();
@@ -210,6 +216,9 @@ export default function RoleDraft() {
   const [full, setFull] = useState(false);
   const [saveBlocked, setSaveBlocked] = useState(stored.blocked);
   const [step, setStep] = useState(0);
+  /** The steps the person has stood on, so the trail ticks only those. */
+  const [visited, setVisited] = useState<ReadonlySet<number>>(() => new Set([0]));
+  useEffect(() => setVisited((v) => (v.has(step) ? v : new Set(Array.from(v).concat(step)))), [step]);
   const [burst, setBurst] = useState(0);
   const [applyBurst, setApplyBurst] = useState(0);
   const [, navigate] = useLocation();
@@ -347,6 +356,7 @@ export default function RoleDraft() {
               ]}
               step={step}
               reached={4}
+              visited={visited}
               onGo={go}
               barLabel={t({ message: "Your progress through the five steps", context: "role draft steps" })}
             />
@@ -507,7 +517,7 @@ export default function RoleDraft() {
                             </InfoTip>
                           </dt>
                           <dd className="font-semibold text-foreground">
-                            {/^Commitment: \d{1,3}%$/.test(role.timeCommitment ?? "") ? role.timeCommitment : t({ message: "Part or full commitment", context: "role draft stat" })}
+                            {commitmentLine(role.id, role.timeCommitment)}
                           </dd>
                         </div>
                         <div className="px-2 py-2">
@@ -525,12 +535,12 @@ export default function RoleDraft() {
                         <p className={role.aim ? "text-foreground" : "italic text-muted-foreground"}>{role.aim ?? t`This role has not written its aim yet.`}</p>
                         {role.accountabilities > 0 && (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {role.accountabilities === 1 ? t`Answers for 1 thing` : t({ message: `Answers for ${answers} things`, context: "role draft stat" })}
+                            {role.accountabilities === 1 ? t`Answers for 1 goal` : t({ message: `Answers for ${answers} goals`, context: "role draft stat" })}
                           </p>
                         )}
                       </div>
                       {isOpen && load.kind === "ready" && (
-                        <div ref={cardRef} tabIndex={-1} role="region" aria-label={t`The full card for ${roleName}`} className="border-t border-border p-3 outline-none">
+                        <div ref={cardRef} tabIndex={-1} role="region" aria-label={t`The full card for ${roleName}`} className="scroll-mt-52 border-t border-border p-3 outline-none">
                           <SeatTradingCard
                             input={fromOrgSeat(role.raw, load.org.circles, load.org.people, load.org.village, { raiseHand: false })}
                             ctx={ctx}

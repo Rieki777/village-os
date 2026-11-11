@@ -316,12 +316,44 @@ describe.skipIf(!configured)("open role proposals, the intake, on a real schema"
 
     it("a cap per connection and a cap per address", async () => {
       state.limited = ["open-proposal:ip:"];
-      expect((await call("POST", "/api/open-proposals", proposal())).status).toBe(429);
+      const ip = await call("POST", "/api/open-proposals", proposal());
+      expect(ip.status).toBe(429);
+      expect(ip.body.error).toBe(OPEN_WORDS.tooMany);
       state.limited = ["open-proposal:email:"];
       const r = await call("POST", "/api/open-proposals", proposal());
       expect(r.status).toBe(429);
-      expect(r.body.error).toBe(OPEN_WORDS.tooMany);
+      expect(r.body.error).toBe(OPEN_WORDS.tooManyForAddress);
       expect(state.sent).toHaveLength(0);
+    });
+
+    it("B1: five refused bodies, then a valid one from the same connection, is accepted", async () => {
+      state.counting = true;
+      const ip = "198.51.100.77";
+      for (const bad of [{ name: " " }, { email: "" }, { roles: [] }, { why: "" }, { roles: [{ roleId: "nope" }] }]) {
+        const r = await call("POST", "/api/open-proposals", proposal(bad), ip);
+        expect(r.status).toBe(400);
+      }
+      const ok = await call("POST", "/api/open-proposals", proposal({ email: "after-refusals@example.test" }), ip);
+      expect(ok.status).toBe(200);
+      expect(ok.body.sent).toBe(true);
+      expect(state.sent).toHaveLength(1);
+    });
+
+    it("the 429 for a connection that really sent five says what happened and when to try again", async () => {
+      state.counting = true;
+      for (let i = 0; i < 5; i += 1) expect((await call("POST", "/api/open-proposals", proposal({ email: `five${i}@example.test` }), "198.51.100.78")).status).toBe(200);
+      const r = await call("POST", "/api/open-proposals", proposal({ email: "six@example.test" }), "198.51.100.78");
+      expect(r.status).toBe(429);
+      expect(r.body.error).toBe(OPEN_WORDS.tooMany);
+      expect(OPEN_WORDS.tooMany).toMatch(/five proposals/);
+      expect(OPEN_WORDS.tooMany).toMatch(/in about an hour/);
+    });
+
+    it("a flood of refused tries is still stopped, by the generous bucket", async () => {
+      state.counting = true;
+      let refused429 = 0;
+      for (let i = 0; i < 70; i += 1) if ((await call("POST", "/api/open-proposals", proposal({ why: "" }), "198.51.100.79")).status === 429) refused429 += 1;
+      expect(refused429).toBe(10);
     });
 
     it("ATTACK: 100 proposals from one connection: 5 go, 95 are refused, and only 5 emails are sent", async () => {

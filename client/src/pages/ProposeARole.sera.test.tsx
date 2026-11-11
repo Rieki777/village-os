@@ -12,6 +12,16 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { OPEN_WORDS } from "@shared/openProposals";
 import { DRAFT_WORDS } from "@shared/seraDrafts";
 
+/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
+const fillGoals = () => {
+  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
+    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
+    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
+    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
+    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
+  }
+};
+
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
 vi.mock("@/contexts/AuthContext", () => ({ useOptionalAuth: () => ({ user: auth.user }) }));
@@ -95,12 +105,14 @@ describe("the open form with Ask Sera", () => {
     expect(screen.getByText("Draft from Sera")).toBeTruthy();
 
     await fillRest();
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     expect((await screen.findByRole("alert")).textContent).toContain(DRAFT_WORDS.blocked(["aim"]));
     expect(posted).toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Keep this" }));
     expect(screen.queryByText("Draft from Sera")).toBeNull();
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].aim).toBe("The gate opens at dawn, every day.");
@@ -115,6 +127,7 @@ describe("the open form with Ask Sera", () => {
     expect(await screen.findByText(/Your form works without it/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "My own aim." } });
     await fillRest();
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].aim).toBe("My own aim.");

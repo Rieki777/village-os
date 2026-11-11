@@ -12,7 +12,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { OPEN_AI_DRAFTS, OPEN_WORDS } from "@shared/openProposals";
+import { CARD_WORDS } from "@shared/openProposalCard";
 import { ATTACHMENT_WORDS } from "@shared/proposalAttachments";
+
+/** One goal on every picked role's card: the form asks for at least one before it sends (audit B1). */
+const fillGoals = () => {
+  for (const card of Array.from(document.querySelectorAll("[data-role-card]"))) {
+    const title = card.querySelector<HTMLInputElement>('input[id$="-title"]');
+    const done = card.querySelector<HTMLInputElement>('input[id$="-done"]');
+    if (title && !title.value) fireEvent.change(title, { target: { value: "Open the gate each dawn" } });
+    if (done && !done.value) fireEvent.change(done, { target: { value: "the gate is open by sunrise" } });
+  }
+};
 
 vi.mock("@/components/Layout", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 const auth = vi.hoisted(() => ({ user: null as null | { name: string; email: string } }));
@@ -59,6 +70,17 @@ function serve(form: unknown, answer: { status: number; body: unknown } = { stat
   );
 }
 
+/** Everything the form asks before it will send, for a test that is about something else. */
+const completeTheRest = async () => {
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.whyLabel), { target: { value: "The gate is always shut." } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.aimLabel), { target: { value: "The gate opens at dawn." } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
+  fireEvent.change(screen.getByLabelText(OPEN_WORDS.emailLabel), { target: { value: "rowan@example.test" } });
+  fireEvent.click(await screen.findByLabelText(LETTER.intent));
+  fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
+  fillGoals();
+};
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -97,6 +119,7 @@ describe("the form", () => {
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
 
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
@@ -115,7 +138,7 @@ describe("the form", () => {
         { roleId: "r-gate", note: "I open gates for a living." },
         { roleId: "r-host", note: "" },
       ],
-      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [] }, { roleId: "r-host", moves: [], firstMoon: [] }], serves: [], commitmentPct: 50, agreed: { nda: true } },
+      card: { roles: [{ roleId: "r-gate", moves: [], firstMoon: [{ quest: "Open the gate each dawn", doneWhen: "the gate is open by sunrise" }] }, { roleId: "r-host", moves: [], firstMoon: [{ quest: "Open the gate each dawn", doneWhen: "the gate is open by sunrise" }] }], serves: [], commitmentPct: 50, agreed: { nda: true } },
       membership: { letterVersion: LETTER.version },
     });
     // No payment anywhere on the path: nothing posted names money.
@@ -172,6 +195,7 @@ describe("the form", () => {
     expect(document.querySelector('[data-file-row="0"]')?.textContent).toContain("portfolio.pdf");
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    await completeTheRest();
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body.links).toEqual([{ label: "Gates I built", url: "https://gates.example.org/rowan" }]);
@@ -186,6 +210,7 @@ describe("the form", () => {
     fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    await completeTheRest();
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(sentAs[0]).toEqual({ files: [], headers: { "Content-Type": "application/json" } });
@@ -199,10 +224,36 @@ describe("the form", () => {
     fireEvent.change(screen.getByLabelText(OPEN_WORDS.nameLabel), { target: { value: "Rowan" } });
     fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    await completeTheRest();
     fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
-    expect((await screen.findByRole("alert")).textContent).toBe(OPEN_WORDS.needWhy);
+    expect((await screen.findByRole("alert")).textContent).toContain(OPEN_WORDS.needWhy);
     expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
     expect((screen.getByLabelText(OPEN_WORDS.nameLabel) as HTMLInputElement).value).toBe("Rowan");
+  });
+
+  it("M1: sending with gaps posts nothing, lists every gap at once, shows each beside its field, and moves focus to the first", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    fireEvent.click(within((await screen.findByText("Gate Keeper")).closest("[data-role]") as HTMLElement).getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("Your commitment"), { target: { value: "50" } });
+    fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fireEvent.submit(document.querySelector("[data-open-proposal]") as HTMLFormElement);
+    const list = (await screen.findByText(/things to fix before we can send this/)).closest("[data-problems]") as HTMLElement;
+    for (const words of [OPEN_WORDS.needWhy, OPEN_WORDS.needAim, OPEN_WORDS.needName, OPEN_WORDS.needEmail, "Add at least one goal for your first moon.", CARD_WORDS.agreed]) expect(list.textContent).toContain(words);
+    expect(posted).toHaveLength(0);
+    // Beside the field as well, and the cursor is on the first one.
+    expect(document.querySelector("#propose-problem-why")?.textContent).toBe(OPEN_WORDS.needWhy);
+    expect(document.querySelector("#propose-problem-email")?.textContent).toBe(OPEN_WORDS.needEmail);
+    await waitFor(() => expect(document.activeElement?.id).toBe("propose-why"));
+    expect(screen.getByLabelText(OPEN_WORDS.whyLabel).getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("the form holds the floating compass back, and a trail names its four parts", async () => {
+    serve(FORM);
+    render(<ProposeARole />);
+    await screen.findByText("Gate Keeper");
+    expect(document.querySelector("form[data-hides-fab]")).toBeTruthy();
+    expect(within(document.querySelector("[data-form-trail]") as HTMLElement).getAllByRole("button")).toHaveLength(4);
   });
 
   it("the privacy note says an AI may draft replies, in the same words as the confirmation email", async () => {
@@ -372,6 +423,7 @@ describe("the applicant's own card beside the open one (Rye, 9 Nov 2026)", () =>
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card).toMatchObject({
@@ -420,6 +472,7 @@ describe("form v2 (role journey brief v2, 5.4)", () => {
     fireEvent.click(screen.getByLabelText(/confidentiality agreement before I see/));
     // About you: no references, so the background-check consent is ticked (joining lane PR 2).
     fireEvent.click(screen.getByLabelText(/agree to the background check/i));
+    fillGoals();
     fireEvent.click(screen.getByRole("button", { name: OPEN_WORDS.send }));
     await screen.findByRole("heading", { name: "Check your email" });
     expect(posted[0].body.card.terms).toEqual({ answers: { term: { choice: "talk", note: "A shorter trial" } } });
