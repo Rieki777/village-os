@@ -302,6 +302,36 @@ describe.skipIf(!configured)("the rules a village is seeded with", () => {
     expect(rows[0].name).toBe("The Gardener");
   });
 
+  it("moves a name the platform retired to the new one (Catalyst becomes Connector + Catalyst)", async () => {
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
+      "UPDATE `archetypes` SET `name` = 'The Catalyst', `customized` = 0 WHERE `village_id` = ? AND `key` = 'catalyzing'",
+      [VILLAGE],
+    );
+    await seedEconomy(pool, VILLAGE);
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
+      "SELECT `name` FROM `archetypes` WHERE `village_id` = ? AND `key` = 'catalyzing'",
+      [VILLAGE],
+    );
+    expect(rows[0].name).toBe("The Connector + Catalyst");
+  });
+
+  it("never moves a retired name the village made its own, nor a name it typed", async () => {
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
+      "UPDATE `archetypes` SET `name` = 'The Catalyst', `customized` = 1 WHERE `village_id` = ? AND `key` = 'catalyzing'",
+      [VILLAGE],
+    );
+    await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
+      "UPDATE `archetypes` SET `name` = 'The Weaver', `customized` = 0 WHERE `village_id` = ? AND `key` = 'facilitating'",
+      [VILLAGE],
+    );
+    await seedEconomy(pool, VILLAGE);
+    const [rows]: any = await pool.query( // module-review-ok: fixture SQL against the S5 scratch schema this suite provisioned
+      "SELECT `key`, `name` FROM `archetypes` WHERE `village_id` = ? AND `key` IN ('catalyzing','facilitating') ORDER BY `key`",
+      [VILLAGE],
+    );
+    expect(rows.map((r: any) => r.name)).toEqual(["The Catalyst", "The Weaver"]);
+  });
+
   it("seeds every key the shared cast declares, and no others", async () => {
     const [rows]: any = await pool.query(
       "SELECT `key` FROM `archetypes` WHERE `village_id` = ? ORDER BY `key`",

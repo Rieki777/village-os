@@ -126,7 +126,7 @@ describe("season goals on /roles", () => {
 describe("step one: the archetype", () => {
   it("hides the roles until a choice, then reveals them with See all roles", async () => {
     renderRoles();
-    expect(screen.getByRole("heading", { name: "Select your archetype to help you find your role" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Choose the root you grow from" })).toBeTruthy();
     // Wait for the archetypes, which prove the page has had time to load the chart too.
     await screen.findByText("The Builder");
     expect(screen.queryByText("Gardener")).toBeNull();

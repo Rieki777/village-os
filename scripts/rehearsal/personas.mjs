@@ -423,6 +423,27 @@ export async function holder(w, ctx) {
     await settle(page, 1500);
   });
   await w.look("profile");
+  // The five archetypes as roots (11 Nov 2026): a new holder picks the roots
+  // they grow from, and the quests board shows what grows from them first,
+  // with one switch to see everything.
+  await w.step("pick a root on the characters page", async () => {
+    await w.goto("/profile/characters");
+    await settle(page, 1500);
+    await page.getByRole("button", { name: /Grow from this root|Save this look/ }).first().click();
+    await page.waitForTimeout(1500);
+    if (!(await page.getByRole("heading", { name: "Your roots" }).count())) throw new Error("the page does not show the roots just picked");
+  });
+  await w.look("roots");
+  await w.step("see the quests that grow from those roots, and switch to all", async () => {
+    await w.goto("/quests");
+    await settle(page, 1500);
+    const sw = page.getByRole("switch", { name: "Show only what matches my roots" });
+    if ((await sw.getAttribute("aria-checked")) !== "true") throw new Error("the roots filter is not on by default once a root is picked");
+    await sw.click();
+    if ((await sw.getAttribute("aria-checked")) !== "false") throw new Error("the roots filter did not turn off");
+    await sw.click();
+  });
+  await w.look("quests-by-roots");
 }
 
 export const PERSONAS = [
