@@ -93,6 +93,8 @@ export const ALIGN_WORDS = {
   unsealed: "Unsealed",
   receipt: "Download the receipt",
   reconfirmLine: "These terms carry money, so the village asks you to confirm it is you before you align.",
+  /** An agreement that carries no money (the confidentiality agreement): the same check, the true reason. */
+  reconfirmAgreementLine: "This agreement binds you personally, so we ask you to confirm it is you before you align.",
   reconfirm: "Confirm it is you",
   reconfirmed: "Confirmed. You can align for the next fifteen minutes.",
   wordsChanged: "The words changed since you read them. Read them again before you align.",

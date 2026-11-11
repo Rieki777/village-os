@@ -46,7 +46,7 @@ import type { Express, Request } from "express";
 
 import { cleanName, passwordProblem } from "../../shared/accountRules";
 import { claimPaths } from "../../shared/gameConfig";
-import type { InviteDoor } from "../lib/inviteDoor";
+import { describeInvite, type InviteDoor } from "../lib/inviteDoor";
 import { INVITE_REFUSALS, readInviteToken } from "../lib/invites";
 import { isTombstone } from "../lib/oauthAccounts";
 import { numberVar } from "../lib/variables";
@@ -112,9 +112,14 @@ export function register(app: Express, deps: RegisterDeps): void {
     const token = readInviteToken(req.body?.invite);
     const required = deps.invites.required();
     let inviteId: string | null = null;
+    // The address an adopted proposal's link was mailed to, when this account is made at that same address (audit P9).
+    let invitedAddress: string | null = null;
     if (token || required) {
       const found = await deps.invites.resolve(token);
-      if (found.ok) inviteId = found.id;
+      if (found.ok) {
+        inviteId = found.id;
+        invitedAddress = (await describeInvite(found.id))?.email?.trim().toLowerCase() || null;
+      }
       else if (required) return res.status(403).json({ error: found.error, code: "invitation_required" });
     }
 
@@ -137,7 +142,11 @@ export function register(app: Express, deps: RegisterDeps): void {
       // starts unproved (R104). Until the letter below is redeemed, this
       // password is never trusted as the mailbox owner's: a Google sign-in at
       // this address ends it, and no founder grant lands on this row.
-      emailVerifiedAt: null,
+      // ONE EXCEPTION (audit P9): a link that was mailed to this very address
+      // and opened by it has already proved the mailbox, so the account starts
+      // proved and no second "confirm your address" letter goes out. A link
+      // opened with some other address proves nothing about that one.
+      emailVerifiedAt: invitedAddress !== null && invitedAddress === String(email).trim().toLowerCase() ? new Date().toISOString() : null,
       passwordHash: await deps.hashPassword(password),
       handle: await deps.makeHandle(name),
       paths: chosen.paths ?? [],
@@ -157,7 +166,7 @@ export function register(app: Express, deps: RegisterDeps): void {
     await deps.joined({ id: userId, name, handle: user.handle });
     // Not awaited: a slow provider must not hold the sign-up, and the letter
     // carries the only copy of the link. It is never put in the response.
-    void deps.sendVerification({ id: userId, email, name }).catch(() => undefined);
+    if (user.emailVerifiedAt === null) void deps.sendVerification({ id: userId, email, name }).catch(() => undefined);
     for (const pathId of user.paths) commsSink.fire({ type: "path_joined", personKey: userId, userId, email, name, pathId, source: "signup" });
     if (inviter) await deps.invites.welcome(inviter, userId);
     res.json({ success: true, token: deps.encodeToken(userId, email), user: deps.publicUser(user) });

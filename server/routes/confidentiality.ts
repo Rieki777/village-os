@@ -246,12 +246,15 @@ export function register(app: Express, deps: Deps): void {
     const pool = getPool();
     const waiting = (await applicationsOfCandidates(pool, [String(user.id)])).filter((a) => a.status === "adopted" || a.status === "held-full");
     const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }> }> = [];
+    // A village that has written no agreement has no door to draw for that step, so the holder is not
+    // asked for it (audit M18). The admins are told by the closer (seatApplicationCloser.ts).
+    const hasAgreement = waiting.length > 0 && (await agreement()) !== null;
     if (waiting.length) {
       const conn = await pool.getConnection();
       try {
         for (const app of waiting) {
           if ((await seatingsEverHolding(conn, app.id)) > 0) continue;
-          const steps = await stepsBeforeStart(conn, app, now());
+          const steps = (await stepsBeforeStart(conn, app, now())).filter((s) => s !== "confidentiality" || hasAgreement);
           if (!steps.length) continue;
           out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })) });
         }
@@ -275,7 +278,7 @@ export function register(app: Express, deps: Deps): void {
     // One click, identity re-confirmed: the agreement binds a person, so a stale confirmation asks again.
     const until = confirmedUntil(user, RECONFIRM_FRESH_MS);
     if (until === null || now().getTime() > until) {
-      return res.status(403).json({ error: "reconfirm_required", message: ALIGN_WORDS.reconfirmLine, confirmWith: confirmWithFor(user, deps.authSecret, deps.googleAvailable()) });
+      return res.status(403).json({ error: "reconfirm_required", message: ALIGN_WORDS.reconfirmAgreementLine, confirmWith: confirmWithFor(user, deps.authSecret, deps.googleAvailable()) });
     }
     const out = await inApplicationTransaction(getPool(), (conn) => alignConfidentiality(conn, { agreement: current, userId, now: now() }));
     holds.delete(userId);

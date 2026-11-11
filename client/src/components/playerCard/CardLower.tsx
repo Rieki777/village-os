@@ -7,7 +7,7 @@
  * edited here; they change through a new role application, and the owner is
  * told so in edit mode.
  */
-import { useContext } from "react";
+import { createContext, useContext } from "react";
 import { Link } from "wouter";
 import { CARD_WORDS as W, type AgreementRow, type ApplicationOut, type PlayerCard, type Slot } from "@shared/playerCard";
 import type { TrackMarkKind } from "@shared/playerCardHero";
@@ -154,8 +154,16 @@ function AppGroup({ heading, slot, now = false }: { heading: string; slot: Slot<
   );
 }
 
+/**
+ * True while the holder is in their first days (profile, audit M8): the card
+ * then draws no next-season group and no "propose my roles for next season"
+ * door. Default false, so every other card reads as before.
+ */
+export const FirstDaysContext = createContext(false);
+
 export function MyApplications({ applications }: { applications: PlayerCard["applications"] }) {
   const { owner } = useContext(CardEditContext);
+  const firstDays = useContext(FirstDaysContext);
   if (applications.thisSeason.kind === "unread") return null;
   return (
     <section aria-labelledby="pc-apps-h" className="pc-panel">
@@ -168,10 +176,10 @@ export function MyApplications({ applications }: { applications: PlayerCard["app
       <div className="pc-hist">
         <AppGroup heading={W.past} slot={applications.past} />
         <AppGroup heading={W.thisSeason} slot={applications.thisSeason} now />
-        <AppGroup heading={W.nextSeason} slot={applications.nextSeason} />
+        {!firstDays && <AppGroup heading={W.nextSeason} slot={applications.nextSeason} />}
       </div>
       {/* The owner's role proposals, each linked to where it stands (role proposals PR C). */}
-      {owner ? <ProposalLinks /> : null}
+      {owner && !firstDays ? <ProposalLinks /> : null}
     </section>
   );
 }
