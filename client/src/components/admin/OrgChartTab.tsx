@@ -37,9 +37,9 @@ import { CIRCLE_LAYERS, parentChoicesFor, type CircleLayer } from "@shared/circl
 
 /** A circle's standing in a word, on the circles level. Keyed by the union. */
 const STANDING_WORDS: Record<CircleStanding, MessageDescriptor> = {
-  operating: msg`Operating`,
-  forming: msg`Forming`,
-  hidden: msg`Dormant`,
+  operating: msg({ message: "Operating", context: "circle standing" }),
+  forming: msg({ message: "Forming", context: "circle standing" }),
+  hidden: msg({ message: "Dormant", context: "circle standing" }),
 };
 
 /**
@@ -224,7 +224,7 @@ export function OrgChartTab({ password }: { password: string }) {
         const name = String(cd.name || c.name);
         return {
           key: `c:${c.id}`,
-          label: t`Circle ${name}`,
+          label: t({ message: `Circle ${name}`, context: "save bar, which item failed" }),
           run: () => send(`/admin/circles/${c.id}`, { name: cd.name, status: cd.status, isAnchor: !!cd.isAnchor, layer: cd.layer || null, parentCircleId: cd.parentCircleId || null }),
         };
       }),
@@ -233,7 +233,7 @@ export function OrgChartTab({ password }: { password: string }) {
         const name = String(d.name || r.name);
         return {
           key: `r:${r.id}`,
-          label: t`Role ${name}`,
+          label: t({ message: `Role ${name}`, context: "save bar, which item failed" }),
           run: () => send(`/admin/org/roles/${r.id}`, {
             name: d.name, circleId: d.circleId, aim: d.aim, domain: d.domain, seats: d.seats,
             accountabilities: d.accountabilities ?? [], whyItMatters: d.whyItMatters ?? "",
@@ -265,7 +265,7 @@ export function OrgChartTab({ password }: { password: string }) {
   );
 
   const crumbs = (items: { label: React.ReactNode; to?: OrgPath }[]) => (
-    <nav aria-label={t`Breadcrumb`} className="mb-4">
+    <nav aria-label={t({ message: "Breadcrumb", context: "navigation landmark" })} className="mb-4">
       <ol className="flex flex-wrap items-center gap-1 text-sm">
         {items.map((it, i) => (
           <li key={i} className="inline-flex items-center gap-1">
@@ -289,16 +289,16 @@ export function OrgChartTab({ password }: { password: string }) {
   };
   const ROW = "flex min-h-[44px] flex-col gap-1 rounded-xl border border-border bg-card p-4 shadow-sm hover:border-notice focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const META = "flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground";
-  const UNSAVED = <span className="font-medium text-notice"><Trans>Unsaved changes</Trans></span>;
+  const UNSAVED = <span className="font-medium text-notice"><Trans context="org chart, item has unsaved edits">Unsaved changes</Trans></span>;
 
   const top: OrgPath = { circle: null, role: null };
   const openCircle = path.circle ? (path.circle === NO_CIRCLE ? null : anchored.find((c) => String(c.id) === path.circle) ?? null) : null;
   const openRole = path.role ? roles.find((r) => String(r.id) === path.role) ?? null : null;
   const level = openRole ? 3 : path.circle ? 2 : 1;
   const circleCrumbLabel = (id: string | null) => {
-    if (!id || id === NO_CIRCLE) return t`In no circle`;
+    if (!id || id === NO_CIRCLE) return t({ message: "In no circle", context: "org chart breadcrumb" });
     const c = anchored.find((x) => String(x.id) === id);
-    return c ? <CircleName name={c.name} anchor={c.anchor} /> : t`Circle`;
+    return c ? <CircleName name={c.name} anchor={c.anchor} /> : t({ message: "Circle", context: "org chart breadcrumb" });
   };
 
   // ── Level 1: the circles ────────────────────────────────────────────────
@@ -361,7 +361,7 @@ export function OrgChartTab({ password }: { password: string }) {
       <RoleListingPanel roles={roles} circles={circles} call={call} onDone={() => void load()} />
 
       <section aria-labelledby="org-circles-h" className="mb-8">
-        <h3 id="org-circles-h" className="text-lg font-semibold text-foreground"><Trans>Circles</Trans></h3>
+        <h3 id="org-circles-h" className="text-lg font-semibold text-foreground"><Trans context="org chart heading">Circles</Trans></h3>
         <p className="mt-1 text-sm text-muted-foreground">
           <Trans>Open a circle to see its roles. Open a role to edit all of it.</Trans>
         </p>
@@ -387,7 +387,7 @@ export function OrgChartTab({ password }: { password: string }) {
                     <span>{plural(inside.length, { one: "# role", other: "# roles" })}</span>
                     {openSeats > 0 && <span>{plural(openSeats, { one: "# open", other: "# open" })}</span>}
                     {asks > 0 && <span className="text-notice">{plural(asks, { one: "# ask waiting", other: "# asks waiting" })}</span>}
-                    {c.isExample && <span><Trans>Standing example</Trans></span>}
+                    {c.isExample && <span><Trans context="org chart, a sample circle or role">Standing example</Trans></span>}
                     {unsaved && UNSAVED}
                   </span>
                 </LevelLink>
@@ -440,7 +440,7 @@ export function OrgChartTab({ password }: { password: string }) {
     if (id !== NO_CIRCLE && !c) {
       return (
         <>
-          {crumbs([{ label: t`Org chart`, to: top }, { label: t`Circle` }])}
+          {crumbs([{ label: t({ message: "Org chart", context: "admin section name" }), to: top }, { label: t({ message: "Circle", context: "org chart breadcrumb" }) }])}
           <p className="text-sm text-muted-foreground"><Trans>That circle is not on the chart any more.</Trans></p>
         </>
       );
@@ -448,7 +448,7 @@ export function OrgChartTab({ password }: { password: string }) {
     const seats = rolesIn(id);
     return (
       <>
-        {crumbs([{ label: t`Org chart`, to: top }, { label: circleCrumbLabel(id) }])}
+        {crumbs([{ label: t({ message: "Org chart", context: "admin section name" }), to: top }, { label: circleCrumbLabel(id) }])}
         {c && (() => {
           /*
             A CIRCLE'S NAME, STATUS, ANCHOR, LAYER AND PLACE ARE EDITABLE HERE.
@@ -463,7 +463,7 @@ export function OrgChartTab({ password }: { password: string }) {
           const cd = circleDraft[c.id] ?? c;
           const setCircle = (patch: any) => setCircleDraft({ ...circleDraft, [c.id]: { ...cd, ...patch } });
           return (
-            <section aria-label={t`This circle`} className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
+            <section aria-label={t({ message: "This circle", context: "org chart section label" })} className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
                 <label className="text-xs text-gray-500">Circle name
                   <input value={cd.name ?? ""} className={`${inputCls} w-full mt-1 min-h-[44px]`} disabled={!!c.isExample}
@@ -523,7 +523,7 @@ export function OrgChartTab({ password }: { password: string }) {
         })()}
 
         <section aria-labelledby="org-roles-h">
-          <h3 id="org-roles-h" className="text-lg font-semibold text-foreground"><Trans>Roles</Trans></h3>
+          <h3 id="org-roles-h" className="text-lg font-semibold text-foreground"><Trans context="org chart heading">Roles</Trans></h3>
           {seats.length === 0 && <p className="mt-2 text-sm text-muted-foreground"><Trans>No roles in this circle yet.</Trans></p>}
           <ul className="mt-3 space-y-2">
             {seats.map((r) => {
@@ -537,9 +537,9 @@ export function OrgChartTab({ password }: { password: string }) {
                     </span>
                     <span className={META}>
                       <span>{STATE_LABEL[r.state] ?? r.state}</span>
-                      <span>{t`${r.holderCount ?? 0} of ${r.seats ?? 1} held`}</span>
+                      <span>{t({ message: `${r.holderCount ?? 0} of ${r.seats ?? 1} held`, context: "org chart, seats held" })}</span>
                       {asks > 0 && <span className="text-notice">{plural(asks, { one: "# ask waiting", other: "# asks waiting" })}</span>}
-                      {r.isExample && <span><Trans>Standing example</Trans></span>}
+                      {r.isExample && <span><Trans context="org chart, a sample circle or role">Standing example</Trans></span>}
                       {roleDirty(r) && UNSAVED}
                     </span>
                   </LevelLink>
@@ -586,11 +586,11 @@ export function OrgChartTab({ password }: { password: string }) {
     return (
       <>
         {crumbs([
-          { label: t`Org chart`, to: top },
+          { label: t({ message: "Org chart", context: "admin section name" }), to: top },
           { label: circleCrumbLabel(circleId), to: { circle: circleId, role: null } },
           { label: d.name || r.name },
         ])}
-        <section aria-label={t`This role`} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <section aria-label={t({ message: "This role", context: "org chart section label" })} className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="grid sm:grid-cols-4 gap-2 items-end">
             <label className="text-xs text-gray-500">Role
               <input value={d.name ?? ""} className={`${inputCls} w-full mt-1`}
@@ -800,7 +800,7 @@ export function OrgChartTab({ password }: { password: string }) {
       {level === 2 && circleLevel}
       {level === 3 && roleLevel}
 
-      <SaveBar count={changeCount} onSave={saveAll} onDiscard={discardAll} what={t`Org chart`} />
+      <SaveBar count={changeCount} onSave={saveAll} onDiscard={discardAll} what={t({ message: "Org chart", context: "admin section name" })} />
     </div>
   );
 }

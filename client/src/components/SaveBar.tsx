@@ -82,7 +82,7 @@ export default function SaveBar({
       try { r = await one.save(); } catch { r = { ok: false, reason: i18n._(UNREACHABLE) }; }
       if (r.ok) continue;
       if (r.failed?.length) failed.push(...r.failed);
-      else failed.push({ label: one.what ?? t`This section`, reason: r.reason ?? t`That did not save.` });
+      else failed.push({ label: one.what ?? t({ message: "This section", context: "save bar, a part of the page that did not save" }), reason: r.reason ?? t`That did not save.` });
     }
     return failed.length ? { ok: false, failed } : { ok: true };
   };
@@ -128,7 +128,7 @@ export default function SaveBar({
     if (status === "saving" || count === 0) return;
     setStatus("saving");
     setFailure(null);
-    setSaid(t`Saving.`);
+    setSaid(t({ message: "Saving.", context: "save bar" }));
     let result: SaveResult;
     try {
       result = await onSave();
@@ -137,7 +137,7 @@ export default function SaveBar({
     }
     if (result.ok) {
       setStatus("saved");
-      setSaid(t`Saved.`);
+      setSaid(t({ message: "Saved.", context: "save bar" }));
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setStatus((s) => (s === "saved" ? "idle" : s)), 2500);
     } else {
@@ -163,14 +163,14 @@ export default function SaveBar({
   const discard = () => {
     setStatus("idle");
     setFailure(null);
-    setSaid(t`Changes discarded.`);
+    setSaid(t({ message: "Changes discarded.", context: "save bar" }));
     onDiscard();
   };
 
   const countWords = plural(count, { one: "# change not saved yet", other: "# changes not saved yet" });
   const headline =
-    status === "saving" ? t`Saving…`
-      : status === "saved" && count === 0 ? t`Saved`
+    status === "saving" ? t({ message: "Saving…", context: "save bar" })
+      : status === "saved" && count === 0 ? t({ message: "Saved", context: "save bar" })
         : countWords;
 
   if (!leader) return null;
@@ -184,7 +184,7 @@ export default function SaveBar({
           <div
             data-save-bar=""
             role="region"
-            aria-label={t`Unsaved changes`}
+            aria-label={t({ message: "Unsaved changes", context: "save bar region" })}
             style={{ bottom: lift }}
             className={`fixed inset-x-0 z-[55] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] motion-safe:transition-[transform,opacity] motion-safe:duration-300 motion-safe:ease-out ${shown ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 motion-reduce:translate-y-0 motion-reduce:opacity-100"}`}
           >
@@ -201,7 +201,7 @@ export default function SaveBar({
                     disabled={status === "saving" || count === 0}
                     className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
-                    <Trans>Discard</Trans>
+                    <Trans context="save bar">Discard</Trans>
                   </button>
                   <button
                     type="button"
@@ -210,7 +210,7 @@ export default function SaveBar({
                     aria-keyshortcuts="Control+S Meta+S"
                     className="inline-flex min-h-11 items-center justify-center rounded-xl bg-notice px-5 py-2 text-sm font-semibold text-background hover:bg-notice/90 active:translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
                   >
-                    {status === "saving" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
+                    {status === "saving" ? <Trans context="save bar">Saving…</Trans> : <Trans context="save bar">Save</Trans>}
                   </button>
                 </div>
               </div>

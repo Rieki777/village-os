@@ -2019,7 +2019,15 @@ function FaqAdminTab({ password }: { password: string }) {
     } catch { toast.error("Add failed"); }
   };
 
-  const remove = (id: string) => setItems((cur) => cur.filter((it) => it.id !== id));
+  // Deleting is its own act on its own route, answered, and leaves other edits waiting.
+  const remove = async (id: string) => {
+    if (!saved.some((it) => it.id === id)) { setItems((cur) => cur.filter((it) => it.id !== id)); return; }
+    if (!confirm("Delete this question?")) return;
+    const res = await fetch(`${API_BASE}/admin/faqs/${pathway}/${id}`, { method: "DELETE", headers: authHeaders(password) }).catch(() => null);
+    if (!res?.ok) { toast.error(refusal(await res?.json().catch(() => null), "The question is still here.")); return; }
+    toast.success("Deleted");
+    setSaved((cur) => cur.filter((it) => it.id !== id)); setItems((cur) => cur.filter((it) => it.id !== id));
+  };
   const edit = (id: string, patch: Partial<FaqItem>) => setItems((cur) => cur.map((it) => (it.id === id ? { ...it, ...patch } : it)));
 
   const move = (idx: number, dir: -1 | 1) => {
