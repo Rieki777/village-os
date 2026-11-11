@@ -739,7 +739,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat state"
+msgctxt "roles page, role state"
 msgid "Open"
 msgstr "Abierto"
 
@@ -5177,7 +5177,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat link"
+msgctxt "roles page, role link"
 msgid "Copy link to {seatName}"
 msgstr "Copiar el enlace a {seatName}"
 
@@ -6218,7 +6218,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat state"
+msgctxt "roles page, role state"
 msgid "Partly held"
 msgstr "Ocupado en parte"
 
@@ -7603,7 +7603,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat state"
+msgctxt "roles page, role state"
 msgid "Forming"
 msgstr "En formación"
 
@@ -7829,7 +7829,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat link"
+msgctxt "roles page, role link"
 msgid "Link to {seatName} copied."
 msgstr "Se copió el enlace a {seatName}."
 
@@ -8801,7 +8801,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat link"
+msgctxt "roles page, role link"
 msgid "Link to {seatName}"
 msgstr "Enlace a {seatName}"
 
@@ -9116,7 +9116,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat state"
+msgctxt "roles page, role state"
 msgid "Held"
 msgstr "Ocupado"
 
@@ -10323,7 +10323,7 @@ msgstr ""
 
 #. needs-native-review
 #: client/src/pages/Roles.tsx
-msgctxt "roles page, seat link"
+msgctxt "roles page, role link"
 msgid "Copy link"
 msgstr "Copiar enlace"
 
@@ -10916,3 +10916,13 @@ msgstr ""
 msgctxt "sera answers"
 msgid "Take it again"
 msgstr ""
+
+#: client/src/pages/Aligned.tsx
+msgctxt "aligned page, signed out"
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: client/src/pages/Aligned.tsx
+msgctxt "aligned page, signed out"
+msgid "Create an account"
+msgstr "Crear una cuenta"

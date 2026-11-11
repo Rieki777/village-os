@@ -165,7 +165,7 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
   };
   const line =
     said === "copied"
-      ? t({ message: `Link to ${seatName} copied.`, context: "roles page, seat link" })
+      ? t({ message: `Link to ${seatName} copied.`, context: "roles page, role link" })
       : said === "refused"
         ? t`Copying did not work here. The link is selected in the field below.`
         : "";
@@ -174,11 +174,11 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
       <button
         type="button"
         onClick={copy}
-        aria-label={t({ message: `Copy link to ${seatName}`, context: "roles page, seat link" })}
+        aria-label={t({ message: `Copy link to ${seatName}`, context: "roles page, role link" })}
         className="inline-flex items-center gap-2 min-h-[44px] text-sm font-medium text-foreground underline underline-offset-2"
       >
         <Link2 className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
-        {t({ message: `Copy link`, context: "roles page, seat link" })}
+        {t({ message: `Copy link`, context: "roles page, role link" })}
       </button>
       {refused > 0 && (
         <input
@@ -186,7 +186,7 @@ function SeatLinkCopy({ seatId, seatName }: { seatId: string; seatName: string }
           type="text"
           readOnly
           value={link}
-          aria-label={t({ message: `Link to ${seatName}`, context: "roles page, seat link" })}
+          aria-label={t({ message: `Link to ${seatName}`, context: "roles page, role link" })}
           onFocus={(e) => e.currentTarget.select()}
           className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground"
         />
@@ -215,10 +215,10 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
   const { t } = useLingui();
   const vendorName = useModule("saberra")?.name ?? t({ message: `the connected service`, context: "roles page, a connected service's fallback name" });
   const stateWords: Record<SeatStateWord, string> = {
-    open: t({ message: `Open`, context: "roles page, seat state" }),
-    partial: t({ message: `Partly held`, context: "roles page, seat state" }),
-    filled: t({ message: `Held`, context: "roles page, seat state" }),
-    forming: t({ message: `Forming`, context: "roles page, seat state" }),
+    open: t({ message: `Open`, context: "roles page, role state" }),
+    partial: t({ message: `Partly held`, context: "roles page, role state" }),
+    filled: t({ message: `Held`, context: "roles page, role state" }),
+    forming: t({ message: `Forming`, context: "roles page, role state" }),
     expired: t`Ready to be re-chosen`,
   };
   const headerId = `${useId().replace(/[^a-zA-Z0-9]/g, "")}-seat`;
