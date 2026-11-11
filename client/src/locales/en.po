@@ -1089,6 +1089,11 @@ msgctxt "sera answers"
 msgid "it cannot be taken from this list"
 msgstr "it cannot be taken from this list"
 
+#: client/src/pages/RoleDraft.tsx
+msgctxt "role draft steps"
+msgid "Your progress through the five steps"
+msgstr "Your progress through the five steps"
+
 #: client/src/components/modules/BuilderJourney.tsx
 msgctxt "module library, builder section"
 msgid "Worked examples"
@@ -1855,9 +1860,9 @@ msgid "Add a practice"
 msgstr "Add a practice"
 
 #: client/src/pages/RoleDraft.tsx
-msgctxt "role draft steps"
-msgid "Your progress through the four steps"
-msgstr "Your progress through the four steps"
+#~ msgctxt "role draft steps"
+#~ msgid "Your progress through the four steps"
+#~ msgstr "Your progress through the four steps"
 
 #: client/src/components/openProposal/MembershipAtApplication.tsx
 msgid "It takes effect once you confirm your address, and you won't be asked again when you make your account. No payment is asked: any contribution the letter suggests stays your choice."
@@ -6854,6 +6859,11 @@ msgctxt "admin header"
 msgid "Admin"
 msgstr "Admin"
 
+#: client/src/components/roleDraft/SeasonGoals.tsx
+msgctxt "roles page season: how far into the season today is"
+msgid "Day {day} of {of}"
+msgstr "Day {day} of {of}"
+
 #. placeholder {0}: row.credited
 #. placeholder {1}: cycle.poolToken ?? ""
 #: client/src/components/journey/EconomicsView.tsx
@@ -8413,6 +8423,12 @@ msgstr "Not needed"
 msgctxt "button that saves a canvas block's public line"
 msgid "Save the line"
 msgstr "Save the line"
+
+#. placeholder {0}: goals.length
+#: client/src/components/roleDraft/SeasonGoals.tsx
+msgctxt "roles page season goals: how many of the village's goals are done"
+msgid "{reached} of {0} reached so far"
+msgstr "{reached} of {0} reached so far"
 
 #: client/src/components/admin/RoleDiscoverTab.tsx
 msgctxt "role discover admin"
