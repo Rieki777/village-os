@@ -150,7 +150,7 @@ export default function ConnectorSetupPanel({
         <li><Trans context="connector setup panel, step one">In Claude, open Settings, then Connectors, then Add custom connector.</Trans></li>
         <li><Trans context="connector setup panel, step two">Paste this address and save it.</Trans></li>
         <li><Trans context="connector setup panel, step three">Claude opens the village to sign you in. Say yes there.</Trans></li>
-        <li><Trans context="connector setup panel, step four">In a chat, ask Claude about your moon. It asks you before it changes anything.</Trans></li>
+        <li><Trans context="connector setup panel, step four">In a chat, ask Claude about your moon. It asks you before it changes anything.</Trans></li>{/* village-ok: Claude is the assistant app this connector plugs into, not a person */}
       </ol>
 
       <div className={`${TILE} space-y-2`}>
