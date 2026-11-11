@@ -9,10 +9,18 @@
  *     is never told about steps.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { START_WORDS } from "@shared/roleStartWords";
 
 vi.mock("@/lib/gameApi", () => ({ useSeason: () => ({ timezone: "UTC" }), authToken: () => "member-token" }));
+vi.mock("wouter", () => ({
+  Link: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("@/components/auth/ConfirmWithGoogle", () => ({
   IdentityConfirmField: () => null,
   identityBody: () => ({}),
@@ -42,7 +50,7 @@ describe("the steps before a role starts, on the profile", () => {
       }),
     );
     render(<RoleStartSteps />);
-    expect(await screen.findByRole("heading", { name: START_WORDS.title(2) })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: START_WORDS.cardTitle })).toBeTruthy();
     expect(screen.getByText("Gate Keeper")).toBeTruthy();
     // The agreement is aligned with in place, not somewhere the holder has to find.
     expect(await screen.findByText(AGREEMENT.intent)).toBeTruthy();
@@ -57,5 +65,23 @@ describe("the steps before a role starts, on the profile", () => {
     const { container } = render(<RoleStartSteps />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(container.innerHTML).toBe("");
+  });
+
+  it("is one card: role terms that wait on the holder are listed in it, and it tells the page it is shown (audit M8)", async () => {
+    const termsRow = { textId: "t1", kind: "seat_terms", title: "Terms for Gate Keeper", href: "/aligned#t1", you: { aligned: false, mayAlign: true, partyKey: "me", alignedAt: null } };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/profile/role-start-steps") return json({ waiting: [{ applicationId: "sa-1", roles: ["Gate Keeper"], steps: [{ step: "confidentiality", href: "/aligned" }] }] });
+        if (url === "/api/confidentiality") return json({ agreement: AGREEMENT, you: { holds: false } });
+        if (url.startsWith("/api/profile/alignments")) return json({ alignments: [termsRow] });
+        return json({});
+      }),
+    );
+    const onShown = vi.fn();
+    render(<RoleStartSteps onShown={onShown} />);
+    expect(await screen.findByRole("heading", { name: "Before you start" })).toBeTruthy();
+    expect((await screen.findByRole("link", { name: "Align with Terms for Gate Keeper" })).getAttribute("href")).toBe("/aligned#t1");
+    expect(onShown).toHaveBeenCalledWith(true);
   });
 });

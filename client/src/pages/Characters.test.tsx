@@ -190,9 +190,9 @@ describe("Characters: the two toggles say what is selected", () => {
     // for it to land before pressing anything: otherwise the assertion races
     // an effect that is doing its job.
     await screen.findByRole("button", { name: "Leave The Steward" });
-    const pronouns = await screen.findByRole("radiogroup", { name: "Presentation" });
-    const she = within(pronouns).getByRole("radio", { name: "She" });
-    const he = within(pronouns).getByRole("radio", { name: "He" });
+    const pronouns = await screen.findByRole("radiogroup", { name: "Portrait style" });
+    const she = within(pronouns).getByRole("radio", { name: "Style one" });
+    const he = within(pronouns).getByRole("radio", { name: "Style two" });
     expect(she.getAttribute("aria-checked")).toBe("true");
     expect(he.getAttribute("aria-checked")).toBe("false");
 
@@ -206,9 +206,9 @@ describe("Characters: the two toggles say what is selected", () => {
     render(<Characters />);
     await screen.findByRole("button", { name: "Leave The Steward" });
 
-    const pronouns = await screen.findByRole("radiogroup", { name: "Presentation" });
-    const she = within(pronouns).getByRole("radio", { name: "She" });
-    const he = within(pronouns).getByRole("radio", { name: "He" });
+    const pronouns = await screen.findByRole("radiogroup", { name: "Portrait style" });
+    const she = within(pronouns).getByRole("radio", { name: "Style one" });
+    const he = within(pronouns).getByRole("radio", { name: "Style two" });
 
     // Only the selected radio is in the tab order, which is what makes a
     // radiogroup one stop rather than N.

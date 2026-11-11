@@ -47,7 +47,7 @@ const { BTN_PRIMARY, BTN_SECONDARY, FIELD, TILE } = ALIGN_LOOK;
  * The confirmation, in place. Shown when the server asks for it, or ahead of
  * time by a Review step whose terms carry money.
  */
-export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
+export function ReconfirmPanel({ onConfirmed, reason = ALIGN_WORDS.reconfirmLine }: { onConfirmed: () => void; reason?: string }) {
   const state = useIdentityConfirm("align");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -76,7 +76,7 @@ export function ReconfirmPanel({ onConfirmed }: { onConfirmed: () => void }) {
     <div data-reconfirm="" className={`${TILE} mt-3`}>
       <p className="flex items-start gap-2 text-sm text-foreground">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-notice" aria-hidden="true" />
-        {ALIGN_WORDS.reconfirmLine}
+        {reason}
       </p>
       {/* A form, so Enter confirms (red team U8). */}
       <form
@@ -132,9 +132,11 @@ export interface AlignButtonProps {
   /** After a landed alignment, to reload what the page shows. */
   onDone?: (data: any) => void;
   disabled?: boolean;
+  /** Why we ask for the password. Defaults to the line for terms that carry money; an agreement with no money passes its own. */
+  reconfirmReason?: string;
 }
 
-export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false }: AlignButtonProps) {
+export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false, reconfirmReason }: AlignButtonProps) {
   const season = useSeason();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -176,7 +178,7 @@ export default function AlignButton({ label = ALIGN_WORDS.align, sentence, align
         <Check className="size-4" aria-hidden="true" />
         {label}
       </button>
-      {asking && <ReconfirmPanel onConfirmed={() => void run()} />}
+      {asking && <ReconfirmPanel reason={reconfirmReason} onConfirmed={() => void run()} />}
       {error && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {error}

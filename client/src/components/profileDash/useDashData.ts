@@ -27,6 +27,7 @@
 import { useEffect, useState } from "react";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import { onProfileRefresh } from "@/lib/profileRefresh";
+import { moduleIsOn, useModules } from "@/modules/ModuleProvider";
 import type { CashOwedEntry } from "@shared/cashOwed";
 import type { WaitingConsent } from "@shared/waitingOnYou";
 import { WAITING_URL } from "@shared/waitingOnYou";
@@ -160,14 +161,6 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         }),
       );
       read<{ entries: CashOwedEntry[] }>("/api/me/cash-owed").then((c) => put({ cash: c?.entries ?? null }));
-      read<{ badges: FlowerBadge[]; maxFeatured?: number }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) => {
-        const list = Array.isArray(b?.badges) ? b.badges : null;
-        put({
-          badges: list ? list.length : null,
-          badgeList: list,
-          maxFeatured: typeof b?.maxFeatured === "number" ? b.maxFeatured : null,
-        });
-      });
       read<{ current: { name: string; startsOn: string; endsOn?: string | null } | null; today: string }>("/api/season").then((s) => {
         const cur = s?.current;
         if (!cur?.name) return put({ season: null });
@@ -176,37 +169,6 @@ export function useDashData(userId: string | number | null | undefined): DashDat
         put({ season: { name: cur.name, day, of: of !== null ? Math.max(1, of - 1) : null } });
       });
       read<{ toConsent?: WaitingConsent[] }>(WAITING_URL).then((w) => put({ consents: w ? (w.toConsent ?? []) : null }));
-      read<{ waiting: number; nextDue: string | null }>("/api/sessions/tasks/count").then((t) =>
-        put({ tasks: t && typeof t.waiting === "number" ? { waiting: t.waiting, nextDue: t.nextDue ?? null } : null }),
-      );
-      read<{ unreadTotal: number; conversations: InboxConversation[] }>("/api/messages").then((m) => {
-        if (!m || typeof m.unreadTotal !== "number") return put({ messages: null });
-        const top = (m.conversations ?? []).find((c) => c.unreadCount > 0 && !c.muted) ?? null;
-        put({
-          messages: {
-            unreadTotal: m.unreadTotal,
-            top: top
-              ? { id: String(top.id), title: String(top.title || top.name || ""), preview: String(top.preview ?? ""), unread: top.unreadCount }
-              : null,
-            parties: partiesOf(m.conversations ?? [], String(userId)),
-          },
-        });
-      });
-      read<{ comingUp?: { rows: Array<{ circleName: string; nextTitle: string | null; words: string; mine: boolean; openRoom: { id: number } | null }> } }>(
-        "/api/sessions",
-      ).then((s) => {
-        const row = s?.comingUp?.rows?.find((r) => r.mine) ?? null;
-        put({
-          session: row
-            ? {
-                circle: row.circleName,
-                title: row.nextTitle,
-                words: row.words,
-                href: row.openRoom ? `/sessions/${row.openRoom.id}` : "/sessions",
-              }
-            : null,
-        });
-      });
       read<AsksPayload>(ASKS_URL).then((a) =>
         put({
           asks: a && Array.isArray(a.waitingOnYou)
@@ -230,6 +192,79 @@ export function useDashData(userId: string | number | null | undefined): DashDat
       off();
     };
   }, [userId]);
+
+  /*
+   * THE READS OF OPTIONAL MODULES (badges, messaging, sessions). An off module
+   * has no routes, so asking is a 404 on every load and a console error for a
+   * new member (audit M14). Each read waits for the catalog and goes only when
+   * its module is on; a catalog that could not be read counts as on, as
+   * `moduleIsOn` says. A read that does not go leaves its field null, which
+   * is what a failed read leaves.
+   */
+  const modules = useModules();
+  const badgesOn = moduleIsOn(modules, "badges");
+  const messagingOn = moduleIsOn(modules, "messaging");
+  const sessionsOn = moduleIsOn(modules, "sessions");
+  useEffect(() => {
+    if (!authToken() || userId == null) return;
+    let live = true;
+    const put = (patch: Partial<DashData>) => {
+      if (live) setData((d) => ({ ...d, ...patch }));
+    };
+    const load = () => {
+      if (badgesOn) {
+        read<{ badges: FlowerBadge[]; maxFeatured?: number }>(`/api/badges/of/${encodeURIComponent(String(userId))}`).then((b) => {
+          const list = Array.isArray(b?.badges) ? b.badges : null;
+          put({
+            badges: list ? list.length : null,
+            badgeList: list,
+            maxFeatured: typeof b?.maxFeatured === "number" ? b.maxFeatured : null,
+          });
+        });
+      }
+      if (sessionsOn) {
+        read<{ waiting: number; nextDue: string | null }>("/api/sessions/tasks/count").then((t) =>
+          put({ tasks: t && typeof t.waiting === "number" ? { waiting: t.waiting, nextDue: t.nextDue ?? null } : null }),
+        );
+        read<{ comingUp?: { rows: Array<{ circleName: string; nextTitle: string | null; words: string; mine: boolean; openRoom: { id: number } | null }> } }>(
+          "/api/sessions",
+        ).then((s) => {
+          const row = s?.comingUp?.rows?.find((r) => r.mine) ?? null;
+          put({
+            session: row
+              ? {
+                  circle: row.circleName,
+                  title: row.nextTitle,
+                  words: row.words,
+                  href: row.openRoom ? `/sessions/${row.openRoom.id}` : "/sessions",
+                }
+              : null,
+          });
+        });
+      }
+      if (messagingOn) {
+        read<{ unreadTotal: number; conversations: InboxConversation[] }>("/api/messages").then((m) => {
+          if (!m || typeof m.unreadTotal !== "number") return put({ messages: null });
+          const top = (m.conversations ?? []).find((c) => c.unreadCount > 0 && !c.muted) ?? null;
+          put({
+            messages: {
+              unreadTotal: m.unreadTotal,
+              top: top
+                ? { id: String(top.id), title: String(top.title || top.name || ""), preview: String(top.preview ?? ""), unread: top.unreadCount }
+                : null,
+              parties: partiesOf(m.conversations ?? [], String(userId)),
+            },
+          });
+        });
+      }
+    };
+    load();
+    const off = onProfileRefresh(load);
+    return () => {
+      live = false;
+      off();
+    };
+  }, [userId, badgesOn, messagingOn, sessionsOn]);
 
   return data;
 }

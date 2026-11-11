@@ -53,6 +53,7 @@ import { m, AnimatePresence } from "framer-motion";
 import { Heart, Edit2, LogOut, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import { useTokenName } from "@/hooks/useTokenNames";
 import { usePathLadders } from "@/hooks/usePathLadders";
+import { FIRST_DAYS } from "@shared/roleStartWords";
 import { lazy, Suspense, useEffect, useState } from "react";
 const OnboardingPath = lazy(() => import("@/components/profile/OnboardingPath"));
 import { Link, useLocation } from "wouter";
@@ -146,6 +147,15 @@ export default function Profile() {
   const [advance, setAdvance] = useState<StageAdvance | null>(null);
   /** Every read the dashboard takes, once for the page. */
   const dash = useDashData(user?.id ?? null);
+  /**
+   * THE FIRST DAYS (audit M8, P7). While steps wait before a role starts, or the
+   * holder's own onboarding path is within its first 14 days, the page asks for
+   * nothing about next season and shows no stage or rank: somebody who arrived an
+   * hour ago is not on a ladder yet.
+   */
+  const [startStepsShown, setStartStepsShown] = useState(false);
+  const [pathDay, setPathDay] = useState<number | null>(null);
+  const firstDays = startStepsShown || (pathDay !== null && pathDay <= FIRST_DAYS);
 
   /**
    * The progression read, once for the page.
@@ -403,15 +413,19 @@ export default function Profile() {
           <m.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-6 sm:gap-8">
             {/* THE STEPS BEFORE A ROLE STARTS, on every tab: a new holder lands
                 here after sign-up, on any tab, and is asked here (role journey L7). */}
-            <RoleStartSteps />
+            <RoleStartSteps onShown={setStartStepsShown} />
+            {/* "Our first 14 days" sits directly under the steps card, on Today and Roles (audit M8). */}
+            <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
+              <Suspense fallback={null}><OnboardingPath onDay={setPathDay} /></Suspense>
+            </div>
             {/* The role proposal, first under the tabs. On a phone it is on
                 Today and on Roles, so it is the first thing on either tab.
                 A desktop shows it here, above the hero. */}
             <div className={`flex flex-col gap-4 ${tabOf(["today", "roles"])}`}>
               {/* Guide v2: whose move it is, first: what waits on you to align with, above proposing for next season. */}
-              <YourMoveCard />
-              <ProposeBanner />
-              <ProposeRolesEntry />
+              {!startStepsShown && <YourMoveCard />}
+              {!firstDays && <ProposeBanner />}
+              {!firstDays && <ProposeRolesEntry />}
             </div>
             {/* WHO YOU ARE PLAYING, FIRST. The ladder position comes from the
                 page's own reads (`prog.stageIndex`, `config.stages`), never a
@@ -420,9 +434,9 @@ export default function Profile() {
               <ProfileHero
                 name={user.name}
                 handle={user.handle}
-                stageIndex={stageIndex}
-                stageCount={stages?.length ?? null}
-                stageLabel={stagePill(stages, stageIndex)}
+                stageIndex={firstDays ? null : stageIndex}
+                stageCount={firstDays ? null : (stages?.length ?? null)}
+                stageLabel={firstDays ? null : stagePill(stages, stageIndex)}
                 season={seasonWords}
                 rolesLine={rolesLine || null}
                 badges={dash.badgeList}
@@ -463,7 +477,7 @@ export default function Profile() {
                   </div>
                 }
                 footer={
-                  nextRung ? (
+                  nextRung && !firstDays ? (
                     <div className="mt-1 flex w-full max-w-[640px] flex-col gap-2 sm:mt-3.5">
                       <div className="flex justify-between text-xs sm:text-sm">
                         <span className="font-semibold text-dash-gold-lit">Next: {nextRung.name}</span>
@@ -521,7 +535,7 @@ export default function Profile() {
               />
             </div>
 
-            {stages && prog ? (
+            {stages && prog && !firstDays ? (
               <div className={tabOf("today")}>
                 <StagePanel
                   stages={stages}
@@ -537,7 +551,7 @@ export default function Profile() {
             ) : null}
 
             <div className={tabOf("today")}>
-              <TodayStrip data={dash} />
+              <TodayStrip data={dash} stepsWaiting={startStepsShown} />
             </div>
 
             {/* WHO HELPS YOU: the member's guide, chosen once (2026-11-09). On Today, so a phone finds it first. */}
@@ -596,9 +610,6 @@ export default function Profile() {
                 {/* The quest log: every task taken on in a live session, what
                     this member's roles hold, and what waits on a power they
                     hold. Emails and notices land on #my-tasks. */}
-                <div className={`empty:hidden ${tabOf(["today", "roles"])}`}>
-                  <Suspense fallback={null}><OnboardingPath /></Suspense>
-                </div>
                 <div className={tabOf(["today", "quests"])}>
                   <TasksWaitingCard enabled={sessionsOn} />
                 </div>

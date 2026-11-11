@@ -73,6 +73,7 @@ export default function ConfidentialityCard({ onAligned }: { onAligned?: () => v
             <p className={`${HINT} mb-2`}>{CONFIDENTIALITY_WORDS.asYou}</p>
             <AlignButton
               sentence={agreement.intent}
+              reconfirmReason={ALIGN_WORDS.reconfirmAgreementLine}
               alignedAt={alignedAt}
               onAlign={async () => {
                 const a = await alignConfidentiality(agreement.version);

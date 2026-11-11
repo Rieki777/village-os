@@ -25,7 +25,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BreathingLoader } from "@/components/natural";
 import ProposalEditor from "@/components/roleProposal/ProposalEditor";
 import SharedProposal from "@/components/roleProposal/SharedProposal";
-import { fetchProposal, fetchShared, startFromCard, type ProposalOut, type SharedOut } from "@/components/roleProposal/proposalApi";
+import { fetchMine, fetchProposal, fetchShared, startFromCard, type ProposalOut, type SharedOut } from "@/components/roleProposal/proposalApi";
+import { proposalHref } from "@shared/roleProposals";
 import { keepRoleOn } from "@/components/roleProposal/QuickPath";
 import { RP_WORDS } from "@/components/roleProposal/proposalWords";
 
@@ -74,13 +75,21 @@ export function NewRoleProposal() {
   useEffect(() => {
     if (!user || gate) return;
     let alive = true;
-    void startFromCard().then((r) => {
+    // Read first: a member with a draft goes to it without a refused POST, which a browser logs as an error on every visit (audit M14).
+    void (async () => {
+      const mine = await fetchMine();
+      if (!alive) return;
+      if (mine.ok && typeof mine.data.draftId === "string" && mine.data.draftId) {
+        setLocation(keepRoleOn(proposalHref(mine.data.draftId)), { replace: true });
+        return;
+      }
+      const r = await startFromCard();
       if (!alive) return;
       if (r.ok) setLocation(keepRoleOn(r.data.proposal.href), { replace: true });
       // One draft at a time: the one already open is where the member carries on.
       else if (r.status === 409 && typeof r.body?.href === "string" && r.body.href.startsWith("/role-proposals/")) setLocation(keepRoleOn(r.body.href), { replace: true });
       else setError({ status: r.status, text: r.error });
-    });
+    })();
     return () => {
       alive = false;
     };

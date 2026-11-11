@@ -266,8 +266,9 @@ export default function NotifyPrefsPanel({ onDeleted }: { onDeleted?: () => void
         <div className="space-y-2.5 mb-6">
           {Object.keys(LABELS).map((key) => (
             <div key={key} className="flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">{LABELS[key]}</span>
+              <label htmlFor={`notify-${key}`} className="text-sm text-muted-foreground">{LABELS[key]}</label>
               <select
+                id={`notify-${key}`}
                 value={prefs[key]}
                 disabled={saving}
                 onChange={(e) => save({ [key]: e.target.value })}

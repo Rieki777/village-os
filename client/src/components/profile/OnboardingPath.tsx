@@ -26,6 +26,15 @@ import {
 } from "@/components/journey/look";
 import type { CheckinAnswers, PathItemState } from "@shared/onboardingPath";
 
+/** "2026-11-24" as "24 November". A date that does not read as one comes back as it was. */
+export function humanDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+}
+
 export const ONBOARDING_WORDS = {
   heading: (role: string) => role,
   line: (day: number, due: string) =>
@@ -206,7 +215,7 @@ function PathCard({
           : ONBOARDING_WORDS.holderOf(p.roleName)}
       </h2>
       <p className="mt-2 text-foreground">
-        {ONBOARDING_WORDS.line(p.day, p.dueOn)}
+        {ONBOARDING_WORDS.line(p.day, humanDate(p.dueOn))}
       </p>
       <p className="mt-1 text-foreground">
         {p.buddyName
@@ -293,7 +302,13 @@ function PathCard({
   );
 }
 
-export default function OnboardingPath() {
+/** The day the reader's own path is on, or null when they have none. */
+export function ownDay(paths: readonly Pick<Served, "mine" | "day">[]): number | null {
+  const mine = paths.filter((p) => p.mine);
+  return mine.length ? Math.min(...mine.map((p) => p.day)) : null;
+}
+
+export default function OnboardingPath({ onDay }: { onDay?: (day: number | null) => void } = {}) {
   const [paths, setPaths] = useState<Served[] | null>(null);
   const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
@@ -301,11 +316,13 @@ export default function OnboardingPath() {
     void gameFetch("/api/onboarding/me")
       .then(async res => {
         const out = await res.json().catch(() => ({}));
-        if (res.ok && Array.isArray(out.paths)) setPaths(out.paths);
-        else setFailed(true);
+        if (res.ok && Array.isArray(out.paths)) {
+          setPaths(out.paths);
+          onDay?.(ownDay(out.paths));
+        } else setFailed(true);
       })
       .catch(() => setFailed(true));
-  }, []);
+  }, [onDay]);
   useEffect(() => load(), [load]);
 
   if (failed) {
