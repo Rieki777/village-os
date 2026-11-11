@@ -17,12 +17,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight, Hourglass } from "lucide-react";
 import { START_WORDS, type StartStep } from "@shared/roleStartWords";
+import { SEAT_OPENS_WORDS } from "@shared/openProposalDecide";
 import ConfidentialityCard from "@/components/alignment/ConfidentialityCard";
 import { authToken } from "@/lib/gameApi";
 import { call, fetchMyAlignments } from "@/components/alignment/alignmentsApi";
 import { waitingOnYou } from "./YourMoveCard";
 
-type Waiting = { applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }> };
+type Waiting = { applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat?: boolean };
 
 export default function RoleStartSteps({ className = "", onShown }: { className?: string; onShown?: (shown: boolean) => void } = {}) {
   const [waiting, setWaiting] = useState<Waiting[] | null>(null);
@@ -58,11 +59,13 @@ export default function RoleStartSteps({ className = "", onShown }: { className?
 
   if (!shown || !waiting) return null;
   const roles = waiting.flatMap((w) => w.roles);
+  // Every seat taken (audit B3): the honest line, never "within the hour".
+  const full = waiting.filter((w) => w.waitsForSeat).flatMap((w) => w.roles);
   return (
     <section aria-labelledby="role-start-h" data-role-start-steps="" className={`rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-sm ${className}`}>
       <h2 id="role-start-h" className="flex items-center gap-2 font-display text-xl font-bold text-foreground">
         <Hourglass className="size-5 shrink-0 text-notice" aria-hidden="true" />
-        {START_WORDS.cardTitle}
+        {steps.length === 0 && extra.length === 0 && full.length ? SEAT_OPENS_WORDS.heldTitle : START_WORDS.cardTitle}
       </h2>
       {roles.length > 0 && <p className="mt-1 text-sm text-muted-foreground">{roles.join(", ")}</p>}
       <ol className="mt-4 grid gap-3">
@@ -88,7 +91,9 @@ export default function RoleStartSteps({ className = "", onShown }: { className?
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-xs text-muted-foreground">{START_WORDS.after}</p>
+      <p className="mt-4 text-xs text-muted-foreground" data-start-after={full.length ? "seat" : "hour"}>
+        {full.length ? (steps.length || extra.length ? SEAT_OPENS_WORDS.after(full) : SEAT_OPENS_WORDS.held(full)) : START_WORDS.after}
+      </p>
     </section>
   );
 }

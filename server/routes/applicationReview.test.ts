@@ -438,6 +438,8 @@ describe.skipIf(!configured)("application review, on a real schema", () => {
   describe("adopt for the moon running now", () => {
     it("offers it when the stored moon ended, and adopts onto the moon running now when the holder says so", async () => {
       const { id } = await confirmed("moon@example.test", [roleA]);
+      // Room for one more: a role with every place filled refuses an adoption (audit B3), which is not this test.
+      await q("UPDATE org_roles SET seats = 5 WHERE id = ?", [roleA]);
       await q("UPDATE open_role_proposals SET body_json = JSON_SET(body_json, '$.term', JSON_OBJECT('kind', 'moon', 'startsOn', '2020-01-01', 'endsOn', '2020-01-28')) WHERE id = ?", [id]);
       const refused = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
       expect(refused.status).toBe(409);

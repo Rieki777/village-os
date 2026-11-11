@@ -410,4 +410,102 @@ describe.skipIf(!configured)("open role proposals, the decision, on a real schem
       expect((await save(id, { words: { ending: "x" }, expectedRevision: 1 })).status).toBe(409);
     });
   });
+
+  // ── Audit B2 (11 Nov 2026): what was agreed is what is signed ──────────────
+  describe("what was agreed is what is signed", () => {
+    const appOf = async (userId: string) => {
+      const [row] = await q("SELECT id, settings_json, deliverables, answers AS answers_json, text_id FROM seat_applications WHERE candidate_user_id = ? ORDER BY created_at DESC LIMIT 1", [userId]);
+      const json = (v: unknown) => (v == null ? null : typeof v === "string" ? JSON.parse(v) : v);
+      return { ...row, settings: json(row.settings_json), answers: json(row.answers_json) };
+    };
+
+    it("carries the offer, the accepted revision, the answers and the commitment into the application and the words the holder aligns with", async () => {
+      await q("DELETE FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
+      const { id } = await proposalWithCard({ term: A, ending: { choice: "talk", note: "Two moons would suit me." } });
+      await save(id, { words: { ending: "Two moons' notice.", allowance: "Your accounting software is paid for." }, commitmentPct: 80, expectedRevision: 0 });
+      await call("POST", `/api/governance/applications/${id}/terms`, { replies: { ending: { choice: "accept", note: "" }, allowance: { choice: "accept", note: "" }, commitment: { choice: "accept", note: "" } } }, HAS.id);
+      const adopted = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+
+      const app = await appOf(HAS.id);
+      // The settings: the role's words, the counter-offer on top, and the agreed commitment.
+      expect(app.settings.words).toEqual({ term: "We renew together each moon.", ending: "Two moons' notice.", allowance: "Your accounting software is paid for." });
+      expect(app.settings.clocks).toEqual({ commitmentPct: 80 });
+      // The terms line comes from the FINAL answers: the talk on Ending was settled by accepting the revision.
+      expect(String(app.deliverables)).toContain("Accepts the terms on offer.");
+      expect(String(app.deliverables)).not.toContain("Wants to talk about the terms");
+      expect(String(app.deliverables)).toContain("Commitment: 80%");
+      expect(app.answers.terms).toMatchObject({ choice: "accept", commitmentPct: 80, answers: { ending: { choice: "accept" }, allowance: { choice: "accept" }, term: { choice: "accept" } } });
+
+      // The words the holder aligns with say what was agreed, and do not leave those settings "to fill together".
+      const [text] = await q("SELECT body FROM alignment_texts WHERE id = ?", [app.text_id]);
+      const body = String(text.body);
+      expect(body).toContain("Ending: Two moons' notice.");
+      expect(body).toContain("Allowance: Your accounting software is paid for.");
+      expect(body).toContain("Term: We renew together each moon.");
+      expect(body).toContain("Clocks: Commitment: 80%");
+      const together = body.split("\n").find((l) => l.startsWith("We'll fill this together")) ?? "";
+      for (const label of ["Term", "Clocks", "Allowance", "Ending"]) expect(together).not.toContain(label);
+    });
+
+    it("records a setting still being talked about at an adopt-anyway as still open, never as accepted", async () => {
+      await q("DELETE FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
+      const { id } = await proposalWithCard({ term: A, ending: A });
+      await save(id, { words: { ending: "Two moons' notice." }, expectedRevision: 0 });
+      const adopted = await call("POST", `/api/governance/open-proposals/${id}/adopt`, { confirmOpenTalks: true }, FOUNDER.id);
+      expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+      const app = await appOf(HAS.id);
+      expect(app.settings.words.ending).toBe("Two moons' notice.");
+      expect(String(app.deliverables)).toContain("Wants to talk about the terms: Ending");
+    });
+  });
+
+  // ── Audit B3 (11 Nov 2026): a full seat is never promised by accident ──────
+  describe("adopting into a role with every seat taken", () => {
+    let bee = "";
+    beforeAll(async () => {
+      bee = await createOrgRole(pool, { id: "opd-role-bee", name: "Bee Keeper", seats: 1, circleId: "c-land", aim: "Keep the hives." });
+      // Seated for next season too, so the seat is still taken on the day a proposal for next season would start.
+      await seatHolder(pool, bee, { userId: MO.id, seasonId: "s-next", termEndsAt: new Date("2037-03-20T00:00:00Z") });
+    });
+
+    it("refuses by default with the seat count, then adopts for when a seat opens and tells them so, never 'within the hour'", async () => {
+      await q("DELETE FROM seat_applications WHERE candidate_user_id = ?", [HAS.id]);
+      const { id } = await confirmed("rowan-has@example.test", [bee]);
+      const page1 = (await page(id, FOUNDER.id)).body.proposal;
+      expect(page1.beforeAdopt.seatsFull).toEqual([{ name: "Bee Keeper", seats: 1, taken: 1 }]);
+      expect(page1.beforeAdopt.seatsWords).toContain("Bee Keeper has room for 1 person, and that place is filled");
+
+      const refused = await call("POST", `/api/governance/open-proposals/${id}/adopt`, {}, FOUNDER.id);
+      expect(refused.status).toBe(409);
+      expect(refused.body.error).toBe("seats_full");
+      expect(refused.body.message).toContain("Bee Keeper has room for 1 person, and that place is filled");
+      expect(refused.body.canAdoptForWhenASeatOpens).toBe(true);
+      expect((await readOpenProposal(pool, id))?.status).toBe("confirmed");
+      expect(state.sent.filter((m) => m.origin === "open_proposal.adopted")).toHaveLength(0);
+
+      const adopted = await call("POST", `/api/governance/open-proposals/${id}/adopt`, { whenASeatOpens: true }, FOUNDER.id);
+      expect(adopted.status, JSON.stringify(adopted.body)).toBe(200);
+      expect(adopted.body.decided).toContain("for when a place opens");
+      expect(adopted.body.message).toContain("Adopted for when a place opens");
+      const letter = state.sent.filter((m) => m.origin === "open_proposal.adopted").pop();
+      expect(letter?.text).toContain("Every place in Bee Keeper is filled right now, so your role starts when a place opens.");
+      expect(letter?.text).not.toContain("within the hour");
+      expect(letter?.text).not.toContain("Your roles start when");
+      // P11: the letter says what comes next.
+      expect(letter?.text).toContain("What comes next:");
+    });
+
+    it("counts an adopted invitation nobody has used yet as a place promised", async () => {
+      const roomy = await createOrgRole(pool, { id: "opd-role-hive2", name: "Hive Helper", seats: 1, circleId: "c-land", aim: "Help the hives." });
+      const first = await confirmed("first-hive@example.test", [roomy]);
+      const one = await call("POST", `/api/governance/open-proposals/${first.id}/adopt`, {}, FOUNDER.id);
+      expect(one.status, JSON.stringify(one.body)).toBe(200);
+      const second = await confirmed("second-hive@example.test", [roomy]);
+      const two = await call("POST", `/api/governance/open-proposals/${second.id}/adopt`, {}, FOUNDER.id);
+      expect(two.status).toBe(409);
+      expect(two.body.error).toBe("seats_full");
+      expect(two.body.message).toContain("Hive Helper has room for 1 person, and that place is filled");
+    });
+  });
 });

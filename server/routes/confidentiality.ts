@@ -245,7 +245,7 @@ export function register(app: Express, deps: Deps): void {
     if (!user) return res.status(401).json({ error: "auth_required" });
     const pool = getPool();
     const waiting = (await applicationsOfCandidates(pool, [String(user.id)])).filter((a) => a.status === "adopted" || a.status === "held-full");
-    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }> }> = [];
+    const out: Array<{ applicationId: string; roles: string[]; steps: Array<{ step: StartStep; href: string }>; waitsForSeat: boolean }> = [];
     // A village that has written no agreement has no door to draw for that step, so the holder is not
     // asked for it (audit M18). The admins are told by the closer (seatApplicationCloser.ts).
     const hasAgreement = waiting.length > 0 && (await agreement()) !== null;
@@ -255,8 +255,10 @@ export function register(app: Express, deps: Deps): void {
         for (const app of waiting) {
           if ((await seatingsEverHolding(conn, app.id)) > 0) continue;
           const steps = (await stepsBeforeStart(conn, app, now())).filter((s) => s !== "confidentiality" || hasAgreement);
-          if (!steps.length) continue;
-          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })) });
+          // Held because every seat is taken: shown even with no step left, so the card says the role starts when a seat opens (audit B3).
+          const waitsForSeat = app.status === "held-full";
+          if (!steps.length && !waitsForSeat) continue;
+          out.push({ applicationId: app.id, roles: await seatNamesFor(conn, app.seatIds), steps: steps.map((step) => ({ step, href: stepHref(step, app) })), waitsForSeat });
         }
       } finally {
         conn.release();

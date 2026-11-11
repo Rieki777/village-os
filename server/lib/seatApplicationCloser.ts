@@ -51,6 +51,7 @@
  */
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { civilDateInstant, RECORD_LIMIT, type SeatCalendar } from "../../shared/seatTerms";
+import { SEAT_OPENS_WORDS } from "../../shared/openProposalDecide";
 import { applicationHref, applicationNoticeTitle, type ApplicationStatus } from "../../shared/seatApplications";
 import type { CloseRouting, SubjectCloser } from "./applyDue";
 import type { BallotRow } from "./ballots";
@@ -65,6 +66,7 @@ import { agreementWritten, stepHref, stepsBeforeStart, stepsBody, START_WORDS, t
 import { revertDraft } from "./orgDrafts";
 import { proposalsForApplications } from "../repos/roleProposals";
 import {
+  applicationsToSeat,
   endSeatingForRenewal,
   inApplicationTransaction,
   liveSeatingsOf,
@@ -96,7 +98,7 @@ export type SeatingOutcome =
    * Adopted, and the seats wait: for `starts_at`, or for the agreements the
    * village asks before a role starts (`steps`, server/lib/roleStartAgreements.ts).
    */
-  | { kind: "later"; steps?: StartStep[] }
+  | { kind: "later"; steps?: StartStep[]; /** Roles with no free place at the start: the holder is told it starts when a seat opens (audit B3). */ full?: string[] }
   /** A seat had no free place. Nobody was seated. */
   | { kind: "held-full"; full: string[] }
   /** A seat is gone, retired or an example, or the term ended before it could start. */
@@ -153,6 +155,88 @@ function termAtSeating(app: StoredApplication, calendar: SeatCalendar, now: Date
     return { ok: false, why: "The term this application set ended before its roles could be taken up, so nobody was seated. Apply again with a later end." };
   }
   return { ok: true, endsAt };
+}
+
+/** A role with no free place at a start, for the words that say so. */
+export interface FullSeat {
+  id: string;
+  name: string;
+  seats: number;
+  /** Live seatings still running at the start, plus places already promised to adopted applications and invitations. */
+  taken: number;
+}
+
+/**
+ * WHICH ROLES HAVE NO FREE PLACE WHEN A ROLE WOULD START (audit B3, 11 Nov
+ * 2026). Asked BEFORE an adoption, so a second person is never adopted into a
+ * full seat by accident, and asked again when the waiting holder is told what
+ * comes next, so nobody reads "your role starts within the hour" for a seat
+ * that is full.
+ *
+ * A place counts as taken by:
+ *   - a live seating still running at `at` (a term ending before it, or a
+ *     season that has turned by then, frees its place, by the same `isLapsed`
+ *     the seating count reads);
+ *   - an application adopted and not yet seated, or held because a seat was
+ *     full, that came before this one (`before`), the order the season turn
+ *     seats them in;
+ *   - `promised`: places the caller counted that no application holds yet (an
+ *     adopted proposal whose invitation nobody has used).
+ *
+ * The candidate's own seatings and applications never count against them: a
+ * renewal is not a second person. A read, never a lock: the seating itself
+ * counts again under its locks (`seatInTransaction`), so this is the words and
+ * the refusal, never the guarantee.
+ */
+export async function seatsWithoutRoom(
+  db: Pool | PoolConnection,
+  p: {
+    seatIds: readonly string[];
+    candidateUserId: string | null;
+    at: Date;
+    calendar: SeatCalendar;
+    lapse: LapseContext;
+    /** The season the start falls in, when the caller knows it. */
+    seasonId?: string | null;
+    /** This application, when there is one: itself and anything after it are not ahead of it. */
+    before?: Pick<StoredApplication, "id" | "createdAt"> | null;
+    promised?: ReadonlyMap<string, number>;
+  },
+): Promise<FullSeat[]> {
+  if (!p.seatIds.length) return [];
+  const tz = p.calendar.timezone || "UTC";
+  const day = civilDateKey(p.at, tz);
+  // The season running at the start: the one named, else the latest that has begun by then (a season's last day may be the next one's first).
+  const begun = p.calendar.seasons.filter((s) => s.startsOn <= day && (!s.endsOn || day <= s.endsOn)).sort((a, b) => (a.startsOn < b.startsOn ? 1 : -1));
+  const seasonThen = p.seasonId ?? begun[0]?.id ?? p.lapse.currentSeasonId;
+  const lapse: LapseContext = { ...p.lapse, currentSeasonId: seasonThen, now: p.at };
+  const seats = await seatsForUpdate(db, p.seatIds);
+  const live = await liveSeatingsOf(db, p.seatIds);
+  const ahead = (await applicationsToSeat(db, RECORD_LIMIT)).filter(
+    (a) =>
+      a.candidateUserId !== p.candidateUserId &&
+      (!p.before ||
+        (a.id !== p.before.id &&
+          (a.createdAt.getTime() < p.before.createdAt.getTime() || (a.createdAt.getTime() === p.before.createdAt.getTime() && a.id < p.before.id)))),
+  );
+  const out: FullSeat[] = [];
+  for (const id of p.seatIds) {
+    const seat = seats.find((s) => s.id === id);
+    if (!seat) continue;
+    const seated = live.filter((l) => l.orgRoleId === id && l.userId !== p.candidateUserId && !isLapsed({ ...l, endedAt: null }, seat, lapse).lapsed).length;
+    const waiting = ahead.filter((a) => a.seatIds.includes(id)).length;
+    const taken = seated + waiting + (p.promised?.get(id) ?? 0);
+    if (taken >= seat.seats) out.push({ id, name: seat.name, seats: seat.seats, taken });
+  }
+  return out;
+}
+
+/** The roles an adopted, unseated application waits on a free place for, at its own first day. Empty when it has room. */
+export async function fullSeatsFor(db: Pool | PoolConnection, app: StoredApplication, ctx: SeatingContext): Promise<string[]> {
+  const first = firstDayOf(app, ctx.calendar);
+  const at = first && first.getTime() > ctx.now.getTime() ? first : ctx.now;
+  const full = await seatsWithoutRoom(db, { seatIds: app.seatIds, candidateUserId: app.candidateUserId, at, calendar: ctx.calendar, lapse: ctx.lapse, seasonId: first && first.getTime() > ctx.now.getTime() ? app.termSeasonId : null, before: app });
+  return full.map((f) => f.name);
 }
 
 /**
@@ -270,9 +354,11 @@ export async function adoptApplication(
      */
     const steps = await stepsBeforeStart(conn, { ...app, textId: text.id, textHash: text.contentHash }, ctx.now);
     if (notYet(app, ctx) || steps.length > 0) {
-      await setStatus(conn, id, from, "adopted", adopted);
+      // Waiting on its steps with every seat taken: held, so the holder's profile reads it honestly (audit B3).
+      const full = steps.length ? await fullSeatsFor(conn, app, ctx) : [];
+      await setStatus(conn, id, from, full.length ? "held-full" : "adopted", adopted);
       await villageAligns();
-      return { outcome: { kind: "later", ...(steps.length ? { steps } : {}) }, app, textId: text.id };
+      return { outcome: { kind: "later", ...(steps.length ? { steps } : {}), ...(full.length ? { full } : {}) }, app, textId: text.id };
     }
     const outcome = await seatInTransaction(conn, app, ctx, how.ref);
     if (outcome.kind === "seated") await setStatus(conn, id, from, "adopted", adopted);
@@ -303,7 +389,13 @@ export async function seatFromApplication(pool: Pool, id: string, ctx: SeatingCo
     if ((await seatingsEverHolding(conn, id)) > 0) return { outcome: { kind: "lost", status: app.status }, app };
     // The agreements before a role starts (L7): still waiting, nothing is seated, and the turn asks again next hour.
     const steps = await stepsBeforeStart(conn, app, ctx.now);
-    if (steps.length > 0) return { outcome: { kind: "later", steps }, app };
+    if (steps.length > 0) {
+      // The room can change while the steps wait: the status follows it, so the profile says what is true.
+      const full = await fullSeatsFor(conn, app, ctx);
+      if (full.length && app.status === "adopted") await setStatus(conn, id, ["adopted"], "held-full");
+      if (!full.length && app.status === "held-full") await setStatus(conn, id, ["held-full"], "adopted");
+      return { outcome: { kind: "later", steps, ...(full.length ? { full } : {}) }, app };
+    }
     const outcome = await seatInTransaction(conn, app, ctx, app.adoptedRef ?? app.id);
     if (outcome.kind === "seated" && app.status === "held-full") await setStatus(conn, id, ["held-full"], "adopted");
     if (outcome.kind === "held-full" && app.status === "adopted") await setStatus(conn, id, ["adopted"], "held-full");
@@ -347,7 +439,7 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
   if (outcome.kind === "seated" || outcome.kind === "later") {
     await deps.notify({ userId: app.candidateUserId, type: "governance", title: applicationNoticeTitle("adopted", names), body: null, link, actorUserId: actorId, dedupeKey: `sa:${app.id}:adopted:${key}` });
   }
-  if (outcome.kind === "later" && outcome.steps?.length) await tellSteps(deps, app, outcome.steps, actorId);
+  if (outcome.kind === "later" && outcome.steps?.length) await tellSteps(deps, app, outcome.steps, actorId, outcome.full ?? []);
   if (outcome.kind === "seated") {
     for (const s of outcome.seated) {
       const name = names[app.seatIds.indexOf(s.seatId)] ?? s.seatId;
@@ -375,13 +467,14 @@ export async function tellOutcome(deps: NoticeDeps, app: StoredApplication, outc
  * shorter list. When the confidentiality step waits on words the village has
  * not written, the admins hear that once.
  */
-export async function tellSteps(deps: NoticeDeps, app: StoredApplication, steps: readonly StartStep[], actorId: string | null): Promise<void> {
-  const key = `sa:${app.id}:steps:${steps.join("+")}`;
+export async function tellSteps(deps: NoticeDeps, app: StoredApplication, steps: readonly StartStep[], actorId: string | null, full: readonly string[] = []): Promise<void> {
+  // Every seat taken: the steps, then the honest line, never "within the hour" (audit B3). Its own key, so the words change when the room does.
+  const key = `sa:${app.id}:steps:${steps.join("+")}${full.length ? ":full" : ""}`;
   await deps.notify({
     userId: app.candidateUserId,
     type: "governance",
     title: START_WORDS.title(steps.length),
-    body: stepsBody(steps),
+    body: full.length ? [...steps.map((s) => START_WORDS.step[s]), SEAT_OPENS_WORDS.after(full)].join("\n") : stepsBody(steps),
     link: stepHref(steps[0], app),
     actorUserId: actorId,
     dedupeKey: key,
