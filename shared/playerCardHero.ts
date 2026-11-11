@@ -25,7 +25,8 @@
  * chip says full time ("Part of a full-time season" does), "About N hours a
  * week" when every chip reads as hours (`hoursAWeek`, the load check's
  * reader), the chip's own words when every role says the same thing, and
- * nothing at all otherwise.
+ * nothing at all otherwise. A role whose card states a commitment speaks in
+ * it ("Commitment: 60%") and nothing is derived from it as hours.
  *
  * Pure: the clock is `input.now`, the zone is `input.timeZone`.
  */
@@ -33,6 +34,7 @@ import { LUNAR_CLOCK } from "./cycleClock";
 import { civilDate, daysOfSpan, fullMoonsBetween, newMoonsBetween, zonedTimeToUtc } from "./lunar";
 import { CARD_WORDS as W } from "./playerCardWords";
 import { FULL_SEASON_HOURS, hoursAWeek } from "./roleProposalLoad";
+import { commitmentWords } from "./termsWords";
 import { formatDay, joinList, type Read } from "./roleSheet";
 
 /** A number and the field it came from, as the model's `Figure`. */
@@ -92,6 +94,8 @@ export interface HeroRoleIn {
   name: string;
   circle: Read<{ id: string; name: string } | null>;
   timeCommitment?: Read<string | null>;
+  /** The role card's terms on offer. Its `commitmentPct`, when set, is the role's commitment. */
+  cardSeat?: Record<string, unknown> | null;
 }
 
 export interface HeroApplicationIn {
@@ -148,7 +152,13 @@ function adoptedTerm(input: HeroIn, seasonEnd: Date | null): { start: Date; end:
 
 /** The time words on the tagline, from the roles' own time chips. Null when they say nothing usable. */
 export function personTime(roles: readonly HeroRoleIn[]): string | null {
-  const words = roles.map((r) => clean(r.timeCommitment ?? null)).filter((w): w is string => w !== null);
+  // A role that states a commitment speaks in it, and its legacy time chip stays quiet (audit M2).
+  const words = roles
+    .map((r) => {
+      const pct = r.cardSeat?.commitmentPct;
+      return typeof pct === "number" && Number.isInteger(pct) ? commitmentWords(pct) : clean(r.timeCommitment ?? null);
+    })
+    .filter((w): w is string => w !== null);
   if (!words.length) return null;
   if (words.some((w) => /\bfull[- ]?time\b/i.test(w))) return W.fullTime;
   if (words.length === roles.length) {
@@ -178,10 +188,13 @@ export function heroOf(input: HeroIn): HeroOut {
   const tz = input.timeZone;
   const season = input.season ?? null;
   const seasonStart = season ? instantOf(season.startsOn, tz) : null;
-  // A season's `endsOn` is the day the NEXT one starts (`seasonState` runs a
-  // season while `today < endsOn`), so its last day is the day before.
+  // A season's `endsOn` is a civil day and it is shown as written, the way
+  // /roles prints it ("ends 31 Dec"). It was read as the day the next season
+  // starts and shown a day early ("30 December"). The instant is that civil
+  // day's first moment in the village's zone, so a zone west of UTC cannot
+  // move it either.
   const seasonEndsAt = season ? instantOf(season.endsOn, tz) : null;
-  const seasonEnd = seasonEndsAt ? new Date(seasonEndsAt.getTime() - 1) : null;
+  const seasonEnd = seasonEndsAt;
 
   const eyebrow = [clean(input.villageName ?? null), clean(season?.name ?? null)].filter((s): s is string => s !== null).join(" · ");
 
@@ -202,10 +215,9 @@ export function heroOf(input: HeroIn): HeroOut {
   // A day is counted only inside the span (E9). A proposal for a season that
   // has not begun, or one that has ended, names that season. Naming today's
   // moon beside next season's dates reads as the wrong month.
-  // A term runs through its last day, as `adoptedTerm` reads it; a season's
-  // end is already the last instant before the next one starts.
+  // A term and a season both run through their last day.
   const nowMs = input.now.getTime();
-  const inside = !!span && nowMs >= span.start.getTime() && nowMs < span.end.getTime() + (span.over === "term" ? 86_400_000 : 1);
+  const inside = !!span && nowMs >= span.start.getTime() && nowMs < span.end.getTime() + 86_400_000;
   const seasonName = input.proposal ? clean(season?.name ?? null) : null;
   if (span && inside && span.end.getTime() >= span.start.getTime()) {
     // The season counts its `endsOn` day too, as the role chart's header does (`daysOfSpan`); a term's end is already its last day.

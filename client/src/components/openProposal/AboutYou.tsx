@@ -15,6 +15,7 @@
  */
 import type { ReactNode } from "react";
 import { useLingui } from "@lingui/react/macro";
+import { formatDay } from "@shared/roleSheet";
 import {
   ABOUT_BASED_MAX,
   ABOUT_LANGUAGES_MAX,
@@ -224,7 +225,8 @@ export function AboutYouView({ about }: { about: ServedAboutYou | null | undefin
   ].filter(Boolean) as Array<{ label: string; text: string }>;
   if (!facts.length && !references.length && !backgroundCheck) return null;
   const consent = backgroundCheck?.consent;
-  const day = consent ? new Date(consent.at).toISOString().slice(0, 10) : "";
+  // "10 Nov 2026", the way the rest of the card writes a day, never the ISO form (audit P5).
+  const day = consent ? (formatDay(consent.at) ?? "") : "";
   return (
     <section aria-labelledby="op-aboutyou" className="grid gap-3" data-aboutyou="">
       <h2 id="op-aboutyou" className="text-lg font-bold text-foreground">

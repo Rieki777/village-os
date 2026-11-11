@@ -47,6 +47,7 @@ import { gameFetch } from "@/lib/gameApi";
 import { DECIDE_WORDS, DOOR, type DoorReason } from "@shared/openProposalDecide";
 import { CONSENT_WORDS, type ConsentAnswer } from "@shared/roleProposalConsent";
 import { civilDayWords } from "@shared/seasonPlans";
+import { WORLD } from "@/components/journey/look";
 
 /** One proposal as the page reads it (`GET /api/governance/open-proposals/:id`). */
 export interface ServedOpenProposal {
@@ -181,7 +182,7 @@ export default function OpenProposal() {
 
   if (!user || state === "members") {
     return (
-      <Layout>
+      <Layout><div className={WORLD}>
         <div className="container max-w-3xl px-4 py-8">
           {back}
           <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
@@ -194,14 +195,14 @@ export default function OpenProposal() {
             )}
           </div>
         </div>
-      </Layout>
+      </div></Layout>
     );
   }
 
   const record = p?.consent.record ?? null;
 
   return (
-    <Layout>
+    <Layout><div className={WORLD}>
       <div className="container max-w-3xl px-4 py-8">
         {back}
         {state === "loading" && (
@@ -426,6 +427,6 @@ export default function OpenProposal() {
           </article>
         )}
       </div>
-    </Layout>
+    </div></Layout>
   );
 }

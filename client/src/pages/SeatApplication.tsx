@@ -67,6 +67,7 @@ import { parseSeatSettings } from "@shared/seatSettings";
 import { WHOSE_MOVE, applicationHref, seatList, whoseMove, type ApplicationStatus } from "@shared/seatApplications";
 import { civilDayWords } from "@shared/seasonPlans";
 import { ALIGN_WORDS, intentSentence } from "@shared/alignments";
+import { CARD, CARD_FEATURED, EYEBROW, H1, H2, WORLD } from "@/components/journey/look";
 import AlignButton from "@/components/alignment/AlignButton";
 import AlignmentCard from "@/components/alignment/AlignmentCard";
 import { call as alignCall } from "@/components/alignment/alignmentsApi";
@@ -282,7 +283,7 @@ export default function SeatApplication() {
   const back = (
     <Link
       href="/decisions"
-      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-teal-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+      className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-notice focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <ArrowLeft className="w-4 h-4" aria-hidden="true" />
       Every decision
@@ -292,11 +293,12 @@ export default function SeatApplication() {
   if (!user || state === "members") {
     return (
       <Layout>
+        <div className={WORLD}>
         <div className="container max-w-3xl px-4 py-8">
           {back}
-          <div className="mt-6 rounded-xl border border-stone-200 bg-white p-8 text-center">
-            <h1 className="font-display text-2xl font-bold text-stone-900">{APPLICATION_WORDS.membersOnly}</h1>
-            <p className="mx-auto mt-2 max-w-md text-stone-600 leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
+          <div className={`${CARD} mt-6 text-center`}>
+            <h1 className={H2}>{APPLICATION_WORDS.membersOnly}</h1>
+            <p className="mx-auto mt-2 max-w-md text-muted-foreground leading-relaxed">{APPLICATION_WORDS.membersOnlyLine}</p>
             {!user && (
               <div className="mt-5">
                 <SignInDoors next={`/role-applications/${encodeURIComponent(id)}`} />
@@ -304,12 +306,14 @@ export default function SeatApplication() {
             )}
           </div>
         </div>
+        </div>
       </Layout>
     );
   }
 
   return (
     <Layout>
+      <div className={WORLD}>
       <div className="container max-w-3xl px-4 py-8">
         {back}
         {state === "loading" && (
@@ -317,17 +321,17 @@ export default function SeatApplication() {
             <BreathingLoader label="Reading the proposal" />
           </div>
         )}
-        {state === "missing" && <p className="mt-6 text-stone-700">There is no application at this address.</p>}
+        {state === "missing" && <p className="mt-6 text-foreground">There is no application at this address.</p>}
         {state === "error" && (
-          <p role="alert" className="mt-6 text-coral">
+          <p role="alert" className="mt-6 text-destructive">
             {error}
           </p>
         )}
         {state === "ready" && app && (
           <article className="mt-3 space-y-8">
             <header>
-              <p className="text-sm font-semibold text-teal-deep">{app.statusWords}</p>
-              <h1 className="mt-1 font-display text-3xl font-bold text-stone-900">
+              <p className={EYEBROW}>{app.statusWords}</p>
+              <h1 className={`${H1} mt-1`}>
                 {app.candidate.name ?? "A former member"} proposes to hold {seatList(app.seats.map((s) => s.name))}
               </h1>
               {/* Guide v2: whose move it is, first. */}
@@ -335,7 +339,7 @@ export default function SeatApplication() {
                 <span className="font-semibold">{`${WHOSE_MOVE}: `}</span>
                 {whoseMove(app.status as ApplicationStatus, app.you)}
               </p>
-              <p className="mt-2 text-stone-600 leading-relaxed">
+              <p className="mt-2 text-muted-foreground leading-relaxed">
                 {app.term.followsSeason
                   ? `Until the season ends on ${civilDayWords(app.term.endsOn)}.`
                   : `Until ${civilDayWords(app.term.endsOn)}.`}
@@ -348,24 +352,24 @@ export default function SeatApplication() {
             {/* THE WORDS EVERY PARTY ALIGNS WITH (PR5), as stored, with the parties' chips and, for a party, Align. */}
             {app.alignment && <AlignmentCard alignment={app.alignment} applicationId={app.id} onChanged={() => void load()} />}
             {app.supersedesId && (
-              <p className="text-sm text-stone-700">
+              <p className="text-sm text-foreground">
                 {APPLICATION_WORDS.amends}{" "}
-                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-teal-deep underline underline-offset-2">
+                <a href={applicationHref(app.supersedesId)} className="inline-flex min-h-11 items-center font-semibold text-notice underline underline-offset-2">
                   {APPLICATION_WORDS.readEarlier}
                 </a>
               </p>
             )}
 
-            <section aria-labelledby="sa-words">
-              <h2 id="sa-words" className="text-lg font-bold text-stone-900">
+            <section aria-labelledby="sa-words" className={CARD}>
+              <h2 id="sa-words" className={H2}>
                 {APPLICATION_WORDS.wordsHeading}
               </h2>
               {app.deliverables || app.note || app.goals?.length ? (
                 <dl className="mt-3 space-y-4">
                   {app.deliverables && (
                     <div>
-                      <dt className="text-sm font-semibold text-stone-700">{APPLICATION_WORDS.deliverables}</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-stone-900">{app.deliverables}</dd>
+                      <dt className="text-sm font-semibold text-foreground">{APPLICATION_WORDS.deliverables}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-foreground">{app.deliverables}</dd>
                     </div>
                   )}
                   {!!app.goals?.length && (
@@ -388,13 +392,13 @@ export default function SeatApplication() {
                   )}
                   {app.note && (
                     <div>
-                      <dt className="text-sm font-semibold text-stone-700">{APPLICATION_WORDS.why}</dt>
-                      <dd className="mt-1 whitespace-pre-wrap text-stone-900">{app.note}</dd>
+                      <dt className="text-sm font-semibold text-foreground">{APPLICATION_WORDS.why}</dt>
+                      <dd className="mt-1 whitespace-pre-wrap text-foreground">{app.note}</dd>
                     </div>
                   )}
                 </dl>
               ) : (
-                <p className="mt-2 text-stone-600">{APPLICATION_WORDS.wordsRemoved}</p>
+                <p className="mt-2 text-muted-foreground">{APPLICATION_WORDS.wordsRemoved}</p>
               )}
             </section>
 
@@ -419,33 +423,33 @@ export default function SeatApplication() {
 
             {/* Who adopts it in this village, read on the server from who holds the power (E8). */}
             {app.status === "awaiting-holder" && app.whoAdopts && (
-              <p className="text-sm text-stone-700" data-who-adopts="">
+              <p className="text-sm text-foreground" data-who-adopts="">
                 {app.whoAdopts}
               </p>
             )}
 
             {app.status === "voting" && app.ballotId && (
-              <section className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <p className="text-stone-800">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
+              <section className="rounded-xl border border-border bg-muted p-4">
+                <p className="text-foreground">{app.carried ? `${app.statusWords}.` : APPLICATION_WORDS.votingLine}</p>
                 <Link
                   href={`/decisions/${app.ballotId}`}
-                  className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-teal-deep hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                  className="mt-2 inline-flex min-h-[44px] items-center font-semibold text-notice hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {APPLICATION_WORDS.readTheVote}
                 </Link>
               </section>
             )}
-            {app.status === "adopted" && app.startsOn && <p className="text-stone-700">{APPLICATION_WORDS.laterLine}</p>}
+            {app.status === "adopted" && app.startsOn && <p className="text-foreground">{APPLICATION_WORDS.laterLine}</p>}
 
             {app.you && app.status === "awaiting-holder" && app.you.holdsThePower && (
-              <section aria-labelledby="sa-holder" className="rounded-xl border-2 border-teal-deep/40 bg-white p-5">
-                <h2 id="sa-holder" className="text-lg font-bold text-stone-900">
+              <section aria-labelledby="sa-holder" className={CARD_FEATURED}>
+                <h2 id="sa-holder" className="text-lg font-bold text-foreground">
                   {APPLICATION_WORDS.holderHeading}
                 </h2>
                 {app.you.isCandidate ? (
-                  <p className="mt-1 text-stone-700">{APPLICATION_WORDS.ownTerms}</p>
+                  <p className="mt-1 text-foreground">{APPLICATION_WORDS.ownTerms}</p>
                 ) : (
-                  <p className="mt-1 text-stone-700">
+                  <p className="mt-1 text-foreground">
                     {record ? CONSENT_WORDS.recordLine : app.proposal?.changesRoles ? APPLICATION_WORDS.powerLine : APPLICATION_WORDS.holderLine}
                   </p>
                 )}
@@ -472,7 +476,7 @@ export default function SeatApplication() {
                       type="button"
                       disabled={busy}
                       onClick={() => void act(() => putApplicationToVillage(app.id), "The village is voting on it now.")}
-                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-400 px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                      className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-5 text-sm font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <Send className="w-4 h-4" aria-hidden="true" />
                       {APPLICATION_WORDS.putToVillage}
@@ -487,15 +491,15 @@ export default function SeatApplication() {
                 type="button"
                 disabled={busy}
                 onClick={() => setAsking(true)}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-stone-700 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
                 <Undo2 className="w-4 h-4" aria-hidden="true" />
                 {APPLICATION_WORDS.withdraw}
               </button>
             )}
             {app.you?.mayWithdraw && asking && (
-              <div role="group" aria-label={APPLICATION_WORDS.withdraw} className="rounded-xl border border-stone-300 bg-white p-4">
-                <p className="text-stone-800">{APPLICATION_WORDS.withdrawAsk}</p>
+              <div role="group" aria-label={APPLICATION_WORDS.withdraw} className="rounded-xl border border-border bg-card p-4">
+                <p className="text-foreground">{APPLICATION_WORDS.withdrawAsk}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -504,14 +508,14 @@ export default function SeatApplication() {
                       setAsking(false);
                       void act(() => withdrawApplication(app.id), "Withdrawn.");
                     }}
-                    className="inline-flex min-h-[44px] items-center rounded-lg bg-coral px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep disabled:opacity-50"
+                    className="inline-flex min-h-[44px] items-center rounded-lg bg-destructive px-4 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
                     {APPLICATION_WORDS.withdrawYes}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAsking(false)}
-                    className="inline-flex min-h-[44px] items-center rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-deep"
+                    className="inline-flex min-h-[44px] items-center rounded-lg border border-border px-4 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {APPLICATION_WORDS.withdrawNo}
                   </button>
@@ -520,12 +524,13 @@ export default function SeatApplication() {
             )}
 
             {said && (
-              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-sage" : "text-coral"}`}>
+              <p role={said.ok ? "status" : "alert"} className={`text-sm font-medium ${said.ok ? "text-open" : "text-destructive"}`}>
                 {said.text}
               </p>
             )}
           </article>
         )}
+      </div>
       </div>
     </Layout>
   );

@@ -230,7 +230,7 @@ export default function Quests() {
             <ExamplesBanner moduleId="quests" noun="quest" />
             <p className="text-sm text-muted-foreground mb-8">
               {quests.length} active quests &nbsp;·&nbsp; {quests.filter((q) => q.pay?.value).length} with a value set
-              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" />
+              <InfoTip tip="A quest with a value set shows it on its card. One without says to inquire for payment details." label="What a value is" className="[&_button]:before:-inset-3.5" />
             </p>
             <p className="text-sm italic text-muted-foreground -mt-6 mb-8">
               Real work, on real land, beside people becoming your people.
@@ -442,7 +442,7 @@ export default function Quests() {
                     <p className="text-muted-foreground mt-1 max-w-2xl">
                       {meta.blurb.replace("{ladder}", ladder)}
                       {ring === "further" && (
-                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" />
+                        <InfoTip tip={`The ${ladder} is the membership ladder on your profile. Walking it, or holding a role, opens these quests.`} label="What opens these quests" className="[&_button]:before:-inset-3.5" />
                       )}
                     </p>
                   </div>

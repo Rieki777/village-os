@@ -79,6 +79,8 @@ const PAGES = [
   "client/src/pages/SetPassword.tsx",
   "client/src/pages/Register.tsx",
   "client/src/pages/Aligned.tsx",
+  "client/src/pages/SeatApplication.tsx",
+  "client/src/pages/ResidentJourney.tsx",
 ];
 
 /** Every file the joining journey draws with, pages included. */
@@ -115,6 +117,12 @@ const JOURNEY = [
   "client/src/components/alignment/RegisterEntry.tsx",
   "client/src/components/alignment/AlignButton.tsx",
   "client/src/components/alignment/ConfidentialityCard.tsx",
+  // The decider and holder side of a proposal (audit M11). OpenProposal.tsx and
+  // CircleConsent.tsx join once their inner classes are on tokens.
+  "client/src/components/openProposal/AboutYou.tsx",
+  "client/src/components/openProposal/MembershipAtApplication.tsx",
+  "client/src/components/openProposal/ProposalAttachments.tsx",
+  "client/src/components/openProposal/RoleCardBridge.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);

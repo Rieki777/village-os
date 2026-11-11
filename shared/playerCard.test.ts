@@ -7,6 +7,7 @@
  * holder, a tension's raiser, another member's application), so the test that
  * no person but the owner is named has something to catch.
  */
+import { OPEN_ROW_AGAIN } from "./roleProposalHonesty";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -592,15 +593,15 @@ describe("proposal mode (PR 3): the card a role application asks for", () => {
       }),
     );
     const line = "We'll fill this together with Operations Steward.";
-    expect(card.across.growingEdge.text).toEqual({ kind: "empty", words: line });
-    expect(card.across.whoCouldHoldNext.text).toEqual({ kind: "empty", words: line });
-    expect(card.across.goals).toEqual({ kind: "empty", words: line });
+    // Audit P6: the role is named once, in one open row. The rest say "too".
+    const all = JSON.stringify(card);
+    expect(all.split(line).length - 1).toBe(1);
+    expect(all.split(OPEN_ROW_AGAIN).length - 1).toBeGreaterThanOrEqual(3);
     expect(card.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with Operations Steward." });
-    expect(card.roles[0].chips.join(" ")).toContain(line);
     expect(card.roles[0].chips.join(" ")).not.toContain("No review date set");
     const none = buildPlayerCard(input({ mode: "proposal", fillWith: null, loadRead: null, growingEdge: null, plan: null }));
     expect(none.across.load.own).toEqual({ kind: "empty", words: "We'll set the load together with the village's operations role." });
-    expect(none.across.growingEdge.text).toEqual({ kind: "empty", words: "We'll fill this together with the village's operations role." });
+    expect(JSON.stringify(none).split("fill this together with the village's operations role").length - 1).toBe(1);
     const live = buildPlayerCard(input({ loadRead: null, growingEdge: null, plan: { aim: null, goals: [] } }));
     expect(live.across.load.own).toEqual({ kind: "empty", words: "Not set this moon" });
     expect(live.across.growingEdge.text).toEqual({ kind: "empty", words: "Not written yet" });
