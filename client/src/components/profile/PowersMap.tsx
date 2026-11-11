@@ -352,7 +352,7 @@ export default function PowersMap({
               {/* The hypha: a soft thread from this node to the next, drawn with a gentle sway
                   so the spine reads as something grown. It stops at the last node shown. */}
               {last ? null : (
-                <svg aria-hidden="true" viewBox="0 0 8 40" preserveAspectRatio="none" className={`absolute bottom-0 left-[6px] top-6 h-auto w-2 ${rung.state === "walked" ? "text-open/60" : "text-border"}`}>
+                <svg aria-hidden="true" viewBox="0 0 8 40" preserveAspectRatio="none" className={`absolute left-[6px] top-6 h-[calc(100%-1.5rem)] w-2 ${rung.state === "walked" ? "text-open/60" : "text-border"}`}>
                   <path d="M4 0 C1 12, 7 24, 4 40" fill="none" stroke="currentColor" strokeWidth="1.25" vectorEffect="non-scaling-stroke" />
                 </svg>
               )}
