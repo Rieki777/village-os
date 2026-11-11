@@ -162,7 +162,7 @@ export function ConfirmProposal() {
   const byWords = by ? whenWords(by, false) : "";
   return (
     <Shell wide>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" data-threshold="confirmed">
+      <div data-hides-fab-phone="" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" data-threshold="confirmed">
         <section aria-live="polite" className={`${CARD} grid gap-5 text-center lg:text-left`}>
           <div className="flex justify-center lg:justify-start">
             <Vesica met={met} size="lg" label={t({ message: "You and the village, met", context: "open proposal confirmed drawing" })} names={[t({ message: "You", context: "open proposal confirmed drawing" }), t({ message: "The village", context: "open proposal confirmed drawing" })]} />
@@ -225,7 +225,7 @@ export function SentThreshold({ sent, roles, onFixAddress }: { sent: SentNote; r
   const sentTo = sent.to;
   return (
     <Shell wide>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" data-threshold="sent">
+      <div data-hides-fab-phone="" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start" data-threshold="sent">
         <section aria-live="polite" className={`${CARD} grid gap-5`}>
           <div className="flex justify-center lg:justify-start">
             <Vesica met={false} size="lg" label={t({ message: "You and the village, about to meet", context: "open proposal sent drawing" })} names={[t({ message: "You", context: "open proposal sent drawing" }), t({ message: "The village", context: "open proposal sent drawing" })]} />

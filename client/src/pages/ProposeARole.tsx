@@ -644,7 +644,7 @@ export default function ProposeARole() {
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
             noValidate
-            className="relative min-w-0 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-8"
+            className="relative min-w-0 scroll-mt-28 rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-8"
             data-open-proposal=""
             data-hides-fab=""
             data-stone-now={STONES[stone]}
@@ -936,7 +936,8 @@ export default function ProposeARole() {
             <div className="sticky bottom-[calc(var(--tabbar-h)+0.5rem)] z-20 -mx-5 mt-8 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:-mx-8 sm:px-6" data-stone-bar="">
               <button type="button" onClick={back} disabled={stone === 0} className={`${BTN_SECONDARY} disabled:invisible`} data-stone-back="">
                 <ArrowLeft className="size-4" aria-hidden="true" />
-                {t({ message: "Back", context: "open proposal stones" })}
+                {/* On a phone the arrow says it, so Next has the width; a screen reader still hears "Back". */}
+                <span className="max-sm:sr-only">{t({ message: "Back", context: "open proposal stones" })}</span>
               </button>
               {stone < LAST_STONE ? (
                 <Fireflies key={`next-${stone}`} className="min-w-0 flex-1 justify-end sm:flex-none">
