@@ -11,6 +11,8 @@ import {
   ADMIN_WORDS, AUTHORITY_KINDS, AUTHORITY_KIND_WORDS, INVOICING_ROUTES, PAY_ROUTE_SHORT_WORDS,
   type AuthorityKind, type Payer, type PayersDoc, type PayRoute,
 } from "@shared/moonRecap";
+import SaveBar from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { buttonClass, inputClass, labelClass, listOf, primaryClass, useSettingsDocument } from "./useSettingsDocument";
 
 const W = ADMIN_WORDS.payers;
@@ -108,11 +110,9 @@ export default function PayersEditor({ password }: { password: string }) {
       ))}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={buttonClass} onClick={() => setDrafts((all) => [...all, toDraft(blank())])}>{W.add}</button>
-        <button type="button" className={primaryClass} disabled={saving} onClick={() => void save({ payers: drafts.map(fromDraft) })}>
-          {saving ? ADMIN_WORDS.saving : ADMIN_WORDS.save}
-        </button>
-        {message && <p role={message.ok ? "status" : "alert"} className="text-sm text-foreground">{message.text}</p>}
+        {message?.ok && <p role="status" className="text-sm text-foreground">{message.text}</p>}
       </div>
+      <SaveBar count={docChangeCount(state.kind === "ready" ? JSON.stringify(state.doc.payers.map(toDraft)) : null, JSON.stringify(drafts))} onSave={() => save({ payers: drafts.map(fromDraft) })} onDiscard={() => setDrafts((state as { doc: PayersDoc }).doc.payers.map(toDraft))} what="the payers" />
     </div>
   );
 }

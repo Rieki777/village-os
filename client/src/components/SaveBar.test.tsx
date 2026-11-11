@@ -61,6 +61,34 @@ describe("SaveBar", () => {
     vi.useRealTimers();
   });
 
+  it("still says Saved when the surface's count clears a render after the save answered", async () => {
+    // A bar that draws for several surfaces reads its total through the
+    // registry, so a count a save just cleared can read as it was for a beat.
+    // That stale number is not a new edit and must not cancel "Saved".
+    function Late() {
+      const [n, setN] = useState(0);
+      return (
+        <>
+        <button type="button" onClick={() => setN(1)}>Edit</button>
+        <SaveBar
+          count={n}
+          onDiscard={() => setN(0)}
+          onSave={async () => {
+            setTimeout(() => setN(0), 20);
+            return { ok: true };
+          }}
+        />
+        </>
+      );
+    }
+    render(<Late />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const save = await screen.findByRole("button", { name: "Save" });
+    await act(async () => { fireEvent.click(save); });
+    await waitFor(() => expect(unsavedCount()).toBe(0));
+    expect(screen.getByText("Saved")).toBeTruthy();
+  });
+
   it("keeps the bar and the change when the server says no", async () => {
     render(<Surface onSave={async () => ({ ok: false, reason: "You do not hold that power." })} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Hearth Circle" } });

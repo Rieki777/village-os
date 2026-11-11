@@ -168,24 +168,24 @@ describe("Comms Settings", () => {
     await screen.findByRole("heading", { name: "Comms Settings" });
     await userEvent.click(within(row("reply-to")).getByRole("button", { name: /Set up/ }));
     await userEvent.type(await screen.findByLabelText("Core Team (Steward)"), "core@example.test");
-    await userEvent.click(screen.getByRole("button", { name: "Save inboxes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.some((c) => c.method === "PUT" && /\/admin\/email-config$/.test(c.url))).toBe(true));
     const put = calls.find((c) => c.method === "PUT" && /\/admin\/email-config$/.test(c.url))!;
     expect(put.body).toEqual({ investor: "", steward: "core@example.test", resident: "", prosperity: "" });
-    expect(toast.success).toHaveBeenCalledWith("Email settings saved");
+    // The floating save bar, not a toast, says it landed.
+    expect(await screen.findByText("Saved")).toBeTruthy();
   });
 
   it("saves the postal address through the settings route and redraws the item from the answer", async () => {
     render(<CommsSettings password="secret" openIntegrations={() => undefined} />);
     await screen.findByRole("heading", { name: "Comms Settings" });
     await userEvent.type(within(row("postal-address")).getByLabelText("Postal address"), "1 Orchard Lane");
-    await userEvent.click(within(row("postal-address")).getByRole("button", { name: "Save address" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByText("1 of 6 required steps done.")).toBeTruthy());
     const put = calls.find((c) => c.method === "PUT" && /\/admin\/comms\/settings$/.test(c.url))!;
     // Only the field that changed travels, so the village's document never
     // freezes the platform's defaults into itself.
     expect(put.body).toEqual({ postalAddress: "1 Orchard Lane" });
-    expect(toast.success).toHaveBeenCalledWith("Postal address saved");
   });
 
   it("saves the provider key through the existing secrets route, then reads the checklist again", async () => {

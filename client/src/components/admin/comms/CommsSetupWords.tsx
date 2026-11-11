@@ -15,6 +15,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DEFAULT_CONSENT_TEXT, DEFAULT_RECAP_QUESTIONS } from "@shared/comms/settings";
 import { refusal } from "@/components/admin/adminApi";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
 import { commsCall, whenOfIso, type SettingsPayload } from "./commsSettingsApi";
 import { EmailField } from "./EmailField";
 import { Refused, inputCls, primaryCls, secondaryCls, useSaver, type EditorProps } from "./CommsSetupEditors";
@@ -25,7 +27,7 @@ const SETTINGS = "/admin/comms/settings";
 
 export function PostalAddressEditor(props: EditorProps) {
   const [draft, setDraft] = useState(props.data.settings.postalAddress);
-  const { busy, refused, save } = useSaver(props);
+  const { refused, saveForBar } = useSaver(props);
   return (
     <div className="space-y-3">
       <label className="block">
@@ -39,14 +41,12 @@ export function PostalAddressEditor(props: EditorProps) {
         />
       </label>
       <p className="text-xs text-gray-500">It goes in the footer of every email the village sends in bulk, the way it would on an envelope.</p>
-      <button
-        type="button"
-        disabled={busy || draft.trim() === props.data.settings.postalAddress.trim()}
-        onClick={() => save(SETTINGS, "PUT", { postalAddress: draft }, "Postal address saved")}
-        className={primaryCls}
-      >
-        {busy ? "Saving..." : "Save address"}
-      </button>
+      <SaveBar
+        count={draft.trim() === props.data.settings.postalAddress.trim() ? 0 : 1}
+        onSave={() => saveForBar(SETTINGS, "PUT", { postalAddress: draft })}
+        onDiscard={() => setDraft(props.data.settings.postalAddress)}
+        what="the postal address"
+      />
       <Refused text={refused} />
     </div>
   );
@@ -73,18 +73,21 @@ export function ReplyToEditor(props: EditorProps) {
   const pathName = (id: string, fallback: string) => props.data.paths.find((p) => p.id === id)?.label || fallback;
   const [cfg, setCfg] = useState<Inboxes>({ investor: "", steward: "", resident: "", prosperity: "" });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  /** The inboxes as the server last had them. */
+  const [held, setHeld] = useState<Inboxes | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = await commsCall<Partial<Inboxes>>("/admin/email-config", password);
     if (r.ok) {
-      setCfg({
+      const got = {
         investor: r.data.investor ?? "",
         steward: r.data.steward ?? "",
         resident: r.data.resident ?? "",
         prosperity: r.data.prosperity ?? "",
-      });
+      };
+      setCfg(got);
+      setHeld(got);
     } else {
       toast.error("Failed to load email settings");
     }
@@ -95,18 +98,14 @@ export function ReplyToEditor(props: EditorProps) {
     void load();
   }, [load]);
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (): Promise<SaveResult> => {
     const r = await commsCall("/admin/email-config", password, { method: "PUT", body: cfg });
-    if (r.ok) {
-      toast.success("Email settings saved");
-      // The checklist reads the same document, so it is asked again.
-      const fresh = await commsCall<SettingsPayload>(SETTINGS, password);
-      if (fresh.ok) props.apply(fresh.data);
-    } else {
-      toast.error(refusal(r.data, "Failed to save"));
-    }
-    setSaving(false);
+    if (!r.ok) return { ok: false, reason: refusal(r.data, "Failed to save") };
+    setHeld(cfg);
+    // The checklist reads the same document, so it is asked again.
+    const fresh = await commsCall<SettingsPayload>(SETTINGS, password);
+    if (fresh.ok) props.apply(fresh.data);
+    return { ok: true };
   };
 
   if (loading) return <p className="text-sm text-gray-400">Loading...</p>;
@@ -136,9 +135,12 @@ export function ReplyToEditor(props: EditorProps) {
         onChange={(v) => setCfg({ ...cfg, resident: v })}
         hint={`Receives ${pathName("resident", "Resident")} applications and waitlist signups, and replies to the ${pathName("resident", "Resident")} path.`}
       />
-      <button type="button" onClick={save} disabled={saving} className={primaryCls}>
-        {saving ? "Saving..." : "Save inboxes"}
-      </button>
+      <SaveBar
+        count={held ? changedKeys<Record<string, unknown>>({ ...held }, { ...cfg }).length : 0}
+        onSave={save}
+        onDiscard={() => held && setCfg(held)}
+        what="the reply-to inboxes"
+      />
     </div>
   );
 }
@@ -150,7 +152,8 @@ export function PathContactsEditor(props: EditorProps) {
   const [draft, setDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(data.paths.map((p) => [p.id, data.settings.pathContacts[p.id] ?? ""])),
   );
-  const { busy, refused, save } = useSaver(props);
+  const { refused, saveForBar } = useSaver(props);
+  const heldContacts = Object.fromEntries(data.paths.map((p) => [p.id, data.settings.pathContacts[p.id] ?? ""]));
   const known = new Set(data.members.map((m) => m.id));
   return (
     <div className="space-y-3">
@@ -178,14 +181,12 @@ export function PathContactsEditor(props: EditorProps) {
           </label>
         ))}
       </div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => save(SETTINGS, "PUT", { pathContacts: draft }, "Path contacts saved")}
-        className={primaryCls}
-      >
-        {busy ? "Saving..." : "Save path contacts"}
-      </button>
+      <SaveBar
+        count={changedKeys<Record<string, unknown>>(heldContacts, draft).length}
+        onSave={() => saveForBar(SETTINGS, "PUT", { pathContacts: draft })}
+        onDiscard={() => setDraft(heldContacts)}
+        what="the path contacts"
+      />
       <Refused text={refused} />
     </div>
   );
@@ -196,7 +197,7 @@ export function PathContactsEditor(props: EditorProps) {
 export function ConsentWordsEditor(props: EditorProps) {
   const current = props.data.settings.consentText;
   const [draft, setDraft] = useState(current);
-  const { busy, refused, save } = useSaver(props);
+  const { busy, refused, save, saveForBar } = useSaver(props);
   const own = current !== DEFAULT_CONSENT_TEXT;
   return (
     <div className="space-y-3">
@@ -209,14 +210,12 @@ export function ConsentWordsEditor(props: EditorProps) {
         email. Left unticked, they get the acknowledgement and nothing more.
       </p>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || !draft.trim() || draft.trim() === current}
-          onClick={() => save(SETTINGS, "PUT", { consentText: draft }, "Tick-box words saved")}
-          className={primaryCls}
-        >
-          {busy ? "Saving..." : "Save words"}
-        </button>
+        <SaveBar
+          count={draft.trim() === current.trim() ? 0 : 1}
+          onSave={async () => (!draft.trim() ? { ok: false, reason: "The words beside the box cannot be blank." } : saveForBar(SETTINGS, "PUT", { consentText: draft }))}
+          onDiscard={() => setDraft(current)}
+          what="the tick-box words"
+        />
         {own && (
           <button
             type="button"
@@ -241,7 +240,7 @@ export function RecapQuestionsEditor(props: EditorProps) {
   const current = props.data.settings.recapQuestions;
   const [first, setFirst] = useState(current[0]);
   const [second, setSecond] = useState(current[1]);
-  const { busy, refused, save } = useSaver(props);
+  const { busy, refused, save, saveForBar } = useSaver(props);
   const own = current[0] !== DEFAULT_RECAP_QUESTIONS[0] || current[1] !== DEFAULT_RECAP_QUESTIONS[1];
   return (
     <div className="space-y-3">
@@ -254,14 +253,12 @@ export function RecapQuestionsEditor(props: EditorProps) {
         <input type="text" value={second} onChange={(e) => setSecond(e.target.value)} className={inputCls} />
       </label>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || !first.trim() || !second.trim()}
-          onClick={() => save(SETTINGS, "PUT", { recapQuestions: [first, second] }, "Recap questions saved")}
-          className={primaryCls}
-        >
-          {busy ? "Saving..." : "Save questions"}
-        </button>
+        <SaveBar
+          count={(first !== current[0] ? 1 : 0) + (second !== current[1] ? 1 : 0)}
+          onSave={async () => (!first.trim() || !second.trim() ? { ok: false, reason: "Both recap questions need words." } : saveForBar(SETTINGS, "PUT", { recapQuestions: [first, second] }))}
+          onDiscard={() => { setFirst(current[0]); setSecond(current[1]); }}
+          what="the recap questions"
+        />
         {own && (
           <button
             type="button"
@@ -351,7 +348,7 @@ export function InvestorWordsEditor(props: EditorProps) {
 export function RehearsalInboxEditor(props: EditorProps) {
   const named = props.data.settings.rehearsalTo;
   const [draft, setDraft] = useState(named.join(", "));
-  const { busy, refused, save } = useSaver(props);
+  const { busy, refused, save, saveForBar } = useSaver(props);
   const list = draft
     .split(",")
     .map((s) => s.trim())
@@ -375,14 +372,12 @@ export function RehearsalInboxEditor(props: EditorProps) {
         />
       </label>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy || list.length === 0}
-          onClick={() => save(SETTINGS, "PUT", { rehearsalTo: list }, "Rehearsal inbox saved")}
-          className={primaryCls}
-        >
-          {busy ? "Saving..." : "Save inbox"}
-        </button>
+        <SaveBar
+          count={JSON.stringify(list) === JSON.stringify(named) ? 0 : 1}
+          onSave={async () => (list.length === 0 ? { ok: false, reason: "Name at least one address, or use the button to send rehearsals to the admins." } : saveForBar(SETTINGS, "PUT", { rehearsalTo: list }))}
+          onDiscard={() => setDraft(named.join(", "))}
+          what="the rehearsal inbox"
+        />
         {named.length > 0 && (
           <button
             type="button"

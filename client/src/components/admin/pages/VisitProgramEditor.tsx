@@ -8,13 +8,15 @@
  * not say so. Here a card can be added, removed and moved, every box has its
  * limit, and every box says where it shows and what a blank does.
  *
- * It saves on its own button, because it is a different document from the
+ * It saves from the floating save bar, as its own document, because it is a different document from the
  * page's words above it. The editor asks `visitProgramProblems`, the same
  * check `PUT /api/admin/visit-config` runs, so it never offers a save the
  * route refuses.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { API_BASE, authHeaders, refusal } from "../adminApi";
 import {
   MAX_VISIT_TYPES,
@@ -83,7 +85,6 @@ export default function VisitProgramEditor({
   const [saved, setSaved] = useState<VisitProgram | null>(null);
   const [draft, setDraft] = useState<VisitProgram | null>(null);
   const [loadError, setLoadError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -133,8 +134,8 @@ export default function VisitProgramEditor({
     setTypes(next);
   };
 
-  const save = async () => {
-    setSaving(true);
+  const save = async (): Promise<SaveResult> => {
+    if (problems.length > 0) return { ok: false, reason: problems.join(" ") };
     setMessage(null);
     const doc = { ...draft, visit_types: renumberVisitTypes(draft.visit_types) };
     try {
@@ -143,14 +144,14 @@ export default function VisitProgramEditor({
         headers: authHeaders(password, { "Content-Type": "application/json" }),
         body: JSON.stringify(doc),
       });
-      if (!res.ok) throw new Error(refusal(await res.json().catch(() => ({})), "Save failed."));
+      if (!res.ok) return { ok: false, reason: refusal(await res.json().catch(() => ({})), "Save failed.") };
       setSaved(doc);
       setDraft(doc);
       setMessage({ kind: "ok", text: "Saved. Open the page to see it." });
-    } catch (e) {
-      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Save failed." });
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: "The save could not reach the server." };
     }
-    setSaving(false);
   };
 
   return (
@@ -159,17 +160,9 @@ export default function VisitProgramEditor({
         <div className="min-w-0 flex-1 basis-64">
           <h3 id="visit-program-h" className="text-sm font-bold text-foreground">Visit Program</h3>
           <p className="text-[11px] text-muted-foreground">
-            The rest of the Visit page: the sentence under the headline, the ways to visit and the logistics. It has its own Save button.
+            The rest of the Visit page: the sentence under the headline, the ways to visit and the logistics. Changes save from the bar at the bottom.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !dirty || problems.length > 0}
-          className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 bg-teal-deep text-white rounded-lg text-xs font-medium hover:bg-teal-deep-dark disabled:opacity-50"
-        >
-          <Save className="w-3.5 h-3.5" aria-hidden="true" /> {saving ? "Saving..." : "Save the visit program"}
-        </button>
       </header>
 
       {message && <p role="status" className={`text-sm ${message.kind === "ok" ? "text-teal-deep" : "text-red-700"}`}>{message.text}</p>}
@@ -233,6 +226,7 @@ export default function VisitProgramEditor({
           />
         ))}
       </fieldset>
+      <SaveBar count={docChangeCount(JSON.stringify(saved), JSON.stringify(draft))} onSave={save} onDiscard={() => { setDraft(saved); setMessage(null); }} what="the visit program" />
     </section>
   );
 }

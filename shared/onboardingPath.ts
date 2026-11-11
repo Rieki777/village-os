@@ -22,6 +22,12 @@ export const OWNER_KEYS: readonly OwnerKey[] = ["holder", "buddy", "onboarding",
 export type ItemKind = "plain" | "companion" | "guide" | "access";
 export type ItemSource = "platform" | "village" | "circle" | "card";
 
+/** A step's one clickable link: the words on the button and an https address. */
+export interface PathLink {
+  label: string;
+  href: string;
+}
+
 export interface PathItem {
   key: string;
   kind: ItemKind;
@@ -30,6 +36,8 @@ export interface PathItem {
   /** The day the step is due, counted from the day the path opened (day 1). */
   dueDay: number;
   doneWhen: string;
+  /** Optional. Only ever an https address, read through `readLink`. */
+  link?: PathLink;
   source: ItemSource;
   phase: string;
   phaseFrom: number;
@@ -66,6 +74,30 @@ const dayOr = (v: unknown, fallback: number): number => {
   return Number.isFinite(n) && n >= 1 && n <= MAX_DAY ? n : fallback;
 };
 
+export const LINK_LABEL_MAX = 60;
+export const LINK_HREF_MAX = 500;
+
+/**
+ * A step's link, or null when it cannot stand. The address must be https,
+ * parse as a web address with a host, carry no sign-in details and fit the
+ * cap; the label must have words and is cut at its cap. Never throws.
+ */
+export function readLink(raw: unknown): PathLink | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const label = clip(r.label, LINK_LABEL_MAX);
+  const href = typeof r.href === "string" ? r.href.trim() : "";
+  if (!label || !href || href.length > LINK_HREF_MAX) return null;
+  let u: URL;
+  try { u = new URL(href); } catch { return null; }
+  if (u.protocol !== "https:" || !u.hostname || u.username || u.password) return null;
+  if (u.href.length > LINK_HREF_MAX) return null;
+  return { label, href: u.href };
+}
+
+/** True when a step carries a link field at all, valid or not. A bad one is named, never dropped silently. */
+const hasLinkField = (raw: unknown): boolean => !!raw && typeof raw === "object" && (raw as Record<string, unknown>).link != null;
+
 type Where = { phase: string; phaseFrom: number; phaseTo: number };
 
 /** One item from stored data, or null when it cannot stand. Never throws. */
@@ -77,7 +109,8 @@ export function readItem(raw: unknown, source: ItemSource, where: Where): PathIt
   if (!title || !key) return null;
   const owner = OWNER_KEYS.includes(r.owner as OwnerKey) ? (r.owner as OwnerKey) : "holder";
   const kind = KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "plain";
-  return { key, kind, title, owner, dueDay: dayOr(r.dueDay, where.phaseTo), doneWhen: clip(r.doneWhen, 200) || "Ticked", source, ...where };
+  const link = readLink(r.link);
+  return { key, kind, title, owner, dueDay: dayOr(r.dueDay, where.phaseTo), doneWhen: clip(r.doneWhen, 200) || "Ticked", ...(link ? { link } : {}), source, ...where };
 }
 
 /** The neutral phase every village gets until it writes its own. */
@@ -267,6 +300,9 @@ export function readCheckin(raw: unknown): { ok: true; answers: CheckinAnswers }
   };
 }
 
+const LINK_ERROR = (where: string): string =>
+  `${where}, has a link that cannot stand. It needs a label (up to ${LINK_LABEL_MAX} characters) and an https address (up to ${LINK_HREF_MAX} characters).`;
+
 /**
  * The village's document as an editor may save it: every phase and item read
  * through the same readers (a bad row is named, never silently kept), owners
@@ -287,6 +323,7 @@ export function readVillageDoc(raw: unknown): { ok: true; doc: Record<string, un
     for (let j = 0; j < items.length; j++) {
       const it = items[j];
       if (!readItem(it, "village", { phase: "x", phaseFrom: 1, phaseTo: 1 })) return { ok: false, error: `Phase ${i + 1}, step ${j + 1}, needs a title.` };
+      if (hasLinkField(it) && !readLink((it as Record<string, unknown>).link)) return { ok: false, error: LINK_ERROR(`Phase ${i + 1}, step ${j + 1}`) };
     }
   }
   const cleanPhases = phases.map((p) => {
@@ -299,7 +336,8 @@ export function readVillageDoc(raw: unknown): { ok: true; doc: Record<string, un
       toDay: Math.max(fromDay, dayOr(pr.toDay, fromDay)),
       items: (Array.isArray(pr.items) ? pr.items : []).map((it) => {
         const x = it as Record<string, unknown>;
-        return { key: slug(clip(x.key, 64)) || slug(clip(x.title, 160)), title: clip(x.title, 160), owner: x.owner, kind: x.kind, dueDay: x.dueDay, doneWhen: clip(x.doneWhen, 200) };
+        const link = readLink(x.link);
+        return { key: slug(clip(x.key, 64)) || slug(clip(x.title, 160)), title: clip(x.title, 160), owner: x.owner, kind: x.kind, dueDay: x.dueDay, doneWhen: clip(x.doneWhen, 200), ...(link ? { link } : {}) };
       }),
     };
   });
@@ -311,6 +349,7 @@ export function readVillageDoc(raw: unknown): { ok: true; doc: Record<string, un
       for (let j = 0; j < arr.length; j++) {
         const it = arr[j];
         if (!readItem(it, "circle", { phase: "x", phaseFrom: 1, phaseTo: 1 })) return { ok: false, error: `Circle ${id}, step ${j + 1}, needs a title.` };
+        if (hasLinkField(it) && !readLink((it as Record<string, unknown>).link)) return { ok: false, error: LINK_ERROR(`Circle ${id}, step ${j + 1}`) };
       }
       circles[id] = arr;
     }

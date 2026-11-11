@@ -10,6 +10,8 @@
  */
 import { useEffect, useState } from "react";
 import { ADMIN_WORDS, INVOICING_ROUTES, PAY_ROUTE_SHORT_WORDS, type MoonReviewSettings, type PayRoute } from "@shared/moonRecap";
+import SaveBar from "@/components/SaveBar";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { buttonClass, inputClass, labelClass, primaryClass, useSettingsDocument } from "./useSettingsDocument";
 
 const W = ADMIN_WORDS.settings;
@@ -141,11 +143,9 @@ export default function VillageSettingsEditor({ password }: { password: string }
       </section>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={primaryClass} disabled={saving} onClick={() => void save(fromDraft(d) as unknown as MoonReviewSettings)}>
-          {saving ? ADMIN_WORDS.saving : ADMIN_WORDS.save}
-        </button>
-        {message && <p role={message.ok ? "status" : "alert"} className="text-sm text-foreground">{message.text}</p>}
+        {message?.ok && <p role="status" className="text-sm text-foreground">{message.text}</p>}
       </div>
+      <SaveBar count={docChangeCount(state.kind === "ready" ? JSON.stringify(toDraft(state.doc)) : null, JSON.stringify(d))} onSave={() => save(fromDraft(d) as unknown as MoonReviewSettings)} onDiscard={() => setD(toDraft((state as { doc: MoonReviewSettings }).doc))} what="the village settings" />
     </div>
   );
 }

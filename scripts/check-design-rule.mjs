@@ -116,6 +116,11 @@ const JOURNEY = [
   "client/src/components/alignment/RegisterEntry.tsx",
   "client/src/components/alignment/AlignButton.tsx",
   "client/src/components/alignment/ConfidentialityCard.tsx",
+  "client/src/components/openProposal/MembershipAtApplication.tsx",
+  "client/src/components/openProposal/RoleCardBridge.tsx",
+  "client/src/components/modules/ModuleGate.tsx",
+  "client/src/components/admin/OnboardingPathEditor.tsx",
+  "client/src/pages/RequestMembership.tsx",
 ];
 
 const listFlag = (name) => flag(name)?.split(",").filter(Boolean);

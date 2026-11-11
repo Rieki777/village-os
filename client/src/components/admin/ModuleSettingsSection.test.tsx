@@ -156,9 +156,10 @@ describe("ModuleSettingsSection", () => {
     renderSection();
     const field = (await screen.findByDisplayValue("3000")) as HTMLInputElement;
     fireEvent.change(field, { target: { value: "9000" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]!);
-    const shown = await screen.findByRole("alert");
-    expect(shown.textContent).toContain("not one the village governs");
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+    // The dial keeps the server's words, and the save bar names the refusal too.
+    const shown = await screen.findAllByRole("alert");
+    expect(shown.some((a) => (a.textContent ?? "").includes("not one the village governs"))).toBe(true);
   });
 
   it("marks a founder-held dial as one", async () => {
@@ -380,10 +381,9 @@ describe("ModuleSettingsSection, arriving from a setup link", () => {
     withCalendar(false);
     renderCalendar();
     const confirm = await screen.findByRole("button", { name: "This is right" });
-    // Save stays disabled because nothing changed. That is exactly the state
+    // The save bar is down because nothing changed. That is exactly the state
     // in which this dial could not be answered before.
-    const save = screen.getAllByRole("button", { name: "Save" })[0];
-    expect(save).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     fireEvent.click(confirm);
     await waitFor(() => {
       const put = (globalThis.fetch as any).mock.calls.find((c: any[]) => c[1]?.method === "PUT");

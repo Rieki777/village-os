@@ -16,7 +16,7 @@ const DOC = {
   enabled: true,
   title: "Your first 14 days",
   phases: [
-    { name: "Arrive", fromDay: 1, toDay: 3, items: [{ key: "welcome", title: "Read the welcome pack", owner: "onboarding", doneWhen: "Sent" }] },
+    { name: "Arrive", fromDay: 1, toDay: 3, items: [{ key: "welcome", title: "Read the welcome pack", owner: "onboarding", doneWhen: "Sent", link: { label: "Open the pack", href: "https://example.org/pack" } }] },
     { name: "Set up", fromDay: 4, toDay: 7, items: [
       { key: "access", kind: "access", title: "Logins and task board", owner: "access" },
       { key: "companion", kind: "companion", title: "Get started with the companion" },
@@ -86,6 +86,17 @@ describe.skipIf(!configured)("onboarding against a real schema", () => {
     const [again] = await servePaths(env(), "u-new");
     expect(again.items.some((i) => i.kind === "companion")).toBe(true);
     consent = false;
+  });
+
+  it("a step's link is served from the village's document, https only, and never on a step without one", async () => {
+    const [mine] = await servePaths(env(), "u-new");
+    expect(mine.items.find((i) => i.key === "welcome")?.link).toEqual({ label: "Open the pack", href: "https://example.org/pack" });
+    expect(mine.items.find((i) => i.key === "week")).not.toHaveProperty("link");
+    // Control: an address that is not https is not served, whatever the document holds.
+    await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'onboarding-path'", [JSON.stringify({ ...DOC, phases: [{ ...DOC.phases[0], items: [{ ...DOC.phases[0].items[0], link: { label: "Open the pack", href: "http://example.org/pack" } }] }, ...DOC.phases.slice(1)] })]); // module-review-ok: the village document on the scratch schema
+    const [after] = await servePaths(env(), "u-new");
+    expect(after.items.find((i) => i.key === "welcome")).not.toHaveProperty("link");
+    await pool.query("UPDATE app_config SET value = ? WHERE config_key = 'onboarding-path'", [JSON.stringify(DOC)]); // module-review-ok: put the document back
   });
 
   it("the Trail fact holds only while the holder has an open step", async () => {
