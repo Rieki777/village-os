@@ -12,7 +12,9 @@
  * is EMPTY rather than an error. See the comments there.
  */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, RefreshCw, Save } from "lucide-react";
+import { ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
+import SaveBar, { type SaveResult } from "@/components/SaveBar";
+import { changedKeys } from "@/lib/unsavedChanges";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { emptyContentFor, PAGES_TAB_KEY, PATHS_STAGES_TAB_KEY } from "./contentSections";
 import PagesEditor from "./pages/PagesEditor";
@@ -60,6 +62,11 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
    * contents are unknown is not. While this is set, saving is refused.
    */
   const [loadError, setLoadError] = useState("");
+  /**
+   * What the server holds, as last read or saved. The floating bar compares
+   * the box against it; null means the read failed and nothing is known.
+   */
+  const [baseline, setBaseline] = useState<string | null>(null);
 
   /*
    * WHAT A MEMBER SIGNS, HANDED OVER FROM A REGEN CIVICS FILE (ProfileImport.tsx).
@@ -80,6 +87,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
     setLoading(true);
     setLoadError("");
     setHanded(false);
+    setBaseline(null);
     try {
       const res = await fetch(`${API_BASE}/content/${sectionKey}`);
       /*
@@ -108,6 +116,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
        * this editor now agrees with it.
        */
       if (res.status === 404) {
+        setBaseline(JSON.stringify(emptyContentFor(sectionKey), null, 2));
         setRaw(JSON.stringify(withHanded(emptyContentFor(sectionKey)), null, 2));
         setLoading(false);
         return;
@@ -124,6 +133,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
         return;
       }
       const data = await res.json();
+      setBaseline(JSON.stringify(data, null, 2));
       setRaw(JSON.stringify(withHanded(data), null, 2));
     } catch {
       setLoadError(
@@ -140,7 +150,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
   // this panel lie in the other direction.
   useEffect(() => { load(); setSaved(false); setSaveError(""); }, [load]);
 
-  const save = async () => {
+  const save = async (): Promise<SaveResult> => {
     setParseError("");
     /*
      * A save is only ever safe on top of a KNOWN current state. If the read
@@ -149,15 +159,16 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
      * successful read establishing that the section is empty.
      */
     if (loadError) {
-      setSaveError("This section has not been read successfully yet, so there is nothing safe to save over. Press refresh first.");
-      return;
+      const why = "This section has not been read successfully yet, so there is nothing safe to save over. Press refresh first.";
+      setSaveError(why);
+      return { ok: false, reason: why };
     }
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (e: any) {
       setParseError("Invalid JSON: " + e.message);
-      return;
+      return { ok: false, reason: "Invalid JSON: " + e.message };
     }
     /*
      * The last line of defence, and it is deliberately narrow: a document
@@ -170,8 +181,9 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const keys = Object.keys(parsed);
       if (keys.length === 1 && keys[0] === "error") {
-        setSaveError(`This looks like an error message ("${String((parsed as any).error)}"), not content. Saving it would publish it. Clear the box to start this section from scratch.`);
-        return;
+        const why = `This looks like an error message ("${String((parsed as any).error)}"), not content. Saving it would publish it. Clear the box to start this section from scratch.`;
+        setSaveError(why);
+        return { ok: false, reason: why };
       }
     }
     // Blank list entries are trimmed HERE, not while typing — see the
@@ -209,16 +221,27 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
       if (res.ok) {
         setSaved(true);
         setHanded(false);
+        // What was sent is now what the server holds.
+        const now = JSON.stringify(parsed, null, 2);
+        setBaseline(now);
+        setRaw(now);
         setTimeout(() => setSaved(false), 3000);
-      } else {
-        const body = await res.json().catch(() => null);
-        setSaveError(refusal(body, `The server refused this save (${res.status}). The live page is unchanged.`));
+        setSaving(false);
+        return { ok: true };
       }
+      const body = await res.json().catch(() => null);
+      const why = refusal(body, `The server refused this save (${res.status}). The live page is unchanged.`);
+      setSaveError(why);
+      setSaving(false);
+      return { ok: false, reason: why };
     } catch {
-      setSaveError("This save did not reach the server. The live page is unchanged.");
+      const why = "This save did not reach the server. The live page is unchanged.";
+      setSaveError(why);
+      setSaving(false);
+      return { ok: false, reason: why };
     }
-    setSaving(false);
   };
+  const changes = loading ? 0 : docChangeCount(baseline, raw);
 
   // Team gets a card editor: plain fields, the raw JSON demoted to "advanced".
   // Editing mutates the PARSED array in place and re-serializes, so keys the
@@ -310,7 +333,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Edit: {sectionLabel}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Changes save to the server and go live immediately.
+            Changes go live once you save them in the bar at the bottom.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -320,14 +343,6 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-deep text-white rounded-lg text-sm font-medium hover:bg-teal-deep-dark disabled:opacity-50 transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? "Saving..." : saved ? "Saved!" : "Save Changes"}
-          </button>
         </div>
       </div>
 
@@ -336,7 +351,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
       {handed && !saved && (
         <p className="mb-4 text-sm text-gray-900 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
           The opening paragraph now holds what a member signs, from your ReGen Civics profile. Nothing is saved
-          until you press Save Changes. Refresh to see the section as it is saved.
+          until you press Save. Refresh to see the section as it is saved.
         </p>
       )}
 
@@ -451,7 +466,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
               })}
 
               <p className="text-xs text-muted-foreground">
-                Remember to hit Save Changes above. Edits here go live only after saving.
+                Edits here go live once you press Save in the bar at the bottom.
               </p>
             </div>
           )}
@@ -546,7 +561,7 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
                 + Add a team member
               </button>
               <p className="text-xs text-gray-400">
-                Remember to hit Save Changes above. Edits here go live only after saving.
+                Edits here go live once you press Save in the bar at the bottom.
               </p>
             </div>
           )}
@@ -572,6 +587,33 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
           </div>
         </>
       )}
+      <SaveBar
+        count={changes}
+        onSave={save}
+        onDiscard={() => { if (baseline !== null) setRaw(baseline); setParseError(""); setSaveError(""); setHanded(false); }}
+        what={sectionLabel}
+      />
     </div>
   );
+}
+
+/**
+ * How many changes the box holds against what the server has: the top-level
+ * keys of a document, or the entries of a list, that differ by value. A box
+ * that no longer parses counts as one change until it does.
+ */
+export function docChangeCount(baseline: string | null, raw: string): number {
+  if (baseline === null) return raw.trim() ? 1 : 0;
+  if (raw === baseline) return 0;
+  let a: any, b: any;
+  try { a = JSON.parse(baseline); b = JSON.parse(raw); } catch { return 1; }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    let n = Math.abs(a.length - b.length);
+    for (let i = 0; i < Math.min(a.length, b.length); i++) if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) n++;
+    return n;
+  }
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    return changedKeys(a, b).length;
+  }
+  return JSON.stringify(a) === JSON.stringify(b) ? 0 : 1;
 }
