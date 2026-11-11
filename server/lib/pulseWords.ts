@@ -43,12 +43,30 @@ export function settingsPulseLine(key: string): { text: string; audience: "publi
     : { text: `${NARRATION_PREFIX}${key}`, audience: "admin" };
 }
 
+/** Lines that announce a person's stage or level. Nothing ranks a person in public. */
+const RANK_LINE = /\b(advanced to|moved up to|levell?ed up|level up|reached (?:the )?(?:stage|level))\b/i;
+
+/** True for a stored line that names a person's stage or level, old or new. */
+export function isRankLine(row: { kind: string; text: string; entityType?: string | null }): boolean {
+  return row.kind === "stage" || row.entityType === "stage" || RANK_LINE.test(row.text);
+}
+
+/** Capitalise the first letter of a line a writer left lowercase. */
+function capitalised(text: string): string {
+  const i = text.search(/\S/);
+  if (i < 0) return text;
+  const c = text[i];
+  return c !== c.toUpperCase() ? text.slice(0, i) + c.toUpperCase() + text.slice(i + 1) : text;
+}
+
 /**
  * The text a public reader gets for a stored line, or null to leave the line out.
- * Anything that is not an old settings line comes back as it was.
+ * A stage or level line is always left out. Anything else comes back as it was,
+ * with its first letter capitalised.
  */
 export function publicPulseText(row: { kind: string; text: string; entityType?: string | null; entityRef?: string | null }): string | null {
-  if (row.kind !== "settings" || !row.text.startsWith(NARRATION_PREFIX)) return row.text;
+  if (isRankLine(row)) return null;
+  if (row.kind !== "settings" || !row.text.startsWith(NARRATION_PREFIX)) return capitalised(row.text);
   const rest = row.text.slice(NARRATION_PREFIX.length);
   const key = (row.entityType === "variable" && row.entityRef ? row.entityRef : rest.split(" is now ")[0]).trim();
   const label = publicSettingLabel(key);
