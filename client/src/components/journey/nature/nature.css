@@ -85,6 +85,9 @@
 .nk-life circle[data-state="open"] {
   stroke-dasharray: 0.012 0.03;
 }
+.nk-life circle.nk-current {
+  color: var(--nk-firefly);
+}
 .nk-life .nk-bloom path {
   transform-box: view-box;
 }

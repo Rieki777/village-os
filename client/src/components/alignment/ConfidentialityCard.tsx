@@ -20,6 +20,8 @@ type Agreement = { title: string; body: string; intent: string; version: string;
 export default function ConfidentialityCard({ onAligned, embedded = false }: { onAligned?: () => void; embedded?: boolean } = {}) {
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [holds, setHolds] = useState(false);
+  // False once the server says the last identity confirmation is stale: the password is asked first, then the align is sent.
+  const [confirmFresh, setConfirmFresh] = useState(true);
   const [alignedAt, setAlignedAt] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [reload, setReload] = useState(0);
@@ -30,6 +32,7 @@ export default function ConfidentialityCard({ onAligned, embedded = false }: { o
       if (!alive || !a.ok) return;
       setAgreement(a.data.agreement);
       setHolds(!!a.data.you?.holds);
+      setConfirmFresh(a.data.you?.confirmFresh !== false);
     });
     return () => {
       alive = false;
@@ -74,6 +77,7 @@ export default function ConfidentialityCard({ onAligned, embedded = false }: { o
             <AlignButton
               sentence={agreement.intent}
               reconfirmReason={ALIGN_WORDS.reconfirmAgreementLine}
+              askFirst={!confirmFresh}
               alignedAt={alignedAt}
               onAlign={async () => {
                 const a = await alignConfidentiality(agreement.version);

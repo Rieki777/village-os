@@ -19,6 +19,7 @@ import { readConfigDocument, writeConfigDocument } from "../repos/appConfigDocs"
 import { VILLAGE_DOC_KEY, hasOpenOnboardingItems, dayIn, fileCheckin, servePaths, tick, type OnboardingEnv } from "../lib/onboarding";
 import { roleHasCompanion } from "../lib/companions";
 import { stringVar } from "../lib/variables";
+import { providePathFacts } from "../lib/pathFacts";
 
 type Deps = Pick<AppDeps, "authedUser" | "getPool" | "overLimit" | "isAdmin" | "guardCapability"> & { village: () => { timeZone: string } };
 
@@ -35,6 +36,16 @@ export async function onboardingOpenFor(pool: Pool, userId: string): Promise<boo
 export function register(app: Express, deps: Deps): void {
   const { authedUser, getPool, overLimit, village, isAdmin, guardCapability } = deps;
   const env = (): OnboardingEnv => ({ db: getPool(), today: dayIn(new Date(), village().timeZone || "UTC"), consented: consentedBy() });
+
+  // The path's "first days" step: the holder's own next open item, with the day it is due (server/lib/pathFacts.ts).
+  providePathFacts("onboarding", async (userId) => {
+    const mine = (await servePaths(env(), userId)).filter((p) => p.mine).sort((a, b) => a.openedOn.localeCompare(b.openedOn));
+    const open = mine.find((p) => p.items.some((i) => !i.doneAt && i.owner === "holder")) ?? mine[mine.length - 1];
+    if (!open) return { onboarding: null };
+    const dayOn = (n: number) => new Date(Date.parse(`${open.openedOn.slice(0, 10)}T00:00:00Z`) + Math.max(0, n - 1) * 86_400_000).toISOString().slice(0, 10);
+    const next = open.items.filter((i) => !i.doneAt && i.owner === "holder").sort((a, b) => a.dueDay - b.dueDay)[0];
+    return { onboarding: { title: open.title, dueOn: open.dueOn, next: next ? { title: next.title, dueOn: dayOn(next.dueDay) } : null } };
+  });
 
   const member = async (req: Request, res: Response): Promise<string | null> => {
     const user = await authedUser(req);

@@ -54,9 +54,6 @@ interface Archetype {
  * renders a zero-length arc while it waits says "you have got nowhere", which
  * is a lie told confidently; drawing nothing says nothing.
  */
-/** The ring's own circumference, at the radius the viewBox is drawn for. */
-const RING_R = 124;
-const CIRCUMFERENCE = 2 * Math.PI * RING_R;
 
 export default function ProfileHero({
   name,
@@ -111,7 +108,6 @@ export default function ProfileHero({
    * of "how much I have not done".
    */
   const known = typeof stageIndex === "number" && typeof stageCount === "number" && stageCount > 0;
-  const arc = known ? Math.max(0, Math.min(1, (stageIndex + 1) / stageCount)) : null;
   // R47: progress is a number, and the ladder's name is the Path of Growth,
   // so the chip names the stage and never "Maturity".
   const rung = stageLabel || (known ? `Stage ${stageIndex + 1}/${stageCount}` : "");
@@ -268,18 +264,9 @@ export default function ProfileHero({
             label={`Your badges, ${flower.length} held. Open the roster and pick which show on your card.`}
             onOpen={() => setRoster(true)}
           />
-          {arc !== null && (
-            <svg viewBox="0 0 260 260" className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-              <circle cx="130" cy="130" r={RING_R} fill="none" stroke="var(--color-dash-track)" strokeWidth="12" />
-              <circle
-                cx="130" cy="130" r={RING_R} fill="none"
-                stroke="var(--color-dash-gold)" strokeWidth="12"
-                transform="rotate(-90 130 130)"
-                strokeDasharray={CIRCUMFERENCE.toFixed(1)}
-                strokeDashoffset={(CIRCUMFERENCE * (1 - arc)).toFixed(1)}
-              />
-            </svg>
-          )}
+          {/* A plain gold edge round the face. It used to be an arc that filled with the ladder, an XP ring in all
+              but name; a person's walk is drawn as the seed under the party now (the Root), and this ring measures nothing. */}
+          <div className="pointer-events-none absolute inset-0 rounded-full border-[3px] border-dash-gold/70" aria-hidden="true" />
           <div className="pointer-events-none absolute inset-[6px] overflow-hidden rounded-full border-4 border-background bg-muted">
             {portrait("hero", primary)}
           </div>

@@ -136,13 +136,20 @@ export interface AlignButtonProps {
   disabled?: boolean;
   /** Why we ask for the password. Defaults to the line for terms that carry money; an agreement with no money passes its own. */
   reconfirmReason?: string;
+  /**
+   * The caller already knows the last identity confirmation is stale: ask for
+   * it BEFORE the act is sent, so the server is never asked for something it
+   * must refuse. After the confirm the act runs as usual.
+   */
+  askFirst?: boolean;
 }
 
-export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false, reconfirmReason }: AlignButtonProps) {
+export default function AlignButton({ label = ALIGN_WORDS.align, sentence, alignedAt = null, onAlign, onDone, disabled = false, reconfirmReason, askFirst = false }: AlignButtonProps) {
   const season = useSeason();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
+  const [confirmedHere, setConfirmedHere] = useState(false);
 
   if (alignedAt) {
     return (
@@ -174,13 +181,19 @@ export default function AlignButton({ label = ALIGN_WORDS.align, sentence, align
       <button
         type="button"
         disabled={busy || disabled}
-        onClick={() => void run()}
+        onClick={() => (askFirst && !confirmedHere ? setAsking(true) : void run())}
         className={`${BTN_PRIMARY} mt-2`}
       >
         <Check className="size-4" aria-hidden="true" />
         {label}
       </button>
-      {asking && <ReconfirmPanel reason={reconfirmReason} onConfirmed={() => void run()} />}
+      {asking && <ReconfirmPanel
+          reason={reconfirmReason}
+          onConfirmed={() => {
+            setConfirmedHere(true);
+            void run();
+          }}
+        />}
       {error && (
         <p role="alert" className="mt-2 text-sm text-destructive">
           {error}

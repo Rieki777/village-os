@@ -287,8 +287,8 @@ function AskSomeone({ onSent }: { onSent: () => void }) {
         </label>
         <input id={`${ids}-due`} type="date" className={INPUT} value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} />
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+        <input type="checkbox" className="size-5 shrink-0" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} />
         I am stuck until this is done
       </label>
       {error && (

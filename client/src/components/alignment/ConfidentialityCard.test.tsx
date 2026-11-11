@@ -77,4 +77,21 @@ describe("the confidentiality card", () => {
     expect(await screen.findByText(ALIGN_WORDS.reconfirmAgreementLine)).toBeTruthy();
     expect(screen.queryByText(/carry money/)).toBeNull();
   });
+  it("asks for the password BEFORE sending the align when the server says the confirmation is stale, so no 403 is drawn", async () => {
+    const posts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") posts.push(url);
+        if (url === "/api/confidentiality") return json({ agreement: { ...AGREEMENT, document: null }, you: { holds: false, confirmFresh: false } });
+        return json({ error: "reconfirm_required" }, 403);
+      }),
+    );
+    render(<ConfidentialityCard />);
+    fireEvent.click(await screen.findByRole("button", { name: ALIGN_WORDS.align }));
+    await waitFor(() => expect(document.querySelector("[data-reconfirm]")).not.toBeNull());
+    expect(screen.getByText(ALIGN_WORDS.reconfirmAgreementLine)).toBeTruthy();
+    // CONTROL is the test above: with no flag the align is sent first and the 403 opens the panel.
+    expect(posts).toEqual([]);
+  });
 });

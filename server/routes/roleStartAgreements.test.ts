@@ -401,10 +401,10 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
     it("an alignment with earlier words stops counting when the words change, and aligning again counts", async () => {
       const who = await newAccount("words");
       await alignAgreement(who.id);
-      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: true });
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toMatchObject({ holds: true });
 
       state.content = { confidentiality: { ...AGREEMENT, body: `${AGREEMENT.body}\n\nAnd one more line.` } };
-      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: false });
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toMatchObject({ holds: false });
 
       // The gate asks again, in moon mode, before the role starts.
       state.dials["org.start_after_confidentiality"] = true;
@@ -415,7 +415,7 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
         expect(state.notices.some((x) => x.userId === who.id && x.title === START_WORDS.title(1))).toBe(true);
 
         await alignAgreement(who.id);
-        expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toEqual({ holds: true });
+        expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you).toMatchObject({ holds: true });
         await turn(soon());
         expect(await seatedIn(who.id)).toEqual([{ org_role_id: gate }]);
       });
@@ -432,11 +432,14 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
     it("the door refuses words that changed while they read, and a stale identity confirmation, and writes nothing", async () => {
       const who = await newAccount("refused");
       const was = currentAgreement(AGREEMENT)!;
+      // Never confirmed: the read says so, which is how the page asks for the password BEFORE it sends the align.
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you.confirmFresh).toBe(false);
       // Never confirmed: asked to confirm first.
       const stale = await call("POST", "/api/profile/confidentiality", { version: was.version }, who.id);
       expect(stale.status).toBe(403);
       expect(stale.body.error).toBe("reconfirm_required");
       await reconfirmed(who.id);
+      expect((await call("GET", "/api/confidentiality", undefined, who.id)).body.you.confirmFresh).toBe(true);
       state.content = { confidentiality: { ...AGREEMENT, title: "Privacy agreement" } };
       const moved = await call("POST", "/api/profile/confidentiality", { version: was.version }, who.id);
       expect(moved.status).toBe(409);
@@ -631,18 +634,18 @@ describe.skipIf(!configured)("a role starts only after its agreements, on a real
       const who = await newAccount("doc-holder");
       await alignAgreement(who.id);
       const holds = async () => (await call("GET", "/api/confidentiality", undefined, who.id)).body.you;
-      expect(await holds()).toEqual({ holds: true });
+      expect(await holds()).toMatchObject({ holds: true });
 
       // The same bytes and title again: the same words, so they still hold it.
       expect((await attach(pdf("v1"), "Agreement.pdf", DOC_TITLE)).status).toBe(200);
-      expect(await holds()).toEqual({ holds: true });
+      expect(await holds()).toMatchObject({ holds: true });
 
       // A new file: the fingerprint moved, and they are asked again.
       expect((await attach(pdf("v2"), "Agreement.pdf", DOC_TITLE)).status).toBe(200);
-      expect(await holds()).toEqual({ holds: false });
+      expect(await holds()).toMatchObject({ holds: false });
       // The stored words of their next alignment name the new file by its fingerprint.
       await alignAgreement(who.id);
-      expect(await holds()).toEqual({ holds: true });
+      expect(await holds()).toMatchObject({ holds: true });
       const newest = await q(
         "SELECT t.body FROM alignment_texts t JOIN alignment_parties p ON p.text_id = t.id WHERE p.user_id = ? AND t.subject_type = 'confidentiality' ORDER BY t.version DESC LIMIT 1",
         [who.id],
