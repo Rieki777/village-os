@@ -512,15 +512,17 @@ export async function holder(w, ctx) {
   // Two training pages (the lead, 11 Nov 2026): /training chooses, and each
   // track has its own page with its own words. A holder takes the steward one
   // and marks a lesson done; the record is the server's, so it is read back.
-  await w.step("choose the steward training", async () => {
+  const doors = page.getByRole("navigation", { name: "Training pages" });
+  await w.step("open the training chooser", async () => {
     await w.goto("/training");
-    const nav = page.getByRole("navigation", { name: "Training pages" });
-    await nav.waitFor();
-    await nav.locator('a[href="/training/steward"]').click();
+    await doors.waitFor();
+  });
+  await w.look("training-chooser", { next: doors.locator('a[href="/training/steward"]') });
+  await w.step("choose the steward training", async () => {
+    await doors.locator('a[href="/training/steward"]').click();
     await page.waitForURL((u) => u.pathname === "/training/steward", { timeout: 15_000 });
     await settle(page, 1500);
   });
-  await w.look("training-chooser-to-steward");
   await w.step("mark the first lesson done", async () => {
     await page.getByRole("button", { name: /Mark as done/ }).first().click();
     await page.getByText("Marked done.").waitFor({ timeout: 10_000 });
