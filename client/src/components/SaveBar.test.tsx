@@ -99,6 +99,33 @@ describe("SaveBar", () => {
     expect(ev.defaultPrevented).toBe(true);
   });
 
+  it("draws one bar for two surfaces, saves both, and names the one that failed", async () => {
+    const a = vi.fn(async () => ({ ok: true as const }));
+    const b = vi.fn(async () => ({ ok: false as const, reason: "Refused." }));
+    function Two() {
+      const [x, setX] = useState(0);
+      const [y, setY] = useState(0);
+      return (
+        <>
+          <button onClick={() => { setX(1); setY(2); }}>edit</button>
+          <SaveBar count={x} onSave={async () => { const r = await a(); setX(0); return r; }} onDiscard={() => setX(0)} what="Circles" />
+          <SaveBar count={y} onSave={b} onDiscard={() => setY(0)} what="Onboarding path" />
+        </>
+      );
+    }
+    render(<Two />);
+    fireEvent.click(screen.getByText("edit"));
+    await waitFor(() => expect(screen.getByText("3 changes not saved yet")).toBeTruthy());
+    expect(document.querySelectorAll("[data-save-bar]")).toHaveLength(1);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save" })); });
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+    const alert = screen.getByRole("alert").textContent ?? "";
+    expect(alert).toContain("Onboarding path");
+    expect(alert).toContain("Refused.");
+    await waitFor(() => expect(screen.getByText("2 changes not saved yet")).toBeTruthy());
+  });
+
   it("saveEach keeps only the failed keys", async () => {
     const { result, failedKeys } = await saveEach([
       { key: "a", label: "A", run: async () => null },

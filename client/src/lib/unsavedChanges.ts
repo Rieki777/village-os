@@ -22,7 +22,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { i18n } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 
-const counts = new Map<string, number>();
+/**
+ * Every surface with a save bar, in the order it mounted. A screen can hold
+ * more than one (the org chart's circles level also shows the onboarding path
+ * editor), and two bars stacked on the bottom edge would hide each other, so
+ * the FIRST one mounted draws the bar for all of them: one count, one Save
+ * that saves every surface, one Discard. The rest only register.
+ */
+export interface SaveSurface {
+  count: number;
+  save: () => Promise<{ ok: true } | { ok: false; reason?: string; failed?: { label: string; reason: string }[] }>;
+  discard: () => void;
+  what?: string;
+}
+const surfaces = new Map<string, SaveSurface>();
 const listeners = new Set<() => void>();
 
 const LEAVE_QUESTION = msg`You have changes that are not saved yet. Leave and lose them?`;
@@ -31,18 +44,38 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
-/** Record how many unsaved changes one surface holds. Zero removes it. */
+/** Record one surface's state. Null removes it. */
+export function setSurface(id: string, next: SaveSurface | null) {
+  const before = surfaces.get(id)?.count ?? 0;
+  if (next) surfaces.set(id, next);
+  else surfaces.delete(id);
+  if (before !== (next?.count ?? 0) || !next) emit();
+}
+
+/** Record how many unsaved changes one surface holds, for a surface with no bar of its own. */
 export function setUnsaved(id: string, count: number) {
-  const before = counts.get(id) ?? 0;
-  if (count > 0) counts.set(id, count);
-  else counts.delete(id);
-  if (before !== count) emit();
+  if (count <= 0) { setSurface(id, null); return; }
+  const cur = surfaces.get(id);
+  setSurface(id, { save: async () => ({ ok: true }), discard: () => {}, ...cur, count });
+}
+
+/** The surface that draws the bar: the first one still mounted. */
+export function leaderId(): string | null {
+  const first = surfaces.keys().next();
+  return first.done ? null : first.value;
+}
+
+/** Every surface holding changes right now. */
+export function dirtySurfaces(): SaveSurface[] {
+  const out: SaveSurface[] = [];
+  surfaces.forEach((v) => { if (v.count > 0) out.push(v); });
+  return out;
 }
 
 /** Every unsaved change on screen, across every surface that registered. */
 export function unsavedCount(): number {
   let n = 0;
-  counts.forEach((v) => { n += v; });
+  surfaces.forEach((v) => { n += v.count; });
   return n;
 }
 
@@ -59,13 +92,18 @@ export function subscribeUnsaved(fn: () => void): () => void {
 export function confirmLeave(): boolean {
   if (unsavedCount() === 0) return true;
   const go = window.confirm(i18n._(LEAVE_QUESTION));
-  if (go) { counts.clear(); emit(); }
+  if (go) {
+    // Zero the counts and keep the registrations: the surfaces are about to
+    // unmount and remove themselves, and the bar must not ask twice.
+    surfaces.forEach((v, k) => surfaces.set(k, { ...v, count: 0 }));
+    emit();
+  }
   return go;
 }
 
 /** Test seam: forget every registration. */
 export function resetUnsavedForTests() {
-  counts.clear();
+  surfaces.clear();
   emit();
 }
 
@@ -112,16 +150,25 @@ export function useUnsavedTotal(): number {
 
 let nextId = 0;
 /**
- * Register this surface's change count for as long as it is mounted. The
- * registration is dropped on unmount, so a surface that closed cannot keep a
- * guard asking about changes nobody can see any more.
+ * Register this surface for as long as it is mounted, and say whether it is
+ * the one that draws the bar. The registration is dropped on unmount, so a
+ * surface that closed cannot keep a guard asking about changes nobody can see.
  */
-export function useUnsavedRegistration(count: number) {
+export function useSaveSurface(surface: SaveSurface): { id: string; leader: boolean } {
   const id = useRef<string>("");
   if (!id.current) id.current = `surface-${++nextId}`;
+  const [leader, setLeader] = useState(false);
   useEffect(() => { installLeaveGuard(); }, []);
-  useEffect(() => { setUnsaved(id.current, count); }, [count]);
-  useEffect(() => () => setUnsaved(id.current, 0), []);
+  // Every render hands the registry the latest handlers, so a save runs on
+  // the draft as it is now.
+  useEffect(() => { setSurface(id.current, surface); });
+  useEffect(() => {
+    const check = () => setLeader(leaderId() === id.current);
+    check();
+    const off = subscribeUnsaved(check);
+    return () => { off(); setSurface(id.current, null); };
+  }, []);
+  return { id: id.current, leader };
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -160,4 +207,25 @@ export function useDraftDoc<T extends Record<string, unknown>>(loaded: T | null,
   const discard = useCallback(() => setDraft(base), [base]);
   const accept = useCallback((saved?: T) => { const next = saved ?? draft; setBase(next); setDraft(next); }, [draft]);
   return { base, draft, setDraft, patch, changed, count: changed.length, dirty: changed.length > 0, discard, accept };
+}
+
+/**
+ * How many changes the box holds against what the server has: the top-level
+ * keys of a document, or the entries of a list, that differ by value. A box
+ * that no longer parses counts as one change until it does.
+ */
+export function docChangeCount(baseline: string | null, raw: string): number {
+  if (baseline === null) return raw.trim() ? 1 : 0;
+  if (raw === baseline) return 0;
+  let a: any, b: any;
+  try { a = JSON.parse(baseline); b = JSON.parse(raw); } catch { return 1; }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    let n = Math.abs(a.length - b.length);
+    for (let i = 0; i < Math.min(a.length, b.length); i++) if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) n++;
+    return n;
+  }
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    return changedKeys(a, b).length;
+  }
+  return JSON.stringify(a) === JSON.stringify(b) ? 0 : 1;
 }

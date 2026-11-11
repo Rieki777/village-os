@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, RefreshCw } from "lucide-react";
 import SaveBar, { type SaveResult } from "@/components/SaveBar";
-import { changedKeys } from "@/lib/unsavedChanges";
+import { docChangeCount } from "@/lib/unsavedChanges";
 import { API_BASE, authHeaders, refusal } from "./adminApi";
 import { emptyContentFor, PAGES_TAB_KEY, PATHS_STAGES_TAB_KEY } from "./contentSections";
 import PagesEditor from "./pages/PagesEditor";
@@ -595,25 +595,4 @@ function SectionEditorTab({ password, sectionKey, sectionLabel }: {
       />
     </div>
   );
-}
-
-/**
- * How many changes the box holds against what the server has: the top-level
- * keys of a document, or the entries of a list, that differ by value. A box
- * that no longer parses counts as one change until it does.
- */
-export function docChangeCount(baseline: string | null, raw: string): number {
-  if (baseline === null) return raw.trim() ? 1 : 0;
-  if (raw === baseline) return 0;
-  let a: any, b: any;
-  try { a = JSON.parse(baseline); b = JSON.parse(raw); } catch { return 1; }
-  if (Array.isArray(a) && Array.isArray(b)) {
-    let n = Math.abs(a.length - b.length);
-    for (let i = 0; i < Math.min(a.length, b.length); i++) if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) n++;
-    return n;
-  }
-  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
-    return changedKeys(a, b).length;
-  }
-  return JSON.stringify(a) === JSON.stringify(b) ? 0 : 1;
 }

@@ -22,12 +22,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { msg, plural } from "@lingui/core/macro";
 import { i18n } from "@lingui/core";
-import { useUnsavedRegistration } from "@/lib/unsavedChanges";
+import { dirtySurfaces, useSaveSurface, useUnsavedTotal } from "@/lib/unsavedChanges";
 
 export type SaveFailure = { label: string; reason: string };
 export type SaveResult = { ok: true } | { ok: false; reason?: string; failed?: SaveFailure[] };
 
 type Status = "idle" | "saving" | "saved" | "failed";
+
+const UNREACHABLE = msg`The save could not reach the server.`;
 
 const BOTTOM_BARS = "[data-admin-bottom-bar], [data-mobile-tabbar]";
 
@@ -42,10 +44,10 @@ function bottomBarHeight(): number {
 }
 
 export default function SaveBar({
-  count,
-  onSave,
-  onDiscard,
-  what,
+  count: ownCount,
+  onSave: ownSave,
+  onDiscard: ownDiscard,
+  what: ownWhat,
 }: {
   /** How many changes are waiting. Zero hides the bar. */
   count: number;
@@ -63,7 +65,28 @@ export default function SaveBar({
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadChanges = useRef(false);
 
-  useUnsavedRegistration(count);
+  // One bar per screen: the first surface mounted draws it for every
+  // surface holding changes (lib/unsavedChanges.ts); the rest only register.
+  const { leader } = useSaveSurface({ count: ownCount, save: ownSave, discard: ownDiscard, what: ownWhat });
+  const total = useUnsavedTotal();
+  const count = leader ? total : 0;
+  const dirtyNow = leader ? dirtySurfaces() : [];
+  const what = dirtyNow.length > 1 ? undefined : dirtyNow[0]?.what ?? ownWhat;
+
+  const onSave = async (): Promise<SaveResult> => {
+    const dirty = dirtySurfaces();
+    if (dirty.length === 1) return dirty[0].save();
+    const failed: SaveFailure[] = [];
+    for (const one of dirty) {
+      let r: SaveResult;
+      try { r = await one.save(); } catch { r = { ok: false, reason: i18n._(UNREACHABLE) }; }
+      if (r.ok) continue;
+      if (r.failed?.length) failed.push(...r.failed);
+      else failed.push({ label: one.what ?? t`This section`, reason: r.reason ?? t`That did not save.` });
+    }
+    return failed.length ? { ok: false, failed } : { ok: true };
+  };
+  const onDiscard = () => dirtySurfaces().forEach((one) => one.discard());
 
   const visible = count > 0 || status === "saving" || status === "saved";
 
@@ -122,7 +145,8 @@ export default function SaveBar({
       setFailure({ reason: result.reason, failed: result.failed });
       setSaid("");
     }
-  }, [count, onSave, status, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count, status, t]);
 
   useEffect(() => {
     if (count === 0) return;
@@ -149,6 +173,7 @@ export default function SaveBar({
       : status === "saved" && count === 0 ? t`Saved`
         : countWords;
 
+  if (!leader) return null;
   return (
     <>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{said}</p>
@@ -214,8 +239,6 @@ export default function SaveBar({
     </>
   );
 }
-
-const UNREACHABLE = msg`The save could not reach the server.`;
 
 /**
  * Run a list of saves one after another and gather what failed, for a
