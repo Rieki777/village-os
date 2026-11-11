@@ -28,13 +28,13 @@ export default function FaqSection({ pathway, heading = "Common Questions" }: { 
   if (!loaded || items.length === 0) return null;
 
   return (
-    <section className="bg-white py-20">
+    <section className="bg-card py-20">
       <div className="container max-w-3xl mx-auto px-4">
         <div className="text-center mb-10">
-          <span className="inline-block text-xs tracking-widest uppercase text-teal-deep font-semibold mb-3">
+          <span className="inline-block text-xs tracking-widest uppercase text-notice font-semibold mb-3">
             FAQ
           </span>
-          <h2 className="font-display text-3xl md:text-4xl font-bold text-teal-deep">
+          <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground">
             {heading}
           </h2>
         </div>
@@ -43,12 +43,12 @@ export default function FaqSection({ pathway, heading = "Common Questions" }: { 
             <AccordionItem
               key={item.id}
               value={item.id}
-              className="border border-stone-200 rounded-2xl px-5 bg-stone-50/40"
+              className="border border-border rounded-2xl px-5 bg-muted"
             >
-              <AccordionTrigger className="text-left font-semibold text-teal-deep py-4 hover:no-underline">
+              <AccordionTrigger className="text-left font-semibold text-foreground py-4 hover:no-underline">
                 {item.question}
               </AccordionTrigger>
-              <AccordionContent className="text-stone-600 leading-relaxed pb-4">
+              <AccordionContent className="text-muted-foreground leading-relaxed pb-4">
                 {item.answer}
               </AccordionContent>
             </AccordionItem>

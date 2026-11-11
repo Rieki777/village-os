@@ -1,5 +1,6 @@
 import ArchetypeStep from "@/components/roleDraft/ArchetypeStep";
 import SeasonGoals from "@/components/roleDraft/SeasonGoals";
+import { BTN_NOTICE, BTN_PRIMARY, BTN_SECONDARY, CARD, H1, H2, LINK, RING, TILE, WORLD } from "@/components/journey/look";
 import NotListedChip from "@/components/NotListedChip";
 import Layout from "@/components/Layout";
 import { Link } from "wouter";
@@ -73,11 +74,13 @@ interface SheetSource {
 // never disagree and a sixth state cannot draw an empty badge. A seat whose
 // term reached its date used to fall through to "Open Role" here.
 const statusBadge: Record<SeatStateWord, string> = {
-  filled: "bg-sage/15 text-sage border border-sage/30",
-  open: "bg-amber/15 text-amber-ink border border-amber/40",
-  forming: "bg-teal/15 text-teal-deep border border-teal/30",
-  partial: "bg-gold/20 text-foreground border border-gold/40",
-  expired: "bg-gold/20 text-foreground border border-gold/40",
+  // The sheet's state colours (docs/DESIGN_RULE.md): held is living green, open is the gold of
+  // what can be taken up, the rest are quiet. Semantic tokens, so they read on the night ground.
+  filled: "bg-open/10 text-open border border-open/40",
+  open: "bg-notice/10 text-notice border border-notice/50",
+  forming: "bg-muted text-foreground border border-border",
+  partial: "bg-muted text-foreground border border-border",
+  expired: "bg-muted text-muted-foreground border border-border",
 };
 
 function normalizeStatus(s: unknown): SeatStateWord {
@@ -242,7 +245,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
         id={headerId}
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full text-left bg-card hover:bg-card/80 transition-colors p-5 rounded-xl border border-border scroll-mt-28"
+        className="w-full text-left bg-card hover:bg-muted transition-colors p-5 rounded-xl border border-border shadow-sm scroll-mt-28 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -260,7 +263,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               <p className="text-xs text-muted-foreground">
                 {role.group}
                 {holders.length > 0 && (
-                  <span className="text-sage font-medium"> · {holders.join(", ")}</span>
+                  <span className="text-open font-medium"> · {holders.join(", ")}</span>
                 )}
               </p>
             </div>
@@ -283,7 +286,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-muted/30 p-6 rounded-b-xl border border-t-0 border-border space-y-5">
+            <div className="bg-muted p-6 rounded-b-xl border border-t-0 border-border space-y-5">
               {/* The role card, the same one the map draws, from this page's
                   own `/api/org` row at whatever tier it was served. The row
                   header above already says the circle and the state, so the
@@ -307,7 +310,7 @@ function RoleCard({ role, expanded, onToggle, index, canTagNeeds, sheet, arrive 
               {/* For a holder of the power to decide the structure, and nobody else: the editor is its own chunk. */}
               {!role.isExample && <EditRoleButton roleId={role.id} onSaved={() => window.location.reload()} />}
               {!role.isExample && (
-                <Link href={proposeRoleHref(role.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-notice underline underline-offset-2">
+                <Link href={proposeRoleHref(role.id)} className={`w-fit ${BTN_NOTICE}`}>
                   {RP_WORDS.proposeThisRole}
                 </Link>
               )}
@@ -487,7 +490,8 @@ export default function Roles() {
 
   return (
     <Layout>
-      <section className="py-24 bg-background">
+      {/* The sheet's world (docs/DESIGN_RULE.md): the same night ground and display face as the profile. */}
+      <section className={`${WORLD} py-16 sm:py-24`}>
         <div className="container">
           {/* Header */}
           <m.div
@@ -495,15 +499,15 @@ export default function Roles() {
             animate={{ opacity: 1, y: 0 }}
             className="text-center mb-16"
           >
-            <div className="w-16 h-16 rounded-full bg-sage/10 flex items-center justify-center mx-auto mb-6">
-              <Briefcase className="w-8 h-8 text-sage" />
+            <div className={`${RING} mx-auto mb-6 size-16`}>
+              <Briefcase className="w-7 h-7" aria-hidden="true" />
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
+            <h1 className={`${H1} mb-4`}>
               {linkedName ?? "Roles and Circles"}
             </h1>
             {/* R46 enchant-first: the forest image carries the surface; the
                 sociocracy mechanics live in the three tooltips. */}
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg leading-relaxed text-muted-foreground max-w-2xl mx-auto sm:text-xl">
               The village organizes itself the way a forest does:{" "}
               <InfoTip tip="Circles are sociocratic working groups with real authority over their own domain. Decisions inside a circle pass by consent.">circles</InfoTip>{" "}
               of care, each holding its own ground, and every{" "}
@@ -516,7 +520,7 @@ export default function Roles() {
             </div>
             {canTagNeeds && (
               <p className="mt-3 text-sm">
-                <Link href="/role-measures" className="font-semibold text-foreground underline underline-offset-2">
+                <Link href="/role-measures" className={LINK}>
                   {t({ message: "How roles are going", context: "roles page measures door" })}
                 </Link>
               </p>
@@ -524,7 +528,7 @@ export default function Roles() {
             {/* The draft board: pick characters, scout, shortlist, apply (pages/RoleDraft.tsx). */}
             <Link
               href="/roles/select"
-              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full bg-notice px-5 text-sm font-bold text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className={`mt-6 ${BTN_PRIMARY}`}
             >
               {t({ message: "Select your roles", context: "roles page button" })}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -552,7 +556,7 @@ export default function Roles() {
                 { label: "Roles", description: "Specific responsibilities inside a circle. One person can hold many roles. If a person leaves, the role stays and gets reassigned." },
                 { label: "Consent", description: "Decisions move forward when no one has a reasoned objection that the proposal would cause harm or block the aim. Everyone loving them is not the bar." },
               ].map((item) => (
-                <div key={item.label} className="rounded-xl bg-muted/30 border border-border p-5">
+                <div key={item.label} className={TILE}>
                   <div className="text-sm font-bold text-foreground mb-1">{item.label}</div>
                   <p className={`text-xs text-muted-foreground leading-relaxed${"pending" in item && item.pending ? " invisible" : ""}`}>{item.description}</p>
                 </div>
@@ -561,7 +565,7 @@ export default function Roles() {
 
             {showAll && (
               <div>
-                <h2 ref={allHeading} tabIndex={-1} className="mb-8 font-display text-3xl font-bold text-foreground focus:outline-none">
+                <h2 ref={allHeading} tabIndex={-1} className="mb-8 font-display text-3xl text-foreground focus:outline-none">
                   {t({ message: "All roles and circles", context: "roles page archetypes" })}
                 </h2>
             {/* Members-only people: every seat card below still carries its
@@ -594,7 +598,7 @@ export default function Roles() {
             {groups.map(({ title, subtitle, circleId, roles: groupRoles }) => (
               <div className="mb-14" key={title}>
                 <div className="mb-6">
-                  <h2 className="font-display text-2xl font-bold text-foreground mb-1">{title}</h2>
+                  <h2 className={`${H2} mb-1`}>{title}</h2>
                   {subtitle && (
                     <p className="text-muted-foreground text-sm">{subtitle}</p>
                   )}
@@ -602,7 +606,7 @@ export default function Roles() {
                   {circleId ? (
                     <Link
                       href={`/circles/${encodeURIComponent(circleId)}`}
-                      className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-2"
+                      className={`inline-flex min-h-11 items-center text-sm ${LINK}`}
                     >
                       {OPEN_CIRCLE_CARD}
                     </Link>
@@ -638,9 +642,9 @@ export default function Roles() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="mt-4 bg-sage/5 p-8 rounded-2xl border border-sage/20"
+              className={`mt-4 ${CARD}`}
             >
-              <h2 className="font-display text-2xl font-bold text-foreground mb-4">
+              <h2 className={`${H2} mb-4`}>
                 When a Tension Is Between People
               </h2>
               <VillageConflictSteps />
@@ -653,7 +657,7 @@ export default function Roles() {
             viewport={{ once: true }}
             className="mt-12 text-center"
           >
-            <Link href="/circles" className="inline-flex items-center gap-2 px-6 py-3 bg-sage text-white rounded-lg hover:bg-sage/90 transition-colors font-medium">
+            <Link href="/circles" className={BTN_SECONDARY}>
               Explore Our Circles
               <ArrowRight className="w-4 h-4" />
             </Link>

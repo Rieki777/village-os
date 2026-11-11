@@ -100,6 +100,12 @@ which was true of the source and got read as true of the gate set, and the gap w
 node scripts/module-facts.mjs
 ```
 
+**Design rule.** A member-facing page draws in the profile's look: the sheet's night world,
+semantic colour tokens, the display face, `rounded-lg/xl/2xl/full`, `shadow-sm`, and the class
+strings in `client/src/components/journey/look.ts`. The rule, with "use X, not Y" examples, is
+`docs/DESIGN_RULE.md`; `node scripts/check-design-rule.mjs` holds the joining journey to it
+(`--report` lists what it would flag elsewhere).
+
 ### Running the suite honestly
 
 - **A whole run with no `TEST_DATABASE_URL` now FAILS.** It used to skip 91 files

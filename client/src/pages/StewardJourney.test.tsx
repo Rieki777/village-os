@@ -120,7 +120,7 @@ describe("/steward", () => {
   it("shows four cards under Getting to know us, with Optional on the second and third only", async () => {
     show();
     await screen.findByText("Getting to know us");
-    const cards = ["Come to an Event", "Take Part in Events", "Village Immersion", "Community Training"].map((t) => screen.getByText(t).closest("div.bg-card") as HTMLElement);
+    const cards = ["Come to an Event", "Take Part in Events", "Village Immersion", "Community Training"].map((t) => screen.getByText(t).closest("li") as HTMLElement);
     expect(cards.map((c) => !!within(c).queryByText("Optional"))).toEqual([false, true, true, false]);
     expect(screen.queryByText(/steps completed/)).toBeNull();
   });

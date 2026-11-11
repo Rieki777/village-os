@@ -1811,27 +1811,242 @@ html:has(#sera-changes [data-sera-strip-on]) {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
 }
+/* A chosen card lifts, then settles back like a leaf landing (game feel lane). */
 @keyframes sel-pop {
-  0% { transform: scale(1); }
-  45% { transform: scale(1.045); }
-  100% { transform: scale(1); }
+  0% { transform: translateY(-6px) scale(1.02); }
+  60% { transform: translateY(1px) scale(0.995); }
+  100% { transform: none; }
 }
+/* Leaves on the wind: each one drifts out, turns and sinks a little as it fades. */
 @keyframes sel-spark {
-  0% { opacity: 1; transform: translate(0, 0) scale(1); }
-  100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0.4); }
-}
-@keyframes sel-bar-glow {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--sx), calc(var(--sy) + 14px)) rotate(var(--sr, 140deg)) scale(0.6); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .sel-rise { animation: sel-rise 0.45s ease-out both; }
   .sel-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
   .sel-lift:hover, .sel-lift:focus-within { transform: translateY(-4px); box-shadow: 0 14px 28px -16px color-mix(in srgb, var(--foreground) 45%, transparent); }
-  .sel-lift[data-on="true"] { animation: sel-pop 0.4s ease-out; }
+  .sel-lift[data-on="true"] { animation: sel-pop 0.5s var(--nat-ease-organic); }
   .sel-art { transition: transform 0.5s ease; }
   .sel-lift:hover .sel-art { transform: scale(1.06); }
-  .sel-spark { animation: sel-spark 0.9s ease-out forwards; }
+  .sel-spark { animation: sel-spark 0.8s ease-out forwards; }
   .sel-bar { transition: width 0.5s ease; }
-  .sel-bar-fill { animation: sel-bar-glow 2.4s ease-in-out infinite; }
+}
+
+/*
+ * THE JOURNEY KIT (game feel lane, 10 Nov 2026): the joining journey as a walk
+ * through the world. /roles/select, the Love Letter and the status page use it
+ * now; the proposal form is the next to take it. Two motifs, reused on purpose:
+ *
+ *   WATER: a ring spreading when you choose something (a character, a role, a
+ *          path), the way a stone dropped in a pond answers.
+ *   GROWTH: a leaf unfurling when something is done or kept (a step reached,
+ *          a slot filled, a badge earned), and seeds when a stage completes.
+ *
+ * The path itself is stepping stones across that water (.jw-trail). Rules: only
+ * transform and opacity move, feedback settles inside 600ms, nothing loops near
+ * text, and every animation sits inside no-preference so "reduce motion" gets
+ * the end state at once. The components that use these classes also render
+ * their still form themselves (useReducedMotion), so a test can check it.
+ *
+ * --jw-gold is the same gold as Tailwind's `notice` (an @theme inline colour,
+ * so it has no custom property of its own at runtime).
+ */
+:root {
+  --jw-gold: var(--sheet-notice, #8d5e19);
+}
+@keyframes jw-ripple {
+  from { opacity: 0.75; transform: scale(0.97); }
+  to { opacity: 0; transform: scale(1.1); }
+}
+@keyframes jw-unfurl {
+  0% { opacity: 0; transform: rotate(-40deg) scale(0.2); }
+  70% { opacity: 1; transform: rotate(6deg) scale(1.08); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes jw-ring-grow {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes jw-seal {
+  from { opacity: 0; transform: translateY(-10px) scale(1.5); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes jw-grow-down {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* Buttons: one rest, hover, press, focus and disabled language for the journey. */
+.jw-btn {
+  position: relative;
+  min-height: 2.75rem;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.jw-btn:disabled,
+.jw-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+.jw-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+/* Choosing: the chosen thing answers with a ring on the water. */
+.jw-pick {
+  position: relative;
+}
+.jw-pick::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--nat-water, #4d8b93);
+  opacity: 0;
+  pointer-events: none;
+}
+/* A portrait's frame, drawn over the art when its character is chosen. */
+.jw-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 3px var(--jw-gold);
+  pointer-events: none;
+}
+.jw-unfurl,
+.jw-sprout {
+  transform-origin: 0% 100%;
+}
+
+/* The trail: stepping stones over water, filled up to where you stand. */
+.jw-trail {
+  position: relative;
+}
+.jw-trail-path {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 20px;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--nat-water, #4d8b93) 24%, transparent);
+}
+.jw-trail-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--primary), var(--jw-gold));
+}
+.jw-stone-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  /* A river stone, never a perfect circle. */
+  border-radius: 47% 53% 44% 56% / 54% 46% 54% 46%;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+/* A passed stone is a gold ring, the way the sheet draws what is held (its stat tiles); the stone you stand on is filled gold. */
+.jw-stone[data-state="done"] .jw-stone-face {
+  background: var(--muted);
+  border-color: var(--jw-gold);
+  color: var(--jw-gold);
+}
+.jw-stone[data-state="here"] .jw-stone-face {
+  background: var(--jw-gold);
+  border-color: var(--jw-gold);
+  color: var(--background);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--jw-gold) 22%, transparent);
+}
+.jw-stone:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.jw-sprout {
+  position: absolute;
+  top: -8px;
+  right: -7px;
+  color: var(--jw-gold);
+}
+
+/* The status path, standing up: each row draws its half of the line to the next stone. */
+.jw-trail-v > li {
+  position: relative;
+}
+.jw-trail-v > li::before,
+.jw-trail-v > li::after {
+  content: "";
+  position: absolute;
+  left: 20.5px;
+  width: 3px;
+  background: color-mix(in srgb, var(--nat-water, #4d8b93) 24%, transparent);
+}
+.jw-trail-v > li::before { top: 0; height: 50%; }
+.jw-trail-v > li::after { top: 50%; bottom: 0; }
+.jw-trail-v > li:first-child::before,
+.jw-trail-v > li:last-child::after {
+  content: none;
+}
+.jw-trail-v > li[data-path-state="done"]::before,
+.jw-trail-v > li[data-path-state="done"]::after,
+.jw-trail-v > li[data-path-state="now"]::before {
+  background: var(--jw-gold);
+  transform-origin: top;
+}
+.jw-trail-v .jw-stone-face {
+  width: 30px;
+  height: 30px;
+  margin-inline: 7px;
+  z-index: 1;
+}
+.jw-trail-v [data-path-state="now"] .jw-stone-face {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--jw-gold) 26%, transparent),
+    0 0 0 9px color-mix(in srgb, var(--nat-water, #4d8b93) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .jw-btn {
+    transition: transform 0.18s var(--nat-ease-organic), box-shadow 0.22s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+  .jw-btn:hover:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 18px -12px color-mix(in srgb, var(--foreground) 60%, transparent);
+  }
+  .jw-btn:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: translateY(1px) scale(0.97);
+    box-shadow: none;
+    transition-duration: 80ms;
+  }
+  .jw-pick[data-on="true"]::after { animation: jw-ripple 0.6s ease-out; }
+  .jw-ring { animation: jw-ring-grow 0.45s var(--nat-ease-organic) both; }
+  .jw-unfurl, .jw-sprout { animation: jw-unfurl 0.55s var(--nat-ease-organic) both; }
+  .jw-seal { animation: jw-seal 0.4s var(--nat-ease-organic) both; }
+  .jw-trail-fill { transition: transform 0.6s var(--nat-ease-organic); }
+  .jw-stone-face { transition: transform 0.2s var(--nat-ease-organic), background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
+  button.jw-stone:hover:not(:disabled) .jw-stone-face { transform: translateY(-3px) rotate(-3deg); }
+  button.jw-stone:active:not(:disabled) .jw-stone-face { transform: translateY(1px) scale(0.94); }
+  .jw-trail-v > li[data-path-state="done"]::before,
+  .jw-trail-v > li[data-path-state="done"]::after,
+  .jw-trail-v > li[data-path-state="now"]::before {
+    animation: jw-grow-down 0.35s var(--nat-ease-organic) both;
+    animation-delay: var(--jw-delay, 0ms);
+  }
+  .jw-trail-v [data-path-state="now"] .jw-stone-face::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    border: 2px solid var(--nat-water, #4d8b93);
+    opacity: 0;
+    animation: jw-ripple 0.6s ease-out var(--jw-delay, 0ms);
+  }
 }
