@@ -123,8 +123,8 @@ export async function neighbour(w, ctx) {
   await w.step("fill the proposal", async () => {
     await stoneNext(page, "moon");
     await page.fill("#propose-aim", "Que el agua y la tierra se lean cada luna.");
-    await page.getByLabel("The goal", { exact: true }).first().fill("Caminar la quebrada con los vecinos");
-    await page.getByLabel("Done when", { exact: true }).first().fill("cuando tengamos el primer mapa del agua");
+    await page.getByLabel(/^(The goal|La meta)$/).first().fill("Caminar la quebrada con los vecinos");
+    await page.getByLabel(/^(Done when|Listo cuando)$/).first().fill("cuando tengamos el primer mapa del agua");
     const serve = page.getByRole("checkbox", { name: /Clean water all year/ }).first();
     if (await serve.count()) await serve.check();
     await stoneNext(page, "why");

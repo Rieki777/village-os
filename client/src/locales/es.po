@@ -1511,7 +1511,7 @@ msgstr ""
 #: client/src/components/governance/GoalsList.tsx
 msgctxt "proposal goals list"
 msgid "Done when"
-msgstr "Lista cuando"
+msgstr "Listo cuando"
 
 #: client/src/components/canvas/CanvasMoon.tsx
 msgid "A canvas moon gathering is on the calendar's list as a draft. It reaches the calendar once somebody who manages events publishes it."
