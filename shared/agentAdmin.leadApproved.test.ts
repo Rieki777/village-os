@@ -135,7 +135,26 @@ describe("with the opt-in on", () => {
       expect(["Ledger", "The Mint", "Gratitude"]).not.toContain(def.category);
       expect(k.startsWith("agents.")).toBe(false);
     }
-    expect(VARIABLES_BY_KEY["agents.lead_approved_writes"]?.default).toBe("false");
+    expect(VARIABLES_BY_KEY["agents.lead_approved_writes"]?.default).toBe("true");
+  });
+});
+
+describe("the switch ships on, and says why that is safe", () => {
+  const def = VARIABLES_BY_KEY["agents.lead_approved_writes"];
+  it("is on by default, first in its own Connector category, and no agent may set it", () => {
+    expect(def.default).toBe("true");
+    expect(def.category).toBe("Connector");
+    expect(def.label).toBe("Our agent may make the changes we approve in the chat");
+  });
+  it("tells the village the allow-list stays a person's and every write needs the approval note", () => {
+    expect(def.description).toContain("edited only by a person");
+    expect(def.description).toContain("approval note");
+  });
+  it("with it set off explicitly, nothing opens for any listed route", () => {
+    for (const [m, p] of NEWLY_OPEN) {
+      if (p.startsWith("/api/org/role-edit/")) continue;
+      expect(adminRequestDecision(m, p, seed, "agent-1", { leadApprovedWrites: false }), `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
+    }
   });
 });
 

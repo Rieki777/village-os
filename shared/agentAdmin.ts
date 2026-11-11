@@ -283,11 +283,14 @@ export function effectiveAgentAdminPaths(stored: unknown): AgentAdminPathsDoc {
  * human decision is still there; it is made in the conversation, and the
  * two-call confirm plus the approval carried in the body keep the record.
  *
- * OFF UNLESS A VILLAGE OPTS IN. The game variable `agents.lead_approved_writes`
- * ships false, and with it false nothing below has any effect: `alwaysAPerson`
- * answers exactly as it did before (pinned by a regression test over the whole
- * list). A person turns it on in Admin, Variables. The agent can never turn it
- * on or off: no variable under `agents.` is a wording variable.
+ * ON BY DEFAULT SINCE 2026-11-11 (the lead). The game variable
+ * `agents.lead_approved_writes` ships true. That opens nothing by itself: the
+ * agent paths list is still saved only by a person, and every write still needs
+ * the approval note. With it set false nothing below has any effect:
+ * `alwaysAPerson` answers exactly as it did before (pinned by a regression test
+ * over the whole list). A person sets it in Admin, Game Mechanics, Connector.
+ * The agent can never turn it on or off: no variable under `agents.` is a
+ * wording variable.
  *
  * WHAT IT OPENS, AND HOW NARROWLY. Each entry below names one route and the
  * always-a-person rules it lifts for that route alone. Only `powers`, `tier_c`

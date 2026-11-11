@@ -61,6 +61,20 @@ import { API_BASE, authHeaders, refusal } from "@/components/admin/adminApi";
 /** What an admin does that ends the settling scroll: the page is theirs again. */
 const ADMIN_MOVES = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
+/** The categories Game Mechanics lists first, in this order. The rest keep the order the server sent. */
+export const FIRST_CATEGORIES: readonly string[] = ["Connector"];
+
+export function orderCategories<T>(entries: Array<[string, T]>): Array<[string, T]> {
+  const rank = (c: string) => {
+    const i = FIRST_CATEGORIES.indexOf(c);
+    return i === -1 ? FIRST_CATEGORIES.length : i;
+  };
+  return entries
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => rank(a.e[0]) - rank(b.e[0]) || a.i - b.i)
+    .map((x) => x.e);
+}
+
 export default function VariablesTab({ password }: { password: string }) {
   const [vars, setVars] = useState<any[]>([]);
   /** One row per module holding settings, as the variables route reports them. */
@@ -182,7 +196,14 @@ export default function VariablesTab({ password }: { password: string }) {
    */
   const filtered = vars.filter((v) => !(v.modules ?? []).length).filter(matches);
   const byCategory: Record<string, any[]> = {};
+  /*
+   * THE CONNECTOR COMES FIRST (the lead, 2026-11-11: "move this box to the top
+   * of the Game Mechanics part in Admin"). The server sends categories in
+   * registry order; this puts the one named here ahead of the rest and leaves
+   * every other category where the server put it.
+   */
   for (const v of filtered) (byCategory[v.category] ??= []).push(v);
+  const categoryEntries = orderCategories(Object.entries(byCategory));
 
   return (
     <div>
@@ -258,7 +279,7 @@ export default function VariablesTab({ password }: { password: string }) {
       </div>
       {loading ? <div className="text-center py-12 text-gray-400">Loading...</div> : (
         <div className="space-y-8">
-          {Object.entries(byCategory).map(([cat, list]) => (
+          {categoryEntries.map(([cat, list]) => (
             <div key={cat}>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{cat}</h3>
               <div className="space-y-3">
