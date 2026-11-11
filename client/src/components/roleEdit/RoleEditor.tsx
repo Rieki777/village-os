@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { ROLE_CARD_FIELDS } from "@shared/roleCardText";
 import { CONVERSATION_MODES, interviewMinutesTotal, TRACKS, TRACK_WORDS, WHERE_WORKED, type Interviewer } from "@shared/roleParameters";
 import { PAY_KINDS, type PaySettings } from "@shared/seatSettings";
+import type { HeldBy } from "@shared/agentHolders";
 import type { WordValue } from "@shared/roleProposals";
 import { FOCUS, INPUT, LEDE, PANEL, PRIMARY, QUIET, SECONDARY } from "@/components/roleProposal/parts";
 import { openEditor, saveEditor, type EditorOpen, type EditorState, type SaveBody } from "./roleEditApi";
@@ -39,6 +40,8 @@ interface Form {
   words: Record<string, string>;
   listed: boolean;
   alwaysChecked: boolean;
+  /** Who may hold it (0374): "" is a card that has not said, which reads as either. */
+  heldBy: "" | HeldBy;
   recruiting: boolean;
   track: string;
   whereWorked: string;
@@ -62,6 +65,7 @@ function formOf(s: EditorState): Form {
     words: Object.fromEntries(Object.entries(s.words).map(([k, v]) => [k, text(v)])),
     listed: p.listed ?? true,
     alwaysChecked: p.alwaysChecked ?? false,
+    heldBy: p.heldBy ?? "",
     recruiting: p.recruiting ?? false,
     track: p.track ?? "",
     whereWorked: p.whereWorked ?? "",
@@ -86,6 +90,7 @@ function bodyOf(f: Form, s: EditorState): SaveBody {
   const parameters: Record<string, unknown> = { recruiting: f.recruiting };
   if (has("listed")) parameters.listed = f.listed;
   if (has("alwaysChecked")) parameters.alwaysChecked = f.alwaysChecked;
+  if (has("heldBy")) parameters.heldBy = f.heldBy || null;
   if (has("track")) parameters.track = f.track || null;
   if (has("whereWorked")) parameters.whereWorked = f.whereWorked || null;
   if (has("languages")) parameters.languages = lines(f.languages);
@@ -268,6 +273,17 @@ export default function RoleEditor({ roleId, onClose, onSaved }: { roleId: strin
                 <input type="checkbox" className="size-5 accent-dash-gold" checked={form.alwaysChecked} onChange={(e) => set("alwaysChecked", e.target.checked)} />
                 <span><Trans context="role editor">Always background-checked, whatever the references say (roles that hold money or work near children)</Trans></span>
               </label>
+            </Frame>
+          )}
+          {has("heldBy") && (
+            <Frame label={t({ message: "Who can hold it", context: "role editor" })} changed={form.heldBy !== start.heldBy}>
+              <select className={INPUT} value={form.heldBy} onChange={(e) => set("heldBy", e.target.value as Form["heldBy"])} aria-label={t({ message: "Who can hold it", context: "role editor" })}>
+                <option value="">{t({ message: "Not said (a person or an agent)", context: "role editor: who can hold a role" })}</option>
+                <option value="person">{t({ message: "A person", context: "role editor: who can hold a role" })}</option>
+                <option value="agent">{t({ message: "An agent", context: "role editor: who can hold a role" })}</option>
+                <option value="either">{t({ message: "A person or an agent", context: "role editor: who can hold a role" })}</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground"><Trans context="role editor">An agent is proposed by the member who keeps it, and the circle decides by consent, as for a person.</Trans></p>
             </Frame>
           )}
           <Frame label={t({ message: "Door", context: "role editor" })} changed={form.recruiting !== start.recruiting}>

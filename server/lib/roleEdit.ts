@@ -61,6 +61,7 @@ import { recordEvent } from "./events";
 import { listArchetypeRows } from "../repos/archetypes";
 import { characterTagsFrom } from "./orgChart";
 import { villageId } from "./economy";
+import { readHeldBy } from "../../shared/agentHolders";
 
 export const EDIT_WORDS = {
   noRole: "There is no role by that id.",
@@ -113,6 +114,7 @@ async function storedParameters(pool: Pool, roleId: string, live: readonly Param
   for (const k of live) {
     const v = row[PARAMETER_COLUMNS[k]];
     if (k === "alwaysChecked") out[k] = Number(v) === 1;
+    else if (k === "heldBy") out[k] = readHeldBy(v);
     else if (k === "listed") out[k] = v === null || v === undefined ? true : Number(v) === 1;
     else if (k === "languages" || k === "villageGoals" || k === "selectionCriteria" || k === "accessBundle") out[k] = asList(v).map(String);
     else if (k === "conversations") out[k] = asList(v);

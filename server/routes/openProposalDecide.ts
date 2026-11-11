@@ -81,7 +81,7 @@ import type { SeatCalendar } from "../../shared/seatTerms";
 import type { AppDeps } from "../lib/appDeps";
 import { makeApplicantTeller } from "../lib/applicantUpdates";
 import { hashInviteToken, INVITE_DAYS, invitePath, mintInviteToken } from "../lib/invites";
-import { accountFor, decideRule, isFormerMemberAccount, placeOnRoles, type DecideDeps } from "../lib/openProposalDecide";
+import { decideRule, isFormerMemberAccount, ownAccountOf, placeOnRoles, type DecideDeps } from "../lib/openProposalDecide";
 import type { LapseContext } from "../lib/orgChart";
 import { answerAsk, askRolesFor, consentView, decisionFor, type AskStanding } from "../lib/roleProposals";
 import { whileSessionHolds } from "../lib/sessionHold";
@@ -97,6 +97,9 @@ import { readProposalFile } from "../lib/proposalFiles";
 import { seatsWithCircles } from "../repos/seatApplications";
 import { baseOf, deciderOffer, loadSubject, saveOffer } from "../lib/counterOffer";
 import { OFFER_WORDS, openTalks, OFFER_LABELS } from "../../shared/counterOffer";
+import { AGENT_PROPOSAL_WORDS, scopeWords } from "../../shared/agentHolders";
+import { seatAdoptedAgent } from "../lib/agentRoleProposals";
+import { agentsWithReach, isAgentAccount } from "../repos/agentAccounts";
 
 export type DecideRouteDeps = Pick<
   AppDeps,
@@ -209,7 +212,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
    */
   async function deciding(p: store.StoredOpenProposal, actorId: string) {
     const rule = await decideRule(work);
-    const own = await accountFor(members, p.email);
+    // An agent's keeper is its own (0374): they proposed it, so they never decide it.
+    const own = await ownAccountOf(members, p);
     // Nobody adopts their own, matched by account AND by the person behind the
     // address: the actor's own address with a +tag, another case or Gmail's dots
     // is still the applicant (coordinator, 9 Nov 2026). A proposal from an
@@ -320,6 +324,22 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // The terms we offer, with the history: for the deciders only (joining lane PR 4). The applicant reads the current offer at their status page, never the log.
     const subject = decidesIt(may, asks, viewerId) ? await loadSubject(pool, p.id) : null;
     const offer = subject ? deciderOffer(subject, await baseOf(pool, subject.roleIds)) : null;
+    // An agent's proposal (0374): what it is, who keeps it, what it can reach (read live from its tokens) and how to switch it off.
+    let agent: Record<string, unknown> | null = null;
+    if (p.body.agent) {
+      const a = p.body.agent;
+      const keeperRow: any = await members.byId(a.keeperUserId);
+      const [live] = await agentsWithReach(pool, a.agentUserId);
+      agent = {
+        name: a.name,
+        what: a.what,
+        keeper: String(keeperRow?.name ?? "").trim() || null,
+        reach: live ? live.scopes.map((sc) => ({ scope: sc, words: scopeWords(sc) })) : [],
+        stillAnAgent: !!live,
+        switchOff: a.switchOff,
+        switchOffPlatform: AGENT_PROPOSAL_WORDS.switchOffPlatform,
+      };
+    }
     res.set("Cache-Control", "no-store").json({
       proposal: {
         id: p.id,
@@ -331,7 +351,8 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         term: p.body.term ?? null,
         card: p.body.card ?? null,
         // The membership letter, aligned with at application or from their account (Rye's answer 8): a yes or a no.
-        membership: { aligned: await membershipAlignedFor(pool, p.email, may.own ?? null) },
+        membership: agent ? null : { aligned: await membershipAlignedFor(pool, p.email, may.own ?? null) },
+        agent,
         roles,
         why: p.body.why,
         aim: p.body.aim,
@@ -343,7 +364,7 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
         door: { because: may.rule.because, words: DECIDE_WORDS.door[may.rule.because] },
         invitation,
         attached,
-        aboutYou,
+        aboutYou: agent ? null : aboutYou,
         offer,
         you: {
           mayEditTerms: open && may.ok,
@@ -449,6 +470,16 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     if (p.status !== "confirmed") return res.status(409).json({ error: DECIDE_WORDS.decided, status: p.status });
     const may = await deciding(p, actorId);
     if (!may.ok) return res.status(may.status).json(may.body);
+    /*
+     * AN AGENT'S PROPOSAL (0374): deciding stays human, and seating an agent is
+     * its own power. An agent account never adopts, and the adopter needs
+     * `org.seatAgent` on top of the raised-hand rule over `org.seat`, as the
+     * admin's agent seating asks both. Checked before anything is written.
+     */
+    if (p.body.agent) {
+      if (await isAgentAccount(getPool(), actorId)) return res.status(403).json({ error: "person_only", message: AGENT_PROPOSAL_WORDS.agentNeverDecides });
+      if (!(await guardCapability(req, res, "org.seatAgent"))) return;
+    }
     // Role journey L5: nobody who stepped out adopts, and nothing is adopted while a conversation is still to be written up.
     if (await hasRecused({ getPool }, p.id, actorId)) return res.status(403).json({ error: "recused", message: REVIEW_WORDS.recused });
     if (!(await interviewsAreIn({ getPool }, p.id))) return res.status(409).json({ error: "interviews_not_done", message: REVIEW_WORDS.interviewsNotDone });
@@ -488,6 +519,36 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     const village = projectName();
     // The Love Letter line only for somebody not aligned yet: an applicant who aligned on the form is not asked again (Rye's answer 8).
     const letterLine = await loveLetterLine(p, may.own ?? null);
+
+    // An agent's proposal: adopted and the agent seated, together, through the one agent seating path.
+    if (p.body.agent) {
+      const agent = p.body.agent;
+      if (!(await isAgentAccount(pool, agent.agentUserId))) return res.status(409).json({ error: "not_an_agent", message: AGENT_PROPOSAL_WORDS.noLongerAnAgent });
+      if (!(await store.decideOpenProposal(pool, p.id, "adopted", decision, at, note))) return res.status(409).json({ error: DECIDE_WORDS.raced });
+      let seated: Awaited<ReturnType<typeof seatAdoptedAgent>>;
+      try {
+        seated = await seatAdoptedAgent(pool, { proposal: p, adopterId: actorId, calendar: deps.seatCalendar(), now: at });
+      } catch (e) {
+        await store.undoAdoption(pool, p.id);
+        throw e;
+      }
+      if (!seated.ok) {
+        // Nothing stays seated, so the proposal waits on the village again.
+        await store.undoAdoption(pool, p.id);
+        return res.status(409).json({ error: seated.error });
+      }
+      await stampDecided(work, p.id, "adopted");
+      await deps.notify({
+        userId: agent.keeperUserId,
+        type: "open_role_proposal_decided",
+        title: AGENT_PROPOSAL_WORDS.keeperTold(agent.name, namesOf(roles)),
+        body: decided,
+        link: openProposalHref(p.id),
+        actorUserId: actorId,
+        dedupeKey: `op:${p.id}:adopted:keeper`,
+      });
+      return res.json({ success: true, status: "adopted", decided, account: false, agent: true, seated: seated.seated, invitation: null, application: null, message: AGENT_PROPOSAL_WORDS.adoptedSeated(seated.seated) });
+    }
 
     // An address with an account here: the place is made now, and no invitation is needed.
     if (may.own) {
@@ -585,6 +646,19 @@ export function registerOpenProposalDecide(app: Express, deps: DecideRouteDeps):
     // decided_at is set here, so the tidy job takes the name and address off after 90 days.
     if (!(await store.decideOpenProposal(pool, p.id, "declined", { words: decided, authority: null }, at, note))) return res.status(409).json({ error: DECIDE_WORDS.raced });
     await stampDecided(work, p.id, "declined");
+    if (p.body.agent) {
+      // An agent's proposal has no address: its keeper hears it in the bell.
+      await deps.notify({
+        userId: p.body.agent.keeperUserId,
+        type: "open_role_proposal_decided",
+        title: AGENT_PROPOSAL_WORDS.keeperDeclined(p.body.agent.name, namesOf(await rolesOf(pool, p))),
+        body: decided,
+        link: openProposalHref(p.id),
+        actorUserId: actorId,
+        dedupeKey: `op:${p.id}:declined:keeper`,
+      });
+      return res.json({ success: true, status: "declined", decided, emailed: false, message: AGENT_PROPOSAL_WORDS.declined });
+    }
     const firstName = greetingName(p.name);
     const why = await sent(
       p.email

@@ -168,3 +168,36 @@ export async function namesOf(db: Db, ids: readonly string[]): Promise<Record<st
   const [rows] = await db.query<RowDataPacket[]>("SELECT `id`, `name` FROM `users` WHERE `id` IN (?)", [unique]);
   return Object.fromEntries(rows.map((r) => [String(r.id), String(r.name ?? "")]));
 }
+
+/**
+ * Every agent account with its name and the scopes its live tokens hold (0374): what the member door
+ * offers a keeper to pick, and what the circle reads as the agent's reach. Scopes are read from the
+ * tokens themselves, never typed by the keeper.
+ */
+export async function agentsWithReach(db: Db, onlyId?: string): Promise<Array<{ id: string; name: string; scopes: string[] }>> {
+  const [agents] = await db.query<RowDataPacket[]>(
+    `SELECT \`id\`, \`name\` FROM \`users\` WHERE \`is_agent\` = 1${onlyId ? " AND `id` = ?" : ""} ORDER BY \`name\`, \`id\` LIMIT 200`,
+    onlyId ? [onlyId] : [],
+  );
+  if (!agents.length) return [];
+  const ids = agents.map((a) => String(a.id));
+  const [tokens] = await db.query<RowDataPacket[]>(
+    "SELECT `user_id`, `scopes` FROM `agent_tokens` WHERE `user_id` IN (?) AND `revoked_at` IS NULL AND `expires_at` > NOW()",
+    [ids],
+  );
+  const reach = new Map<string, Set<string>>();
+  for (const t of tokens) {
+    let scopes: unknown = t.scopes;
+    if (typeof scopes === "string") {
+      try {
+        scopes = JSON.parse(scopes);
+      } catch {
+        scopes = [];
+      }
+    }
+    const set = reach.get(String(t.user_id)) ?? new Set<string>();
+    for (const s of Array.isArray(scopes) ? scopes : []) set.add(String(s));
+    reach.set(String(t.user_id), set);
+  }
+  return agents.map((a) => ({ id: String(a.id), name: String(a.name ?? "").trim() || "An agent", scopes: Array.from(reach.get(String(a.id)) ?? []).sort() }));
+}

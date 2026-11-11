@@ -34,6 +34,7 @@ function formPatch(key: string, after: unknown): Record<string, unknown> {
     case "recruiting":
       return { [key]: after === true };
     case "track":
+    case "heldBy":
     case "conversationMode":
     case "whereWorked":
     case "budgetLine":

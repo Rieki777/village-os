@@ -82,7 +82,8 @@ function rowOf(r: any): StoredOpenProposal {
 
 export async function insertOpenProposal(
   db: Db,
-  p: { id: string; name: string; email: string; emailKey: string; targetSeasonId: string | null; body: OpenProposalBody; confirmHash: string; linkId: string | null; now: Date },
+  /** An agent's proposal (0374) has no address: its keeper is signed in, and is told in the bell. */
+  p: { id: string; name: string; email: string | null; emailKey: string | null; targetSeasonId: string | null; body: OpenProposalBody; confirmHash: string; linkId: string | null; now: Date },
 ): Promise<void> {
   await db.query(
     "INSERT INTO open_role_proposals (id, name, email, email_key, status, target_season_id, body_json, confirm_hash, link_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",

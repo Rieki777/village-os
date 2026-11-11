@@ -26,6 +26,7 @@ import { counterOfferOf, type CounterOffer } from "./counterOffer";
 import { aboutOf, backgroundCheckOf, parseAboutYou, referencesOf, type BackgroundCheck, type ProposalAbout, type ProposalReference } from "./proposalAbout";
 import { filesOf, linksOf, parseProposalLinks, type ProposalFile, type ProposalLink } from "./proposalAttachments";
 import type { TermKey } from "./termsWords";
+import { agentPartOf, type AgentProposalPart } from "./agentHolders";
 
 export const OPEN_PROPOSAL_PATH = "/propose-a-role";
 
@@ -139,6 +140,11 @@ export interface OpenProposalBody {
   note?: string;
   /** The steward's counter-offer on the terms, appended revision by revision (shared/counterOffer.ts). Written only by the decider door, never by the form. */
   counterOffer?: CounterOffer;
+  /**
+   * An agent proposed by its keeper (0374, shared/agentHolders.ts). Written only by the member door's agent
+   * route, never by the public form. Absent on every person's proposal.
+   */
+  agent?: AgentProposalPart;
 }
 
 export interface OpenProposalInput {
@@ -180,6 +186,7 @@ export function openBodyOf(raw: unknown): OpenProposalBody {
     ...(isApplicantLanguage(o.locale) ? { locale: o.locale } : {}),
     ...(cleanNote(o.note) ? { note: cleanNote(o.note) as string } : {}),
     ...(counterOfferOf(o.counterOffer) ? { counterOffer: counterOfferOf(o.counterOffer) as CounterOffer } : {}),
+    ...(agentPartOf(o.agent) ? { agent: agentPartOf(o.agent) as AgentProposalPart } : {}),
   };
 }
 
