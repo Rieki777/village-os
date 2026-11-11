@@ -82,6 +82,7 @@ const PAGES = [
   "client/src/pages/SeatApplication.tsx",
   "client/src/pages/ResidentJourney.tsx",
   "client/src/pages/OpenProposal.tsx",
+  "client/src/pages/Training.tsx",
 ];
 
 /** Every file the joining journey draws with, pages included. */

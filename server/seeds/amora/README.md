@@ -15,6 +15,7 @@ reads this folder, so a new village never receives them.
 | `faqs-steward-seed.json` | The three steward questions as they should read after the joining flow (no hours, no old journey). Applied by hand, Admin, FAQs. |
 | `lead-financial-steward-terms-seed.json` | The eight wordings and the 100% commitment the Lead Financial Steward's terms on offer carry (joining lane PR 3). The role is only in the live database, so it is applied by hand, Admin, Roles, Terms on offer. |
 | `pages/page-<id>.json` | Amora's own words for each of the 18 public page sections, adopted on production 2026-10-23 and kept here as its record. Read verbatim from production's public `GET /api/content/page-<id>` and pretty-printed; re-read 2026-10-31, words unchanged. Amora holds no `page-governance` (that spec arrived later). |
+| `pages/page-training-steward.json`, `pages/page-training-resident.json` | The two training pages (/training/steward and /training/resident), new on 11 Nov 2026 and not yet on production. Both carry the same words for now (the lead: the trainings will differ later); only their name on the /training chooser differs. Applied by hand, Admin, Pages, Training: steward and Training: resident. |
 
 Amora applies them by hand, through Admin or `PUT /api/admin/content/legal` and
 `PUT /api/admin/content/covenant` (capability `story.tell`). The page sections

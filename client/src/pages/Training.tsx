@@ -1,18 +1,30 @@
 import Layout from "@/components/Layout";
 import { authToken, gameFetch } from "@/lib/gameApi";
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "wouter";
+import { ArrowRight, CheckCircle2, Circle, ExternalLink, FileText, GraduationCap, Hand, Radio, Users, Video } from "lucide-react";
+import { usePageContent } from "@/hooks/usePageContent";
+import { Emphasized } from "@/components/PageText";
+import { BreathingLoader } from "@/components/natural";
+import { SeedOfLife } from "@/components/journey/nature";
 import {
-  BookOpen,
-  CheckCircle2,
-  Circle,
-  ExternalLink,
-  Video,
-  FileText,
-  Hand,
-  Users,
-  Radio,
-  GraduationCap,
-} from "lucide-react";
+  BTN_NOTICE,
+  BTN_SECONDARY,
+  CARD,
+  CHIP_SOFT,
+  DOOR,
+  EYEBROW,
+  H1,
+  H2,
+  HINT,
+  LEDE,
+  LINK,
+  RING,
+  TILE,
+  WORLD,
+} from "@/components/journey/look";
+import { TRAINING_PAGES, TRAINING_TRACKS, isTrainingTrack, trainingPathFor, type TrainingTrack } from "@shared/pageContent/training";
+import type { ResolvedPage } from "@shared/pageContent/types";
 
 interface TrainingModule {
   id: string;
@@ -30,16 +42,33 @@ interface TrainingModule {
   mandatory?: boolean;
 }
 
-// Each chip is 12px text, so each pair needs 4.5:1. Computed on the card ground:
-// sage on sage/20 4.28, gold on gold/20 3.39, amber-700 on amber/20 4.39.
-// Now the light tints index.css documents with their inks (sage-light + sage
-// 4.82, amber-light + amber-ink 5.02) and amber-800 (6.23), as Forum uses.
-const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
-  Video: { icon: Video, color: "bg-coral/15 text-coral" },
-  Article: { icon: FileText, color: "bg-teal-deep/10 text-teal-deep" },
-  Practice: { icon: Hand, color: "bg-sage-light text-sage" },
-  Workshop: { icon: Users, color: "bg-amber/20 text-amber-800" },
-  "Live Session": { icon: Radio, color: "bg-amber-light text-amber-ink" },
+/*
+ * TWO TRAINING PAGES AND A CHOOSER (the lead, 11 Nov 2026: "should have 2
+ * different routes in admin").
+ *
+ *   /training/steward and /training/resident each read their own words from
+ *   Admin, Pages (shared/pageContent/training.ts), so a village can tell each
+ *   path its own story, and each track's "Community training" step links to
+ *   its own page.
+ *   /training is the chooser: the two doors, each named in its page's words.
+ *   Older links, the path card and the menu still land somewhere true.
+ *
+ * The lessons are one list for both pages for now (Admin, Training modules),
+ * because the rung that counts them is one rule for everybody.
+ *
+ * DRAWN IN THE NIGHT WORLD (docs/DESIGN_RULE.md). The bar and percentage the
+ * page used to draw were a meter; the progress is a Seed of Life now, one
+ * circle per lesson, with the words beside it. It is the member's own record
+ * and names nobody else.
+ */
+
+/** Each lesson type's icon. Keyed by the types Admin offers; anything else reads as an article. */
+const TYPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
+  Video,
+  Article: FileText,
+  Practice: Hand,
+  Workshop: Users,
+  "Live Session": Radio,
 };
 
 /*
@@ -65,9 +94,79 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
  * mirror would only reintroduce the question of which copy is true.
  */
 
-export default function Training() {
+/** wouter hands a routed component its params; a track page is mounted with `track`. */
+export default function Training({ track }: { track?: unknown }) {
+  return isTrainingTrack(track) ? <TrackTraining track={track} /> : <TrainingChooser />;
+}
+
+function Hero({ eyebrow, headline, intro, waiting }: { eyebrow: string; headline: string; intro: string; waiting: boolean }) {
+  return (
+    <header className={`space-y-3${waiting ? " invisible" : ""}`}>
+      <p className={`${EYEBROW} inline-flex items-center gap-2`}>
+        <GraduationCap className="size-4" aria-hidden="true" />
+        {eyebrow || " "}
+      </p>
+      <h1 className={H1}>{headline || " "}</h1>
+      {intro ? (
+        <p className={LEDE}>
+          <Emphasized text={intro} />
+        </p>
+      ) : null}
+    </header>
+  );
+}
+
+/** /training: one door per track, each in its own page's words. */
+function TrainingChooser() {
+  const steward = usePageContent(TRAINING_PAGES.steward);
+  const resident = usePageContent(TRAINING_PAGES.resident);
+  const pages: Record<TrainingTrack, ResolvedPage | null> = { steward, resident };
+  const ready = steward !== null && resident !== null;
+  return (
+    <Layout>
+      <div className={`${WORLD} py-10 sm:py-16`}>
+        <div className="mx-auto max-w-3xl space-y-8 px-4">
+          <Hero
+            eyebrow="Community training"
+            headline="Choose your training"
+            intro="Each path has its own training. Open the one for the path you are walking."
+            waiting={false}
+          />
+          {ready ? (
+            <nav aria-label="Training pages" className="grid gap-4 sm:grid-cols-2">
+              {TRAINING_TRACKS.map((t) => {
+                const door = pages[t]?.door.fields;
+                return (
+                  <Link key={t} href={trainingPathFor(t)} className={`${CARD} group flex min-h-11 flex-col gap-3 hover:border-notice`}>
+                    <span className={RING} aria-hidden="true">
+                      <GraduationCap className="size-5" />
+                    </span>
+                    <span className={H2}>{door?.title}</span>
+                    <span className={HINT}>{door?.line}</span>
+                    <span className="mt-auto inline-flex items-center gap-1 text-sm font-medium text-notice">
+                      Open
+                      <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                    </span>
+                  </Link>
+                );
+              })}
+            </nav>
+          ) : (
+            <div className="flex justify-center py-10">
+              <BreathingLoader label="Opening the training" />
+            </div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+function TrackTraining({ track }: { track: TrainingTrack }) {
+  const page = usePageContent(TRAINING_PAGES[track]);
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [completed, setCompleted] = useState<string[] | null>(null);
+  const [signedIn] = useState(() => Boolean(authToken()));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState("");
@@ -137,186 +236,182 @@ export default function Training() {
   const held = completed ?? [];
   const total = modules.length;
   const done = modules.filter((m) => held.includes(m.id)).length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   /*
    * The rung turns on the MANDATORY modules only, so the page counts them
-   * separately from the total above. Both figures are shown, because "3 of 5
-   * modules" and "the 2 that open the next rung" are different questions and a
-   * single percentage answers neither of them.
+   * separately from the total above. Both are said, because "3 of 5 lessons"
+   * and "the 2 that complete your training" are different questions.
    */
   const required = modules.filter((m) => m.mandatory !== false);
   const requiredDone = required.filter((m) => held.includes(m.id)).length;
+  // The one lesson to take next: the first required one not yet done, else the first of any.
+  const next = completed === null ? null : (required.find((m) => !held.includes(m.id)) ?? modules.find((m) => !held.includes(m.id)) ?? null);
+
+  const hero = page?.hero.fields;
+  const lessons = page?.lessons.fields;
+  const close = page?.close;
+
+  const progress =
+    completed !== null && total > 0 ? (
+      <section aria-labelledby="training-progress" className={`${CARD} flex items-center gap-5 lg:flex-col lg:items-start`}>
+        {total <= 19 ? (
+          <SeedOfLife
+            total={total}
+            walked={done}
+            size="md"
+            bloom
+            label={`${done} of ${total} lessons done`}
+            labels={modules.map((m) => m.title)}
+            className="shrink-0"
+          />
+        ) : null}
+        <div className="min-w-0 space-y-1">
+          <h2 id="training-progress" className={EYEBROW}>
+            Your training
+          </h2>
+          <p className="font-display text-2xl text-card-foreground">
+            {done} of {total} lessons done
+          </p>
+          {required.length > 0 ? (
+            <p className={HINT}>
+              {requiredDone === required.length
+                ? "Required training complete."
+                : `${requiredDone} of ${required.length} required lessons done. Finish the rest to complete your training.`}
+            </p>
+          ) : null}
+        </div>
+      </section>
+    ) : !loading && !signedIn ? (
+      <section className={CARD}>
+        <p className={HINT}>
+          <Link href="/login" className={LINK}>
+            Sign in
+          </Link>{" "}
+          to mark lessons done as you go.
+        </p>
+      </section>
+    ) : null;
 
   return (
     <Layout>
-      <div className="bg-teal-band text-white py-16">
-        <div className="container max-w-4xl">
-          <div className="flex items-center gap-3 mb-3">
-            <GraduationCap className="w-6 h-6 text-amber-on-band" />
-            <span className="text-amber-on-band font-medium text-sm tracking-widest uppercase">
-              Community Training
-            </span>
-          </div>
-          <h1 className="font-display text-4xl md:text-5xl font-bold mb-3">
-            Learn together, grow together
-          </h1>
-          <p className="text-white text-lg max-w-2xl">
-            Practical training in nonviolent communication, authentic relating, and
-            consent-based decision making. The practices that make community life
-            actually work.
-          </p>
-        </div>
-      </div>
+      <div className={`${WORLD} py-10 sm:py-16`}>
+        <div className="mx-auto max-w-5xl space-y-8 px-4">
+          <Hero eyebrow={hero?.eyebrow ?? ""} headline={hero?.headline ?? ""} intro={hero?.intro ?? ""} waiting={!page} />
 
-      <div className="bg-stone-50 py-12">
-        <div className="container max-w-4xl">
-          {/* Progress bar */}
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="font-display text-xl font-bold text-teal-deep">
-                  Your progress
-                </h2>
-                <p className="text-sm text-stone-500 mt-0.5">
-                  {done}/{total} lessons done
-                </p>
-              </div>
-              <span className="text-teal-deep font-bold text-2xl">{pct}%</span>
-            </div>
-            <div className="bg-stone-100 rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-teal-deep h-2 rounded-full transition-all duration-500"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            {/* What the bar above does NOT answer. A percentage over every
-                module says nothing about the rung, because only the required
-                ones open it, and a member deserves to know which count they
-                are being measured on. */}
-            {required.length > 0 ? (
-              <p className="mt-3 text-sm text-stone-600">
-                {requiredDone === required.length ? (
-                  <>Required training complete.</>
-                ) : (
-                  <>
-                    <span className="font-semibold text-teal-deep">
-                      {requiredDone}/{required.length}
-                    </span>{" "}
-                    required lessons done. Finish the rest to complete your training.
-                  </>
-                )}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:items-start">
+            {/* On a desktop the record stays beside the lessons; on a phone it sits above them. */}
+            <div className="space-y-4 lg:sticky lg:top-24">
+              {progress}
+              {/* Mounted on every render, empty until there is something to say:
+                  a region inserted with its text already in it announces nothing. */}
+              <p aria-live="polite" className={said ? HINT : "sr-only"}>
+                {said}
               </p>
-            ) : null}
-            {/* Mounted on every render, empty until there is something to say:
-                a region inserted with its text already in it announces
-                nothing. */}
-            <p aria-live="polite" className={said ? "mt-2 text-sm text-stone-600" : "sr-only"}>
-              {said}
-            </p>
-          </div>
-
-          {/* Modules */}
-          {loading ? (
-            <div className="text-center py-16 text-stone-400">Loading lessons…</div>
-          ) : modules.length === 0 ? (
-            <div className="text-center py-16 text-stone-400">
-              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No lessons yet.</p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {modules.map((m) => {
-                const meta = TYPE_META[m.type] ?? TYPE_META.Article;
-                const Icon = meta.icon;
-                const isDone = held.includes(m.id);
-                return (
-                  <div
-                    key={m.id}
-                    className={`bg-white rounded-2xl border ${
-                      isDone ? "border-teal-deep/30 bg-teal-deep/[0.02]" : "border-stone-200"
-                    } shadow-sm p-5 md:p-6 transition-colors`}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${meta.color}`}>
-                        <Icon className="w-6 h-6" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {/*
-                          The title and its badges share a row that may WRAP. At 390 they fit
-                          side by side; at 375, 360 and 320 the badges ("Required" plus the
-                          module type) held their width as `shrink-0` in a row that could not
-                          break, and pushed the page 9, 24 and 64 pixels wider than the phone.
-                          Now they drop under the title as one group instead, and the title
-                          itself may shrink and break rather than hold the row open.
-                        */}
-                        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5 mb-1.5">
-                          <h3 className={`min-w-0 break-words font-display text-lg font-semibold ${isDone ? "text-stone-500" : "text-teal-deep"}`}>
-                            {m.title}
-                          </h3>
-                          <div className="shrink-0 flex items-center gap-1.5">
-                            {m.mandatory === false ? (
-                              <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-500">
-                                Optional
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center rounded-full bg-amber/20 px-2 py-0.5 text-xs font-medium text-amber-800">
-                                Required
-                              </span>
-                            )}
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${meta.color}`}>
-                              {m.type}
-                            </span>
+
+            <section aria-labelledby="training-lessons" className={`${CARD} space-y-4`}>
+              <div className={`space-y-1${page ? "" : " invisible"}`}>
+                <h2 id="training-lessons" className={H2}>
+                  {lessons?.heading || " "}
+                </h2>
+                {lessons?.intro ? <p className={HINT}>{lessons.intro}</p> : null}
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <BreathingLoader label="Gathering the lessons" />
+                </div>
+              ) : modules.length === 0 ? (
+                <p className={HINT}>No lessons yet. They appear here once the village adds them.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {modules.map((m) => {
+                    const Icon = TYPE_ICON[m.type] ?? FileText;
+                    const isDone = held.includes(m.id);
+                    const isNext = next?.id === m.id;
+                    return (
+                      <li key={m.id} className={`${TILE}${isNext ? " border-notice/60" : ""}`} data-next={isNext || undefined}>
+                        <div className="flex items-start gap-4">
+                          <span className={`${RING} hidden sm:inline-flex`} aria-hidden="true">
+                            {isDone ? <CheckCircle2 className="size-5 text-open" /> : <Icon className="size-5" />}
+                          </span>
+                          <div className="min-w-0 flex-1 space-y-2">
+                            {isNext ? <p className={EYEBROW}>Next</p> : null}
+                            {/*
+                              The title and its chips share a row that may WRAP, so at 320 the
+                              chips drop under the title instead of pushing the page wider than
+                              the phone.
+                            */}
+                            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+                              <h3 className={`min-w-0 break-words font-display text-lg ${isDone ? "text-muted-foreground" : "text-card-foreground"}`}>
+                                {m.title}
+                              </h3>
+                              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                <span className={CHIP_SOFT}>{m.mandatory === false ? "Optional" : "Required"}</span>
+                                <span className={CHIP_SOFT}>
+                                  <Icon className="size-3.5" aria-hidden="true" />
+                                  {m.type}
+                                </span>
+                              </div>
+                            </div>
+                            {m.description ? <p className={`${HINT} leading-relaxed`}>{m.description}</p> : null}
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                              {m.url ? (
+                                <a href={m.url} target="_blank" rel="noopener noreferrer" className={BTN_NOTICE}>
+                                  Open <ExternalLink className="size-3.5" aria-hidden="true" />
+                                </a>
+                              ) : (
+                                <span className={`${HINT} italic`}>Link coming soon</span>
+                              )}
+                              {/* Disabled until the member's record has arrived, so
+                                  nobody can toggle against a list nobody has read,
+                                  and while a write is in flight so a double press
+                                  cannot post and delete the same module. */}
+                              <button
+                                type="button"
+                                onClick={() => void toggle(m.id)}
+                                disabled={completed === null || busy !== null}
+                                aria-busy={busy === m.id}
+                                className={BTN_SECONDARY}
+                              >
+                                {isDone ? (
+                                  <>
+                                    <CheckCircle2 className="size-4 text-open" aria-hidden="true" /> I have done this
+                                  </>
+                                ) : (
+                                  <>
+                                    <Circle className="size-4" aria-hidden="true" /> Mark as done
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <p className={`text-sm leading-relaxed mb-4 ${isDone ? "text-stone-400" : "text-stone-600"}`}>
-                          {m.description}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-3">
-                          {m.url ? (
-                            <a
-                              href={m.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-deep hover:text-teal-deep/80 transition-colors"
-                            >
-                              Open <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          ) : (
-                            <span className="text-sm text-stone-400 italic">Link coming soon</span>
-                          )}
-                          {/* Disabled until the member's record has arrived, so
-                              nobody can toggle against a list nobody has read,
-                              and while a write is in flight so a double press
-                              cannot post and delete the same module. */}
-                          <button
-                            type="button"
-                            onClick={() => void toggle(m.id)}
-                            disabled={completed === null || busy !== null}
-                            aria-busy={busy === m.id}
-                            className={`inline-flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
-                              isDone
-                                ? "bg-teal-deep/10 text-teal-deep hover:bg-teal-deep/15"
-                                : "bg-stone-100 text-stone-600 hover:bg-stone-200"
-                            }`}
-                          >
-                            {isDone ? (
-                              <>
-                                <CheckCircle2 className="w-4 h-4" /> I have done this
-                              </>
-                            ) : (
-                              <>
-                                <Circle className="w-4 h-4" /> Mark as done
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
+
+          {close && !close.hidden ? (
+            <section aria-labelledby="training-close" className={`${CARD} space-y-3`}>
+              <h2 id="training-close" className={H2}>
+                {close.fields.heading}
+              </h2>
+              {close.fields.body ? (
+                <p className={LEDE}>
+                  <Emphasized text={close.fields.body} />
+                </p>
+              ) : null}
+              {close.fields.ctaLabel && close.fields.ctaTarget ? (
+                <a href={close.fields.ctaTarget} className={DOOR}>
+                  {close.fields.ctaLabel}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </a>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </div>
     </Layout>
