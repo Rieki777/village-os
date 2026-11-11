@@ -169,9 +169,15 @@ export async function professional(w, ctx) {
     await w.goto("/steward?utm_source=newsletter&utm_medium=email");
     await page.locator("main").waitFor();
   });
-  await w.look("steward", { next: page.getByRole("link", { name: /Find your role/i }) });
+  // The steward page is one flow since 2026-11-11: its one main act is the founding team's invitation.
+  await w.look("steward", { next: page.getByRole("link", { name: /Join the founding team/i }) });
+  await w.step("tick the first steps the professional has taken", async () => {
+    const boxes = page.locator("#first-steps [role=checkbox]");
+    if (!(await boxes.count())) throw new Error("the steward page shows no first steps");
+    await boxes.first().click();
+  });
   await w.step("find a role", async () => {
-    const first = page.getByRole("link", { name: /Find your role/i }).first();
+    const first = page.getByRole("link", { name: /Join the founding team/i }).first();
     if (await first.count()) await first.click();
     else await w.goto("/roles");
     await settle(page);

@@ -1,0 +1,391 @@
+{
+  "_about": "Draft (lane A5, 11 Nov 2026): Amora's words for the one-flow steward page and the resident track. Not applied by anything. The content lane may refine them; apply each through Admin, Pages or PUT /api/admin/content/<key>.",
+  "page-journey-steward": {
+    "hero": {
+      "eyebrow": "Steward the Village",
+      "headline": "Build {village} with us",
+      "highlight": "with us",
+      "intro": "Roles are how the work of {village} gets done. Everyone starts on the same first steps: the webinar or community call, a land tour and the potluck. Then the path divides: hold a role, live here, or both.",
+      "primaryLabel": "See the first steps",
+      "primaryTarget": "#first-steps",
+      "secondaryLabel": "Ask us a question",
+      "secondaryTarget": "#contact"
+    },
+    "getToKnow": {
+      "heading": "Get to know us",
+      "body": "Optional to visit, required to apply. Take them in this order, and tick each one off as you go.",
+      "exceptions": "We encourage you to do these, but if you haven't, you can still apply, especially if you've been invited to, or if you're not in Costa Rica and the next webinar is more than a week away, or if you feel you're an incredibly strong candidate. For a role we urgently need, you may start after the webinar alone.",
+      "items": [
+        {
+          "stage": "First",
+          "title": "Attend the webinar or community call",
+          "mark": "Required to apply",
+          "description": "Live is best, or watch the recording. Meet the founding team, hear the vision and ask your questions.",
+          "bullet1": "Meet the founding team",
+          "bullet2": "Hear the vision",
+          "bullet3": "Ask questions live",
+          "bullet4": "Or watch the recording",
+          "actionLabel": "See the next call",
+          "actionTarget": "#events"
+        },
+        {
+          "stage": "Second",
+          "title": "Come on a land tour",
+          "mark": "Required to apply",
+          "description": "Weekly, right after the potluck. If that day doesn't work for you, we can arrange a special tour.",
+          "bullet1": "Walk the land with us",
+          "bullet2": "Weekly, after the potluck",
+          "bullet3": "Ask us for a special tour",
+          "bullet4": "",
+          "actionLabel": "See upcoming events",
+          "actionTarget": "#events"
+        },
+        {
+          "stage": "Third",
+          "title": "Join the potluck",
+          "mark": "Required to apply",
+          "description": "Take part in an event: share a meal with the village and meet us as we live.",
+          "bullet1": "Bring a dish to share",
+          "bullet2": "Meet the people who live here",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "See upcoming events",
+          "actionTarget": "#events"
+        }
+      ]
+    },
+    "tracks": {
+      "heading": "Two tracks from here",
+      "body": "After the first steps the path divides. Walk one, or both.",
+      "stewardTitle": "Steward track",
+      "stewardLine": "Hold a role on the founding team that takes {village} from idea to flourishing village.",
+      "residentTitle": "Resident track",
+      "residentLine": "Make {village} your home, from Guest and Founding Seeder to Steward of {village}.",
+      "hereLabel": "You are here"
+    },
+    "steps": {
+      "heading": "The steward track",
+      "intro": "From your application to your seat on the team, in {count} steps. Each says whose move it is.",
+      "items": [
+        {
+          "stage": "Your move",
+          "title": "Find your role",
+          "description": "Read the open lead roles. Each card says what the role holds, the background we'd love to see, and that it is a paid role.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "See the open roles",
+          "actionTarget": "/roles"
+        },
+        {
+          "stage": "Your move",
+          "title": "Apply for the role",
+          "description": "Apply from the role's card, in six steps: get to know us, about you, your value, the terms, your first day, and review.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "The circle's move",
+          "title": "Our review",
+          "description": "We read every application. We invite some applicants to interview, and send everyone else a warm thank-you.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Together",
+          "title": "Interviews",
+          "description": "Three conversations: Operations (60 minutes) first, then CRM & Hiring (30), then the Visionary (30).",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "The circle's move",
+          "title": "The decision, by consent",
+          "description": "The circle decides together. People choose people, and we tell you what we decided.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Together",
+          "title": "Your first cycle",
+          "description": "One paid month, from the end of November to the end of December. Either side may end it there.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Your move",
+          "title": "Seated in the role",
+          "description": "Your first conversations include Technical Operations, and you take up the role with the team.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        }
+      ]
+    },
+    "crossover": {
+      "mark": "Optional",
+      "title": "Join the resident track too",
+      "body": "We prefer to work with people who also want to live here at least part time.",
+      "ctaLabel": "See the resident track",
+      "ctaTarget": "/resident"
+    },
+    "foundingTeam": {
+      "eyebrow": "Join the founding team",
+      "heading": "The team that builds {village}",
+      "body": "We are seating three circle leads: the Lead Finance Steward, the Regenerative Land & Building Lead and the Community Building Lead. Each is a paid, multi-year founding role, from the foundation through to completion. A rare invitation, for people ready to hold a whole domain.",
+      "ctaLabel": "Join the founding team",
+      "ctaTarget": "/roles"
+    },
+    "extras": {
+      "heading": "Optional, any time",
+      "body": "None of these is needed to apply. Each is a deeper way to know us.",
+      "items": [
+        {
+          "title": "Other events",
+          "when": "",
+          "description": "Workshops, gatherings and celebrations on the land.",
+          "actionLabel": "View Events",
+          "actionTarget": "#events"
+        },
+        {
+          "title": "Village immersion",
+          "when": "",
+          "description": "Spend unhurried time in the village, see circles at work and find where your gifts fit.",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "title": "Community training",
+          "when": "Later",
+          "description": "Our training in NVC (Nonviolent Communication), authentic relating and other community practices, once you have joined.",
+          "actionLabel": "Learn About Training",
+          "actionTarget": "/training"
+        }
+      ]
+    },
+    "rights": {
+      "heading": "Your rights and responsibilities",
+      "body": "Read what we ask of you, what you can count on from us, and how leaving a role works.",
+      "ctaLabel": "Read rights and responsibilities",
+      "ctaTarget": "/steward-rights"
+    },
+    "faq": {
+      "heading": "Common Questions"
+    }
+  },
+  "page-journey-resident": {
+    "faq": {
+      "heading": "Common Questions"
+    },
+    "dues": {
+      "heading": "Village Dues",
+      "fallback": "As a resident, you'll pay Village Dues that cover utilities, maintenance, and community services. Together, we work to reduce costs and create surplus that benefits everyone.",
+      "linkLabel": "How we create together",
+      "linkTarget": "/how-we-create"
+    },
+    "hero": {
+      "intro": "The Resident Space is for those coordinating the success of the whole Village from the perspective of Residents. Find your place in a loving community where all beings belong and thrive.",
+      "eyebrow": "Resident Co-Creator Journey",
+      "headline": "Make {village} Home",
+      "highlight": "Home",
+      "primaryLabel": "See the first steps",
+      "primaryTarget": "#first-steps",
+      "secondaryLabel": "Explore Housing",
+      "secondaryTarget": "/housing"
+    },
+    "steps": {
+      "heading": "The resident track",
+      "intro": "From Guest to Steward of {village}, and the invitation to make your home here. Each stage helps both sides decide.",
+      "items": [
+        {
+          "stage": "Guest",
+          "title": "Visit as a Guest",
+          "description": "Open to everyone, with no commitment. Come back to events, workshops and celebrations as often as you like.",
+          "bullet1": "Open access",
+          "bullet2": "No commitment",
+          "bullet3": "Events and gatherings",
+          "bullet4": "",
+          "actionLabel": "View Events",
+          "actionTarget": "#events"
+        },
+        {
+          "stage": "Founding Seeder",
+          "title": "Become a Founding Seeder",
+          "bullet1": "Join the Founding Seeders waitlist",
+          "bullet2": "First access to homes and land",
+          "bullet3": "Priority as lots are released",
+          "bullet4": "No obligation to purchase",
+          "actionLabel": "Become a Founding Seeder",
+          "description": "A $100 gift, with no deposit. Founding Seeders are our waitlist of soul-aligned people with first access to homes and land at {village}. This is how you say: I'm serious about this.",
+          "actionTarget": "https://amora.cr/founding-seeder/"
+        },
+        {
+          "stage": "Potential Steward",
+          "title": "Reserve your lot",
+          "description": "After an in-person conversation with a core team member, reserve your lot with a refundable deposit{range}.",
+          "bullet1": "Meet a core team member",
+          "bullet2": "{deposit-summary}",
+          "bullet3": "Holds your lot",
+          "bullet4": "",
+          "actionLabel": "Reserve Your Home",
+          "actionTarget": "/reserve"
+        },
+        {
+          "stage": "Connection Ceremony",
+          "title": "The opening ceremony",
+          "description": "Held on the land at the opening of each season. The community witnesses your commitment, and you are named a Steward of {village}.",
+          "bullet1": "At the opening of the season",
+          "bullet2": "Witnessed by the community",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Steward of {village}",
+          "title": "Live as a Steward",
+          "description": "Full community participation: visit the land, come to events, and complete our training in NVC and authentic relating.",
+          "bullet1": "Visit the land",
+          "bullet2": "Come to events",
+          "bullet3": "Complete the training",
+          "bullet4": "",
+          "actionLabel": "Learn About Training",
+          "actionTarget": "/training"
+        },
+        {
+          "stage": "Wisdom Council",
+          "title": "Sit with the Wisdom Council",
+          "description": "Before the season closes, you sit with the Wisdom Council of {village}.",
+          "bullet1": "",
+          "bullet2": "",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Connection Ceremony",
+          "title": "The closing ceremony",
+          "description": "At the close of each season, with elders and the full community as witness, certified Stewards are invited to purchase their home or lot.",
+          "bullet1": "At the close of the season",
+          "bullet2": "Elders and community as witness",
+          "bullet3": "",
+          "bullet4": "",
+          "actionLabel": "",
+          "actionTarget": ""
+        },
+        {
+          "stage": "Invitation",
+          "title": "Accept the invitation to purchase",
+          "description": "Agree the terms of your home or lot with {village} and sign.",
+          "bullet1": "Review the terms",
+          "bullet2": "Ask about anything unclear",
+          "bullet3": "Sign your agreement",
+          "bullet4": "",
+          "actionLabel": "View Housing Options",
+          "actionTarget": "/housing"
+        },
+        {
+          "stage": "Builder",
+          "title": "Build Your Home",
+          "bullet1": "Choose your home design",
+          "bullet2": "Select your builder",
+          "bullet3": "Follow building guidelines",
+          "bullet4": "Create your dream home",
+          "actionLabel": "Building Guidelines",
+          "description": "Work with our approved builders or bring your own plans. Observe Resident Governance.",
+          "actionTarget": "/housing"
+        },
+        {
+          "stage": "Resident",
+          "title": "Move In Celebration!",
+          "bullet1": "Community welcome ceremony",
+          "bullet2": "Meet your neighbors",
+          "bullet3": "Begin village life",
+          "bullet4": "Celebrate your new home",
+          "actionLabel": "Welcome Home",
+          "description": "Welcome home! Celebrate with the {village} Family and begin your life in the village.",
+          "actionTarget": ""
+        }
+      ]
+    },
+    "rights": {
+      "body": "As a resident you are a co-owner of this village, not a tenant. Read the full covenant that protects you and defines what we're building together.",
+      "heading": "Your Rights and Responsibilities",
+      "ctaLabel": "Read Rights and Responsibilities",
+      "ctaTarget": "/resident-rights"
+    },
+    "tenure": {
+      "body": "Your Land Share Agreement gives you long-term access to your land with the ability to renew and pass down to your children{transfer-note}. The structure holds ownership in the community and gives your family security.",
+      "heading": "Land Share Agreements"
+    },
+    "titles": {
+      "body": "{village} marks long presence with a title. These titles are honorary: they carry no voice in governance and no rights today. Voice comes from what you contribute, and a village may decide later to attach powers of its own to these titles.",
+      "items": [
+        {
+          "level": "Resident",
+          "years": "",
+          "description": "Your arrival, you've made the village your home"
+        },
+        {
+          "level": "Guardian",
+          "years": "7 years",
+          "description": "Deep roots, steward of community traditions"
+        },
+        {
+          "level": "Elder",
+          "years": "21 years",
+          "description": "Village wisdom keeper, mentor to new residents"
+        },
+        {
+          "level": "Sage",
+          "years": "49 years",
+          "description": "Intergenerational bridge, keeper of the village's longest memory"
+        }
+      ],
+      "heading": "Titles for Time Here"
+    },
+    "closing": {
+      "body": "Start with a community call to learn about life at {village}, then explore our housing options and available lots.",
+      "heading": "Find Your Home",
+      "primaryLabel": "Join Community Call",
+      "primaryTarget": "#events",
+      "secondaryLabel": "View Housing Options",
+      "secondaryTarget": "/housing"
+    },
+    "nextStep": {
+      "body": "Schedule a village visit to experience {village} firsthand and ask any questions about becoming a resident.",
+      "heading": "Your Next Step",
+      "ctaLabel": "Schedule a Village Visit",
+      "ctaTarget": "/visit"
+    },
+    "entry": {
+      "heading": "Start with the first steps",
+      "body": "Everyone begins here, whichever track you walk. Tick each one off as you go."
+    }
+  }
+}
