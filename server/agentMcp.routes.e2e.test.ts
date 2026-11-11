@@ -261,7 +261,7 @@ describe.skipIf(!DB_CONFIGURED)("the Operations agent (B6)", () => {
     const read = await tool(agentVat, "admin_request", { method: "GET", path: "/api/admin/member-tasks/access" });
     expect(read.json.result.isError, read.text).toBe(false);
 
-    const args = { method: "PUT", path: `/api/admin/member-tasks/access/${ben.id}`, body: { on: false } };
+    const args = { method: "PUT", path: `/api/admin/member-tasks/access/${ben.id}`, body: { on: false }, summary: "Turn off member tasks for Ben. Nothing else changes." };
     const asked = await tool(agentVat, "admin_request", args);
     expect(asked.json.result.structuredContent.confirmRequired).toBe(true);
     const still = await call("GET", "/api/member-tasks/me", undefined, ben.token);
