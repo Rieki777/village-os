@@ -87,7 +87,8 @@ describe("with the opt-in off, nothing changes", () => {
   it("keeps every newly opened write refused but the role editor, which no rule ever named", () => {
     for (const [m, p] of NEWLY_OPEN) {
       const d = adminRequestDecision(m, p, listed([[m, p]]), "agent-1");
-      if (p.startsWith("/api/org/role-edit/")) expect(d.ok && d.leadApproved, `${m} ${p}`).toBeFalsy();
+      // The role editor stays open as before, and its body is checked even with the switch off.
+      if (p.startsWith("/api/org/role-edit/")) expect(d, `${m} ${p}`).toMatchObject({ ok: true, leadApproved: "role_edit" });
       else expect(d, `${m} ${p}`).toMatchObject({ ok: false, code: "always_a_person" });
     }
   });

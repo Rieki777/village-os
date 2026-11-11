@@ -54,6 +54,25 @@ function agent(opts: { on: boolean; seat?: Partial<LeadSeatFacts> }) {
   return { ctx, routes, recorded };
 }
 
+describe("the role editor refuses pay from an agent, with the switch off or on", () => {
+  for (const on of [false, true]) {
+    it(`switch ${on ? "on" : "off"}: pay, budget line and funding source refuse and call no route; words pass`, async () => {
+      const a = agent({ on });
+      a.ctx.adminPaths = async () => ({ paths: [{ method: "POST", path: "/api/org/role-edit/:id", confirm: "agent", label: "Role editor" }] });
+      for (const body of [{ pay: { kind: "cash" } }, { parameters: { budgetLine: "ops" } }, { parameters: { fundedFrom: "grant" } }]) {
+        const r = await ask(call({ method: "POST", path: "/api/org/role-edit/r-gardener", body }), a.ctx);
+        expect(r.result.isError, JSON.stringify(body)).toBe(true);
+        expect(r.result.structuredContent.detail.code).toBe("lead_approved_refused");
+      }
+      expect(a.routes).toEqual([]);
+      const args = { method: "POST", path: "/api/org/role-edit/r-gardener", body: { words: { aim: "Tend the beds" } } };
+      const first = await ask(call(args), a.ctx);
+      await ask(call({ ...args, confirmToken: first.result.structuredContent.confirmToken }), a.ctx);
+      expect(a.routes).toEqual([{ method: "POST", path: args.path, body: args.body }]);
+    });
+  }
+});
+
 const SEAT = { method: "POST", path: "/api/admin/org/roles/r-gardener/holders", body: { userId: "u-ana", approvedBy: "The lead", approvalNote: "Yes, seat Ana as Gardener from today." } };
 
 describe("admin_request under the lead-approved writes", () => {

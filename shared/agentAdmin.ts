@@ -218,7 +218,10 @@ export function adminRequestDecision(method: string, path: string, doc: AgentAdm
     return { ok: false, code: "not_allowed", words: "That admin path is not open to agents in this village. An admin who is a person can add it to the agent paths list." };
   }
   const write = m !== "GET";
-  const lead = write && opts.leadApprovedWrites === true ? leadApprovedEntry(m, bare) : null;
+  // An entry that lifts no rule opens nothing and only adds its body check, so it holds whatever the switch says:
+  // the role editor refuses pay, budget line and funding source from an agent always (coordinator, 11 Nov 2026).
+  const found = write ? leadApprovedEntry(m, bare) : null;
+  const lead = found && (opts.leadApprovedWrites === true || found.lifts.length === 0) ? found : null;
   return { ok: true, entry, write, confirm: write ? entry.confirm : "agent", ...(lead ? { leadApproved: lead.kind } : {}) };
 }
 
@@ -354,7 +357,7 @@ export const LEAD_APPROVED_WRITES: readonly LeadApprovedEntry[] = [
   // a. A role card's words: create and update. The body is held to ROLE_CARD_TEXT_KEYS.
   { kind: "role_text", method: "POST", path: "/api/admin/org/roles", lifts: ["powers"] },
   { kind: "role_text", method: "PUT", path: "/api/admin/org/roles/:id", lifts: ["powers"] },
-  // The role card's own editor. No rule refuses its path today; under the opt-in its body is checked too, so pay stays out.
+  // The role card's own editor. No rule refuses its path; its body is checked with the switch on or off, so pay stays out.
   { kind: "role_edit", method: "POST", path: "/api/org/role-edit/:id", lifts: [] },
   // A draft of the org chart, terms on offer included, with publishing still a person's (tier_c is not lifted).
   { kind: "role_draft", method: "POST", path: "/api/admin/org/drafts", lifts: ["powers"] },
