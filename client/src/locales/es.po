@@ -11448,3 +11448,9 @@ msgstr ""
 msgctxt "sera answers"
 msgid "Take it again"
 msgstr ""
+
+#. needs-native-review
+#: client/src/components/roleDraft/ArchetypeStep.tsx
+msgctxt "roles page archetypes, before the village's own examples"
+msgid "You might pick this if you are drawn to:"
+msgstr "Puedes elegirlo si te atrae:"
