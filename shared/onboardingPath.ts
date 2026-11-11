@@ -78,9 +78,19 @@ export const LINK_LABEL_MAX = 60;
 export const LINK_HREF_MAX = 500;
 
 /**
- * A step's link, or null when it cannot stand. The address must be https,
- * parse as a web address with a host, carry no sign-in details and fit the
- * cap; the label must have words and is cut at its cap. Never throws.
+ * A page of this village's own site: one leading slash and never two (`//host`
+ * leaves the site), no backslash (a browser reads `/\host` as `//host`), no
+ * space and no control character. `/training/steward` is one.
+ */
+export function isSitePath(href: string): boolean {
+  return /^\/(?![/\\])[^\s\\\u0000-\u001f]*$/.test(href);
+}
+
+/**
+ * A step's link, or null when it cannot stand. The address is a page of this
+ * site (`isSitePath`, opened in place: the steward training lives here), or an
+ * https address that parses with a host, carries no sign-in details and fits
+ * the cap; the label must have words and is cut at its cap. Never throws.
  */
 export function readLink(raw: unknown): PathLink | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -88,6 +98,7 @@ export function readLink(raw: unknown): PathLink | null {
   const label = clip(r.label, LINK_LABEL_MAX);
   const href = typeof r.href === "string" ? r.href.trim() : "";
   if (!label || !href || href.length > LINK_HREF_MAX) return null;
+  if (isSitePath(href)) return { label, href };
   let u: URL;
   try { u = new URL(href); } catch { return null; }
   if (u.protocol !== "https:" || !u.hostname || u.username || u.password) return null;
