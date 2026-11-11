@@ -20,6 +20,7 @@
  * expiry so it lapses back rather than outliving the moment somebody meant it.
  */
 import { isAgentAccount } from "../repos/agentAccounts";
+import { roleHeldBy } from "../repos/orgRoleColumns";
 import { HELD_BY_REFUSAL, mayHold } from "../../shared/agentHolders";
 import { isMoonTerm } from "../../shared/moonRenewal";
 import { raiseRevokeForEnded } from "./roleAccess";
@@ -1220,8 +1221,7 @@ export async function seatHolder(
    * allowed before, so nothing changes for a role nobody has marked.
    */
   {
-    const [cardRows]: any = await pool.query("SELECT held_by FROM org_roles WHERE id = ? LIMIT 1", [orgRoleId]);
-    const heldBy = cardRows?.[0]?.held_by ?? null;
+    const heldBy = await roleHeldBy(pool, orgRoleId);
     const asKind = isAgent ? "agent" : "person";
     if (!mayHold(heldBy, asKind)) return { ok: false, reason: HELD_BY_REFUSAL[asKind] };
   }
